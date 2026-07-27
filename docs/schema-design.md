@@ -205,8 +205,10 @@ The current C++ implementation has registered component models exposing kind/ver
 names, domains, directions, and fluid-property capabilities. The compiler resolves model media
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
 compressor, turbine, and pump equations. The default registry also contains enthalpy-flow mixer
-and splitter models. Broader parameter schemas, additional physical components, and frontend
-display metadata remain future extensions.
+and splitter models, an isenthalpic pressure-ratio valve, a two-stream fixed-duty heat exchanger,
+and a rigid adiabatic fluid volume. Heat-exchanger sides may select different media, but each side
+must be internally consistent. Broader parameter schemas and frontend display metadata remain
+future extensions.
 
 Transient-capable component descriptors additionally declare:
 
@@ -219,6 +221,11 @@ Transient-capable component descriptors additionally declare:
 Cases use `initial_guesses` to initialize differential states. A transient case cannot place a
 differential state in `fixed_values`, because that would constrain it for the entire trajectory
 rather than initialize it.
+
+`volume.fluid.rigid_adiabatic` is transient-only. It stores `mass` and `total_energy` as
+differential states and uses algebraic `pressure` and `enthalpy` with PH density/internal-energy
+closures. Its `volume` parameter accepts `m3`, `m^3`, or `L`; initial mass and total energy accept
+`kg` and `J`/`kJ`/`MJ`.
 
 Before producing a solver problem, each compiler compares the number of unknowns and residual
 equations. Under- and over-specified graphs are rejected with model-level counts. Fixed sparse

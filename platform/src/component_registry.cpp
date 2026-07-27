@@ -217,6 +217,14 @@ double required_parameter(const ComponentDefinition& component, const std::strin
     return it->second.value_si;
 }
 
+double optional_parameter(const ComponentDefinition& component,
+                          const std::string& name,
+                          double default_value) {
+    const auto it = component.parameters.find(name);
+    return it == component.parameters.end() ? default_value
+                                            : it->second.value_si;
+}
+
 void validate_positive(const ComponentDefinition& component,
                        const std::string& name,
                        double value) {
@@ -239,6 +247,35 @@ EvaluationStatus property_failure(const physics::PropertyResult& result) {
     if (result.status == physics::PropertyStatus::backend_error)
         return EvaluationStatus::fatal(result.message);
     return EvaluationStatus::recoverable(result.message);
+}
+
+EvaluationStatus property_partial(
+    const physics::PropertyPackage& properties,
+    double pressure,
+    double enthalpy,
+    double base_value,
+    bool with_respect_to_pressure,
+    double (*extract)(const physics::ThermodynamicState&),
+    double& derivative) {
+    const double coordinate =
+        with_respect_to_pressure ? pressure : enthalpy;
+    const double step =
+        std::max(std::abs(coordinate) * 1.0e-6, 1.0e-3);
+    const auto plus = properties.state_ph(
+        with_respect_to_pressure ? pressure + step : pressure,
+        with_respect_to_pressure ? enthalpy : enthalpy + step);
+    if (plus.ok()) {
+        derivative = (extract(plus.state) - base_value) / step;
+        return EvaluationStatus::success();
+    }
+    const auto minus = properties.state_ph(
+        with_respect_to_pressure ? pressure - step : pressure,
+        with_respect_to_pressure ? enthalpy : enthalpy - step);
+    if (minus.ok()) {
+        derivative = (base_value - extract(minus.state)) / step;
+        return EvaluationStatus::success();
+    }
+    return property_failure(plus);
 }
 
 void add_turbomachinery_equations(const ComponentCompileContext& context,
@@ -519,6 +556,384 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class IsenthalpicPressureRatioValveModel final : public ComponentModel {
+public:
+    IsenthalpicPressureRatioValveModel()
+        : descriptor_(make_descriptor(
+              "valve.fluid.isenthalpic_pressure_ratio",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(const ComponentCompileContext& context,
+                       EquationSystemBuilder& system) const override {
+        const double pressure_ratio =
+            required_parameter(context.component, "pressure_ratio");
+        validate_positive(context.component, "pressure_ratio",
+                          pressure_ratio);
+        if (pressure_ratio <= 1.0) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' parameter 'pressure_ratio' must be greater than 1");
+        }
+        if (require_property_package(context, "inlet") !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_ratio",
+            {{inlet_p, 1.0}, {outlet_p, -pressure_ratio}},
+            0.0, 100000.0 * pressure_ratio);
+        system.add_linear_equation(
+            prefix + "isenthalpic",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}},
+            0.0, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class FixedDutyHeatExchangerModel final : public ComponentModel {
+public:
+    FixedDutyHeatExchangerModel()
+        : descriptor_(make_descriptor(
+              "heat_exchanger.fluid.fixed_duty",
+              {{"hot_in", "fluid", "in"},
+               {"hot_out", "fluid", "out"},
+               {"cold_in", "fluid", "in"},
+               {"cold_out", "fluid", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(const ComponentCompileContext& context,
+                       EquationSystemBuilder& system) const override {
+        const double duty =
+            required_parameter(context.component, "heat_duty");
+        validate_positive(context.component, "heat_duty", duty);
+        const double hot_loss = optional_parameter(
+            context.component, "hot_pressure_loss_fraction", 0.0);
+        const double cold_loss = optional_parameter(
+            context.component, "cold_pressure_loss_fraction", 0.0);
+        const auto validate_loss = [&](const std::string& name,
+                                       double loss) {
+            if (!std::isfinite(loss) || loss < 0.0 || loss >= 1.0) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' parameter '" + name +
+                    "' must be finite and in [0, 1)");
+            }
+        };
+        validate_loss("hot_pressure_loss_fraction", hot_loss);
+        validate_loss("cold_pressure_loss_fraction", cold_loss);
+        if (require_property_package(context, "hot_in") !=
+            require_property_package(context, "hot_out")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' hot-side ports must use the same medium");
+        }
+        if (require_property_package(context, "cold_in") !=
+            require_property_package(context, "cold_out")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' cold-side ports must use the same medium");
+        }
+
+        const auto hot_in_m =
+            require_port_variable(context, "hot_in.m_dot");
+        const auto hot_in_p =
+            require_port_variable(context, "hot_in.p");
+        const auto hot_in_h =
+            require_port_variable(context, "hot_in.h");
+        const auto hot_out_m =
+            require_port_variable(context, "hot_out.m_dot");
+        const auto hot_out_p =
+            require_port_variable(context, "hot_out.p");
+        const auto hot_out_h =
+            require_port_variable(context, "hot_out.h");
+        const auto cold_in_m =
+            require_port_variable(context, "cold_in.m_dot");
+        const auto cold_in_p =
+            require_port_variable(context, "cold_in.p");
+        const auto cold_in_h =
+            require_port_variable(context, "cold_in.h");
+        const auto cold_out_m =
+            require_port_variable(context, "cold_out.m_dot");
+        const auto cold_out_p =
+            require_port_variable(context, "cold_out.p");
+        const auto cold_out_h =
+            require_port_variable(context, "cold_out.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "hot_mass_continuity",
+            {{hot_out_m, 1.0}, {hot_in_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "cold_mass_continuity",
+            {{cold_out_m, 1.0}, {cold_in_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "hot_pressure_loss",
+            {{hot_out_p, 1.0}, {hot_in_p, -(1.0 - hot_loss)}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "cold_pressure_loss",
+            {{cold_out_p, 1.0}, {cold_in_p, -(1.0 - cold_loss)}},
+            0.0, 100000.0);
+        system.add_sparse_equation(
+            prefix + "hot_energy",
+            {hot_in_m, hot_in_h, hot_out_h},
+            [hot_in_m, hot_in_h, hot_out_h, duty](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double delta_h =
+                    x.at(hot_in_h) - x.at(hot_out_h);
+                jacobian.push_back({hot_in_m, delta_h});
+                jacobian.push_back({hot_in_h, x.at(hot_in_m)});
+                jacobian.push_back({hot_out_h, -x.at(hot_in_m)});
+                return x.at(hot_in_m) * delta_h - duty;
+            },
+            std::max(duty, 1.0));
+        system.add_sparse_equation(
+            prefix + "cold_energy",
+            {cold_in_m, cold_in_h, cold_out_h},
+            [cold_in_m, cold_in_h, cold_out_h, duty](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double delta_h =
+                    x.at(cold_out_h) - x.at(cold_in_h);
+                jacobian.push_back({cold_in_m, delta_h});
+                jacobian.push_back({cold_in_h, -x.at(cold_in_m)});
+                jacobian.push_back({cold_out_h, x.at(cold_in_m)});
+                return x.at(cold_in_m) * delta_h - duty;
+            },
+            std::max(duty, 1.0));
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class RigidAdiabaticFluidVolumeModel final : public ComponentModel {
+public:
+    RigidAdiabaticFluidVolumeModel()
+        : descriptor_(make_descriptor(
+              "volume.fluid.rigid_adiabatic",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.supports_steady = false;
+        descriptor_.supports_transient = true;
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph};
+        descriptor_.internal_variables = {
+            {"mass", DaeVariableKind::differential,
+             1.0, 10.0, 0.0, 1.0, 1.0e-12,
+             std::numeric_limits<double>::infinity()},
+            {"total_energy", DaeVariableKind::differential,
+             200000.0, 1.0e6, 0.0, 1.0e5,
+             -std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::infinity()},
+            {"pressure", DaeVariableKind::algebraic,
+             101325.0, 100000.0, 0.0, 100000.0, 1.0,
+             std::numeric_limits<double>::infinity()},
+            {"enthalpy", DaeVariableKind::algebraic,
+             300000.0, 100000.0, 0.0, 100000.0,
+             -std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::infinity()}};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(const ComponentCompileContext&,
+                       EquationSystemBuilder&) const override {
+        throw std::logic_error(
+            "rigid fluid volume is a transient-only component");
+    }
+
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        const double volume =
+            required_parameter(context.component, "volume");
+        validate_positive(context.component, "volume", volume);
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto mass =
+            require_internal_variable(context, "mass");
+        const auto energy =
+            require_internal_variable(context, "total_energy");
+        const auto pressure =
+            require_internal_variable(context, "pressure");
+        const auto enthalpy =
+            require_internal_variable(context, "enthalpy");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_accumulation",
+            {{mass, 0.0, 1.0}, {inlet_m, -1.0, 0.0},
+             {outlet_m, 1.0, 0.0}},
+            0.0, 100.0);
+        system.add_sparse_equation(
+            prefix + "energy_accumulation",
+            {energy, inlet_m, inlet_h, outlet_m, outlet_h},
+            [energy, inlet_m, inlet_h, outlet_m, outlet_h](
+                double, const std::vector<double>& x,
+                const std::vector<double>& x_dot, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                residual = x_dot.at(energy) -
+                           x.at(inlet_m) * x.at(inlet_h) +
+                           x.at(outlet_m) * x.at(outlet_h);
+                jacobian.push_back({energy, 0.0, 1.0});
+                jacobian.push_back(
+                    {inlet_m, -x.at(inlet_h), 0.0});
+                jacobian.push_back(
+                    {inlet_h, -x.at(inlet_m), 0.0});
+                jacobian.push_back(
+                    {outlet_m, x.at(outlet_h), 0.0});
+                jacobian.push_back(
+                    {outlet_h, x.at(outlet_m), 0.0});
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+        system.add_linear_equation(
+            prefix + "outlet_pressure",
+            {{outlet_p, 1.0, 0.0}, {pressure, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "outlet_enthalpy",
+            {{outlet_h, 1.0, 0.0}, {enthalpy, -1.0, 0.0}},
+            0.0, 100000.0);
+
+        system.add_sparse_equation(
+            prefix + "volume_closure",
+            {mass, pressure, enthalpy},
+            [properties, volume, mass, pressure, enthalpy](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                const auto state = properties->state_ph(
+                    x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) return property_failure(state);
+                double drho_dp = 0.0;
+                double drho_dh = 0.0;
+                auto status = property_partial(
+                    *properties, x.at(pressure), x.at(enthalpy),
+                    state.state.density_kg_m3, true,
+                    [](const physics::ThermodynamicState& value) {
+                        return value.density_kg_m3;
+                    },
+                    drho_dp);
+                if (!status.ok()) return status;
+                status = property_partial(
+                    *properties, x.at(pressure), x.at(enthalpy),
+                    state.state.density_kg_m3, false,
+                    [](const physics::ThermodynamicState& value) {
+                        return value.density_kg_m3;
+                    },
+                    drho_dh);
+                if (!status.ok()) return status;
+                residual = x.at(mass) -
+                           volume * state.state.density_kg_m3;
+                jacobian.push_back({mass, 1.0, 0.0});
+                jacobian.push_back(
+                    {pressure, -volume * drho_dp, 0.0});
+                jacobian.push_back(
+                    {enthalpy, -volume * drho_dh, 0.0});
+                return EvaluationStatus::success();
+            },
+            10.0);
+        system.add_sparse_equation(
+            prefix + "energy_closure",
+            {energy, mass, pressure, enthalpy},
+            [properties, energy, mass, pressure, enthalpy](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                const auto state = properties->state_ph(
+                    x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) return property_failure(state);
+                double du_dp = 0.0;
+                double du_dh = 0.0;
+                auto status = property_partial(
+                    *properties, x.at(pressure), x.at(enthalpy),
+                    state.state.internal_energy_j_kg, true,
+                    [](const physics::ThermodynamicState& value) {
+                        return value.internal_energy_j_kg;
+                    },
+                    du_dp);
+                if (!status.ok()) return status;
+                status = property_partial(
+                    *properties, x.at(pressure), x.at(enthalpy),
+                    state.state.internal_energy_j_kg, false,
+                    [](const physics::ThermodynamicState& value) {
+                        return value.internal_energy_j_kg;
+                    },
+                    du_dh);
+                if (!status.ok()) return status;
+                residual = x.at(energy) -
+                           x.at(mass) *
+                               state.state.internal_energy_j_kg;
+                jacobian.push_back({energy, 1.0, 0.0});
+                jacobian.push_back(
+                    {mass, -state.state.internal_energy_j_kg, 0.0});
+                jacobian.push_back(
+                    {pressure, -x.at(mass) * du_dp, 0.0});
+                jacobian.push_back(
+                    {enthalpy, -x.at(mass) * du_dh, 0.0});
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class LumpedThermalStorageModel final : public ComponentModel {
 public:
     LumpedThermalStorageModel()
@@ -722,10 +1137,16 @@ std::vector<std::string> ComponentRegistry::kinds() const {
 
 ComponentRegistry make_default_component_registry() {
     ComponentRegistry registry;
-    registry.register_model(std::make_shared<MetadataComponentModel>(make_descriptor(
-        "source.fluid.boundary", {{"outlet", "fluid", "out"}})));
-    registry.register_model(std::make_shared<MetadataComponentModel>(make_descriptor(
-        "sink.fluid.boundary", {{"inlet", "fluid", "in"}})));
+    auto fluid_source = make_descriptor(
+        "source.fluid.boundary", {{"outlet", "fluid", "out"}});
+    fluid_source.supports_transient = true;
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        std::move(fluid_source)));
+    auto fluid_sink = make_descriptor(
+        "sink.fluid.boundary", {{"inlet", "fluid", "in"}});
+    fluid_sink.supports_transient = true;
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        std::move(fluid_sink)));
     auto heat_source = make_descriptor(
         "source.heat.boundary", {{"outlet", "heat", "out"}});
     heat_source.supports_transient = true;
@@ -746,12 +1167,12 @@ ComponentRegistry make_default_component_registry() {
         std::make_shared<TwoInletFluidMixerModel>());
     registry.register_model(
         std::make_shared<TwoOutletFluidSplitterModel>());
-    registry.register_model(std::make_shared<MetadataComponentModel>(make_descriptor(
-        "heat_exchanger.simple",
-        {{"hot_in", "fluid", "in"},
-         {"hot_out", "fluid", "out"},
-         {"cold_in", "fluid", "in"},
-         {"cold_out", "fluid", "out"}})));
+    registry.register_model(
+        std::make_shared<IsenthalpicPressureRatioValveModel>());
+    registry.register_model(
+        std::make_shared<FixedDutyHeatExchangerModel>());
+    registry.register_model(
+        std::make_shared<RigidAdiabaticFluidVolumeModel>());
     registry.register_model(std::make_shared<LumpedThermalStorageModel>());
     return registry;
 }

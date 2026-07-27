@@ -118,6 +118,22 @@ Delivered:
 5. Physical IF97 pump plus generic two-inlet mixer and two-outlet splitter establish the first
    reusable fluid-network component set. ✅
 
+## Reusable transport and inventory components
+
+Goal: establish the first steady transport elements and a property-backed dynamic fluid
+inventory without introducing cycle-specific assumptions. ✅
+
+Delivered:
+
+1. Isenthalpic pressure-ratio valve with mass, pressure, and enthalpy conservation equations. ✅
+2. Two-stream fixed-duty heat exchanger with independent hot/cold media and configurable
+   fractional pressure losses. ✅
+3. Transient rigid adiabatic fluid volume with mass and total-energy accumulation plus PH
+   density/internal-energy closure. ✅
+4. Transient fluid boundaries and fixed sparse DAE assembly for a connected source-volume-sink
+   network. ✅
+5. SI normalization for volume, mass, and energy component/case values. ✅
+
 ## Phase 2 — Combined-cycle prototype
 
 Goal: produce a credible single-pressure combined-cycle heat balance.

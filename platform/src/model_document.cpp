@@ -476,6 +476,20 @@ ScalarValue convert_scalar(double value, const std::string& unit, const std::str
         return make_scalar(convert_thermal_capacity_to_j_k(value, unit),
                            "J/K", "thermal_capacity");
     }
+    if (unit == "m3" || unit == "m^3") {
+        return make_scalar(value, "m3", "volume");
+    }
+    if (unit == "L") {
+        return make_scalar(value * 1.0e-3, "m3", "volume");
+    }
+    if (unit == "kg") {
+        return make_scalar(value, "kg", "mass");
+    }
+    if (unit == "J" || unit == "kJ" || unit == "MJ") {
+        const double multiplier =
+            unit == "J" ? 1.0 : (unit == "kJ" ? 1.0e3 : 1.0e6);
+        return make_scalar(value * multiplier, "J", "energy");
+    }
     if (unit == "dimensionless" || unit == "1" || unit == "%" || unit.empty()) {
         return make_scalar(convert_dimensionless(value, unit), "dimensionless", "dimensionless");
     }

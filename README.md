@@ -37,8 +37,9 @@ Implemented in this sprint:
   doubling, event detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
-- Base C++ `ComponentModel` interface with physical compressor, turbine, pump, two-inlet mixer,
-  two-outlet splitter, and lumped thermal-storage implementations.
+- Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
+  two-stream heat exchanger, mixer, splitter, lumped thermal storage, and rigid adiabatic fluid
+  volume implementations.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - Fluid connectors use conserved primary unknowns (`m_dot`, `p`, and `h`); temperature, entropy,
   density, phase, and quality are derived through the selected property package after solving.
@@ -147,6 +148,11 @@ The transient example uses a registered lumped thermal-storage component with an
 differential temperature state. The platform performs consistent DAE initialization before
 adaptive integration.
 
+The transient component path also supports a property-backed rigid fluid volume. Its mass and
+total internal energy are differential states, while pressure and enthalpy are algebraic states
+closed by the selected fluid package. The same component therefore works with any registered
+backend that supplies a PH flash.
+
 ## Verify everything
 
 ```sh
@@ -155,11 +161,12 @@ adaptive integration.
 
 ## Next steps
 
-1. Add valve/pressure-loss, heat-exchanger, condenser, and fluid-inventory component models.
-2. Add dynamic fluid inventory, wall thermal mass, rotating inertia, and control components using
-   the established transient component contract.
+1. Add condenser/evaporator models and temperature-driven heat-exchanger formulations.
+2. Add wall thermal mass, rotating inertia, and control components using the established
+   transient component contract.
 3. Add a simple IF97 Rankine example and regression tolerances.
-4. Add explicit saturation-pair and analytic property-derivative APIs.
+4. Add explicit saturation-pair and analytic property-derivative APIs; the rigid volume currently
+   computes local PH closure derivatives through bounded property calls.
 5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
 6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when

@@ -7,8 +7,10 @@
 #include <cmath>
 #include <exception>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -49,6 +51,18 @@ void require_near(double actual, double expected, double tolerance, const std::s
         throw std::runtime_error(message + ": actual=" + std::to_string(actual) +
                                  " expected=" + std::to_string(expected));
     }
+}
+
+std::size_t require_variable_index(
+    const std::vector<std::string>& names,
+    const std::string& expected_name) {
+    const auto it = std::find(names.begin(), names.end(), expected_name);
+    if (it == names.end()) {
+        throw std::runtime_error(
+            "missing compiled variable: " + expected_name);
+    }
+    return static_cast<std::size_t>(
+        std::distance(names.begin(), it));
 }
 
 std::string write_temp_model(const std::string& name, const std::string& content) {
@@ -273,6 +287,12 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain two-inlet mixer");
     require(registry.contains("junction.fluid.splitter.two_outlet"),
             "default registry should contain two-outlet splitter");
+    require(registry.contains("valve.fluid.isenthalpic_pressure_ratio"),
+            "default registry should contain fluid valve");
+    require(registry.contains("heat_exchanger.fluid.fixed_duty"),
+            "default registry should contain fixed-duty heat exchanger");
+    require(registry.contains("volume.fluid.rigid_adiabatic"),
+            "default registry should contain rigid fluid volume");
     require(registry.kinds().size() >= 4, "default registry should contain multiple component kinds");
 }
 
@@ -654,6 +674,118 @@ void test_generic_model_solves_two_outlet_splitter() {
                  "splitter propagates pressure");
     require_near(outlet_b_enthalpy, 4.0e5, 1.0e-8,
                  "splitter propagates enthalpy");
+}
+
+void test_generic_model_solves_isenthalpic_valve() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "isenthalpic_valve",
+    "media": [
+      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+    ],
+    "components": [{
+      "id": "valve",
+      "kind": "valve.fluid.isenthalpic_pressure_ratio",
+      "ports": {
+        "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "water", "direction": "out"}
+      },
+      "parameters": {"pressure_ratio": 10.0}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "valve.inlet.m_dot": {"value": 5.0, "unit": "kg/s"},
+      "valve.inlet.p": {"value": 10.0, "unit": "MPa"},
+      "valve.inlet.h": {"value": 1200.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "valve.outlet.m_dot")),
+        5.0, 1.0e-10, "valve conserves mass");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "valve.outlet.p")),
+        1.0e6, 1.0e-6, "valve applies pressure ratio");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "valve.outlet.h")),
+        1.2e6, 1.0e-7, "valve preserves enthalpy");
+}
+
+void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "cross_medium_heat_exchanger",
+    "media": [
+      {"id": "gas", "backend": "ideal_gas_mixture", "substance": "Air"},
+      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+    ],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.fluid.fixed_duty",
+      "ports": {
+        "hot_in": {"domain": "fluid", "medium": "gas", "direction": "in"},
+        "hot_out": {"domain": "fluid", "medium": "gas", "direction": "out"},
+        "cold_in": {"domain": "fluid", "medium": "water", "direction": "in"},
+        "cold_out": {"domain": "fluid", "medium": "water", "direction": "out"}
+      },
+      "parameters": {
+        "heat_duty": {"value": 1.0, "unit": "MW"},
+        "hot_pressure_loss_fraction": 0.05,
+        "cold_pressure_loss_fraction": 0.02
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 10.0, "unit": "bar"},
+      "hx.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "hx.cold_in.m_dot": {"value": 20.0, "unit": "kg/s"},
+      "hx.cold_in.p": {"value": 5.0, "unit": "bar"},
+      "hx.cold_in.h": {"value": 200.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("hx.hot_out.h"), 5.0e5, 1.0e-7,
+                 "hot side supplies fixed duty");
+    require_near(value("hx.cold_out.h"), 2.5e5, 1.0e-7,
+                 "cold side receives fixed duty");
+    require_near(value("hx.hot_out.p"), 9.5e5, 1.0e-7,
+                 "hot pressure loss is applied");
+    require_near(value("hx.cold_out.p"), 4.9e5, 1.0e-7,
+                 "cold pressure loss is applied");
 }
 
 void test_generic_model_solves_if97_pump() {
@@ -1101,6 +1233,224 @@ void test_transient_model_compiles_and_integrates_lumped_storage() {
         "compiled storage follows energy accumulation");
 }
 
+void test_transient_model_integrates_rigid_fluid_volume() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "rigid_fluid_volume_transient",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "ports": {
+          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+        }
+      },
+      {
+        "id": "tank",
+        "kind": "volume.fluid.rigid_adiabatic",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+        },
+        "parameters": {
+          "volume": {"value": 1000.0, "unit": "L"}
+        }
+      },
+      {
+        "id": "sink",
+        "kind": "sink.fluid.boundary",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"}
+        }
+      }
+    ],
+    "connections": [
+      {"id": "feed", "from": "source.outlet", "to": "tank.inlet", "kind": "fluid_link"},
+      {"id": "discharge", "from": "tank.outlet", "to": "sink.inlet", "kind": "fluid_link"}
+    ]
+  },
+  "cases": [{
+    "id": "fill",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "source.outlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "source.outlet.p": {"value": 1.01325, "unit": "bar"},
+      "source.outlet.h": {"value": 301.35, "unit": "kJ/kg"},
+      "sink.inlet.m_dot": {"value": 1.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "tank.mass": {"value": 1.17683, "unit": "kg"},
+      "tank.total_energy": {"value": 253.33, "unit": "kJ"},
+      "tank.pressure": {"value": 1.01325, "unit": "bar"},
+      "tank.enthalpy": {"value": 301.35, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    require_near(
+        document.components.at(1).parameters.at("volume").value_si,
+        1.0, 1.0e-12, "litres normalize to cubic metres");
+    require_near(
+        document.cases.at(0).initial_guesses.at(
+            "tank.total_energy").value_si,
+        253330.0, 1.0e-9, "energy normalizes to joules");
+
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "fill");
+    require(graph.problem.sparse_jacobian_pattern.has_value(),
+            "fluid volume preserves fixed sparse DAE structure");
+    const auto mass = require_variable_index(
+        graph.problem.variable_names, "tank.mass");
+    const auto energy = require_variable_index(
+        graph.problem.variable_names, "tank.total_energy");
+    require(graph.problem.variable_kinds.at(mass) ==
+                thermox::DaeVariableKind::differential,
+            "fluid mass is a differential state");
+    require(graph.problem.variable_kinds.at(energy) ==
+                thermox::DaeVariableKind::differential,
+            "fluid total energy is a differential state");
+
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require_near(initialized.derivative.at(mass), 1.0,
+                 1.0e-8,
+                 "fluid mass derivative follows inlet minus outlet flow");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.01;
+    options.max_step = 0.02;
+    const auto result =
+        thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    require_near(
+        result.trajectory.back().state.at(mass),
+        result.trajectory.front().state.at(mass) + 0.1,
+        2.0e-7,
+        "rigid volume integrates net mass inflow");
+}
+
+void test_transient_fluid_volume_closes_with_real_fluid_backends() {
+    struct BackendCase {
+        std::string backend;
+        std::string substance;
+        double pressure;
+        double temperature;
+    };
+    const std::vector<BackendCase> cases = {
+        {"water_steam_if97", "Water", 1.0e5, 300.0},
+        {"co2_span_wagner", "CO2", 8.0e6, 350.0}};
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+
+    for (const auto& backend_case : cases) {
+        const auto package = properties.create(
+            backend_case.backend, backend_case.substance);
+        const auto state = package->state_pt(
+            backend_case.pressure, backend_case.temperature);
+        require(state.ok(),
+                backend_case.backend +
+                    " volume initial state should be valid");
+        const double initial_mass = state.state.density_kg_m3;
+        const double initial_energy =
+            initial_mass * state.state.internal_energy_j_kg;
+        std::ostringstream number;
+        number << std::setprecision(17);
+        const auto format = [&](double value) {
+            number.str({});
+            number.clear();
+            number << value;
+            return number.str();
+        };
+        std::string text = R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "real_fluid_volume",
+    "media": [{"id": "fluid", "backend": "__BACKEND__", "substance": "__SUBSTANCE__"}],
+    "components": [{
+      "id": "tank",
+      "kind": "volume.fluid.rigid_adiabatic",
+      "ports": {
+        "inlet": {"domain": "fluid", "medium": "fluid", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "fluid", "direction": "out"}
+      },
+      "parameters": {"volume": {"value": 1.0, "unit": "m3"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "hold",
+    "mode": "dynamic_initialization",
+    "fixed_values": {
+      "tank.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "tank.inlet.p": __PRESSURE__,
+      "tank.inlet.h": __ENTHALPY__,
+      "tank.outlet.m_dot": {"value": 1.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "tank.mass": __MASS__,
+      "tank.total_energy": __ENERGY__,
+      "tank.pressure": __PRESSURE__,
+      "tank.enthalpy": __ENTHALPY__
+    }
+  }]
+})json";
+        const auto replace = [&](const std::string& token,
+                                 const std::string& value) {
+            std::size_t position = 0;
+            while ((position = text.find(token, position)) !=
+                   std::string::npos) {
+                text.replace(position, token.size(), value);
+                position += value.size();
+            }
+        };
+        replace("__BACKEND__", backend_case.backend);
+        replace("__SUBSTANCE__", backend_case.substance);
+        replace("__PRESSURE__", format(backend_case.pressure));
+        replace("__ENTHALPY__",
+                format(state.state.enthalpy_j_kg));
+        replace("__MASS__", format(initial_mass));
+        replace("__ENERGY__", format(initial_energy));
+
+        const auto document =
+            thermox::platform::parse_model_document_text(text);
+        const auto graph =
+            thermox::platform::compile_transient_model_graph(
+                document, components, properties, "hold");
+        const auto initialized =
+            thermox::make_consistent_initial_conditions(
+                graph.problem, 0.0);
+        require(initialized.diagnostics.converged,
+                backend_case.backend + ": " +
+                    initialized.diagnostics.message);
+        const auto mass = require_variable_index(
+            graph.problem.variable_names, "tank.mass");
+        const auto energy = require_variable_index(
+            graph.problem.variable_names, "tank.total_energy");
+        require_near(initialized.derivative.at(mass), 0.0,
+                     1.0e-9,
+                     backend_case.backend +
+                         " volume has zero mass accumulation");
+        require_near(initialized.derivative.at(energy), 0.0,
+                     1.0e-4,
+                     backend_case.backend +
+                         " volume has zero energy accumulation");
+    }
+}
+
 void test_transient_compiler_rejects_steady_only_components() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -1112,15 +1462,21 @@ void test_transient_compiler_rejects_steady_only_components() {
     ],
     "components": [
       {
-        "id": "source",
-        "kind": "source.fluid.boundary",
+        "id": "valve",
+        "kind": "valve.fluid.isenthalpic_pressure_ratio",
         "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "air",
+            "direction": "in"
+          },
           "outlet": {
             "domain": "fluid",
             "medium": "air",
             "direction": "out"
           }
-        }
+        },
+        "parameters": {"pressure_ratio": 2.0}
       }
     ],
     "connections": []
@@ -1197,6 +1553,8 @@ int main() {
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();
+        test_generic_model_solves_isenthalpic_valve();
+        test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_if97_pump();
         test_generic_model_solves_supercritical_co2_compressor();
         test_generic_model_compiler_rejects_unregistered_component_kind();
@@ -1205,6 +1563,8 @@ int main() {
         test_compiler_reports_under_and_over_specification();
         test_component_property_capabilities_are_validated();
         test_transient_model_compiles_and_integrates_lumped_storage();
+        test_transient_model_integrates_rigid_fluid_volume();
+        test_transient_fluid_volume_closes_with_real_fluid_backends();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();
     } catch (const std::exception& ex) {
