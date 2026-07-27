@@ -44,13 +44,15 @@ Work items:
    - compile-time component/backend capability validation ✅
 10. Implement minimal compiled components:
    - source/sink
-   - pump
-   - turbine ✅ *(ideal-gas isentropic-efficiency residuals: mass continuity, pressure ratio, inlet/outlet enthalpy, outlet temperature, and shaft power)*
-   - compressor ✅ *(ideal-gas isentropic-efficiency residuals: mass continuity, pressure ratio, inlet/outlet enthalpy, outlet temperature, and shaft power)*
+   - pump ✅ *(property-aware PH/PS isentropic-efficiency model, including IF97 regression)*
+   - turbine ✅ *(property-aware mass continuity, pressure ratio, isentropic enthalpy change, and
+     shaft-power residuals; outlet temperature is derived)*
+   - compressor ✅ *(property-aware mass continuity, pressure ratio, isentropic enthalpy change,
+     and shaft-power residuals; outlet temperature is derived)*
    - combustor simplified
    - heat exchanger simplified
    - condenser
-   - mixer/splitter
+   - mixer/splitter ✅ *(two-inlet enthalpy-flow mixer and two-outlet splitter)*
 11. Add examples:
    - simple Rankine cycle
    - simple Brayton cycle ✅ *(kept isolated from the platform API)*
@@ -97,6 +99,24 @@ Delivered:
 4. Registered lumped thermal-storage component and end-to-end transient CLI example. ✅
 5. Consistent initialization, adaptive integration, release, sanitizer, and CLI regression
    coverage. ✅
+
+## Thermofluid connector foundation
+
+Goal: establish non-redundant, property-independent stream semantics before expanding the
+component library. ✅
+
+Delivered:
+
+1. Fluid links carry primary conserved variables `m_dot`, `p`, and `h`; thermodynamic quantities
+   are derived results, while natural `(p,T)` boundaries compile to PH property equations without
+   adding a temperature unknown. ✅
+2. Property-aware turbomachinery uses PH/PS closure for ideal gas and real fluids. ✅
+3. Platform result evaluation reconstructs temperature, density, entropy, phase, and quality for
+   every solved fluid port. ✅
+4. Compile-time degree-of-freedom diagnostics reject under- and over-specified graphs before
+   Newton. ✅
+5. Physical IF97 pump plus generic two-inlet mixer and two-outlet splitter establish the first
+   reusable fluid-network component set. ✅
 
 ## Phase 2 — Combined-cycle prototype
 

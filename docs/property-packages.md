@@ -51,7 +51,7 @@ The `thermox_platform` compiler resolves each `media[].backend` through
 `PropertyPackageRegistry` and injects the resulting package into fluid
 components. Each component declares its required property capabilities; compilation fails with a
 specific diagnostic when a selected backend cannot supply one. Turbomachinery uses checked
-equations, allowing range and
+PH/PS equations, allowing range and
 convergence failures during line search to be treated as recoverable solver
 evaluations rather than process-level exceptions.
 

@@ -1,12 +1,14 @@
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/results.hpp"
 #include "thermox/transient_solver.hpp"
 
 #include <cmath>
 #include <exception>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -84,6 +86,11 @@ int main(int argc, char** argv) {
             thermox::SolverOptions options;
             options.residual_tolerance = 1.0e-10;
             const auto result = thermox::solve_newton(graph.problem, options);
+            const auto fluid_ports =
+                result.diagnostics.converged
+                    ? thermox::platform::evaluate_fluid_port_results(
+                          document, graph, result.x)
+                    : std::vector<thermox::platform::FluidPortResult>{};
 
             if (format == "json") {
                 std::cout << "{\n"
@@ -97,6 +104,20 @@ int main(int argc, char** argv) {
                               << result.x[i]
                               << (i + 1 == graph.problem.variable_names.size() ? "\n" : ",\n");
                 }
+                std::cout << "  },\n"
+                          << "  \"fluid_ports\": {\n";
+                for (std::size_t i = 0; i < fluid_ports.size(); ++i) {
+                    const auto& port = fluid_ports[i];
+                    std::cout
+                        << "    \"" << port.component_id << "."
+                        << port.port_name << "\": {"
+                        << "\"T\": " << port.state.temperature_k
+                        << ", \"rho\": " << port.state.density_kg_m3
+                        << ", \"s\": " << port.state.entropy_j_kg_k
+                        << ", \"quality\": " << port.state.vapor_quality
+                        << "}"
+                        << (i + 1 == fluid_ports.size() ? "\n" : ",\n");
+                }
                 std::cout << "  }\n}\n";
             } else {
                 std::cout << "model: " << graph.model_id << "\n"
@@ -106,6 +127,18 @@ int main(int argc, char** argv) {
                 for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
                     std::cout << graph.problem.variable_names[i] << " = "
                               << result.x[i] << "\n";
+                }
+                for (const auto& port : fluid_ports) {
+                    const std::string prefix =
+                        port.component_id + "." + port.port_name;
+                    std::cout << prefix << ".T = "
+                              << port.state.temperature_k << "\n"
+                              << prefix << ".rho = "
+                              << port.state.density_kg_m3 << "\n"
+                              << prefix << ".s = "
+                              << port.state.entropy_j_kg_k << "\n"
+                              << prefix << ".quality = "
+                              << port.state.vapor_quality << "\n";
                 }
             }
             return result.diagnostics.converged ? 0 : 1;

@@ -1,6 +1,7 @@
 add_library(thermox_platform
     src/component_registry.cpp
     src/model_document.cpp
+    src/results.cpp
 )
 add_library(thermox::platform ALIAS thermox_platform)
 target_include_directories(thermox_platform

@@ -36,7 +36,7 @@
       },
       "initial_guesses": {
         "compressor.outlet.p": {"value": 1.2, "unit": "MPa"},
-        "compressor.outlet.T": {"value": 650.0, "unit": "K"},
+        "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
         "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
       }
     }

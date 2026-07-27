@@ -105,12 +105,20 @@ direction: in | out | bidirectional
 
 Canonical solver variables:
 
-- `m_dot` — kg/s, signed by port orientation.
+- `m_dot` — kg/s; positive follows the declared port direction and negative represents reversal.
 - `p` — Pa.
 - `h` — J/kg.
-- `T` — K, usually derived but may be explicit in selected formulations.
-- `composition` — mass or mole fractions for mixtures.
-- `quality` — optional for two-phase water/steam diagnostics.
+- `composition` — mass or mole fractions for mixtures (future extension).
+
+`T`, entropy, density, phase, and vapor quality are property-derived results, not redundant
+connector unknowns. A normal directed `fluid_link` equates `m_dot`, `p`, and `h` at its two ends.
+Pressure-loss, heat-transfer, mixing, and junction behavior belongs to registered components rather
+than hidden connection semantics.
+
+A steady case may nevertheless specify `component.port.T` in `fixed_values`. The compiler lowers
+that engineering boundary condition into a property-backed PH equation; it does not create a
+temperature unknown. This allows natural `(p,T)` boundary input while preserving a non-redundant
+connector formulation.
 
 ### 5.2 Heat domain
 
@@ -159,12 +167,15 @@ id: design_100pct
 label: 100% design load
 mode: steady_state_design
 fixed_values:
-  ambient.T:
-    value: 288.15
-    unit: K
-  ambient.p:
+  ambient.outlet.m_dot:
+    value: 100
+    unit: kg/s
+  ambient.outlet.p:
     value: 101325
     unit: Pa
+  ambient.outlet.T:
+    value: 288.15
+    unit: K
   generator.P_e:
     value: 450
     unit: MW
@@ -193,8 +204,9 @@ Component type definitions should be served to the frontend and compiler from th
 The current C++ implementation has registered component models exposing kind/version, required port
 names, domains, directions, and fluid-property capabilities. The compiler resolves model media
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
-compressor and turbine equations. Broader parameter schemas, additional physical components, and
-frontend display metadata remain future extensions.
+compressor, turbine, and pump equations. The default registry also contains enthalpy-flow mixer
+and splitter models. Broader parameter schemas, additional physical components, and frontend
+display metadata remain future extensions.
 
 Transient-capable component descriptors additionally declare:
 
@@ -207,6 +219,10 @@ Transient-capable component descriptors additionally declare:
 Cases use `initial_guesses` to initialize differential states. A transient case cannot place a
 differential state in `fixed_values`, because that would constrain it for the entire trajectory
 rather than initialize it.
+
+Before producing a solver problem, each compiler compares the number of unknowns and residual
+equations. Under- and over-specified graphs are rejected with model-level counts. Fixed sparse
+patterns additionally enable structural matching in the numerical core.
 
 ```yaml
 kind: turbine.steam.isentropic_efficiency

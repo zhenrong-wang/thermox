@@ -37,14 +37,20 @@ Implemented in this sprint:
   doubling, event detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
-- Base C++ `ComponentModel` interface for source/sink, compressor, turbine, pump, and simple
-  heat-exchanger port contracts.
+- Base C++ `ComponentModel` interface with physical compressor, turbine, pump, two-inlet mixer,
+  two-outlet splitter, and lumped thermal-storage implementations.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
+- Fluid connectors use conserved primary unknowns (`m_dot`, `p`, and `h`); temperature, entropy,
+  density, phase, and quality are derived through the selected property package after solving.
+- Natural temperature boundary specifications compile into PH property equations without adding
+  redundant temperature unknowns.
+- Compile-time degree-of-freedom validation rejects under- and over-specified models with variable
+  and equation counts before Newton is invoked.
 - Transient graph compiler that validates component simulation-mode support, creates internal
   component states, lowers accumulation and algebraic equations, and emits a `DaeProblem`.
-- Property-aware compressor and turbine residuals declare their required flash capabilities, resolve
-  their medium backend from the model,
-  use PT/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
+- Property-aware compressor, turbine, and pump residuals declare their required flash capabilities,
+  resolve their medium backend from the model,
+  use PH/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
   Newton, and support ideal gas and real fluids without changing component equations.
 
 The built-in direct solvers and first-order transient integrator intentionally remain
@@ -124,7 +130,8 @@ JSON output:
 ```
 
 The CLI parses the generic model document, resolves the registered component and fluid backend,
-compiles the graph to a nonlinear problem, solves it, and reports every canonical model variable.
+compiles the graph to a nonlinear problem, solves it, and reports primary variables plus derived
+fluid-port properties.
 
 Run a generic transient model:
 
@@ -148,7 +155,7 @@ adaptive integration.
 
 ## Next steps
 
-1. Extend property-aware residuals to pump, heat exchanger, condenser, mixer, and splitter models.
+1. Add valve/pressure-loss, heat-exchanger, condenser, and fluid-inventory component models.
 2. Add dynamic fluid inventory, wall thermal mass, rotating inertia, and control components using
    the established transient component contract.
 3. Add a simple IF97 Rankine example and regression tolerances.

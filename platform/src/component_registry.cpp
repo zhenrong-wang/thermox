@@ -20,8 +20,7 @@ std::vector<CanonicalVariableSpec> canonical_variables_for_domain(const std::str
     if (domain == "fluid") {
         return {{"m_dot", 1.0, 100.0},
                 {"p", 101325.0, 100000.0},
-                {"h", 300000.0, 100000.0},
-                {"T", 300.0, 100.0}};
+                {"h", 300000.0, 100000.0}};
     }
     if (domain == "heat") {
         return {{"Q_dot", 0.0, 1000000.0}, {"T", 300.0, 100.0}};
@@ -155,6 +154,30 @@ void validate_property_capabilities(const ComponentCompileContext& context,
     }
 }
 
+template <typename Builder>
+void validate_degree_of_freedom(
+    const std::string& model_id,
+    const Builder& system) {
+    const std::size_t variables = system.variables().size();
+    const std::size_t equations = system.residuals().size();
+    if (variables == equations) {
+        return;
+    }
+    const bool under_specified = variables > equations;
+    const std::size_t difference = under_specified
+                                       ? variables - equations
+                                       : equations - variables;
+    throw std::invalid_argument(
+        "model '" + model_id + "' is " +
+        (under_specified ? "under-specified" : "over-specified") +
+        ": " + std::to_string(variables) + " variables and " +
+        std::to_string(equations) + " equations; " +
+        std::to_string(difference) +
+        (under_specified
+             ? " additional independent equation(s) or specification(s) required"
+             : " equation(s) or specification(s) must be removed"));
+}
+
 ComponentModelDescriptor make_descriptor(std::string kind,
                                     std::vector<PortModelDescriptor> ports,
                                     std::string version = "1.0.0") {
@@ -240,11 +263,9 @@ void add_turbomachinery_equations(const ComponentCompileContext& context,
     const auto inlet_m = require_port_variable(context, "inlet.m_dot");
     const auto inlet_p = require_port_variable(context, "inlet.p");
     const auto inlet_h = require_port_variable(context, "inlet.h");
-    const auto inlet_t = require_port_variable(context, "inlet.T");
     const auto outlet_m = require_port_variable(context, "outlet.m_dot");
     const auto outlet_p = require_port_variable(context, "outlet.p");
     const auto outlet_h = require_port_variable(context, "outlet.h");
-    const auto outlet_t = require_port_variable(context, "outlet.T");
     const auto shaft_w = require_port_variable(context, "shaft.W_dot");
     const std::string prefix = "component." + context.component.id + ".";
 
@@ -257,31 +278,11 @@ void add_turbomachinery_equations(const ComponentCompileContext& context,
             : std::vector<LinearTerm>{{inlet_p, 1.0}, {outlet_p, -pressure_ratio}},
         0.0, 100000.0 * pressure_ratio);
 
-    const auto add_state_equation =
-        [&system, &prefix, properties](const std::string& label,
-                                      std::size_t pressure,
-                                      std::size_t temperature,
-                                      std::size_t enthalpy) {
-            system.add_checked_equation(
-                prefix + label + "_state",
-                [properties, pressure, temperature, enthalpy](
-                    const std::vector<double>& x, double& residual) {
-                    const auto state =
-                        properties->state_pt(x.at(pressure), x.at(temperature));
-                    if (!state.ok()) return property_failure(state);
-                    residual = x.at(enthalpy) - state.state.enthalpy_j_kg;
-                    return EvaluationStatus::success();
-                },
-                1e6);
-        };
-    add_state_equation("inlet", inlet_p, inlet_t, inlet_h);
-    add_state_equation("outlet", outlet_p, outlet_t, outlet_h);
-
     system.add_checked_equation(
         prefix + "isentropic_efficiency",
-        [properties, compressor, eta_is, inlet_p, inlet_t, inlet_h, outlet_p,
+        [properties, compressor, eta_is, inlet_p, inlet_h, outlet_p,
          outlet_h](const std::vector<double>& x, double& residual) {
-            const auto inlet = properties->state_pt(x.at(inlet_p), x.at(inlet_t));
+            const auto inlet = properties->state_ph(x.at(inlet_p), x.at(inlet_h));
             if (!inlet.ok()) return property_failure(inlet);
             const auto isentropic =
                 properties->state_ps(x.at(outlet_p), inlet.state.entropy_j_kg_k);
@@ -317,7 +318,7 @@ public:
                                   {"outlet", "fluid", "out"},
                                   {"shaft", "shaft", "in"}})) {
         descriptor_.required_property_capabilities = {
-            physics::PropertyCapability::state_pt,
+            physics::PropertyCapability::state_ph,
             physics::PropertyCapability::state_ps};
     }
 
@@ -340,7 +341,7 @@ public:
                                        {"outlet", "fluid", "out"},
                                        {"shaft", "shaft", "out"}})) {
         descriptor_.required_property_capabilities = {
-            physics::PropertyCapability::state_pt,
+            physics::PropertyCapability::state_ph,
             physics::PropertyCapability::state_ps};
     }
 
@@ -349,6 +350,169 @@ public:
     void add_equations(const ComponentCompileContext& context,
                        EquationSystemBuilder& system) const override {
         add_turbomachinery_equations(context, system, false);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class TwoInletFluidMixerModel final : public ComponentModel {
+public:
+    TwoInletFluidMixerModel()
+        : descriptor_(make_descriptor(
+              "junction.fluid.mixer.two_inlet",
+              {{"inlet_a", "fluid", "in"},
+               {"inlet_b", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(const ComponentCompileContext& context,
+                       EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet_a");
+        if (properties !=
+                require_property_package(context, "inlet_b") ||
+            properties !=
+                require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' mixer ports must use the same medium");
+        }
+
+        const auto mass_a =
+            require_port_variable(context, "inlet_a.m_dot");
+        const auto pressure_a =
+            require_port_variable(context, "inlet_a.p");
+        const auto enthalpy_a =
+            require_port_variable(context, "inlet_a.h");
+        const auto mass_b =
+            require_port_variable(context, "inlet_b.m_dot");
+        const auto pressure_b =
+            require_port_variable(context, "inlet_b.p");
+        const auto enthalpy_b =
+            require_port_variable(context, "inlet_b.h");
+        const auto mass_out =
+            require_port_variable(context, "outlet.m_dot");
+        const auto pressure_out =
+            require_port_variable(context, "outlet.p");
+        const auto enthalpy_out =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{mass_out, 1.0}, {mass_a, -1.0}, {mass_b, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_inlet_a",
+            {{pressure_out, 1.0}, {pressure_a, -1.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "pressure_inlet_b",
+            {{pressure_out, 1.0}, {pressure_b, -1.0}},
+            0.0, 100000.0);
+        system.add_sparse_equation(
+            prefix + "energy_balance",
+            {mass_a, enthalpy_a, mass_b, enthalpy_b,
+             mass_out, enthalpy_out},
+            [mass_a, enthalpy_a, mass_b, enthalpy_b,
+             mass_out, enthalpy_out](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                jacobian.push_back(
+                    {mass_out, x.at(enthalpy_out)});
+                jacobian.push_back(
+                    {enthalpy_out, x.at(mass_out)});
+                jacobian.push_back(
+                    {mass_a, -x.at(enthalpy_a)});
+                jacobian.push_back(
+                    {enthalpy_a, -x.at(mass_a)});
+                jacobian.push_back(
+                    {mass_b, -x.at(enthalpy_b)});
+                jacobian.push_back(
+                    {enthalpy_b, -x.at(mass_b)});
+                return x.at(mass_out) * x.at(enthalpy_out) -
+                       x.at(mass_a) * x.at(enthalpy_a) -
+                       x.at(mass_b) * x.at(enthalpy_b);
+            },
+            1.0e8);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class TwoOutletFluidSplitterModel final : public ComponentModel {
+public:
+    TwoOutletFluidSplitterModel()
+        : descriptor_(make_descriptor(
+              "junction.fluid.splitter.two_outlet",
+              {{"inlet", "fluid", "in"},
+               {"outlet_a", "fluid", "out"},
+               {"outlet_b", "fluid", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(const ComponentCompileContext& context,
+                       EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+                require_property_package(context, "outlet_a") ||
+            properties !=
+                require_property_package(context, "outlet_b")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' splitter ports must use the same medium");
+        }
+
+        const auto mass_in =
+            require_port_variable(context, "inlet.m_dot");
+        const auto pressure_in =
+            require_port_variable(context, "inlet.p");
+        const auto enthalpy_in =
+            require_port_variable(context, "inlet.h");
+        const auto mass_a =
+            require_port_variable(context, "outlet_a.m_dot");
+        const auto pressure_a =
+            require_port_variable(context, "outlet_a.p");
+        const auto enthalpy_a =
+            require_port_variable(context, "outlet_a.h");
+        const auto mass_b =
+            require_port_variable(context, "outlet_b.m_dot");
+        const auto pressure_b =
+            require_port_variable(context, "outlet_b.p");
+        const auto enthalpy_b =
+            require_port_variable(context, "outlet_b.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{mass_in, 1.0}, {mass_a, -1.0}, {mass_b, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_outlet_a",
+            {{pressure_a, 1.0}, {pressure_in, -1.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "pressure_outlet_b",
+            {{pressure_b, 1.0}, {pressure_in, -1.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "enthalpy_outlet_a",
+            {{enthalpy_a, 1.0}, {enthalpy_in, -1.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "enthalpy_outlet_b",
+            {{enthalpy_b, 1.0}, {enthalpy_in, -1.0}},
+            0.0, 100000.0);
     }
 
 private:
@@ -576,9 +740,12 @@ ComponentRegistry make_default_component_registry() {
         "turbine.gas.isentropic_efficiency"));
     registry.register_model(std::make_shared<PropertyTurbineModel>(
         "turbine.fluid.isentropic_efficiency"));
-    registry.register_model(std::make_shared<MetadataComponentModel>(make_descriptor(
-        "pump.fluid.isentropic_efficiency",
-        {{"inlet", "fluid", "in"}, {"outlet", "fluid", "out"}, {"shaft", "shaft", "in"}})));
+    registry.register_model(std::make_shared<PropertyCompressorModel>(
+        "pump.fluid.isentropic_efficiency"));
+    registry.register_model(
+        std::make_shared<TwoInletFluidMixerModel>());
+    registry.register_model(
+        std::make_shared<TwoOutletFluidSplitterModel>());
     registry.register_model(std::make_shared<MetadataComponentModel>(make_descriptor(
         "heat_exchanger.simple",
         {{"hot_in", "fluid", "in"},
@@ -692,6 +859,115 @@ CompiledModelGraph compile_model_graph(
         for (const auto& [key, scalar] : active_case->fixed_values) {
             const auto variable_it = variable_indices.find(key);
             if (variable_it == variable_indices.end()) {
+                const std::size_t first_dot = key.find('.');
+                const std::size_t second_dot =
+                    first_dot == std::string::npos
+                        ? std::string::npos
+                        : key.find('.', first_dot + 1);
+                const bool is_temperature_specification =
+                    first_dot != std::string::npos &&
+                    second_dot != std::string::npos &&
+                    key.find('.', second_dot + 1) ==
+                        std::string::npos &&
+                    key.substr(second_dot + 1) == "T";
+                if (is_temperature_specification) {
+                    const std::string component_id =
+                        key.substr(0, first_dot);
+                    const std::string port_name = key.substr(
+                        first_dot + 1,
+                        second_dot - first_dot - 1);
+                    const ComponentDefinition* component = nullptr;
+                    for (const auto& candidate :
+                         document.components) {
+                        if (candidate.id == component_id) {
+                            component = &candidate;
+                            break;
+                        }
+                    }
+                    if (component != nullptr) {
+                        const auto port =
+                            component->ports.find(port_name);
+                        if (port != component->ports.end() &&
+                            port->second.domain == "fluid") {
+                            const auto package =
+                                medium_properties.find(
+                                    port->second.medium);
+                            if (package ==
+                                medium_properties.end()) {
+                                throw std::logic_error(
+                                    "compiled medium property package missing: " +
+                                    port->second.medium);
+                            }
+                            if (!package->second->supports(
+                                    physics::PropertyCapability::
+                                        state_ph)) {
+                                throw std::invalid_argument(
+                                    "temperature specification '" +
+                                    key +
+                                    "' requires property capability 'state_ph'");
+                            }
+                            const auto pressure =
+                                variable_indices.find(
+                                    variable_key(
+                                        component_id, port_name,
+                                        "p"));
+                            const auto enthalpy =
+                                variable_indices.find(
+                                    variable_key(
+                                        component_id, port_name,
+                                        "h"));
+                            if (pressure ==
+                                    variable_indices.end() ||
+                                enthalpy ==
+                                    variable_indices.end()) {
+                                throw std::logic_error(
+                                    "fluid temperature specification is missing primary variables: " +
+                                    key);
+                            }
+                            const std::string residual_name =
+                                "fixed." + active_case->id +
+                                "." + key;
+                            const std::size_t residual_index =
+                                system.add_checked_equation(
+                                    residual_name,
+                                    [properties =
+                                         package->second,
+                                     pressure =
+                                         pressure->second,
+                                     enthalpy =
+                                         enthalpy->second,
+                                     target =
+                                         scalar.value_si](
+                                        const std::vector<double>&
+                                            x,
+                                        double& residual) {
+                                        const auto state =
+                                            properties->state_ph(
+                                                x.at(pressure),
+                                                x.at(enthalpy));
+                                        if (!state.ok()) {
+                                            return property_failure(
+                                                state);
+                                        }
+                                        residual =
+                                            state.state
+                                                .temperature_k -
+                                            target;
+                                        return EvaluationStatus::
+                                            success();
+                                    },
+                                    std::max(
+                                        std::abs(
+                                            scalar.value_si),
+                                        1.0));
+                            graph.fixed_value_equations.push_back(
+                                system.residuals()
+                                    .at(residual_index)
+                                    .name);
+                            continue;
+                        }
+                    }
+                }
                 throw std::invalid_argument("case '" + active_case->id +
                                             "' fixed value references unknown variable: " + key);
             }
@@ -710,6 +986,7 @@ CompiledModelGraph compile_model_graph(
         }
     }
 
+    validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     return graph;
 }
@@ -921,6 +1198,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
         }
     }
 
+    validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     return graph;
 }

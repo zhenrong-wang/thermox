@@ -1,7 +1,9 @@
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/results.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <fstream>
@@ -149,7 +151,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
       "mode": "steady_state_design",
       "fixed_values": {
         "ambient.outlet.p": {"value": 1.01325, "unit": "bar"},
-        "ambient.outlet.T": {"value": 288.15, "unit": "K"},
+        "ambient.outlet.h": {"value": 289.446675, "unit": "kJ/kg"},
         "generator.W_dot": {"value": 20.0, "unit": "MW"}
       },
       "initial_guesses": {
@@ -265,6 +267,12 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain lumped thermal storage");
     require(registry.contains("source.heat.boundary"),
             "default registry should contain transient heat boundary");
+    require(registry.contains("pump.fluid.isentropic_efficiency"),
+            "default registry should contain property-aware pump");
+    require(registry.contains("junction.fluid.mixer.two_inlet"),
+            "default registry should contain two-inlet mixer");
+    require(registry.contains("junction.fluid.splitter.two_outlet"),
+            "default registry should contain two-outlet splitter");
     require(registry.kinds().size() >= 4, "default registry should contain multiple component kinds");
 }
 
@@ -300,8 +308,10 @@ void test_generic_model_compiles_to_connection_equations() {
     "id": "design",
     "mode": "steady_state_design",
     "fixed_values": {
+      "ambient.outlet.m_dot": {"value": 100.0, "unit": "kg/s"},
       "ambient.outlet.p": {"value": 101.325, "unit": "kPa"},
-      "ambient.outlet.T": {"value": 288.15, "unit": "K"}
+      "ambient.outlet.T": {"value": 288.15, "unit": "K"},
+      "compressor.shaft.omega": 314.1592653589793
     },
     "initial_guesses": {
       "compressor.inlet.p": {"value": 100.0, "unit": "kPa"}
@@ -314,10 +324,15 @@ void test_generic_model_compiles_to_connection_equations() {
 
     require(graph.model_id == "compile_demo", "compiled graph carries model id");
     require(graph.case_id && *graph.case_id == "design", "compiled graph carries selected case id");
-    require(graph.port_variables.size() == 14, "compiled graph should expose canonical port variables");
-    require(graph.connection_equations.size() == 4, "fluid connection lowers to four equations");
-    require(graph.fixed_value_equations.size() == 2, "fixed values lower to equations");
-    require(graph.problem.variable_names.size() == 14, "problem has variables");
+    require(graph.port_variables.size() == 11, "compiled graph should expose primary port variables");
+    require(graph.connection_equations.size() == 3, "fluid connection lowers conserved variables");
+    require(graph.fixed_value_equations.size() == 4, "fixed values lower to equations");
+    require(graph.problem.variable_names.size() == 11, "problem has variables");
+    require(std::find(graph.problem.variable_names.begin(),
+                      graph.problem.variable_names.end(),
+                      "ambient.outlet.T") ==
+                graph.problem.variable_names.end(),
+            "temperature boundary specification is not a solver variable");
     require(static_cast<bool>(graph.problem.partial_sparse_jacobian),
             "property-aware graph provides mixed sparse Jacobian assembly");
 
@@ -339,9 +354,6 @@ void test_generic_model_compiles_to_connection_equations() {
         }
         if (graph.problem.variable_names.at(i) == "compressor.inlet.p") {
             x.at(i) = 101325.0;
-        }
-        if (graph.problem.variable_names.at(i) == "ambient.outlet.T") {
-            x.at(i) = 288.15;
         }
     }
     graph.problem.residual(x, residual);
@@ -382,7 +394,7 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
     },
     "initial_guesses": {
       "compressor.outlet.p": {"value": 1200.0, "unit": "kPa"},
-      "compressor.outlet.T": {"value": 650.0, "unit": "K"},
+      "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
       "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
     }
   }]
@@ -397,15 +409,12 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
     require(result.diagnostics.converged, result.diagnostics.message);
 
     double outlet_pressure = 0.0;
-    double outlet_temperature = 0.0;
     double outlet_enthalpy = 0.0;
     double shaft_power = 0.0;
     for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
         const auto& name = graph.problem.variable_names.at(i);
         if (name == "compressor.outlet.p") {
             outlet_pressure = result.x.at(i);
-        } else if (name == "compressor.outlet.T") {
-            outlet_temperature = result.x.at(i);
         } else if (name == "compressor.outlet.h") {
             outlet_enthalpy = result.x.at(i);
         } else if (name == "compressor.shaft.W_dot") {
@@ -421,9 +430,23 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
     const double expected_power = 100.0 * (expected_enthalpy - cp * 300.0);
 
     require_near(outlet_pressure, 12.0 * 101325.0, 1.0e-5, "compressor outlet pressure");
-    require_near(outlet_temperature, expected_temperature, 1.0e-8, "compressor outlet temperature");
     require_near(outlet_enthalpy, expected_enthalpy, 1.0e-5, "compressor outlet enthalpy");
+    require_near(outlet_enthalpy / cp, expected_temperature, 1.0e-8,
+                 "compressor derived outlet temperature");
     require_near(shaft_power, expected_power, 1.0e-2, "compressor shaft power");
+
+    const auto port_results =
+        thermox::platform::evaluate_fluid_port_results(
+            document, graph, result.x);
+    require(port_results.size() == 2,
+            "compressor exposes two derived fluid-port results");
+    for (const auto& port : port_results) {
+        if (port.port_name == "outlet") {
+            require_near(port.state.temperature_k,
+                         expected_temperature, 1.0e-8,
+                         "result layer derives compressor outlet temperature");
+        }
+    }
 }
 
 void test_generic_model_solves_ideal_gas_turbine_residuals() {
@@ -454,12 +477,12 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
     "fixed_values": {
       "turbine.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
       "turbine.inlet.p": {"value": 1215.9, "unit": "kPa"},
-      "turbine.inlet.T": {"value": 1400.0, "unit": "K"},
+      "turbine.inlet.h": {"value": 1406.3, "unit": "kJ/kg"},
       "turbine.shaft.omega": 314.1592653589793
     },
     "initial_guesses": {
       "turbine.outlet.p": {"value": 101.325, "unit": "kPa"},
-      "turbine.outlet.T": {"value": 800.0, "unit": "K"},
+      "turbine.outlet.h": {"value": 803.6, "unit": "kJ/kg"},
       "turbine.shaft.W_dot": {"value": 60.0, "unit": "MW"}
     }
   }]
@@ -474,15 +497,12 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
     require(result.diagnostics.converged, result.diagnostics.message);
 
     double outlet_pressure = 0.0;
-    double outlet_temperature = 0.0;
     double outlet_enthalpy = 0.0;
     double shaft_power = 0.0;
     for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
         const auto& name = graph.problem.variable_names.at(i);
         if (name == "turbine.outlet.p") {
             outlet_pressure = result.x.at(i);
-        } else if (name == "turbine.outlet.T") {
-            outlet_temperature = result.x.at(i);
         } else if (name == "turbine.outlet.h") {
             outlet_enthalpy = result.x.at(i);
         } else if (name == "turbine.shaft.W_dot") {
@@ -501,14 +521,239 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
 
     require_near(outlet_pressure, 1215900.0 / pressure_ratio, 1.0e-5,
                  "turbine outlet pressure");
-    require_near(outlet_temperature, expected_temperature, 1.0e-6,
-                 "turbine outlet temperature");
     require_near(outlet_enthalpy, expected_enthalpy, 1.0e-3, "turbine outlet enthalpy");
+    require_near(outlet_enthalpy / cp, expected_temperature, 1.0e-6,
+                 "turbine derived outlet temperature");
     require_near(shaft_power, expected_power, 1.0e-1, "turbine shaft power");
 }
 
+void test_generic_model_solves_two_inlet_mixer() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "ideal_gas_mixer",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {
+        "id": "mixer",
+        "kind": "junction.fluid.mixer.two_inlet",
+        "ports": {
+          "inlet_a": {"domain": "fluid", "medium": "air", "direction": "in"},
+          "inlet_b": {"domain": "fluid", "medium": "air", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "mixer.inlet_a.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "mixer.inlet_a.p": {"value": 1.0, "unit": "bar"},
+      "mixer.inlet_a.h": {"value": 300.0, "unit": "kJ/kg"},
+      "mixer.inlet_b.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "mixer.inlet_b.h": {"value": 600.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+
+    double outlet_mass = 0.0;
+    double outlet_pressure = 0.0;
+    double outlet_enthalpy = 0.0;
+    for (std::size_t i = 0;
+         i < graph.problem.variable_names.size(); ++i) {
+        const auto& name = graph.problem.variable_names.at(i);
+        if (name == "mixer.outlet.m_dot") {
+            outlet_mass = result.x.at(i);
+        } else if (name == "mixer.outlet.p") {
+            outlet_pressure = result.x.at(i);
+        } else if (name == "mixer.outlet.h") {
+            outlet_enthalpy = result.x.at(i);
+        }
+    }
+    require_near(outlet_mass, 3.0, 1.0e-10,
+                 "mixer conserves mass");
+    require_near(outlet_pressure, 1.0e5, 1.0e-8,
+                 "mixer equalizes pressure");
+    require_near(outlet_enthalpy, 4.0e5, 1.0e-7,
+                 "mixer conserves enthalpy flow");
+}
+
+void test_generic_model_solves_two_outlet_splitter() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "ideal_gas_splitter",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {
+        "id": "splitter",
+        "kind": "junction.fluid.splitter.two_outlet",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+          "outlet_a": {"domain": "fluid", "medium": "air", "direction": "out"},
+          "outlet_b": {"domain": "fluid", "medium": "air", "direction": "out"}
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "splitter.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "splitter.inlet.p": {"value": 1.0, "unit": "bar"},
+      "splitter.inlet.h": {"value": 400.0, "unit": "kJ/kg"},
+      "splitter.outlet_a.m_dot": {"value": 4.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+
+    double outlet_b_mass = 0.0;
+    double outlet_b_pressure = 0.0;
+    double outlet_b_enthalpy = 0.0;
+    for (std::size_t i = 0;
+         i < graph.problem.variable_names.size(); ++i) {
+        const auto& name = graph.problem.variable_names.at(i);
+        if (name == "splitter.outlet_b.m_dot") {
+            outlet_b_mass = result.x.at(i);
+        } else if (name == "splitter.outlet_b.p") {
+            outlet_b_pressure = result.x.at(i);
+        } else if (name == "splitter.outlet_b.h") {
+            outlet_b_enthalpy = result.x.at(i);
+        }
+    }
+    require_near(outlet_b_mass, 6.0, 1.0e-10,
+                 "splitter conserves mass");
+    require_near(outlet_b_pressure, 1.0e5, 1.0e-8,
+                 "splitter propagates pressure");
+    require_near(outlet_b_enthalpy, 4.0e5, 1.0e-8,
+                 "splitter propagates enthalpy");
+}
+
+void test_generic_model_solves_if97_pump() {
+    const auto properties =
+        thermox::physics::make_default_property_package_registry().create(
+            "water_steam_if97", "Water");
+    const auto inlet_state = properties->state_pt(1.0e5, 300.0);
+    const auto outlet_guess = properties->state_pt(5.0e6, 305.0);
+    require(inlet_state.ok() && outlet_guess.ok(),
+            "IF97 pump test states should be valid");
+
+    std::string model_text = R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "if97_pump",
+    "media": [
+      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+    ],
+    "components": [
+      {
+        "id": "pump",
+        "kind": "pump.fluid.isentropic_efficiency",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
+          "shaft": {"domain": "shaft", "direction": "in"}
+        },
+        "parameters": {"pressure_ratio": 50.0, "eta_is": 0.8}
+      }
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "pump.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "pump.inlet.p": {"value": 1.0, "unit": "bar"},
+      "pump.inlet.h": __INLET_H__,
+      "pump.shaft.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "pump.outlet.p": {"value": 5.0, "unit": "MPa"},
+      "pump.outlet.h": __OUTLET_H__,
+      "pump.shaft.W_dot": {"value": 0.1, "unit": "MW"}
+    }
+  }]
+})json";
+    const auto replace_number =
+        [&model_text](const std::string& token, double value) {
+            const auto position = model_text.find(token);
+            require(position != std::string::npos,
+                    "IF97 model token should exist");
+            model_text.replace(position, token.size(),
+                               std::to_string(value));
+        };
+    replace_number("__INLET_H__", inlet_state.state.enthalpy_j_kg);
+    replace_number("__OUTLET_H__", outlet_guess.state.enthalpy_j_kg);
+    const auto document =
+        thermox::platform::parse_model_document_text(model_text);
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+
+    double outlet_pressure = 0.0;
+    double outlet_enthalpy = 0.0;
+    double shaft_power = 0.0;
+    for (std::size_t i = 0;
+         i < graph.problem.variable_names.size(); ++i) {
+        const auto& name = graph.problem.variable_names.at(i);
+        if (name == "pump.outlet.p") {
+            outlet_pressure = result.x.at(i);
+        } else if (name == "pump.outlet.h") {
+            outlet_enthalpy = result.x.at(i);
+        } else if (name == "pump.shaft.W_dot") {
+            shaft_power = result.x.at(i);
+        }
+    }
+    require_near(outlet_pressure, 5.0e6, 1.0e-3,
+                 "IF97 pump outlet pressure");
+    require(outlet_enthalpy > inlet_state.state.enthalpy_j_kg,
+            "IF97 pump raises enthalpy");
+    require(shaft_power > 0.0,
+            "IF97 pump consumes shaft power");
+}
+
 void test_generic_model_solves_supercritical_co2_compressor() {
-    const auto document = thermox::platform::parse_model_document_text(R"json({
+    const auto properties =
+        thermox::physics::make_default_property_package_registry().create(
+            "co2_span_wagner", "CO2");
+    const auto inlet_state = properties->state_pt(8.0e6, 350.0);
+    const auto outlet_guess = properties->state_pt(16.0e6, 400.0);
+    require(inlet_state.ok() && outlet_guess.ok(),
+            "sCO2 test states should be valid");
+
+    std::string model_text = R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "sco2_compressor",
@@ -533,16 +778,28 @@ void test_generic_model_solves_supercritical_co2_compressor() {
     "fixed_values": {
       "compressor.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
       "compressor.inlet.p": {"value": 8.0, "unit": "MPa"},
-      "compressor.inlet.T": {"value": 350.0, "unit": "K"},
+      "compressor.inlet.h": __INLET_H__,
       "compressor.shaft.omega": 314.1592653589793
     },
     "initial_guesses": {
       "compressor.outlet.p": {"value": 16.0, "unit": "MPa"},
-      "compressor.outlet.T": {"value": 400.0, "unit": "K"},
+      "compressor.outlet.h": __OUTLET_H__,
       "compressor.shaft.W_dot": {"value": 1.0, "unit": "MW"}
     }
   }]
-})json");
+})json";
+    const auto replace_number =
+        [&model_text](const std::string& token, double value) {
+            const auto position = model_text.find(token);
+            require(position != std::string::npos,
+                    "sCO2 model token should exist");
+            model_text.replace(position, token.size(),
+                               std::to_string(value));
+        };
+    replace_number("__INLET_H__", inlet_state.state.enthalpy_j_kg);
+    replace_number("__OUTLET_H__", outlet_guess.state.enthalpy_j_kg);
+    const auto document =
+        thermox::platform::parse_model_document_text(model_text);
 
     const auto registry = thermox::platform::make_default_component_registry();
     const auto graph =
@@ -558,18 +815,19 @@ void test_generic_model_solves_supercritical_co2_compressor() {
     double inlet_h = 0.0;
     double outlet_h = 0.0;
     double outlet_p = 0.0;
-    double outlet_t = 0.0;
     double shaft_w = 0.0;
     for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
         const auto& name = graph.problem.variable_names.at(i);
         if (name == "compressor.inlet.h") inlet_h = result.x.at(i);
         if (name == "compressor.outlet.h") outlet_h = result.x.at(i);
         if (name == "compressor.outlet.p") outlet_p = result.x.at(i);
-        if (name == "compressor.outlet.T") outlet_t = result.x.at(i);
         if (name == "compressor.shaft.W_dot") shaft_w = result.x.at(i);
     }
+    const auto solved_outlet = properties->state_ph(outlet_p, outlet_h);
+    require(solved_outlet.ok(), "sCO2 solved outlet state should be valid");
     require_near(outlet_p, 16e6, 1e-4, "sCO2 compressor outlet pressure");
-    require(outlet_t > 350.0, "sCO2 compression raises temperature");
+    require(solved_outlet.state.temperature_k > 350.0,
+            "sCO2 compression raises derived temperature");
     require(outlet_h > inlet_h, "sCO2 compression raises enthalpy");
     require_near(shaft_w, 10.0 * (outlet_h - inlet_h), 1e-3,
                  "sCO2 compressor energy balance");
@@ -640,6 +898,70 @@ void test_generic_model_compiler_rejects_unknown_case_variable() {
                    "fixed value references unknown variable");
 }
 
+void test_compiler_reports_under_and_over_specification() {
+    const auto under_specified =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "under_specified",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {"id": "source", "kind": "source.fluid.boundary", "ports": {
+        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+      }}
+    ],
+    "connections": []
+  },
+  "cases": [{"id": "design", "mode": "steady_state_design"}]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                under_specified, registry, "design");
+        },
+        "under-specified: 3 variables and 0 equations");
+
+    const auto over_specified =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "over_specified",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
+        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
+        "shaft": {"domain": "shaft", "direction": "in"}
+      }, "parameters": {"pressure_ratio": 2.0, "eta_is": 0.8}}
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "compressor.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 1.0, "unit": "bar"},
+      "compressor.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "compressor.outlet.p": {"value": 2.0, "unit": "bar"},
+      "compressor.shaft.omega": 300.0
+    }
+  }]
+})json");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                over_specified, registry, "design");
+        },
+        "over-specified: 8 variables and 9 equations");
+}
+
 void test_component_property_capabilities_are_validated() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
@@ -667,7 +989,7 @@ void test_component_property_capabilities_are_validated() {
             (void)thermox::platform::compile_model_graph(
                 document, components, properties);
         },
-        "requires property capability 'state_ps'");
+        "requires property capability 'state_ph'");
 }
 
 void test_transient_model_compiles_and_integrates_lumped_storage() {
@@ -873,10 +1195,14 @@ int main() {
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
         test_generic_model_solves_ideal_gas_turbine_residuals();
+        test_generic_model_solves_two_inlet_mixer();
+        test_generic_model_solves_two_outlet_splitter();
+        test_generic_model_solves_if97_pump();
         test_generic_model_solves_supercritical_co2_compressor();
         test_generic_model_compiler_rejects_unregistered_component_kind();
         test_generic_model_compiler_rejects_bad_port_contract();
         test_generic_model_compiler_rejects_unknown_case_variable();
+        test_compiler_reports_under_and_over_specification();
         test_component_property_capabilities_are_validated();
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_compiler_rejects_steady_only_components();

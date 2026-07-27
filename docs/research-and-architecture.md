@@ -199,7 +199,8 @@ Minimum steady-state variables:
 - `m_dot`: mass flow rate, kg/s; flow variable.
 - `p`: static pressure, Pa; potential-like variable for connection compatibility.
 - `h`: specific enthalpy, J/kg; stream variable.
-- `T`: temperature, K; property-derived or optional state variable.
+- `T`: temperature, K; property-derived result or compiled boundary specification, not a normal
+  fluid-connector unknown.
 - `x`: composition vector / mass fractions where needed.
 - `phase` or vapor quality for steam/water if applicable.
 
@@ -238,8 +239,9 @@ Topology/model definition and case data must be separate.
   "model_revision": "rev_2026_07_27_a",
   "mode": "steady_state_design",
   "fixed_values": {
-    "ambient.T": {"value": 288.15, "unit": "K"},
-    "ambient.p": {"value": 101325, "unit": "Pa"},
+    "ambient.outlet.m_dot": {"value": 100, "unit": "kg/s"},
+    "ambient.outlet.p": {"value": 101325, "unit": "Pa"},
+    "ambient.outlet.T": {"value": 288.15, "unit": "K"},
     "generator.P_e": {"value": 450, "unit": "MW"}
   },
   "initial_guesses": {
