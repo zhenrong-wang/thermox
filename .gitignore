@@ -1,0 +1,15 @@
+/build/
+
+# Local compiler and editor output
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+.cache/
+.vscode/
+
+# Test-generated model inputs
+/thermox_*.json

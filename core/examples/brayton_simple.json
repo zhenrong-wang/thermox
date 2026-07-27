@@ -1,0 +1,15 @@
+{
+  "schema_version": "thermox.model/v1",
+  "model_id": "brayton_simple",
+  "case_id": "design",
+  "kind": "example.brayton.simple",
+  "ambient_pressure_pa": 101325.0,
+  "ambient_temperature_k": 288.15,
+  "pressure_ratio": 12.0,
+  "turbine_inlet_temperature_k": 1400.0,
+  "compressor_efficiency": 0.86,
+  "turbine_efficiency": 0.89,
+  "mass_flow_kg_s": 100.0,
+  "cp_j_kg_k": 1004.5,
+  "gamma": 1.4
+}

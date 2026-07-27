@@ -1,0 +1,871 @@
+#include "thermox/examples/schema.hpp"
+
+#include <cctype>
+#include <cmath>
+#include <fstream>
+#include <map>
+#include <set>
+#include <sstream>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace thermox::examples {
+
+namespace {
+
+struct JsonValue {
+    enum class Type { Null, Bool, Number, String, Object, Array };
+
+    Type type{Type::Null};
+    bool boolean{false};
+    double number{0.0};
+    std::string string;
+    std::map<std::string, JsonValue> object;
+    std::vector<JsonValue> array;
+};
+
+class JsonParser {
+public:
+    explicit JsonParser(std::string_view text) : text_(text) {}
+
+    JsonValue parse_document() {
+        skip_whitespace();
+        JsonValue value = parse_value();
+        skip_whitespace();
+        if (!at_end()) {
+            fail("unexpected trailing content");
+        }
+        return value;
+    }
+
+private:
+    [[nodiscard]] bool at_end() const { return pos_ >= text_.size(); }
+
+    [[nodiscard]] char peek() const {
+        if (at_end()) {
+            fail("unexpected end of input");
+        }
+        return text_[pos_];
+    }
+
+    char consume() {
+        const char c = peek();
+        ++pos_;
+        return c;
+    }
+
+    void expect(char expected) {
+        if (consume() != expected) {
+            fail(std::string("expected '") + expected + "'");
+        }
+    }
+
+    void skip_whitespace() {
+        while (!at_end() && std::isspace(static_cast<unsigned char>(text_[pos_])) != 0) {
+            ++pos_;
+        }
+    }
+
+    [[noreturn]] void fail(const std::string& message) const {
+        throw std::invalid_argument("invalid JSON at byte " + std::to_string(pos_) + ": " + message);
+    }
+
+    JsonValue parse_value() {
+        skip_whitespace();
+        const char c = peek();
+        if (c == '{') {
+            return parse_object();
+        }
+        if (c == '[') {
+            return parse_array();
+        }
+        if (c == '"') {
+            JsonValue value;
+            value.type = JsonValue::Type::String;
+            value.string = parse_string();
+            return value;
+        }
+        if (c == '-' || std::isdigit(static_cast<unsigned char>(c)) != 0) {
+            return parse_number();
+        }
+        if (match_literal("true")) {
+            JsonValue value;
+            value.type = JsonValue::Type::Bool;
+            value.boolean = true;
+            return value;
+        }
+        if (match_literal("false")) {
+            JsonValue value;
+            value.type = JsonValue::Type::Bool;
+            value.boolean = false;
+            return value;
+        }
+        if (match_literal("null")) {
+            JsonValue value;
+            value.type = JsonValue::Type::Null;
+            return value;
+        }
+        fail("expected JSON value");
+    }
+
+    bool match_literal(std::string_view literal) {
+        if (text_.substr(pos_, literal.size()) == literal) {
+            pos_ += literal.size();
+            return true;
+        }
+        return false;
+    }
+
+    JsonValue parse_object() {
+        JsonValue value;
+        value.type = JsonValue::Type::Object;
+        expect('{');
+        skip_whitespace();
+        if (!at_end() && peek() == '}') {
+            consume();
+            return value;
+        }
+
+        while (true) {
+            skip_whitespace();
+            if (peek() != '"') {
+                fail("expected object key string");
+            }
+            const std::string key = parse_string();
+            skip_whitespace();
+            expect(':');
+            JsonValue member = parse_value();
+            const auto inserted = value.object.emplace(key, std::move(member));
+            if (!inserted.second) {
+                fail("duplicate object key: " + key);
+            }
+            skip_whitespace();
+            const char separator = consume();
+            if (separator == '}') {
+                break;
+            }
+            if (separator != ',') {
+                fail("expected ',' or '}' in object");
+            }
+        }
+        return value;
+    }
+
+    JsonValue parse_array() {
+        JsonValue value;
+        value.type = JsonValue::Type::Array;
+        expect('[');
+        skip_whitespace();
+        if (!at_end() && peek() == ']') {
+            consume();
+            return value;
+        }
+
+        while (true) {
+            value.array.push_back(parse_value());
+            skip_whitespace();
+            const char separator = consume();
+            if (separator == ']') {
+                break;
+            }
+            if (separator != ',') {
+                fail("expected ',' or ']' in array");
+            }
+        }
+        return value;
+    }
+
+    std::string parse_string() {
+        expect('"');
+        std::string out;
+        while (true) {
+            if (at_end()) {
+                fail("unterminated string");
+            }
+            const char c = consume();
+            if (c == '"') {
+                return out;
+            }
+            if (static_cast<unsigned char>(c) < 0x20U) {
+                fail("unescaped control character in string");
+            }
+            if (c != '\\') {
+                out.push_back(c);
+                continue;
+            }
+
+            if (at_end()) {
+                fail("unterminated escape sequence");
+            }
+            const char escaped = consume();
+            switch (escaped) {
+                case '"':
+                case '\\':
+                case '/':
+                    out.push_back(escaped);
+                    break;
+                case 'b':
+                    out.push_back('\b');
+                    break;
+                case 'f':
+                    out.push_back('\f');
+                    break;
+                case 'n':
+                    out.push_back('\n');
+                    break;
+                case 'r':
+                    out.push_back('\r');
+                    break;
+                case 't':
+                    out.push_back('\t');
+                    break;
+                case 'u':
+                    for (int i = 0; i < 4; ++i) {
+                        if (at_end() || std::isxdigit(static_cast<unsigned char>(consume())) == 0) {
+                            fail("invalid unicode escape");
+                        }
+                    }
+                    out.push_back('?');
+                    break;
+                default:
+                    fail("invalid string escape");
+            }
+        }
+    }
+
+    JsonValue parse_number() {
+        const std::size_t start = pos_;
+        if (!at_end() && peek() == '-') {
+            consume();
+        }
+
+        if (at_end()) {
+            fail("incomplete number");
+        }
+        if (peek() == '0') {
+            consume();
+            if (!at_end() && std::isdigit(static_cast<unsigned char>(peek())) != 0) {
+                fail("leading zero in number");
+            }
+        } else if (std::isdigit(static_cast<unsigned char>(peek())) != 0) {
+            while (!at_end() && std::isdigit(static_cast<unsigned char>(peek())) != 0) {
+                consume();
+            }
+        } else {
+            fail("expected digit in number");
+        }
+
+        if (!at_end() && peek() == '.') {
+            consume();
+            if (at_end() || std::isdigit(static_cast<unsigned char>(peek())) == 0) {
+                fail("expected digit after decimal point");
+            }
+            while (!at_end() && std::isdigit(static_cast<unsigned char>(peek())) != 0) {
+                consume();
+            }
+        }
+
+        if (!at_end() && (peek() == 'e' || peek() == 'E')) {
+            consume();
+            if (!at_end() && (peek() == '+' || peek() == '-')) {
+                consume();
+            }
+            if (at_end() || std::isdigit(static_cast<unsigned char>(peek())) == 0) {
+                fail("expected exponent digits");
+            }
+            while (!at_end() && std::isdigit(static_cast<unsigned char>(peek())) != 0) {
+                consume();
+            }
+        }
+
+        JsonValue value;
+        value.type = JsonValue::Type::Number;
+        try {
+            value.number = std::stod(std::string(text_.substr(start, pos_ - start)));
+        } catch (const std::exception&) {
+            fail("number is out of range");
+        }
+        if (!std::isfinite(value.number)) {
+            fail("number is not finite");
+        }
+        return value;
+    }
+
+    std::string_view text_;
+    std::size_t pos_{0};
+};
+
+const JsonValue& require_object_root(const JsonValue& root) {
+    if (root.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("model document must be a JSON object");
+    }
+    return root;
+}
+
+const JsonValue* find_member(const JsonValue& object, const std::string& key) {
+    if (object.type != JsonValue::Type::Object) {
+        return nullptr;
+    }
+    const auto it = object.object.find(key);
+    if (it == object.object.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const JsonValue& require_member(const JsonValue& object, const std::string& key) {
+    const JsonValue* value = find_member(object, key);
+    if (value == nullptr) {
+        throw std::invalid_argument("missing required field: " + key);
+    }
+    return *value;
+}
+
+std::string require_string(const JsonValue& object, const std::string& key) {
+    const JsonValue& value = require_member(object, key);
+    if (value.type != JsonValue::Type::String || value.string.empty()) {
+        throw std::invalid_argument("field '" + key + "' must be a non-empty string");
+    }
+    return value.string;
+}
+
+double require_number_value(const JsonValue& value, const std::string& field_name) {
+    if (value.type != JsonValue::Type::Number) {
+        throw std::invalid_argument("field '" + field_name + "' must be a finite number");
+    }
+    if (!std::isfinite(value.number)) {
+        throw std::invalid_argument("field '" + field_name + "' must be finite");
+    }
+    return value.number;
+}
+
+std::string require_unit(const JsonValue& value, const std::string& field_name) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + field_name + "' must be a number or {value, unit}");
+    }
+    const std::string unit_key{"unit"};
+    const JsonValue& unit = require_member(value, unit_key);
+    if (unit.type != JsonValue::Type::String || unit.string.empty()) {
+        throw std::invalid_argument("field '" + field_name + ".unit' must be a non-empty string");
+    }
+    return unit.string;
+}
+
+double convert_pressure_to_pa(double value, const std::string& unit) {
+    if (unit == "Pa") {
+        return value;
+    }
+    if (unit == "kPa") {
+        return value * 1000.0;
+    }
+    if (unit == "MPa") {
+        return value * 1.0e6;
+    }
+    if (unit == "bar") {
+        return value * 100000.0;
+    }
+    throw std::invalid_argument("unsupported pressure unit: " + unit);
+}
+
+double convert_temperature_to_k(double value, const std::string& unit) {
+    if (unit == "K") {
+        return value;
+    }
+    if (unit == "C" || unit == "degC") {
+        return value + 273.15;
+    }
+    throw std::invalid_argument("unsupported temperature unit: " + unit);
+}
+
+double convert_mass_flow_to_kg_s(double value, const std::string& unit) {
+    if (unit == "kg/s") {
+        return value;
+    }
+    if (unit == "kg/h") {
+        return value / 3600.0;
+    }
+    throw std::invalid_argument("unsupported mass-flow unit: " + unit);
+}
+
+double convert_cp_to_j_kg_k(double value, const std::string& unit) {
+    if (unit == "J/kg/K" || unit == "J/(kg*K)") {
+        return value;
+    }
+    if (unit == "kJ/kg/K" || unit == "kJ/(kg*K)") {
+        return value * 1000.0;
+    }
+    throw std::invalid_argument("unsupported specific-heat unit: " + unit);
+}
+
+double convert_dimensionless(double value, const std::string& unit) {
+    if (unit == "dimensionless" || unit == "1" || unit.empty()) {
+        return value;
+    }
+    if (unit == "%") {
+        return value / 100.0;
+    }
+    throw std::invalid_argument("unsupported dimensionless unit: " + unit);
+}
+
+double convert_power_to_w(double value, const std::string& unit) {
+    if (unit == "W") {
+        return value;
+    }
+    if (unit == "kW") {
+        return value * 1000.0;
+    }
+    if (unit == "MW") {
+        return value * 1.0e6;
+    }
+    throw std::invalid_argument("unsupported power unit: " + unit);
+}
+
+double convert_specific_enthalpy_to_j_kg(double value, const std::string& unit) {
+    if (unit == "J/kg") {
+        return value;
+    }
+    if (unit == "kJ/kg") {
+        return value * 1000.0;
+    }
+    throw std::invalid_argument("unsupported specific-enthalpy unit: " + unit);
+}
+
+ScalarValue make_scalar(double value_si, const std::string& unit, const std::string& dimension) {
+    ScalarValue scalar;
+    scalar.value_si = value_si;
+    scalar.unit = unit;
+    scalar.dimension = dimension;
+    return scalar;
+}
+
+ScalarValue convert_scalar(double value, const std::string& unit, const std::string& field_name) {
+    if (unit == "Pa" || unit == "kPa" || unit == "MPa" || unit == "bar") {
+        return make_scalar(convert_pressure_to_pa(value, unit), "Pa", "pressure");
+    }
+    if (unit == "K" || unit == "C" || unit == "degC") {
+        return make_scalar(convert_temperature_to_k(value, unit), "K", "temperature");
+    }
+    if (unit == "kg/s" || unit == "kg/h") {
+        return make_scalar(convert_mass_flow_to_kg_s(value, unit), "kg/s", "mass_flow");
+    }
+    if (unit == "J/kg/K" || unit == "J/(kg*K)" || unit == "kJ/kg/K" || unit == "kJ/(kg*K)") {
+        return make_scalar(convert_cp_to_j_kg_k(value, unit), "J/kg/K", "specific_heat");
+    }
+    if (unit == "J/kg" || unit == "kJ/kg") {
+        return make_scalar(convert_specific_enthalpy_to_j_kg(value, unit), "J/kg", "specific_enthalpy");
+    }
+    if (unit == "W" || unit == "kW" || unit == "MW") {
+        return make_scalar(convert_power_to_w(value, unit), "W", "power");
+    }
+    if (unit == "dimensionless" || unit == "1" || unit == "%" || unit.empty()) {
+        return make_scalar(convert_dimensionless(value, unit), "dimensionless", "dimensionless");
+    }
+    throw std::invalid_argument("unsupported unit for field '" + field_name + "': " + unit);
+}
+
+ScalarValue parse_scalar_value(const JsonValue& value, const std::string& field_name) {
+    if (value.type == JsonValue::Type::Number) {
+        return make_scalar(require_number_value(value, field_name), "dimensionless", "dimensionless");
+    }
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + field_name + "' must be a number or {value, unit}");
+    }
+    const double scalar = require_number_value(require_member(value, "value"), field_name + ".value");
+    const std::string unit = require_unit(value, field_name);
+    return convert_scalar(scalar, unit, field_name);
+}
+
+bool is_scalar_like(const JsonValue& value) {
+    return value.type == JsonValue::Type::Number ||
+           (value.type == JsonValue::Type::Object && find_member(value, "value") != nullptr &&
+            find_member(value, "unit") != nullptr);
+}
+
+std::map<std::string, ScalarValue> parse_scalar_map(const JsonValue& object,
+                                                    const std::string& field_name,
+                                                    bool skip_non_scalar = false) {
+    if (object.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + field_name + "' must be an object");
+    }
+    std::map<std::string, ScalarValue> scalars;
+    for (const auto& [key, value] : object.object) {
+        if (!is_scalar_like(value)) {
+            if (skip_non_scalar) {
+                continue;
+            }
+            throw std::invalid_argument("field '" + field_name + "." + key + "' must be a scalar quantity");
+        }
+        scalars.emplace(key, parse_scalar_value(value, field_name + "." + key));
+    }
+    return scalars;
+}
+
+std::string optional_string(const JsonValue& object, const std::string& key) {
+    const JsonValue* value = find_member(object, key);
+    if (value == nullptr) {
+        return {};
+    }
+    if (value->type != JsonValue::Type::String) {
+        throw std::invalid_argument("field '" + key + "' must be a string");
+    }
+    return value->string;
+}
+
+const JsonValue& require_object_member(const JsonValue& object, const std::string& key) {
+    const JsonValue& value = require_member(object, key);
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + key + "' must be an object");
+    }
+    return value;
+}
+
+const JsonValue& require_array_member(const JsonValue& object, const std::string& key) {
+    const JsonValue& value = require_member(object, key);
+    if (value.type != JsonValue::Type::Array) {
+        throw std::invalid_argument("field '" + key + "' must be an array");
+    }
+    return value;
+}
+
+const JsonValue* optional_object_member(const JsonValue& object, const std::string& key) {
+    const JsonValue* value = find_member(object, key);
+    if (value == nullptr) {
+        return nullptr;
+    }
+    if (value->type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + key + "' must be an object");
+    }
+    return value;
+}
+
+void require_unique_id(const std::string& id, std::set<std::string>& ids, const std::string& collection_name) {
+    if (!ids.insert(id).second) {
+        throw std::invalid_argument("duplicate " + collection_name + " id: " + id);
+    }
+}
+
+std::string endpoint_component(const std::string& endpoint) {
+    const std::size_t dot = endpoint.find('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= endpoint.size() ||
+        endpoint.find('.', dot + 1) != std::string::npos) {
+        throw std::invalid_argument("connection endpoint must use component.port: " + endpoint);
+    }
+    return endpoint.substr(0, dot);
+}
+
+std::string endpoint_port(const std::string& endpoint) {
+    const std::size_t dot = endpoint.find('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= endpoint.size() ||
+        endpoint.find('.', dot + 1) != std::string::npos) {
+        throw std::invalid_argument("connection endpoint must use component.port: " + endpoint);
+    }
+    return endpoint.substr(dot + 1);
+}
+
+bool is_allowed_domain(const std::string& domain) {
+    return domain == "fluid" || domain == "heat" || domain == "shaft" || domain == "signal" ||
+           domain == "control";
+}
+
+bool is_allowed_direction(const std::string& direction) {
+    return direction == "in" || direction == "out" || direction == "bidirectional";
+}
+
+MediumDefinition parse_medium(const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("media entries must be objects");
+    }
+    MediumDefinition medium;
+    medium.id = require_string(value, "id");
+    medium.backend = require_string(value, "backend");
+    medium.substance = require_string(value, "substance");
+    return medium;
+}
+
+PortDefinition parse_port(const JsonValue& value,
+                          const std::set<std::string>& medium_ids,
+                          const std::string& field_name) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("field '" + field_name + "' must be an object");
+    }
+    PortDefinition port;
+    port.domain = require_string(value, "domain");
+    port.medium = optional_string(value, "medium");
+    port.direction = require_string(value, "direction");
+    if (!is_allowed_domain(port.domain)) {
+        throw std::invalid_argument("unsupported port domain: " + port.domain);
+    }
+    if (!is_allowed_direction(port.direction)) {
+        throw std::invalid_argument("unsupported port direction: " + port.direction);
+    }
+    if (port.domain == "fluid") {
+        if (port.medium.empty()) {
+            throw std::invalid_argument("fluid port '" + field_name + "' must reference a medium");
+        }
+        if (medium_ids.find(port.medium) == medium_ids.end()) {
+            throw std::invalid_argument("unknown medium referenced by port '" + field_name + "': " + port.medium);
+        }
+    }
+    return port;
+}
+
+ComponentDefinition parse_component(const JsonValue& value, const std::set<std::string>& medium_ids) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("components entries must be objects");
+    }
+    ComponentDefinition component;
+    component.id = require_string(value, "id");
+    component.label = optional_string(value, "label");
+    component.kind = require_string(value, "kind");
+    component.version = optional_string(value, "version");
+
+    const std::string ports_key{"ports"};
+    const JsonValue& ports = require_object_member(value, ports_key);
+    if (ports.object.empty()) {
+        throw std::invalid_argument("component '" + component.id + "' must declare at least one port");
+    }
+    for (const auto& [port_name, port_value] : ports.object) {
+        component.ports.emplace(port_name, parse_port(port_value, medium_ids, component.id + "." + port_name));
+    }
+
+    if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
+        component.parameters = parse_scalar_map(*parameters, "component '" + component.id + "'.parameters");
+    }
+    return component;
+}
+
+ConnectionDefinition parse_connection(const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("connections entries must be objects");
+    }
+    ConnectionDefinition connection;
+    connection.id = require_string(value, "id");
+    connection.from = require_string(value, "from");
+    connection.to = require_string(value, "to");
+    connection.kind = optional_string(value, "kind");
+    if (connection.kind.empty()) {
+        connection.kind = "link";
+    }
+    if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
+        connection.parameters = parse_scalar_map(*parameters, "connection '" + connection.id + "'.parameters", true);
+    }
+    return connection;
+}
+
+CaseDefinition parse_case(const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument("cases entries must be objects");
+    }
+    CaseDefinition c;
+    c.id = require_string(value, "id");
+    c.label = optional_string(value, "label");
+    c.mode = require_string(value, "mode");
+    if (const JsonValue* fixed_values = optional_object_member(value, "fixed_values")) {
+        c.fixed_values = parse_scalar_map(*fixed_values, "case '" + c.id + "'.fixed_values");
+    }
+    if (const JsonValue* initial_guesses = optional_object_member(value, "initial_guesses")) {
+        c.initial_guesses = parse_scalar_map(*initial_guesses, "case '" + c.id + "'.initial_guesses");
+    }
+    if (const JsonValue* solver_options = optional_object_member(value, "solver_options")) {
+        c.solver_options = parse_scalar_map(*solver_options, "case '" + c.id + "'.solver_options", true);
+    }
+    return c;
+}
+
+const PortDefinition& find_endpoint_port(const ModelDocument& document, const std::string& endpoint) {
+    const std::string component_id = endpoint_component(endpoint);
+    const std::string port_name = endpoint_port(endpoint);
+    for (const ComponentDefinition& component : document.components) {
+        if (component.id != component_id) {
+            continue;
+        }
+        const auto port_it = component.ports.find(port_name);
+        if (port_it == component.ports.end()) {
+            throw std::invalid_argument("unknown port in connection endpoint: " + endpoint);
+        }
+        return port_it->second;
+    }
+    throw std::invalid_argument("unknown component in connection endpoint: " + endpoint);
+}
+
+void validate_connections(const ModelDocument& document) {
+    std::set<std::string> connection_ids;
+    for (const ConnectionDefinition& connection : document.connections) {
+        require_unique_id(connection.id, connection_ids, "connection");
+        const PortDefinition& from_port = find_endpoint_port(document, connection.from);
+        const PortDefinition& to_port = find_endpoint_port(document, connection.to);
+        if (from_port.domain != to_port.domain) {
+            throw std::invalid_argument("connection '" + connection.id + "' links incompatible port domains");
+        }
+        if (from_port.domain == "fluid" && from_port.medium != to_port.medium) {
+            throw std::invalid_argument("connection '" + connection.id + "' links incompatible fluid media");
+        }
+        if (from_port.direction == "in") {
+            throw std::invalid_argument("connection '" + connection.id + "' source port cannot have direction 'in'");
+        }
+        if (to_port.direction == "out") {
+            throw std::invalid_argument("connection '" + connection.id + "' target port cannot have direction 'out'");
+        }
+    }
+}
+
+ModelDocument parse_model_document_root(const JsonValue& root) {
+    const JsonValue& object = require_object_root(root);
+    ModelDocument document;
+    document.schema_version = require_string(object, "schema_version");
+    if (document.schema_version != "thermox.model/v1") {
+        throw std::invalid_argument("unsupported schema_version: " + document.schema_version);
+    }
+    const std::string model_key{"model"};
+    const JsonValue& model = require_object_member(object, model_key);
+    document.model_id = require_string(model, "id");
+    document.name = optional_string(model, "name");
+    document.revision = optional_string(model, "revision");
+
+    std::set<std::string> medium_ids;
+    for (const JsonValue& medium_value : require_array_member(model, "media").array) {
+        MediumDefinition medium = parse_medium(medium_value);
+        require_unique_id(medium.id, medium_ids, "medium");
+        document.media.push_back(std::move(medium));
+    }
+
+    std::set<std::string> component_ids;
+    for (const JsonValue& component_value : require_array_member(model, "components").array) {
+        ComponentDefinition component = parse_component(component_value, medium_ids);
+        require_unique_id(component.id, component_ids, "component");
+        document.components.push_back(std::move(component));
+    }
+
+    for (const JsonValue& connection_value : require_array_member(model, "connections").array) {
+        document.connections.push_back(parse_connection(connection_value));
+    }
+
+    std::set<std::string> case_ids;
+    for (const JsonValue& case_value : require_array_member(object, "cases").array) {
+        CaseDefinition c = parse_case(case_value);
+        require_unique_id(c.id, case_ids, "case");
+        document.cases.push_back(std::move(c));
+    }
+
+    validate_connections(document);
+    return document;
+}
+
+double require_quantity(const JsonValue& root,
+                        const std::string& canonical_key,
+                        const std::string& quantity_key,
+                        double (*convert)(double, const std::string&)) {
+    const JsonValue* canonical = find_member(root, canonical_key);
+    const JsonValue* quantity = find_member(root, quantity_key);
+    if (canonical != nullptr && quantity != nullptr) {
+        throw std::invalid_argument("provide only one of '" + canonical_key + "' or '" + quantity_key + "'");
+    }
+    if (canonical != nullptr) {
+        return require_number_value(*canonical, canonical_key);
+    }
+    if (quantity == nullptr) {
+        throw std::invalid_argument("missing required field: " + canonical_key + " or " + quantity_key);
+    }
+    if (quantity->type == JsonValue::Type::Number) {
+        return require_number_value(*quantity, quantity_key);
+    }
+    const double value = require_number_value(require_member(*quantity, "value"), quantity_key + ".value");
+    const std::string unit = require_unit(*quantity, quantity_key);
+    return convert(value, unit);
+}
+
+double require_dimensionless(const JsonValue& root, const std::string& key) {
+    const JsonValue& value = require_member(root, key);
+    if (value.type == JsonValue::Type::Number) {
+        return require_number_value(value, key);
+    }
+    const double scalar = require_number_value(require_member(value, "value"), key + ".value");
+    const std::string unit = require_unit(value, key);
+    return convert_dimensionless(scalar, unit);
+}
+
+void require_valid(const BraytonCycleInput& input) {
+    if (input.ambient_pressure_pa <= 0.0) {
+        throw std::invalid_argument("ambient pressure must be positive");
+    }
+    if (input.ambient_temperature_k <= 0.0) {
+        throw std::invalid_argument("ambient temperature must be positive after unit conversion");
+    }
+    if (input.pressure_ratio <= 1.0) {
+        throw std::invalid_argument("pressure_ratio must be greater than 1");
+    }
+    if (input.turbine_inlet_temperature_k <= input.ambient_temperature_k) {
+        throw std::invalid_argument("turbine inlet temperature must exceed ambient temperature");
+    }
+    if (input.compressor_efficiency <= 0.0 || input.compressor_efficiency > 1.0) {
+        throw std::invalid_argument("compressor_efficiency must be in (0, 1]");
+    }
+    if (input.turbine_efficiency <= 0.0 || input.turbine_efficiency > 1.0) {
+        throw std::invalid_argument("turbine_efficiency must be in (0, 1]");
+    }
+    if (input.mass_flow_kg_s <= 0.0) {
+        throw std::invalid_argument("mass flow must be positive");
+    }
+    if (input.cp_j_kg_k <= 0.0) {
+        throw std::invalid_argument("specific heat must be positive");
+    }
+    if (input.gamma <= 1.0) {
+        throw std::invalid_argument("gamma must be greater than 1");
+    }
+}
+
+}  // namespace
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream file(path);
+    if (!file) {
+        throw std::runtime_error("failed to open file: " + path);
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+ModelDocument parse_model_document_text(const std::string& text) {
+    const JsonValue root_value = JsonParser{text}.parse_document();
+    return parse_model_document_root(root_value);
+}
+
+ModelDocument load_model_document(const std::string& path) {
+    return parse_model_document_text(read_text_file(path));
+}
+
+BraytonCycleInput load_brayton_cycle_model(const std::string& path) {
+    const std::string text = read_text_file(path);
+    const JsonValue root_value = JsonParser{text}.parse_document();
+    const JsonValue& root = require_object_root(root_value);
+
+    BraytonCycleInput input;
+    const std::string schema_version = require_string(root, "schema_version");
+    if (schema_version != "thermox.model/v1") {
+        throw std::invalid_argument("unsupported schema_version: " + schema_version);
+    }
+    const std::string kind = require_string(root, "kind");
+    if (kind != "example.brayton.simple") {
+        throw std::invalid_argument("unsupported model kind: " + kind);
+    }
+
+    input.model_id = require_string(root, "model_id");
+    input.case_id = require_string(root, "case_id");
+    input.ambient_pressure_pa = require_quantity(root, "ambient_pressure_pa", "ambient_pressure", convert_pressure_to_pa);
+    input.ambient_temperature_k = require_quantity(root, "ambient_temperature_k", "ambient_temperature", convert_temperature_to_k);
+    input.pressure_ratio = require_dimensionless(root, "pressure_ratio");
+    input.turbine_inlet_temperature_k = require_quantity(root, "turbine_inlet_temperature_k", "turbine_inlet_temperature", convert_temperature_to_k);
+    input.compressor_efficiency = require_dimensionless(root, "compressor_efficiency");
+    input.turbine_efficiency = require_dimensionless(root, "turbine_efficiency");
+    input.mass_flow_kg_s = require_quantity(root, "mass_flow_kg_s", "mass_flow", convert_mass_flow_to_kg_s);
+    input.cp_j_kg_k = require_quantity(root, "cp_j_kg_k", "cp", convert_cp_to_j_kg_k);
+    input.gamma = require_dimensionless(root, "gamma");
+
+    require_valid(input);
+    return input;
+}
+
+}  // namespace thermox::examples
