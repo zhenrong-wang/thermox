@@ -618,42 +618,31 @@ Never run untrusted user Python directly in the API process.
 Mitigation: start with strict schemas, simple validated components, strong diagnostics, and benchmark-driven development.
 
 ---
-## 15. Initial repository proposal
+## 15. Repository architecture
 
-```text
 ```text
 thermox/
   CMakeLists.txt
   docs/
-    research-and-architecture.md
-    schema-design.md
-    roadmap.md
   core/
-    include/thermox/
-      graph/
-      components/
-      properties/
-      compiler/
-      solver/
-      diagnostics/
-    src/
-      components/
-      properties/
-      compiler/
-      solver/
-      diagnostics/
+    include/thermox/    # numerical contracts
+    src/                # steady Newton and transient DAE kernel
+    example_models/     # isolated examples, never a platform dependency
+    examples/           # generic model documents
+  physics/
+    include/
+    src/                # unified property-package adapters
+  platform/
+    include/
+    src/                # model validation, registries, and graph compiler
     tests/
-  bindings/
-    python/        # optional developer bindings, not the production solver runtime
-  apps/
-    api/
-    web/
-  examples/
-    rankine_simple.yaml
-    brayton_simple.yaml
-    ccgt_single_pressure.yaml
+  modules/
+    properties/         # pinned CO2 and IF97 implementations
   scripts/
     verify.sh
 ```
 
-The next engineering step should be to create the C++ core skeleton and implement a minimal end-to-end CLI solve path: schema input -> compile summary -> residual/Jacobian assembly -> nonlinear solve -> structured diagnostics.
+Dependency direction is `platform -> physics + core`; the numerical core does not depend on either
+physics or platform, and examples are leaf consumers. The current CLI follows the end-to-end path:
+model document -> validation and registry resolution -> equation compilation -> nonlinear solve ->
+structured variables and diagnostics.

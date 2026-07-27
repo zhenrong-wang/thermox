@@ -28,6 +28,8 @@ The public C++ interface is
 
 - pressure-temperature (`state_pt`), pressure-enthalpy (`state_ph`), and
   pressure-entropy (`state_ps`) flashes;
+- explicit capability discovery for PT, PH, PS, and transport operations, allowing the platform
+  compiler to reject an incompatible component/backend pairing before solving;
 - SI-unit density, energy, enthalpy, entropy, heat capacities, speed of sound,
   viscosity, thermal conductivity, vapor quality, and phase;
 - validity limits and explicit invalid-input, range, saturation-boundary,
@@ -45,9 +47,11 @@ out-of-range inputs, steady Newton solves through every backend, a
 property-backed transient energy balance through the DAE integrator, and an
 end-to-end supercritical-CO2 compressor compiled from the model schema.
 
-The model compiler resolves each `media[].backend` through
+The `thermox_platform` compiler resolves each `media[].backend` through
 `PropertyPackageRegistry` and injects the resulting package into fluid
-components. Turbomachinery uses checked equations, allowing range and
+components. Each component declares its required property capabilities; compilation fails with a
+specific diagnostic when a selected backend cannot supply one. Turbomachinery uses checked
+equations, allowing range and
 convergence failures during line search to be treated as recoverable solver
 evaluations rather than process-level exceptions.
 

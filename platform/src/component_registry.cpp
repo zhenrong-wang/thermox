@@ -1,4 +1,4 @@
-#include "thermox/examples/component_registry.hpp"
+#include "thermox/platform/component_registry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace thermox::examples {
+namespace thermox::platform {
 
 namespace {
 
@@ -124,6 +124,31 @@ void validate_declared_ports(const ComponentDefinition& component, const Compone
         if (actual.direction != expected.direction && actual.direction != "bidirectional") {
             throw std::invalid_argument("component '" + component.id + "' port '" + expected.name +
                                         "' has incompatible direction for kind '" + component.kind + "'");
+        }
+    }
+}
+
+std::string_view capability_name(physics::PropertyCapability capability) {
+    switch (capability) {
+        case physics::PropertyCapability::state_pt: return "state_pt";
+        case physics::PropertyCapability::state_ph: return "state_ph";
+        case physics::PropertyCapability::state_ps: return "state_ps";
+        case physics::PropertyCapability::transport: return "transport";
+    }
+    return "unknown";
+}
+
+void validate_property_capabilities(const ComponentCompileContext& context,
+                                    const ComponentModel& model) {
+    for (const auto capability : model.descriptor().required_property_capabilities) {
+        for (const auto& [port, package] : context.port_properties) {
+            if (!package->supports(capability)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id + "' port '" + port +
+                    "' requires property capability '" +
+                    std::string(capability_name(capability)) +
+                    "' unsupported by backend '" + std::string(package->name()) + "'");
+            }
         }
     }
 }
@@ -276,7 +301,11 @@ public:
         : descriptor_(make_descriptor(std::move(kind),
                                  {{"inlet", "fluid", "in"},
                                   {"outlet", "fluid", "out"},
-                                  {"shaft", "shaft", "in"}})) {}
+                                  {"shaft", "shaft", "in"}})) {
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_pt,
+            physics::PropertyCapability::state_ps};
+    }
 
     const ComponentModelDescriptor& descriptor() const override { return descriptor_; }
 
@@ -295,7 +324,11 @@ public:
         : descriptor_(make_descriptor(std::move(kind),
                                       {{"inlet", "fluid", "in"},
                                        {"outlet", "fluid", "out"},
-                                       {"shaft", "shaft", "out"}})) {}
+                                       {"shaft", "shaft", "out"}})) {
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_pt,
+            physics::PropertyCapability::state_ps};
+    }
 
     const ComponentModelDescriptor& descriptor() const override { return descriptor_; }
 
@@ -437,6 +470,7 @@ CompiledModelGraph compile_model_graph(
                                                                      full_name, index});
             }
         }
+        validate_property_capabilities(context, model);
         model.add_equations(context, system);
     }
 
@@ -496,4 +530,4 @@ CompiledModelGraph compile_model_graph(
     return graph;
 }
 
-}  // namespace thermox::examples
+}  // namespace thermox::platform

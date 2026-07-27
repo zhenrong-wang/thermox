@@ -2,9 +2,17 @@
 
 _Date: 2026-07-27_
 
-This document defines the first stable interchange concepts for the thermal balance calculation platform. It is intentionally implementation-neutral so the graph UI, backend API, numeric compiler, and solver can evolve independently.
+This document defines the current interchange concepts for the thermal balance calculation
+platform. The project is in early development: the schema is intentionally allowed to change
+without backward-compatibility adapters while the architecture is established.
 
-Implementation status: the current C++ MVP parses and validates the core `thermox.model/v1` boundary for media, components, typed ports, connections, cases, and scalar unit normalization. It also includes a metadata-backed component registry and graph compiler that validate registered component port contracts, create canonical port variables, and lower connections/fixed values into sparse equation assembly metadata. Design-only metadata such as annotations/options remains documented here for registry/frontend use and may be ignored by the first parser.
+Implementation status: the first-class `thermox_platform` C++ module parses and validates the
+`thermox.model/v1` boundary for media, components, typed ports, connections, cases, and scalar unit
+normalization. Its metadata-backed component registry and graph compiler validate port contracts
+and property capabilities, create canonical port variables, and lower connections, fixed values,
+and component equations into sparse equation assembly metadata. Design-only metadata such as
+annotations/options remains documented here for registry/frontend use and may be ignored by the
+current parser.
 
 ## 1. Goals
 
@@ -174,13 +182,18 @@ Case modes:
 
 - `steady_state_design`
 - `steady_state_off_design`
-- `dynamic_initialization` (future)
-- `dynamic_transient` (future)
+- `dynamic_initialization` (numeric core available; platform compilation pending)
+- `dynamic_transient` (numeric core available; platform compilation pending)
 - `parameter_sweep` (future)
 - `optimization` (future)
 
 ## 8. Component type metadata schema
-Component type definitions should be served to the frontend and compiler from the same registry. The current C++ implementation has registered component models exposing kind/version plus required port names, domains, and directions. The compiler resolves model media through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware compressor and turbine equations. Broader parameter schemas, additional physical components, and frontend display metadata remain future extensions.
+Component type definitions should be served to the frontend and compiler from the same registry.
+The current C++ implementation has registered component models exposing kind/version, required port
+names, domains, directions, and fluid-property capabilities. The compiler resolves model media
+through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
+compressor and turbine equations. Broader parameter schemas, additional physical components, and
+frontend display metadata remain future extensions.
 
 ```yaml
 kind: turbine.steam.isentropic_efficiency
@@ -261,7 +274,8 @@ Minimum validation before compilation:
 
 ## 11. Versioning policy
 
-- `schema_version` changes only for breaking interchange changes.
+- `schema_version` changes for breaking interchange changes; no compatibility adapter is promised
+  during early development.
 - Component `kind` + `version` identifies equation semantics.
 - Model revisions are immutable once used for a simulation result.
 - Simulation results record schema version, component versions, property backend versions, and solver version.

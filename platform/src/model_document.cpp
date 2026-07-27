@@ -1,4 +1,4 @@
-#include "thermox/examples/schema.hpp"
+#include "thermox/platform/model_document.hpp"
 
 #include <cctype>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace thermox::examples {
+namespace thermox::platform {
 
 namespace {
 
@@ -753,69 +753,6 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
     return document;
 }
 
-double require_quantity(const JsonValue& root,
-                        const std::string& canonical_key,
-                        const std::string& quantity_key,
-                        double (*convert)(double, const std::string&)) {
-    const JsonValue* canonical = find_member(root, canonical_key);
-    const JsonValue* quantity = find_member(root, quantity_key);
-    if (canonical != nullptr && quantity != nullptr) {
-        throw std::invalid_argument("provide only one of '" + canonical_key + "' or '" + quantity_key + "'");
-    }
-    if (canonical != nullptr) {
-        return require_number_value(*canonical, canonical_key);
-    }
-    if (quantity == nullptr) {
-        throw std::invalid_argument("missing required field: " + canonical_key + " or " + quantity_key);
-    }
-    if (quantity->type == JsonValue::Type::Number) {
-        return require_number_value(*quantity, quantity_key);
-    }
-    const double value = require_number_value(require_member(*quantity, "value"), quantity_key + ".value");
-    const std::string unit = require_unit(*quantity, quantity_key);
-    return convert(value, unit);
-}
-
-double require_dimensionless(const JsonValue& root, const std::string& key) {
-    const JsonValue& value = require_member(root, key);
-    if (value.type == JsonValue::Type::Number) {
-        return require_number_value(value, key);
-    }
-    const double scalar = require_number_value(require_member(value, "value"), key + ".value");
-    const std::string unit = require_unit(value, key);
-    return convert_dimensionless(scalar, unit);
-}
-
-void require_valid(const BraytonCycleInput& input) {
-    if (input.ambient_pressure_pa <= 0.0) {
-        throw std::invalid_argument("ambient pressure must be positive");
-    }
-    if (input.ambient_temperature_k <= 0.0) {
-        throw std::invalid_argument("ambient temperature must be positive after unit conversion");
-    }
-    if (input.pressure_ratio <= 1.0) {
-        throw std::invalid_argument("pressure_ratio must be greater than 1");
-    }
-    if (input.turbine_inlet_temperature_k <= input.ambient_temperature_k) {
-        throw std::invalid_argument("turbine inlet temperature must exceed ambient temperature");
-    }
-    if (input.compressor_efficiency <= 0.0 || input.compressor_efficiency > 1.0) {
-        throw std::invalid_argument("compressor_efficiency must be in (0, 1]");
-    }
-    if (input.turbine_efficiency <= 0.0 || input.turbine_efficiency > 1.0) {
-        throw std::invalid_argument("turbine_efficiency must be in (0, 1]");
-    }
-    if (input.mass_flow_kg_s <= 0.0) {
-        throw std::invalid_argument("mass flow must be positive");
-    }
-    if (input.cp_j_kg_k <= 0.0) {
-        throw std::invalid_argument("specific heat must be positive");
-    }
-    if (input.gamma <= 1.0) {
-        throw std::invalid_argument("gamma must be greater than 1");
-    }
-}
-
 }  // namespace
 
 std::string read_text_file(const std::string& path) {
@@ -837,35 +774,4 @@ ModelDocument load_model_document(const std::string& path) {
     return parse_model_document_text(read_text_file(path));
 }
 
-BraytonCycleInput load_brayton_cycle_model(const std::string& path) {
-    const std::string text = read_text_file(path);
-    const JsonValue root_value = JsonParser{text}.parse_document();
-    const JsonValue& root = require_object_root(root_value);
-
-    BraytonCycleInput input;
-    const std::string schema_version = require_string(root, "schema_version");
-    if (schema_version != "thermox.model/v1") {
-        throw std::invalid_argument("unsupported schema_version: " + schema_version);
-    }
-    const std::string kind = require_string(root, "kind");
-    if (kind != "example.brayton.simple") {
-        throw std::invalid_argument("unsupported model kind: " + kind);
-    }
-
-    input.model_id = require_string(root, "model_id");
-    input.case_id = require_string(root, "case_id");
-    input.ambient_pressure_pa = require_quantity(root, "ambient_pressure_pa", "ambient_pressure", convert_pressure_to_pa);
-    input.ambient_temperature_k = require_quantity(root, "ambient_temperature_k", "ambient_temperature", convert_temperature_to_k);
-    input.pressure_ratio = require_dimensionless(root, "pressure_ratio");
-    input.turbine_inlet_temperature_k = require_quantity(root, "turbine_inlet_temperature_k", "turbine_inlet_temperature", convert_temperature_to_k);
-    input.compressor_efficiency = require_dimensionless(root, "compressor_efficiency");
-    input.turbine_efficiency = require_dimensionless(root, "turbine_efficiency");
-    input.mass_flow_kg_s = require_quantity(root, "mass_flow_kg_s", "mass_flow", convert_mass_flow_to_kg_s);
-    input.cp_j_kg_k = require_quantity(root, "cp_j_kg_k", "cp", convert_cp_to_j_kg_k);
-    input.gamma = require_dimensionless(root, "gamma");
-
-    require_valid(input);
-    return input;
-}
-
-}  // namespace thermox::examples
+}  // namespace thermox::platform

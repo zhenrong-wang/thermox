@@ -16,6 +16,13 @@ enum class PropertyStatus {
 
 enum class Phase { unknown, liquid, vapor, supercritical, two_phase };
 
+enum class PropertyCapability {
+    state_pt,
+    state_ph,
+    state_ps,
+    transport,
+};
+
 struct ThermodynamicState {
     double pressure_pa{0.0};
     double temperature_k{0.0};
@@ -52,6 +59,7 @@ public:
     virtual ~PropertyPackage() = default;
     [[nodiscard]] virtual std::string_view name() const noexcept = 0;
     [[nodiscard]] virtual PropertyLimits limits() const noexcept = 0;
+    [[nodiscard]] virtual bool supports(PropertyCapability capability) const noexcept = 0;
     [[nodiscard]] virtual PropertyResult state_pt(
         double pressure_pa, double temperature_k) const = 0;
     [[nodiscard]] virtual PropertyResult state_ph(

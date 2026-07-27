@@ -1,7 +1,7 @@
 #pragma once
 
 #include "thermox/equation_system.hpp"
-#include "thermox/examples/schema.hpp"
+#include "thermox/platform/model_document.hpp"
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/physics/property_registry.hpp"
 
@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace thermox::examples {
+namespace thermox::platform {
 
 struct PortModelDescriptor {
     std::string name;
@@ -24,6 +24,7 @@ struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
     std::vector<PortModelDescriptor> ports;
+    std::vector<physics::PropertyCapability> required_property_capabilities;
 };
 
 struct ComponentCompileContext {
@@ -98,4 +99,4 @@ CompiledModelGraph compile_model_graph(
     const physics::PropertyPackageRegistry& property_registry,
     const std::string& case_id = {});
 
-}  // namespace thermox::examples
+}  // namespace thermox::platform

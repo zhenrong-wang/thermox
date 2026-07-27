@@ -55,6 +55,7 @@ std::string_view If97PropertyPackage::name() const noexcept { return "water-stea
 PropertyLimits If97PropertyPackage::limits() const noexcept {
     return {0.0, 100e6, 273.15, 2273.15};
 }
+bool If97PropertyPackage::supports(PropertyCapability) const noexcept { return true; }
 PropertyResult If97PropertyPackage::state_pt(double pressure, double temperature) const {
     thermox_if97_state state{};
     return map_result(thermox_if97_state_pt(pressure, temperature, &state), state);

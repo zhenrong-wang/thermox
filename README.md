@@ -1,10 +1,13 @@
 # Thermox
 
-Thermox is a thermal balance calculation platform focused on a generic equation-oriented thermal/fluid network simulator. Gas-steam combined-cycle systems are the first full target, with small Brayton and Rankine cycles used as stepping stones.
+Thermox is a system-agnostic, equation-oriented thermal/fluid simulation platform. A system is
+defined by registered components, registered fluid-property packages, topology, and operating
+cases—not by a hard-coded cycle type. Gas turbines, steam plants, combined cycles, nuclear heat
+systems, refrigeration systems, and other networks use the same platform path.
 
 This repository contains a cycle-agnostic C++ numerical core for steady nonlinear systems and
 implicit transient DAEs, a property-independent physics bridge, production CO2 and IF97 property
-modules, plus the first thermal-system schema/compiler and example models.
+modules, a generic thermal-system schema/compiler platform, and isolated example models.
 
 ## Design documents
 
@@ -30,26 +33,34 @@ Implemented in this sprint:
 - Implicit index-1 DAE path for `F(t, y, y_dot) = 0` with differential/algebraic variables,
   consistent initial conditions, analytic dense/sparse Jacobians, adaptive backward-Euler step
   doubling, event detection, and trajectory diagnostics.
-- Component registry with a base C++ `ComponentModel` interface for source/sink, compressor, turbine, pump, and simple heat-exchanger port contracts.
+- First-class `thermox_platform` module with a model document, component registry, property registry
+  integration, and graph compiler.
+- Base C++ `ComponentModel` interface for source/sink, compressor, turbine, pump, and simple
+  heat-exchanger port contracts.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
-- Property-aware compressor and turbine residuals now resolve their medium backend from the model,
+- Property-aware compressor and turbine residuals declare their required flash capabilities, resolve
+  their medium backend from the model,
   use PT/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
   Newton, and support ideal gas and real fluids without changing component equations.
 
 The built-in direct solvers and first-order transient integrator intentionally remain
 dependency-free reference backends. Larger production models should use an external sparse
 factorization backend, and higher-order/stiff transient work can be added behind the established
-DAE contract. Brayton remains the first physics example.
+DAE contract. Cycle examples do not define or constrain the platform API.
 
 ## Repository layout
 
 ```text
 core/
-  example_models/       Example-only adapters/components/properties that build equation systems
+  example_models/       Isolated example calculations; not a platform dependency
   examples/             Example model/case inputs
   include/thermox/      Public cycle-agnostic C++ solver headers
   src/                  Cycle-agnostic solver implementation
-  tests/                Steady, transient, and example regression tests
+  tests/                Steady and transient numeric-kernel tests
+platform/
+  include/              Generic model-document and component-registry API
+  src/                  Schema validation and graph-to-equation compilation
+  tests/                System-agnostic platform and property-integration tests
 physics/
   include/              Property-independent physics interfaces
   src/                  Ideal-gas, CO2, and IF97 adapters
@@ -94,21 +105,22 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-## Run the Brayton example
+## Run a generic model
 
 Text output:
 
 ```sh
-./build/core/thermox_cli solve --model core/examples/brayton_simple.json
+./build/thermox_cli solve --model core/examples/air_compressor.json
 ```
 
 JSON output:
 
 ```sh
-./build/core/thermox_cli solve --model core/examples/brayton_simple.json --format json
+./build/thermox_cli solve --model core/examples/air_compressor.json --format json
 ```
 
-Expected MVP behavior: the example converges in Newton solve and reports compressor/turbine outlet temperatures, compressor/turbine/net power, heat input, thermal efficiency, and diagnostics.
+The CLI parses the generic model document, resolves the registered component and fluid backend,
+compiles the graph to a nonlinear problem, solves it, and reports every canonical model variable.
 
 ## Verify everything
 
@@ -119,9 +131,11 @@ Expected MVP behavior: the example converges in Newton solve and reports compres
 ## Next steps
 
 1. Extend property-aware residuals to pump, heat exchanger, condenser, mixer, and splitter models.
-2. Add a simple IF97 Rankine example and regression tolerances.
-3. Add explicit saturation-pair and analytic property-derivative APIs.
-4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+2. Add the platform-side dynamic model contract that compiles registered component accumulation
+   equations into the existing transient DAE core.
+3. Add a simple IF97 Rankine example and regression tolerances.
+4. Add explicit saturation-pair and analytic property-derivative APIs.
+5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-5. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

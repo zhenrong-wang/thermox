@@ -55,6 +55,7 @@ std::string_view Co2PropertyPackage::name() const noexcept { return "co2-span-wa
 PropertyLimits Co2PropertyPackage::limits() const noexcept {
     return {0.0, 800e6, 216.0, 1100.0};
 }
+bool Co2PropertyPackage::supports(PropertyCapability) const noexcept { return true; }
 PropertyResult Co2PropertyPackage::state_pt(double pressure, double temperature) const {
     thermox_co2_state state{};
     return map_result(thermox_co2_state_pt(pressure, temperature, &state), state);

@@ -1,5 +1,6 @@
-#include "thermox/examples/brayton_cycle.hpp"
-#include "thermox/examples/schema.hpp"
+#include "thermox/nonlinear_solver.hpp"
+#include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/model_document.hpp"
 
 #include <exception>
 #include <iostream>
@@ -53,15 +54,33 @@ int main(int argc, char** argv) {
     }
 
     try {
-        const auto input = thermox::examples::load_brayton_cycle_model(model_path);
+        const auto document = thermox::platform::load_model_document(model_path);
+        const auto components = thermox::platform::make_default_component_registry();
+        const auto graph = thermox::platform::compile_model_graph(document, components);
         thermox::SolverOptions options;
         options.residual_tolerance = 1.0e-10;
-        const auto result = thermox::examples::solve_brayton_cycle(input, options);
+        const auto result = thermox::solve_newton(graph.problem, options);
 
         if (format == "json") {
-            std::cout << thermox::examples::format_brayton_result_json(result);
+            std::cout << "{\n"
+                      << "  \"model_id\": \"" << graph.model_id << "\",\n"
+                      << "  \"converged\": "
+                      << (result.diagnostics.converged ? "true" : "false") << ",\n"
+                      << "  \"iterations\": " << result.diagnostics.iterations << ",\n"
+                      << "  \"variables\": {\n";
+            for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
+                std::cout << "    \"" << graph.problem.variable_names[i] << "\": "
+                          << result.x[i]
+                          << (i + 1 == graph.problem.variable_names.size() ? "\n" : ",\n");
+            }
+            std::cout << "  }\n}\n";
         } else if (format == "text") {
-            std::cout << thermox::examples::format_brayton_result_text(result);
+            std::cout << "model: " << graph.model_id << "\n"
+                      << "converged: "
+                      << (result.diagnostics.converged ? "yes" : "no") << "\n"
+                      << "iterations: " << result.diagnostics.iterations << "\n";
+            for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i)
+                std::cout << graph.problem.variable_names[i] << " = " << result.x[i] << "\n";
         } else {
             std::cerr << "Unsupported format: " << format << "\n";
             return 2;

@@ -1,18 +1,40 @@
-#include "thermox/examples/brayton_cycle.hpp"
-#include "thermox/examples/component_registry.hpp"
-#include "thermox/examples/ideal_gas.hpp"
-#include "thermox/examples/schema.hpp"
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/platform/component_registry.hpp"
+#include "thermox/physics/ideal_gas_package.hpp"
 
 #include <cmath>
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace {
+
+class PtOnlyPropertyPackage final : public thermox::physics::PropertyPackage {
+public:
+    std::string_view name() const noexcept override { return "pt-only-test"; }
+    thermox::physics::PropertyLimits limits() const noexcept override {
+        return delegate_.limits();
+    }
+    bool supports(thermox::physics::PropertyCapability capability) const noexcept override {
+        return capability == thermox::physics::PropertyCapability::state_pt;
+    }
+    thermox::physics::PropertyResult state_pt(double p, double t) const override {
+        return delegate_.state_pt(p, t);
+    }
+    thermox::physics::PropertyResult state_ph(double p, double h) const override {
+        return delegate_.state_ph(p, h);
+    }
+    thermox::physics::PropertyResult state_ps(double p, double s) const override {
+        return delegate_.state_ps(p, s);
+    }
+
+private:
+    thermox::physics::IdealGasPropertyPackage delegate_;
+};
 
 void require(bool condition, const std::string& message) {
     if (!condition) {
@@ -51,144 +73,6 @@ void require_throws(Func&& func, const std::string& expected_message_fragment) {
     }
     throw std::runtime_error("expected exception containing: " + expected_message_fragment);
 }
-
-void test_ideal_gas() {
-    const thermox::examples::IdealGas air;
-    require_near(air.enthalpy_from_temperature(300.0), 301350.0, 1.0e-9, "ideal gas h(T)");
-    require_near(air.isentropic_temperature_out(300.0, 1.0), 300.0, 1.0e-12,
-                 "isentropic pressure ratio one");
-}
-
-void test_brayton_cycle() {
-    thermox::examples::BraytonCycleInput input;
-    input.pressure_ratio = 12.0;
-    input.turbine_inlet_temperature_k = 1400.0;
-    const auto result = thermox::examples::solve_brayton_cycle(input);
-    require(result.diagnostics.converged, result.diagnostics.message);
-    require(result.net_power_w > 0.0, "Brayton net power should be positive");
-    require(result.thermal_efficiency > 0.25 && result.thermal_efficiency < 0.5,
-            "Brayton efficiency should be plausible");
-    require_near(result.compressor_outlet_temperature_k, 634.5790109, 1.0e-3,
-                 "Brayton compressor outlet temperature");
-}
-
-void test_brayton_model_loads_canonical_json() {
-    const std::string path = write_temp_model(
-        "canonical",
-        R"json({
-  "schema_version": "thermox.model/v1",
-  "model_id": "brayton_simple",
-  "case_id": "design",
-  "kind": "example.brayton.simple",
-  "ambient_pressure_pa": 101325.0,
-  "ambient_temperature_k": 288.15,
-  "pressure_ratio": 12.0,
-  "turbine_inlet_temperature_k": 1400.0,
-  "compressor_efficiency": 0.86,
-  "turbine_efficiency": 0.89,
-  "mass_flow_kg_s": 100.0,
-  "cp_j_kg_k": 1004.5,
-  "gamma": 1.4
-})json");
-
-    const auto input = thermox::examples::load_brayton_cycle_model(path);
-    require(input.model_id == "brayton_simple", "model id should load");
-    require(input.case_id == "design", "case id should load");
-    require_near(input.ambient_pressure_pa, 101325.0, 1.0e-12, "ambient pressure canonical");
-    require_near(input.cp_j_kg_k, 1004.5, 1.0e-12, "cp canonical");
-}
-
-void test_brayton_model_normalizes_units() {
-    const std::string path = write_temp_model(
-        "units",
-        R"json({
-  "schema_version": "thermox.model/v1",
-  "model_id": "brayton_units",
-  "case_id": "design",
-  "kind": "example.brayton.simple",
-  "ambient_pressure": {"value": 101.325, "unit": "kPa"},
-  "ambient_temperature": {"value": 15.0, "unit": "degC"},
-  "pressure_ratio": {"value": 12.0, "unit": "dimensionless"},
-  "turbine_inlet_temperature": {"value": 1126.85, "unit": "degC"},
-  "compressor_efficiency": {"value": 86.0, "unit": "%"},
-  "turbine_efficiency": {"value": 89.0, "unit": "%"},
-  "mass_flow": {"value": 360000.0, "unit": "kg/h"},
-  "cp": {"value": 1.0045, "unit": "kJ/kg/K"},
-  "gamma": 1.4
-})json");
-
-    const auto input = thermox::examples::load_brayton_cycle_model(path);
-    require_near(input.ambient_pressure_pa, 101325.0, 1.0e-9, "pressure unit conversion");
-    require_near(input.ambient_temperature_k, 288.15, 1.0e-9, "temperature unit conversion");
-    require_near(input.turbine_inlet_temperature_k, 1400.0, 1.0e-9,
-                 "turbine temperature conversion");
-    require_near(input.compressor_efficiency, 0.86, 1.0e-12, "efficiency percent conversion");
-    require_near(input.turbine_efficiency, 0.89, 1.0e-12, "turbine percent conversion");
-    require_near(input.mass_flow_kg_s, 100.0, 1.0e-12, "mass flow conversion");
-    require_near(input.cp_j_kg_k, 1004.5, 1.0e-12, "cp conversion");
-}
-
-void test_brayton_model_rejects_malformed_json() {
-    const std::string path = write_temp_model("malformed", R"json({"schema_version": )json");
-    require_throws([&]() { thermox::examples::load_brayton_cycle_model(path); }, "invalid JSON");
-}
-
-void test_brayton_model_rejects_missing_required_fields() {
-    const std::string path = write_temp_model(
-        "missing",
-        R"json({
-  "schema_version": "thermox.model/v1",
-  "model_id": "brayton_missing",
-  "kind": "example.brayton.simple"
-})json");
-    require_throws([&]() { thermox::examples::load_brayton_cycle_model(path); },
-                   "missing required field: case_id");
-}
-
-void test_brayton_model_rejects_invalid_values() {
-    const std::string path = write_temp_model(
-        "invalid",
-        R"json({
-  "schema_version": "thermox.model/v1",
-  "model_id": "brayton_invalid",
-  "case_id": "design",
-  "kind": "example.brayton.simple",
-  "ambient_pressure_pa": 101325.0,
-  "ambient_temperature_k": 288.15,
-  "pressure_ratio": 0.9,
-  "turbine_inlet_temperature_k": 1400.0,
-  "compressor_efficiency": 0.86,
-  "turbine_efficiency": 0.89,
-  "mass_flow_kg_s": 100.0,
-  "cp_j_kg_k": 1004.5,
-  "gamma": 1.4
-})json");
-    require_throws([&]() { thermox::examples::load_brayton_cycle_model(path); },
-                   "pressure_ratio must be greater than 1");
-}
-
-void test_brayton_model_rejects_unsupported_units() {
-    const std::string path = write_temp_model(
-        "bad_unit",
-        R"json({
-  "schema_version": "thermox.model/v1",
-  "model_id": "brayton_bad_unit",
-  "case_id": "design",
-  "kind": "example.brayton.simple",
-  "ambient_pressure": {"value": 1.0, "unit": "psi"},
-  "ambient_temperature_k": 288.15,
-  "pressure_ratio": 12.0,
-  "turbine_inlet_temperature_k": 1400.0,
-  "compressor_efficiency": 0.86,
-  "turbine_efficiency": 0.89,
-  "mass_flow_kg_s": 100.0,
-  "cp_j_kg_k": 1004.5,
-  "gamma": 1.4
-})json");
-    require_throws([&]() { thermox::examples::load_brayton_cycle_model(path); },
-                   "unsupported pressure unit");
-}
-
 
 void test_generic_model_document_loads_components_connections_and_cases() {
     const std::string path = write_temp_model(
@@ -279,7 +163,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
   ]
 })json");
 
-    const auto document = thermox::examples::load_model_document(path);
+    const auto document = thermox::platform::load_model_document(path);
     require(document.schema_version == "thermox.model/v1", "schema version should load");
     require(document.model_id == "flexible_cycle", "generic model id should load");
     require(document.media.size() == 1, "one medium should load");
@@ -319,7 +203,7 @@ void test_generic_model_document_rejects_unknown_medium() {
   },
   "cases": []
 })json");
-    require_throws([&]() { thermox::examples::load_model_document(path); }, "unknown medium referenced");
+    require_throws([&]() { thermox::platform::load_model_document(path); }, "unknown medium referenced");
 }
 
 void test_generic_model_document_rejects_invalid_topology() {
@@ -347,7 +231,7 @@ void test_generic_model_document_rejects_invalid_topology() {
   },
   "cases": []
 })json");
-    require_throws([&]() { thermox::examples::load_model_document(path); }, "incompatible fluid media");
+    require_throws([&]() { thermox::platform::load_model_document(path); }, "incompatible fluid media");
 }
 
 void test_generic_model_document_rejects_unsupported_units() {
@@ -367,11 +251,11 @@ void test_generic_model_document_rejects_unsupported_units() {
   },
   "cases": []
 })json");
-    require_throws([&]() { thermox::examples::load_model_document(path); }, "unsupported unit");
+    require_throws([&]() { thermox::platform::load_model_document(path); }, "unsupported unit");
 }
 
 void test_component_registry_exposes_default_models() {
-    const auto registry = thermox::examples::make_default_component_registry();
+    const auto registry = thermox::platform::make_default_component_registry();
     require(registry.contains("source.fluid.boundary"), "default registry should contain fluid source");
     require(registry.contains("compressor.gas.isentropic_efficiency"),
             "default registry should contain compressor");
@@ -381,13 +265,13 @@ void test_component_registry_exposes_default_models() {
 }
 
 void test_component_registry_rejects_unknown_kind() {
-    const auto registry = thermox::examples::make_default_component_registry();
+    const auto registry = thermox::platform::make_default_component_registry();
     require_throws([&]() { (void)registry.require_model("not.registered"); },
                    "no component model registered");
 }
 
 void test_generic_model_compiles_to_connection_equations() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "compile_demo",
@@ -421,8 +305,8 @@ void test_generic_model_compiles_to_connection_equations() {
   }]
 })json");
 
-    const auto registry = thermox::examples::make_default_component_registry();
-    const auto graph = thermox::examples::compile_model_graph(document, registry, "design");
+    const auto registry = thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(document, registry, "design");
 
     require(graph.model_id == "compile_demo", "compiled graph carries model id");
     require(graph.case_id && *graph.case_id == "design", "compiled graph carries selected case id");
@@ -462,7 +346,7 @@ void test_generic_model_compiles_to_connection_equations() {
 
 
 void test_generic_model_solves_ideal_gas_compressor_residuals() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "compressor_physics",
@@ -500,8 +384,8 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
   }]
 })json");
 
-    const auto registry = thermox::examples::make_default_component_registry();
-    const auto graph = thermox::examples::compile_model_graph(document, registry, "design");
+    const auto registry = thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(document, registry, "design");
     require(graph.problem.variable_names.size() == graph.problem.residual_names.size(),
             "compressor physical residual problem should be square");
 
@@ -525,11 +409,12 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
         }
     }
 
-    const thermox::examples::IdealGas air;
+    constexpr double gamma = 1.4;
+    constexpr double cp = 1004.5;
     const double expected_temperature = 300.0 *
-        (1.0 + (std::pow(12.0, (air.gamma - 1.0) / air.gamma) - 1.0) / 0.86);
-    const double expected_enthalpy = air.enthalpy_from_temperature(expected_temperature);
-    const double expected_power = 100.0 * (expected_enthalpy - air.enthalpy_from_temperature(300.0));
+        (1.0 + (std::pow(12.0, (gamma - 1.0) / gamma) - 1.0) / 0.86);
+    const double expected_enthalpy = cp * expected_temperature;
+    const double expected_power = 100.0 * (expected_enthalpy - cp * 300.0);
 
     require_near(outlet_pressure, 12.0 * 101325.0, 1.0e-5, "compressor outlet pressure");
     require_near(outlet_temperature, expected_temperature, 1.0e-8, "compressor outlet temperature");
@@ -538,7 +423,7 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
 }
 
 void test_generic_model_solves_ideal_gas_turbine_residuals() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "turbine_physics",
@@ -576,8 +461,8 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
   }]
 })json");
 
-    const auto registry = thermox::examples::make_default_component_registry();
-    const auto graph = thermox::examples::compile_model_graph(document, registry, "design");
+    const auto registry = thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(document, registry, "design");
     require(graph.problem.variable_names.size() == graph.problem.residual_names.size(),
             "turbine physical residual problem should be square");
 
@@ -601,13 +486,14 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
         }
     }
 
-    const thermox::examples::IdealGas air;
+    constexpr double gamma = 1.4;
+    constexpr double cp = 1004.5;
     const double pressure_ratio = 12.0;
     const double expected_temperature = 1400.0 *
         (1.0 - 0.89 * (1.0 - std::pow(1.0 / pressure_ratio,
-                                        (air.gamma - 1.0) / air.gamma)));
-    const double expected_enthalpy = air.enthalpy_from_temperature(expected_temperature);
-    const double expected_power = 100.0 * (air.enthalpy_from_temperature(1400.0) - expected_enthalpy);
+                                        (gamma - 1.0) / gamma)));
+    const double expected_enthalpy = cp * expected_temperature;
+    const double expected_power = 100.0 * (cp * 1400.0 - expected_enthalpy);
 
     require_near(outlet_pressure, 1215900.0 / pressure_ratio, 1.0e-5,
                  "turbine outlet pressure");
@@ -618,7 +504,7 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
 }
 
 void test_generic_model_solves_supercritical_co2_compressor() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "sco2_compressor",
@@ -654,9 +540,9 @@ void test_generic_model_solves_supercritical_co2_compressor() {
   }]
 })json");
 
-    const auto registry = thermox::examples::make_default_component_registry();
+    const auto registry = thermox::platform::make_default_component_registry();
     const auto graph =
-        thermox::examples::compile_model_graph(document, registry, "design");
+        thermox::platform::compile_model_graph(document, registry, "design");
     require(static_cast<bool>(graph.problem.checked_residual),
             "real-fluid graph uses checked property residuals");
     thermox::SolverOptions options;
@@ -686,7 +572,7 @@ void test_generic_model_solves_supercritical_co2_compressor() {
 }
 
 void test_generic_model_compiler_rejects_unregistered_component_kind() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "unregistered_kind",
@@ -700,13 +586,13 @@ void test_generic_model_compiler_rejects_unregistered_component_kind() {
   },
   "cases": []
 })json");
-    const auto registry = thermox::examples::make_default_component_registry();
-    require_throws([&]() { (void)thermox::examples::compile_model_graph(document, registry); },
+    const auto registry = thermox::platform::make_default_component_registry();
+    require_throws([&]() { (void)thermox::platform::compile_model_graph(document, registry); },
                    "no component model registered");
 }
 
 void test_generic_model_compiler_rejects_bad_port_contract() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "bad_contract",
@@ -721,13 +607,13 @@ void test_generic_model_compiler_rejects_bad_port_contract() {
   },
   "cases": []
 })json");
-    const auto registry = thermox::examples::make_default_component_registry();
-    require_throws([&]() { (void)thermox::examples::compile_model_graph(document, registry); },
+    const auto registry = thermox::platform::make_default_component_registry();
+    require_throws([&]() { (void)thermox::platform::compile_model_graph(document, registry); },
                    "missing required port: shaft");
 }
 
 void test_generic_model_compiler_rejects_unknown_case_variable() {
-    const auto document = thermox::examples::parse_model_document_text(R"json({
+    const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "unknown_case_var",
@@ -745,23 +631,45 @@ void test_generic_model_compiler_rejects_unknown_case_variable() {
     "fixed_values": {"missing.port.p": {"value": 1.0, "unit": "bar"}}
   }]
 })json");
-    const auto registry = thermox::examples::make_default_component_registry();
-    require_throws([&]() { (void)thermox::examples::compile_model_graph(document, registry, "design"); },
+    const auto registry = thermox::platform::make_default_component_registry();
+    require_throws([&]() { (void)thermox::platform::compile_model_graph(document, registry, "design"); },
                    "fixed value references unknown variable");
+}
+
+void test_component_property_capabilities_are_validated() {
+    const auto document = thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "capability_check",
+    "media": [{"id": "limited", "backend": "pt_only", "substance": "Test"}],
+    "components": [
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
+        "inlet": {"domain": "fluid", "medium": "limited", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "limited", "direction": "out"},
+        "shaft": {"domain": "shaft", "direction": "in"}
+      }, "parameters": {"pressure_ratio": 2.0, "eta_is": 0.8}}
+    ],
+    "connections": []
+  },
+  "cases": []
+})json");
+    auto properties = thermox::physics::make_default_property_package_registry();
+    properties.register_backend("pt_only", [](std::string_view) {
+        return std::make_shared<PtOnlyPropertyPackage>();
+    });
+    const auto components = thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, components, properties);
+        },
+        "requires property capability 'state_ps'");
 }
 
 }  // namespace
 
 int main() {
     try {
-        test_ideal_gas();
-        test_brayton_cycle();
-        test_brayton_model_loads_canonical_json();
-        test_brayton_model_normalizes_units();
-        test_brayton_model_rejects_malformed_json();
-        test_brayton_model_rejects_missing_required_fields();
-        test_brayton_model_rejects_invalid_values();
-        test_brayton_model_rejects_unsupported_units();
         test_generic_model_document_loads_components_connections_and_cases();
         test_generic_model_document_rejects_unknown_medium();
         test_generic_model_document_rejects_invalid_topology();
@@ -775,10 +683,11 @@ int main() {
         test_generic_model_compiler_rejects_unregistered_component_kind();
         test_generic_model_compiler_rejects_bad_port_contract();
         test_generic_model_compiler_rejects_unknown_case_variable();
+        test_component_property_capabilities_are_validated();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;
     }
-    std::cout << "thermox_brayton_example_tests passed\n";
+    std::cout << "thermox_platform_tests passed\n";
     return 0;
 }

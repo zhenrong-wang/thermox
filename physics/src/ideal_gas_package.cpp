@@ -25,6 +25,10 @@ PropertyLimits IdealGasPropertyPackage::limits() const noexcept {
             std::numeric_limits<double>::min(), std::numeric_limits<double>::max()};
 }
 
+bool IdealGasPropertyPackage::supports(PropertyCapability capability) const noexcept {
+    return capability != PropertyCapability::transport;
+}
+
 PropertyResult IdealGasPropertyPackage::state_pt(double pressure, double temperature) const {
     if (!std::isfinite(pressure) || !std::isfinite(temperature) ||
         pressure <= 0.0 || temperature <= 0.0) {

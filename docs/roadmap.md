@@ -27,7 +27,8 @@ Work items:
 
 1. Create C++ core package under `core/` with CMake, unit tests, and a small CLI runner. ✅
 2. Implement language-neutral schema loading/validation for media, components, ports, connections, and cases. ✅
-3. Implement unit normalization to canonical SI. ✅ *(Generic schema scalars and Brayton example inputs now support canonical fields plus `{value, unit}` inputs.)*
+3. Implement unit normalization to canonical SI. ✅ *(Generic schema scalars support canonical
+   fields plus `{value, unit}` inputs.)*
 4. Implement component registry and base C++ `ComponentModel` interface. ✅ *(The registry validates port contracts, resolves medium property packages, and compiles generic graph/connection structure with ideal-gas and real-fluid compressor/turbine residuals.)*
 5. Implement variable registry and residual registry. ✅
 6. Implement sparse nonlinear system assembly with named residuals, explicit sparse Jacobian partials, bounds, and scaling metadata. ✅
@@ -40,6 +41,7 @@ Work items:
    - water/steam IF97 adapter with transport properties ✅
    - steady Newton and transient DAE integration tests for property calls ✅
    - schema-selected property registry and checked component evaluation path ✅
+   - compile-time component/backend capability validation ✅
 10. Implement minimal compiled components:
    - source/sink
    - pump
@@ -51,7 +53,7 @@ Work items:
    - mixer/splitter
 11. Add examples:
    - simple Rankine cycle
-   - simple Brayton cycle
+   - simple Brayton cycle ✅ *(kept isolated from the platform API)*
 
 Exit criteria:
 
@@ -72,7 +74,7 @@ Delivered:
 4. Recoverable/fatal physics-evaluation status and bounds-aware line-search recovery. ✅
 5. Duplicate-name validation and fixed-pattern structural matching. ✅
 6. Index-1 DAE contract, consistent initial conditions, implicit adaptive integration, and events. ✅
-7. Steady, transient, sanitizer, and example regression coverage. ✅
+7. Steady, transient, sanitizer, platform, and isolated example regression coverage. ✅
 
 Production follow-ons:
 

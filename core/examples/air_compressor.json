@@ -1,0 +1,44 @@
+{
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "air_compressor",
+    "name": "Property-aware air compressor",
+    "revision": "1",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
+          "shaft": {"domain": "shaft", "direction": "in"}
+        },
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.86
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.outlet.p": {"value": 1.2, "unit": "MPa"},
+        "compressor.outlet.T": {"value": 650.0, "unit": "K"},
+        "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
+      }
+    }
+  ]
+}

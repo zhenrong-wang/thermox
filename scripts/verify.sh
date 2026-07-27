@@ -12,4 +12,4 @@ trap cleanup EXIT HUP INT TERM
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD_DIR" --parallel
 ctest --test-dir "$BUILD_DIR" --output-on-failure
-"$BUILD_DIR/core/thermox_cli" solve --model "$ROOT_DIR/core/examples/brayton_simple.json" --format json
+"$BUILD_DIR/thermox_cli" solve --model "$ROOT_DIR/core/examples/air_compressor.json" --format json
