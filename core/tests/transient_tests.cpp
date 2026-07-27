@@ -1,4 +1,4 @@
-#include "thermox/transient_solver.hpp"
+#include "thermox/dae_equation_system.hpp"
 
 #include <cmath>
 #include <exception>
@@ -50,6 +50,49 @@ thermox::DaeProblem make_decay_problem() {
         return thermox::EvaluationStatus::success();
     };
     return problem;
+}
+
+void test_dae_equation_system_builder() {
+    thermox::DaeEquationSystemBuilder system;
+    const auto inventory = system.add_variable(
+        "inventory", thermox::DaeVariableKind::differential,
+        0.2, 0.0, 1.0, 1.0);
+    const auto flow = system.add_variable(
+        "flow", thermox::DaeVariableKind::algebraic,
+        0.2, 0.0, 1.0, 1.0);
+    system.add_linear_equation(
+        "inventory_balance",
+        {{inventory, 1.0, 1.0}, {flow, -1.0, 0.0}}, 0.0);
+    system.add_linear_equation(
+        "flow_constraint",
+        {{inventory, 1.0, 0.0}, {flow, 1.0, 0.0}}, 1.0);
+
+    const auto problem = system.build();
+    require(problem.sparse_jacobian_pattern.has_value(),
+            "DAE builder emits a fixed sparse Jacobian pattern");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(problem, 0.0);
+    require(initialized.diagnostics.converged, initialized.diagnostics.message);
+    require_near(initialized.state[0], 0.2, 1.0e-9,
+                 "builder retains differential initial state");
+    require_near(initialized.state[1], 0.8, 1.0e-8,
+                 "builder solves algebraic initial state");
+    require_near(initialized.derivative[0], 0.6, 1.0e-8,
+                 "builder solves differential initial derivative");
+}
+
+void test_dae_equation_system_builder_rejects_non_square_system() {
+    thermox::DaeEquationSystemBuilder system;
+    system.add_variable("state", thermox::DaeVariableKind::differential,
+                        1.0, 0.0);
+    try {
+        (void)system.build();
+    } catch (const std::invalid_argument& ex) {
+        require(std::string(ex.what()).find("must be square") != std::string::npos,
+                "non-square DAE builder diagnostic is actionable");
+        return;
+    }
+    throw std::runtime_error("DAE builder should reject a non-square system");
 }
 
 void test_consistent_initial_conditions_for_ode() {
@@ -165,6 +208,8 @@ void test_terminal_event_stops_integration() {
 
 int main() {
     try {
+        test_dae_equation_system_builder();
+        test_dae_equation_system_builder_rejects_non_square_system();
         test_consistent_initial_conditions_for_ode();
         test_adaptive_dae_integration();
         test_index_one_dae_consistent_initialization_and_integration();

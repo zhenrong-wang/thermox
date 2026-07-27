@@ -56,6 +56,12 @@ dF/dy + alpha dF/d(y_dot)
 where the time integrator supplies `alpha`. Both dense and sparse forms are supported, including a
 fixed sparse pattern with value-only updates.
 
+`DaeEquationSystemBuilder` is the assembly boundary above `DaeProblem`. It registers named
+differential and algebraic variables, initial states and derivatives, independent state/derivative
+scales, bounds, residual scales, checked equations, and sparse partials with respect to both `y` and
+`y_dot`. It combines those partials into `dF/dy + alpha dF/d(y_dot)` and rejects non-square systems
+before integration.
+
 `make_consistent_initial_conditions` holds differential states fixed while solving their initial
 derivatives, and solves algebraic states while holding their supplied derivatives fixed. This
 targets index-1 systems.

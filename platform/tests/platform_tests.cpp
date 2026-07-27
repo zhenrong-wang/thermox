@@ -261,6 +261,10 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain compressor");
     require(registry.contains("compressor.fluid.isentropic_efficiency"),
             "default registry should contain generic-fluid compressor");
+    require(registry.contains("storage.thermal.lumped"),
+            "default registry should contain lumped thermal storage");
+    require(registry.contains("source.heat.boundary"),
+            "default registry should contain transient heat boundary");
     require(registry.kinds().size() >= 4, "default registry should contain multiple component kinds");
 }
 
@@ -666,6 +670,196 @@ void test_component_property_capabilities_are_validated() {
         "requires property capability 'state_ps'");
 }
 
+void test_transient_model_compiles_and_integrates_lumped_storage() {
+    const auto document = thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "thermal_storage_transient",
+    "media": [],
+    "components": [
+      {
+        "id": "heater",
+        "kind": "source.heat.boundary",
+        "ports": {
+          "outlet": {
+            "domain": "heat",
+            "direction": "out"
+          }
+        }
+      },
+      {
+        "id": "store",
+        "kind": "storage.thermal.lumped",
+        "ports": {
+          "thermal": {
+            "domain": "heat",
+            "direction": "in"
+          }
+        },
+        "parameters": {
+          "thermal_capacity": {"value": 2.0, "unit": "MJ/K"}
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "charging_heat",
+        "from": "heater.outlet",
+        "to": "store.thermal",
+        "kind": "heat_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "charge",
+      "mode": "dynamic_transient",
+      "fixed_values": {
+        "heater.outlet.Q_dot": {"value": 1.0, "unit": "MW"}
+      },
+      "initial_guesses": {
+        "store.temperature": {"value": 300.0, "unit": "K"}
+      }
+    }
+  ]
+})json");
+
+    require_near(
+        document.components.at(1).parameters.at("thermal_capacity").value_si,
+        2.0e6, 1.0e-9, "thermal capacity normalizes to J/K");
+
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "charge");
+    require(graph.problem.variable_names.size() == 5,
+            "connected transient graph exposes boundary, port, and internal states");
+    require(graph.internal_variables.size() == 1,
+            "compiled graph reports the internal storage state");
+    require(graph.connection_equations.size() == 2,
+            "heat link compiles both canonical connection constraints");
+    require(graph.problem.sparse_jacobian_pattern.has_value(),
+            "compiled transient graph has a fixed sparse Jacobian");
+
+    std::size_t temperature = graph.problem.variable_names.size();
+    for (std::size_t i = 0;
+         i < graph.problem.variable_names.size(); ++i) {
+        if (graph.problem.variable_names.at(i) ==
+            "store.temperature") {
+            temperature = i;
+        }
+    }
+    require(temperature < graph.problem.variable_names.size(),
+            "compiled graph exposes storage temperature");
+    require(graph.problem.variable_kinds.at(temperature) ==
+                thermox::DaeVariableKind::differential,
+            "storage temperature is a differential state");
+
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require_near(initialized.derivative.at(temperature), 0.5,
+                 1.0e-9,
+                 "compiled accumulation equation initializes Tdot");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 10.0;
+    options.initial_step = 1.0;
+    options.max_step = 2.0;
+    const auto result =
+        thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    require_near(
+        result.trajectory.back().state.at(temperature),
+        305.0, 1.0e-7,
+        "compiled storage follows energy accumulation");
+}
+
+void test_transient_compiler_rejects_steady_only_components() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "invalid_dynamic_component",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "ports": {
+          "outlet": {
+            "domain": "fluid",
+            "medium": "air",
+            "direction": "out"
+          }
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {"id": "dynamic", "mode": "dynamic_transient"}
+  ]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_transient_model_graph(
+                document, registry, "dynamic");
+        },
+        "does not support transient compilation");
+}
+
+void test_transient_compiler_rejects_fixed_differential_state() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "fixed_dynamic_state",
+    "media": [],
+    "components": [
+      {
+        "id": "store",
+        "kind": "storage.thermal.lumped",
+        "ports": {
+          "thermal": {
+            "domain": "heat",
+            "direction": "bidirectional"
+          }
+        },
+        "parameters": {"thermal_capacity": 1000.0}
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "dynamic",
+      "mode": "dynamic_transient",
+      "fixed_values": {
+        "store.thermal.Q_dot": 0.0,
+        "store.temperature": 300.0
+      }
+    }
+  ]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_transient_model_graph(
+                document, registry, "dynamic");
+        },
+        "cannot fix differential variable");
+}
+
 }  // namespace
 
 int main() {
@@ -684,6 +878,9 @@ int main() {
         test_generic_model_compiler_rejects_bad_port_contract();
         test_generic_model_compiler_rejects_unknown_case_variable();
         test_component_property_capabilities_are_validated();
+        test_transient_model_compiles_and_integrates_lumped_storage();
+        test_transient_compiler_rejects_steady_only_components();
+        test_transient_compiler_rejects_fixed_differential_state();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

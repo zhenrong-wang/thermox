@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(thermox_core
+    src/dae_equation_system.cpp
     src/dense_linear_solver.cpp
     src/equation_system.cpp
     src/nonlinear_solver.cpp

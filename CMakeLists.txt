@@ -37,6 +37,12 @@ add_test(NAME thermox_example_tests COMMAND thermox_example_tests)
 add_test(NAME platform_example_cli
     COMMAND thermox_cli solve --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/air_compressor.json
 )
+add_test(NAME platform_transient_example_cli
+    COMMAND thermox_cli simulate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/lumped_thermal_storage.json
+        --case charge
+        --end-time 10
+)
 
 add_executable(thermox_property_tests physics/tests/property_tests.cpp)
 target_link_libraries(thermox_property_tests PRIVATE thermox_physics thermox_core)

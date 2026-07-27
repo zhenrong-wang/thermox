@@ -10,7 +10,8 @@ Implementation status: the first-class `thermox_platform` C++ module parses and 
 `thermox.model/v1` boundary for media, components, typed ports, connections, cases, and scalar unit
 normalization. Its metadata-backed component registry and graph compiler validate port contracts
 and property capabilities, create canonical port variables, and lower connections, fixed values,
-and component equations into sparse equation assembly metadata. Design-only metadata such as
+component equations, internal dynamic states, and accumulation equations into sparse steady or DAE
+assembly metadata. Design-only metadata such as
 annotations/options remains documented here for registry/frontend use and may be ignored by the
 current parser.
 
@@ -182,8 +183,8 @@ Case modes:
 
 - `steady_state_design`
 - `steady_state_off_design`
-- `dynamic_initialization` (numeric core available; platform compilation pending)
-- `dynamic_transient` (numeric core available; platform compilation pending)
+- `dynamic_initialization`
+- `dynamic_transient`
 - `parameter_sweep` (future)
 - `optimization` (future)
 
@@ -194,6 +195,18 @@ names, domains, directions, and fluid-property capabilities. The compiler resolv
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
 compressor and turbine equations. Broader parameter schemas, additional physical components, and
 frontend display metadata remain future extensions.
+
+Transient-capable component descriptors additionally declare:
+
+- whether steady and/or transient compilation is supported;
+- canonical port variables that become differential states;
+- internal differential or algebraic variables, including initial values, bounds, and state and
+  derivative scales;
+- transient residual and sparse Jacobian assembly.
+
+Cases use `initial_guesses` to initialize differential states. A transient case cannot place a
+differential state in `fixed_values`, because that would constrain it for the entire trajectory
+rather than initialize it.
 
 ```yaml
 kind: turbine.steam.isentropic_efficiency

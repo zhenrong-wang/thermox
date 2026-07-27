@@ -1,0 +1,63 @@
+{
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "lumped_thermal_storage",
+    "name": "Generic lumped thermal storage transient",
+    "revision": "1",
+    "media": [],
+    "components": [
+      {
+        "id": "heater",
+        "kind": "source.heat.boundary",
+        "ports": {
+          "outlet": {
+            "domain": "heat",
+            "direction": "out"
+          }
+        }
+      },
+      {
+        "id": "store",
+        "kind": "storage.thermal.lumped",
+        "ports": {
+          "thermal": {
+            "domain": "heat",
+            "direction": "in"
+          }
+        },
+        "parameters": {
+          "thermal_capacity": {
+            "value": 2.0,
+            "unit": "MJ/K"
+          }
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "charging_heat",
+        "from": "heater.outlet",
+        "to": "store.thermal",
+        "kind": "heat_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "charge",
+      "mode": "dynamic_transient",
+      "fixed_values": {
+        "heater.outlet.Q_dot": {
+          "value": 1.0,
+          "unit": "MW"
+        }
+      },
+      "initial_guesses": {
+        "store.temperature": {
+          "value": 300.0,
+          "unit": "K"
+        }
+      }
+    }
+  ]
+}

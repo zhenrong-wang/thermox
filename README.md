@@ -23,6 +23,8 @@ Implemented in this sprint:
 
 - CMake-based C++20 equation-solver core library and CLI runner.
 - Generic equation-system builder for declaring variables, residual equations, scaling, bounds, and initial guesses independent of any cycle type.
+- Generic DAE equation-system builder for differential/algebraic variables, accumulation equations,
+  derivative scaling, bounds, checked evaluation, and fixed sparse Jacobians.
 - Variable and residual registries for equation-system assembly metadata.
 - Validated CSR matrix/pattern storage and replaceable dense/sparse linear-solver hooks.
 - Fixed sparse patterns with value-only Jacobian updates, dynamic sparse assembly, and hybrid
@@ -38,6 +40,8 @@ Implemented in this sprint:
 - Base C++ `ComponentModel` interface for source/sink, compressor, turbine, pump, and simple
   heat-exchanger port contracts.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
+- Transient graph compiler that validates component simulation-mode support, creates internal
+  component states, lowers accumulation and algebraic equations, and emits a `DaeProblem`.
 - Property-aware compressor and turbine residuals declare their required flash capabilities, resolve
   their medium backend from the model,
   use PT/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
@@ -122,6 +126,20 @@ JSON output:
 The CLI parses the generic model document, resolves the registered component and fluid backend,
 compiles the graph to a nonlinear problem, solves it, and reports every canonical model variable.
 
+Run a generic transient model:
+
+```sh
+./build/thermox_cli simulate \
+  --model core/examples/lumped_thermal_storage.json \
+  --case charge \
+  --end-time 10 \
+  --format json
+```
+
+The transient example uses a registered lumped thermal-storage component with an internal
+differential temperature state. The platform performs consistent DAE initialization before
+adaptive integration.
+
 ## Verify everything
 
 ```sh
@@ -131,8 +149,8 @@ compiles the graph to a nonlinear problem, solves it, and reports every canonica
 ## Next steps
 
 1. Extend property-aware residuals to pump, heat exchanger, condenser, mixer, and splitter models.
-2. Add the platform-side dynamic model contract that compiles registered component accumulation
-   equations into the existing transient DAE core.
+2. Add dynamic fluid inventory, wall thermal mass, rotating inertia, and control components using
+   the established transient component contract.
 3. Add a simple IF97 Rankine example and regression tolerances.
 4. Add explicit saturation-pair and analytic property-derivative APIs.
 5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR

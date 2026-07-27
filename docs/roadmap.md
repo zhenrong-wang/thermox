@@ -82,6 +82,22 @@ Production follow-ons:
 - higher-order BDF/IDA-style integration backend;
 - graph/block tearing, continuation, and richer rank/conditioning diagnostics.
 
+## System-agnostic transient platform milestone
+
+Goal: bridge registered dynamic components into the cycle-independent DAE kernel. ✅
+
+Delivered:
+
+1. Generic `DaeEquationSystemBuilder` with state and derivative partials, scaling, bounds, checked
+   evaluation, square-system validation, and fixed sparse Jacobian assembly. ✅
+2. Component metadata for steady/transient support, dynamic port variables, and internal
+   differential/algebraic variables. ✅
+3. Generic transient graph compiler for topology equations, fixed algebraic boundaries, initial
+   states, component accumulation equations, and property capability validation. ✅
+4. Registered lumped thermal-storage component and end-to-end transient CLI example. ✅
+5. Consistent initialization, adaptive integration, release, sanitizer, and CLI regression
+   coverage. ✅
+
 ## Phase 2 — Combined-cycle prototype
 
 Goal: produce a credible single-pressure combined-cycle heat balance.

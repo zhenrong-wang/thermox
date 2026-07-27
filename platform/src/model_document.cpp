@@ -422,6 +422,19 @@ double convert_power_to_w(double value, const std::string& unit) {
     throw std::invalid_argument("unsupported power unit: " + unit);
 }
 
+double convert_thermal_capacity_to_j_k(double value, const std::string& unit) {
+    if (unit == "J/K") {
+        return value;
+    }
+    if (unit == "kJ/K") {
+        return value * 1000.0;
+    }
+    if (unit == "MJ/K") {
+        return value * 1.0e6;
+    }
+    throw std::invalid_argument("unsupported thermal-capacity unit: " + unit);
+}
+
 double convert_specific_enthalpy_to_j_kg(double value, const std::string& unit) {
     if (unit == "J/kg") {
         return value;
@@ -458,6 +471,10 @@ ScalarValue convert_scalar(double value, const std::string& unit, const std::str
     }
     if (unit == "W" || unit == "kW" || unit == "MW") {
         return make_scalar(convert_power_to_w(value, unit), "W", "power");
+    }
+    if (unit == "J/K" || unit == "kJ/K" || unit == "MJ/K") {
+        return make_scalar(convert_thermal_capacity_to_j_k(value, unit),
+                           "J/K", "thermal_capacity");
     }
     if (unit == "dimensionless" || unit == "1" || unit == "%" || unit.empty()) {
         return make_scalar(convert_dimensionless(value, unit), "dimensionless", "dimensionless");
