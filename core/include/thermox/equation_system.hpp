@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,12 @@ struct Equation {
     std::vector<std::size_t> sparsity_variables;
 };
 
+enum class LinearEquationRelation {
+    independent,
+    redundant,
+    inconsistent,
+};
+
 class EquationSystemBuilder {
 public:
     std::size_t add_variable(std::string name, double initial_value, double scale = 1.0);
@@ -60,6 +67,10 @@ public:
                                     std::vector<LinearTerm> terms,
                                     double rhs,
                                     double scale = 1.0);
+    [[nodiscard]] LinearEquationRelation classify_linear_equation(
+        const std::vector<LinearTerm>& terms,
+        double rhs,
+        double tolerance = 1.0e-10) const;
 
     const std::vector<Variable>& variables() const { return registry_.variables(); }
     const std::vector<ResidualDescriptor>& residuals() const { return registry_.residuals(); }
@@ -68,8 +79,30 @@ public:
     NonlinearProblem build() const;
 
 private:
+    struct LinearBasisRow {
+        std::size_t pivot{0};
+        std::map<std::size_t, double> coefficients;
+        double rhs{0.0};
+    };
+    struct LinearReduction {
+        LinearEquationRelation relation{
+            LinearEquationRelation::independent};
+        std::size_t pivot{0};
+        std::map<std::size_t, double> coefficients;
+        double rhs{0.0};
+    };
+
+    [[nodiscard]] LinearReduction reduce_linear_equation(
+        const std::vector<LinearTerm>& terms,
+        double rhs,
+        double tolerance) const;
+    void record_linear_equation_if_independent(
+        const std::vector<LinearTerm>& terms,
+        double rhs);
+
     VariableRegistry registry_;
     std::vector<Equation> equations_;
+    std::vector<LinearBasisRow> linear_basis_;
 };
 
 }  // namespace thermox

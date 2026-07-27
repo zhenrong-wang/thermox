@@ -13,6 +13,36 @@ bool is_finite(double value) {
     return std::isfinite(value);
 }
 
+std::map<std::size_t, double> aggregate_terms(
+    const std::vector<LinearTerm>& terms,
+    std::size_t variable_count) {
+    if (terms.empty()) {
+        throw std::invalid_argument(
+            "linear equation must contain at least one term");
+    }
+    std::map<std::size_t, double> coefficients;
+    for (const auto& term : terms) {
+        if (term.variable >= variable_count) {
+            throw std::invalid_argument(
+                "linear equation term variable index out of range");
+        }
+        if (!is_finite(term.coefficient)) {
+            throw std::invalid_argument(
+                "linear equation coefficients must be finite");
+        }
+        coefficients[term.variable] += term.coefficient;
+    }
+    for (auto it = coefficients.begin();
+         it != coefficients.end();) {
+        if (it->second == 0.0) {
+            it = coefficients.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return coefficients;
+}
+
 }  // namespace
 
 std::size_t EquationSystemBuilder::add_variable(std::string name,
@@ -108,18 +138,7 @@ std::size_t EquationSystemBuilder::add_linear_equation(std::string name,
     if (!is_finite(rhs)) {
         throw std::invalid_argument("linear equation rhs must be finite");
     }
-    if (terms.empty()) {
-        throw std::invalid_argument("linear equation must contain at least one term");
-    }
-    const std::size_t variable_count = registry_.variables().size();
-    for (const auto& term : terms) {
-        if (term.variable >= variable_count) {
-            throw std::invalid_argument("linear equation term variable index out of range");
-        }
-        if (!is_finite(term.coefficient)) {
-            throw std::invalid_argument("linear equation coefficients must be finite");
-        }
-    }
+    record_linear_equation_if_independent(terms, rhs);
 
     std::vector<std::size_t> sparsity_variables;
     sparsity_variables.reserve(terms.size());
@@ -139,6 +158,116 @@ std::size_t EquationSystemBuilder::add_linear_equation(std::string name,
             return residual;
         },
         scale);
+}
+
+LinearEquationRelation EquationSystemBuilder::classify_linear_equation(
+    const std::vector<LinearTerm>& terms,
+    double rhs,
+    double tolerance) const {
+    if (!is_finite(rhs)) {
+        throw std::invalid_argument(
+            "linear equation rhs must be finite");
+    }
+    if (!is_finite(tolerance) || tolerance <= 0.0) {
+        throw std::invalid_argument(
+            "linear equation relation tolerance must be positive and finite");
+    }
+    return reduce_linear_equation(terms, rhs, tolerance).relation;
+}
+
+EquationSystemBuilder::LinearReduction
+EquationSystemBuilder::reduce_linear_equation(
+    const std::vector<LinearTerm>& terms,
+    double rhs,
+    double tolerance) const {
+    auto coefficients =
+        aggregate_terms(terms, registry_.variables().size());
+    double coefficient_scale = 0.0;
+    for (const auto& [_, coefficient] : coefficients) {
+        coefficient_scale =
+            std::max(coefficient_scale, std::abs(coefficient));
+    }
+    if (coefficient_scale == 0.0) {
+        return {
+            std::abs(rhs) <= tolerance
+                ? LinearEquationRelation::redundant
+                : LinearEquationRelation::inconsistent,
+            0, {}, rhs};
+    }
+    for (auto& [_, coefficient] : coefficients) {
+        coefficient /= coefficient_scale;
+    }
+    const double normalized_rhs = rhs / coefficient_scale;
+    double reduced_rhs = normalized_rhs;
+
+    for (const auto& basis : linear_basis_) {
+        const auto pivot = coefficients.find(basis.pivot);
+        if (pivot == coefficients.end()) {
+            continue;
+        }
+        const double factor = pivot->second;
+        coefficients.erase(pivot);
+        for (const auto& [variable, coefficient] :
+             basis.coefficients) {
+            if (variable == basis.pivot) {
+                continue;
+            }
+            coefficients[variable] -= factor * coefficient;
+            if (std::abs(coefficients[variable]) <= tolerance) {
+                coefficients.erase(variable);
+            }
+        }
+        reduced_rhs -= factor * basis.rhs;
+    }
+
+    double remaining_scale = 0.0;
+    for (const auto& [_, coefficient] : coefficients) {
+        remaining_scale =
+            std::max(remaining_scale, std::abs(coefficient));
+    }
+    if (remaining_scale > tolerance) {
+        const auto pivot = std::max_element(
+            coefficients.begin(), coefficients.end(),
+            [](const auto& left, const auto& right) {
+                return std::abs(left.second) <
+                       std::abs(right.second);
+            });
+        if (pivot == coefficients.end()) {
+            throw std::logic_error(
+                "independent linear equation produced no basis pivot");
+        }
+        const std::size_t pivot_variable = pivot->first;
+        const double pivot_coefficient = pivot->second;
+        for (auto& [_, coefficient] : coefficients) {
+            coefficient /= pivot_coefficient;
+        }
+        reduced_rhs /= pivot_coefficient;
+        return {LinearEquationRelation::independent,
+                pivot_variable, std::move(coefficients),
+                reduced_rhs};
+    }
+    return {
+        std::abs(reduced_rhs) <=
+                tolerance * (1.0 + std::abs(normalized_rhs))
+            ? LinearEquationRelation::redundant
+            : LinearEquationRelation::inconsistent,
+        0, {}, reduced_rhs};
+}
+
+void EquationSystemBuilder::record_linear_equation_if_independent(
+    const std::vector<LinearTerm>& terms,
+    double rhs) {
+    constexpr double tolerance = 1.0e-10;
+    auto reduced =
+        reduce_linear_equation(terms, rhs, tolerance);
+    if (reduced.relation !=
+        LinearEquationRelation::independent) {
+        return;
+    }
+    linear_basis_.push_back(
+        LinearBasisRow{
+            reduced.pivot, std::move(reduced.coefficients),
+            reduced.rhs});
 }
 
 NonlinearProblem EquationSystemBuilder::build() const {

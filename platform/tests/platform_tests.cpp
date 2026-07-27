@@ -511,6 +511,8 @@ void test_generic_model_compiles_to_connection_equations() {
     require(graph.case_id && *graph.case_id == "design", "compiled graph carries selected case id");
     require(graph.port_variables.size() == 11, "compiled graph should expose primary port variables");
     require(graph.connection_equations.size() == 3, "fluid connection lowers conserved variables");
+    require(graph.reduced_connection_equations.empty(),
+            "open graph should not reduce connection equations");
     require(graph.fixed_value_equations.size() == 4, "fixed values lower to equations");
     require(graph.problem.variable_names.size() == 11, "problem has variables");
     require(std::find(graph.problem.variable_names.begin(),
@@ -1149,6 +1151,24 @@ void test_if97_rankine_graph_regression() {
         thermox::platform::make_default_component_registry();
     const auto graph = thermox::platform::compile_model_graph(
         document, registry, "design");
+    require(graph.reduced_connection_equations.size() == 2,
+            "closed Rankine loop should reduce two exact linear closure rows; actual=" +
+                std::to_string(
+                    graph.reduced_connection_equations.size()));
+    require(
+        std::find(
+            graph.reduced_connection_equations.begin(),
+            graph.reduced_connection_equations.end(),
+            "connection.condenser_to_pump.m_dot") !=
+            graph.reduced_connection_equations.end(),
+        "closed Rankine loop reduces mass-flow closure");
+    require(
+        std::find(
+            graph.reduced_connection_equations.begin(),
+            graph.reduced_connection_equations.end(),
+            "connection.condenser_to_pump.p") !=
+            graph.reduced_connection_equations.end(),
+        "closed Rankine loop reduces pressure closure");
     thermox::SolverOptions options;
     options.max_iterations = 80;
     const auto result = thermox::solve_newton(
@@ -1172,17 +1192,20 @@ void test_if97_rankine_graph_regression() {
             "Rankine turbine output exceeds pump consumption");
     require(evaporator_heat > 0.0 && condenser_heat > 0.0,
             "Rankine heat duties use positive port magnitudes");
-    const double cycle_cut_power =
-        value("condensate.outlet.m_dot") *
-        (value("condensate.outlet.h") -
-         value("condenser.outlet.h"));
     require_near(
         net_power,
-        evaporator_heat - condenser_heat + cycle_cut_power,
+        evaporator_heat - condenser_heat,
         1.0e-3,
-        "Rankine cycle-cut energy balance closes");
-    require(std::abs(cycle_cut_power) < 200.0,
-            "Rankine boundary cut mismatch remains below 200 W");
+        "closed Rankine cycle energy balance closes");
+    require_near(value("condenser.outlet.m_dot"),
+                 value("pump.inlet.m_dot"), 1.0e-8,
+                 "reduced mass-flow closure remains satisfied");
+    require_near(value("condenser.outlet.p"),
+                 value("pump.inlet.p"), 1.0e-6,
+                 "reduced pressure closure remains satisfied");
+    require_near(value("condenser.outlet.h"),
+                 value("pump.inlet.h"), 1.0e-6,
+                 "retained enthalpy closure remains satisfied");
     const double efficiency = net_power / evaporator_heat;
     require(efficiency > 0.20 && efficiency < 0.30,
             "Rankine thermal efficiency remains in regression range");

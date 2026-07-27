@@ -692,6 +692,38 @@ void test_compiled_sparse_equation_duplicates_accumulate() {
     require_near(result.x.at(x), 2.0, 1.0e-12, "duplicate linear equation solve");
 }
 
+void test_linear_equation_relation_classification() {
+    thermox::EquationSystemBuilder system;
+    const auto x = system.add_variable("x", 0.0);
+    const auto y = system.add_variable("y", 0.0);
+    const auto z = system.add_variable("z", 0.0);
+
+    require(
+        system.classify_linear_equation(
+            {{x, 1.0}, {y, -1.0}}, 0.0) ==
+            thermox::LinearEquationRelation::independent,
+        "first linear relation should be independent");
+    system.add_linear_equation(
+        "x_equals_y", {{x, 1.0}, {y, -1.0}}, 0.0);
+    system.add_linear_equation(
+        "y_equals_z", {{y, 1.0}, {z, -1.0}}, 0.0);
+
+    require(
+        system.classify_linear_equation(
+            {{x, 2.0e12}, {z, -2.0e12}}, 0.0) ==
+            thermox::LinearEquationRelation::redundant,
+        "scaled loop closure should be redundant");
+    require(
+        system.classify_linear_equation(
+            {{x, 1.0}, {z, -1.0}}, 1.0) ==
+            thermox::LinearEquationRelation::inconsistent,
+        "conflicting loop closure should be inconsistent");
+    require(
+        system.classify_linear_equation({{z, 1.0}}, 3.0) ==
+            thermox::LinearEquationRelation::independent,
+        "new absolute specification should remain independent");
+}
+
 }  // namespace
 
 int main() {
@@ -722,6 +754,7 @@ int main() {
         test_equation_system_builder();
         test_compiled_sparse_equation_system_builder();
         test_compiled_sparse_equation_duplicates_accumulate();
+        test_linear_equation_relation_classification();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

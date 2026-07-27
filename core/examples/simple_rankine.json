@@ -2,8 +2,8 @@
   "schema_version": "thermox.model/v1",
   "model": {
     "id": "simple_if97_rankine",
-    "name": "Simple IF97 Rankine cycle with boundary cut",
-    "revision": "1",
+    "name": "Simple closed-loop IF97 Rankine cycle",
+    "revision": "2",
     "media": [
       {
         "id": "water",
@@ -12,17 +12,6 @@
       }
     ],
     "components": [
-      {
-        "id": "condensate",
-        "kind": "source.fluid.boundary",
-        "ports": {
-          "outlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "out"
-          }
-        }
-      },
       {
         "id": "pump",
         "kind": "pump.fluid.isentropic_efficiency",
@@ -116,26 +105,9 @@
         "parameters": {
           "outlet_quality": 0.01
         }
-      },
-      {
-        "id": "cycle_cut",
-        "kind": "sink.fluid.boundary",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "in"
-          }
-        }
       }
     ],
     "connections": [
-      {
-        "id": "condensate_to_pump",
-        "from": "condensate.outlet",
-        "to": "pump.inlet",
-        "kind": "fluid_link"
-      },
       {
         "id": "pump_to_evaporator",
         "from": "pump.outlet",
@@ -155,9 +127,9 @@
         "kind": "fluid_link"
       },
       {
-        "id": "condenser_to_cycle_cut",
+        "id": "condenser_to_pump",
         "from": "condenser.outlet",
-        "to": "cycle_cut.inlet",
+        "to": "pump.inlet",
         "kind": "fluid_link"
       }
     ]
@@ -167,17 +139,13 @@
       "id": "design",
       "mode": "steady_state_design",
       "fixed_values": {
-        "condensate.outlet.m_dot": {
+        "pump.inlet.m_dot": {
           "value": 10.0,
           "unit": "kg/s"
         },
-        "condensate.outlet.p": {
+        "pump.inlet.p": {
           "value": 1.0,
           "unit": "bar"
-        },
-        "condensate.outlet.h": {
-          "value": 440.0,
-          "unit": "kJ/kg"
         },
         "pump.shaft.omega": 314.1592653589793,
         "turbine.shaft.omega": 314.1592653589793

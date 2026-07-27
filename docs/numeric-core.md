@@ -13,6 +13,10 @@ connections, property relations, and boundary conditions into one of two mathema
 Gas turbines, steam cycles, nuclear secondary systems, refrigeration systems, and other physical
 domains reuse these contracts without adding domain concepts to the numeric module.
 
+`EquationSystemBuilder` classifies linear rows as independent, redundant, or inconsistent using an
+incrementally maintained sparse row basis. The builder does not silently remove rows; the platform
+compiler uses this information only for generated connection equations at closed-loop boundaries.
+
 ## Steady nonlinear contract
 
 `NonlinearProblem` carries names, initial values, physical bounds, variable/residual scales, and

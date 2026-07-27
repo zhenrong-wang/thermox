@@ -46,6 +46,9 @@ Implemented in this sprint:
   unknown, dimensionally incompatible, and out-of-range component parameters before equation
   assembly.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
+- Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
+  consistent linear combinations of retained equations; reduced row names remain available as
+  graph diagnostics.
 - Fluid connectors use conserved primary unknowns (`m_dot`, `p`, and `h`); temperature, entropy,
   density, phase, and quality are derived through the selected property package after solving.
 - Natural temperature boundary specifications compile into PH property equations without adding
@@ -168,9 +171,9 @@ Run the IF97 Rankine regression:
   --format json
 ```
 
-This example is compiled as a normal component graph. The cycle is cut at the condensate boundary
-to avoid redundant closed-loop continuity rows; the regression reports and bounds the resulting
-cut-stream energy mismatch explicitly.
+This example is compiled as a true closed component graph. The compiler detects and omits the
+redundant mass-flow and pressure connection rows at the loop closure while retaining enthalpy
+closure. Mass flow and base pressure are normal case specifications.
 
 ## Verify everything
 
@@ -180,14 +183,13 @@ cut-stream energy mismatch explicitly.
 
 ## Next steps
 
-1. Add closed-loop equation reduction for redundant stream continuity constraints.
-2. Add versioned model/result serialization and an application-level simulation command before
+1. Add versioned model/result serialization and an application-level simulation command before
    introducing database adapters.
-3. Add wall thermal mass, rotating inertia, and control components using the established
+2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-4. Add analytic property-derivative APIs; the rigid volume currently
+3. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+5. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

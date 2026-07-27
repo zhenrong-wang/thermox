@@ -135,6 +135,7 @@ struct CompiledModelGraph {
     std::optional<std::string> case_id;
     std::vector<CompiledPortVariable> port_variables;
     std::vector<CompiledConnectionEquation> connection_equations;
+    std::vector<std::string> reduced_connection_equations;
     std::vector<std::string> fixed_value_equations;
     NonlinearProblem problem;
 };

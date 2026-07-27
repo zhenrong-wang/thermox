@@ -258,6 +258,13 @@ Before producing a solver problem, each compiler compares the number of unknowns
 equations. Under- and over-specified graphs are rejected with model-level counts. Fixed sparse
 patterns additionally enable structural matching in the numerical core.
 
+For steady closed loops, the compiler classifies linear equations incrementally. A generated
+connection equation is omitted only when its coefficients and right-hand side are a consistent
+linear combination of already retained equations. Component equations and case specifications are
+never automatically removed, so user over-specification remains an error. The compiled graph
+records every omitted residual name in `reduced_connection_equations`; independent stream
+properties, such as Rankine-loop enthalpy closure, remain enforced.
+
 ```yaml
 kind: turbine.steam.isentropic_efficiency
 version: 1.0.0

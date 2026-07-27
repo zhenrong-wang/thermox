@@ -446,9 +446,18 @@ CompiledModelGraph compile_model_graph(
                 throw std::logic_error("compiled connection variable missing for: " + connection.id);
             }
             const std::string residual_name = "connection." + connection.id + "." + spec.name;
+            const std::vector<LinearTerm> terms{
+                {from_it->second, 1.0},
+                {to_it->second, -1.0}};
+            if (system.classify_linear_equation(terms, 0.0) ==
+                LinearEquationRelation::redundant) {
+                graph.reduced_connection_equations.push_back(
+                    residual_name);
+                continue;
+            }
             const std::size_t residual_index = system.add_linear_equation(
                 residual_name,
-                {{from_it->second, 1.0}, {to_it->second, -1.0}},
+                terms,
                 0.0,
                 spec.scale);
             graph.connection_equations.push_back(CompiledConnectionEquation{connection.id, spec.name,

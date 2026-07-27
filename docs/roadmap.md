@@ -146,8 +146,8 @@ Delivered:
 2. Generic quality-target evaporator and condenser with typed heat ports, positive duty
    magnitudes, pressure loss, and IF97 two-phase PH closure. ✅
 3. Registered steady/transient heat sink boundary and thermal-conductance unit normalization. ✅
-4. Simple IF97 source–pump–evaporator–turbine–condenser–sink Rankine graph with power, heat,
-   pressure, quality, efficiency, and cycle-cut closure regressions. ✅
+4. Simple closed-loop IF97 pump–evaporator–turbine–condenser Rankine graph with power, heat,
+   pressure, quality, efficiency, and exact stream-closure regressions. ✅
 5. CLI and clean-build regression coverage for the Rankine model document. ✅
 
 ## Component catalog and modularization foundation
@@ -177,10 +177,13 @@ Delivered:
     physical models. ✅
 11. Explicit saturation-pair capability in the C and C++ property contracts, implemented for CO₂
     and IF97, with exact saturated-liquid/vapor phase-change targets. ✅
+12. Incremental linear-relation analysis plus deterministic reduction of compiler-generated
+    connection rows that are proven redundant; the Rankine example now runs as a true closed
+    loop. ✅
 
 Next structural slices:
 
-- add closed-loop graph equation reduction.
+- add versioned application serialization and simulation workflows.
 
 ## Persistence boundary decision
 
