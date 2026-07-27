@@ -223,10 +223,10 @@ services and future component-palette generation. Optional model behavior reads 
 same descriptor rather than duplicating them inside the equation implementation.
 
 Default catalog composition uses independent boundary, storage, turbomachinery, and fluid-transport
-registrars. These modules share a small internal support layer for compiled-variable lookup,
-medium-package lookup, required parameter access, and property-failure translation. The graph
-compiler depends only on the public `ComponentModel` contract and is unaffected by which registrar
-owns an implementation.
+registrars plus dedicated heat-transfer/phase-change and fluid-inventory registrars. These modules
+share a small internal support layer for compiled-variable lookup, medium-package lookup, required
+parameter access, and property-failure translation. The graph compiler depends only on the public
+`ComponentModel` contract and is unaffected by which registrar owns an implementation.
 
 `heat_exchanger.fluid.counterflow_ua` uses counterflow terminal temperature differences obtained
 from PH flashes and enforces `Q_dot = UA * LMTD`. `UA` accepts `W/K`, `kW/K`, or `MW/K`. A

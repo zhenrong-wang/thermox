@@ -16,6 +16,7 @@ modules, a generic thermal-system schema/compiler platform, and isolated example
 - [Implementation Roadmap](docs/roadmap.md)
 - [Numeric Core Contracts](docs/numeric-core.md)
 - [Property Packages](docs/property-packages.md)
+- [Persistence Architecture](docs/persistence-architecture.md)
 
 ## Current C++ numeric core
 
@@ -74,8 +75,8 @@ core/
   tests/                Steady and transient numeric-kernel tests
 platform/
   include/              Generic model-document and component-registry API
-  src/                  Boundary, storage, turbomachinery, and transport component modules;
-                        catalog validation; and graph compilation
+  src/                  Modular physical component families, catalog validation, and graph
+                        compilation
   tests/                System-agnostic platform and property-integration tests
 physics/
   include/              Property-independent physics interfaces
@@ -179,12 +180,12 @@ cut-stream energy mismatch explicitly.
 
 ## Next steps
 
-1. Extract heat-transfer/phase-change and fluid-inventory models into independent
-   component-family registrars.
-2. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
-3. Add wall thermal mass, rotating inertia, and control components using the established
+1. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
+2. Add closed-loop equation reduction for redundant stream continuity constraints.
+3. Add versioned model/result serialization and an application-level simulation command before
+   introducing database adapters.
+4. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-4. Add closed-loop equation reduction for redundant stream continuity constraints.
 5. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
 6. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR

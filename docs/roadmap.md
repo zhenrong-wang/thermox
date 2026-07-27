@@ -172,12 +172,30 @@ Delivered:
 8. Independent transport registrar for mixer, splitter, and isenthalpic valve models. ✅
 9. Shared internal component-model support utilities plus an exact 18-kind catalog-equivalence
    regression. ✅
+10. Independent heat-transfer/phase-change and rigid fluid-inventory registrars; the central
+    registry source now contains registry mechanics and graph compilation rather than concrete
+    physical models. ✅
 
 Next structural slices:
 
-- extract heat-transfer/phase-change and fluid-inventory model families;
 - add explicit saturation-pair property contracts;
 - add closed-loop graph equation reduction.
+
+## Persistence boundary decision
+
+Goal: place future database work without coupling persistence to simulation internals. ✅
+
+Decision:
+
+1. Numeric, physics, component, and compiler libraries remain database-free. ✅
+2. A future service layer owns repository interfaces and job transactions. ✅
+3. PostgreSQL stores projects, immutable revisions, run metadata, provenance, diagnostics, result
+   manifests, and searchable summaries. ✅
+4. Large trajectories and reports use checksummed object storage rather than database blobs. ✅
+5. Database implementation starts after versioned serialization, application workflows, job
+   states, and provenance contracts are stable. ✅
+
+See `docs/persistence-architecture.md`.
 
 ## Phase 2 — Combined-cycle prototype
 
