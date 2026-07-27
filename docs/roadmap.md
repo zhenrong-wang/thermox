@@ -134,6 +134,22 @@ Delivered:
    network. ✅
 5. SI normalization for volume, mass, and energy component/case values. ✅
 
+## Heat transfer and phase-change components
+
+Goal: add property-backed heat-transfer equipment and prove a steam-cycle graph without embedding
+Rankine-specific behavior in the platform. ✅
+
+Delivered:
+
+1. Counterflow two-stream heat exchanger using PH-derived terminal temperatures, UA/LMTD heat
+   transfer, energy conservation, and independent side pressure losses/media. ✅
+2. Generic quality-target evaporator and condenser with typed heat ports, positive duty
+   magnitudes, pressure loss, and IF97 two-phase PH closure. ✅
+3. Registered steady/transient heat sink boundary and thermal-conductance unit normalization. ✅
+4. Simple IF97 source–pump–evaporator–turbine–condenser–sink Rankine graph with power, heat,
+   pressure, quality, efficiency, and cycle-cut closure regressions. ✅
+5. CLI and clean-build regression coverage for the Rankine model document. ✅
+
 ## Phase 2 — Combined-cycle prototype
 
 Goal: produce a credible single-pressure combined-cycle heat balance.

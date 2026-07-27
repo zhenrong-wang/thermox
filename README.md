@@ -38,8 +38,8 @@ Implemented in this sprint:
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
-  two-stream heat exchanger, mixer, splitter, lumped thermal storage, and rigid adiabatic fluid
-  volume implementations.
+  and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
+  splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - Fluid connectors use conserved primary unknowns (`m_dot`, `p`, and `h`); temperature, entropy,
   density, phase, and quality are derived through the selected property package after solving.
@@ -153,6 +153,19 @@ total internal energy are differential states, while pressure and enthalpy are a
 closed by the selected fluid package. The same component therefore works with any registered
 backend that supplies a PH flash.
 
+Run the IF97 Rankine regression:
+
+```sh
+./build/thermox_cli solve \
+  --model core/examples/simple_rankine.json \
+  --case design \
+  --format json
+```
+
+This example is compiled as a normal component graph. The cycle is cut at the condensate boundary
+to avoid redundant closed-loop continuity rows; the regression reports and bounds the resulting
+cut-stream energy mismatch explicitly.
+
 ## Verify everything
 
 ```sh
@@ -161,11 +174,11 @@ backend that supplies a PH flash.
 
 ## Next steps
 
-1. Add condenser/evaporator models and temperature-driven heat-exchanger formulations.
+1. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-3. Add a simple IF97 Rankine example and regression tolerances.
-4. Add explicit saturation-pair and analytic property-derivative APIs; the rigid volume currently
+3. Add closed-loop equation reduction for redundant stream continuity constraints.
+4. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
 5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.

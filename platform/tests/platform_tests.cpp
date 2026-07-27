@@ -281,6 +281,8 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain lumped thermal storage");
     require(registry.contains("source.heat.boundary"),
             "default registry should contain transient heat boundary");
+    require(registry.contains("sink.heat.boundary"),
+            "default registry should contain heat sink boundary");
     require(registry.contains("pump.fluid.isentropic_efficiency"),
             "default registry should contain property-aware pump");
     require(registry.contains("junction.fluid.mixer.two_inlet"),
@@ -291,6 +293,14 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain fluid valve");
     require(registry.contains("heat_exchanger.fluid.fixed_duty"),
             "default registry should contain fixed-duty heat exchanger");
+    require(registry.contains("heat_exchanger.fluid.counterflow_ua"),
+            "default registry should contain counterflow UA heat exchanger");
+    require(registry.contains(
+                "evaporator.fluid.fixed_outlet_quality"),
+            "default registry should contain quality-target evaporator");
+    require(registry.contains(
+                "condenser.fluid.fixed_outlet_quality"),
+            "default registry should contain quality-target condenser");
     require(registry.contains("volume.fluid.rigid_adiabatic"),
             "default registry should contain rigid fluid volume");
     require(registry.kinds().size() >= 4, "default registry should contain multiple component kinds");
@@ -786,6 +796,267 @@ void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
                  "hot pressure loss is applied");
     require_near(value("hx.cold_out.p"), 4.9e5, 1.0e-7,
                  "cold pressure loss is applied");
+}
+
+void test_generic_model_solves_counterflow_ua_heat_exchanger() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "counterflow_ua_heat_exchanger",
+    "media": [
+      {"id": "hot_air", "backend": "ideal_gas_mixture", "substance": "Air"},
+      {"id": "cold_air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.fluid.counterflow_ua",
+      "ports": {
+        "hot_in": {"domain": "fluid", "medium": "hot_air", "direction": "in"},
+        "hot_out": {"domain": "fluid", "medium": "hot_air", "direction": "out"},
+        "cold_in": {"domain": "fluid", "medium": "cold_air", "direction": "in"},
+        "cold_out": {"domain": "fluid", "medium": "cold_air", "direction": "out"}
+      },
+      "parameters": {
+        "UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_pressure_loss_fraction": 0.01,
+        "cold_pressure_loss_fraction": 0.02
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "hx.hot_in.T": {"value": 500.0, "unit": "K"},
+      "hx.cold_in.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
+      "hx.cold_in.T": {"value": 300.0, "unit": "K"}
+    },
+    "initial_guesses": {
+      "hx.hot_in.h": {"value": 502.25, "unit": "kJ/kg"},
+      "hx.hot_out.h": {"value": 400.0, "unit": "kJ/kg"},
+      "hx.cold_in.h": {"value": 301.35, "unit": "kJ/kg"},
+      "hx.cold_out.h": {"value": 350.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    require_near(
+        document.components.at(0).parameters.at("UA").value_si,
+        1000.0, 1.0e-12,
+        "heat-transfer conductance normalizes to W/K");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto package =
+        thermox::physics::make_default_property_package_registry()
+            .create("ideal_gas_mixture", "Air");
+    const auto hot_in =
+        package->state_ph(value("hx.hot_in.p"),
+                          value("hx.hot_in.h"));
+    const auto hot_out =
+        package->state_ph(value("hx.hot_out.p"),
+                          value("hx.hot_out.h"));
+    const auto cold_in =
+        package->state_ph(value("hx.cold_in.p"),
+                          value("hx.cold_in.h"));
+    const auto cold_out =
+        package->state_ph(value("hx.cold_out.p"),
+                          value("hx.cold_out.h"));
+    require(hot_in.ok() && hot_out.ok() &&
+                cold_in.ok() && cold_out.ok(),
+            "UA exchanger solved states should be valid");
+    require(hot_out.state.temperature_k <
+                hot_in.state.temperature_k,
+            "UA exchanger cools hot stream");
+    require(cold_out.state.temperature_k >
+                cold_in.state.temperature_k,
+            "UA exchanger heats cold stream");
+    const double hot_duty =
+        value("hx.hot_in.m_dot") *
+        (value("hx.hot_in.h") - value("hx.hot_out.h"));
+    const double cold_duty =
+        value("hx.cold_in.m_dot") *
+        (value("hx.cold_out.h") - value("hx.cold_in.h"));
+    require_near(hot_duty, cold_duty, 1.0e-5,
+                 "UA exchanger conserves energy");
+}
+
+void test_if97_fixed_quality_evaporator_and_condenser() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "if97_phase_change_components",
+    "media": [
+      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+    ],
+    "components": [
+      {
+        "id": "evaporator",
+        "kind": "evaporator.fluid.fixed_outlet_quality",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
+          "heat": {"domain": "heat", "direction": "in"}
+        },
+        "parameters": {
+          "outlet_quality": 0.9,
+          "pressure_loss_fraction": 0.02
+        }
+      },
+      {
+        "id": "condenser",
+        "kind": "condenser.fluid.fixed_outlet_quality",
+        "ports": {
+          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
+          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
+          "heat": {"domain": "heat", "direction": "out"}
+        },
+        "parameters": {
+          "outlet_quality": 0.05
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "evaporator.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "evaporator.inlet.p": {"value": 5.0, "unit": "MPa"},
+      "evaporator.inlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "condenser.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "condenser.inlet.p": {"value": 1.0, "unit": "bar"},
+      "condenser.inlet.h": {"value": 2500.0, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "evaporator.outlet.h": {"value": 2500.0, "unit": "kJ/kg"},
+      "evaporator.heat.Q_dot": {"value": 4.0, "unit": "MW"},
+      "evaporator.heat.T": {"value": 540.0, "unit": "K"},
+      "condenser.outlet.h": {"value": 530.0, "unit": "kJ/kg"},
+      "condenser.heat.Q_dot": {"value": 4.0, "unit": "MW"},
+      "condenser.heat.T": {"value": 373.0, "unit": "K"}
+    }
+  }]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    thermox::SolverOptions options;
+    options.max_iterations = 80;
+    const auto result = thermox::solve_newton(
+        graph.problem, options);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto package =
+        thermox::physics::make_default_property_package_registry()
+            .create("water_steam_if97", "Water");
+    const auto evaporator_out = package->state_ph(
+        value("evaporator.outlet.p"),
+        value("evaporator.outlet.h"));
+    const auto condenser_out = package->state_ph(
+        value("condenser.outlet.p"),
+        value("condenser.outlet.h"));
+    require(evaporator_out.ok() && condenser_out.ok(),
+            "phase-change outlet states should be valid");
+    require_near(evaporator_out.state.vapor_quality, 0.9,
+                 1.0e-8, "evaporator outlet quality");
+    require_near(condenser_out.state.vapor_quality, 0.05,
+                 1.0e-8, "condenser outlet quality");
+    require(value("evaporator.heat.Q_dot") > 0.0,
+            "evaporator receives positive heat");
+    require(value("condenser.heat.Q_dot") > 0.0,
+            "condenser rejects positive heat");
+}
+
+void test_if97_rankine_graph_regression() {
+    const auto document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/simple_rankine.json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    thermox::SolverOptions options;
+    options.max_iterations = 80;
+    const auto result = thermox::solve_newton(
+        graph.problem, options);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const double pump_power = value("pump.shaft.W_dot");
+    const double turbine_power = value("turbine.shaft.W_dot");
+    const double evaporator_heat =
+        value("evaporator.heat.Q_dot");
+    const double condenser_heat =
+        value("condenser.heat.Q_dot");
+    const double net_power = turbine_power - pump_power;
+    require(pump_power > 0.0,
+            "Rankine pump consumes positive shaft power");
+    require(turbine_power > pump_power,
+            "Rankine turbine output exceeds pump consumption");
+    require(evaporator_heat > 0.0 && condenser_heat > 0.0,
+            "Rankine heat duties use positive port magnitudes");
+    const double cycle_cut_power =
+        value("condensate.outlet.m_dot") *
+        (value("condensate.outlet.h") -
+         value("condenser.outlet.h"));
+    require_near(
+        net_power,
+        evaporator_heat - condenser_heat + cycle_cut_power,
+        1.0e-3,
+        "Rankine cycle-cut energy balance closes");
+    require(std::abs(cycle_cut_power) < 200.0,
+            "Rankine boundary cut mismatch remains below 200 W");
+    const double efficiency = net_power / evaporator_heat;
+    require(efficiency > 0.20 && efficiency < 0.30,
+            "Rankine thermal efficiency remains in regression range");
+
+    const auto ports =
+        thermox::platform::evaluate_fluid_port_results(
+            document, graph, result.x);
+    const auto quality = [&](const std::string& component,
+                             const std::string& port) {
+        const auto it = std::find_if(
+            ports.begin(), ports.end(), [&](const auto& value) {
+                return value.component_id == component &&
+                       value.port_name == port;
+            });
+        require(it != ports.end(),
+                "Rankine result port should exist");
+        return it->state.vapor_quality;
+    };
+    require_near(quality("evaporator", "outlet"), 0.99,
+                 1.0e-8,
+                 "Rankine evaporator outlet quality");
+    require_near(quality("condenser", "outlet"), 0.01,
+                 1.0e-8,
+                 "Rankine condenser outlet quality");
+    require_near(value("pump.outlet.p"), 5.0e6, 1.0e-4,
+                 "Rankine high pressure");
+    require_near(value("turbine.outlet.p"), 1.0e5, 1.0e-5,
+                 "Rankine condenser pressure");
 }
 
 void test_generic_model_solves_if97_pump() {
@@ -1555,6 +1826,9 @@ int main() {
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
+        test_generic_model_solves_counterflow_ua_heat_exchanger();
+        test_if97_fixed_quality_evaporator_and_condenser();
+        test_if97_rankine_graph_regression();
         test_generic_model_solves_if97_pump();
         test_generic_model_solves_supercritical_co2_compressor();
         test_generic_model_compiler_rejects_unregistered_component_kind();

@@ -28,6 +28,9 @@ target_link_libraries(thermox_cli PRIVATE thermox_platform)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)
+target_compile_definitions(thermox_platform_tests PRIVATE
+    THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 add_test(NAME thermox_platform_tests COMMAND thermox_platform_tests)
 
 add_executable(thermox_example_tests core/example_models/tests/example_tests.cpp)
@@ -42,6 +45,11 @@ add_test(NAME platform_transient_example_cli
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/lumped_thermal_storage.json
         --case charge
         --end-time 10
+)
+add_test(NAME platform_rankine_example_cli
+    COMMAND thermox_cli solve
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/simple_rankine.json
+        --case design
 )
 
 add_executable(thermox_property_tests physics/tests/property_tests.cpp)

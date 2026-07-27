@@ -47,7 +47,9 @@ out-of-range inputs, steady Newton solves through every backend, a
 property-backed transient energy balance through the DAE integrator, and an
 end-to-end supercritical-CO2 compressor compiled from the model schema. Platform coverage also
 integrates a rigid ideal-gas fluid inventory whose mass and internal-energy closures are evaluated
-through the same PH interface used by real-fluid backends.
+through the same PH interface used by real-fluid backends. IF97 PH mixture states additionally
+drive quality-target evaporator/condenser models and a complete pump–evaporator–turbine–condenser
+Rankine graph regression.
 
 The `thermox_platform` compiler resolves each `media[].backend` through
 `PropertyPackageRegistry` and injects the resulting package into fluid

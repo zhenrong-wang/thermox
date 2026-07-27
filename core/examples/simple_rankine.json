@@ -1,0 +1,277 @@
+{
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "simple_if97_rankine",
+    "name": "Simple IF97 Rankine cycle with boundary cut",
+    "revision": "1",
+    "media": [
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water"
+      }
+    ],
+    "components": [
+      {
+        "id": "condensate",
+        "kind": "source.fluid.boundary",
+        "ports": {
+          "outlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "out"
+          }
+        }
+      },
+      {
+        "id": "pump",
+        "kind": "pump.fluid.isentropic_efficiency",
+        "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "in"
+          },
+          "outlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "out"
+          },
+          "shaft": {
+            "domain": "shaft",
+            "direction": "in"
+          }
+        },
+        "parameters": {
+          "pressure_ratio": 50.0,
+          "eta_is": 0.8
+        }
+      },
+      {
+        "id": "evaporator",
+        "kind": "evaporator.fluid.fixed_outlet_quality",
+        "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "in"
+          },
+          "outlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "out"
+          },
+          "heat": {
+            "domain": "heat",
+            "direction": "in"
+          }
+        },
+        "parameters": {
+          "outlet_quality": 0.99
+        }
+      },
+      {
+        "id": "turbine",
+        "kind": "turbine.fluid.isentropic_efficiency",
+        "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "in"
+          },
+          "outlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "out"
+          },
+          "shaft": {
+            "domain": "shaft",
+            "direction": "out"
+          }
+        },
+        "parameters": {
+          "pressure_ratio": 50.0,
+          "eta_is": 0.85
+        }
+      },
+      {
+        "id": "condenser",
+        "kind": "condenser.fluid.fixed_outlet_quality",
+        "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "in"
+          },
+          "outlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "out"
+          },
+          "heat": {
+            "domain": "heat",
+            "direction": "out"
+          }
+        },
+        "parameters": {
+          "outlet_quality": 0.01
+        }
+      },
+      {
+        "id": "cycle_cut",
+        "kind": "sink.fluid.boundary",
+        "ports": {
+          "inlet": {
+            "domain": "fluid",
+            "medium": "water",
+            "direction": "in"
+          }
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "condensate_to_pump",
+        "from": "condensate.outlet",
+        "to": "pump.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "pump_to_evaporator",
+        "from": "pump.outlet",
+        "to": "evaporator.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "evaporator_to_turbine",
+        "from": "evaporator.outlet",
+        "to": "turbine.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "turbine_to_condenser",
+        "from": "turbine.outlet",
+        "to": "condenser.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "condenser_to_cycle_cut",
+        "from": "condenser.outlet",
+        "to": "cycle_cut.inlet",
+        "kind": "fluid_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "condensate.outlet.m_dot": {
+          "value": 10.0,
+          "unit": "kg/s"
+        },
+        "condensate.outlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "condensate.outlet.h": {
+          "value": 440.0,
+          "unit": "kJ/kg"
+        },
+        "pump.shaft.omega": 314.1592653589793,
+        "turbine.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "pump.inlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "pump.inlet.h": {
+          "value": 440.0,
+          "unit": "kJ/kg"
+        },
+        "pump.outlet.p": {
+          "value": 5.0,
+          "unit": "MPa"
+        },
+        "pump.outlet.h": {
+          "value": 450.0,
+          "unit": "kJ/kg"
+        },
+        "pump.shaft.W_dot": {
+          "value": 0.1,
+          "unit": "MW"
+        },
+        "evaporator.inlet.p": {
+          "value": 5.0,
+          "unit": "MPa"
+        },
+        "evaporator.inlet.h": {
+          "value": 450.0,
+          "unit": "kJ/kg"
+        },
+        "evaporator.outlet.p": {
+          "value": 5.0,
+          "unit": "MPa"
+        },
+        "evaporator.outlet.h": {
+          "value": 2780.0,
+          "unit": "kJ/kg"
+        },
+        "evaporator.heat.Q_dot": {
+          "value": 23.0,
+          "unit": "MW"
+        },
+        "evaporator.heat.T": {
+          "value": 537.0,
+          "unit": "K"
+        },
+        "turbine.inlet.p": {
+          "value": 5.0,
+          "unit": "MPa"
+        },
+        "turbine.inlet.h": {
+          "value": 2780.0,
+          "unit": "kJ/kg"
+        },
+        "turbine.outlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "turbine.outlet.h": {
+          "value": 2200.0,
+          "unit": "kJ/kg"
+        },
+        "turbine.shaft.W_dot": {
+          "value": 6.0,
+          "unit": "MW"
+        },
+        "condenser.inlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "condenser.inlet.h": {
+          "value": 2200.0,
+          "unit": "kJ/kg"
+        },
+        "condenser.outlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "condenser.outlet.h": {
+          "value": 440.0,
+          "unit": "kJ/kg"
+        },
+        "condenser.heat.Q_dot": {
+          "value": 18.0,
+          "unit": "MW"
+        },
+        "condenser.heat.T": {
+          "value": 373.0,
+          "unit": "K"
+        }
+      }
+    }
+  ]
+}

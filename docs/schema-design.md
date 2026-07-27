@@ -206,9 +206,19 @@ names, domains, directions, and fluid-property capabilities. The compiler resolv
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
 compressor, turbine, and pump equations. The default registry also contains enthalpy-flow mixer
 and splitter models, an isenthalpic pressure-ratio valve, a two-stream fixed-duty heat exchanger,
+a property-backed counterflow-UA heat exchanger, quality-target evaporator and condenser models,
 and a rigid adiabatic fluid volume. Heat-exchanger sides may select different media, but each side
-must be internally consistent. Broader parameter schemas and frontend display metadata remain
-future extensions.
+must be internally consistent. Phase-change components expose typed heat ports and require a
+strictly interior outlet quality until explicit saturation-pair queries are available. Broader
+parameter schemas and frontend display metadata remain future extensions.
+
+`heat_exchanger.fluid.counterflow_ua` uses counterflow terminal temperature differences obtained
+from PH flashes and enforces `Q_dot = UA * LMTD`. `UA` accepts `W/K`, `kW/K`, or `MW/K`. A
+temperature crossover is a recoverable model-evaluation failure during Newton line search.
+
+`evaporator.fluid.fixed_outlet_quality` and `condenser.fluid.fixed_outlet_quality` conserve mass,
+apply an optional fractional pressure loss, solve outlet quality through PH, and expose positive
+heat-duty magnitude and phase-change temperature on an `in` or `out` heat port respectively.
 
 Transient-capable component descriptors additionally declare:
 
