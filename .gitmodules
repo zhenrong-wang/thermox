@@ -1,6 +1,6 @@
-[submodule "reference/properties/co2"]
-	path = reference/properties/co2
+[submodule "modules/properties/co2"]
+	path = modules/properties/co2
 	url = git@github.com:zhenrong-wang/co2.git
-[submodule "reference/properties/water-steam-if97"]
-	path = reference/properties/water-steam-if97
+[submodule "modules/properties/water-steam-if97"]
+	path = modules/properties/water-steam-if97
 	url = git@github.com:zhenrong-wang/water-steam-if97.git

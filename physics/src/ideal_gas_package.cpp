@@ -1,0 +1,60 @@
+#include "thermox/physics/ideal_gas_package.hpp"
+
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+
+namespace thermox::physics {
+
+IdealGasPropertyPackage::IdealGasPropertyPackage(
+    double cp, double gas_constant, double reference_pressure, double reference_temperature)
+    : cp_(cp),
+      gas_constant_(gas_constant),
+      reference_pressure_(reference_pressure),
+      reference_temperature_(reference_temperature) {
+    if (!(cp_ > gas_constant_ && gas_constant_ > 0.0) ||
+        reference_pressure_ <= 0.0 || reference_temperature_ <= 0.0) {
+        throw std::invalid_argument("invalid ideal-gas property constants");
+    }
+}
+
+std::string_view IdealGasPropertyPackage::name() const noexcept { return "ideal-gas"; }
+
+PropertyLimits IdealGasPropertyPackage::limits() const noexcept {
+    return {std::numeric_limits<double>::min(), std::numeric_limits<double>::max(),
+            std::numeric_limits<double>::min(), std::numeric_limits<double>::max()};
+}
+
+PropertyResult IdealGasPropertyPackage::state_pt(double pressure, double temperature) const {
+    if (!std::isfinite(pressure) || !std::isfinite(temperature) ||
+        pressure <= 0.0 || temperature <= 0.0) {
+        return {{}, PropertyStatus::invalid_input,
+                "ideal-gas pressure and temperature must be finite and positive"};
+    }
+    const double cv = cp_ - gas_constant_;
+    const double gamma = cp_ / cv;
+    ThermodynamicState state;
+    state.pressure_pa = pressure;
+    state.temperature_k = temperature;
+    state.density_kg_m3 = pressure / (gas_constant_ * temperature);
+    state.internal_energy_j_kg = cv * temperature;
+    state.enthalpy_j_kg = cp_ * temperature;
+    state.entropy_j_kg_k = cp_ * std::log(temperature / reference_temperature_) -
+                           gas_constant_ * std::log(pressure / reference_pressure_);
+    state.cv_j_kg_k = cv;
+    state.cp_j_kg_k = cp_;
+    state.speed_of_sound_m_s = std::sqrt(gamma * gas_constant_ * temperature);
+    state.vapor_quality = 1.0;
+    state.phase = Phase::vapor;
+    return {state, PropertyStatus::success, {}};
+}
+
+PropertyResult IdealGasPropertyPackage::state_ph(double pressure, double enthalpy) const {
+    if (!std::isfinite(enthalpy) || enthalpy <= 0.0) {
+        return {{}, PropertyStatus::invalid_input,
+                "ideal-gas enthalpy must be finite and positive"};
+    }
+    return state_pt(pressure, enthalpy / cp_);
+}
+
+}  // namespace thermox::physics

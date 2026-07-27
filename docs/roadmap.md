@@ -34,8 +34,11 @@ Work items:
 7. Implement damped Newton solver with scaling, line search, finite-difference Jacobian fallback, and a sparse linear-solver abstraction. ✅
 8. Integrate a sparse linear algebra backend behind the existing sparse solver hooks. ✅ *(The current backend is a built-in CSR sparse direct solver; Eigen/SuiteSparse-style external backends can be added behind the same interface later.)*
 9. Implement basic property packages/adapters:
+   - unified SI-unit C++ property-package contract ✅
    - simple ideal gas in C++ ✅ *(used by the compiled compressor/turbine residual slices)*
-   - CoolProp/IF97-style water/steam adapter when dependency policy is set
+   - CO2 Span-Wagner adapter with transport properties ✅
+   - water/steam IF97 adapter with transport properties ✅
+   - steady Newton and transient DAE integration tests for property calls ✅
 10. Implement minimal compiled components:
    - source/sink
    - pump

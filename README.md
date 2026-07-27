@@ -3,7 +3,8 @@
 Thermox is a thermal balance calculation platform focused on a generic equation-oriented thermal/fluid network simulator. Gas-steam combined-cycle systems are the first full target, with small Brayton and Rankine cycles used as stepping stones.
 
 This repository contains a cycle-agnostic C++ numerical core for steady nonlinear systems and
-implicit transient DAEs, plus the first thermal-system schema/compiler and example models.
+implicit transient DAEs, a property-independent physics bridge, production CO2 and IF97 property
+modules, plus the first thermal-system schema/compiler and example models.
 
 ## Design documents
 
@@ -11,6 +12,7 @@ implicit transient DAEs, plus the first thermal-system schema/compiler and examp
 - [Schema Design Draft](docs/schema-design.md)
 - [Implementation Roadmap](docs/roadmap.md)
 - [Numeric Core Contracts](docs/numeric-core.md)
+- [Property Packages](docs/property-packages.md)
 
 ## Current C++ numeric core
 
@@ -46,14 +48,19 @@ core/
   include/thermox/      Public cycle-agnostic C++ solver headers
   src/                  Cycle-agnostic solver implementation
   tests/                Steady, transient, and example regression tests
+physics/
+  include/              Property-independent physics interfaces
+  src/                  Ideal-gas, CO2, and IF97 adapters
+  tests/                Property, steady-solver, and transient integration tests
+modules/
+  properties/           Pinned, library-ready CO2 and IF97 submodules
 scripts/
   verify.sh             Configure, build, test, and run example solve
-reference/
-  properties/           Pinned upstream research code; excluded from production builds
+reference/              Research-only code that is excluded from production builds
 ```
 
-The pinned `co2` and `water-steam-if97` repositories are reference inputs, not production
-dependencies. See [Reference Code](reference/README.md) for provenance and promotion criteria.
+The pinned `co2` and `water-steam-if97` repositories are production modules behind the unified
+Thermox property interface.
 
 ## Prerequisites
 
@@ -61,7 +68,7 @@ dependencies. See [Reference Code](reference/README.md) for provenance and promo
 - A C++20 compiler such as GCC or Clang
 - POSIX shell for `scripts/verify.sh`
 
-No third-party packages or reference submodules are required for the current build.
+The two property submodules are required for the default build.
 
 ## Clone
 
@@ -70,11 +77,6 @@ The production build does not require reference code:
 ```sh
 git clone git@github.com:zhenrong-wang/thermox.git
 cd thermox
-```
-
-To inspect the pinned property references as well:
-
-```sh
 git submodule update --init --recursive
 ```
 
@@ -115,9 +117,10 @@ Expected MVP behavior: the example converges in Newton solve and reports compres
 
 ## Next steps
 
-1. Extend compiled physical residuals beyond the current ideal-gas compressor/turbine slices to source/sink, pump, heat exchanger, condenser, mixer, and splitter components.
-2. Add a simple Rankine example and regression tolerances.
-3. Evaluate wrapping MIT `co2` and `water-steam-if97` property code after the core property ABI stabilizes.
+1. Replace the example-only ideal-gas component dependency with injected `PropertyPackage`
+   instances and extend residuals to pump, heat exchanger, condenser, mixer, and splitter models.
+2. Add a simple IF97 Rankine example and regression tolerances.
+3. Add explicit saturation-pair and analytic property-derivative APIs.
 4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
 5. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
