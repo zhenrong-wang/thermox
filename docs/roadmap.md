@@ -167,10 +167,15 @@ Delivered:
    validation translation unit, establishing the split pattern for remaining families. ✅
 6. Removal of obsolete component-level ideal-gas `cp` and `gamma`; property packages remain the
    sole fluid-property authority. ✅
+7. Independent turbomachinery registrar for compressor, pump, and turbine variants, preserving
+   shared PH/PS equation behavior across ideal-gas, IF97, and CO₂ backends. ✅
+8. Independent transport registrar for mixer, splitter, and isenthalpic valve models. ✅
+9. Shared internal component-model support utilities plus an exact 18-kind catalog-equivalence
+   regression. ✅
 
 Next structural slices:
 
-- extract turbomachinery, junction/transport, heat-transfer, and fluid-inventory model families;
+- extract heat-transfer/phase-change and fluid-inventory model families;
 - add explicit saturation-pair property contracts;
 - add closed-loop graph equation reduction.
 

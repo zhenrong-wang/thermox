@@ -74,7 +74,8 @@ core/
   tests/                Steady and transient numeric-kernel tests
 platform/
   include/              Generic model-document and component-registry API
-  src/                  Component-family modules, catalog validation, and graph compilation
+  src/                  Boundary, storage, turbomachinery, and transport component modules;
+                        catalog validation; and graph compilation
   tests/                System-agnostic platform and property-integration tests
 physics/
   include/              Property-independent physics interfaces
@@ -178,8 +179,8 @@ cut-stream energy mismatch explicitly.
 
 ## Next steps
 
-1. Continue splitting turbomachinery, transport, heat-transfer, and fluid-inventory models into
-   independent component-family registrars.
+1. Extract heat-transfer/phase-change and fluid-inventory models into independent
+   component-family registrars.
 2. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
 3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.

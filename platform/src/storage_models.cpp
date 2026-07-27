@@ -1,4 +1,5 @@
 #include "component_modules.hpp"
+#include "component_model_support.hpp"
 
 #include <cmath>
 #include <limits>
@@ -9,41 +10,9 @@ namespace thermox::platform {
 
 namespace {
 
-double required_parameter(
-    const ComponentDefinition& component,
-    const std::string& name) {
-    const auto it = component.parameters.find(name);
-    if (it == component.parameters.end()) {
-        throw std::invalid_argument(
-            "component '" + component.id +
-            "' is missing required parameter: " + name);
-    }
-    return it->second.value_si;
-}
-
-std::size_t require_port_variable(
-    const ComponentCompileContext& context,
-    const std::string& key) {
-    const auto it = context.port_variables.find(key);
-    if (it == context.port_variables.end()) {
-        throw std::logic_error(
-            "compiled component variable missing: " +
-            context.component.id + "." + key);
-    }
-    return it->second;
-}
-
-std::size_t require_internal_variable(
-    const ComponentCompileContext& context,
-    const std::string& name) {
-    const auto it = context.internal_variables.find(name);
-    if (it == context.internal_variables.end()) {
-        throw std::logic_error(
-            "compiled component internal variable missing: " +
-            context.component.id + "." + name);
-    }
-    return it->second;
-}
+using component_model_support::require_internal_variable;
+using component_model_support::require_port_variable;
+using component_model_support::required_parameter;
 
 class LumpedThermalStorageModel final : public ComponentModel {
 public:

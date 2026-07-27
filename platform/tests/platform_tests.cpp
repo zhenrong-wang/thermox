@@ -315,6 +315,28 @@ void test_component_registry_rejects_unknown_kind() {
 void test_component_catalog_exposes_parameter_contracts() {
     const auto registry =
         thermox::platform::make_default_component_registry();
+    std::vector<std::string> expected_kinds = {
+        "source.fluid.boundary",
+        "sink.fluid.boundary",
+        "source.heat.boundary",
+        "sink.heat.boundary",
+        "compressor.gas.isentropic_efficiency",
+        "compressor.fluid.isentropic_efficiency",
+        "pump.fluid.isentropic_efficiency",
+        "turbine.gas.isentropic_efficiency",
+        "turbine.fluid.isentropic_efficiency",
+        "junction.fluid.mixer.two_inlet",
+        "junction.fluid.splitter.two_outlet",
+        "valve.fluid.isenthalpic_pressure_ratio",
+        "heat_exchanger.fluid.fixed_duty",
+        "heat_exchanger.fluid.counterflow_ua",
+        "evaporator.fluid.fixed_outlet_quality",
+        "condenser.fluid.fixed_outlet_quality",
+        "volume.fluid.rigid_adiabatic",
+        "storage.thermal.lumped"};
+    std::sort(expected_kinds.begin(), expected_kinds.end());
+    require(registry.kinds() == expected_kinds,
+            "default component modules should preserve the complete catalog");
     require(registry.descriptors().size() == registry.kinds().size(),
             "component catalog should expose every registered descriptor");
     const auto& descriptor = registry.require_model(
