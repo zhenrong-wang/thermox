@@ -150,6 +150,30 @@ Delivered:
    pressure, quality, efficiency, and cycle-cut closure regressions. ✅
 5. CLI and clean-build regression coverage for the Rankine model document. ✅
 
+## Component catalog and modularization foundation
+
+Goal: make registered component contracts authoritative and begin separating the component library
+from graph compilation. ✅
+
+Delivered:
+
+1. Public parameter descriptors covering SI dimension, requiredness, defaults, lower/upper bounds,
+   and inclusive/exclusive bound semantics. ✅
+2. Registration-time descriptor validation and steady/transient compile-time value validation for
+   missing, unknown, dimensionally incompatible, non-finite, and out-of-range parameters. ✅
+3. Queryable, kind-ordered component descriptor catalog for future API and frontend consumers. ✅
+4. Catalog-owned optional defaults consumed directly by physical models. ✅
+5. Separate boundary and storage component-family registrar modules plus a dedicated catalog
+   validation translation unit, establishing the split pattern for remaining families. ✅
+6. Removal of obsolete component-level ideal-gas `cp` and `gamma`; property packages remain the
+   sole fluid-property authority. ✅
+
+Next structural slices:
+
+- extract turbomachinery, junction/transport, heat-transfer, and fluid-inventory model families;
+- add explicit saturation-pair property contracts;
+- add closed-loop graph equation reduction.
+
 ## Phase 2 — Combined-cycle prototype
 
 Goal: produce a credible single-pressure combined-cycle heat balance.

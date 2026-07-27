@@ -312,6 +312,136 @@ void test_component_registry_rejects_unknown_kind() {
                    "no component model registered");
 }
 
+void test_component_catalog_exposes_parameter_contracts() {
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require(registry.descriptors().size() == registry.kinds().size(),
+            "component catalog should expose every registered descriptor");
+    const auto& descriptor = registry.require_model(
+        "heat_exchanger.fluid.counterflow_ua").descriptor();
+    const auto find_parameter = [&](const std::string& name)
+        -> const thermox::platform::ParameterModelDescriptor& {
+        const auto it = std::find_if(
+            descriptor.parameters.begin(),
+            descriptor.parameters.end(),
+            [&](const auto& parameter) {
+                return parameter.name == name;
+            });
+        require(it != descriptor.parameters.end(),
+                "component catalog parameter should exist: " + name);
+        return *it;
+    };
+    const auto& conductance = find_parameter("UA");
+    require(conductance.required,
+            "UA should be a required component parameter");
+    require(conductance.dimension == "thermal_conductance",
+            "UA should declare thermal-conductance dimension");
+    require(!conductance.lower_inclusive &&
+                conductance.lower_bound == 0.0,
+            "UA should declare a strictly positive bound");
+    const auto& pressure_loss =
+        find_parameter("hot_pressure_loss_fraction");
+    require(!pressure_loss.required &&
+                pressure_loss.default_value.has_value(),
+            "pressure loss should expose its optional default");
+    require_near(*pressure_loss.default_value, 0.0, 0.0,
+                 "pressure-loss default");
+    require(!pressure_loss.upper_inclusive &&
+                pressure_loss.upper_bound == 1.0,
+            "pressure loss should exclude unity");
+}
+
+void test_component_parameter_contracts_are_enforced() {
+    const auto unknown_parameter =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "unknown_component_parameter",
+    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.fluid.isentropic_efficiency",
+      "ports": {
+        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
+        "shaft": {"domain": "shaft", "direction": "in"}
+      },
+      "parameters": {
+        "pressure_ratio": 2.0,
+        "eta_is": 0.8,
+        "cp": {"value": 1.0, "unit": "kJ/kg/K"}
+      }
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    const auto wrong_dimension =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "wrong_parameter_dimension",
+    "media": [
+      {"id": "hot", "backend": "ideal_gas_mixture", "substance": "Air"},
+      {"id": "cold", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.fluid.counterflow_ua",
+      "ports": {
+        "hot_in": {"domain": "fluid", "medium": "hot", "direction": "in"},
+        "hot_out": {"domain": "fluid", "medium": "hot", "direction": "out"},
+        "cold_in": {"domain": "fluid", "medium": "cold", "direction": "in"},
+        "cold_out": {"domain": "fluid", "medium": "cold", "direction": "out"}
+      },
+      "parameters": {"UA": {"value": 1.0, "unit": "MW"}}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    const auto invalid_bound =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "invalid_parameter_bound",
+    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.fluid.isentropic_efficiency",
+      "ports": {
+        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
+        "shaft": {"domain": "shaft", "direction": "in"}
+      },
+      "parameters": {"pressure_ratio": 2.0, "eta_is": 1.1}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                unknown_parameter, registry);
+        },
+        "supplies unknown parameter");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                wrong_dimension, registry);
+        },
+        "requires dimension 'thermal_conductance'");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                invalid_bound, registry);
+        },
+        "outside its declared bounds");
+}
+
 void test_generic_model_compiles_to_connection_equations() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v1",
@@ -406,9 +536,7 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
         "shaft": {"domain": "shaft", "direction": "in"}
       }, "parameters": {
         "pressure_ratio": 12.0,
-        "eta_is": 0.86,
-        "cp": {"value": 1.0045, "unit": "kJ/kg/K"},
-        "gamma": 1.4
+        "eta_is": 0.86
       }}
     ],
     "connections": []
@@ -494,9 +622,7 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
         "shaft": {"domain": "shaft", "direction": "out"}
       }, "parameters": {
         "pressure_ratio": 12.0,
-        "eta_is": 0.89,
-        "cp": {"value": 1.0045, "unit": "kJ/kg/K"},
-        "gamma": 1.4
+        "eta_is": 0.89
       }}
     ],
     "connections": []
@@ -1819,6 +1945,8 @@ int main() {
         test_generic_model_document_rejects_unsupported_units();
         test_component_registry_exposes_default_models();
         test_component_registry_rejects_unknown_kind();
+        test_component_catalog_exposes_parameter_contracts();
+        test_component_parameter_contracts_are_enforced();
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
         test_generic_model_solves_ideal_gas_turbine_residuals();

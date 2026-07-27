@@ -202,7 +202,13 @@ Case modes:
 ## 8. Component type metadata schema
 Component type definitions should be served to the frontend and compiler from the same registry.
 The current C++ implementation has registered component models exposing kind/version, required port
-names, domains, directions, and fluid-property capabilities. The compiler resolves model media
+names, domains, directions, fluid-property capabilities, supported simulation modes, and formal
+parameter descriptors. Each parameter descriptor records its SI dimension, requiredness, optional
+default, lower/upper bounds, and whether each bound is inclusive. The compiler rejects missing,
+unknown, dimensionally incompatible, non-finite, and out-of-range values before equation assembly.
+Plain numeric values remain implicit SI; unit-bearing values must match the declared dimension.
+
+The compiler resolves model media
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
 compressor, turbine, and pump equations. The default registry also contains enthalpy-flow mixer
 and splitter models, an isenthalpic pressure-ratio valve, a two-stream fixed-duty heat exchanger,
@@ -211,6 +217,10 @@ and a rigid adiabatic fluid volume. Heat-exchanger sides may select different me
 must be internally consistent. Phase-change components expose typed heat ports and require a
 strictly interior outlet quality until explicit saturation-pair queries are available. Broader
 parameter schemas and frontend display metadata remain future extensions.
+
+`ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot suitable for validation
+services and future component-palette generation. Optional model behavior reads defaults from this
+same descriptor rather than duplicating them inside the equation implementation.
 
 `heat_exchanger.fluid.counterflow_ua` uses counterflow terminal temperature differences obtained
 from PH flashes and enforces `Q_dot = UA * LMTD`. `UA` accepts `W/K`, `kW/K`, or `MW/K`. A

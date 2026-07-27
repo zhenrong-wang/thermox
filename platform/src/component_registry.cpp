@@ -1,5 +1,7 @@
 #include "thermox/platform/component_registry.hpp"
 
+#include "component_modules.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -188,6 +190,27 @@ ComponentModelDescriptor make_descriptor(std::string kind,
     return out;
 }
 
+ParameterModelDescriptor parameter_descriptor(
+    std::string name,
+    std::string dimension,
+    bool required,
+    std::optional<double> default_value,
+    double lower_bound,
+    double upper_bound,
+    bool lower_inclusive = true,
+    bool upper_inclusive = true) {
+    ParameterModelDescriptor out;
+    out.name = std::move(name);
+    out.dimension = std::move(dimension);
+    out.required = required;
+    out.default_value = default_value;
+    out.lower_bound = lower_bound;
+    out.upper_bound = upper_bound;
+    out.lower_inclusive = lower_inclusive;
+    out.upper_inclusive = upper_inclusive;
+    return out;
+}
+
 std::size_t require_port_variable(const ComponentCompileContext& context,
                                   const std::string& key) {
     const auto it = context.port_variables.find(key);
@@ -217,12 +240,30 @@ double required_parameter(const ComponentDefinition& component, const std::strin
     return it->second.value_si;
 }
 
-double optional_parameter(const ComponentDefinition& component,
-                          const std::string& name,
-                          double default_value) {
+double parameter_value(
+    const ComponentDefinition& component,
+    const ComponentModelDescriptor& descriptor,
+    const std::string& name) {
     const auto it = component.parameters.find(name);
-    return it == component.parameters.end() ? default_value
-                                            : it->second.value_si;
+    if (it != component.parameters.end()) {
+        return it->second.value_si;
+    }
+    const auto declared = std::find_if(
+        descriptor.parameters.begin(), descriptor.parameters.end(),
+        [&](const auto& parameter) {
+            return parameter.name == name;
+        });
+    if (declared == descriptor.parameters.end()) {
+        throw std::logic_error(
+            "component model '" + descriptor.kind +
+            "' does not declare parameter: " + name);
+    }
+    if (!declared->default_value.has_value()) {
+        throw std::invalid_argument(
+            "component '" + component.id +
+            "' is missing required parameter: " + name);
+    }
+    return *declared->default_value;
 }
 
 void validate_positive(const ComponentDefinition& component,
@@ -380,6 +421,14 @@ public:
                                  {{"inlet", "fluid", "in"},
                                   {"outlet", "fluid", "out"},
                                   {"shaft", "shaft", "in"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "pressure_ratio", "dimensionless", true,
+                std::nullopt, 1.0,
+                std::numeric_limits<double>::infinity(), false),
+            parameter_descriptor(
+                "eta_is", "dimensionless", true, std::nullopt,
+                0.0, 1.0, false, true)};
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph,
             physics::PropertyCapability::state_ps};
@@ -403,6 +452,14 @@ public:
                                       {{"inlet", "fluid", "in"},
                                        {"outlet", "fluid", "out"},
                                        {"shaft", "shaft", "out"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "pressure_ratio", "dimensionless", true,
+                std::nullopt, 1.0,
+                std::numeric_limits<double>::infinity(), false),
+            parameter_descriptor(
+                "eta_is", "dimensionless", true, std::nullopt,
+                0.0, 1.0, false, true)};
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph,
             physics::PropertyCapability::state_ps};
@@ -588,7 +645,13 @@ public:
         : descriptor_(make_descriptor(
               "valve.fluid.isenthalpic_pressure_ratio",
               {{"inlet", "fluid", "in"},
-               {"outlet", "fluid", "out"}})) {}
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "pressure_ratio", "dimensionless", true,
+                std::nullopt, 1.0,
+                std::numeric_limits<double>::infinity(), false)};
+    }
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -652,7 +715,18 @@ public:
               {{"hot_in", "fluid", "in"},
                {"hot_out", "fluid", "out"},
                {"cold_in", "fluid", "in"},
-               {"cold_out", "fluid", "out"}})) {}
+               {"cold_out", "fluid", "out"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "heat_duty", "power", true, std::nullopt, 0.0,
+                std::numeric_limits<double>::infinity(), false),
+            parameter_descriptor(
+                "hot_pressure_loss_fraction", "dimensionless",
+                false, 0.0, 0.0, 1.0, true, false),
+            parameter_descriptor(
+                "cold_pressure_loss_fraction", "dimensionless",
+                false, 0.0, 0.0, 1.0, true, false)};
+    }
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -663,10 +737,12 @@ public:
         const double duty =
             required_parameter(context.component, "heat_duty");
         validate_positive(context.component, "heat_duty", duty);
-        const double hot_loss = optional_parameter(
-            context.component, "hot_pressure_loss_fraction", 0.0);
-        const double cold_loss = optional_parameter(
-            context.component, "cold_pressure_loss_fraction", 0.0);
+        const double hot_loss = parameter_value(
+            context.component, descriptor_,
+            "hot_pressure_loss_fraction");
+        const double cold_loss = parameter_value(
+            context.component, descriptor_,
+            "cold_pressure_loss_fraction");
         const auto validate_loss = [&](const std::string& name,
                                        double loss) {
             if (!std::isfinite(loss) || loss < 0.0 || loss >= 1.0) {
@@ -775,6 +851,16 @@ public:
                {"hot_out", "fluid", "out"},
                {"cold_in", "fluid", "in"},
                {"cold_out", "fluid", "out"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "UA", "thermal_conductance", true, std::nullopt,
+                0.0, std::numeric_limits<double>::infinity(), false),
+            parameter_descriptor(
+                "hot_pressure_loss_fraction", "dimensionless",
+                false, 0.0, 0.0, 1.0, true, false),
+            parameter_descriptor(
+                "cold_pressure_loss_fraction", "dimensionless",
+                false, 0.0, 0.0, 1.0, true, false)};
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph};
     }
@@ -788,10 +874,12 @@ public:
         const double conductance =
             required_parameter(context.component, "UA");
         validate_positive(context.component, "UA", conductance);
-        const double hot_loss = optional_parameter(
-            context.component, "hot_pressure_loss_fraction", 0.0);
-        const double cold_loss = optional_parameter(
-            context.component, "cold_pressure_loss_fraction", 0.0);
+        const double hot_loss = parameter_value(
+            context.component, descriptor_,
+            "hot_pressure_loss_fraction");
+        const double cold_loss = parameter_value(
+            context.component, descriptor_,
+            "cold_pressure_loss_fraction");
         const auto validate_loss = [&](const std::string& name,
                                        double loss) {
             if (!std::isfinite(loss) || loss < 0.0 || loss >= 1.0) {
@@ -932,6 +1020,13 @@ public:
                {"outlet", "fluid", "out"},
                {"heat", "heat", evaporator ? "in" : "out"}})),
           evaporator_(evaporator) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "outlet_quality", "dimensionless", true,
+                std::nullopt, 0.0, 1.0, false, false),
+            parameter_descriptor(
+                "pressure_loss_fraction", "dimensionless", false,
+                0.0, 0.0, 1.0, true, false)};
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph};
     }
@@ -950,8 +1045,9 @@ public:
                 "component '" + context.component.id +
                 "' parameter 'outlet_quality' must be finite and strictly between 0 and 1");
         }
-        const double pressure_loss = optional_parameter(
-            context.component, "pressure_loss_fraction", 0.0);
+        const double pressure_loss = parameter_value(
+            context.component, descriptor_,
+            "pressure_loss_fraction");
         if (!std::isfinite(pressure_loss) ||
             pressure_loss < 0.0 || pressure_loss >= 1.0) {
             throw std::invalid_argument(
@@ -1057,6 +1153,10 @@ public:
               "volume.fluid.rigid_adiabatic",
               {{"inlet", "fluid", "in"},
                {"outlet", "fluid", "out"}})) {
+        descriptor_.parameters = {
+            parameter_descriptor(
+                "volume", "volume", true, std::nullopt, 0.0,
+                std::numeric_limits<double>::infinity(), false)};
         descriptor_.supports_steady = false;
         descriptor_.supports_transient = true;
         descriptor_.required_property_capabilities = {
@@ -1244,60 +1344,6 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
-class LumpedThermalStorageModel final : public ComponentModel {
-public:
-    LumpedThermalStorageModel()
-        : descriptor_(make_descriptor(
-              "storage.thermal.lumped",
-              {{"thermal", "heat", "bidirectional"}})) {
-        descriptor_.supports_steady = false;
-        descriptor_.supports_transient = true;
-        descriptor_.internal_variables.push_back(
-            {"temperature", DaeVariableKind::differential,
-             300.0, 100.0, 0.0, 1.0, 0.0,
-             std::numeric_limits<double>::infinity()});
-    }
-
-    const ComponentModelDescriptor& descriptor() const override {
-        return descriptor_;
-    }
-
-    void add_equations(const ComponentCompileContext&,
-                       EquationSystemBuilder&) const override {
-        throw std::logic_error(
-            "lumped thermal storage is a transient-only component");
-    }
-
-    void add_transient_equations(
-        const ComponentCompileContext& context,
-        DaeEquationSystemBuilder& system) const override {
-        const double capacity =
-            required_parameter(context.component, "thermal_capacity");
-        validate_positive(context.component, "thermal_capacity", capacity);
-        const auto heat_flow =
-            require_port_variable(context, "thermal.Q_dot");
-        const auto port_temperature =
-            require_port_variable(context, "thermal.T");
-        const auto temperature =
-            require_internal_variable(context, "temperature");
-        system.add_linear_equation(
-            "component." + context.component.id +
-                ".surface_temperature",
-            {{port_temperature, 1.0, 0.0},
-             {temperature, -1.0, 0.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            "component." + context.component.id + ".energy_accumulation",
-            {{temperature, 0.0, capacity},
-             {heat_flow, -1.0, 0.0}},
-            0.0,
-            std::max(capacity, 1.0));
-    }
-
-private:
-    ComponentModelDescriptor descriptor_;
-};
-
 const TransientVariableDescriptor* find_transient_variable(
     const ComponentModelDescriptor& descriptor,
     const std::string& port_name,
@@ -1344,6 +1390,7 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
     if (kind.empty()) {
         throw std::invalid_argument("component model kind must not be empty");
     }
+    validate_component_descriptor(model->descriptor());
     std::set<std::string> transient_names;
     for (const auto& variable : model->descriptor().transient_variables) {
         if (variable.port_name.empty() || variable.variable_name.empty()) {
@@ -1445,30 +1492,18 @@ std::vector<std::string> ComponentRegistry::kinds() const {
     return out;
 }
 
+std::vector<ComponentModelDescriptor> ComponentRegistry::descriptors() const {
+    std::vector<ComponentModelDescriptor> out;
+    out.reserve(models_.size());
+    for (const auto& [_, model] : models_) {
+        out.push_back(model->descriptor());
+    }
+    return out;
+}
+
 ComponentRegistry make_default_component_registry() {
     ComponentRegistry registry;
-    auto fluid_source = make_descriptor(
-        "source.fluid.boundary", {{"outlet", "fluid", "out"}});
-    fluid_source.supports_transient = true;
-    registry.register_model(std::make_shared<MetadataComponentModel>(
-        std::move(fluid_source)));
-    auto fluid_sink = make_descriptor(
-        "sink.fluid.boundary", {{"inlet", "fluid", "in"}});
-    fluid_sink.supports_transient = true;
-    registry.register_model(std::make_shared<MetadataComponentModel>(
-        std::move(fluid_sink)));
-    auto heat_source = make_descriptor(
-        "source.heat.boundary", {{"outlet", "heat", "out"}});
-    heat_source.supports_transient = true;
-    registry.register_model(
-        std::make_shared<MetadataComponentModel>(
-            std::move(heat_source)));
-    auto heat_sink = make_descriptor(
-        "sink.heat.boundary", {{"inlet", "heat", "in"}});
-    heat_sink.supports_transient = true;
-    registry.register_model(
-        std::make_shared<MetadataComponentModel>(
-            std::move(heat_sink)));
+    register_boundary_component_models(registry);
     registry.register_model(std::make_shared<PropertyCompressorModel>(
         "compressor.gas.isentropic_efficiency"));
     registry.register_model(std::make_shared<PropertyCompressorModel>(
@@ -1497,7 +1532,7 @@ ComponentRegistry make_default_component_registry() {
             "condenser.fluid.fixed_outlet_quality", false));
     registry.register_model(
         std::make_shared<RigidAdiabaticFluidVolumeModel>());
-    registry.register_model(std::make_shared<LumpedThermalStorageModel>());
+    register_storage_component_models(registry);
     return registry;
 }
 
@@ -1535,6 +1570,7 @@ CompiledModelGraph compile_model_graph(
     for (const ComponentDefinition& component : document.components) {
         const ComponentModel& model = registry.require_model(component.kind);
         validate_declared_ports(component, model);
+        validate_component_parameters(component, model.descriptor());
         if (!model.descriptor().supports_steady) {
             throw std::invalid_argument(
                 "component '" + component.id + "' of kind '" +
@@ -1780,6 +1816,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
         const ComponentModel& model =
             registry.require_model(component.kind);
         validate_declared_ports(component, model);
+        validate_component_parameters(component, model.descriptor());
         if (!model.descriptor().supports_transient) {
             throw std::invalid_argument(
                 "component '" + component.id + "' of kind '" +

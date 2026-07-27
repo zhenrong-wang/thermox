@@ -1,7 +1,10 @@
 add_library(thermox_platform
+    src/boundary_models.cpp
+    src/component_catalog.cpp
     src/component_registry.cpp
     src/model_document.cpp
     src/results.cpp
+    src/storage_models.cpp
 )
 add_library(thermox::platform ALIAS thermox_platform)
 target_include_directories(thermox_platform

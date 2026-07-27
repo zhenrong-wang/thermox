@@ -40,6 +40,10 @@ Implemented in this sprint:
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
+- Queryable component catalog descriptors for ports, simulation modes, property capabilities,
+  parameters, SI dimensions, defaults, and open/closed bounds. The compiler rejects missing,
+  unknown, dimensionally incompatible, and out-of-range component parameters before equation
+  assembly.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - Fluid connectors use conserved primary unknowns (`m_dot`, `p`, and `h`); temperature, entropy,
   density, phase, and quality are derived through the selected property package after solving.
@@ -70,7 +74,7 @@ core/
   tests/                Steady and transient numeric-kernel tests
 platform/
   include/              Generic model-document and component-registry API
-  src/                  Schema validation and graph-to-equation compilation
+  src/                  Component-family modules, catalog validation, and graph compilation
   tests/                System-agnostic platform and property-integration tests
 physics/
   include/              Property-independent physics interfaces
@@ -174,13 +178,15 @@ cut-stream energy mismatch explicitly.
 
 ## Next steps
 
-1. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
-2. Add wall thermal mass, rotating inertia, and control components using the established
+1. Continue splitting turbomachinery, transport, heat-transfer, and fluid-inventory models into
+   independent component-family registrars.
+2. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
+3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-3. Add closed-loop equation reduction for redundant stream continuity constraints.
-4. Add analytic property-derivative APIs; the rigid volume currently
+4. Add closed-loop equation reduction for redundant stream continuity constraints.
+5. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+6. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+7. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

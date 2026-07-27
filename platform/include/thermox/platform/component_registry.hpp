@@ -23,6 +23,17 @@ struct PortModelDescriptor {
     std::string direction;
 };
 
+struct ParameterModelDescriptor {
+    std::string name;
+    std::string dimension{"dimensionless"};
+    bool required{true};
+    std::optional<double> default_value;
+    double lower_bound{-std::numeric_limits<double>::infinity()};
+    double upper_bound{std::numeric_limits<double>::infinity()};
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
 struct TransientVariableDescriptor {
     std::string port_name;
     std::string variable_name;
@@ -45,6 +56,7 @@ struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
     std::vector<PortModelDescriptor> ports;
+    std::vector<ParameterModelDescriptor> parameters;
     std::vector<physics::PropertyCapability> required_property_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
@@ -90,6 +102,7 @@ public:
     const ComponentModel& require_model(const std::string& kind) const;
     bool contains(const std::string& kind) const;
     std::vector<std::string> kinds() const;
+    std::vector<ComponentModelDescriptor> descriptors() const;
 
 private:
     std::map<std::string, std::shared_ptr<const ComponentModel>> models_;
