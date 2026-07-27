@@ -56,7 +56,6 @@ modules/
   properties/           Pinned, library-ready CO2 and IF97 submodules
 scripts/
   verify.sh             Configure, build, test, and run example solve
-reference/              Research-only code that is excluded from production builds
 ```
 
 The pinned `co2` and `water-steam-if97` repositories are production modules behind the unified
