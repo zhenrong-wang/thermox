@@ -28,7 +28,7 @@ Work items:
 1. Create C++ core package under `core/` with CMake, unit tests, and a small CLI runner. ✅
 2. Implement language-neutral schema loading/validation for media, components, ports, connections, and cases. ✅
 3. Implement unit normalization to canonical SI. ✅ *(Generic schema scalars and Brayton example inputs now support canonical fields plus `{value, unit}` inputs.)*
-4. Implement component registry and base C++ `ComponentModel` interface. ✅ *(The registry validates port contracts and compiles generic graph/connection structure; specialized physical residuals have started with the ideal-gas compressor and turbine.)*
+4. Implement component registry and base C++ `ComponentModel` interface. ✅ *(The registry validates port contracts, resolves medium property packages, and compiles generic graph/connection structure with ideal-gas and real-fluid compressor/turbine residuals.)*
 5. Implement variable registry and residual registry. ✅
 6. Implement sparse nonlinear system assembly with named residuals, explicit sparse Jacobian partials, bounds, and scaling metadata. ✅
 7. Implement damped Newton solver with scaling, line search, finite-difference Jacobian fallback, and a sparse linear-solver abstraction. ✅
@@ -39,6 +39,7 @@ Work items:
    - CO2 Span-Wagner adapter with transport properties ✅
    - water/steam IF97 adapter with transport properties ✅
    - steady Newton and transient DAE integration tests for property calls ✅
+   - schema-selected property registry and checked component evaluation path ✅
 10. Implement minimal compiled components:
    - source/sink
    - pump

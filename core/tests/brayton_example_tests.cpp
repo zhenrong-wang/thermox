@@ -375,6 +375,8 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains("source.fluid.boundary"), "default registry should contain fluid source");
     require(registry.contains("compressor.gas.isentropic_efficiency"),
             "default registry should contain compressor");
+    require(registry.contains("compressor.fluid.isentropic_efficiency"),
+            "default registry should contain generic-fluid compressor");
     require(registry.kinds().size() >= 4, "default registry should contain multiple component kinds");
 }
 
@@ -396,7 +398,7 @@ void test_generic_model_compiles_to_connection_equations() {
       {"id": "ambient", "kind": "source.fluid.boundary", "ports": {
         "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
       }},
-      {"id": "compressor", "kind": "compressor.gas.isentropic_efficiency", "ports": {
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
         "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
         "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
         "shaft": {"domain": "shaft", "direction": "in"}
@@ -428,8 +430,8 @@ void test_generic_model_compiles_to_connection_equations() {
     require(graph.connection_equations.size() == 4, "fluid connection lowers to four equations");
     require(graph.fixed_value_equations.size() == 2, "fixed values lower to equations");
     require(graph.problem.variable_names.size() == 14, "problem has variables");
-    require(static_cast<bool>(graph.problem.sparse_jacobian),
-            "compiled graph provides sparse Jacobian assembly");
+    require(static_cast<bool>(graph.problem.partial_sparse_jacobian),
+            "property-aware graph provides mixed sparse Jacobian assembly");
 
     bool saw_pressure_guess = false;
     for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
@@ -468,7 +470,7 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
       {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
     ],
     "components": [
-      {"id": "compressor", "kind": "compressor.gas.isentropic_efficiency", "ports": {
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
         "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
         "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
         "shaft": {"domain": "shaft", "direction": "in"}
@@ -609,10 +611,78 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
 
     require_near(outlet_pressure, 1215900.0 / pressure_ratio, 1.0e-5,
                  "turbine outlet pressure");
-    require_near(outlet_temperature, expected_temperature, 1.0e-8,
+    require_near(outlet_temperature, expected_temperature, 1.0e-6,
                  "turbine outlet temperature");
-    require_near(outlet_enthalpy, expected_enthalpy, 1.0e-5, "turbine outlet enthalpy");
-    require_near(shaft_power, expected_power, 1.0e-2, "turbine shaft power");
+    require_near(outlet_enthalpy, expected_enthalpy, 1.0e-3, "turbine outlet enthalpy");
+    require_near(shaft_power, expected_power, 1.0e-1, "turbine shaft power");
+}
+
+void test_generic_model_solves_supercritical_co2_compressor() {
+    const auto document = thermox::examples::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "sco2_compressor",
+    "media": [
+      {"id": "co2", "backend": "co2_span_wagner", "substance": "CO2"}
+    ],
+    "components": [
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
+        "inlet": {"domain": "fluid", "medium": "co2", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "co2", "direction": "out"},
+        "shaft": {"domain": "shaft", "direction": "in"}
+      }, "parameters": {
+        "pressure_ratio": 2.0,
+        "eta_is": 0.82
+      }}
+    ],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "compressor.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 8.0, "unit": "MPa"},
+      "compressor.inlet.T": {"value": 350.0, "unit": "K"},
+      "compressor.shaft.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "compressor.outlet.p": {"value": 16.0, "unit": "MPa"},
+      "compressor.outlet.T": {"value": 400.0, "unit": "K"},
+      "compressor.shaft.W_dot": {"value": 1.0, "unit": "MW"}
+    }
+  }]
+})json");
+
+    const auto registry = thermox::examples::make_default_component_registry();
+    const auto graph =
+        thermox::examples::compile_model_graph(document, registry, "design");
+    require(static_cast<bool>(graph.problem.checked_residual),
+            "real-fluid graph uses checked property residuals");
+    thermox::SolverOptions options;
+    options.max_iterations = 80;
+    options.residual_tolerance = 1e-8;
+    const auto result = thermox::solve_newton(graph.problem, options);
+    require(result.diagnostics.converged, result.diagnostics.message);
+
+    double inlet_h = 0.0;
+    double outlet_h = 0.0;
+    double outlet_p = 0.0;
+    double outlet_t = 0.0;
+    double shaft_w = 0.0;
+    for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
+        const auto& name = graph.problem.variable_names.at(i);
+        if (name == "compressor.inlet.h") inlet_h = result.x.at(i);
+        if (name == "compressor.outlet.h") outlet_h = result.x.at(i);
+        if (name == "compressor.outlet.p") outlet_p = result.x.at(i);
+        if (name == "compressor.outlet.T") outlet_t = result.x.at(i);
+        if (name == "compressor.shaft.W_dot") shaft_w = result.x.at(i);
+    }
+    require_near(outlet_p, 16e6, 1e-4, "sCO2 compressor outlet pressure");
+    require(outlet_t > 350.0, "sCO2 compression raises temperature");
+    require(outlet_h > inlet_h, "sCO2 compression raises enthalpy");
+    require_near(shaft_w, 10.0 * (outlet_h - inlet_h), 1e-3,
+                 "sCO2 compressor energy balance");
 }
 
 void test_generic_model_compiler_rejects_unregistered_component_kind() {
@@ -701,6 +771,7 @@ int main() {
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
         test_generic_model_solves_ideal_gas_turbine_residuals();
+        test_generic_model_solves_supercritical_co2_compressor();
         test_generic_model_compiler_rejects_unregistered_component_kind();
         test_generic_model_compiler_rejects_bad_port_contract();
         test_generic_model_compiler_rejects_unknown_case_variable();

@@ -63,5 +63,9 @@ PropertyResult If97PropertyPackage::state_ph(double pressure, double enthalpy) c
     thermox_if97_state state{};
     return map_result(thermox_if97_state_ph(pressure, enthalpy, &state), state);
 }
+PropertyResult If97PropertyPackage::state_ps(double pressure, double entropy) const {
+    thermox_if97_state state{};
+    return map_result(thermox_if97_state_ps(pressure, entropy, &state), state);
+}
 
 }  // namespace thermox::physics

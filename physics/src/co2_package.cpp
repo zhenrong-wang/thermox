@@ -63,5 +63,9 @@ PropertyResult Co2PropertyPackage::state_ph(double pressure, double enthalpy) co
     thermox_co2_state state{};
     return map_result(thermox_co2_state_ph(pressure, enthalpy, &state), state);
 }
+PropertyResult Co2PropertyPackage::state_ps(double pressure, double entropy) const {
+    thermox_co2_state state{};
+    return map_result(thermox_co2_state_ps(pressure, entropy, &state), state);
+}
 
 }  // namespace thermox::physics

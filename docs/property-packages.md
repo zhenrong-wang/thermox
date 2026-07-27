@@ -26,7 +26,8 @@ property packages without changing solver contracts.
 The public C++ interface is
 `physics/include/thermox/physics/property_package.hpp`. It provides:
 
-- pressure-temperature (`state_pt`) and pressure-enthalpy (`state_ph`) flashes;
+- pressure-temperature (`state_pt`), pressure-enthalpy (`state_ph`), and
+  pressure-entropy (`state_ps`) flashes;
 - SI-unit density, energy, enthalpy, entropy, heat capacities, speed of sound,
   viscosity, thermal conductivity, vapor quality, and phase;
 - validity limits and explicit invalid-input, range, saturation-boundary,
@@ -39,9 +40,16 @@ between the two old C implementations.
 
 ## Verification
 
-Regression tests cover known upstream points, PT-to-PH round trips, invalid and
-out-of-range inputs, steady Newton solves through every backend, and a
-property-backed transient energy balance through the DAE integrator.
+Regression tests cover known upstream points, PT-to-PH and PT-to-PS round trips, invalid and
+out-of-range inputs, steady Newton solves through every backend, a
+property-backed transient energy balance through the DAE integrator, and an
+end-to-end supercritical-CO2 compressor compiled from the model schema.
+
+The model compiler resolves each `media[].backend` through
+`PropertyPackageRegistry` and injects the resulting package into fluid
+components. Turbomachinery uses checked equations, allowing range and
+convergence failures during line search to be treated as recoverable solver
+evaluations rather than process-level exceptions.
 
 ## Deliberate next extensions
 

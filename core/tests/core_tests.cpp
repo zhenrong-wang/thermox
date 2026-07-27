@@ -162,6 +162,31 @@ void test_newton_solver() {
     require_near(result.x[0], std::sqrt(2.0), 1.0e-7, "sqrt(2) solve");
 }
 
+void test_equation_builder_propagates_recoverable_evaluations() {
+    thermox::EquationSystemBuilder builder;
+    const auto x = builder.add_variable("x", 2.0, 1.0, 0.0, 4.0);
+    builder.add_checked_equation(
+        "domain_limited",
+        [x](const std::vector<double>& values, double& residual) {
+            if (values.at(x) < 1.0)
+                return thermox::EvaluationStatus::recoverable("outside model domain");
+            residual = values.at(x) - 1.5;
+            return thermox::EvaluationStatus::success();
+        });
+    const auto problem = builder.build();
+    require(static_cast<bool>(problem.checked_residual),
+            "checked equation installs checked residual");
+    std::vector<double> residual(1, 0.0);
+    const auto failed = problem.checked_residual({0.5}, residual);
+    require(failed.code == thermox::EvaluationStatusCode::recoverable_failure,
+            "recoverable equation status is preserved");
+    require_contains(failed.message, "domain_limited",
+                     "checked equation failure includes equation name");
+    const auto solved = thermox::solve_newton(problem);
+    require(solved.diagnostics.converged, solved.diagnostics.message);
+    require_near(solved.x.at(0), 1.5, 1e-8, "checked equation solves normally");
+}
+
 void test_newton_solver_uses_analytic_jacobian() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"x", "y"};
@@ -677,6 +702,7 @@ int main() {
         test_sparse_matrix_validates_shape();
         test_variable_registry();
         test_newton_solver();
+        test_equation_builder_propagates_recoverable_evaluations();
         test_newton_solver_uses_analytic_jacobian();
         test_newton_solver_uses_sparse_jacobian_and_solver();
         test_newton_solver_converts_dense_jacobian_for_sparse_solver();

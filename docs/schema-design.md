@@ -180,7 +180,7 @@ Case modes:
 - `optimization` (future)
 
 ## 8. Component type metadata schema
-Component type definitions should be served to the frontend and compiler from the same registry. The current C++ MVP implements a metadata subset of this idea: registered component models expose kind/version plus required port names, domains, and directions. Specialized physical residuals and parameter validation have started with `compressor.gas.isentropic_efficiency` and `turbine.gas.isentropic_efficiency`. A production property-package interface now supports ideal gas, CO2, and IF97; injecting it into the graph-compiled component models, broader parameter schemas, and frontend display metadata remain future extensions.
+Component type definitions should be served to the frontend and compiler from the same registry. The current C++ implementation has registered component models exposing kind/version plus required port names, domains, and directions. The compiler resolves model media through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware compressor and turbine equations. Broader parameter schemas, additional physical components, and frontend display metadata remain future extensions.
 
 ```yaml
 kind: turbine.steam.isentropic_efficiency

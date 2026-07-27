@@ -36,7 +36,18 @@ std::size_t EquationSystemBuilder::add_equation(std::string name,
         throw std::invalid_argument("equation callback must not be empty");
     }
     const std::size_t index = registry_.add_residual(name, scale);
-    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate), {}, {}});
+    equations_.push_back(
+        Equation{index, std::move(name), scale, std::move(evaluate), {}, {}, {}});
+    return index;
+}
+
+std::size_t EquationSystemBuilder::add_checked_equation(
+    std::string name, CheckedEquationCallback evaluate, double scale) {
+    if (!evaluate)
+        throw std::invalid_argument("checked equation callback must not be empty");
+    const std::size_t index = registry_.add_residual(name, scale);
+    equations_.push_back(
+        Equation{index, std::move(name), scale, {}, std::move(evaluate), {}, {}});
     return index;
 }
 
@@ -52,7 +63,7 @@ std::size_t EquationSystemBuilder::add_sparse_equation(std::string name,
         return sparse(x, ignored);
     };
     const std::size_t index = registry_.add_residual(name, scale);
-    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate),
+    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate), {},
                                   std::move(sparse), {}});
     return index;
 }
@@ -85,7 +96,7 @@ std::size_t EquationSystemBuilder::add_sparse_equation(
         return sparse(x, ignored);
     };
     const std::size_t index = registry_.add_residual(name, scale);
-    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate),
+    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate), {},
                                   std::move(sparse), std::move(sparsity_variables)});
     return index;
 }
@@ -161,9 +172,47 @@ NonlinearProblem EquationSystemBuilder::build() const {
             throw std::invalid_argument("residual vector size does not match equation count");
         }
         for (const auto& equation : equations) {
-            residual.at(equation.index) = equation.evaluate(x);
+            if (equation.evaluate) {
+                residual.at(equation.index) = equation.evaluate(x);
+            } else {
+                const auto status =
+                    equation.evaluate_checked(x, residual.at(equation.index));
+                if (!status.ok())
+                    throw std::runtime_error("checked equation evaluation failed: " +
+                                             equation.name + ": " + status.message);
+            }
         }
     };
+
+    const bool has_checked_equations =
+        std::any_of(equations.begin(), equations.end(), [](const auto& equation) {
+            return static_cast<bool>(equation.evaluate_checked);
+        });
+    if (has_checked_equations) {
+        problem.checked_residual =
+            [equations, variable_count](const std::vector<double>& x,
+                                        std::vector<double>& residual) {
+                if (x.size() != variable_count)
+                    return EvaluationStatus::fatal(
+                        "variable vector size does not match equation system");
+                if (residual.size() != equations.size())
+                    return EvaluationStatus::fatal(
+                        "residual vector size does not match equation count");
+                for (const auto& equation : equations) {
+                    if (equation.evaluate_checked) {
+                        auto status =
+                            equation.evaluate_checked(x, residual.at(equation.index));
+                        if (!status.ok()) {
+                            status.message = equation.name + ": " + status.message;
+                            return status;
+                        }
+                    } else {
+                        residual.at(equation.index) = equation.evaluate(x);
+                    }
+                }
+                return EvaluationStatus::success();
+            };
+    }
 
     const bool can_assemble_sparse = std::all_of(equations.begin(), equations.end(), [](const auto& equation) {
         return static_cast<bool>(equation.assemble_sparse);

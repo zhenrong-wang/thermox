@@ -32,7 +32,9 @@ Implemented in this sprint:
   doubling, event detection, and trajectory diagnostics.
 - Component registry with a base C++ `ComponentModel` interface for source/sink, compressor, turbine, pump, and simple heat-exchanger port contracts.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
-- First compiled physical component residual slices: `compressor.gas.isentropic_efficiency` and `turbine.gas.isentropic_efficiency` now use the example `IdealGas` adapter for pressure ratio, isentropic-efficiency outlet temperature, ideal-gas enthalpy, mass continuity, and shaft power equations.
+- Property-aware compressor and turbine residuals now resolve their medium backend from the model,
+  use PT/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
+  Newton, and support ideal gas and real fluids without changing component equations.
 
 The built-in direct solvers and first-order transient integrator intentionally remain
 dependency-free reference backends. Larger production models should use an external sparse
@@ -116,8 +118,7 @@ Expected MVP behavior: the example converges in Newton solve and reports compres
 
 ## Next steps
 
-1. Replace the example-only ideal-gas component dependency with injected `PropertyPackage`
-   instances and extend residuals to pump, heat exchanger, condenser, mixer, and splitter models.
+1. Extend property-aware residuals to pump, heat exchanger, condenser, mixer, and splitter models.
 2. Add a simple IF97 Rankine example and regression tolerances.
 3. Add explicit saturation-pair and analytic property-derivative APIs.
 4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR

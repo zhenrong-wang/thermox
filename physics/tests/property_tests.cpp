@@ -30,6 +30,10 @@ void verify_round_trip(const thermox::physics::PropertyPackage& package,
     require(ph.ok(), std::string(package.name()) + " PH: " + ph.message);
     require_near(ph.state.temperature_k, temperature, tolerance,
                  std::string(package.name()) + " PT-PH round trip");
+    const auto ps = package.state_ps(pressure, pt.state.entropy_j_kg_k);
+    require(ps.ok(), std::string(package.name()) + " PS: " + ps.message);
+    require_near(ps.state.temperature_k, temperature, tolerance,
+                 std::string(package.name()) + " PT-PS round trip");
     require(pt.state.density_kg_m3 > 0.0, "density must be positive");
     require(pt.state.cp_j_kg_k > 0.0, "cp must be positive");
 }

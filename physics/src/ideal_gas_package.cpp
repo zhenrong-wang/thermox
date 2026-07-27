@@ -57,4 +57,15 @@ PropertyResult IdealGasPropertyPackage::state_ph(double pressure, double enthalp
     return state_pt(pressure, enthalpy / cp_);
 }
 
+PropertyResult IdealGasPropertyPackage::state_ps(double pressure, double entropy) const {
+    if (!std::isfinite(pressure) || !std::isfinite(entropy) || pressure <= 0.0) {
+        return {{}, PropertyStatus::invalid_input,
+                "ideal-gas pressure must be finite and positive and entropy finite"};
+    }
+    const double temperature =
+        reference_temperature_ *
+        std::exp((entropy + gas_constant_ * std::log(pressure / reference_pressure_)) / cp_);
+    return state_pt(pressure, temperature);
+}
+
 }  // namespace thermox::physics

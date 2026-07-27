@@ -3,6 +3,7 @@
 #include "thermox/equation_system.hpp"
 #include "thermox/examples/schema.hpp"
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/physics/property_registry.hpp"
 
 #include <cstddef>
 #include <map>
@@ -29,6 +30,7 @@ struct ComponentCompileContext {
     const ComponentDefinition& component;
     const CaseDefinition* active_case{nullptr};
     std::map<std::string, std::size_t> port_variables;
+    std::map<std::string, std::shared_ptr<const physics::PropertyPackage>> port_properties;
 };
 
 class ComponentModel {
@@ -90,5 +92,10 @@ ComponentRegistry make_default_component_registry();
 CompiledModelGraph compile_model_graph(const ModelDocument& document,
                                        const ComponentRegistry& registry,
                                        const std::string& case_id = {});
+CompiledModelGraph compile_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const std::string& case_id = {});
 
 }  // namespace thermox::examples

@@ -11,6 +11,8 @@
 namespace thermox {
 
 using EquationCallback = std::function<double(const std::vector<double>& x)>;
+using CheckedEquationCallback =
+    std::function<EvaluationStatus(const std::vector<double>& x, double& residual)>;
 
 struct EquationPartial {
     std::size_t variable{0};
@@ -30,6 +32,7 @@ struct Equation {
     std::string name;
     double scale{1.0};
     EquationCallback evaluate;
+    CheckedEquationCallback evaluate_checked;
     SparseEquationCallback assemble_sparse;
     std::vector<std::size_t> sparsity_variables;
 };
@@ -43,6 +46,9 @@ public:
                              double lower_bound,
                              double upper_bound);
     std::size_t add_equation(std::string name, EquationCallback evaluate, double scale = 1.0);
+    std::size_t add_checked_equation(std::string name,
+                                     CheckedEquationCallback evaluate,
+                                     double scale = 1.0);
     std::size_t add_sparse_equation(std::string name,
                                     SparseEquationCallback assemble,
                                     double scale = 1.0);

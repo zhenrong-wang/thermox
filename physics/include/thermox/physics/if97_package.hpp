@@ -10,6 +10,7 @@ public:
     [[nodiscard]] PropertyLimits limits() const noexcept override;
     [[nodiscard]] PropertyResult state_pt(double, double) const override;
     [[nodiscard]] PropertyResult state_ph(double, double) const override;
+    [[nodiscard]] PropertyResult state_ps(double, double) const override;
 };
 
 }  // namespace thermox::physics

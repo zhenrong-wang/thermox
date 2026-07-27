@@ -56,6 +56,8 @@ public:
         double pressure_pa, double temperature_k) const = 0;
     [[nodiscard]] virtual PropertyResult state_ph(
         double pressure_pa, double enthalpy_j_kg) const = 0;
+    [[nodiscard]] virtual PropertyResult state_ps(
+        double pressure_pa, double entropy_j_kg_k) const = 0;
 };
 
 }  // namespace thermox::physics

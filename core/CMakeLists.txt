@@ -39,7 +39,7 @@ target_include_directories(thermox_examples
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/example_models/include>
 )
 
-target_link_libraries(thermox_examples PUBLIC thermox_core)
+target_link_libraries(thermox_examples PUBLIC thermox_core thermox_physics)
 
 target_compile_options(thermox_examples PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
