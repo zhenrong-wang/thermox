@@ -59,11 +59,17 @@ PH/PS equations, allowing range and
 convergence failures during line search to be treated as recoverable solver
 evaluations rather than process-level exceptions.
 
-## Deliberate next extensions
+## Saturation contract and next extensions
 
-Before complex two-phase equipment is considered complete, the contract should
-gain explicit saturation-pair queries and solver-facing analytic derivatives.
-The current PT call rejects an exactly saturated state as ambiguous; PH can
-represent a two-phase mixture with vapor quality. Thread-safety stress testing,
-broader authoritative IAPWS/Span-Wagner vectors, and caching policy also remain
-promotion work for production-scale simulations.
+The property interface and both real-fluid backends expose an explicit
+`saturation_p` capability returning saturated-liquid and saturated-vapor
+states at a common pressure and temperature. IF97 currently supports this
+query from its minimum saturation pressure through the Region 1/2 boundary
+(approximately 16.5 MPa); higher-pressure Region 3 saturation remains future
+backend work. The PT call still rejects an exactly saturated state as
+ambiguous, while PH can represent an interior two-phase mixture with vapor
+quality.
+
+Solver-facing analytic derivatives, thread-safety stress testing, broader
+authoritative IAPWS/Span-Wagner vectors, and caching policy remain promotion
+work for production-scale simulations.

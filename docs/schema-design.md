@@ -214,8 +214,8 @@ compressor, turbine, and pump equations. The default registry also contains enth
 and splitter models, an isenthalpic pressure-ratio valve, a two-stream fixed-duty heat exchanger,
 a property-backed counterflow-UA heat exchanger, quality-target evaporator and condenser models,
 and a rigid adiabatic fluid volume. Heat-exchanger sides may select different media, but each side
-must be internally consistent. Phase-change components expose typed heat ports and require a
-strictly interior outlet quality until explicit saturation-pair queries are available. Broader
+must be internally consistent. Phase-change components expose typed heat ports and accept inclusive
+outlet quality from exact saturated liquid (`0`) through exact saturated vapor (`1`). Broader
 parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot suitable for validation
@@ -233,7 +233,8 @@ from PH flashes and enforces `Q_dot = UA * LMTD`. `UA` accepts `W/K`, `kW/K`, or
 temperature crossover is a recoverable model-evaluation failure during Newton line search.
 
 `evaporator.fluid.fixed_outlet_quality` and `condenser.fluid.fixed_outlet_quality` conserve mass,
-apply an optional fractional pressure loss, solve outlet quality through PH, and expose positive
+apply an optional fractional pressure loss, target outlet enthalpy directly from the registered
+fluid's saturation pair, and expose positive
 heat-duty magnitude and phase-change temperature on an `in` or `out` heat port respectively.
 
 Transient-capable component descriptors additionally declare:

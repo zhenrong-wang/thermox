@@ -346,18 +346,18 @@ public:
     FixedOutletQualityPhaseChangeModel(
         std::string kind, bool evaporator) : evaporator_(evaporator) {
         descriptor_.kind = std::move(kind);
-        descriptor_.version = "1.0.0";
+        descriptor_.version = "2.0.0";
         descriptor_.ports = {
             {"inlet", "fluid", "in"},
             {"outlet", "fluid", "out"},
             {"heat", "heat", evaporator ? "in" : "out"}};
         descriptor_.parameters = {
             {"outlet_quality", "dimensionless", true, std::nullopt,
-             0.0, 1.0, false, false},
+             0.0, 1.0, true, true},
             {"pressure_loss_fraction", "dimensionless", false,
              0.0, 0.0, 1.0, true, false}};
         descriptor_.required_property_capabilities = {
-            physics::PropertyCapability::state_ph};
+            physics::PropertyCapability::saturation_p};
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -410,18 +410,19 @@ public:
             prefix + "outlet_quality",
             [properties, outlet_p, outlet_h, target_quality](
                 const std::vector<double>& x, double& residual) {
-                const auto outlet = properties->state_ph(
-                    x.at(outlet_p), x.at(outlet_h));
-                if (!outlet.ok()) return property_failure(outlet);
-                if (outlet.state.phase != physics::Phase::two_phase) {
-                    return EvaluationStatus::recoverable(
-                        "phase-change outlet must remain in the two-phase region");
-                }
-                residual =
-                    outlet.state.vapor_quality - target_quality;
+                const auto saturation =
+                    properties->saturation_p(x.at(outlet_p));
+                if (!saturation.ok())
+                    return property_failure(saturation);
+                const double target_enthalpy =
+                    saturation.liquid.enthalpy_j_kg +
+                    target_quality *
+                        (saturation.vapor.enthalpy_j_kg -
+                         saturation.liquid.enthalpy_j_kg);
+                residual = x.at(outlet_h) - target_enthalpy;
                 return EvaluationStatus::success();
             },
-            1.0);
+            1.0e5);
         system.add_sparse_equation(
             prefix + "heat_balance",
             {heat_flow, inlet_m, inlet_h, outlet_h},
@@ -445,13 +446,14 @@ public:
             1.0e7);
         system.add_checked_equation(
             prefix + "heat_temperature",
-            [properties, outlet_p, outlet_h, heat_temperature](
+            [properties, outlet_p, heat_temperature](
                 const std::vector<double>& x, double& residual) {
-                const auto outlet = properties->state_ph(
-                    x.at(outlet_p), x.at(outlet_h));
-                if (!outlet.ok()) return property_failure(outlet);
+                const auto saturation =
+                    properties->saturation_p(x.at(outlet_p));
+                if (!saturation.ok())
+                    return property_failure(saturation);
                 residual = x.at(heat_temperature) -
-                           outlet.state.temperature_k;
+                           saturation.liquid.temperature_k;
                 return EvaluationStatus::success();
             },
             100.0);

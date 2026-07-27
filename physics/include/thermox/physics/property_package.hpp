@@ -8,6 +8,7 @@ namespace thermox::physics {
 enum class PropertyStatus {
     success,
     saturation_boundary,
+    unsupported,
     invalid_input,
     out_of_range,
     no_convergence,
@@ -20,6 +21,7 @@ enum class PropertyCapability {
     state_pt,
     state_ph,
     state_ps,
+    saturation_p,
     transport,
 };
 
@@ -47,6 +49,15 @@ struct PropertyResult {
     [[nodiscard]] bool ok() const { return status == PropertyStatus::success; }
 };
 
+struct SaturationResult {
+    ThermodynamicState liquid;
+    ThermodynamicState vapor;
+    PropertyStatus status{PropertyStatus::backend_error};
+    std::string message;
+
+    [[nodiscard]] bool ok() const { return status == PropertyStatus::success; }
+};
+
 struct PropertyLimits {
     double minimum_pressure_pa{0.0};
     double maximum_pressure_pa{0.0};
@@ -66,6 +77,8 @@ public:
         double pressure_pa, double enthalpy_j_kg) const = 0;
     [[nodiscard]] virtual PropertyResult state_ps(
         double pressure_pa, double entropy_j_kg_k) const = 0;
+    [[nodiscard]] virtual SaturationResult saturation_p(
+        double pressure_pa) const = 0;
 };
 
 }  // namespace thermox::physics

@@ -35,6 +35,9 @@ public:
     thermox::physics::PropertyResult state_ps(double p, double s) const override {
         return delegate_.state_ps(p, s);
     }
+    thermox::physics::SaturationResult saturation_p(double p) const override {
+        return delegate_.saturation_p(p);
+    }
 
 private:
     thermox::physics::IdealGasPropertyPackage delegate_;
@@ -1060,7 +1063,7 @@ void test_if97_fixed_quality_evaporator_and_condenser() {
           "heat": {"domain": "heat", "direction": "in"}
         },
         "parameters": {
-          "outlet_quality": 0.9,
+          "outlet_quality": 1.0,
           "pressure_loss_fraction": 0.02
         }
       },
@@ -1073,7 +1076,7 @@ void test_if97_fixed_quality_evaporator_and_condenser() {
           "heat": {"domain": "heat", "direction": "out"}
         },
         "parameters": {
-          "outlet_quality": 0.05
+          "outlet_quality": 0.0
         }
       }
     ],
@@ -1117,18 +1120,21 @@ void test_if97_fixed_quality_evaporator_and_condenser() {
     const auto package =
         thermox::physics::make_default_property_package_registry()
             .create("water_steam_if97", "Water");
-    const auto evaporator_out = package->state_ph(
-        value("evaporator.outlet.p"),
-        value("evaporator.outlet.h"));
-    const auto condenser_out = package->state_ph(
-        value("condenser.outlet.p"),
-        value("condenser.outlet.h"));
-    require(evaporator_out.ok() && condenser_out.ok(),
-            "phase-change outlet states should be valid");
-    require_near(evaporator_out.state.vapor_quality, 0.9,
-                 1.0e-8, "evaporator outlet quality");
-    require_near(condenser_out.state.vapor_quality, 0.05,
-                 1.0e-8, "condenser outlet quality");
+    const auto evaporator_saturation = package->saturation_p(
+        value("evaporator.outlet.p"));
+    const auto condenser_saturation = package->saturation_p(
+        value("condenser.outlet.p"));
+    require(evaporator_saturation.ok() &&
+                condenser_saturation.ok(),
+            "phase-change saturation pairs should be valid");
+    require_near(
+        value("evaporator.outlet.h"),
+        evaporator_saturation.vapor.enthalpy_j_kg,
+        1.0e-3, "saturated-vapor evaporator outlet");
+    require_near(
+        value("condenser.outlet.h"),
+        condenser_saturation.liquid.enthalpy_j_kg,
+        1.0e-3, "saturated-liquid condenser outlet");
     require(value("evaporator.heat.Q_dot") > 0.0,
             "evaporator receives positive heat");
     require(value("condenser.heat.Q_dot") > 0.0,
@@ -1541,6 +1547,35 @@ void test_component_property_capabilities_are_validated() {
                 document, components, properties);
         },
         "requires property capability 'state_ph'");
+
+    const auto saturation_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v1",
+  "model": {
+    "id": "saturation_capability_check",
+    "media": [
+      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+    ],
+    "components": [{
+      "id": "evaporator",
+      "kind": "evaporator.fluid.fixed_outlet_quality",
+      "ports": {
+        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
+        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
+        "heat": {"domain": "heat", "direction": "in"}
+      },
+      "parameters": {"outlet_quality": 1.0}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                saturation_document, components);
+        },
+        "requires property capability 'saturation_p'");
 }
 
 void test_transient_model_compiles_and_integrates_lumped_storage() {

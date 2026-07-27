@@ -175,10 +175,11 @@ Delivered:
 10. Independent heat-transfer/phase-change and rigid fluid-inventory registrars; the central
     registry source now contains registry mechanics and graph compilation rather than concrete
     physical models. ✅
+11. Explicit saturation-pair capability in the C and C++ property contracts, implemented for CO₂
+    and IF97, with exact saturated-liquid/vapor phase-change targets. ✅
 
 Next structural slices:
 
-- add explicit saturation-pair property contracts;
 - add closed-loop graph equation reduction.
 
 ## Persistence boundary decision

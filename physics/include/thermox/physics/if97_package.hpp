@@ -12,6 +12,7 @@ public:
     [[nodiscard]] PropertyResult state_pt(double, double) const override;
     [[nodiscard]] PropertyResult state_ph(double, double) const override;
     [[nodiscard]] PropertyResult state_ps(double, double) const override;
+    [[nodiscard]] SaturationResult saturation_p(double) const override;
 };
 
 }  // namespace thermox::physics

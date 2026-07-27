@@ -68,5 +68,22 @@ PropertyResult Co2PropertyPackage::state_ps(double pressure, double entropy) con
     thermox_co2_state state{};
     return map_result(thermox_co2_state_ps(pressure, entropy, &state), state);
 }
+SaturationResult Co2PropertyPackage::saturation_p(double pressure) const {
+    thermox_co2_state liquid{};
+    thermox_co2_state vapor{};
+    const auto status =
+        thermox_co2_saturation_p(pressure, &liquid, &vapor);
+    if (status != THERMOX_CO2_OK) {
+        const auto mapped = map_result(status, liquid);
+        return {{}, {}, mapped.status,
+                status == THERMOX_CO2_OUT_OF_RANGE
+                    ? "pressure is outside the CO2 saturation-pair range"
+                    : mapped.message};
+    }
+    const auto mapped_liquid = map_result(status, liquid);
+    const auto mapped_vapor = map_result(status, vapor);
+    return {mapped_liquid.state, mapped_vapor.state,
+            PropertyStatus::success, {}};
+}
 
 }  // namespace thermox::physics

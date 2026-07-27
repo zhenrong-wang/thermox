@@ -26,7 +26,8 @@ PropertyLimits IdealGasPropertyPackage::limits() const noexcept {
 }
 
 bool IdealGasPropertyPackage::supports(PropertyCapability capability) const noexcept {
-    return capability != PropertyCapability::transport;
+    return capability != PropertyCapability::transport &&
+           capability != PropertyCapability::saturation_p;
 }
 
 PropertyResult IdealGasPropertyPackage::state_pt(double pressure, double temperature) const {
@@ -70,6 +71,11 @@ PropertyResult IdealGasPropertyPackage::state_ps(double pressure, double entropy
         reference_temperature_ *
         std::exp((entropy + gas_constant_ * std::log(pressure / reference_pressure_)) / cp_);
     return state_pt(pressure, temperature);
+}
+
+SaturationResult IdealGasPropertyPackage::saturation_p(double) const {
+    return {{}, {}, PropertyStatus::unsupported,
+            "ideal-gas properties do not define a saturation curve"};
 }
 
 }  // namespace thermox::physics

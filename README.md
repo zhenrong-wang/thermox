@@ -180,15 +180,14 @@ cut-stream energy mismatch explicitly.
 
 ## Next steps
 
-1. Add explicit saturation-pair property APIs and exact saturated-liquid/vapor component targets.
-2. Add closed-loop equation reduction for redundant stream continuity constraints.
-3. Add versioned model/result serialization and an application-level simulation command before
+1. Add closed-loop equation reduction for redundant stream continuity constraints.
+2. Add versioned model/result serialization and an application-level simulation command before
    introducing database adapters.
-4. Add wall thermal mass, rotating inertia, and control components using the established
+3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-5. Add analytic property-derivative APIs; the rigid volume currently
+4. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-6. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-7. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

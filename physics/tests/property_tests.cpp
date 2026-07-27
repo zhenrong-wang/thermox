@@ -106,6 +106,64 @@ void verify_transient_bridge(const thermox::physics::PropertyPackage& package) {
             "property-backed thermal inventory must remain above ambient");
 }
 
+void verify_saturation_pairs(
+    const thermox::physics::PropertyPackage& package,
+    double pressure) {
+    require(
+        package.supports(
+            thermox::physics::PropertyCapability::saturation_p),
+        std::string(package.name()) +
+            " should advertise saturation_p");
+    const auto saturation = package.saturation_p(pressure);
+    require(
+        saturation.ok(),
+        std::string(package.name()) +
+            " saturation: " + saturation.message);
+    require_near(
+        saturation.liquid.pressure_pa, pressure,
+        pressure * 1.0e-6,
+        std::string(package.name()) +
+            " saturated-liquid pressure");
+    require_near(
+        saturation.vapor.pressure_pa, pressure,
+        pressure * 1.0e-6,
+        std::string(package.name()) +
+            " saturated-vapor pressure");
+    require_near(
+        saturation.liquid.temperature_k,
+        saturation.vapor.temperature_k, 1.0e-8,
+        std::string(package.name()) +
+            " saturation temperature agreement");
+    require(
+        saturation.liquid.phase ==
+            thermox::physics::Phase::liquid,
+        "saturated-liquid phase classification");
+    require(
+        saturation.vapor.phase ==
+            thermox::physics::Phase::vapor,
+        "saturated-vapor phase classification");
+    require_near(
+        saturation.liquid.vapor_quality, 0.0, 0.0,
+        "saturated-liquid quality");
+    require_near(
+        saturation.vapor.vapor_quality, 1.0, 0.0,
+        "saturated-vapor quality");
+    require(
+        saturation.liquid.enthalpy_j_kg <
+            saturation.vapor.enthalpy_j_kg,
+        "saturation latent heat must be positive");
+    const auto liquid_ph = package.state_ph(
+        pressure, saturation.liquid.enthalpy_j_kg);
+    const auto vapor_ph = package.state_ph(
+        pressure, saturation.vapor.enthalpy_j_kg);
+    require(liquid_ph.ok() && vapor_ph.ok(),
+            "PH must reconstruct exact saturation endpoints");
+    require_near(liquid_ph.state.vapor_quality, 0.0, 0.0,
+                 "PH saturated-liquid quality");
+    require_near(vapor_ph.state.vapor_quality, 1.0, 0.0,
+                 "PH saturated-vapor quality");
+}
+
 }  // namespace
 
 int main() {
@@ -119,6 +177,14 @@ int main() {
     verify_solver_bridge(co2, 1e5, 340.0, 300.0, 0.02);
     verify_solver_bridge(if97, 6e6, 811.0, 700.0, 0.05);
     verify_transient_bridge(co2);
+    verify_saturation_pairs(co2, 1e6);
+    verify_saturation_pairs(if97, 1e5);
+    require(!ideal_gas.supports(
+                thermox::physics::PropertyCapability::saturation_p),
+            "ideal gas should not advertise saturation_p");
+    require(ideal_gas.saturation_p(1e5).status ==
+                thermox::physics::PropertyStatus::unsupported,
+            "ideal-gas saturation should be unsupported");
     require(co2.state_pt(-1.0, 300.0).status ==
                 thermox::physics::PropertyStatus::invalid_input,
             "CO2 invalid input status");

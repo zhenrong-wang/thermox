@@ -68,5 +68,22 @@ PropertyResult If97PropertyPackage::state_ps(double pressure, double entropy) co
     thermox_if97_state state{};
     return map_result(thermox_if97_state_ps(pressure, entropy, &state), state);
 }
+SaturationResult If97PropertyPackage::saturation_p(double pressure) const {
+    thermox_if97_state liquid{};
+    thermox_if97_state vapor{};
+    const auto status =
+        thermox_if97_saturation_p(pressure, &liquid, &vapor);
+    if (status != THERMOX_IF97_OK) {
+        const auto mapped = map_result(status, liquid);
+        return {{}, {}, mapped.status,
+                status == THERMOX_IF97_OUT_OF_RANGE
+                    ? "pressure is outside the IF97 saturation-pair range"
+                    : mapped.message};
+    }
+    const auto mapped_liquid = map_result(status, liquid);
+    const auto mapped_vapor = map_result(status, vapor);
+    return {mapped_liquid.state, mapped_vapor.state,
+            PropertyStatus::success, {}};
+}
 
 }  // namespace thermox::physics
