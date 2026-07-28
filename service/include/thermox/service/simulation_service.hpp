@@ -1,5 +1,8 @@
 #pragma once
 
+#include "thermox/service/simulation_runtime.hpp"
+
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -9,6 +12,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v1[] = "thermox.result/v1";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
+inline constexpr char catalog_schema_v1[] = "thermox.catalog/v1";
 
 enum class OperationStatus {
     succeeded,
@@ -21,11 +25,96 @@ enum class OperationStatus {
 
 std::string to_string(OperationStatus status);
 
+enum class DiagnosticSeverity {
+    information,
+    warning,
+    error,
+};
+
+std::string to_string(DiagnosticSeverity severity);
+
 struct ServiceError {
     std::string schema_version{error_schema_v1};
     std::string code;
     std::string stage;
     std::string message;
+};
+
+struct Diagnostic {
+    std::string code;
+    DiagnosticSeverity severity{DiagnosticSeverity::error};
+    std::string stage;
+    std::string json_path;
+    std::string component_id;
+    std::string port_name;
+    std::string connection_id;
+    std::string message;
+    std::vector<std::string> suggestions;
+};
+
+struct CatalogPortType {
+    std::string name;
+    std::string domain;
+    std::string direction;
+};
+
+struct CatalogParameterType {
+    std::string name;
+    std::string dimension;
+    bool required{true};
+    bool has_default{false};
+    double default_value_si{0.0};
+    double lower_bound{0.0};
+    double upper_bound{0.0};
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
+struct ComponentType {
+    std::string kind;
+    std::string version;
+    std::vector<CatalogPortType> ports;
+    std::vector<CatalogParameterType> parameters;
+    std::vector<std::string> required_property_capabilities;
+    bool supports_steady{true};
+    bool supports_transient{false};
+};
+
+struct PropertyBackendType {
+    std::string backend;
+    std::string implementation_name;
+    std::string implementation_version;
+    std::vector<std::string> supported_substances;
+    std::vector<std::string> capabilities;
+};
+
+struct ConnectorVariableType {
+    std::string name;
+    std::string dimension;
+};
+
+struct ConnectorDomainType {
+    std::string domain;
+    std::string contract_version;
+    std::vector<ConnectorVariableType> variables;
+};
+
+struct CatalogRequest {
+    std::string schema_version{command_schema_v1};
+};
+
+struct CatalogResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    std::string schema_version{catalog_schema_v1};
+    std::string fingerprint;
+    std::vector<ComponentType> components;
+    std::vector<PropertyBackendType> property_backends;
+    std::vector<ConnectorDomainType> connector_domains;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
 };
 
 struct ModelMetadata {
@@ -46,6 +135,7 @@ struct MediumProvenance {
     std::string backend;
     std::string substance;
     std::string package;
+    std::string package_version;
 };
 
 struct ExecutionMetadata {
@@ -53,6 +143,7 @@ struct ExecutionMetadata {
     std::string command_schema_version;
     std::string operation;
     std::string solver_contract;
+    std::string catalog_fingerprint;
     ModelMetadata model;
     std::vector<ComponentProvenance> components;
     std::vector<MediumProvenance> media;
@@ -114,6 +205,16 @@ struct EventValue {
 struct ValidateModelRequest {
     std::string schema_version{command_schema_v1};
     std::string model_json;
+    std::string case_id;
+};
+
+struct CompilationSummary {
+    bool compiled{false};
+    std::string mode;
+    std::size_t variable_count{0};
+    std::size_t equation_count{0};
+    std::vector<std::string> reduced_connection_equations;
+    std::string catalog_fingerprint;
 };
 
 struct ValidateModelResponse {
@@ -121,6 +222,8 @@ struct ValidateModelResponse {
     ServiceError error;
     ModelMetadata model;
     std::string canonical_model_json;
+    CompilationSummary compilation;
+    std::vector<Diagnostic> diagnostics;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;
@@ -197,6 +300,8 @@ struct TransientSimulationResponse {
 class SimulationService {
 public:
     SimulationService();
+    explicit SimulationService(
+        std::shared_ptr<const SimulationRuntime> runtime);
     ~SimulationService();
     SimulationService(SimulationService&&) noexcept;
     SimulationService& operator=(SimulationService&&) noexcept;
@@ -205,6 +310,8 @@ public:
 
     [[nodiscard]] ValidateModelResponse validate_model(
         const ValidateModelRequest& request) const;
+    [[nodiscard]] CatalogResponse get_catalog(
+        const CatalogRequest& request = {}) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
     [[nodiscard]] TransientSimulationResponse run_transient(

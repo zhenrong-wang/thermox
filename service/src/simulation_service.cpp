@@ -1,6 +1,7 @@
 #include "thermox/service/simulation_service.hpp"
 
 #include "serialization_internal.hpp"
+#include "runtime_internal.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/component_registry.hpp"
@@ -11,7 +12,9 @@
 
 #include <cmath>
 #include <exception>
+#include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace thermox::service {
@@ -32,6 +35,120 @@ ServiceError make_error(
 
 bool valid_schema(const std::string& schema) {
     return schema == command_schema_v1;
+}
+
+std::string_view capability_name(
+    physics::PropertyCapability capability) {
+    switch (capability) {
+        case physics::PropertyCapability::state_pt:
+            return "state_pt";
+        case physics::PropertyCapability::state_ph:
+            return "state_ph";
+        case physics::PropertyCapability::state_ps:
+            return "state_ps";
+        case physics::PropertyCapability::saturation_p:
+            return "saturation_p";
+        case physics::PropertyCapability::transport:
+            return "transport";
+    }
+    return "unknown";
+}
+
+Diagnostic compilation_diagnostic(const std::string& message) {
+    Diagnostic diagnostic;
+    diagnostic.stage = "compilation";
+    diagnostic.message = message;
+    diagnostic.code = "model_compilation_failed";
+    diagnostic.suggestions = {
+        "Review the referenced component, connection, medium, and active case."};
+    if (message.find("no component model registered") !=
+        std::string::npos) {
+        diagnostic.code = "unknown_component_type";
+        diagnostic.suggestions = {
+            "Select a component kind from the active runtime catalog."};
+    } else if (message.find("missing required parameter") !=
+               std::string::npos) {
+        diagnostic.code = "missing_required_parameter";
+        diagnostic.suggestions = {
+            "Provide every required parameter listed by the component type."};
+    } else if (message.find("supplies unknown parameter") !=
+               std::string::npos) {
+        diagnostic.code = "unknown_component_parameter";
+        diagnostic.suggestions = {
+            "Remove the parameter or select it from the component type catalog."};
+    } else if (message.find("requests version") !=
+               std::string::npos) {
+        diagnostic.code = "component_version_mismatch";
+        diagnostic.suggestions = {
+            "Use the component version resolved by the active runtime catalog."};
+    } else if (message.find("declares unknown port") !=
+               std::string::npos) {
+        diagnostic.code = "unknown_component_port";
+        diagnostic.suggestions = {
+            "Derive component ports from the active component type catalog."};
+    } else if (message.find("under-specified") !=
+               std::string::npos) {
+        diagnostic.code = "under_specified_model";
+        diagnostic.suggestions = {
+            "Add independent case specifications or component equations."};
+    } else if (message.find("over-specified") !=
+               std::string::npos) {
+        diagnostic.code = "over_specified_model";
+        diagnostic.suggestions = {
+            "Remove conflicting or redundant user specifications."};
+    } else if (message.find("property capability") !=
+               std::string::npos) {
+        diagnostic.code = "unsupported_property_capability";
+        diagnostic.suggestions = {
+            "Choose a property backend that supplies the required capability."};
+    } else if (message.find("property package registered") !=
+               std::string::npos) {
+        diagnostic.code = "unknown_property_backend";
+        diagnostic.suggestions = {
+            "Select a property backend from the active runtime catalog."};
+    } else if (message.find("does not support") !=
+               std::string::npos ||
+               message.find("must use dynamic") != std::string::npos) {
+        diagnostic.code = "unsupported_simulation_mode";
+        diagnostic.suggestions = {
+            "Choose a case mode supported by every component in the graph."};
+    }
+    return diagnostic;
+}
+
+const platform::CaseDefinition* selected_case(
+    const platform::ModelDocument& document,
+    const std::string& case_id) {
+    if (case_id.empty()) {
+        return document.cases.empty() ? nullptr : &document.cases.front();
+    }
+    for (const auto& simulation_case : document.cases) {
+        if (simulation_case.id == case_id) {
+            return &simulation_case;
+        }
+    }
+    return nullptr;
+}
+
+bool transient_case(const platform::CaseDefinition* simulation_case) {
+    return simulation_case != nullptr &&
+        (simulation_case->mode == "dynamic_initialization" ||
+         simulation_case->mode == "dynamic_transient");
+}
+
+std::string validation_mode(
+    const platform::CaseDefinition* simulation_case) {
+    if (simulation_case == nullptr ||
+        simulation_case->mode == "steady_state_design" ||
+        simulation_case->mode == "steady_state_off_design") {
+        return "steady";
+    }
+    if (transient_case(simulation_case)) {
+        return "transient";
+    }
+    throw std::invalid_argument(
+        "unsupported simulation case mode: " +
+        simulation_case->mode);
 }
 
 void validate_settings(const SteadySolverSettings& settings) {
@@ -122,12 +239,14 @@ ExecutionMetadata execution_metadata(
     const std::string& case_id,
     std::string operation,
     std::string solver_contract,
+    const std::string& catalog_fingerprint,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties) {
     ExecutionMetadata metadata;
     metadata.command_schema_version = command_schema;
     metadata.operation = std::move(operation);
     metadata.solver_contract = std::move(solver_contract);
+    metadata.catalog_fingerprint = catalog_fingerprint;
     metadata.model = model_metadata(document, case_id);
     for (const auto& component : document.components) {
         metadata.components.push_back({
@@ -137,13 +256,14 @@ ExecutionMetadata execution_metadata(
         });
     }
     for (const auto& medium : document.media) {
+        const auto package = properties.create(
+            medium.backend, medium.substance);
         metadata.media.push_back({
             medium.id,
             medium.backend,
             medium.substance,
-            std::string(
-                properties.create(
-                    medium.backend, medium.substance)->name()),
+            std::string(package->name()),
+            std::string(package->version()),
         });
     }
     return metadata;
@@ -180,10 +300,10 @@ TimeIntegrationDiagnostics copy_diagnostics(
 }  // namespace
 
 struct SimulationService::Impl {
-    platform::ComponentRegistry components{
-        platform::make_default_component_registry()};
-    physics::PropertyPackageRegistry properties{
-        physics::make_default_property_package_registry()};
+    explicit Impl(std::shared_ptr<const SimulationRuntime> runtime_value)
+        : runtime(std::move(runtime_value)) {}
+
+    std::shared_ptr<const SimulationRuntime> runtime;
 };
 
 std::string to_string(OperationStatus status) {
@@ -199,8 +319,29 @@ std::string to_string(OperationStatus status) {
     return "unknown";
 }
 
+std::string to_string(DiagnosticSeverity severity) {
+    switch (severity) {
+        case DiagnosticSeverity::information:
+            return "information";
+        case DiagnosticSeverity::warning:
+            return "warning";
+        case DiagnosticSeverity::error:
+            return "error";
+    }
+    return "unknown";
+}
+
 SimulationService::SimulationService()
-    : impl_(std::make_unique<Impl>()) {}
+    : SimulationService(make_default_simulation_runtime()) {}
+
+SimulationService::SimulationService(
+    std::shared_ptr<const SimulationRuntime> runtime)
+    : impl_(std::make_unique<Impl>(std::move(runtime))) {
+    if (!impl_->runtime) {
+        throw std::invalid_argument(
+            "simulation service runtime must not be null");
+    }
+}
 
 SimulationService::~SimulationService() = default;
 SimulationService::SimulationService(SimulationService&&) noexcept =
@@ -230,12 +371,152 @@ ValidateModelResponse SimulationService::validate_model(
         response.model = model_metadata(document);
         response.canonical_model_json =
             detail::serialize_model_document_json(document);
+        const auto* simulation_case =
+            selected_case(document, request.case_id);
+        if (!request.case_id.empty() && simulation_case == nullptr) {
+            throw std::invalid_argument(
+                "unknown case id during graph compilation: " +
+                request.case_id);
+        }
+        response.model.case_id =
+            simulation_case == nullptr ? "" : simulation_case->id;
+        response.compilation.catalog_fingerprint =
+            impl_->runtime->impl_->fingerprint;
+        const std::string mode = validation_mode(simulation_case);
+        if (mode == "transient") {
+            const auto graph =
+                platform::compile_transient_model_graph(
+                    document,
+                    impl_->runtime->impl_->components,
+                    impl_->runtime->impl_->properties,
+                    request.case_id);
+            response.compilation.compiled = true;
+            response.compilation.mode = "transient";
+            response.compilation.variable_count =
+                graph.problem.variable_names.size();
+            response.compilation.equation_count =
+                graph.problem.residual_names.size();
+        } else {
+            const auto graph = platform::compile_model_graph(
+                document,
+                impl_->runtime->impl_->components,
+                impl_->runtime->impl_->properties,
+                request.case_id);
+            response.compilation.compiled = true;
+            response.compilation.mode = "steady";
+            response.compilation.variable_count =
+                graph.problem.variable_names.size();
+            response.compilation.equation_count =
+                graph.problem.residual_names.size();
+            response.compilation.reduced_connection_equations =
+                graph.reduced_connection_equations;
+        }
         response.status = OperationStatus::succeeded;
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
-        response.error = make_error(
-            "invalid_model", "validation", ex.what());
+        const std::string message = ex.what();
+        const bool compilation =
+            !response.canonical_model_json.empty();
+        if (compilation) {
+            const auto diagnostic =
+                compilation_diagnostic(message);
+            response.error = make_error(
+                diagnostic.code, diagnostic.stage, message);
+            response.diagnostics.push_back(diagnostic);
+        } else {
+            response.error = make_error(
+                "invalid_model", "parsing", message);
+            response.diagnostics.push_back({
+                "invalid_model_document",
+                DiagnosticSeverity::error,
+                "parsing",
+                {},
+                {},
+                {},
+                {},
+                message,
+                {"Correct the model document and submit it again."},
+            });
+        }
     }
+    return response;
+}
+
+CatalogResponse SimulationService::get_catalog(
+    const CatalogRequest& request) const {
+    CatalogResponse response;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema",
+            "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    response.fingerprint = impl_->runtime->impl_->fingerprint;
+    for (const auto& descriptor :
+         impl_->runtime->impl_->components.descriptors()) {
+        ComponentType component;
+        component.kind = descriptor.kind;
+        component.version = descriptor.version;
+        component.supports_steady = descriptor.supports_steady;
+        component.supports_transient =
+            descriptor.supports_transient;
+        for (const auto& port : descriptor.ports) {
+            component.ports.push_back(
+                {port.name, port.domain, port.direction});
+        }
+        for (const auto& parameter : descriptor.parameters) {
+            component.parameters.push_back({
+                parameter.name,
+                parameter.dimension,
+                parameter.required,
+                parameter.default_value.has_value(),
+                parameter.default_value.value_or(0.0),
+                parameter.lower_bound,
+                parameter.upper_bound,
+                parameter.lower_inclusive,
+                parameter.upper_inclusive,
+            });
+        }
+        for (const auto capability :
+             descriptor.required_property_capabilities) {
+            component.required_property_capabilities.push_back(
+                std::string(capability_name(capability)));
+        }
+        response.components.push_back(std::move(component));
+    }
+    for (const auto& descriptor :
+         impl_->runtime->impl_->properties.descriptors()) {
+        PropertyBackendType backend;
+        backend.backend = descriptor.backend;
+        backend.implementation_name =
+            descriptor.implementation_name;
+        backend.implementation_version =
+            descriptor.implementation_version;
+        backend.supported_substances =
+            descriptor.supported_substances;
+        for (const auto capability : descriptor.capabilities) {
+            backend.capabilities.push_back(
+                std::string(capability_name(capability)));
+        }
+        response.property_backends.push_back(std::move(backend));
+    }
+    response.connector_domains = {
+        {"fluid", "thermox.connector.fluid/v1",
+         {{"m_dot", "mass_flow"},
+          {"p", "pressure"},
+          {"h", "specific_enthalpy"}}},
+        {"heat", "thermox.connector.heat/v1",
+         {{"Q_dot", "power"}, {"T", "temperature"}}},
+        {"shaft", "thermox.connector.shaft/v1",
+         {{"W_dot", "power"}, {"omega", "angular_speed"}}},
+        {"signal", "thermox.connector.signal/v1",
+         {{"value", "dimensionless"}}},
+        {"control", "thermox.connector.control/v1",
+         {{"value", "dimensionless"}}},
+    };
+    response.status = OperationStatus::succeeded;
     return response;
 }
 
@@ -280,8 +561,8 @@ SteadySimulationResponse SimulationService::run_steady(
     try {
         graph = platform::compile_model_graph(
             document,
-            impl_->components,
-            impl_->properties,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties,
             request.case_id);
         response.metadata = execution_metadata(
             document,
@@ -289,8 +570,9 @@ SteadySimulationResponse SimulationService::run_steady(
             graph.case_id.value_or(""),
             "steady",
             "thermox.newton/v1",
-            impl_->components,
-            impl_->properties);
+            impl_->runtime->impl_->fingerprint,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(
@@ -329,7 +611,8 @@ SteadySimulationResponse SimulationService::run_steady(
 
     try {
         const auto ports = platform::evaluate_fluid_port_results(
-            document, graph, result.x, impl_->properties);
+            document, graph, result.x,
+            impl_->runtime->impl_->properties);
         for (const auto& port : ports) {
             response.fluid_ports.push_back({
                 port.component_id,
@@ -396,8 +679,8 @@ TransientSimulationResponse SimulationService::run_transient(
     try {
         graph = platform::compile_transient_model_graph(
             document,
-            impl_->components,
-            impl_->properties,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties,
             request.case_id);
         response.metadata = execution_metadata(
             document,
@@ -405,8 +688,9 @@ TransientSimulationResponse SimulationService::run_transient(
             graph.case_id.value_or(""),
             "transient",
             "thermox.dae-bdf1/v1",
-            impl_->components,
-            impl_->properties);
+            impl_->runtime->impl_->fingerprint,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(

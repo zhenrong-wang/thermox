@@ -1,5 +1,6 @@
 add_library(thermox_service
     src/serialization.cpp
+    src/simulation_runtime.cpp
     src/simulation_service.cpp
 )
 add_library(thermox::service ALIAS thermox_service)
@@ -13,4 +14,11 @@ target_link_libraries(thermox_service PRIVATE thermox_platform)
 target_compile_features(thermox_service PUBLIC cxx_std_20)
 target_compile_options(thermox_service PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
+)
+
+add_library(thermox_service_native INTERFACE)
+add_library(thermox::service_native ALIAS thermox_service_native)
+target_link_libraries(thermox_service_native INTERFACE
+    thermox_service
+    thermox_platform
 )

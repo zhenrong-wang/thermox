@@ -11,6 +11,7 @@ public:
                                      double reference_pressure_pa = 101325.0,
                                      double reference_temperature_k = 298.15);
     [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] std::string_view version() const noexcept override;
     [[nodiscard]] PropertyLimits limits() const noexcept override;
     [[nodiscard]] bool supports(PropertyCapability) const noexcept override;
     [[nodiscard]] PropertyResult state_pt(double, double) const override;

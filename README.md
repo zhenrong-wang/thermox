@@ -17,6 +17,7 @@ modules, a generic thermal-system schema/compiler platform, and isolated example
 - [Numeric Core Contracts](docs/numeric-core.md)
 - [Property Packages](docs/property-packages.md)
 - [Service Architecture](docs/service-architecture.md)
+- [Graph Platform Architecture Review](docs/graph-platform-review.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
 
 ## Current C++ numeric core
@@ -40,7 +41,9 @@ Implemented in this sprint:
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
 - First-class `thermox_service` application module with versioned validate, steady, and transient
-  commands; structured errors; reproducibility provenance; and canonical JSON contracts.
+  commands; an injectable immutable runtime; component/property/connector catalog discovery;
+  compile-aware validation; structured diagnostics; reproducibility provenance; and canonical JSON
+  contracts.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.

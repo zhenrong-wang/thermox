@@ -19,6 +19,7 @@ IdealGasPropertyPackage::IdealGasPropertyPackage(
 }
 
 std::string_view IdealGasPropertyPackage::name() const noexcept { return "ideal-gas"; }
+std::string_view IdealGasPropertyPackage::version() const noexcept { return "1.0.0"; }
 
 PropertyLimits IdealGasPropertyPackage::limits() const noexcept {
     return {std::numeric_limits<double>::min(), std::numeric_limits<double>::max(),

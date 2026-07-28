@@ -20,6 +20,7 @@ namespace {
 class PtOnlyPropertyPackage final : public thermox::physics::PropertyPackage {
 public:
     std::string_view name() const noexcept override { return "pt-only-test"; }
+    std::string_view version() const noexcept override { return "1.0.0"; }
     thermox::physics::PropertyLimits limits() const noexcept override {
         return delegate_.limits();
     }
@@ -1560,9 +1561,12 @@ void test_component_property_capabilities_are_validated() {
   "cases": []
 })json");
     auto properties = thermox::physics::make_default_property_package_registry();
-    properties.register_backend("pt_only", [](std::string_view) {
-        return std::make_shared<PtOnlyPropertyPackage>();
-    });
+    properties.register_backend(
+        {"pt_only", "pt-only-test", "1.0.0", {"Test"},
+         {thermox::physics::PropertyCapability::state_pt}},
+        [](std::string_view) {
+            return std::make_shared<PtOnlyPropertyPackage>();
+        });
     const auto components = thermox::platform::make_default_component_registry();
     require_throws(
         [&]() {

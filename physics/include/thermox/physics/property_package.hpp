@@ -69,6 +69,7 @@ class PropertyPackage {
 public:
     virtual ~PropertyPackage() = default;
     [[nodiscard]] virtual std::string_view name() const noexcept = 0;
+    [[nodiscard]] virtual std::string_view version() const noexcept = 0;
     [[nodiscard]] virtual PropertyLimits limits() const noexcept = 0;
     [[nodiscard]] virtual bool supports(PropertyCapability capability) const noexcept = 0;
     [[nodiscard]] virtual PropertyResult state_pt(

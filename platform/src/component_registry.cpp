@@ -105,6 +105,14 @@ std::optional<double> case_scalar_value(const CaseDefinition* active_case,
 
 void validate_declared_ports(const ComponentDefinition& component, const ComponentModel& model) {
     const auto& expected_ports = model.descriptor().ports;
+    if (!component.version.empty() &&
+        component.version != model.descriptor().version) {
+        throw std::invalid_argument(
+            "component '" + component.id + "' requests version '" +
+            component.version + "' but registered kind '" +
+            component.kind + "' provides version '" +
+            model.descriptor().version + "'");
+    }
     if (expected_ports.empty()) {
         return;
     }
@@ -127,6 +135,15 @@ void validate_declared_ports(const ComponentDefinition& component, const Compone
             actual.direction != "bidirectional") {
             throw std::invalid_argument("component '" + component.id + "' port '" + expected.name +
                                         "' has incompatible direction for kind '" + component.kind + "'");
+        }
+    }
+    for (const auto& [actual_name, _] : component.ports) {
+        if (expected_names.find(actual_name) ==
+            expected_names.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' declares unknown port for kind '" +
+                component.kind + "': " + actual_name);
         }
     }
 }

@@ -218,9 +218,12 @@ must be internally consistent. Phase-change components expose typed heat ports a
 outlet quality from exact saturated liquid (`0`) through exact saturated vapor (`1`). Broader
 parameter schemas and frontend display metadata remain future extensions.
 
-`ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot suitable for validation
-services and future component-palette generation. Optional model behavior reads defaults from this
-same descriptor rather than duplicating them inside the equation implementation.
+`ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
+publishes that snapshot together with property backend IDs and connector-domain contracts as
+`thermox.catalog/v1`, including a deterministic runtime fingerprint. Optional model behavior reads
+defaults from this same descriptor rather than duplicating them inside the equation implementation.
+Native hosts can assemble and inject an immutable runtime with additional registered C++ models;
+transport adapters remain independent of native registry types.
 
 Default catalog composition uses independent boundary, storage, turbomachinery, and fluid-transport
 registrars plus dedicated heat-transfer/phase-change and fluid-inventory registrars. These modules

@@ -34,6 +34,12 @@ The public C++ interface is
   viscosity, thermal conductivity, vapor quality, and phase;
 - validity limits and explicit invalid-input, range, saturation-boundary,
   non-convergence, and backend-error states.
+- implementation identity and version for reproducible run provenance.
+
+Every registered backend also supplies catalog metadata: backend ID, implementation name/version,
+supported substances, and capabilities. `thermox_service` publishes this metadata through
+`thermox.catalog/v1`, allowing graph clients to reject unsupported fluid/backend/component
+combinations before simulation submission.
 
 CO2 and IF97 remain independent Git repositories under `modules/properties/`.
 Their exported C APIs are namespaced, while legacy implementation symbols are

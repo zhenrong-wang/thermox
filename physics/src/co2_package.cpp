@@ -52,6 +52,9 @@ PropertyResult map_result(thermox_co2_status status, const thermox_co2_state& so
 }  // namespace
 
 std::string_view Co2PropertyPackage::name() const noexcept { return "co2-span-wagner"; }
+std::string_view Co2PropertyPackage::version() const noexcept {
+    return thermox_co2_version();
+}
 PropertyLimits Co2PropertyPackage::limits() const noexcept {
     return {0.0, 800e6, 216.0, 1100.0};
 }

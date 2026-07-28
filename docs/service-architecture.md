@@ -13,6 +13,7 @@ CLI             Web / RPC             workers
  └───────────────┴───────────────────────┘
                      │
               thermox_service
+              ├── discover runtime catalog
               ├── validate model
               ├── run steady
               ├── run transient
@@ -32,16 +33,29 @@ not depend on services, transports, databases, or user interfaces.
 The current synchronous service exposes:
 
 - `ValidateModelRequest` / `ValidateModelResponse`;
+- `CatalogRequest` / `CatalogResponse`;
 - `SteadySimulationRequest` / `SteadySimulationResponse`;
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `thermox.command/v1`, `thermox.result/v1`, and `thermox.error/v1` contracts;
 - stable operation status and error stage/code fields;
 - component implementation, property package, model, case, and solver provenance;
 - canonical model JSON and steady/transient result JSON.
+- deterministic runtime-catalog fingerprints and native application composition.
 
 The public service DTOs contain only standard C++ data types. Solver and compiler objects do not
 cross this boundary. This keeps local callers simple and permits an RPC adapter to map wire
 messages without importing engine internals.
+
+`SimulationRuntime` is immutable after construction. Normal clients see only its transport-neutral
+handle. Native hosts that register C++ component or property implementations use the separate
+`thermox::service_native` composition target, then inject the resulting runtime into
+`SimulationService`.
+
+Validation parses, canonicalizes, resolves the active runtime catalog, and compiles the selected
+steady or transient case without invoking a solver. It returns variable/equation counts, reduced
+closed-loop equations, the catalog fingerprint, and structured diagnostics. Diagnostic entity
+paths and compiler-specific codes will become progressively more precise as compiler internals
+move from exceptions to diagnostic records.
 
 ## Interface responsibilities
 

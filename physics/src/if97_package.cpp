@@ -52,6 +52,9 @@ PropertyResult map_result(thermox_if97_status status, const thermox_if97_state& 
 }  // namespace
 
 std::string_view If97PropertyPackage::name() const noexcept { return "water-steam-if97"; }
+std::string_view If97PropertyPackage::version() const noexcept {
+    return thermox_if97_version();
+}
 PropertyLimits If97PropertyPackage::limits() const noexcept {
     return {0.0, 100e6, 273.15, 2273.15};
 }

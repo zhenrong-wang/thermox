@@ -187,6 +187,9 @@ Completed structural slices:
 - transport-neutral command, result, error, diagnostics, and provenance contracts; ✅
 - canonical model/result JSON serialization owned by the service; ✅
 - thin CLI adapter with no compiler, property, or solver orchestration; ✅
+- immutable injectable simulation runtime and deterministic catalog fingerprint; ✅
+- versioned component/property/connector catalog discovery contract; ✅
+- compile-aware steady/transient validation summary and structured diagnostic envelope; ✅
 
 ## Persistence boundary decision
 
@@ -238,7 +241,7 @@ Goal: expose the core through a production-shaped API.
 
 Work items:
 
-1. Map HTTP/RPC endpoints onto the existing application service.
+1. Map HTTP/RPC endpoints onto the existing application service and runtime catalog.
 2. Endpoints:
    - `POST /models/validate`
    - `POST /models/compile`

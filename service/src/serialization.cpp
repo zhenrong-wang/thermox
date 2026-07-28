@@ -124,6 +124,8 @@ void execution_metadata_json(
     json_string(out, metadata.operation);
     out << ",\n    \"solver_contract\": ";
     json_string(out, metadata.solver_contract);
+    out << ",\n    \"catalog_fingerprint\": ";
+    json_string(out, metadata.catalog_fingerprint);
     out << ",\n    \"model\": ";
     model_metadata_json(out, metadata.model);
     out << ",\n    \"components\": [";
@@ -150,9 +152,39 @@ void execution_metadata_json(
         json_string(out, medium.substance);
         out << ", \"package\": ";
         json_string(out, medium.package);
+        out << ", \"package_version\": ";
+        json_string(out, medium.package_version);
         out << "}";
     }
     out << "]\n  }";
+}
+
+void diagnostic_json(
+    std::ostream& out,
+    const Diagnostic& diagnostic) {
+    out << "{\"code\": ";
+    json_string(out, diagnostic.code);
+    out << ", \"severity\": ";
+    json_string(out, to_string(diagnostic.severity));
+    out << ", \"stage\": ";
+    json_string(out, diagnostic.stage);
+    out << ", \"json_path\": ";
+    json_string(out, diagnostic.json_path);
+    out << ", \"component_id\": ";
+    json_string(out, diagnostic.component_id);
+    out << ", \"port_name\": ";
+    json_string(out, diagnostic.port_name);
+    out << ", \"connection_id\": ";
+    json_string(out, diagnostic.connection_id);
+    out << ", \"message\": ";
+    json_string(out, diagnostic.message);
+    out << ", \"suggestions\": [";
+    for (std::size_t i = 0;
+         i < diagnostic.suggestions.size(); ++i) {
+        if (i != 0) out << ", ";
+        json_string(out, diagnostic.suggestions[i]);
+    }
+    out << "]}";
 }
 
 void number_array(
@@ -297,6 +329,128 @@ std::string serialize_model_document_json(
 
 }  // namespace detail
 
+std::string serialize_catalog_response_json(
+    const CatalogResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, response.schema_version);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"fingerprint\": ";
+    json_string(out, response.fingerprint);
+    out << ",\n  \"components\": [";
+    for (std::size_t i = 0; i < response.components.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& component = response.components[i];
+        out << "{\"kind\": ";
+        json_string(out, component.kind);
+        out << ", \"version\": ";
+        json_string(out, component.version);
+        out << ", \"supports_steady\": "
+            << (component.supports_steady ? "true" : "false")
+            << ", \"supports_transient\": "
+            << (component.supports_transient ? "true" : "false")
+            << ", \"ports\": [";
+        for (std::size_t j = 0; j < component.ports.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& port = component.ports[j];
+            out << "{\"name\": ";
+            json_string(out, port.name);
+            out << ", \"domain\": ";
+            json_string(out, port.domain);
+            out << ", \"direction\": ";
+            json_string(out, port.direction);
+            out << "}";
+        }
+        out << "], \"parameters\": [";
+        for (std::size_t j = 0;
+             j < component.parameters.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& parameter = component.parameters[j];
+            out << "{\"name\": ";
+            json_string(out, parameter.name);
+            out << ", \"dimension\": ";
+            json_string(out, parameter.dimension);
+            out << ", \"required\": "
+                << (parameter.required ? "true" : "false")
+                << ", \"default_value_si\": ";
+            if (parameter.has_default) {
+                json_number(out, parameter.default_value_si);
+            } else {
+                out << "null";
+            }
+            out << ", \"lower_bound\": ";
+            json_number(out, parameter.lower_bound);
+            out << ", \"upper_bound\": ";
+            json_number(out, parameter.upper_bound);
+            out << ", \"lower_inclusive\": "
+                << (parameter.lower_inclusive ? "true" : "false")
+                << ", \"upper_inclusive\": "
+                << (parameter.upper_inclusive ? "true" : "false")
+                << "}";
+        }
+        out << "], \"required_property_capabilities\": [";
+        for (std::size_t j = 0;
+             j < component.required_property_capabilities.size();
+             ++j) {
+            if (j != 0) out << ", ";
+            json_string(
+                out,
+                component.required_property_capabilities[j]);
+        }
+        out << "]}";
+    }
+    out << "],\n  \"property_backends\": [";
+    for (std::size_t i = 0;
+         i < response.property_backends.size(); ++i) {
+        if (i != 0) out << ", ";
+        out << "{\"backend\": ";
+        const auto& backend = response.property_backends[i];
+        json_string(out, backend.backend);
+        out << ", \"implementation_name\": ";
+        json_string(out, backend.implementation_name);
+        out << ", \"implementation_version\": ";
+        json_string(out, backend.implementation_version);
+        out << ", \"supported_substances\": [";
+        for (std::size_t j = 0;
+             j < backend.supported_substances.size(); ++j) {
+            if (j != 0) out << ", ";
+            json_string(out, backend.supported_substances[j]);
+        }
+        out << "], \"capabilities\": [";
+        for (std::size_t j = 0;
+             j < backend.capabilities.size(); ++j) {
+            if (j != 0) out << ", ";
+            json_string(out, backend.capabilities[j]);
+        }
+        out << "]}";
+    }
+    out << "],\n  \"connector_domains\": [";
+    for (std::size_t i = 0;
+         i < response.connector_domains.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& domain = response.connector_domains[i];
+        out << "{\"domain\": ";
+        json_string(out, domain.domain);
+        out << ", \"contract_version\": ";
+        json_string(out, domain.contract_version);
+        out << ", \"variables\": [";
+        for (std::size_t j = 0; j < domain.variables.size(); ++j) {
+            if (j != 0) out << ", ";
+            out << "{\"name\": ";
+            json_string(out, domain.variables[j].name);
+            out << ", \"dimension\": ";
+            json_string(out, domain.variables[j].dimension);
+            out << "}";
+        }
+        out << "]}";
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
@@ -310,6 +464,32 @@ std::string serialize_validate_response_json(
     model_metadata_json(out, response.model);
     out << ",\n  \"canonical_model_json\": ";
     json_string(out, response.canonical_model_json);
+    out << ",\n  \"compilation\": {\"compiled\": "
+        << (response.compilation.compiled ? "true" : "false")
+        << ", \"mode\": ";
+    json_string(out, response.compilation.mode);
+    out << ", \"variable_count\": "
+        << response.compilation.variable_count
+        << ", \"equation_count\": "
+        << response.compilation.equation_count
+        << ", \"catalog_fingerprint\": ";
+    json_string(out, response.compilation.catalog_fingerprint);
+    out << ", \"reduced_connection_equations\": [";
+    for (std::size_t i = 0;
+         i < response.compilation.reduced_connection_equations.size();
+         ++i) {
+        if (i != 0) out << ", ";
+        json_string(
+            out,
+            response.compilation.reduced_connection_equations[i]);
+    }
+    out << "]},\n  \"diagnostics\": [";
+    for (std::size_t i = 0;
+         i < response.diagnostics.size(); ++i) {
+        if (i != 0) out << ", ";
+        diagnostic_json(out, response.diagnostics[i]);
+    }
+    out << "]";
     out << "\n}\n";
     return out.str();
 }
