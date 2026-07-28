@@ -58,6 +58,129 @@ const thermox::service::PortResult& require_port_result(
     return *port;
 }
 
+thermox::service::PerformanceMapArtifactInput compressor_map() {
+    using namespace thermox::service;
+    PerformanceMapArtifactInput artifact;
+    artifact.id = "request-compressor-map";
+    artifact.schema_version = "thermox.performance_map/v1";
+    artifact.revision = "service-test-1";
+    artifact.checksum_sha256 = std::string(64, 'a');
+    PerformanceMapPayloadInput map;
+    map.primary_variable = {
+        "corrected_mass_flow", "mass_flow"};
+    map.family_variable = {
+        "corrected_speed", "angular_speed"};
+    map.output_variables = {
+        {"pressure_ratio", "dimensionless"},
+        {"isentropic_efficiency", "dimensionless"},
+    };
+    map.curves = {
+        {250.0,
+         {{80.0, {10.0, 0.85}},
+          {120.0, {10.0, 0.85}}}},
+        {400.0,
+         {{80.0, {10.0, 0.85}},
+          {120.0, {10.0, 0.85}}}},
+    };
+    artifact.map = std::move(map);
+    return artifact;
+}
+
+std::string mapped_compressor_model() {
+    return R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "request_scoped_map",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.fluid.performance_map",
+      "artifacts": {"performance_map": "request-compressor-map"},
+      "parameters": {
+        "reference_pressure": {"value": 101.325, "unit": "kPa"},
+        "reference_temperature": {"value": 300.0, "unit": "K"}
+      },
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+      "compressor.shaft.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "compressor.outlet.p": {"value": 1.0, "unit": "MPa"},
+      "compressor.outlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "compressor.shaft.W_dot": {"value": 30.0, "unit": "MW"}
+    }
+  }]
+})json";
+}
+
+void test_request_scoped_performance_map_artifacts() {
+    thermox::service::SimulationService service;
+    const auto catalog_before = service.get_catalog();
+
+    thermox::service::ValidateModelRequest validation;
+    validation.model_json = mapped_compressor_model();
+    validation.case_id = "operating_point";
+    const auto missing = service.validate_model(validation);
+    require(
+        !missing.succeeded(),
+        "a model must not resolve a request artifact from global state");
+
+    validation.artifacts.performance_maps.push_back(
+        compressor_map());
+    const auto valid = service.validate_model(validation);
+    require(
+        valid.succeeded(),
+        "validation must resolve a request-scoped performance map");
+
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = validation.model_json;
+    request.case_id = validation.case_id;
+    request.artifacts = validation.artifacts;
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "steady execution must use the request-scoped map");
+    require(
+        response.metadata.artifacts.size() == 1 &&
+            response.metadata.artifacts.front().id ==
+                "request-compressor-map" &&
+            response.metadata.artifacts.front().checksum_sha256 ==
+                std::string(64, 'a'),
+        "execution metadata must retain engineering artifact provenance");
+    const auto serialized =
+        thermox::service::serialize_steady_response_json(response);
+    require(
+        serialized.find("\"artifacts\": [") !=
+                std::string::npos &&
+            serialized.find("\"request-compressor-map\"") !=
+                std::string::npos,
+        "result JSON must expose artifact provenance");
+
+    const auto catalog_after = service.get_catalog();
+    require(
+        catalog_after.fingerprint == catalog_before.fingerprint,
+        "request artifacts must not mutate the runtime catalog");
+    thermox::service::ValidateModelRequest isolated;
+    isolated.model_json = validation.model_json;
+    isolated.case_id = validation.case_id;
+    require(
+        !service.validate_model(isolated).succeeded(),
+        "request artifacts must not leak into later requests");
+}
+
 void test_request_contract_validation() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -843,6 +966,7 @@ void test_invalid_solver_settings() {
 int main() {
     try {
         test_request_contract_validation();
+        test_request_scoped_performance_map_artifacts();
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();

@@ -38,6 +38,7 @@ struct SimulationJobRequest {
     std::string case_id;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
+    SimulationArtifactBundle artifacts;
 };
 
 struct ResultArtifactManifest {

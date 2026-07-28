@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -171,6 +172,14 @@ struct ConnectorProvenance {
     std::string contract_version;
 };
 
+struct ArtifactProvenance {
+    std::string id;
+    std::string artifact_type;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+};
+
 struct SolverSetting {
     std::string name;
     double value{0.0};
@@ -191,7 +200,52 @@ struct ExecutionMetadata {
     ModelMetadata model;
     std::vector<ComponentProvenance> components;
     std::vector<MediumProvenance> media;
+    std::vector<ArtifactProvenance> artifacts;
     std::vector<ConnectorProvenance> connector_domains;
+};
+
+struct MapVariableInput {
+    std::string name;
+    std::string dimension;
+};
+
+struct MapSampleInput {
+    double coordinate{0.0};
+    std::vector<double> outputs;
+};
+
+struct MapCurveInput {
+    double family_coordinate{0.0};
+    std::vector<MapSampleInput> samples;
+};
+
+struct PerformanceMapPayloadInput {
+    MapVariableInput primary_variable;
+    MapVariableInput family_variable;
+    std::vector<MapVariableInput> output_variables;
+    std::vector<MapCurveInput> curves;
+    std::string primary_extrapolation{"reject"};
+    std::string family_extrapolation{"reject"};
+};
+
+struct ConditionedMapLayerInput {
+    double condition_coordinate{0.0};
+    PerformanceMapPayloadInput map;
+};
+
+struct PerformanceMapArtifactInput {
+    std::string id;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+    std::optional<PerformanceMapPayloadInput> map;
+    std::optional<MapVariableInput> condition_variable;
+    std::vector<ConditionedMapLayerInput> layers;
+    std::string condition_extrapolation{"reject"};
+};
+
+struct SimulationArtifactBundle {
+    std::vector<PerformanceMapArtifactInput> performance_maps;
 };
 
 struct ResultValue {
@@ -263,6 +317,7 @@ struct ValidateModelRequest {
     std::string schema_version{command_schema_v1};
     std::string model_json;
     std::string case_id;
+    SimulationArtifactBundle artifacts;
 };
 
 struct CompilationSummary {
@@ -303,6 +358,7 @@ struct SteadySimulationRequest {
     std::string model_json;
     std::string case_id;
     SteadySolverSettings solver;
+    SimulationArtifactBundle artifacts;
 };
 
 struct SteadySimulationResponse {
@@ -333,6 +389,7 @@ struct CalibrationRequest {
     std::string model_json;
     std::string calibration_id;
     CalibrationSolverSettings solver;
+    SimulationArtifactBundle artifacts;
 };
 
 struct CalibrationParameterEstimate {
@@ -401,6 +458,7 @@ struct TransientSimulationRequest {
     std::string model_json;
     std::string case_id;
     TransientSolverSettings solver;
+    SimulationArtifactBundle artifacts;
 };
 
 struct TransientSimulationResponse {

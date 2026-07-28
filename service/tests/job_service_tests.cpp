@@ -38,6 +38,24 @@ thermox::service::SimulationJobRequest steady_request(
     return request;
 }
 
+thermox::service::PerformanceMapArtifactInput unused_test_map() {
+    thermox::service::PerformanceMapArtifactInput artifact;
+    artifact.id = "job-map";
+    artifact.schema_version = "thermox.performance_map/v1";
+    artifact.revision = "job-test-1";
+    artifact.checksum_sha256 = std::string(64, 'b');
+    thermox::service::PerformanceMapPayloadInput map;
+    map.primary_variable = {"flow", "mass_flow"};
+    map.family_variable = {"speed", "angular_speed"};
+    map.output_variables = {{"efficiency", "dimensionless"}};
+    map.curves = {
+        {1.0, {{1.0, {0.8}}, {2.0, {0.9}}}},
+        {2.0, {{1.0, {0.82}}, {2.0, {0.92}}}},
+    };
+    artifact.map = std::move(map);
+    return artifact;
+}
+
 void test_submission_is_idempotent_and_conflict_safe() {
     auto jobs =
         thermox::service::make_in_memory_job_repository();
@@ -45,7 +63,9 @@ void test_submission_is_idempotent_and_conflict_safe() {
         thermox::service::make_in_memory_result_artifact_store();
     thermox::service::SimulationJobService service(jobs, artifacts);
 
-    const auto request = steady_request("submission-1");
+    auto request = steady_request("submission-1");
+    request.artifacts.performance_maps.push_back(
+        unused_test_map());
     const auto first = service.submit(request);
     const auto repeated = service.submit(request);
     require(
@@ -60,7 +80,8 @@ void test_submission_is_idempotent_and_conflict_safe() {
         "a new job must start queued at revision one");
 
     auto changed = request;
-    changed.case_id = "a-different-case";
+    changed.artifacts.performance_maps.front()
+        .map->curves.front().samples.front().outputs.front() = 0.7;
     bool conflict = false;
     try {
         (void)service.submit(changed);
@@ -69,7 +90,8 @@ void test_submission_is_idempotent_and_conflict_safe() {
     }
     require(
         conflict,
-        "reusing an idempotency key for a different request "
+        "artifact payload must participate in the idempotency "
+        "fingerprint and reusing its key "
         "must fail");
 }
 
@@ -80,7 +102,9 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::make_in_memory_result_artifact_store();
     thermox::service::SimulationJobService service(jobs, artifacts);
 
-    const auto request = steady_request("successful-run");
+    auto request = steady_request("successful-run");
+    request.artifacts.performance_maps.push_back(
+        unused_test_map());
     const auto queued = service.submit(request);
     bool unavailable = false;
     try {
@@ -108,6 +132,10 @@ void test_success_publishes_a_readable_artifact() {
             !completed->error.has_value(),
         "successful job must retain worker, provenance, and "
         "artifact metadata");
+    require(
+        completed->execution->artifacts.size() == 1 &&
+            completed->execution->artifacts.front().id == "job-map",
+        "workers must propagate request artifacts and provenance");
 
     const auto& manifest = *completed->result_artifact;
     require(

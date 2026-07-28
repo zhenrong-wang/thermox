@@ -13,8 +13,10 @@ The separation is deliberate:
   the equations that interpret those inputs;
 - a model-document component **instance** supplies its medium bindings, scalar parameters, and
   artifact IDs;
-- the application runtime owns immutable artifact payloads and resolves them while compiling the
-  graph.
+- a simulation request carries project/run-scoped immutable artifact payloads, while a native host
+  may also install deployment-wide artifacts in its immutable runtime;
+- the service builds a private overlay for compilation and never mutates or leaks data into another
+  request.
 
 Consequently, Thermox may ship a generic compressor model without embedding any manufacturer's
 compressor. A user creates a real compressor instance by binding a particular performance-map
@@ -35,7 +37,13 @@ Component artifact bindings are generic:
 
 The component descriptor declares that `performance_map` expects artifact type
 `thermox.performance_map`. Compilation rejects missing roles, unknown roles, and artifact IDs that
-are absent from the runtime registry.
+are absent from the effective request/runtime registry. A request cannot silently replace an
+artifact with the same ID in the deployment runtime.
+
+The transport-neutral `SimulationArtifactBundle` accepts v1 ordinary maps and v2 conditioned maps
+using standard C++ DTOs. Validation, steady, transient, calibration, and queued-job execution all
+resolve the same bundle. Artifact identity, schema, revision, and checksum are recorded in result
+provenance; complete payload content participates in job idempotency fingerprints.
 
 `thermox::platform::PerformanceMap` represents a two-coordinate family of piecewise-linear curves.
 The individual curves may have different primary-coordinate samples, matching common compressor
@@ -101,7 +109,7 @@ input.
 ## Next integration slice
 
 1. Define a versioned map-artifact schema and checksum identity. ✅
-2. Register immutable map artifacts in the application runtime and resolve generic component
+2. Resolve immutable deployment and request-scoped map artifacts through generic component
    artifact bindings during compilation. ✅
 3. Add a map-based compressor component that lowers map outputs and derivatives into checked graph
    equations. ✅
@@ -110,5 +118,6 @@ input.
 5. Apply the same map contract to composition-aware material compressor and turbine ports. ✅
 6. Add conditioned three-coordinate maps and variable-geometry fluid/material turbomachinery
    components. ✅
-7. Calibrate a designated baseline point, then freeze parameters and predict independent
+7. Add a persistent artifact resolver/object-store adapter behind the service DTO boundary.
+8. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.

@@ -37,6 +37,68 @@ void append_steady_settings(
            << settings.max_line_search_steps;
 }
 
+void append_string(
+    std::ostringstream& stream,
+    const std::string& value) {
+    stream << value.size() << ':' << value << '|';
+}
+
+void append_map_payload(
+    std::ostringstream& stream,
+    const PerformanceMapPayloadInput& map) {
+    append_string(stream, map.primary_variable.name);
+    append_string(stream, map.primary_variable.dimension);
+    append_string(stream, map.family_variable.name);
+    append_string(stream, map.family_variable.dimension);
+    stream << map.output_variables.size() << '|';
+    for (const auto& output : map.output_variables) {
+        append_string(stream, output.name);
+        append_string(stream, output.dimension);
+    }
+    stream << map.curves.size() << '|';
+    for (const auto& curve : map.curves) {
+        stream << curve.family_coordinate << '|'
+               << curve.samples.size() << '|';
+        for (const auto& sample : curve.samples) {
+            stream << sample.coordinate << '|'
+                   << sample.outputs.size() << '|';
+            for (const double output : sample.outputs) {
+                stream << output << '|';
+            }
+        }
+    }
+    append_string(stream, map.primary_extrapolation);
+    append_string(stream, map.family_extrapolation);
+}
+
+void append_artifacts(
+    std::ostringstream& stream,
+    const SimulationArtifactBundle& artifacts) {
+    stream << artifacts.performance_maps.size() << '|';
+    for (const auto& artifact : artifacts.performance_maps) {
+        append_string(stream, artifact.id);
+        append_string(stream, artifact.schema_version);
+        append_string(stream, artifact.revision);
+        append_string(stream, artifact.checksum_sha256);
+        stream << artifact.map.has_value() << '|';
+        if (artifact.map) {
+            append_map_payload(stream, *artifact.map);
+        }
+        stream << artifact.condition_variable.has_value() << '|';
+        if (artifact.condition_variable) {
+            append_string(stream, artifact.condition_variable->name);
+            append_string(
+                stream, artifact.condition_variable->dimension);
+        }
+        stream << artifact.layers.size() << '|';
+        for (const auto& layer : artifact.layers) {
+            stream << layer.condition_coordinate << '|';
+            append_map_payload(stream, layer.map);
+        }
+        append_string(stream, artifact.condition_extrapolation);
+    }
+}
+
 std::string request_fingerprint(
     const SimulationJobRequest& request) {
     std::ostringstream stream;
@@ -62,6 +124,8 @@ std::string request_fingerprint(
            << '|';
     append_steady_settings(
         stream, request.transient_solver.nonlinear_solver);
+    stream << '|';
+    append_artifacts(stream, request.artifacts);
     return fnv1a64(stream.str());
 }
 
@@ -227,6 +291,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             request.model_json = claimed->request.model_json;
             request.case_id = claimed->request.case_id;
             request.solver = claimed->request.steady_solver;
+            request.artifacts = claimed->request.artifacts;
             const auto response = impl_->simulation.run_steady(request);
             if (!response.succeeded()) {
                 return impl_->jobs->publish_failure(
@@ -252,6 +317,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
         request.model_json = claimed->request.model_json;
         request.case_id = claimed->request.case_id;
         request.solver = claimed->request.transient_solver;
+        request.artifacts = claimed->request.artifacts;
         const auto response =
             impl_->simulation.run_transient(request);
         if (!response.succeeded()) {

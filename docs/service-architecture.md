@@ -45,7 +45,8 @@ The current synchronous service exposes:
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
-  case, solver contract, and effective solver-setting provenance;
+  case, solver contract, effective solver-setting provenance, and request engineering-artifact
+  identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v1` queued/running/succeeded/failed/cancelled jobs with required idempotency keys,
@@ -59,6 +60,13 @@ messages without importing engine internals.
 handle. Native hosts that register C++ component or property implementations use the separate
 `thermox::service_native` composition target, then inject the resulting runtime into
 `SimulationService`.
+
+Engineering datasets are not service-global mutable state. Validate, steady, transient,
+calibration, and job requests may carry a `SimulationArtifactBundle`; the service validates it and
+constructs an execution-local performance-map registry over any immutable deployment defaults.
+The overlay is destroyed after the call, duplicate identities are rejected, queued jobs preserve
+the bundle, and result-v3 records its artifact provenance. A later database/object-store resolver
+can populate this same DTO boundary without changing platform compilation or component equations.
 
 Validation parses, canonicalizes, resolves the active runtime catalog, and compiles the selected
 steady or transient case without invoking a solver. It returns variable/equation counts, reduced

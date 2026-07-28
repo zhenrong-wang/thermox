@@ -83,8 +83,9 @@ Implemented in this sprint:
 - Generic dimensioned performance-map interpolation across non-rectangular curve families, with
   analytic piecewise derivatives and explicit reject, clamp, or linear extrapolation policies.
 - Versioned, checksummed performance-map artifacts bound to component instances by generic
-  artifact roles and resolved from the application runtime during graph compilation; equipment
-  datasets are not embedded in component types or the numeric kernel.
+  artifact roles and resolved from isolated per-request bundles over optional immutable deployment
+  defaults during graph compilation; equipment datasets are not embedded in component types or
+  the numeric kernel, and queued runs preserve their payload identity and provenance.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
   directions, and connection cardinality come from the active runtime catalog.

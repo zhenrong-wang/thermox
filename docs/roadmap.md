@@ -272,6 +272,7 @@ Work items:
    - generic dimensioned, non-rectangular map interpolation kernel; ✅
    - explicit reject/clamp/linear extrapolation policies and derivatives; ✅
    - versioned map artifacts, generic component artifact bindings, and runtime registry; ✅
+   - request-scoped artifact bundles, job propagation, idempotency, and result provenance; ✅
    - map-based compressor graph component; ✅
    - map-based turbine graph component; ✅
    - two-load shaft train with mechanical losses and an electrical generator component; ✅

@@ -177,6 +177,22 @@ void execution_metadata_json(
         json_string(out, medium.resolved_package_version);
         out << "}";
     }
+    out << "],\n    \"artifacts\": [";
+    for (std::size_t i = 0; i < metadata.artifacts.size(); ++i) {
+        const auto& artifact = metadata.artifacts[i];
+        if (i != 0) out << ", ";
+        out << "{\"id\": ";
+        json_string(out, artifact.id);
+        out << ", \"artifact_type\": ";
+        json_string(out, artifact.artifact_type);
+        out << ", \"schema_version\": ";
+        json_string(out, artifact.schema_version);
+        out << ", \"revision\": ";
+        json_string(out, artifact.revision);
+        out << ", \"checksum_sha256\": ";
+        json_string(out, artifact.checksum_sha256);
+        out << "}";
+    }
     out << "],\n    \"connector_domains\": [";
     for (std::size_t i = 0;
          i < metadata.connector_domains.size(); ++i) {

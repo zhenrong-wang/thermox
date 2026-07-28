@@ -41,6 +41,128 @@ bool valid_schema(const std::string& schema) {
     return schema == command_schema_v1;
 }
 
+platform::MapExtrapolationPolicy extrapolation_policy(
+    const std::string& value) {
+    if (value == "reject") {
+        return platform::MapExtrapolationPolicy::reject;
+    }
+    if (value == "clamp") {
+        return platform::MapExtrapolationPolicy::clamp;
+    }
+    if (value == "linear") {
+        return platform::MapExtrapolationPolicy::linear;
+    }
+    throw std::invalid_argument(
+        "unknown performance-map extrapolation policy: " + value);
+}
+
+std::shared_ptr<const platform::PerformanceMap> performance_map(
+    const PerformanceMapPayloadInput& input) {
+    std::vector<platform::MapVariable> outputs;
+    outputs.reserve(input.output_variables.size());
+    for (const auto& variable : input.output_variables) {
+        outputs.push_back({variable.name, variable.dimension});
+    }
+    std::vector<platform::MapCurve> curves;
+    curves.reserve(input.curves.size());
+    for (const auto& input_curve : input.curves) {
+        platform::MapCurve curve;
+        curve.family_coordinate = input_curve.family_coordinate;
+        curve.samples.reserve(input_curve.samples.size());
+        for (const auto& sample : input_curve.samples) {
+            curve.samples.push_back(
+                {sample.coordinate, sample.outputs});
+        }
+        curves.push_back(std::move(curve));
+    }
+    return std::make_shared<const platform::PerformanceMap>(
+        platform::MapVariable{
+            input.primary_variable.name,
+            input.primary_variable.dimension},
+        platform::MapVariable{
+            input.family_variable.name,
+            input.family_variable.dimension},
+        std::move(outputs),
+        std::move(curves),
+        extrapolation_policy(input.primary_extrapolation),
+        extrapolation_policy(input.family_extrapolation));
+}
+
+platform::PerformanceMapArtifact performance_map_artifact(
+    const PerformanceMapArtifactInput& input) {
+    platform::PerformanceMapArtifact artifact;
+    artifact.id = input.id;
+    artifact.schema_version = input.schema_version;
+    artifact.revision = input.revision;
+    artifact.checksum_sha256 = input.checksum_sha256;
+    if (input.schema_version ==
+        platform::performance_map_artifact_schema_v1) {
+        if (!input.map || input.condition_variable ||
+            !input.layers.empty()) {
+            throw std::invalid_argument(
+                "performance-map v1 artifact '" + input.id +
+                "' requires one ordinary map payload");
+        }
+        artifact.map = performance_map(*input.map);
+        return artifact;
+    }
+    if (input.schema_version ==
+        platform::performance_map_artifact_schema_v2) {
+        if (input.map || !input.condition_variable ||
+            input.layers.empty()) {
+            throw std::invalid_argument(
+                "performance-map v2 artifact '" + input.id +
+                "' requires a condition variable and map layers");
+        }
+        std::vector<platform::ConditionedMapLayer> layers;
+        layers.reserve(input.layers.size());
+        for (const auto& layer : input.layers) {
+            layers.push_back({
+                layer.condition_coordinate,
+                performance_map(layer.map),
+            });
+        }
+        artifact.conditioned_map =
+            std::make_shared<const platform::ConditionedPerformanceMap>(
+                platform::MapVariable{
+                    input.condition_variable->name,
+                    input.condition_variable->dimension},
+                std::move(layers),
+                extrapolation_policy(
+                    input.condition_extrapolation));
+        return artifact;
+    }
+    throw std::invalid_argument(
+        "unsupported performance-map artifact schema: " +
+        input.schema_version);
+}
+
+platform::PerformanceMapRegistry execution_performance_maps(
+    const platform::PerformanceMapRegistry& runtime_maps,
+    const SimulationArtifactBundle& inputs) {
+    auto maps = runtime_maps;
+    for (const auto& input : inputs.performance_maps) {
+        maps.register_artifact(performance_map_artifact(input));
+    }
+    return maps;
+}
+
+std::vector<ArtifactProvenance> artifact_provenance(
+    const SimulationArtifactBundle& inputs) {
+    std::vector<ArtifactProvenance> provenance;
+    provenance.reserve(inputs.performance_maps.size());
+    for (const auto& artifact : inputs.performance_maps) {
+        provenance.push_back({
+            artifact.id,
+            platform::performance_map_artifact_type,
+            artifact.schema_version,
+            artifact.revision,
+            artifact.checksum_sha256,
+        });
+    }
+    return provenance;
+}
+
 std::string_view capability_name(
     physics::PropertyCapability capability) {
     switch (capability) {
@@ -778,6 +900,17 @@ ValidateModelResponse SimulationService::validate_model(
             "missing_model", "request", "model_json must not be empty");
         return response;
     }
+    platform::PerformanceMapRegistry performance_maps;
+    try {
+        performance_maps = execution_performance_maps(
+            impl_->runtime->impl_->performance_maps,
+            request.artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        return response;
+    }
     try {
         const auto document =
             platform::parse_model_document_text(request.model_json);
@@ -805,7 +938,7 @@ ValidateModelResponse SimulationService::validate_model(
                     document,
                     impl_->runtime->impl_->components,
                     impl_->runtime->impl_->properties,
-                    impl_->runtime->impl_->performance_maps,
+                    performance_maps,
                     request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "transient";
@@ -818,7 +951,7 @@ ValidateModelResponse SimulationService::validate_model(
                 document,
                 impl_->runtime->impl_->components,
                 impl_->runtime->impl_->properties,
-                impl_->runtime->impl_->performance_maps,
+                performance_maps,
                 impl_->runtime->impl_->thermochemistry,
                 request.case_id);
             response.compilation.compiled = true;
@@ -1011,6 +1144,17 @@ SteadySimulationResponse SimulationService::run_steady(
             "invalid_solver_settings", "request", ex.what());
         return response;
     }
+    platform::PerformanceMapRegistry performance_maps;
+    try {
+        performance_maps = execution_performance_maps(
+            impl_->runtime->impl_->performance_maps,
+            request.artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        return response;
+    }
     try {
         document =
             platform::parse_model_document_text(request.model_json);
@@ -1027,7 +1171,7 @@ SteadySimulationResponse SimulationService::run_steady(
             document,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
-            impl_->runtime->impl_->performance_maps,
+            performance_maps,
             impl_->runtime->impl_->thermochemistry,
             request.case_id);
         response.metadata = execution_metadata(
@@ -1039,6 +1183,8 @@ SteadySimulationResponse SimulationService::run_steady(
             impl_->runtime->impl_->fingerprint,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
+        response.metadata.artifacts =
+            artifact_provenance(request.artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(
@@ -1128,6 +1274,18 @@ CalibrationResponse SimulationService::run_calibration(
         return response;
     }
 
+    platform::PerformanceMapRegistry performance_maps;
+    try {
+        performance_maps = execution_performance_maps(
+            impl_->runtime->impl_->performance_maps,
+            request.artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        return response;
+    }
+
     platform::ModelDocument document;
     try {
         document =
@@ -1142,6 +1300,8 @@ CalibrationResponse SimulationService::run_calibration(
             impl_->runtime->impl_->fingerprint,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
+        response.metadata.artifacts =
+            artifact_provenance(request.artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -1216,7 +1376,7 @@ CalibrationResponse SimulationService::run_calibration(
             settings.simulation_solver,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
-            impl_->runtime->impl_->performance_maps,
+            performance_maps,
             impl_->runtime->impl_->thermochemistry,
             warm_starts);
     };
@@ -1385,6 +1545,17 @@ TransientSimulationResponse SimulationService::run_transient(
             "invalid_solver_settings", "request", ex.what());
         return response;
     }
+    platform::PerformanceMapRegistry performance_maps;
+    try {
+        performance_maps = execution_performance_maps(
+            impl_->runtime->impl_->performance_maps,
+            request.artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        return response;
+    }
     try {
         document =
             platform::parse_model_document_text(request.model_json);
@@ -1401,7 +1572,7 @@ TransientSimulationResponse SimulationService::run_transient(
             document,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
-            impl_->runtime->impl_->performance_maps,
+            performance_maps,
             request.case_id);
         response.metadata = execution_metadata(
             document,
@@ -1412,6 +1583,8 @@ TransientSimulationResponse SimulationService::run_transient(
             impl_->runtime->impl_->fingerprint,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
+        response.metadata.artifacts =
+            artifact_provenance(request.artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(
