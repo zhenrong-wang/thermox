@@ -850,6 +850,88 @@ std::string serialize_steady_response_json(
     return out.str();
 }
 
+std::string serialize_calibration_response_json(
+    const CalibrationResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, result_schema_v3);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"metadata\": ";
+    execution_metadata_json(out, response.metadata);
+    out << ",\n  \"calibration_id\": ";
+    json_string(out, response.calibration_id);
+    out << ",\n  \"diagnostics\": {\"converged\": "
+        << (response.diagnostics.converged ? "true" : "false")
+        << ", \"iterations\": "
+        << response.diagnostics.iterations
+        << ", \"objective_evaluations\": "
+        << response.diagnostics.objective_evaluations
+        << ", \"initial_objective\": ";
+    json_number(out, response.diagnostics.initial_objective);
+    out << ", \"final_objective\": ";
+    json_number(out, response.diagnostics.final_objective);
+    out << ", \"message\": ";
+    json_string(out, response.diagnostics.message);
+    out << "},\n  \"parameters\": [";
+    for (std::size_t i = 0; i < response.parameters.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& parameter = response.parameters[i];
+        out << "{\"id\": ";
+        json_string(out, parameter.id);
+        out << ", \"scope\": ";
+        json_string(out, parameter.scope);
+        out << ", \"dimension\": ";
+        json_string(out, parameter.dimension);
+        out << ", \"initial_value_si\": ";
+        json_number(out, parameter.initial_value_si);
+        out << ", \"fitted_value_si\": ";
+        json_number(out, parameter.fitted_value_si);
+        out << ", \"lower_bound_si\": ";
+        json_number(out, parameter.lower_bound_si);
+        out << ", \"upper_bound_si\": ";
+        json_number(out, parameter.upper_bound_si);
+        out << ", \"targets\": [";
+        for (std::size_t target = 0;
+             target < parameter.targets.size(); ++target) {
+            if (target != 0) out << ", ";
+            json_string(out, parameter.targets[target]);
+        }
+        out << "]}";
+    }
+    out << "],\n  \"observations\": [";
+    for (std::size_t i = 0;
+         i < response.observations.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& observation = response.observations[i];
+        out << "{\"id\": ";
+        json_string(out, observation.id);
+        out << ", \"case_id\": ";
+        json_string(out, observation.case_id);
+        out << ", \"target\": ";
+        json_string(out, observation.target);
+        out << ", \"dimension\": ";
+        json_string(out, observation.dimension);
+        out << ", \"measured_si\": ";
+        json_number(out, observation.measured_si);
+        out << ", \"predicted_si\": ";
+        json_number(out, observation.predicted_si);
+        out << ", \"sigma_si\": ";
+        json_number(out, observation.sigma_si);
+        out << ", \"residual_si\": ";
+        json_number(out, observation.residual_si);
+        out << ", \"normalized_residual\": ";
+        json_number(out, observation.normalized_residual);
+        out << "}";
+    }
+    out << "],\n  \"fitted_model_json\": ";
+    json_string(out, response.fitted_model_json);
+    out << "\n}\n";
+    return out.str();
+}
+
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;

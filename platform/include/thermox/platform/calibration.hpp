@@ -15,4 +15,11 @@ void validate_calibration_observation_contracts(
     const physics::ThermochemistryPackageRegistry&
         thermochemistry_registry);
 
+ScalarValue& require_calibration_parameter_target(
+    ModelDocument& document,
+    const std::string& target);
+const ScalarValue& require_calibration_parameter_target(
+    const ModelDocument& document,
+    const std::string& target);
+
 }  // namespace thermox::platform

@@ -17,6 +17,7 @@ CLI             Web / RPC             workers
               ├── validate model
               ├── run steady
               ├── run transient
+              ├── calibrate steady cases
               ├── submit / inspect jobs
               ├── claim / execute work
               ├── publish terminal state
@@ -39,12 +40,13 @@ The current synchronous service exposes:
 - `CatalogRequest` / `CatalogResponse`;
 - `SteadySimulationRequest` / `SteadySimulationResponse`;
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
+- `CalibrationRequest` / `CalibrationResponse`;
 - `thermox.command/v1`, `thermox.catalog/v2`, `thermox.result/v3`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
   case, solver contract, and effective solver-setting provenance;
-- canonical model JSON and steady/transient result JSON.
+- canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v1` queued/running/succeeded/failed/cancelled jobs with required idempotency keys,
   optimistic revisions, worker claims, execution provenance, and result-artifact manifests.
@@ -68,6 +70,11 @@ Solver settings on the service command are the sole execution authority. Case-le
 `solver_options` remain model metadata and are never merged implicitly into a run. Result-v3
 provenance records every effective command setting so a stored run does not depend on defaults
 from a later build.
+
+Calibration is also service orchestration: the service applies bounded candidate parameters to
+model copies, invokes ordinary steady simulations sequentially across the observation cases, and
+forms an uncertainty-weighted objective. It returns the fitted canonical model and residual
+attribution. Neither the platform compiler nor the nonlinear solver owns calibration behavior.
 
 Result-v3 represents steady solutions and every transient sample through the same graph structure:
 components contain stable port identities for fluid, heat, shaft, signal, and control domains,

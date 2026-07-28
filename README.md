@@ -84,6 +84,9 @@ Implemented in this sprint:
 - Service validation resolves calibration observations against registered graph results, while
   the result layer derives thermodynamic temperature and composition metadata for reacting
   material ports through the selected thermochemistry backend.
+- A bounded multi-case calibration service performs sequential uncertainty-weighted coordinate
+  search through ordinary steady simulations and returns fitted parameters, residual attribution,
+  execution provenance, and a reusable canonical fitted model.
 - Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
   consistent linear combinations of retained equations; reduced row names remain available as
   graph diagnostics.

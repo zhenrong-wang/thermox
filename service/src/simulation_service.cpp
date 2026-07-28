@@ -11,8 +11,11 @@
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/transient_solver.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
+#include <limits>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -359,6 +362,29 @@ SolverProvenance solver_provenance(
 }
 
 SolverProvenance solver_provenance(
+    const CalibrationSolverSettings& settings) {
+    SolverProvenance provenance{
+        "thermox.coordinate-search/v1",
+        {
+            {"max_iterations",
+             static_cast<double>(settings.max_iterations)},
+            {"initial_step_fraction",
+             settings.initial_step_fraction},
+            {"minimum_step_fraction",
+             settings.minimum_step_fraction},
+            {"step_reduction", settings.step_reduction},
+        },
+    };
+    const auto simulation =
+        solver_provenance(settings.simulation_solver);
+    for (const auto& setting : simulation.settings) {
+        provenance.settings.push_back({
+            "simulation." + setting.name, setting.value});
+    }
+    return provenance;
+}
+
+SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
         "thermox.dae-bdf1/v1",
@@ -474,6 +500,169 @@ GraphResult copy_graph_result(
         graph.components.push_back(std::move(component));
     }
     return graph;
+}
+
+const platform::CalibrationDefinition& require_calibration(
+    const platform::ModelDocument& document,
+    const std::string& id) {
+    const auto calibration = std::find_if(
+        document.calibrations.begin(),
+        document.calibrations.end(),
+        [&](const auto& candidate) {
+            return candidate.id == id;
+        });
+    if (calibration == document.calibrations.end()) {
+        throw std::invalid_argument(
+            "unknown calibration id: " + id);
+    }
+    return *calibration;
+}
+
+const platform::ResultValue& require_graph_value(
+    const platform::GraphResult& graph,
+    const std::string& target) {
+    const auto first = target.find('.');
+    const auto second = target.find('.', first + 1);
+    const auto component = std::find_if(
+        graph.components.begin(), graph.components.end(),
+        [&](const auto& candidate) {
+            return candidate.component_id ==
+                target.substr(0, first);
+        });
+    if (component == graph.components.end()) {
+        throw std::runtime_error(
+            "calibration result component missing: " + target);
+    }
+    const auto find_value = [&](const auto& values,
+                                const std::string& name)
+        -> const platform::ResultValue* {
+        const auto value = std::find_if(
+            values.begin(), values.end(),
+            [&](const auto& candidate) {
+                return candidate.name == name;
+            });
+        return value == values.end() ? nullptr : &*value;
+    };
+    if (second == std::string::npos) {
+        if (const auto* value = find_value(
+                component->internal_values,
+                target.substr(first + 1))) {
+            return *value;
+        }
+    } else {
+        const auto port = std::find_if(
+            component->ports.begin(), component->ports.end(),
+            [&](const auto& candidate) {
+                return candidate.port_name ==
+                    target.substr(
+                        first + 1, second - first - 1);
+            });
+        if (port != component->ports.end()) {
+            const auto name = target.substr(second + 1);
+            if (const auto* value =
+                    find_value(port->primary_values, name)) {
+                return *value;
+            }
+            if (const auto* value =
+                    find_value(port->derived_values, name)) {
+                return *value;
+            }
+        }
+    }
+    throw std::runtime_error(
+        "calibration result value missing: " + target);
+}
+
+platform::GraphResult solve_calibration_case(
+    const platform::ModelDocument& document,
+    const std::string& case_id,
+    const SteadySolverSettings& settings,
+    const platform::ComponentRegistry& components,
+    const physics::PropertyPackageRegistry& properties,
+    const platform::PerformanceMapRegistry& performance_maps,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry) {
+    const auto* simulation_case =
+        selected_case(document, case_id);
+    if (validation_mode(simulation_case) != "steady") {
+        throw std::invalid_argument(
+            "calibration currently requires steady cases: " +
+            case_id);
+    }
+    const auto graph = platform::compile_model_graph(
+        document, components, properties, performance_maps,
+        thermochemistry, case_id);
+    const auto solve = solve_newton(
+        graph.problem, to_core(settings));
+    if (!solve.diagnostics.converged) {
+        throw std::runtime_error(
+            "calibration case '" + case_id +
+            "' failed to solve: " +
+            solve.diagnostics.message);
+    }
+    const platform::GraphResultEvaluator evaluator(
+        document, graph, properties, thermochemistry);
+    return evaluator.evaluate(solve.x);
+}
+
+struct ObjectiveEvaluation {
+    double value{std::numeric_limits<double>::infinity()};
+    std::vector<CalibrationObservationResidual> observations;
+};
+
+ObjectiveEvaluation evaluate_calibration_objective(
+    const platform::ModelDocument& document,
+    const platform::CalibrationDefinition& calibration,
+    const SteadySolverSettings& settings,
+    const platform::ComponentRegistry& components,
+    const physics::PropertyPackageRegistry& properties,
+    const platform::PerformanceMapRegistry& performance_maps,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry) {
+    ObjectiveEvaluation evaluation;
+    evaluation.value = 0.0;
+    std::map<std::string, platform::GraphResult> case_results;
+    for (const auto& observation : calibration.observations) {
+        if (!case_results.contains(observation.case_id)) {
+            case_results.emplace(
+                observation.case_id,
+                solve_calibration_case(
+                    document, observation.case_id, settings,
+                    components, properties, performance_maps,
+                    thermochemistry));
+        }
+        const auto& predicted = require_graph_value(
+            case_results.at(observation.case_id),
+            observation.target);
+        const double residual =
+            predicted.value_si - observation.measured.value_si;
+        const double normalized =
+            residual / observation.sigma.value_si;
+        evaluation.value += normalized * normalized;
+        evaluation.observations.push_back({
+            observation.id,
+            observation.case_id,
+            observation.target,
+            observation.measured.dimension,
+            observation.measured.value_si,
+            predicted.value_si,
+            observation.sigma.value_si,
+            residual,
+            normalized,
+        });
+    }
+    for (const auto& parameter : calibration.parameters) {
+        if (!parameter.prior_mean.has_value()) continue;
+        const double value =
+            platform::require_calibration_parameter_target(
+                document, parameter.targets.front())
+                .value_si;
+        const double normalized =
+            (value - parameter.prior_mean->value_si) /
+            parameter.prior_sigma->value_si;
+        evaluation.value += normalized * normalized;
+    }
+    return evaluation;
 }
 
 }  // namespace
@@ -848,6 +1037,224 @@ SteadySimulationResponse SimulationService::run_steady(
         return response;
     }
 
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
+CalibrationResponse SimulationService::run_calibration(
+    const CalibrationRequest& request) const {
+    CalibrationResponse response;
+    if (!valid_schema(request.schema_version) ||
+        request.model_json.empty() ||
+        request.calibration_id.empty()) {
+        response.error = make_error(
+            "invalid_calibration_request", "request",
+            "schema_version, model_json, and calibration_id are required");
+        return response;
+    }
+    const auto& settings = request.solver;
+    if (settings.max_iterations <= 0 ||
+        !std::isfinite(settings.initial_step_fraction) ||
+        settings.initial_step_fraction <= 0.0 ||
+        settings.initial_step_fraction > 1.0 ||
+        !std::isfinite(settings.minimum_step_fraction) ||
+        settings.minimum_step_fraction <= 0.0 ||
+        settings.minimum_step_fraction >=
+            settings.initial_step_fraction ||
+        !std::isfinite(settings.step_reduction) ||
+        settings.step_reduction <= 0.0 ||
+        settings.step_reduction >= 1.0) {
+        response.error = make_error(
+            "invalid_calibration_settings", "request",
+            "invalid bounded calibration solver settings");
+        return response;
+    }
+    try {
+        (void)to_core(settings.simulation_solver);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_solver_settings", "request", ex.what());
+        return response;
+    }
+
+    platform::ModelDocument document;
+    try {
+        document =
+            platform::parse_model_document_text(request.model_json);
+        platform::validate_calibration_observation_contracts(
+            document, impl_->runtime->impl_->components,
+            impl_->runtime->impl_->thermochemistry);
+        response.calibration_id = request.calibration_id;
+        response.metadata = execution_metadata(
+            document, request.schema_version, "", "calibration",
+            solver_provenance(settings),
+            impl_->runtime->impl_->fingerprint,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        response.error = make_error(
+            "invalid_calibration_model", "validation", ex.what());
+        return response;
+    }
+
+    const platform::CalibrationDefinition* calibration = nullptr;
+    try {
+        calibration =
+            &require_calibration(document, request.calibration_id);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "unknown_calibration", "request", ex.what());
+        return response;
+    }
+
+    std::vector<double> values;
+    std::vector<double> initial;
+    std::vector<double> lower;
+    std::vector<double> upper;
+    std::vector<double> steps;
+    try {
+        for (const auto& parameter : calibration->parameters) {
+            if (!parameter.lower_bound.has_value() ||
+                !parameter.upper_bound.has_value() ||
+                !std::isfinite(parameter.lower_bound->value_si) ||
+                !std::isfinite(parameter.upper_bound->value_si)) {
+                throw std::invalid_argument(
+                    "bounded calibration parameter '" +
+                    parameter.id +
+                    "' requires finite lower and upper bounds");
+            }
+            const double value =
+                platform::require_calibration_parameter_target(
+                    document, parameter.targets.front())
+                    .value_si;
+            values.push_back(value);
+            initial.push_back(value);
+            lower.push_back(parameter.lower_bound->value_si);
+            upper.push_back(parameter.upper_bound->value_si);
+            steps.push_back(
+                settings.initial_step_fraction *
+                (upper.back() - lower.back()));
+        }
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        response.error = make_error(
+            "invalid_calibration_bounds", "validation", ex.what());
+        return response;
+    }
+
+    const auto apply_values = [&]() {
+        for (std::size_t index = 0;
+             index < calibration->parameters.size(); ++index) {
+            for (const auto& target :
+                 calibration->parameters[index].targets) {
+                platform::require_calibration_parameter_target(
+                    document, target)
+                    .value_si = values[index];
+            }
+        }
+    };
+    const auto evaluate = [&]() {
+        apply_values();
+        return evaluate_calibration_objective(
+            document, *calibration,
+            settings.simulation_solver,
+            impl_->runtime->impl_->components,
+            impl_->runtime->impl_->properties,
+            impl_->runtime->impl_->performance_maps,
+            impl_->runtime->impl_->thermochemistry);
+    };
+
+    ObjectiveEvaluation best;
+    try {
+        best = evaluate();
+        response.diagnostics.initial_objective = best.value;
+        response.diagnostics.objective_evaluations = 1;
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "calibration_baseline_failed", "calibration", ex.what());
+        return response;
+    }
+
+    for (int iteration = 0;
+         iteration < settings.max_iterations; ++iteration) {
+        bool improved = false;
+        for (std::size_t index = 0; index < values.size();
+             ++index) {
+            const double original = values[index];
+            double selected = original;
+            ObjectiveEvaluation selected_evaluation = best;
+            for (const double direction : {-1.0, 1.0}) {
+                const double trial = std::clamp(
+                    original + direction * steps[index],
+                    lower[index], upper[index]);
+                if (trial == original) continue;
+                values[index] = trial;
+                try {
+                    auto evaluation = evaluate();
+                    ++response.diagnostics.objective_evaluations;
+                    if (evaluation.value <
+                        selected_evaluation.value) {
+                        selected = trial;
+                        selected_evaluation =
+                            std::move(evaluation);
+                    }
+                } catch (const std::exception&) {
+                    ++response.diagnostics.objective_evaluations;
+                }
+            }
+            values[index] = selected;
+            if (selected != original) {
+                improved = true;
+                best = std::move(selected_evaluation);
+            }
+            apply_values();
+        }
+        response.diagnostics.iterations = iteration + 1;
+        if (!improved) {
+            for (auto& step : steps) {
+                step *= settings.step_reduction;
+            }
+        }
+        bool small = true;
+        for (std::size_t index = 0; index < steps.size();
+             ++index) {
+            small = small &&
+                steps[index] <=
+                    settings.minimum_step_fraction *
+                        (upper[index] - lower[index]);
+        }
+        if (small) {
+            response.diagnostics.converged = true;
+            response.diagnostics.message =
+                "bounded coordinate search step tolerance reached";
+            break;
+        }
+    }
+    if (!response.diagnostics.converged) {
+        response.diagnostics.message =
+            "bounded coordinate search reached iteration limit";
+    }
+    apply_values();
+    response.diagnostics.final_objective = best.value;
+    response.observations = std::move(best.observations);
+    for (std::size_t index = 0;
+         index < calibration->parameters.size(); ++index) {
+        const auto& parameter = calibration->parameters[index];
+        response.parameters.push_back({
+            parameter.id,
+            parameter.scope,
+            parameter.lower_bound->dimension,
+            initial[index],
+            values[index],
+            lower[index],
+            upper[index],
+            parameter.targets,
+        });
+    }
+    response.fitted_model_json =
+        detail::serialize_model_document_json(document);
     response.status = OperationStatus::succeeded;
     return response;
 }

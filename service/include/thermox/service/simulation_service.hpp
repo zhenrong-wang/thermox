@@ -318,6 +318,68 @@ struct SteadySimulationResponse {
     }
 };
 
+struct CalibrationSolverSettings {
+    int max_iterations{20};
+    double initial_step_fraction{0.1};
+    double minimum_step_fraction{1.0e-4};
+    double step_reduction{0.5};
+    SteadySolverSettings simulation_solver;
+};
+
+struct CalibrationRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string calibration_id;
+    CalibrationSolverSettings solver;
+};
+
+struct CalibrationParameterEstimate {
+    std::string id;
+    std::string scope;
+    std::string dimension;
+    double initial_value_si{0.0};
+    double fitted_value_si{0.0};
+    double lower_bound_si{0.0};
+    double upper_bound_si{0.0};
+    std::vector<std::string> targets;
+};
+
+struct CalibrationObservationResidual {
+    std::string id;
+    std::string case_id;
+    std::string target;
+    std::string dimension;
+    double measured_si{0.0};
+    double predicted_si{0.0};
+    double sigma_si{0.0};
+    double residual_si{0.0};
+    double normalized_residual{0.0};
+};
+
+struct CalibrationDiagnostics {
+    bool converged{false};
+    int iterations{0};
+    int objective_evaluations{0};
+    double initial_objective{0.0};
+    double final_objective{0.0};
+    std::string message;
+};
+
+struct CalibrationResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    ExecutionMetadata metadata;
+    std::string calibration_id;
+    CalibrationDiagnostics diagnostics;
+    std::vector<CalibrationParameterEstimate> parameters;
+    std::vector<CalibrationObservationResidual> observations;
+    std::string fitted_model_json;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct TransientSolverSettings {
     double start_time{0.0};
     double end_time{1.0};
@@ -369,6 +431,8 @@ public:
         const CatalogRequest& request = {}) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
+    [[nodiscard]] CalibrationResponse run_calibration(
+        const CalibrationRequest& request) const;
     [[nodiscard]] TransientSimulationResponse run_transient(
         const TransientSimulationRequest& request) const;
 

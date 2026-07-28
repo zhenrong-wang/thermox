@@ -262,4 +262,52 @@ void validate_calibration_observation_contracts(
     }
 }
 
+ScalarValue& require_calibration_parameter_target(
+    ModelDocument& document,
+    const std::string& target) {
+    constexpr std::string_view marker{".parameters."};
+    const auto resolve = [&](std::string_view prefix,
+                             auto& owners) -> ScalarValue& {
+        const std::string_view path{target};
+        const auto split = path.find(marker, prefix.size());
+        if (!path.starts_with(prefix) ||
+            split == std::string_view::npos) {
+            throw std::invalid_argument(
+                "invalid calibration parameter target: " +
+                target);
+        }
+        const std::string owner_id{
+            path.substr(prefix.size(), split - prefix.size())};
+        const std::string parameter_name{
+            path.substr(split + marker.size())};
+        for (auto& owner : owners) {
+            if (owner.id == owner_id) {
+                const auto parameter =
+                    owner.parameters.find(parameter_name);
+                if (parameter != owner.parameters.end()) {
+                    return parameter->second;
+                }
+            }
+        }
+        throw std::invalid_argument(
+            "unresolved calibration parameter target: " +
+            target);
+    };
+    if (std::string_view{target}.starts_with("components.")) {
+        return resolve("components.", document.components);
+    }
+    if (std::string_view{target}.starts_with("connections.")) {
+        return resolve("connections.", document.connections);
+    }
+    throw std::invalid_argument(
+        "invalid calibration parameter target: " + target);
+}
+
+const ScalarValue& require_calibration_parameter_target(
+    const ModelDocument& document,
+    const std::string& target) {
+    return require_calibration_parameter_target(
+        const_cast<ModelDocument&>(document), target);
+}
+
 }  // namespace thermox::platform

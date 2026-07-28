@@ -315,6 +315,45 @@ void test_calibration_observation_contract_validation() {
         "bad calibration observation must have a stable diagnostic code");
 }
 
+void test_bounded_calibration_service() {
+    thermox::service::SimulationService service;
+    thermox::service::CalibrationRequest request;
+    request.model_json =
+        read_source_file("core/examples/air_compressor.json");
+    request.calibration_id = "acceptance_fit";
+    request.solver.max_iterations = 16;
+
+    const auto response = service.run_calibration(request);
+    require(
+        response.succeeded(),
+        "bounded calibration must succeed: " +
+            response.error.message);
+    require(
+        response.parameters.size() == 1 &&
+            response.observations.size() == 2,
+        "multi-case calibration must report fitted parameter and residuals");
+    require(
+        response.diagnostics.final_objective <
+            response.diagnostics.initial_objective,
+        "calibration must reduce the weighted objective");
+    require(
+        response.parameters.front().fitted_value_si >= 0.75 &&
+            response.parameters.front().fitted_value_si <= 0.95,
+        "fitted parameter must remain inside declared bounds");
+    require(
+        !response.fitted_model_json.empty(),
+        "calibration must return a reusable fitted model");
+    const auto json =
+        thermox::service::serialize_calibration_response_json(
+            response);
+    require(
+        json.find("\"normalized_residual\":") !=
+                std::string::npos &&
+            json.find("\"fitted_model_json\":") !=
+                std::string::npos,
+        "calibration JSON must expose residuals and fitted model");
+}
+
 void test_component_version_is_enforced() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -744,6 +783,7 @@ int main() {
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();
         test_calibration_observation_contract_validation();
+        test_bounded_calibration_service();
         test_component_version_is_enforced();
         test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();

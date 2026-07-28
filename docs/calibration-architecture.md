@@ -76,6 +76,18 @@ and checks that measured dimensions match the exposed primary or derived result.
 composition-aware material ports both expose derived temperature, so measured gas-path
 temperatures can participate in gas-turbine calibration without becoming connector unknowns.
 
-The next service slice will execute bounded, multi-case estimation by repeatedly invoking the
-ordinary simulation workflow. The numeric solver and component models will remain unaware of
-calibration campaigns.
+The service executes bounded, multi-case estimation by repeatedly invoking the ordinary steady
+simulation workflow. Its dependency-free reference optimizer is a deterministic coordinate search:
+candidate solve failures are rejected, every observation is weighted by its declared uncertainty,
+and priors contribute normalized penalty residuals. Evaluations and case solves remain sequential
+to bound host resource use.
+
+The response includes initial/fitted values, bounds, per-observation physical and normalized
+residuals, objective diagnostics, complete execution settings, and a canonical fitted model that
+can be submitted directly for independent validation runs.
+
+Coordinate search is intended for a small number of engineering calibration parameters. A later
+optimizer interface can add trust-region least squares and covariance/identifiability analysis
+without changing model, component, property, or observation contracts. Transient estimation is
+also a later workflow; the first implementation intentionally accepts steady cases only. The
+numeric solver and component models remain unaware of calibration campaigns.

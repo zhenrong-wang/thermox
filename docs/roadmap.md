@@ -236,10 +236,11 @@ Next:
 1. Resolve observation targets against registered graph result variables and dimensions. ✅
 2. Derive thermodynamic results, including temperature, for composition-aware material ports. ✅
 3. Add an estimation service command that evaluates bounded multi-case objectives through the
-   ordinary simulation workflow.
-4. Report fitted parameters, covariance/identifiability diagnostics, per-observation residuals,
-   and complete provenance.
-5. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
+   ordinary simulation workflow. ✅
+4. Report fitted parameters, per-observation residuals, fitted canonical models, and complete
+   provenance. ✅
+5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
+6. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
    the independent part-load cases.
 
 See `docs/calibration-architecture.md`.

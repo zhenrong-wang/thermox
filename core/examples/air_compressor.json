@@ -62,6 +62,39 @@
           "unit": "MW"
         }
       }
+    },
+    {
+      "id": "part_load",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {
+          "value": 80.0,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "compressor.inlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.outlet.p": {
+          "value": 1.2,
+          "unit": "MPa"
+        },
+        "compressor.outlet.h": {
+          "value": 650.0,
+          "unit": "kJ/kg"
+        },
+        "compressor.shaft.W_dot": {
+          "value": 28.0,
+          "unit": "MW"
+        }
+      }
     }
   ],
   "calibrations": [
@@ -76,7 +109,8 @@
             "components.compressor.parameters.eta_is"
           ],
           "cases": [
-            "design"
+            "design",
+            "part_load"
           ],
           "bounds": {
             "lower": 0.75,
@@ -95,6 +129,19 @@
           "target": "compressor.shaft.W_dot",
           "measured": {
             "value": 35.0,
+            "unit": "MW"
+          },
+          "sigma": {
+            "value": 0.5,
+            "unit": "MW"
+          }
+        },
+        {
+          "id": "part_load_shaft_power",
+          "case": "part_load",
+          "target": "compressor.shaft.W_dot",
+          "measured": {
+            "value": 28.0,
             "unit": "MW"
           },
           "sigma": {
