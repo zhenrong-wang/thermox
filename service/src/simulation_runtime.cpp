@@ -135,6 +135,9 @@ std::string catalog_fingerprint(
         hash_text(hash, artifact->checksum_sha256);
     }
     hash_text(hash, "thermox.connector.fluid/v1:m_dot,p,h");
+    hash_text(
+        hash,
+        "thermox.connector.material/v1:p,h,m_dot[species]");
     hash_text(hash, "thermox.connector.heat/v1:Q_dot,T");
     hash_text(hash, "thermox.connector.shaft/v1:W_dot,omega");
     hash_text(hash, "thermox.connector.electrical/v1:P,frequency");

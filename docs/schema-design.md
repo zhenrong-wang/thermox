@@ -88,8 +88,9 @@ annotations:
 ### 5.1 Fluid domain
 
 Port names, domains, directions, and maximum connection counts come exclusively from the resolved
-component descriptor. Component instances bind a declared medium only to their fluid ports.
-Heat, shaft, signal, and control ports require no instance declaration.
+component descriptor. Component instances bind a declared medium only to their fluid ports and a
+declared material only to their composition-aware material ports. Heat, shaft, electrical, signal,
+and control ports require no instance declaration.
 
 ```yaml
 kind: turbine.fluid.isentropic_efficiency
@@ -103,7 +104,6 @@ Canonical solver variables:
 - `m_dot` — kg/s; positive follows the declared port direction and negative represents reversal.
 - `p` — Pa.
 - `h` — J/kg.
-- `composition` — mass or mole fractions for mixtures (future extension).
 
 `T`, entropy, density, phase, and vapor quality are property-derived results, not redundant
 connector unknowns. A normal directed `fluid_link` equates `m_dot`, `p`, and `h` at its two ends.
@@ -115,14 +115,34 @@ that engineering boundary condition into a property-backed PH equation; it does 
 temperature unknown. This allows natural `(p,T)` boundary input while preserving a non-redundant
 connector formulation.
 
-### 5.2 Heat domain
+### 5.2 Material domain
+
+Reacting and composition-aware streams use a model-level material definition:
+
+```yaml
+materials:
+  - id: wet_air
+    backend: cantera
+    mechanism: gri30.yaml
+    phase: gri30
+    package_version: 3.2.0
+    species: [N2, O2, H2O]
+```
+
+Component instances bind material ports through `materials`, separately from fixed-composition
+fluid `media`. The canonical variables are `p`, `h`, and one `m_dot[species]` in kg/s for every
+species in the declared basis. Species mass flow is transported directly so connections and
+components can conserve each species without redundant fraction-normalization equations. A
+`material_link` equates that complete, material-specific variable set.
+
+### 5.3 Heat domain
 
 Canonical variables:
 
 - `Q_dot` — W.
 - `T` — K.
 
-### 5.3 Shaft domain
+### 5.4 Shaft domain
 
 Canonical variables:
 
@@ -130,7 +150,7 @@ Canonical variables:
 - `omega` — rad/s where maps require speed.
 - optional torque.
 
-### 5.4 Electrical domain
+### 5.5 Electrical domain
 
 Canonical variables:
 
@@ -141,7 +161,7 @@ The `thermox.connector.electrical/v1` contract is distinct from the shaft contra
 converts shaft power and angular speed into electrical power and frequency; a shaft train balances
 driver power against mechanical loads and explicit losses.
 
-### 5.5 Signal/control domain
+### 5.6 Signal/control domain
 
 Signal ports do not create conservation equations automatically. They supply scalar/vector values to component equations.
 
@@ -163,8 +183,10 @@ Connection kinds are required and must match the registry-owned endpoint domain.
 the exact domain contract with `contract_version`; compilation rejects a mismatch.
 
 - `fluid_link`: normal directed fluid connection.
+- `material_link`: composition-aware stream connection with a declared species basis.
 - `heat_link`: heat transfer connection.
 - `shaft_link`: mechanical power/speed connection.
+- `electrical_link`: electrical power/frequency connection.
 - `signal_link`: control/equation signal.
 
 Every built-in port currently has maximum connection count `1`. A direct fan-out is invalid because

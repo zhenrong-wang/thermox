@@ -10,6 +10,7 @@ namespace thermox::platform {
 namespace {
 
 using component_model_support::require_port_variable;
+using component_model_support::require_port_species;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
 
@@ -253,6 +254,65 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class FrozenMaterialPressureRatioModel final
+    : public ComponentModel {
+public:
+    FrozenMaterialPressureRatioModel()
+        : descriptor_(make_descriptor(
+              "transport.material.frozen_pressure_ratio",
+              {{"inlet", "material", "in"},
+               {"outlet", "material", "out"}})) {
+        descriptor_.parameters = {
+            {"pressure_ratio", "dimensionless", true,
+             std::nullopt, 0.0, 1.0, false, true}};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto inlet_species =
+            require_port_species(context, "inlet");
+        const auto outlet_species =
+            require_port_species(context, "outlet");
+        if (inlet_species != outlet_species) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+        const double ratio = required_parameter(
+            context.component, "pressure_ratio");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "pressure_ratio",
+            {{require_port_variable(context, "outlet.p"), 1.0},
+             {require_port_variable(context, "inlet.p"), -ratio}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "frozen_enthalpy",
+            {{require_port_variable(context, "outlet.h"), 1.0},
+             {require_port_variable(context, "inlet.h"), -1.0}},
+            0.0, 100000.0);
+        for (const auto& species : inlet_species) {
+            const auto variable = "m_dot[" + species + "]";
+            system.add_linear_equation(
+                prefix + "species." + species,
+                {{require_port_variable(
+                      context, "outlet." + variable), 1.0},
+                 {require_port_variable(
+                      context, "inlet." + variable), -1.0}},
+                0.0, 100.0);
+        }
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_transport_component_models(
@@ -264,6 +324,8 @@ void register_transport_component_models(
     registry.register_model(
         std::make_shared<
             IsenthalpicPressureRatioValveModel>());
+    registry.register_model(
+        std::make_shared<FrozenMaterialPressureRatioModel>());
 }
 
 }  // namespace thermox::platform

@@ -671,6 +671,8 @@ void test_component_catalog_exposes_parameter_contracts() {
     std::vector<std::string> expected_kinds = {
         "source.fluid.boundary",
         "sink.fluid.boundary",
+        "source.material.boundary",
+        "sink.material.boundary",
         "source.heat.boundary",
         "sink.heat.boundary",
         "source.electrical.boundary",
@@ -685,6 +687,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
         "valve.fluid.isenthalpic_pressure_ratio",
+        "transport.material.frozen_pressure_ratio",
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "evaporator.fluid.fixed_outlet_quality",
@@ -1701,6 +1704,86 @@ void test_generic_model_solves_isenthalpic_valve() {
         result.x.at(require_variable_index(
             graph.problem.variable_names, "valve.outlet.h")),
         1.2e6, 1.0e-7, "valve preserves enthalpy");
+}
+
+void test_material_connector_and_frozen_transport() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "frozen_material_transport",
+    "media": [],
+    "materials": [{
+      "id": "wet_air",
+      "backend": "test_thermochemistry",
+      "mechanism": "air.yaml",
+      "phase": "gas",
+      "species": ["N2", "O2", "H2O"]
+    }],
+    "components": [{
+      "id": "source",
+      "kind": "source.material.boundary",
+      "materials": {"outlet": "wet_air"}
+    }, {
+      "id": "duct",
+      "kind": "transport.material.frozen_pressure_ratio",
+      "parameters": {"pressure_ratio": 0.9},
+      "materials": {"inlet": "wet_air", "outlet": "wet_air"}
+    }, {
+      "id": "sink",
+      "kind": "sink.material.boundary",
+      "materials": {"inlet": "wet_air"}
+    }],
+    "connections": [{
+      "id": "source_to_duct",
+      "kind": "material_link",
+      "contract_version": "thermox.connector.material/v1",
+      "from": "source.outlet",
+      "to": "duct.inlet"
+    }, {
+      "id": "duct_to_sink",
+      "kind": "material_link",
+      "from": "duct.outlet",
+      "to": "sink.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "source.outlet.p": {"value": 200.0, "unit": "kPa"},
+      "source.outlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "source.outlet.m_dot[N2]": {"value": 7.5, "unit": "kg/s"},
+      "source.outlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "source.outlet.m_dot[H2O]": {"value": 0.5, "unit": "kg/s"}
+    }
+  }]
+})json");
+
+    require(document.materials.size() == 1 &&
+                document.materials.front().species.size() == 3,
+            "material species basis must survive model parsing");
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("sink.inlet.p"), 180000.0, 1.0e-7,
+                 "frozen material transport applies pressure ratio");
+    require_near(value("sink.inlet.h"), 500000.0, 1.0e-7,
+                 "frozen material transport preserves enthalpy");
+    require_near(value("sink.inlet.m_dot[N2]"), 7.5, 1.0e-10,
+                 "material connector conserves nitrogen mass");
+    require_near(value("sink.inlet.m_dot[O2]"), 2.0, 1.0e-10,
+                 "material connector conserves oxygen mass");
+    require_near(value("sink.inlet.m_dot[H2O]"), 0.5, 1.0e-10,
+                 "material connector conserves water mass");
 }
 
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
@@ -3188,6 +3271,7 @@ int main() {
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
+        test_material_connector_and_frozen_transport();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();

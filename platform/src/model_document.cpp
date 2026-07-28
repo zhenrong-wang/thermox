@@ -577,6 +577,20 @@ const JsonValue& require_array_member(const JsonValue& object, const std::string
     return value;
 }
 
+const JsonValue* optional_array_member(
+    const JsonValue& object,
+    const std::string& key) {
+    const JsonValue* value = find_member(object, key);
+    if (value == nullptr) {
+        return nullptr;
+    }
+    if (value->type != JsonValue::Type::Array) {
+        throw std::invalid_argument(
+            "field '" + key + "' must be an array");
+    }
+    return value;
+}
+
 const JsonValue* optional_object_member(const JsonValue& object, const std::string& key) {
     const JsonValue* value = find_member(object, key);
     if (value == nullptr) {
@@ -625,7 +639,43 @@ MediumDefinition parse_medium(const JsonValue& value) {
     return medium;
 }
 
-ComponentDefinition parse_component(const JsonValue& value, const std::set<std::string>& medium_ids) {
+MaterialDefinition parse_material(const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "materials entries must be objects");
+    }
+    MaterialDefinition material;
+    material.id = require_string(value, "id");
+    material.backend = require_string(value, "backend");
+    material.mechanism = require_string(value, "mechanism");
+    material.phase = require_string(value, "phase");
+    material.package_version =
+        optional_string(value, "package_version");
+    std::set<std::string> unique_species;
+    for (const auto& entry :
+         require_array_member(value, "species").array) {
+        const auto name = require_string_value(
+            entry, "material '" + material.id + "'.species");
+        if (name.empty() ||
+            !unique_species.insert(name).second) {
+            throw std::invalid_argument(
+                "material '" + material.id +
+                "' species must be non-empty and unique");
+        }
+        material.species.push_back(name);
+    }
+    if (material.species.empty()) {
+        throw std::invalid_argument(
+            "material '" + material.id +
+            "' must declare at least one species");
+    }
+    return material;
+}
+
+ComponentDefinition parse_component(
+    const JsonValue& value,
+    const std::set<std::string>& medium_ids,
+    const std::set<std::string>& material_ids) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("components entries must be objects");
     }
@@ -652,6 +702,27 @@ ComponentDefinition parse_component(const JsonValue& value, const std::set<std::
             }
             component.medium_bindings.emplace(
                 port_name, medium_id);
+        }
+    }
+
+    if (const JsonValue* materials =
+            optional_object_member(value, "materials")) {
+        for (const auto& [port_name, material_value] :
+             materials->object) {
+            const std::string material_id =
+                require_string_value(
+                    material_value,
+                    "component '" + component.id +
+                        "'.materials." + port_name);
+            if (material_ids.find(material_id) ==
+                material_ids.end()) {
+                throw std::invalid_argument(
+                    "unknown material referenced by component '" +
+                    component.id + "' port '" + port_name +
+                    "': " + material_id);
+            }
+            component.material_bindings.emplace(
+                port_name, material_id);
         }
     }
 
@@ -763,15 +834,34 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
     document.revision = optional_string(model, "revision");
 
     std::set<std::string> medium_ids;
+    std::set<std::string> all_binding_ids;
     for (const JsonValue& medium_value : require_array_member(model, "media").array) {
         MediumDefinition medium = parse_medium(medium_value);
         require_unique_id(medium.id, medium_ids, "medium");
+        require_unique_id(
+            medium.id, all_binding_ids, "medium or material");
         document.media.push_back(std::move(medium));
+    }
+    std::set<std::string> material_ids;
+    if (const auto* materials =
+            optional_array_member(model, "materials")) {
+        for (const JsonValue& material_value :
+             materials->array) {
+            MaterialDefinition material =
+                parse_material(material_value);
+            require_unique_id(
+                material.id, material_ids, "material");
+            require_unique_id(
+                material.id, all_binding_ids,
+                "medium or material");
+            document.materials.push_back(std::move(material));
+        }
     }
 
     std::set<std::string> component_ids;
     for (const JsonValue& component_value : require_array_member(model, "components").array) {
-        ComponentDefinition component = parse_component(component_value, medium_ids);
+        ComponentDefinition component = parse_component(
+            component_value, medium_ids, material_ids);
         require_unique_id(component.id, component_ids, "component");
         document.components.push_back(std::move(component));
     }

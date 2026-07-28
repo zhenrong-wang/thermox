@@ -323,6 +323,34 @@ std::string serialize_model_document_json(
         }
         out << "}" << (i + 1 == document.media.size() ? "\n" : ",\n");
     }
+    out << "    ],\n    \"materials\": [";
+    if (!document.materials.empty()) out << "\n";
+    for (std::size_t i = 0;
+         i < document.materials.size(); ++i) {
+        const auto& material = document.materials[i];
+        out << "      {\"id\": ";
+        json_string(out, material.id);
+        out << ", \"backend\": ";
+        json_string(out, material.backend);
+        out << ", \"mechanism\": ";
+        json_string(out, material.mechanism);
+        out << ", \"phase\": ";
+        json_string(out, material.phase);
+        if (!material.package_version.empty()) {
+            out << ", \"package_version\": ";
+            json_string(out, material.package_version);
+        }
+        out << ", \"species\": [";
+        for (std::size_t species = 0;
+             species < material.species.size(); ++species) {
+            if (species != 0) out << ", ";
+            json_string(out, material.species[species]);
+        }
+        out << "]}"
+            << (i + 1 == document.materials.size()
+                    ? "\n"
+                    : ",\n");
+    }
     out << "    ],\n    \"components\": [";
     if (!document.components.empty()) out << "\n";
     for (std::size_t i = 0; i < document.components.size(); ++i) {
@@ -348,6 +376,18 @@ std::string serialize_model_document_json(
                 json_string(out, port_name);
                 out << ": ";
                 json_string(out, medium_id);
+            }
+            out << "}";
+        }
+        if (!component.material_bindings.empty()) {
+            out << ",\n        \"materials\": {";
+            std::size_t binding_index = 0;
+            for (const auto& [port_name, material_id] :
+                 component.material_bindings) {
+                if (binding_index++ != 0) out << ", ";
+                json_string(out, port_name);
+                out << ": ";
+                json_string(out, material_id);
             }
             out << "}";
         }

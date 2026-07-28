@@ -79,6 +79,7 @@ struct ComponentCompileContext {
     const CaseDefinition* active_case{nullptr};
     std::map<std::string, std::size_t> port_variables;
     std::map<std::string, std::size_t> internal_variables;
+    std::map<std::string, std::vector<std::string>> port_species;
     std::map<std::string, std::shared_ptr<const physics::PropertyPackage>> port_properties;
     std::map<
         std::string,

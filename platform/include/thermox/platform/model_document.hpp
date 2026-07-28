@@ -19,12 +19,22 @@ struct MediumDefinition {
     std::string package_version;
 };
 
+struct MaterialDefinition {
+    std::string id;
+    std::string backend;
+    std::string mechanism;
+    std::string phase;
+    std::string package_version;
+    std::vector<std::string> species;
+};
+
 struct ComponentDefinition {
     std::string id;
     std::string label;
     std::string kind;
     std::string version;
     std::map<std::string, std::string> medium_bindings;
+    std::map<std::string, std::string> material_bindings;
     std::map<std::string, std::string> artifact_bindings;
     std::map<std::string, ScalarValue> parameters;
 };
@@ -53,6 +63,7 @@ struct ModelDocument {
     std::string name;
     std::string revision;
     std::vector<MediumDefinition> media;
+    std::vector<MaterialDefinition> materials;
     std::vector<ComponentDefinition> components;
     std::vector<ConnectionDefinition> connections;
     std::vector<CaseDefinition> cases;

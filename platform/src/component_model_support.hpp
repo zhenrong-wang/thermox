@@ -53,6 +53,18 @@ inline std::size_t require_internal_variable(
     return it->second;
 }
 
+inline const std::vector<std::string>& require_port_species(
+    const ComponentCompileContext& context,
+    const std::string& port) {
+    const auto it = context.port_species.find(port);
+    if (it == context.port_species.end()) {
+        throw std::logic_error(
+            "compiled material species basis missing: " +
+            context.component.id + "." + port);
+    }
+    return it->second;
+}
+
 inline std::shared_ptr<const physics::PropertyPackage>
 require_property_package(
     const ComponentCompileContext& context,

@@ -19,7 +19,9 @@ struct CanonicalVariableSpec {
     std::string dimension{"dimensionless"};
 };
 
-std::vector<CanonicalVariableSpec> canonical_variables_for_domain(const std::string& domain) {
+std::vector<CanonicalVariableSpec> canonical_variables_for_domain(
+    const std::string& domain,
+    const std::vector<std::string>& species = {}) {
     if (domain == "fluid") {
         return {{"m_dot", 1.0, 100.0, "mass_flow"},
                 {"p", 101325.0, 100000.0, "pressure"},
@@ -38,6 +40,18 @@ std::vector<CanonicalVariableSpec> canonical_variables_for_domain(const std::str
     if (domain == "electrical") {
         return {{"P", 0.0, 1000000.0, "power"},
                 {"frequency", 50.0, 50.0, "frequency"}};
+    }
+    if (domain == "material") {
+        std::vector<CanonicalVariableSpec> variables{
+            {"p", 101325.0, 100000.0, "pressure"},
+            {"h", 300000.0, 100000.0,
+             "specific_enthalpy"}};
+        for (const auto& name : species) {
+            variables.push_back(
+                {"m_dot[" + name + "]", 0.01, 100.0,
+                 "mass_flow"});
+        }
+        return variables;
     }
     if (domain == "signal" || domain == "control") {
         return {{"value", 0.0, 1.0, "dimensionless"}};
@@ -110,6 +124,36 @@ const std::string& require_medium_binding(
     return medium->second;
 }
 
+const std::string& require_material_binding(
+    const ComponentDefinition& component,
+    const std::string& port_name) {
+    const auto material =
+        component.material_bindings.find(port_name);
+    if (material == component.material_bindings.end()) {
+        throw std::invalid_argument(
+            "component '" + component.id +
+            "' is missing material binding for material port: " +
+            port_name);
+    }
+    return material->second;
+}
+
+const MaterialDefinition& find_material(
+    const ModelDocument& document,
+    const std::string& material_id) {
+    const auto it = std::find_if(
+        document.materials.begin(), document.materials.end(),
+        [&](const auto& material) {
+            return material.id == material_id;
+        });
+    if (it == document.materials.end()) {
+        throw std::invalid_argument(
+            "unknown material binding during graph compilation: " +
+            material_id);
+    }
+    return *it;
+}
+
 using MediumPropertyMap =
     std::map<
         std::string,
@@ -139,6 +183,7 @@ MediumPropertyMap create_medium_properties(
 
 std::string required_connection_kind(const std::string& domain) {
     if (domain == "fluid") return "fluid_link";
+    if (domain == "material") return "material_link";
     if (domain == "heat") return "heat_link";
     if (domain == "shaft") return "shaft_link";
     if (domain == "electrical") return "electrical_link";
@@ -153,6 +198,9 @@ std::string required_connection_kind(const std::string& domain) {
 std::string required_connection_contract(
     const std::string& domain) {
     if (domain == "fluid") return "thermox.connector.fluid/v1";
+    if (domain == "material") {
+        return "thermox.connector.material/v1";
+    }
     if (domain == "heat") return "thermox.connector.heat/v1";
     if (domain == "shaft") return "thermox.connector.shaft/v1";
     if (domain == "electrical") {
@@ -171,6 +219,7 @@ struct ValidatedConnection {
     std::string to_component;
     std::string to_port;
     std::string domain;
+    std::vector<std::string> species;
 };
 
 ValidatedConnection validate_connection(
@@ -183,6 +232,7 @@ ValidatedConnection validate_connection(
         endpoint_port(connection.from),
         endpoint_component(connection.to),
         endpoint_port(connection.to),
+        {},
         {},
     };
     const auto& from_definition =
@@ -241,6 +291,21 @@ ValidatedConnection validate_connection(
             "connection '" + connection.id +
             "' links incompatible fluid media");
     }
+    if (from_port.domain == "material" &&
+        require_material_binding(
+            from_definition, result.from_port) !=
+            require_material_binding(
+                to_definition, result.to_port)) {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' links incompatible material definitions");
+    }
+    if (from_port.domain == "material") {
+        result.species = find_material(
+            document,
+            require_material_binding(
+                from_definition, result.from_port)).species;
+    }
     const auto count_connection =
         [&](const std::string& endpoint,
             const PortModelDescriptor& port) {
@@ -296,20 +361,38 @@ void validate_component_bindings(
             model.descriptor().version + "'");
     }
     for (const auto& expected : expected_ports) {
-        const auto binding =
+        const auto medium_binding =
             component.medium_bindings.find(expected.name);
+        const auto material_binding =
+            component.material_bindings.find(expected.name);
         if (expected.domain == "fluid" &&
-            binding == component.medium_bindings.end()) {
+            medium_binding == component.medium_bindings.end()) {
             throw std::invalid_argument(
                 "component '" + component.id +
                 "' is missing medium binding for fluid port: " +
                 expected.name);
         }
+        if (expected.domain == "material" &&
+            material_binding ==
+                component.material_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' is missing material binding for material port: " +
+                expected.name);
+        }
         if (expected.domain != "fluid" &&
-            binding != component.medium_bindings.end()) {
+            medium_binding != component.medium_bindings.end()) {
             throw std::invalid_argument(
                 "component '" + component.id +
                 "' supplies a medium binding for non-fluid port: " +
+                expected.name);
+        }
+        if (expected.domain != "material" &&
+            material_binding !=
+                component.material_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' supplies a material binding for non-material port: " +
                 expected.name);
         }
     }
@@ -324,6 +407,20 @@ void validate_component_bindings(
             throw std::invalid_argument(
                 "component '" + component.id +
                 "' binds a medium to unknown port for kind '" +
+                component.kind + "': " + bound_port);
+        }
+    }
+    for (const auto& [bound_port, _] :
+         component.material_bindings) {
+        const auto expected = std::find_if(
+            expected_ports.begin(), expected_ports.end(),
+            [&](const auto& port) {
+                return port.name == bound_port;
+            });
+        if (expected == expected_ports.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' binds a material to unknown port for kind '" +
                 component.kind + "': " + bound_port);
         }
     }
@@ -654,7 +751,7 @@ CompiledModelGraph compile_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}};
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -667,8 +764,20 @@ CompiledModelGraph compile_model_graph(
                                            medium_id);
                 context.port_properties.emplace(
                     port.name, package->second);
+            } else if (port.domain == "material") {
+                medium_id =
+                    require_material_binding(component, port.name);
+                context.port_species.emplace(
+                    port.name,
+                    find_material(document, medium_id).species);
             }
-            for (const auto& spec : canonical_variables_for_domain(port.domain)) {
+            const auto species = context.port_species.find(
+                port.name);
+            for (const auto& spec : canonical_variables_for_domain(
+                     port.domain,
+                     species == context.port_species.end()
+                         ? std::vector<std::string>{}
+                         : species->second)) {
                 const std::string full_name =
                     variable_key(component.id, port.name, spec.name);
                 double initial = spec.initial_value;
@@ -700,7 +809,8 @@ CompiledModelGraph compile_model_graph(
         const auto endpoints = validate_connection(
             document, registry, connection, connection_counts);
         for (const auto& spec :
-             canonical_variables_for_domain(endpoints.domain)) {
+             canonical_variables_for_domain(
+                 endpoints.domain, endpoints.species)) {
             const std::string from_key = variable_key(
                 endpoints.from_component, endpoints.from_port, spec.name);
             const std::string to_key = variable_key(
@@ -934,7 +1044,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}};
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -949,9 +1059,21 @@ CompiledTransientModelGraph compile_transient_model_graph(
                 }
                 context.port_properties.emplace(
                     port.name, package->second);
+            } else if (port.domain == "material") {
+                medium_id =
+                    require_material_binding(component, port.name);
+                context.port_species.emplace(
+                    port.name,
+                    find_material(document, medium_id).species);
             }
+            const auto species = context.port_species.find(
+                port.name);
             for (const auto& spec :
-                 canonical_variables_for_domain(port.domain)) {
+                 canonical_variables_for_domain(
+                     port.domain,
+                     species == context.port_species.end()
+                         ? std::vector<std::string>{}
+                         : species->second)) {
                 const std::string full_name =
                     variable_key(
                         component.id, port.name, spec.name);
@@ -1024,7 +1146,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
         const auto endpoints = validate_connection(
             document, registry, connection, connection_counts);
         for (const auto& spec :
-             canonical_variables_for_domain(endpoints.domain)) {
+             canonical_variables_for_domain(
+                 endpoints.domain, endpoints.species)) {
             const auto from_it = variable_indices.find(variable_key(
                 endpoints.from_component, endpoints.from_port,
                 spec.name));

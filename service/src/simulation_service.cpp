@@ -303,6 +303,7 @@ ExecutionMetadata execution_metadata(
     }
     metadata.connector_domains = {
         {"fluid", "thermox.connector.fluid/v1"},
+        {"material", "thermox.connector.material/v1"},
         {"heat", "thermox.connector.heat/v1"},
         {"shaft", "thermox.connector.shaft/v1"},
         {"electrical", "thermox.connector.electrical/v1"},
@@ -681,6 +682,10 @@ CatalogResponse SimulationService::get_catalog(
          {{"m_dot", "mass_flow"},
           {"p", "pressure"},
           {"h", "specific_enthalpy"}}},
+        {"material", "thermox.connector.material/v1",
+         {{"p", "pressure"},
+          {"h", "specific_enthalpy"},
+          {"m_dot[species]", "mass_flow"}}},
         {"heat", "thermox.connector.heat/v1",
          {{"Q_dot", "power"}, {"T", "temperature"}}},
         {"shaft", "thermox.connector.shaft/v1",

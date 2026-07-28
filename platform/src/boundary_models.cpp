@@ -32,6 +32,14 @@ void register_boundary_component_models(ComponentRegistry& registry) {
             {{"inlet", "fluid", "in"}}, true)));
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
+            "source.material.boundary",
+            {{"outlet", "material", "out"}}, false)));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.material.boundary",
+            {{"inlet", "material", "in"}}, false)));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
             "source.heat.boundary",
             {{"outlet", "heat", "out"}}, true)));
     registry.register_model(std::make_shared<MetadataComponentModel>(
