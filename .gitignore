@@ -1,4 +1,5 @@
 /build*/
+/tmp/
 
 # Local compiler and editor output
 *.o

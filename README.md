@@ -20,6 +20,7 @@ isolated example models.
 - [Service Architecture](docs/service-architecture.md)
 - [Graph Platform Architecture Review](docs/graph-platform-review.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
+- [Performance Map Architecture](docs/performance-maps.md)
 
 ## Current C++ numeric core
 
@@ -55,6 +56,8 @@ Implemented in this sprint:
   parameters, SI dimensions, defaults, and open/closed bounds. The compiler rejects missing,
   unknown, dimensionally incompatible, and out-of-range component parameters before equation
   assembly.
+- Generic dimensioned performance-map interpolation across non-rectangular curve families, with
+  analytic piecewise derivatives and explicit reject, clamp, or linear extrapolation policies.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
   directions, and connection cardinality come from the active runtime catalog.

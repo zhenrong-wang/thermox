@@ -229,9 +229,10 @@ Work items:
    - gas-side pressure drop
    - pinch/approach constraints
 2. Add gas turbine off-design placeholders:
-   - compressor/turbine maps
-   - map interpolation
-   - extrapolation policies
+   - generic dimensioned, non-rectangular map interpolation kernel; ✅
+   - explicit reject/clamp/linear extrapolation policies and derivatives; ✅
+   - versioned map artifacts and runtime registry;
+   - map-based compressor/turbine graph components;
 3. Add steam turbine stage/extraction support.
 4. Add design/off-design case handling.
 5. Add heat balance report generation.
