@@ -43,8 +43,8 @@ Implemented in this sprint:
   integration, and graph compiler.
 - First-class `thermox_service` application module with versioned validate, steady, and transient
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
-  compile-aware validation; structured diagnostics; reproducibility provenance; and canonical JSON
-  contracts.
+  compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
+  `thermox.result/v2` JSON with complete execution provenance.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -53,6 +53,8 @@ Implemented in this sprint:
   unknown, dimensionally incompatible, and out-of-range component parameters before equation
   assembly.
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
+- `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
+  directions, and connection cardinality come from the active runtime catalog.
 - Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
   consistent linear combinations of retained equations; reduced row names remain available as
   graph diagnostics.

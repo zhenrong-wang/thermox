@@ -101,6 +101,33 @@ const std::string& require_medium_binding(
     return medium->second;
 }
 
+using MediumPropertyMap =
+    std::map<
+        std::string,
+        std::shared_ptr<const physics::PropertyPackage>>;
+
+MediumPropertyMap create_medium_properties(
+    const ModelDocument& document,
+    const physics::PropertyPackageRegistry& property_registry) {
+    MediumPropertyMap properties;
+    for (const auto& medium : document.media) {
+        auto package =
+            property_registry.create(
+                medium.backend, medium.substance);
+        if (!medium.package_version.empty() &&
+            medium.package_version != package->version()) {
+            throw std::invalid_argument(
+                "medium '" + medium.id +
+                "' requests property package version '" +
+                medium.package_version + "' but backend '" +
+                medium.backend + "' provides version '" +
+                std::string(package->version()) + "'");
+        }
+        properties.emplace(medium.id, std::move(package));
+    }
+    return properties;
+}
+
 std::string required_connection_kind(const std::string& domain) {
     if (domain == "fluid") return "fluid_link";
     if (domain == "heat") return "heat_link";
@@ -108,6 +135,18 @@ std::string required_connection_kind(const std::string& domain) {
     if (domain == "signal" || domain == "control") {
         return "signal_link";
     }
+    throw std::invalid_argument(
+        "unsupported port domain during connection validation: " +
+        domain);
+}
+
+std::string required_connection_contract(
+    const std::string& domain) {
+    if (domain == "fluid") return "thermox.connector.fluid/v1";
+    if (domain == "heat") return "thermox.connector.heat/v1";
+    if (domain == "shaft") return "thermox.connector.shaft/v1";
+    if (domain == "signal") return "thermox.connector.signal/v1";
+    if (domain == "control") return "thermox.connector.control/v1";
     throw std::invalid_argument(
         "unsupported port domain during connection validation: " +
         domain);
@@ -168,6 +207,17 @@ ValidatedConnection validate_connection(
             "' kind '" + connection.kind +
             "' is incompatible with domain '" +
             from_port.domain + "'");
+    }
+    const auto resolved_contract =
+        required_connection_contract(from_port.domain);
+    if (!connection.contract_version.empty() &&
+        connection.contract_version != resolved_contract) {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' requests connector contract version '" +
+            connection.contract_version + "' but domain '" +
+            from_port.domain + "' provides version '" +
+            resolved_contract + "'");
     }
     if (from_port.domain == "fluid" &&
         require_medium_binding(
@@ -514,13 +564,9 @@ CompiledModelGraph compile_model_graph(
     }
 
     std::map<std::string, std::size_t> variable_indices;
-    std::map<std::string, std::shared_ptr<const physics::PropertyPackage>>
-        medium_properties;
+    auto medium_properties =
+        create_medium_properties(document, property_registry);
     std::set<std::string> seen_case_keys;
-    for (const auto& medium : document.media) {
-        medium_properties.emplace(
-            medium.id, property_registry.create(medium.backend, medium.substance));
-    }
 
     for (const ComponentDefinition& component : document.components) {
         const ComponentModel& model = registry.require_model(component.kind);
@@ -783,13 +829,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
 
     std::map<std::string, std::size_t> variable_indices;
     std::map<std::size_t, DaeVariableKind> variable_kinds;
-    std::map<std::string, std::shared_ptr<const physics::PropertyPackage>>
-        medium_properties;
-    for (const auto& medium : document.media) {
-        medium_properties.emplace(
-            medium.id,
-            property_registry.create(medium.backend, medium.substance));
-    }
+    auto medium_properties =
+        create_medium_properties(document, property_registry);
 
     for (const ComponentDefinition& component : document.components) {
         const ComponentModel& model =

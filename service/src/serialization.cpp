@@ -120,10 +120,21 @@ void execution_metadata_json(
     json_string(out, metadata.result_schema_version);
     out << ",\n    \"command_schema_version\": ";
     json_string(out, metadata.command_schema_version);
+    out << ",\n    \"platform_version\": ";
+    json_string(out, metadata.platform_version);
     out << ",\n    \"operation\": ";
     json_string(out, metadata.operation);
-    out << ",\n    \"solver_contract\": ";
-    json_string(out, metadata.solver_contract);
+    out << ",\n    \"solver\": {\"contract_version\": ";
+    json_string(out, metadata.solver.contract_version);
+    out << ", \"settings\": {";
+    for (std::size_t i = 0;
+         i < metadata.solver.settings.size(); ++i) {
+        if (i != 0) out << ", ";
+        json_string(out, metadata.solver.settings[i].name);
+        out << ": ";
+        json_number(out, metadata.solver.settings[i].value);
+    }
+    out << "}}";
     out << ",\n    \"catalog_fingerprint\": ";
     json_string(out, metadata.catalog_fingerprint);
     out << ",\n    \"model\": ";
@@ -136,8 +147,10 @@ void execution_metadata_json(
         json_string(out, component.component_id);
         out << ", \"kind\": ";
         json_string(out, component.kind);
-        out << ", \"implementation_version\": ";
-        json_string(out, component.implementation_version);
+        out << ", \"requested_version\": ";
+        json_string(out, component.requested_version);
+        out << ", \"resolved_version\": ";
+        json_string(out, component.resolved_version);
         out << "}";
     }
     out << "],\n    \"media\": [";
@@ -152,8 +165,22 @@ void execution_metadata_json(
         json_string(out, medium.substance);
         out << ", \"package\": ";
         json_string(out, medium.package);
-        out << ", \"package_version\": ";
-        json_string(out, medium.package_version);
+        out << ", \"requested_package_version\": ";
+        json_string(out, medium.requested_package_version);
+        out << ", \"resolved_package_version\": ";
+        json_string(out, medium.resolved_package_version);
+        out << "}";
+    }
+    out << "],\n    \"connector_domains\": [";
+    for (std::size_t i = 0;
+         i < metadata.connector_domains.size(); ++i) {
+        if (i != 0) out << ", ";
+        out << "{\"domain\": ";
+        json_string(out, metadata.connector_domains[i].domain);
+        out << ", \"contract_version\": ";
+        json_string(
+            out,
+            metadata.connector_domains[i].contract_version);
         out << "}";
     }
     out << "]\n  }";
@@ -232,6 +259,10 @@ std::string serialize_model_document_json(
         json_string(out, medium.backend);
         out << ", \"substance\": ";
         json_string(out, medium.substance);
+        if (!medium.package_version.empty()) {
+            out << ", \"package_version\": ";
+            json_string(out, medium.package_version);
+        }
         out << "}" << (i + 1 == document.media.size() ? "\n" : ",\n");
     }
     out << "    ],\n    \"components\": [";
@@ -281,6 +312,10 @@ std::string serialize_model_document_json(
         json_string(out, connection.to);
         out << ", \"kind\": ";
         json_string(out, connection.kind);
+        if (!connection.contract_version.empty()) {
+            out << ", \"contract_version\": ";
+            json_string(out, connection.contract_version);
+        }
         if (!connection.parameters.empty()) {
             out << ", \"parameters\": ";
             scalar_map(out, connection.parameters, "        ");
@@ -449,7 +484,7 @@ std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v1);
+    json_string(out, result_schema_v2);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -492,7 +527,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v1);
+    json_string(out, result_schema_v2);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -562,7 +597,7 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v1);
+    json_string(out, result_schema_v2);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";

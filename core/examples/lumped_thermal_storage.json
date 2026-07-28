@@ -8,11 +8,13 @@
     "components": [
       {
         "id": "heater",
-        "kind": "source.heat.boundary"
+        "kind": "source.heat.boundary",
+        "version": "1.0.0"
       },
       {
         "id": "store",
         "kind": "storage.thermal.lumped",
+        "version": "1.0.0",
         "parameters": {
           "thermal_capacity": {
             "value": 2.0,
@@ -26,7 +28,8 @@
         "id": "charging_heat",
         "from": "heater.outlet",
         "to": "store.thermal",
-        "kind": "heat_link"
+        "kind": "heat_link",
+        "contract_version": "thermox.connector.heat/v1"
       }
     ]
   },

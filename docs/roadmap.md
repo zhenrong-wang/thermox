@@ -192,6 +192,8 @@ Completed structural slices:
 - compile-aware steady/transient validation summary and structured diagnostic envelope; ✅
 - breaking `thermox.model/v2` schema with registry-derived ports and fluid-only medium bindings; ✅
 - domain-compatible connection kinds, direction checks, and explicit port cardinality; ✅
+- optional exact component/property/connector version pins plus complete result-v2 execution
+  provenance, including the platform build and effective solver settings; ✅
 
 ## Persistence boundary decision
 

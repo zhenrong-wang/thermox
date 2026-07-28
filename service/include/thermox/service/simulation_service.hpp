@@ -10,7 +10,7 @@
 namespace thermox::service {
 
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
-inline constexpr char result_schema_v1[] = "thermox.result/v1";
+inline constexpr char result_schema_v2[] = "thermox.result/v2";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
 inline constexpr char catalog_schema_v1[] = "thermox.catalog/v1";
 
@@ -128,7 +128,8 @@ struct ModelMetadata {
 struct ComponentProvenance {
     std::string component_id;
     std::string kind;
-    std::string implementation_version;
+    std::string requested_version;
+    std::string resolved_version;
 };
 
 struct MediumProvenance {
@@ -136,18 +137,36 @@ struct MediumProvenance {
     std::string backend;
     std::string substance;
     std::string package;
-    std::string package_version;
+    std::string requested_package_version;
+    std::string resolved_package_version;
+};
+
+struct ConnectorProvenance {
+    std::string domain;
+    std::string contract_version;
+};
+
+struct SolverSetting {
+    std::string name;
+    double value{0.0};
+};
+
+struct SolverProvenance {
+    std::string contract_version;
+    std::vector<SolverSetting> settings;
 };
 
 struct ExecutionMetadata {
-    std::string result_schema_version{result_schema_v1};
+    std::string result_schema_version{result_schema_v2};
     std::string command_schema_version;
+    std::string platform_version;
     std::string operation;
-    std::string solver_contract;
+    SolverProvenance solver;
     std::string catalog_fingerprint;
     ModelMetadata model;
     std::vector<ComponentProvenance> components;
     std::vector<MediumProvenance> media;
+    std::vector<ConnectorProvenance> connector_domains;
 };
 
 struct VariableValue {

@@ -76,6 +76,18 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.code = "unknown_component_parameter";
         diagnostic.suggestions = {
             "Remove the parameter or select it from the component type catalog."};
+    } else if (message.find(
+                   "requests property package version") !=
+               std::string::npos) {
+        diagnostic.code = "property_package_version_mismatch";
+        diagnostic.suggestions = {
+            "Use the property package version resolved by the active runtime catalog."};
+    } else if (message.find(
+                   "requests connector contract version") !=
+               std::string::npos) {
+        diagnostic.code = "connector_contract_version_mismatch";
+        diagnostic.suggestions = {
+            "Use the connector contract version resolved by the active runtime catalog."};
     } else if (message.find("requests version") !=
                std::string::npos) {
         diagnostic.code = "component_version_mismatch";
@@ -258,20 +270,22 @@ ExecutionMetadata execution_metadata(
     const std::string& command_schema,
     const std::string& case_id,
     std::string operation,
-    std::string solver_contract,
+    SolverProvenance solver,
     const std::string& catalog_fingerprint,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties) {
     ExecutionMetadata metadata;
     metadata.command_schema_version = command_schema;
+    metadata.platform_version = THERMOX_PLATFORM_VERSION;
     metadata.operation = std::move(operation);
-    metadata.solver_contract = std::move(solver_contract);
+    metadata.solver = std::move(solver);
     metadata.catalog_fingerprint = catalog_fingerprint;
     metadata.model = model_metadata(document, case_id);
     for (const auto& component : document.components) {
         metadata.components.push_back({
             component.id,
             component.kind,
+            component.version,
             components.require_model(component.kind).descriptor().version,
         });
     }
@@ -283,10 +297,72 @@ ExecutionMetadata execution_metadata(
             medium.backend,
             medium.substance,
             std::string(package->name()),
+            medium.package_version,
             std::string(package->version()),
         });
     }
+    metadata.connector_domains = {
+        {"fluid", "thermox.connector.fluid/v1"},
+        {"heat", "thermox.connector.heat/v1"},
+        {"shaft", "thermox.connector.shaft/v1"},
+        {"signal", "thermox.connector.signal/v1"},
+        {"control", "thermox.connector.control/v1"},
+    };
     return metadata;
+}
+
+SolverProvenance solver_provenance(
+    const SteadySolverSettings& settings) {
+    return {
+        "thermox.newton/v1",
+        {
+            {"max_iterations",
+             static_cast<double>(settings.max_iterations)},
+            {"residual_tolerance", settings.residual_tolerance},
+            {"step_tolerance", settings.step_tolerance},
+            {"finite_difference_epsilon",
+             settings.finite_difference_epsilon},
+            {"min_damping", settings.min_damping},
+            {"damping_reduction", settings.damping_reduction},
+            {"sufficient_decrease", settings.sufficient_decrease},
+            {"max_line_search_steps",
+             static_cast<double>(
+                 settings.max_line_search_steps)},
+        },
+    };
+}
+
+SolverProvenance solver_provenance(
+    const TransientSolverSettings& settings) {
+    auto provenance = SolverProvenance{
+        "thermox.dae-bdf1/v1",
+        {
+            {"start_time", settings.start_time},
+            {"end_time", settings.end_time},
+            {"initial_step", settings.initial_step},
+            {"min_step", settings.min_step},
+            {"max_step", settings.max_step},
+            {"absolute_tolerance", settings.absolute_tolerance},
+            {"relative_tolerance", settings.relative_tolerance},
+            {"max_steps", static_cast<double>(settings.max_steps)},
+            {"max_consecutive_rejections",
+             static_cast<double>(
+                 settings.max_consecutive_rejections)},
+            {"compute_consistent_initial_conditions",
+             settings.compute_consistent_initial_conditions
+                 ? 1.0
+                 : 0.0},
+        },
+    };
+    const auto nonlinear =
+        solver_provenance(settings.nonlinear_solver);
+    for (const auto& setting : nonlinear.settings) {
+        provenance.settings.push_back({
+            "nonlinear." + setting.name,
+            setting.value,
+        });
+    }
+    return provenance;
 }
 
 NonlinearDiagnostics copy_diagnostics(
@@ -590,7 +666,7 @@ SteadySimulationResponse SimulationService::run_steady(
             request.schema_version,
             graph.case_id.value_or(""),
             "steady",
-            "thermox.newton/v1",
+            solver_provenance(request.solver),
             impl_->runtime->impl_->fingerprint,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
@@ -708,7 +784,7 @@ TransientSimulationResponse SimulationService::run_transient(
             request.schema_version,
             graph.case_id.value_or(""),
             "transient",
-            "thermox.dae-bdf1/v1",
+            solver_provenance(request.solver),
             impl_->runtime->impl_->fingerprint,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);

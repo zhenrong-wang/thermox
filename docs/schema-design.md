@@ -44,6 +44,7 @@ cases: []
 id: water_steam
 backend: coolprop_if97
 substance: Water
+package_version: 8.0.0
 options:
   reference_state: IAPWS_IF97
   valid_region_policy: error
@@ -140,13 +141,15 @@ id: c_main_steam
 from: hrsg_hp_superheater.outlet
 to: st_hp.inlet
 kind: fluid_link
+contract_version: thermox.connector.fluid/v1
 parameters:
   pressure_loss:
     model: fixed_fraction
     value: 0.02
 ```
 
-Connection kinds are required and must match the registry-owned endpoint domain:
+Connection kinds are required and must match the registry-owned endpoint domain. A model may pin
+the exact domain contract with `contract_version`; compilation rejects a mismatch.
 
 - `fluid_link`: normal directed fluid connection.
 - `heat_link`: heat transfer connection.
@@ -183,11 +186,13 @@ initial_guesses:
     value: 120
     unit: bar
 solver_options:
-  nonlinear_solver: damped_newton
-  tolerance: 1.0e-8
+  residual_tolerance: 1.0e-8
   max_iterations: 80
-  scaling: auto
 ```
+
+`solver_options` in a case are descriptive model metadata. The service command owns executable
+solver settings; Thermox never silently merges case metadata with command defaults. Every
+effective command setting is recorded in `thermox.result/v2`.
 
 Case modes:
 
@@ -351,4 +356,6 @@ Minimum validation before compilation:
   during early development.
 - Component `kind` + `version` identifies equation semantics.
 - Model revisions are immutable once used for a simulation result.
-- Simulation results record schema version, component versions, property backend versions, and solver version.
+- Simulation results use `thermox.result/v2` and record the platform build, model and command
+  schemas, catalog fingerprint, requested and resolved component/property versions, connector
+  contracts, solver contract, and every effective solver setting.

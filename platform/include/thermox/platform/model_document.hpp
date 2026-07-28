@@ -16,6 +16,7 @@ struct MediumDefinition {
     std::string id;
     std::string backend;
     std::string substance;
+    std::string package_version;
 };
 
 struct ComponentDefinition {
@@ -32,6 +33,7 @@ struct ConnectionDefinition {
     std::string from;
     std::string to;
     std::string kind;
+    std::string contract_version;
     std::map<std::string, ScalarValue> parameters;
 };
 

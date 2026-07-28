@@ -8,13 +8,15 @@
       {
         "id": "water",
         "backend": "water_steam_if97",
-        "substance": "Water"
+        "substance": "Water",
+        "package_version": "8.0.0"
       }
     ],
     "components": [
       {
         "id": "pump",
         "kind": "pump.fluid.isentropic_efficiency",
+        "version": "1.0.0",
         "parameters": {
           "pressure_ratio": 50.0,
           "eta_is": 0.8
@@ -27,6 +29,7 @@
       {
         "id": "evaporator",
         "kind": "evaporator.fluid.fixed_outlet_quality",
+        "version": "2.0.0",
         "parameters": {
           "outlet_quality": 0.99
         },
@@ -38,6 +41,7 @@
       {
         "id": "turbine",
         "kind": "turbine.fluid.isentropic_efficiency",
+        "version": "1.0.0",
         "parameters": {
           "pressure_ratio": 50.0,
           "eta_is": 0.85
@@ -50,6 +54,7 @@
       {
         "id": "condenser",
         "kind": "condenser.fluid.fixed_outlet_quality",
+        "version": "2.0.0",
         "parameters": {
           "outlet_quality": 0.01
         },
@@ -64,25 +69,29 @@
         "id": "pump_to_evaporator",
         "from": "pump.outlet",
         "to": "evaporator.inlet",
-        "kind": "fluid_link"
+        "kind": "fluid_link",
+        "contract_version": "thermox.connector.fluid/v1"
       },
       {
         "id": "evaporator_to_turbine",
         "from": "evaporator.outlet",
         "to": "turbine.inlet",
-        "kind": "fluid_link"
+        "kind": "fluid_link",
+        "contract_version": "thermox.connector.fluid/v1"
       },
       {
         "id": "turbine_to_condenser",
         "from": "turbine.outlet",
         "to": "condenser.inlet",
-        "kind": "fluid_link"
+        "kind": "fluid_link",
+        "contract_version": "thermox.connector.fluid/v1"
       },
       {
         "id": "condenser_to_pump",
         "from": "condenser.outlet",
         "to": "pump.inlet",
-        "kind": "fluid_link"
+        "kind": "fluid_link",
+        "contract_version": "thermox.connector.fluid/v1"
       }
     ]
   },

@@ -620,6 +620,8 @@ MediumDefinition parse_medium(const JsonValue& value) {
     medium.id = require_string(value, "id");
     medium.backend = require_string(value, "backend");
     medium.substance = require_string(value, "substance");
+    medium.package_version =
+        optional_string(value, "package_version");
     return medium;
 }
 
@@ -668,6 +670,8 @@ ConnectionDefinition parse_connection(const JsonValue& value) {
     connection.from = require_string(value, "from");
     connection.to = require_string(value, "to");
     connection.kind = require_string(value, "kind");
+    connection.contract_version =
+        optional_string(value, "contract_version");
     if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
         connection.parameters = parse_scalar_map(*parameters, "connection '" + connection.id + "'.parameters", true);
     }

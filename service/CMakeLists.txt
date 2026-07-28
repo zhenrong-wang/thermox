@@ -12,6 +12,9 @@ target_include_directories(thermox_service
 )
 target_link_libraries(thermox_service PRIVATE thermox_platform)
 target_compile_features(thermox_service PUBLIC cxx_std_20)
+target_compile_definitions(thermox_service PRIVATE
+    THERMOX_PLATFORM_VERSION="${PROJECT_VERSION}"
+)
 target_compile_options(thermox_service PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
 )

@@ -225,6 +225,67 @@ void test_component_version_is_enforced() {
         "requested component version must be enforced");
 }
 
+void test_property_and_connector_versions_are_enforced() {
+    thermox::service::SimulationService service;
+    thermox::service::ValidateModelRequest property_request;
+    property_request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "property_version_mismatch",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water",
+      "package_version": "99.0.0"
+    }],
+    "components": [{
+      "id": "source",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json";
+    const auto property_response =
+        service.validate_model(property_request);
+    require(
+        !property_response.succeeded() &&
+            !property_response.diagnostics.empty() &&
+            property_response.diagnostics.front().code ==
+                "property_package_version_mismatch",
+        "requested property package version must be enforced");
+
+    thermox::service::ValidateModelRequest connector_request;
+    connector_request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "connector_version_mismatch",
+    "media": [],
+    "components": [
+      {"id": "source", "kind": "source.heat.boundary"},
+      {"id": "sink", "kind": "sink.heat.boundary"}
+    ],
+    "connections": [{
+      "id": "link",
+      "from": "source.outlet",
+      "to": "sink.inlet",
+      "kind": "heat_link",
+      "contract_version": "thermox.connector.heat/v99"
+    }]
+  },
+  "cases": []
+})json";
+    const auto connector_response =
+        service.validate_model(connector_request);
+    require(
+        !connector_response.succeeded() &&
+            !connector_response.diagnostics.empty() &&
+            connector_response.diagnostics.front().code ==
+                "connector_contract_version_mismatch",
+        "requested connector contract version must be enforced");
+}
+
 void test_connection_contract_diagnostic() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -340,25 +401,38 @@ void test_steady_service() {
         "steady result must identify operation");
     require(
         response.metadata.result_schema_version ==
-            thermox::service::result_schema_v1,
+            thermox::service::result_schema_v2,
         "steady result contract must be versioned");
     require(
-        response.metadata.solver_contract == "thermox.newton/v1",
+        response.metadata.platform_version == "0.2.0",
+        "steady result must identify the platform build");
+    require(
+        response.metadata.solver.contract_version ==
+            "thermox.newton/v1" &&
+            !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
         !response.metadata.catalog_fingerprint.empty(),
         "steady result must record runtime catalog fingerprint");
     require(
         !response.metadata.components.empty() &&
+            response.metadata.components.front()
+                    .requested_version == "1.0.0" &&
             !response.metadata.components.front()
-                 .implementation_version.empty(),
-        "component provenance must include implementation version");
+                 .resolved_version.empty(),
+        "component provenance must include requested and resolved versions");
     require(
         !response.metadata.media.empty() &&
             response.metadata.media.front().package == "ideal-gas" &&
-            response.metadata.media.front().package_version ==
+            response.metadata.media.front()
+                    .requested_package_version == "1.0.0" &&
+            response.metadata.media.front()
+                    .resolved_package_version ==
                 "1.0.0",
-        "medium provenance must include resolved package version");
+        "medium provenance must include requested and resolved package versions");
+    require(
+        response.metadata.connector_domains.size() == 5,
+        "result provenance must include connector contracts");
     require(
         response.diagnostics.converged && !response.variables.empty(),
         "steady result must contain converged variables");
@@ -373,9 +447,14 @@ void test_steady_service() {
             std::string::npos,
         "steady JSON must expose service status");
     require(
-        json.find("\"schema_version\": \"thermox.result/v1\"") !=
+        json.find("\"schema_version\": \"thermox.result/v2\"") !=
             std::string::npos,
         "steady JSON must expose result schema");
+    require(
+        json.find("\"platform_version\": \"0.2.0\"") !=
+                std::string::npos &&
+            json.find("\"settings\": {") != std::string::npos,
+        "steady JSON must serialize complete execution provenance");
 }
 
 void test_transient_service() {
@@ -395,9 +474,20 @@ void test_transient_service() {
         response.metadata.operation == "transient",
         "transient result must identify operation");
     require(
-        response.metadata.solver_contract ==
+        response.metadata.solver.contract_version ==
             "thermox.dae-bdf1/v1",
         "transient result must record solver contract");
+    const auto end_time_setting = std::find_if(
+        response.metadata.solver.settings.begin(),
+        response.metadata.solver.settings.end(),
+        [](const auto& setting) {
+            return setting.name == "end_time";
+        });
+    require(
+        end_time_setting !=
+                response.metadata.solver.settings.end() &&
+            std::abs(end_time_setting->value - 0.2) < 1.0e-12,
+        "transient provenance must record effective solver settings");
     require(
         response.diagnostics.success &&
             !response.trajectory.empty(),
@@ -459,6 +549,7 @@ int main() {
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();
         test_component_version_is_enforced();
+        test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();
         test_injectable_native_runtime();
         test_steady_service();

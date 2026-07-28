@@ -8,13 +8,15 @@
       {
         "id": "air",
         "backend": "ideal_gas_mixture",
-        "substance": "Air"
+        "substance": "Air",
+        "package_version": "1.0.0"
       }
     ],
     "components": [
       {
         "id": "compressor",
         "kind": "compressor.fluid.isentropic_efficiency",
+        "version": "1.0.0",
         "parameters": {
           "pressure_ratio": 12.0,
           "eta_is": 0.86

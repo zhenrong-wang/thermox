@@ -36,9 +36,10 @@ The current synchronous service exposes:
 - `CatalogRequest` / `CatalogResponse`;
 - `SteadySimulationRequest` / `SteadySimulationResponse`;
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
-- `thermox.command/v1`, `thermox.result/v1`, and `thermox.error/v1` contracts;
+- `thermox.command/v1`, `thermox.result/v2`, and `thermox.error/v1` contracts;
 - stable operation status and error stage/code fields;
-- component implementation, property package, model, case, and solver provenance;
+- requested/resolved component and property versions, connector contracts, platform build, model,
+  case, solver contract, and effective solver-setting provenance;
 - canonical model JSON and steady/transient result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
 
@@ -56,6 +57,11 @@ steady or transient case without invoking a solver. It returns variable/equation
 closed-loop equations, the catalog fingerprint, and structured diagnostics. Diagnostic entity
 paths and compiler-specific codes will become progressively more precise as compiler internals
 move from exceptions to diagnostic records.
+
+Solver settings on the service command are the sole execution authority. Case-level
+`solver_options` remain model metadata and are never merged implicitly into a run. Result-v2
+provenance records every effective command setting so a stored run does not depend on defaults
+from a later build.
 
 ## Interface responsibilities
 

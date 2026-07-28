@@ -111,7 +111,7 @@ and KPIs.
 2. Component, property, and connector-domain catalog service contracts.
 3. Compile-aware validation and compilation preview with structured diagnostics.
 4. Registry-derived model schema and formal connection/cardinality semantics. ✅
-5. Complete version enforcement and provenance.
+5. Complete version enforcement and provenance. ✅
 6. Graph-native steady and transient result contracts.
 7. Asynchronous jobs, repository ports, RPC mapping, then visual graph UI.
 

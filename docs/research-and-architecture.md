@@ -509,7 +509,7 @@ Use JSON/YAML for interchange. It must be stable, versioned, and independent fro
 Top-level schema:
 
 ```yaml
-schema_version: thermox.model/v1
+schema_version: thermox.model/v2
 model:
   id: ccgt_demo
   components: []
