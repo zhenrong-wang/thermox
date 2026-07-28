@@ -4,6 +4,7 @@ add_library(thermox_physics
     src/ideal_gas_package.cpp
     src/if97_package.cpp
     src/property_registry.cpp
+    src/thermochemistry.cpp
 )
 add_library(thermox::physics ALIAS thermox_physics)
 target_include_directories(thermox_physics PUBLIC

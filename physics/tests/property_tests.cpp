@@ -3,14 +3,76 @@
 #include "thermox/physics/co2_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
+#include "thermox/physics/thermochemistry.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
+
+class TestThermochemistryPackage final
+    : public thermox::physics::ThermochemistryPackage {
+public:
+    TestThermochemistryPackage(
+        std::string mechanism,
+        std::string phase)
+        : mechanism_(std::move(mechanism)),
+          phase_(std::move(phase)) {}
+
+    std::string_view name() const noexcept override {
+        return "test-thermochemistry";
+    }
+    std::string_view version() const noexcept override {
+        return "1.0.0";
+    }
+    std::string_view mechanism() const noexcept override {
+        return mechanism_;
+    }
+    std::string_view phase() const noexcept override {
+        return phase_;
+    }
+    const std::vector<std::string>& species_basis()
+        const noexcept override {
+        return species_;
+    }
+    bool supports(
+        thermox::physics::ThermochemistryCapability)
+        const noexcept override {
+        return true;
+    }
+    thermox::physics::ThermochemicalResult state_pt(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&)
+        const override {
+        return {};
+    }
+    thermox::physics::ThermochemicalResult state_ph(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&)
+        const override {
+        return {};
+    }
+    thermox::physics::ThermochemicalResult equilibrate_hp(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&)
+        const override {
+        return {};
+    }
+
+private:
+    std::string mechanism_;
+    std::string phase_;
+    std::vector<std::string> species_{"O2", "N2", "CH4", "CO2",
+                                      "H2O"};
+};
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
@@ -246,6 +308,60 @@ void verify_co2_cycle_points(
         "CO2 vapor phase above saturation temperature");
 }
 
+void verify_thermochemistry_contracts() {
+    const thermox::physics::SpeciesComposition air{
+        thermox::physics::CompositionBasis::mole_fraction,
+        {"O2", "N2"},
+        {0.21, 0.79},
+    };
+    require_near(
+        air.fraction("O2"), 0.21, 0.0,
+        "composition exposes named fractions");
+    bool invalid_sum_rejected = false;
+    try {
+        (void)thermox::physics::SpeciesComposition{
+            thermox::physics::CompositionBasis::mass_fraction,
+            {"O2", "N2"},
+            {0.2, 0.7},
+        };
+    } catch (const std::invalid_argument&) {
+        invalid_sum_rejected = true;
+    }
+    require(
+        invalid_sum_rejected,
+        "composition must reject fractions that do not sum to one");
+
+    thermox::physics::ThermochemistryPackageRegistry registry;
+    registry.register_backend(
+        {
+            "test",
+            "test-thermochemistry",
+            "1.0.0",
+            {
+                thermox::physics::ThermochemistryCapability::
+                    state_pt,
+                thermox::physics::ThermochemistryCapability::
+                    state_ph,
+                thermox::physics::ThermochemistryCapability::
+                    equilibrium_hp,
+            },
+        },
+        [](std::string_view mechanism,
+           std::string_view phase) {
+            return std::make_shared<
+                const TestThermochemistryPackage>(
+                std::string(mechanism), std::string(phase));
+        });
+    const auto package =
+        registry.create("test", "gri30.yaml", "gri30");
+    require(
+        package->mechanism() == "gri30.yaml" &&
+            package->phase() == "gri30" &&
+            package->species_basis().size() == 5,
+        "thermochemistry registry preserves mechanism, phase, "
+        "and species basis");
+}
+
 }  // namespace
 
 int main() {
@@ -256,6 +372,7 @@ int main() {
     verify_round_trip(co2, 1e5, 320.0, 0.1);
     verify_round_trip(if97, 25e6, 873.0, 0.2);
     verify_co2_cycle_points(co2);
+    verify_thermochemistry_contracts();
     verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);
     verify_solver_bridge(co2, 1e5, 340.0, 300.0, 0.02);

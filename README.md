@@ -42,6 +42,9 @@ Implemented in this sprint:
   doubling, event detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
+- A separate composition-aware thermochemistry contract validates ordered species bases and
+  mass/mole fractions, exposes PT/PH/equilibrium-HP capabilities, and supports mechanism-specific
+  backends without coupling components directly to a chemistry library.
 - First-class `thermox_service` application module with versioned validate, steady, and transient
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical

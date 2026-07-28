@@ -1,5 +1,20 @@
 # Property Packages
 
+## Reacting mixtures
+
+Fixed-fluid property packages and reacting-mixture thermochemistry are separate Thermox contracts.
+`ThermochemistryPackage` owns:
+
+- an ordered species basis and validated mass- or mole-fraction compositions;
+- composition-aware PT and PH states;
+- equilibrium at fixed enthalpy and pressure;
+- mechanism, phase, implementation, version, and capability identity.
+
+`ThermochemistryPackageRegistry` constructs these packages by backend, mechanism, and phase.
+Combustors and reacting-material components will depend on this interface rather than directly on
+Cantera or another chemistry library. This preserves backend replacement, service catalog
+discovery, and execution provenance.
+
 Thermox separates numerical algorithms from thermophysical models:
 
 ```text
