@@ -15,6 +15,18 @@ Combustors and reacting-material components will depend on this interface rather
 Cantera or another chemistry library. This preserves backend replacement, service catalog
 discovery, and execution provenance.
 
+Cantera 3.2.0 is pinned under `modules/properties/cantera`. The adapter is intentionally optional:
+install the pinned Cantera C++ library into an isolated prefix, make its `cantera.pc` visible to
+`pkg-config`, and configure Thermox with:
+
+```bash
+cmake -S . -B build-cantera -DTHERMOX_ENABLE_CANTERA=ON
+```
+
+This produces `thermox::cantera_backend`, whose registration function adds composition-aware PT,
+PH, equilibrium-HP, and transport capabilities. The default build remains bounded and does not
+compile Cantera.
+
 Thermox separates numerical algorithms from thermophysical models:
 
 ```text

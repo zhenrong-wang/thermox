@@ -1,3 +1,6 @@
 [submodule "modules/properties/coolprop"]
 	path = modules/properties/coolprop
 	url = https://github.com/CoolProp/CoolProp.git
+[submodule "modules/properties/cantera"]
+	path = modules/properties/cantera
+	url = https://github.com/Cantera/cantera.git

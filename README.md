@@ -120,6 +120,7 @@ physics/
   tests/                Property, steady-solver, and transient integration tests
 modules/
   properties/           Pinned CoolProp dependency
+                        and optional pinned Cantera source
 scripts/
   verify.sh             Configure, build, test, and run example solve
 ```
