@@ -628,6 +628,8 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain generic-fluid compressor");
     require(registry.contains("compressor.fluid.performance_map"),
             "default registry should contain map-driven compressor");
+    require(registry.contains("turbine.fluid.performance_map"),
+            "default registry should contain map-driven turbine");
     require(registry.contains("storage.thermal.lumped"),
             "default registry should contain lumped thermal storage");
     require(registry.contains("source.heat.boundary"),
@@ -677,6 +679,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "pump.fluid.isentropic_efficiency",
         "turbine.gas.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
+        "turbine.fluid.performance_map",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
         "valve.fluid.isenthalpic_pressure_ratio",
@@ -1238,6 +1241,120 @@ void test_map_driven_compressor_solves_bound_operating_point() {
                 "operating_point");
         },
         "primary axis must be 'corrected_mass_flow'");
+}
+
+void test_map_driven_turbine_solves_bound_operating_point() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mapped_turbine",
+    "media": [{
+      "id": "gas",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "turbine",
+      "kind": "turbine.fluid.performance_map",
+      "artifacts": {"performance_map": "turbine-map"},
+      "parameters": {
+        "reference_pressure": {"value": 1.0, "unit": "MPa"},
+        "reference_temperature": {"value": 1000.0, "unit": "K"}
+      },
+      "media": {"inlet": "gas", "outlet": "gas"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "turbine.inlet.m_dot": {"value": 50.0, "unit": "kg/s"},
+      "turbine.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "turbine.inlet.T": {"value": 1000.0, "unit": "K"},
+      "turbine.shaft.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "turbine.inlet.h": {"value": 1004.5, "unit": "kJ/kg"},
+      "turbine.outlet.p": {"value": 0.2, "unit": "MPa"},
+      "turbine.outlet.h": {"value": 700.0, "unit": "kJ/kg"},
+      "turbine.shaft.W_dot": {"value": 15.0, "unit": "MW"}
+    }
+  }]
+})json");
+
+    thermox::platform::PerformanceMapRegistry maps;
+    maps.register_artifact({
+        "turbine-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-turbine-map",
+        std::string(64, 'e'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{40.0, {5.0, 0.9}},
+                  {60.0, {5.0, 0.9}}}},
+                {400.0,
+                 {{40.0, {5.0, 0.9}},
+                  {60.0, {5.0, 0.9}}}},
+            }),
+    });
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::
+            make_default_property_package_registry(),
+        maps,
+        "operating_point");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(
+        result.diagnostics.converged,
+        result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(
+            found != graph.problem.variable_names.end(),
+            "mapped turbine result variable missing: " + name);
+        return result.x.at(static_cast<std::size_t>(
+            std::distance(
+                graph.problem.variable_names.begin(), found)));
+    };
+    const double gamma = 1004.5 / (1004.5 - 287.0);
+    const double expected_outlet_temperature =
+        1000.0 *
+        (1.0 +
+         0.9 *
+             (std::pow(
+                  1.0 / 5.0,
+                  (gamma - 1.0) / gamma) -
+              1.0));
+    const double expected_outlet_enthalpy =
+        1004.5 * expected_outlet_temperature;
+    require_near(
+        value("turbine.outlet.p"), 1.0e6 / 5.0,
+        1.0e-5, "mapped turbine pressure ratio");
+    require_near(
+        value("turbine.outlet.h"),
+        expected_outlet_enthalpy, 1.0e-4,
+        "mapped turbine efficiency");
+    require_near(
+        value("turbine.shaft.W_dot"),
+        50.0 *
+            (1004.5 * 1000.0 -
+             expected_outlet_enthalpy),
+        1.0e-2, "mapped turbine shaft power");
 }
 
 void test_generic_model_solves_ideal_gas_turbine_residuals() {
@@ -2974,6 +3091,7 @@ int main() {
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
         test_map_driven_compressor_solves_bound_operating_point();
+        test_map_driven_turbine_solves_bound_operating_point();
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();

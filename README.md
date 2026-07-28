@@ -55,6 +55,8 @@ Implemented in this sprint:
 - A map-driven compressor component resolves an instance-bound performance artifact, evaluates
   corrected mass flow and shaft speed, and closes pressure ratio, efficiency, and shaft power for
   off-design operating points.
+- The corresponding map-driven turbine uses the same domain-neutral artifact format with
+  turbine-specific expansion, efficiency, and generated shaft-power conventions.
 - Queryable component catalog descriptors for ports, simulation modes, property capabilities,
   parameters, SI dimensions, defaults, and open/closed bounds. The compiler rejects missing,
   unknown, dimensionally incompatible, and out-of-range component parameters before equation

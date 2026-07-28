@@ -40,9 +40,11 @@ ComponentModelDescriptor make_descriptor(
     return out;
 }
 
-ComponentModelDescriptor make_map_compressor_descriptor() {
+ComponentModelDescriptor make_map_turbomachinery_descriptor(
+    std::string kind,
+    std::string shaft_direction) {
     auto out = make_descriptor(
-        "compressor.fluid.performance_map", "in");
+        std::move(kind), std::move(shaft_direction));
     out.version = "1.0.0";
     out.parameters = {
         {"reference_pressure", "pressure", false, 101325.0,
@@ -60,7 +62,7 @@ ComponentModelDescriptor make_map_compressor_descriptor() {
     return out;
 }
 
-struct CompressorMapPoint {
+struct TurbomachineryMapPoint {
     double pressure_ratio{0.0};
     double efficiency{0.0};
     double inlet_temperature{0.0};
@@ -70,12 +72,12 @@ struct CompressorMapPoint {
     double pressure_ratio_speed_derivative{0.0};
 };
 
-struct CompressorMapContract {
+struct TurbomachineryMapContract {
     std::size_t pressure_ratio{0};
     std::size_t efficiency{0};
 };
 
-CompressorMapContract validate_compressor_map(
+TurbomachineryMapContract validate_turbomachinery_map(
     const PerformanceMapArtifact& artifact) {
     const auto& map = *artifact.map;
     if (map.primary_variable().name !=
@@ -83,17 +85,17 @@ CompressorMapContract validate_compressor_map(
         map.primary_variable().dimension != "mass_flow") {
         throw std::invalid_argument(
             "performance-map artifact '" + artifact.id +
-            "' compressor primary axis must be "
+            "' turbomachinery primary axis must be "
             "'corrected_mass_flow' with dimension 'mass_flow'");
     }
     if (map.family_variable().name != "corrected_speed" ||
         map.family_variable().dimension != "angular_speed") {
         throw std::invalid_argument(
             "performance-map artifact '" + artifact.id +
-            "' compressor family axis must be "
+            "' turbomachinery family axis must be "
             "'corrected_speed' with dimension 'angular_speed'");
     }
-    CompressorMapContract result;
+    TurbomachineryMapContract result;
     bool found_pressure_ratio = false;
     bool found_efficiency = false;
     const auto& outputs = map.output_variables();
@@ -114,15 +116,15 @@ CompressorMapContract validate_compressor_map(
     if (!found_pressure_ratio || !found_efficiency) {
         throw std::invalid_argument(
             "performance-map artifact '" + artifact.id +
-            "' compressor outputs must include dimensionless "
+            "' turbomachinery outputs must include dimensionless "
             "'pressure_ratio' and 'isentropic_efficiency'");
     }
     return result;
 }
 
-EvaluationStatus evaluate_compressor_map(
+EvaluationStatus evaluate_turbomachinery_map(
     const PerformanceMapArtifact& artifact,
-    const CompressorMapContract& contract,
+    const TurbomachineryMapContract& contract,
     const physics::PropertyPackage& properties,
     double mass_flow,
     double pressure,
@@ -130,7 +132,7 @@ EvaluationStatus evaluate_compressor_map(
     double angular_speed,
     double reference_pressure,
     double reference_temperature,
-    CompressorMapPoint& point) {
+    TurbomachineryMapPoint& point) {
     const auto inlet = properties.state_ph(
         pressure, enthalpy);
     if (!inlet.ok()) {
@@ -142,7 +144,7 @@ EvaluationStatus evaluate_compressor_map(
     if (!std::isfinite(theta) || !std::isfinite(delta) ||
         theta <= 0.0 || delta <= 0.0) {
         return EvaluationStatus::recoverable(
-            "compressor corrected-state ratios must be "
+            "turbomachinery corrected-state ratios must be "
             "finite and positive");
     }
     const double root_theta = std::sqrt(theta);
@@ -169,14 +171,14 @@ EvaluationStatus evaluate_compressor_map(
     if (!std::isfinite(point.pressure_ratio) ||
         point.pressure_ratio <= 1.0) {
         return EvaluationStatus::recoverable(
-            "compressor map pressure ratio must be finite and "
+            "turbomachinery map pressure ratio must be finite and "
             "greater than one");
     }
     if (!std::isfinite(point.efficiency) ||
         point.efficiency <= 0.0 ||
         point.efficiency > 1.0) {
         return EvaluationStatus::recoverable(
-            "compressor map isentropic efficiency must be in "
+            "turbomachinery map isentropic efficiency must be in "
             "(0, 1]");
     }
     point.inlet_temperature = inlet.state.temperature_k;
@@ -220,7 +222,7 @@ std::pair<double, double> inlet_temperature_derivatives(
                     step;
             }
             throw std::runtime_error(
-                "unable to evaluate compressor inlet "
+                "unable to evaluate turbomachinery inlet "
                 "temperature derivatives");
         };
     return {
@@ -349,10 +351,15 @@ private:
     bool compressor_{false};
 };
 
-class MapCompressorModel final : public ComponentModel {
+class MapTurbomachineryModel final : public ComponentModel {
 public:
-    MapCompressorModel()
-        : descriptor_(make_map_compressor_descriptor()) {}
+    MapTurbomachineryModel(
+        std::string kind,
+        bool compressor)
+        : descriptor_(make_map_turbomachinery_descriptor(
+              std::move(kind),
+              compressor ? "in" : "out")),
+          compressor_(compressor) {}
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -365,7 +372,7 @@ public:
             require_performance_map(
                 context, "performance_map");
         const auto contract =
-            validate_compressor_map(*artifact);
+            validate_turbomachinery_map(*artifact);
         const auto properties =
             require_property_package(context, "inlet");
         if (properties !=
@@ -408,8 +415,8 @@ public:
              inlet_h, shaft_omega, reference_pressure,
              reference_temperature](
                 const std::vector<double>& x,
-                CompressorMapPoint& point) {
-                return evaluate_compressor_map(
+                TurbomachineryMapPoint& point) {
+                return evaluate_turbomachinery_map(
                     *artifact, contract, *properties,
                     x.at(inlet_m), x.at(inlet_p),
                     x.at(inlet_h), x.at(shaft_omega),
@@ -419,23 +426,30 @@ public:
 
         system.add_checked_sparse_equation(
             prefix + "map_pressure_ratio",
-            [map_point, inlet_p, outlet_p](
+            [map_point, inlet_p, outlet_p,
+             compressor = compressor_](
                 const std::vector<double>& x,
                 double& residual) {
-                CompressorMapPoint point;
+                TurbomachineryMapPoint point;
                 const auto status = map_point(x, point);
                 if (!status.ok()) return status;
-                residual = x.at(outlet_p) -
-                    x.at(inlet_p) * point.pressure_ratio;
+                residual = compressor
+                    ? x.at(outlet_p) -
+                          x.at(inlet_p) *
+                              point.pressure_ratio
+                    : x.at(inlet_p) -
+                          x.at(outlet_p) *
+                              point.pressure_ratio;
                 return EvaluationStatus::success();
             },
             {inlet_m, inlet_p, inlet_h, outlet_p, shaft_omega},
             [map_point, properties, inlet_m, inlet_p, inlet_h,
              outlet_p, shaft_omega, reference_pressure,
-             reference_temperature](
+             reference_temperature,
+             compressor = compressor_](
                 const std::vector<double>& x,
                 std::vector<EquationPartial>& jacobian) {
-                CompressorMapPoint point;
+                TurbomachineryMapPoint point;
                 const auto status = map_point(x, point);
                 if (!status.ok()) {
                     throw std::runtime_error(status.message);
@@ -487,40 +501,50 @@ public:
                                 speed_derivative;
                     };
                 const double inlet_pressure = x.at(inlet_p);
+                const double pressure_multiplier = compressor
+                    ? inlet_pressure
+                    : x.at(outlet_p);
                 jacobian.push_back({
                     inlet_m,
-                    -inlet_pressure *
+                    -pressure_multiplier *
                         pressure_ratio_derivative(
                             flow_mass_derivative, 0.0)});
                 jacobian.push_back({
                     inlet_p,
-                    -point.pressure_ratio -
-                        inlet_pressure *
+                    (compressor ? -point.pressure_ratio : 1.0) -
+                        pressure_multiplier *
                             pressure_ratio_derivative(
                                 flow_pressure_derivative,
                                 speed_pressure_derivative)});
                 jacobian.push_back({
                     inlet_h,
-                    -inlet_pressure *
+                    -pressure_multiplier *
                         pressure_ratio_derivative(
                             flow_enthalpy_derivative,
                             speed_enthalpy_derivative)});
-                jacobian.push_back({outlet_p, 1.0});
+                jacobian.push_back({
+                    outlet_p,
+                    compressor ? 1.0 : -point.pressure_ratio});
                 jacobian.push_back({
                     shaft_omega,
-                    -inlet_pressure *
+                    -pressure_multiplier *
                         pressure_ratio_derivative(
                             0.0, speed_omega_derivative)});
-                return x.at(outlet_p) -
-                    inlet_pressure * point.pressure_ratio;
+                return compressor
+                    ? x.at(outlet_p) -
+                          inlet_pressure * point.pressure_ratio
+                    : inlet_pressure -
+                          x.at(outlet_p) *
+                              point.pressure_ratio;
             },
             1.0e6);
         system.add_checked_equation(
             prefix + "map_isentropic_efficiency",
             [map_point, properties, inlet_p, inlet_h, outlet_p,
-             outlet_h](const std::vector<double>& x,
+             outlet_h, compressor = compressor_](
+                const std::vector<double>& x,
                        double& residual) {
-                CompressorMapPoint point;
+                TurbomachineryMapPoint point;
                 const auto status = map_point(x, point);
                 if (!status.ok()) return status;
                 const auto inlet = properties->state_ph(
@@ -534,34 +558,46 @@ public:
                 }
                 residual =
                     x.at(outlet_h) - x.at(inlet_h) -
-                    (isentropic.state.enthalpy_j_kg -
-                     x.at(inlet_h)) /
-                        point.efficiency;
+                    (compressor
+                         ? (isentropic.state.enthalpy_j_kg -
+                            x.at(inlet_h)) /
+                               point.efficiency
+                         : point.efficiency *
+                               (isentropic.state.enthalpy_j_kg -
+                                x.at(inlet_h)));
                 return EvaluationStatus::success();
             },
             1.0e6);
         system.add_sparse_equation(
             prefix + "shaft_power",
-            [inlet_m, inlet_h, outlet_h, shaft_w](
+            [inlet_m, inlet_h, outlet_h, shaft_w,
+             compressor = compressor_](
                 const std::vector<double>& x,
                 std::vector<EquationPartial>& jacobian) {
+                const double direction =
+                    compressor ? 1.0 : -1.0;
                 const double enthalpy_change =
                     x.at(outlet_h) - x.at(inlet_h);
                 jacobian.push_back({shaft_w, 1.0});
                 jacobian.push_back(
-                    {inlet_m, -enthalpy_change});
+                    {inlet_m,
+                     -direction * enthalpy_change});
                 jacobian.push_back(
-                    {inlet_h, x.at(inlet_m)});
+                    {inlet_h,
+                     direction * x.at(inlet_m)});
                 jacobian.push_back(
-                    {outlet_h, -x.at(inlet_m)});
+                    {outlet_h,
+                     -direction * x.at(inlet_m)});
                 return x.at(shaft_w) -
-                    x.at(inlet_m) * enthalpy_change;
+                    direction * x.at(inlet_m) *
+                        enthalpy_change;
             },
             1.0e6);
     }
 
 private:
     ComponentModelDescriptor descriptor_;
+    bool compressor_{false};
 };
 
 }  // namespace
@@ -584,7 +620,11 @@ void register_turbomachinery_component_models(
         std::make_shared<TurbomachineryModel>(
             "turbine.fluid.isentropic_efficiency", false));
     registry.register_model(
-        std::make_shared<MapCompressorModel>());
+        std::make_shared<MapTurbomachineryModel>(
+            "compressor.fluid.performance_map", true));
+    registry.register_model(
+        std::make_shared<MapTurbomachineryModel>(
+            "turbine.fluid.performance_map", false));
 }
 
 }  // namespace thermox::platform

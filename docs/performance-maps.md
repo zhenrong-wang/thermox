@@ -66,7 +66,8 @@ ratio and efficiency as outputs. Those semantics belong to the compressor compon
 descriptor, not to `PerformanceMap` itself. Turbines, pumps, fans, heat-exchanger correlations, and
 other engineering components can use the same map kernel.
 
-The registered `compressor.fluid.performance_map` model formalizes the following map contract:
+The registered `compressor.fluid.performance_map` and
+`turbine.fluid.performance_map` models formalize the following map contract:
 
 - primary axis: `corrected_mass_flow`, dimension `mass_flow`;
 - family axis: `corrected_speed`, dimension `angular_speed`;
@@ -81,9 +82,10 @@ corrected_speed     = omega / sqrt(T_in / T_ref)
 ```
 
 The selected map pressure ratio and efficiency close outlet pressure, isentropic enthalpy change,
-and shaft power. Map-domain failures are recoverable model evaluations, allowing the nonlinear
-solver to reject invalid trial states. The pressure-ratio row uses map derivatives and local
-numerically evaluated property-transformation derivatives in sparse Jacobian assembly.
+and shaft power using the appropriate compressor or turbine convention. Map-domain failures are
+recoverable model evaluations, allowing the nonlinear solver to reject invalid trial states. The
+pressure-ratio row uses map derivatives and local numerically evaluated property-transformation
+derivatives in sparse Jacobian assembly.
 
 ## Next integration slice
 
@@ -92,5 +94,7 @@ numerically evaluated property-transformation derivatives in sparse Jacobian ass
    artifact bindings during compilation. ✅
 3. Add a map-based compressor component that lowers map outputs and derivatives into checked graph
    equations. ✅
-4. Calibrate a designated baseline point, then freeze parameters and predict independent
+4. Add the corresponding map-based turbine component with turbine pressure, efficiency, and shaft
+   power conventions. ✅
+5. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.
