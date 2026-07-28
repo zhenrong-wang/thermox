@@ -638,13 +638,17 @@ thermox/
     include/
     src/                # model validation, registries, and graph compiler
     tests/
+  service/
+    include/             # transport-neutral application contracts
+    src/                 # validation, simulation workflows, provenance, serialization
+    tests/
   modules/
     properties/         # pinned CO2 and IF97 implementations
   scripts/
     verify.sh
 ```
 
-Dependency direction is `platform -> physics + core`; the numerical core does not depend on either
-physics or platform, and examples are leaf consumers. The current CLI follows the end-to-end path:
-model document -> validation and registry resolution -> equation compilation -> nonlinear solve ->
-structured variables and diagnostics.
+Dependency direction is `interfaces -> service -> platform -> physics + core`; the numerical core
+does not depend on any outer layer, and examples are leaf consumers. The CLI is an interface
+adapter and calls the same transport-neutral service workflows intended for future RPC and worker
+adapters.

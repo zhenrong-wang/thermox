@@ -181,9 +181,12 @@ Delivered:
     connection rows that are proven redundant; the Rankine example now runs as a true closed
     loop. ✅
 
-Next structural slices:
+Completed structural slices:
 
-- add versioned application serialization and simulation workflows.
+- versioned validation, steady-simulation, and transient-simulation service workflows; ✅
+- transport-neutral command, result, error, diagnostics, and provenance contracts; ✅
+- canonical model/result JSON serialization owned by the service; ✅
+- thin CLI adapter with no compiler, property, or solver orchestration; ✅
 
 ## Persistence boundary decision
 
@@ -192,7 +195,8 @@ Goal: place future database work without coupling persistence to simulation inte
 Decision:
 
 1. Numeric, physics, component, and compiler libraries remain database-free. ✅
-2. A future service layer owns repository interfaces and job transactions. ✅
+2. The service layer owns application workflows; its next slice owns repository interfaces and
+   job transactions. ✅
 3. PostgreSQL stores projects, immutable revisions, run metadata, provenance, diagnostics, result
    manifests, and searchable summaries. ✅
 4. Large trajectories and reports use checksummed object storage rather than database blobs. ✅
@@ -234,7 +238,7 @@ Goal: expose the core through a production-shaped API.
 
 Work items:
 
-1. Create API service.
+1. Map HTTP/RPC endpoints onto the existing application service.
 2. Endpoints:
    - `POST /models/validate`
    - `POST /models/compile`
@@ -244,7 +248,7 @@ Work items:
    - `GET /component-types`
 3. Add job state model and run persistence.
 4. Add structured logging and run IDs.
-5. Add result serialization.
+5. Publish the existing versioned result serialization through the API.
 
 Exit criteria:
 

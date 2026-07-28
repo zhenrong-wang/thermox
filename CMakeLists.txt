@@ -10,6 +10,7 @@ add_subdirectory(modules/properties/water-steam-if97)
 add_subdirectory(physics)
 add_subdirectory(core)
 add_subdirectory(platform)
+add_subdirectory(service)
 
 add_library(thermox_examples
     core/example_models/src/brayton_cycle.cpp
@@ -24,7 +25,7 @@ target_compile_options(thermox_examples PRIVATE
 )
 
 add_executable(thermox_cli core/apps/thermox_cli.cpp)
-target_link_libraries(thermox_cli PRIVATE thermox_platform)
+target_link_libraries(thermox_cli PRIVATE thermox_service)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)
@@ -32,6 +33,13 @@ target_compile_definitions(thermox_platform_tests PRIVATE
     THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 add_test(NAME thermox_platform_tests COMMAND thermox_platform_tests)
+
+add_executable(thermox_service_tests service/tests/service_tests.cpp)
+target_link_libraries(thermox_service_tests PRIVATE thermox_service)
+target_compile_definitions(thermox_service_tests PRIVATE
+    THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+add_test(NAME thermox_service_tests COMMAND thermox_service_tests)
 
 add_executable(thermox_example_tests core/example_models/tests/example_tests.cpp)
 target_link_libraries(thermox_example_tests PRIVATE thermox_examples)

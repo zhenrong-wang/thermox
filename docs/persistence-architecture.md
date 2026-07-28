@@ -8,7 +8,7 @@ Thermox does not add a database dependency to the numerical, physics, component,
 libraries. Those layers remain deterministic, embeddable, and usable from files, tests, desktop
 applications, batch tools, and future services.
 
-Database implementation begins with the simulation service, after the model/result serialization
+Database implementation begins after the simulation service's model/result serialization
 contracts and job lifecycle are stable. Persistence is accessed through application-layer
 repository interfaces; database adapters depend on those interfaces, while the simulation engine
 does not know that a database exists.
@@ -68,6 +68,6 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-The immediate engine priorities remain explicit saturation properties and closed-loop equation
-reduction. Database work can then begin alongside the service layer without destabilizing solver
-architecture.
+The synchronous simulation service, versioned contracts, provenance, and serialization are now in
+place. The remaining gate is an explicit job lifecycle, artifact boundary, and repository contract
+test suite; database adapters can follow without destabilizing the solver architecture.

@@ -16,6 +16,7 @@ modules, a generic thermal-system schema/compiler platform, and isolated example
 - [Implementation Roadmap](docs/roadmap.md)
 - [Numeric Core Contracts](docs/numeric-core.md)
 - [Property Packages](docs/property-packages.md)
+- [Service Architecture](docs/service-architecture.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
 
 ## Current C++ numeric core
@@ -38,6 +39,8 @@ Implemented in this sprint:
   doubling, event detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
+- First-class `thermox_service` application module with versioned validate, steady, and transient
+  commands; structured errors; reproducibility provenance; and canonical JSON contracts.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -81,6 +84,10 @@ platform/
   src/                  Modular physical component families, catalog validation, and graph
                         compilation
   tests/                System-agnostic platform and property-integration tests
+service/
+  include/              Transport-neutral application commands and result contracts
+  src/                  Simulation orchestration and serialization
+  tests/                Service-boundary and workflow tests
 physics/
   include/              Property-independent physics interfaces
   src/                  Ideal-gas, CO2, and IF97 adapters
@@ -139,9 +146,9 @@ JSON output:
 ./build/thermox_cli solve --model core/examples/air_compressor.json --format json
 ```
 
-The CLI parses the generic model document, resolves the registered component and fluid backend,
-compiles the graph to a nonlinear problem, solves it, and reports primary variables plus derived
-fluid-port properties.
+The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
+renders the returned contract. Model parsing, registry resolution, graph compilation, solving,
+derived-property evaluation, provenance, and JSON result construction belong to the service.
 
 Run a generic transient model:
 
@@ -183,8 +190,8 @@ closure. Mass flow and base pressure are normal case specifications.
 
 ## Next steps
 
-1. Add versioned model/result serialization and an application-level simulation command before
-   introducing database adapters.
+1. Add asynchronous job-state and repository ports around the synchronous simulation service,
+   followed by database and object-storage adapters.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

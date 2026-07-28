@@ -1,22 +1,90 @@
-#include "thermox/nonlinear_solver.hpp"
-#include "thermox/platform/component_registry.hpp"
-#include "thermox/platform/model_document.hpp"
-#include "thermox/platform/results.hpp"
-#include "thermox/transient_solver.hpp"
+#include "thermox/service/serialization.hpp"
+#include "thermox/service/simulation_service.hpp"
 
 #include <cmath>
-#include <exception>
+#include <fstream>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace {
 
 void print_usage(std::ostream& out) {
     out << "Usage:\n"
-        << "  thermox_cli solve --model <path> [--case <id>] [--format text|json]\n"
-        << "  thermox_cli simulate --model <path> [--case <id>] --end-time <seconds>"
-           " [--format text|json]\n";
+        << "  thermox_cli solve --model <path> [--case <id>]"
+           " [--format text|json]\n"
+        << "  thermox_cli simulate --model <path> [--case <id>]"
+           " --end-time <seconds> [--format text|json]\n";
+}
+
+std::string read_file(const std::string& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("cannot open model file: " + path);
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+double parse_positive_number(
+    const std::string& text,
+    const std::string& option) {
+    std::size_t parsed = 0;
+    const double value = std::stod(text, &parsed);
+    if (parsed != text.size() || !std::isfinite(value) || value <= 0.0) {
+        throw std::invalid_argument(
+            option + " must be a positive finite number");
+    }
+    return value;
+}
+
+void print_steady_text(
+    const thermox::service::SteadySimulationResponse& response) {
+    std::cout << "model: " << response.metadata.model.model_id << "\n"
+              << "status: "
+              << thermox::service::to_string(response.status) << "\n"
+              << "converged: "
+              << (response.diagnostics.converged ? "yes" : "no") << "\n"
+              << "iterations: " << response.diagnostics.iterations << "\n";
+    if (!response.error.code.empty()) {
+        std::cout << "error: " << response.error.message << "\n";
+    }
+    for (const auto& variable : response.variables) {
+        std::cout << variable.name << " = " << variable.value_si << "\n";
+    }
+    for (const auto& port : response.fluid_ports) {
+        const std::string prefix =
+            port.component_id + "." + port.port_name;
+        std::cout << prefix << ".T = " << port.temperature_k << "\n"
+                  << prefix << ".rho = " << port.density_kg_m3 << "\n"
+                  << prefix << ".s = " << port.entropy_j_kg_k << "\n"
+                  << prefix << ".quality = " << port.vapor_quality << "\n";
+    }
+}
+
+void print_transient_text(
+    const thermox::service::TransientSimulationResponse& response) {
+    std::cout << "model: " << response.metadata.model.model_id << "\n"
+              << "status: "
+              << thermox::service::to_string(response.status) << "\n"
+              << "success: "
+              << (response.diagnostics.success ? "yes" : "no") << "\n"
+              << "final_time: " << response.diagnostics.final_time << "\n"
+              << "accepted_steps: "
+              << response.diagnostics.accepted_steps << "\n";
+    if (!response.error.code.empty()) {
+        std::cout << "error: " << response.error.message << "\n";
+    }
+    if (response.trajectory.empty()) return;
+    const auto& final = response.trajectory.back().state;
+    for (std::size_t i = 0;
+         i < response.variable_names.size() && i < final.size();
+         ++i) {
+        std::cout << response.variable_names[i] << " = "
+                  << final[i] << "\n";
+    }
 }
 
 }  // namespace
@@ -27,13 +95,12 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    std::string command;
+    const std::string command = argv[1];
     std::string model_path;
     std::string case_id;
     std::string end_time_text;
     std::string format = "text";
 
-    command = argv[1];
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--model" && i + 1 < argc) {
@@ -78,123 +145,37 @@ int main(int argc, char** argv) {
     }
 
     try {
-        const auto document = thermox::platform::load_model_document(model_path);
-        const auto components = thermox::platform::make_default_component_registry();
+        const std::string model_json = read_file(model_path);
+        thermox::service::SimulationService service;
         if (command == "solve") {
-            const auto graph = thermox::platform::compile_model_graph(
-                document, components, case_id);
-            thermox::SolverOptions options;
-            options.residual_tolerance = 1.0e-10;
-            const auto result = thermox::solve_newton(graph.problem, options);
-            const auto fluid_ports =
-                result.diagnostics.converged
-                    ? thermox::platform::evaluate_fluid_port_results(
-                          document, graph, result.x)
-                    : std::vector<thermox::platform::FluidPortResult>{};
-
+            thermox::service::SteadySimulationRequest request;
+            request.model_json = model_json;
+            request.case_id = case_id;
+            const auto response = service.run_steady(request);
             if (format == "json") {
-                std::cout << "{\n"
-                          << "  \"model_id\": \"" << graph.model_id << "\",\n"
-                          << "  \"converged\": "
-                          << (result.diagnostics.converged ? "true" : "false") << ",\n"
-                          << "  \"iterations\": " << result.diagnostics.iterations << ",\n"
-                          << "  \"variables\": {\n";
-                for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
-                    std::cout << "    \"" << graph.problem.variable_names[i] << "\": "
-                              << result.x[i]
-                              << (i + 1 == graph.problem.variable_names.size() ? "\n" : ",\n");
-                }
-                std::cout << "  },\n"
-                          << "  \"fluid_ports\": {\n";
-                for (std::size_t i = 0; i < fluid_ports.size(); ++i) {
-                    const auto& port = fluid_ports[i];
-                    std::cout
-                        << "    \"" << port.component_id << "."
-                        << port.port_name << "\": {"
-                        << "\"T\": " << port.state.temperature_k
-                        << ", \"rho\": " << port.state.density_kg_m3
-                        << ", \"s\": " << port.state.entropy_j_kg_k
-                        << ", \"quality\": " << port.state.vapor_quality
-                        << "}"
-                        << (i + 1 == fluid_ports.size() ? "\n" : ",\n");
-                }
-                std::cout << "  }\n}\n";
+                std::cout <<
+                    thermox::service::serialize_steady_response_json(
+                        response);
             } else {
-                std::cout << "model: " << graph.model_id << "\n"
-                          << "converged: "
-                          << (result.diagnostics.converged ? "yes" : "no") << "\n"
-                          << "iterations: " << result.diagnostics.iterations << "\n";
-                for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
-                    std::cout << graph.problem.variable_names[i] << " = "
-                              << result.x[i] << "\n";
-                }
-                for (const auto& port : fluid_ports) {
-                    const std::string prefix =
-                        port.component_id + "." + port.port_name;
-                    std::cout << prefix << ".T = "
-                              << port.state.temperature_k << "\n"
-                              << prefix << ".rho = "
-                              << port.state.density_kg_m3 << "\n"
-                              << prefix << ".s = "
-                              << port.state.entropy_j_kg_k << "\n"
-                              << prefix << ".quality = "
-                              << port.state.vapor_quality << "\n";
-                }
+                print_steady_text(response);
             }
-            return result.diagnostics.converged ? 0 : 1;
+            return response.succeeded() ? 0 : 1;
         }
 
-        std::size_t parsed = 0;
-        const double end_time = std::stod(end_time_text, &parsed);
-        if (parsed != end_time_text.size() || !std::isfinite(end_time) ||
-            end_time <= 0.0) {
-            throw std::invalid_argument(
-                "--end-time must be a positive finite number");
-        }
-        const auto graph =
-            thermox::platform::compile_transient_model_graph(
-                document, components, case_id);
-        thermox::TimeIntegrationOptions options;
-        options.end_time = end_time;
-        const auto result = thermox::integrate_dae(graph.problem, options);
-        if (result.trajectory.empty()) {
-            std::cerr << "transient solve failed: "
-                      << result.diagnostics.message << "\n";
-            return 1;
-        }
-        const auto& final = result.trajectory.back();
+        thermox::service::TransientSimulationRequest request;
+        request.model_json = model_json;
+        request.case_id = case_id;
+        request.solver.end_time =
+            parse_positive_number(end_time_text, "--end-time");
+        const auto response = service.run_transient(request);
         if (format == "json") {
-            std::cout << "{\n"
-                      << "  \"model_id\": \"" << graph.model_id << "\",\n"
-                      << "  \"success\": "
-                      << (result.diagnostics.success ? "true" : "false") << ",\n"
-                      << "  \"final_time\": " << final.time << ",\n"
-                      << "  \"accepted_steps\": "
-                      << result.diagnostics.accepted_steps << ",\n"
-                      << "  \"variables\": {\n";
-            for (std::size_t i = 0;
-                 i < graph.problem.variable_names.size(); ++i) {
-                std::cout << "    \"" << graph.problem.variable_names[i]
-                          << "\": " << final.state[i]
-                          << (i + 1 == graph.problem.variable_names.size()
-                                  ? "\n"
-                                  : ",\n");
-            }
-            std::cout << "  }\n}\n";
+            std::cout <<
+                thermox::service::serialize_transient_response_json(
+                    response);
         } else {
-            std::cout << "model: " << graph.model_id << "\n"
-                      << "success: "
-                      << (result.diagnostics.success ? "yes" : "no") << "\n"
-                      << "final_time: " << final.time << "\n"
-                      << "accepted_steps: "
-                      << result.diagnostics.accepted_steps << "\n";
-            for (std::size_t i = 0;
-                 i < graph.problem.variable_names.size(); ++i) {
-                std::cout << graph.problem.variable_names[i] << " = "
-                          << final.state[i] << "\n";
-            }
+            print_transient_text(response);
         }
-        return result.diagnostics.success ? 0 : 1;
+        return response.succeeded() ? 0 : 1;
     } catch (const std::exception& ex) {
         std::cerr << "thermox_cli error: " << ex.what() << "\n";
         return 1;
