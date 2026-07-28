@@ -343,6 +343,17 @@ void test_bounded_calibration_service() {
     require(
         !response.fitted_model_json.empty(),
         "calibration must return a reusable fitted model");
+    require(
+        response.metadata.solver.contract_version ==
+            "thermox.coordinate-search/v1" &&
+            std::any_of(
+                response.metadata.solver.settings.begin(),
+                response.metadata.solver.settings.end(),
+                [](const auto& setting) {
+                    return setting.name ==
+                        "minimum_continuation_fraction";
+                }),
+        "calibration provenance must record continuation settings");
     const auto json =
         thermox::service::serialize_calibration_response_json(
             response);

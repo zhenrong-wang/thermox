@@ -373,6 +373,10 @@ SolverProvenance solver_provenance(
             {"minimum_step_fraction",
              settings.minimum_step_fraction},
             {"step_reduction", settings.step_reduction},
+            {"minimum_continuation_fraction",
+             settings.minimum_continuation_fraction},
+            {"continuation_growth",
+             settings.continuation_growth},
         },
     };
     const auto simulation =
@@ -573,7 +577,15 @@ const platform::ResultValue& require_graph_value(
         "calibration result value missing: " + target);
 }
 
-platform::GraphResult solve_calibration_case(
+using CalibrationState =
+    std::map<std::string, double, std::less<>>;
+
+struct CalibrationCaseSolution {
+    platform::GraphResult graph;
+    CalibrationState state;
+};
+
+CalibrationCaseSolution solve_calibration_case(
     const platform::ModelDocument& document,
     const std::string& case_id,
     const SteadySolverSettings& settings,
@@ -581,7 +593,8 @@ platform::GraphResult solve_calibration_case(
     const physics::PropertyPackageRegistry& properties,
     const platform::PerformanceMapRegistry& performance_maps,
     const physics::ThermochemistryPackageRegistry&
-        thermochemistry) {
+        thermochemistry,
+    const CalibrationState* warm_start) {
     const auto* simulation_case =
         selected_case(document, case_id);
     if (validation_mode(simulation_case) != "steady") {
@@ -589,9 +602,19 @@ platform::GraphResult solve_calibration_case(
             "calibration currently requires steady cases: " +
             case_id);
     }
-    const auto graph = platform::compile_model_graph(
+    auto graph = platform::compile_model_graph(
         document, components, properties, performance_maps,
         thermochemistry, case_id);
+    if (warm_start != nullptr) {
+        for (std::size_t index = 0;
+             index < graph.problem.variable_names.size(); ++index) {
+            const auto value = warm_start->find(
+                graph.problem.variable_names[index]);
+            if (value != warm_start->end()) {
+                graph.problem.initial_guess[index] = value->second;
+            }
+        }
+    }
     const auto solve = solve_newton(
         graph.problem, to_core(settings));
     if (!solve.diagnostics.converged) {
@@ -602,12 +625,20 @@ platform::GraphResult solve_calibration_case(
     }
     const platform::GraphResultEvaluator evaluator(
         document, graph, properties, thermochemistry);
-    return evaluator.evaluate(solve.x);
+    CalibrationCaseSolution solution;
+    solution.graph = evaluator.evaluate(solve.x);
+    for (std::size_t index = 0;
+         index < graph.problem.variable_names.size(); ++index) {
+        solution.state.emplace(
+            graph.problem.variable_names[index], solve.x[index]);
+    }
+    return solution;
 }
 
 struct ObjectiveEvaluation {
     double value{std::numeric_limits<double>::infinity()};
     std::vector<CalibrationObservationResidual> observations;
+    std::map<std::string, CalibrationState> case_states;
 };
 
 ObjectiveEvaluation evaluate_calibration_objective(
@@ -618,21 +649,31 @@ ObjectiveEvaluation evaluate_calibration_objective(
     const physics::PropertyPackageRegistry& properties,
     const platform::PerformanceMapRegistry& performance_maps,
     const physics::ThermochemistryPackageRegistry&
-        thermochemistry) {
+        thermochemistry,
+    const std::map<std::string, CalibrationState>*
+        warm_starts = nullptr) {
     ObjectiveEvaluation evaluation;
     evaluation.value = 0.0;
-    std::map<std::string, platform::GraphResult> case_results;
+    std::map<std::string, CalibrationCaseSolution> case_results;
     for (const auto& observation : calibration.observations) {
         if (!case_results.contains(observation.case_id)) {
+            const CalibrationState* warm_start = nullptr;
+            if (warm_starts != nullptr) {
+                const auto found =
+                    warm_starts->find(observation.case_id);
+                if (found != warm_starts->end()) {
+                    warm_start = &found->second;
+                }
+            }
             case_results.emplace(
                 observation.case_id,
                 solve_calibration_case(
                     document, observation.case_id, settings,
                     components, properties, performance_maps,
-                    thermochemistry));
+                    thermochemistry, warm_start));
         }
         const auto& predicted = require_graph_value(
-            case_results.at(observation.case_id),
+            case_results.at(observation.case_id).graph,
             observation.target);
         const double residual =
             predicted.value_si - observation.measured.value_si;
@@ -650,6 +691,10 @@ ObjectiveEvaluation evaluate_calibration_objective(
             residual,
             normalized,
         });
+    }
+    for (auto& [case_id, solution] : case_results) {
+        evaluation.case_states.emplace(
+            case_id, std::move(solution.state));
     }
     for (const auto& parameter : calibration.parameters) {
         if (!parameter.prior_mean.has_value()) continue;
@@ -1063,7 +1108,13 @@ CalibrationResponse SimulationService::run_calibration(
             settings.initial_step_fraction ||
         !std::isfinite(settings.step_reduction) ||
         settings.step_reduction <= 0.0 ||
-        settings.step_reduction >= 1.0) {
+        settings.step_reduction >= 1.0 ||
+        !std::isfinite(
+            settings.minimum_continuation_fraction) ||
+        settings.minimum_continuation_fraction <= 0.0 ||
+        settings.minimum_continuation_fraction > 1.0 ||
+        !std::isfinite(settings.continuation_growth) ||
+        settings.continuation_growth <= 1.0) {
         response.error = make_error(
             "invalid_calibration_settings", "request",
             "invalid bounded calibration solver settings");
@@ -1143,31 +1194,75 @@ CalibrationResponse SimulationService::run_calibration(
         return response;
     }
 
-    const auto apply_values = [&]() {
+    const auto apply_values =
+        [&](const std::vector<double>& candidate) {
         for (std::size_t index = 0;
              index < calibration->parameters.size(); ++index) {
             for (const auto& target :
                  calibration->parameters[index].targets) {
                 platform::require_calibration_parameter_target(
                     document, target)
-                    .value_si = values[index];
+                    .value_si = candidate[index];
             }
         }
     };
-    const auto evaluate = [&]() {
-        apply_values();
+    const auto evaluate_at =
+        [&](const std::vector<double>& candidate,
+            const std::map<std::string, CalibrationState>*
+                warm_starts) {
+        apply_values(candidate);
         return evaluate_calibration_objective(
             document, *calibration,
             settings.simulation_solver,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
             impl_->runtime->impl_->performance_maps,
-            impl_->runtime->impl_->thermochemistry);
+            impl_->runtime->impl_->thermochemistry,
+            warm_starts);
+    };
+    const auto continue_to =
+        [&](const std::vector<double>& from,
+            const std::vector<double>& target,
+            const std::map<std::string, CalibrationState>&
+                warm_starts) {
+        double progress = 0.0;
+        double fraction = 1.0;
+        auto current_warm_starts = warm_starts;
+        ObjectiveEvaluation result;
+        while (progress < 1.0) {
+            const double next =
+                std::min(1.0, progress + fraction);
+            std::vector<double> candidate(from.size());
+            for (std::size_t index = 0;
+                 index < from.size(); ++index) {
+                candidate[index] =
+                    from[index] +
+                    next * (target[index] - from[index]);
+            }
+            try {
+                result = evaluate_at(
+                    candidate, &current_warm_starts);
+                ++response.diagnostics.objective_evaluations;
+                progress = next;
+                current_warm_starts = result.case_states;
+                fraction = std::min(
+                    1.0 - progress,
+                    fraction * settings.continuation_growth);
+            } catch (const std::exception&) {
+                ++response.diagnostics.objective_evaluations;
+                fraction *= 0.5;
+                if (fraction <
+                    settings.minimum_continuation_fraction) {
+                    throw;
+                }
+            }
+        }
+        return result;
     };
 
     ObjectiveEvaluation best;
     try {
-        best = evaluate();
+        best = evaluate_at(values, nullptr);
         response.diagnostics.initial_objective = best.value;
         response.diagnostics.objective_evaluations = 1;
     } catch (const std::exception& ex) {
@@ -1182,18 +1277,23 @@ CalibrationResponse SimulationService::run_calibration(
         bool improved = false;
         for (std::size_t index = 0; index < values.size();
              ++index) {
+            const auto base_values = values;
+            const auto base_evaluation = best;
             const double original = values[index];
             double selected = original;
-            ObjectiveEvaluation selected_evaluation = best;
+            ObjectiveEvaluation selected_evaluation =
+                base_evaluation;
             for (const double direction : {-1.0, 1.0}) {
                 const double trial = std::clamp(
                     original + direction * steps[index],
                     lower[index], upper[index]);
                 if (trial == original) continue;
-                values[index] = trial;
+                auto target_values = base_values;
+                target_values[index] = trial;
                 try {
-                    auto evaluation = evaluate();
-                    ++response.diagnostics.objective_evaluations;
+                    auto evaluation = continue_to(
+                        base_values, target_values,
+                        base_evaluation.case_states);
                     if (evaluation.value <
                         selected_evaluation.value) {
                         selected = trial;
@@ -1201,7 +1301,6 @@ CalibrationResponse SimulationService::run_calibration(
                             std::move(evaluation);
                     }
                 } catch (const std::exception&) {
-                    ++response.diagnostics.objective_evaluations;
                 }
             }
             values[index] = selected;
@@ -1209,7 +1308,7 @@ CalibrationResponse SimulationService::run_calibration(
                 improved = true;
                 best = std::move(selected_evaluation);
             }
-            apply_values();
+            apply_values(values);
         }
         response.diagnostics.iterations = iteration + 1;
         if (!improved) {
@@ -1236,7 +1335,7 @@ CalibrationResponse SimulationService::run_calibration(
         response.diagnostics.message =
             "bounded coordinate search reached iteration limit";
     }
-    apply_values();
+    apply_values(values);
     response.diagnostics.final_objective = best.value;
     response.observations = std::move(best.observations);
     for (std::size_t index = 0;

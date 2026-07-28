@@ -82,6 +82,11 @@ candidate solve failures are rejected, every observation is weighted by its decl
 and priors contribute normalized penalty residuals. Evaluations and case solves remain sequential
 to bound host resource use.
 
+Each accepted case solution is retained as a named-variable warm start. A candidate parameter move
+first attempts the requested endpoint; on failure, adaptive continuation halves the move and walks
+through converged neighboring states before retrying the endpoint. Continuation controls and all
+underlying Newton settings are recorded in execution provenance.
+
 The response includes initial/fitted values, bounds, per-observation physical and normalized
 residuals, objective diagnostics, complete execution settings, and a canonical fitted model that
 can be submitted directly for independent validation runs.

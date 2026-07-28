@@ -241,7 +241,7 @@ Next:
    provenance. ✅
 5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
 6. Add topology-aware/continuation initialization for large reacting graphs so calibration
-   candidates begin from component-consistent neighboring states.
+   candidates begin from component-consistent neighboring states. ✅
 7. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
    the independent part-load cases.
 

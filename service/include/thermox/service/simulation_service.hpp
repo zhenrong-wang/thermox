@@ -323,6 +323,8 @@ struct CalibrationSolverSettings {
     double initial_step_fraction{0.1};
     double minimum_step_fraction{1.0e-4};
     double step_reduction{0.5};
+    double minimum_continuation_fraction{1.0 / 64.0};
+    double continuation_growth{1.5};
     SteadySolverSettings simulation_solver;
 };
 
