@@ -11,6 +11,7 @@ namespace thermox::service {
 struct SimulationRuntime::Impl {
     platform::ComponentRegistry components;
     physics::PropertyPackageRegistry properties;
+    platform::PerformanceMapRegistry performance_maps;
     std::string fingerprint;
 };
 
@@ -19,7 +20,8 @@ namespace detail {
 struct NativeRuntimeFactory {
     static std::shared_ptr<const SimulationRuntime> create(
         platform::ComponentRegistry components,
-        physics::PropertyPackageRegistry properties);
+        physics::PropertyPackageRegistry properties,
+        platform::PerformanceMapRegistry performance_maps);
 };
 
 }  // namespace detail

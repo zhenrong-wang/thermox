@@ -30,7 +30,8 @@ void hash_number(std::uint64_t& hash, double value) {
 
 std::string catalog_fingerprint(
     const platform::ComponentRegistry& components,
-    const physics::PropertyPackageRegistry& properties) {
+    const physics::PropertyPackageRegistry& properties,
+    const platform::PerformanceMapRegistry& performance_maps) {
     std::uint64_t hash = 14695981039346656037ULL;
     for (const auto& descriptor : components.descriptors()) {
         hash_text(hash, descriptor.kind);
@@ -63,6 +64,13 @@ std::string catalog_fingerprint(
             hash_text(
                 hash,
                 parameter.upper_inclusive ? "inclusive" : "exclusive");
+        }
+        for (const auto& artifact : descriptor.artifacts) {
+            hash_text(hash, artifact.role);
+            hash_text(hash, artifact.artifact_type);
+            hash_text(
+                hash,
+                artifact.required ? "required" : "optional");
         }
         for (const auto capability :
              descriptor.required_property_capabilities) {
@@ -118,6 +126,14 @@ std::string catalog_fingerprint(
                 std::to_string(static_cast<int>(capability)));
         }
     }
+    for (const auto& id : performance_maps.ids()) {
+        const auto artifact =
+            performance_maps.require_artifact(id);
+        hash_text(hash, artifact->id);
+        hash_text(hash, artifact->schema_version);
+        hash_text(hash, artifact->revision);
+        hash_text(hash, artifact->checksum_sha256);
+    }
     hash_text(hash, "thermox.connector.fluid/v1:m_dot,p,h");
     hash_text(hash, "thermox.connector.heat/v1:Q_dot,T");
     hash_text(hash, "thermox.connector.shaft/v1:W_dot,omega");
@@ -138,20 +154,25 @@ SimulationRuntime::~SimulationRuntime() = default;
 
 std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
-    physics::PropertyPackageRegistry properties) {
+    physics::PropertyPackageRegistry properties,
+    platform::PerformanceMapRegistry performance_maps) {
     return detail::NativeRuntimeFactory::create(
-        std::move(components), std::move(properties));
+        std::move(components), std::move(properties),
+        std::move(performance_maps));
 }
 
 std::shared_ptr<const SimulationRuntime>
 detail::NativeRuntimeFactory::create(
     platform::ComponentRegistry components,
-    physics::PropertyPackageRegistry properties) {
+    physics::PropertyPackageRegistry properties,
+    platform::PerformanceMapRegistry performance_maps) {
     auto impl = std::make_unique<SimulationRuntime::Impl>();
     impl->fingerprint =
-        catalog_fingerprint(components, properties);
+        catalog_fingerprint(
+            components, properties, performance_maps);
     impl->components = std::move(components);
     impl->properties = std::move(properties);
+    impl->performance_maps = std::move(performance_maps);
     return std::shared_ptr<const SimulationRuntime>(
         new SimulationRuntime(std::move(impl)));
 }
@@ -160,7 +181,8 @@ std::shared_ptr<const SimulationRuntime>
 make_default_simulation_runtime() {
     return make_simulation_runtime(
         platform::make_default_component_registry(),
-        physics::make_default_property_package_registry());
+        physics::make_default_property_package_registry(),
+        {});
 }
 
 }  // namespace thermox::service

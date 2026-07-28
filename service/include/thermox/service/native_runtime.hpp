@@ -12,6 +12,7 @@ namespace thermox::service {
 // simulation_runtime.hpp and service DTOs without including this header.
 std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
-    physics::PropertyPackageRegistry properties);
+    physics::PropertyPackageRegistry properties,
+    platform::PerformanceMapRegistry performance_maps = {});
 
 }  // namespace thermox::service

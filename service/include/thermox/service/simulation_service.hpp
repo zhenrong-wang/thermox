@@ -71,6 +71,12 @@ struct CatalogParameterType {
     bool upper_inclusive{true};
 };
 
+struct CatalogArtifactType {
+    std::string role;
+    std::string artifact_type;
+    bool required{true};
+};
+
 struct CatalogInternalVariableType {
     std::string name;
     std::string dimension;
@@ -82,6 +88,7 @@ struct ComponentType {
     std::string version;
     std::vector<CatalogPortType> ports;
     std::vector<CatalogParameterType> parameters;
+    std::vector<CatalogArtifactType> artifacts;
     std::vector<CatalogInternalVariableType> internal_variables;
     std::vector<std::string> required_property_capabilities;
     bool supports_steady{true};

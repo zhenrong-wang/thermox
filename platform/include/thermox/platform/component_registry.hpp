@@ -4,6 +4,7 @@
 #include "thermox/equation_system.hpp"
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/performance_map.hpp"
 #include "thermox/physics/property_registry.hpp"
 
 #include <cstddef>
@@ -35,6 +36,12 @@ struct ParameterModelDescriptor {
     bool upper_inclusive{true};
 };
 
+struct ArtifactModelDescriptor {
+    std::string role;
+    std::string artifact_type;
+    bool required{true};
+};
+
 struct TransientVariableDescriptor {
     std::string port_name;
     std::string variable_name;
@@ -59,6 +66,7 @@ struct ComponentModelDescriptor {
     std::string version;
     std::vector<PortModelDescriptor> ports;
     std::vector<ParameterModelDescriptor> parameters;
+    std::vector<ArtifactModelDescriptor> artifacts;
     std::vector<physics::PropertyCapability> required_property_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
@@ -72,6 +80,10 @@ struct ComponentCompileContext {
     std::map<std::string, std::size_t> port_variables;
     std::map<std::string, std::size_t> internal_variables;
     std::map<std::string, std::shared_ptr<const physics::PropertyPackage>> port_properties;
+    std::map<
+        std::string,
+        std::shared_ptr<const PerformanceMapArtifact>>
+        performance_maps;
 };
 
 class ComponentModel {
@@ -165,6 +177,12 @@ CompiledModelGraph compile_model_graph(
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
     const std::string& case_id = {});
+CompiledModelGraph compile_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const PerformanceMapRegistry& performance_map_registry,
+    const std::string& case_id = {});
 CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
@@ -173,6 +191,12 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
+    const std::string& case_id = {});
+CompiledTransientModelGraph compile_transient_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const PerformanceMapRegistry& performance_map_registry,
     const std::string& case_id = {});
 
 }  // namespace thermox::platform

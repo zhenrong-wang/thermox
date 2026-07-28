@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -82,6 +84,37 @@ private:
     std::vector<MapCurve> curves_;
     MapExtrapolationPolicy primary_extrapolation_;
     MapExtrapolationPolicy family_extrapolation_;
+};
+
+inline constexpr const char* performance_map_artifact_type =
+    "thermox.performance_map";
+inline constexpr const char* performance_map_artifact_schema_v1 =
+    "thermox.performance_map/v1";
+
+// Immutable identity and payload for user-supplied engineering data. The
+// checksum identifies the canonical source payload; revision is a
+// user-facing data revision and is not used as a substitute for identity.
+struct PerformanceMapArtifact {
+    std::string id;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+    std::shared_ptr<const PerformanceMap> map;
+};
+
+class PerformanceMapRegistry {
+public:
+    void register_artifact(PerformanceMapArtifact artifact);
+    [[nodiscard]] std::shared_ptr<const PerformanceMapArtifact>
+    require_artifact(const std::string& id) const;
+    [[nodiscard]] bool contains(const std::string& id) const;
+    [[nodiscard]] std::vector<std::string> ids() const;
+
+private:
+    std::map<
+        std::string,
+        std::shared_ptr<const PerformanceMapArtifact>>
+        artifacts_;
 };
 
 }  // namespace thermox::platform

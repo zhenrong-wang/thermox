@@ -351,6 +351,18 @@ std::string serialize_model_document_json(
             }
             out << "}";
         }
+        if (!component.artifact_bindings.empty()) {
+            out << ",\n        \"artifacts\": {";
+            std::size_t binding_index = 0;
+            for (const auto& [role, artifact_id] :
+                 component.artifact_bindings) {
+                if (binding_index++ != 0) out << ", ";
+                json_string(out, role);
+                out << ": ";
+                json_string(out, artifact_id);
+            }
+            out << "}";
+        }
         if (!component.parameters.empty()) {
             out << ",\n        \"parameters\": ";
             scalar_map(out, component.parameters, "          ");
@@ -476,6 +488,19 @@ std::string serialize_catalog_response_json(
                 << (parameter.lower_inclusive ? "true" : "false")
                 << ", \"upper_inclusive\": "
                 << (parameter.upper_inclusive ? "true" : "false")
+                << "}";
+        }
+        out << "], \"artifacts\": [";
+        for (std::size_t j = 0;
+             j < component.artifacts.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& artifact = component.artifacts[j];
+            out << "{\"role\": ";
+            json_string(out, artifact.role);
+            out << ", \"artifact_type\": ";
+            json_string(out, artifact.artifact_type);
+            out << ", \"required\": "
+                << (artifact.required ? "true" : "false")
                 << "}";
         }
         out << "], \"internal_variables\": [";

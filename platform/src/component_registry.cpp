@@ -319,6 +319,56 @@ void validate_component_bindings(
                 component.kind + "': " + bound_port);
         }
     }
+
+    std::map<std::string, const ArtifactModelDescriptor*>
+        declared_artifacts;
+    for (const auto& artifact : model.descriptor().artifacts) {
+        declared_artifacts.emplace(artifact.role, &artifact);
+        if (artifact.required &&
+            component.artifact_bindings.find(artifact.role) ==
+                component.artifact_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' is missing required artifact binding: " +
+                artifact.role);
+        }
+    }
+    for (const auto& [role, _] :
+         component.artifact_bindings) {
+        if (declared_artifacts.find(role) ==
+            declared_artifacts.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' supplies unknown artifact role for kind '" +
+                component.kind + "': " + role);
+        }
+    }
+}
+
+void resolve_component_artifacts(
+    ComponentCompileContext& context,
+    const ComponentModel& model,
+    const PerformanceMapRegistry& performance_map_registry) {
+    for (const auto& artifact : model.descriptor().artifacts) {
+        const auto binding =
+            context.component.artifact_bindings.find(
+                artifact.role);
+        if (binding ==
+            context.component.artifact_bindings.end()) {
+            continue;
+        }
+        if (artifact.artifact_type ==
+            performance_map_artifact_type) {
+            context.performance_maps.emplace(
+                artifact.role,
+                performance_map_registry.require_artifact(
+                    binding->second));
+            continue;
+        }
+        throw std::logic_error(
+            "unsupported resolved component artifact type: " +
+            artifact.artifact_type);
+    }
 }
 
 std::string_view capability_name(physics::PropertyCapability capability) {
@@ -559,6 +609,17 @@ CompiledModelGraph compile_model_graph(
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
     const std::string& case_id) {
+    return compile_model_graph(
+        document, registry, property_registry,
+        PerformanceMapRegistry{}, case_id);
+}
+
+CompiledModelGraph compile_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const PerformanceMapRegistry& performance_map_registry,
+    const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
 
     EquationSystemBuilder system;
@@ -583,7 +644,8 @@ CompiledModelGraph compile_model_graph(
                 component.kind + "' does not support steady compilation");
         }
 
-        ComponentCompileContext context{component, active_case, {}, {}, {}};
+        ComponentCompileContext context{
+            component, active_case, {}, {}, {}, {}};
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -618,6 +680,8 @@ CompiledModelGraph compile_model_graph(
                         spec.dimension, index});
             }
         }
+        resolve_component_artifacts(
+            context, model, performance_map_registry);
         validate_property_capabilities(context, model);
         model.add_equations(context, system);
     }
@@ -817,6 +881,17 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
     const std::string& case_id) {
+    return compile_transient_model_graph(
+        document, registry, property_registry,
+        PerformanceMapRegistry{}, case_id);
+}
+
+CompiledTransientModelGraph compile_transient_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const PerformanceMapRegistry& performance_map_registry,
+    const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
     if (active_case != nullptr &&
         active_case->mode != "dynamic_initialization" &&
@@ -849,7 +924,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
                 component.kind + "' does not support transient compilation");
         }
 
-        ComponentCompileContext context{component, active_case, {}, {}, {}};
+        ComponentCompileContext context{
+            component, active_case, {}, {}, {}, {}};
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -927,6 +1003,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
                                          full_name,
                                          variable.dimension, index});
         }
+        resolve_component_artifacts(
+            context, model, performance_map_registry);
         validate_property_capabilities(context, model);
         model.add_transient_equations(context, system);
     }

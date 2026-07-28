@@ -25,6 +25,7 @@ struct ComponentDefinition {
     std::string kind;
     std::string version;
     std::map<std::string, std::string> medium_bindings;
+    std::map<std::string, std::string> artifact_bindings;
     std::map<std::string, ScalarValue> parameters;
 };
 

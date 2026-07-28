@@ -655,6 +655,30 @@ ComponentDefinition parse_component(const JsonValue& value, const std::set<std::
         }
     }
 
+    if (const JsonValue* artifacts =
+            optional_object_member(value, "artifacts")) {
+        for (const auto& [role, artifact_value] :
+             artifacts->object) {
+            if (role.empty()) {
+                throw std::invalid_argument(
+                    "component artifact role must not be empty");
+            }
+            const std::string artifact_id =
+                require_string_value(
+                    artifact_value,
+                    "component '" + component.id +
+                        "'.artifacts." + role);
+            if (artifact_id.empty()) {
+                throw std::invalid_argument(
+                    "component '" + component.id +
+                    "' artifact binding '" + role +
+                    "' must not be empty");
+            }
+            component.artifact_bindings.emplace(
+                role, artifact_id);
+        }
+    }
+
     if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
         component.parameters = parse_scalar_map(*parameters, "component '" + component.id + "'.parameters");
     }

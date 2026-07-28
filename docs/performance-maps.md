@@ -7,6 +7,36 @@ _Decision date: 2026-07-28_
 Performance maps are immutable, validated engineering data used by registered components. They are
 not embedded in the nonlinear solver and do not create a gas-turbine-specific execution path.
 
+The separation is deliberate:
+
+- a registered component **type** declares ports, scalar parameters, required artifact roles, and
+  the equations that interpret those inputs;
+- a model-document component **instance** supplies its medium bindings, scalar parameters, and
+  artifact IDs;
+- the application runtime owns immutable artifact payloads and resolves them while compiling the
+  graph.
+
+Consequently, Thermox may ship a generic compressor model without embedding any manufacturer's
+compressor. A user creates a real compressor instance by binding a particular performance-map
+artifact and the remaining machine data required by that model. The same component type can be
+instantiated repeatedly with different maps.
+
+Component artifact bindings are generic:
+
+```json
+{
+  "id": "gt1.compressor",
+  "kind": "compressor.gas.map",
+  "artifacts": {
+    "performance_map": "gt1-compressor-oem-map"
+  }
+}
+```
+
+The component descriptor declares that `performance_map` expects artifact type
+`thermox.performance_map`. Compilation rejects missing roles, unknown roles, and artifact IDs that
+are absent from the runtime registry.
+
 `thermox::platform::PerformanceMap` represents a two-coordinate family of piecewise-linear curves.
 The individual curves may have different primary-coordinate samples, matching common compressor
 and turbine speed-line data without forcing it onto a rectangular grid.
@@ -38,8 +68,9 @@ other engineering components can use the same map kernel.
 
 ## Next integration slice
 
-1. Define a versioned map-artifact schema and checksum identity.
-2. Register immutable map artifacts in the application runtime.
+1. Define a versioned map-artifact schema and checksum identity. ✅
+2. Register immutable map artifacts in the application runtime and resolve generic component
+   artifact bindings during compilation. ✅
 3. Add a map-based compressor component that lowers map outputs and analytic derivatives into
    checked graph equations.
 4. Calibrate a designated baseline point, then freeze parameters and predict independent

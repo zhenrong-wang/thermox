@@ -143,6 +143,116 @@ void require_throws(Func&& func, const std::string& expected_message_fragment) {
     throw std::runtime_error("expected exception containing: " + expected_message_fragment);
 }
 
+class ArtifactConsumerModel final
+    : public thermox::platform::ComponentModel {
+public:
+    ArtifactConsumerModel() {
+        descriptor_.kind = "test.map_consumer";
+        descriptor_.version = "1.0.0";
+        descriptor_.ports = {
+            {"result", "signal", "out"},
+        };
+        descriptor_.artifacts = {{
+            "performance_map",
+            thermox::platform::performance_map_artifact_type,
+            true,
+        }};
+    }
+
+    const thermox::platform::ComponentModelDescriptor&
+    descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const thermox::platform::ComponentCompileContext& context,
+        thermox::EquationSystemBuilder& system) const override {
+        const auto found =
+            context.performance_maps.find("performance_map");
+        if (found == context.performance_maps.end() ||
+            !found->second || !found->second->map) {
+            throw std::runtime_error(
+                "resolved performance map was not supplied");
+        }
+        system.add_linear_equation(
+            "component." + context.component.id + ".result",
+            {{context.port_variables.at("result.value"), 1.0}},
+            0.0,
+            1.0);
+    }
+
+private:
+    thermox::platform::ComponentModelDescriptor descriptor_;
+};
+
+thermox::platform::PerformanceMapArtifact
+make_test_map_artifact() {
+    return {
+        "oem-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "revision-1",
+        std::string(64, 'b'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"}},
+            std::vector<thermox::platform::MapCurve>{
+                {100.0, {{1.0, {2.0}}, {2.0, {3.0}}}},
+                {200.0, {{1.0, {3.0}}, {2.0, {4.0}}}},
+            }),
+    };
+}
+
+void test_component_artifact_bindings_resolve_at_compile_time() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "artifact_binding",
+    "media": [],
+    "components": [{
+      "id": "machine",
+      "kind": "test.map_consumer",
+      "artifacts": {"performance_map": "oem-map"}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    require(
+        document.components.at(0).artifact_bindings.at(
+            "performance_map") == "oem-map",
+        "component artifact binding must survive parsing");
+
+    thermox::platform::ComponentRegistry components;
+    components.register_model(
+        std::make_shared<const ArtifactConsumerModel>());
+    thermox::platform::PerformanceMapRegistry maps;
+    maps.register_artifact(make_test_map_artifact());
+    const auto graph = thermox::platform::compile_model_graph(
+        document, components,
+        thermox::physics::make_default_property_package_registry(),
+        maps);
+    require(
+        graph.problem.variable_names.size() == 1 &&
+            graph.problem.residual_names.size() == 1,
+        "artifact-only test model should compile as a square graph");
+
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, components,
+                thermox::physics::
+                    make_default_property_package_registry(),
+                thermox::platform::PerformanceMapRegistry{});
+        },
+        "no performance-map artifact registered");
+}
+
 void test_generic_model_document_loads_components_connections_and_cases() {
     const std::string path = write_temp_model(
         "generic_valid",
@@ -2695,6 +2805,7 @@ void test_transient_compiler_rejects_fixed_differential_state() {
 
 int main() {
     try {
+        test_component_artifact_bindings_resolve_at_compile_time();
         test_generic_model_document_loads_components_connections_and_cases();
         test_generic_model_document_rejects_unknown_medium();
         test_generic_model_document_rejects_invalid_topology();

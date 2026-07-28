@@ -56,6 +56,19 @@ require_property_package(
     return it->second;
 }
 
+inline std::shared_ptr<const PerformanceMapArtifact>
+require_performance_map(
+    const ComponentCompileContext& context,
+    const std::string& role) {
+    const auto it = context.performance_maps.find(role);
+    if (it == context.performance_maps.end() || !it->second) {
+        throw std::logic_error(
+            "compiled performance-map artifact missing: " +
+            context.component.id + "." + role);
+    }
+    return it->second;
+}
+
 inline EvaluationStatus property_failure(
     const physics::PropertyResult& result) {
     if (result.status == physics::PropertyStatus::backend_error) {

@@ -5,6 +5,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -53,6 +54,18 @@ thermox::platform::PerformanceMap sample_map(
         },
         primary,
         family,
+    };
+}
+
+thermox::platform::PerformanceMapArtifact sample_artifact(
+    std::string id = "compressor-map") {
+    return {
+        std::move(id),
+        thermox::platform::performance_map_artifact_schema_v1,
+        "vendor-revision-7",
+        std::string(64, 'a'),
+        std::make_shared<const thermox::platform::PerformanceMap>(
+            sample_map()),
     };
 }
 
@@ -226,6 +239,45 @@ void test_definition_validation() {
         "non-finite map outputs must be rejected");
 }
 
+void test_versioned_artifact_registry() {
+    thermox::platform::PerformanceMapRegistry registry;
+    registry.register_artifact(sample_artifact());
+    require(
+        registry.contains("compressor-map") &&
+            registry.ids() ==
+                std::vector<std::string>{"compressor-map"},
+        "registered map artifact must be discoverable");
+    const auto artifact =
+        registry.require_artifact("compressor-map");
+    require(
+        artifact->revision == "vendor-revision-7" &&
+            artifact->map->evaluate(5.0, 150.0).outputs.at(0) ==
+                2.5,
+        "artifact registry must preserve identity and payload");
+
+    bool duplicate_rejected = false;
+    try {
+        registry.register_artifact(sample_artifact());
+    } catch (const std::invalid_argument&) {
+        duplicate_rejected = true;
+    }
+    require(
+        duplicate_rejected,
+        "artifact registry must reject duplicate identities");
+
+    auto bad_checksum = sample_artifact("bad-checksum");
+    bad_checksum.checksum_sha256 = "not-a-sha256";
+    bool checksum_rejected = false;
+    try {
+        registry.register_artifact(std::move(bad_checksum));
+    } catch (const std::invalid_argument&) {
+        checksum_rejected = true;
+    }
+    require(
+        checksum_rejected,
+        "artifact registry must reject malformed checksums");
+}
+
 }  // namespace
 
 int main() {
@@ -235,6 +287,7 @@ int main() {
         test_clamp_policy_has_zero_boundary_derivatives();
         test_linear_policy_extrapolates_with_derivatives();
         test_definition_validation();
+        test_versioned_artifact_registry();
         std::cout << "thermox performance map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

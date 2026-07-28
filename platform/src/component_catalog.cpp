@@ -52,6 +52,28 @@ void validate_component_descriptor(
                 descriptor.kind + "." + parameter.name);
         }
     }
+    std::map<std::string, bool> artifacts;
+    for (const auto& artifact : descriptor.artifacts) {
+        if (artifact.role.empty() ||
+            artifact.artifact_type.empty()) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' has an incomplete artifact descriptor");
+        }
+        if (!artifacts.emplace(artifact.role, true).second) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' declares duplicate artifact role: " +
+                artifact.role);
+        }
+        if (artifact.artifact_type !=
+            performance_map_artifact_type) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' declares unsupported artifact type: " +
+                artifact.artifact_type);
+        }
+    }
     std::map<std::string, bool> internal_variables;
     for (const auto& variable : descriptor.internal_variables) {
         if (variable.name.empty() || variable.dimension.empty()) {

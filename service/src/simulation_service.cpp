@@ -542,6 +542,7 @@ ValidateModelResponse SimulationService::validate_model(
                     document,
                     impl_->runtime->impl_->components,
                     impl_->runtime->impl_->properties,
+                    impl_->runtime->impl_->performance_maps,
                     request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "transient";
@@ -554,6 +555,7 @@ ValidateModelResponse SimulationService::validate_model(
                 document,
                 impl_->runtime->impl_->components,
                 impl_->runtime->impl_->properties,
+                impl_->runtime->impl_->performance_maps,
                 request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "steady";
@@ -631,6 +633,13 @@ CatalogResponse SimulationService::get_catalog(
                 parameter.upper_bound,
                 parameter.lower_inclusive,
                 parameter.upper_inclusive,
+            });
+        }
+        for (const auto& artifact : descriptor.artifacts) {
+            component.artifacts.push_back({
+                artifact.role,
+                artifact.artifact_type,
+                artifact.required,
             });
         }
         for (const auto& variable :
@@ -727,6 +736,7 @@ SteadySimulationResponse SimulationService::run_steady(
             document,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
+            impl_->runtime->impl_->performance_maps,
             request.case_id);
         response.metadata = execution_metadata(
             document,
@@ -826,6 +836,7 @@ TransientSimulationResponse SimulationService::run_transient(
             document,
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
+            impl_->runtime->impl_->performance_maps,
             request.case_id);
         response.metadata = execution_metadata(
             document,
