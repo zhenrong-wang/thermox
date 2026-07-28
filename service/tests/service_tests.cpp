@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 34,
+        response.components.size() == 38,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -126,6 +126,26 @@ void test_catalog_discovery() {
             mapped_compressor->artifacts.front().artifact_type ==
                 thermox::platform::performance_map_artifact_type,
         "catalog must expose mapped compressor artifact contract");
+    const auto variable_geometry_compressor = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "compressor.material.variable_geometry_map";
+        });
+    require(
+        variable_geometry_compressor !=
+                response.components.end() &&
+            variable_geometry_compressor->artifacts.size() == 1 &&
+            std::any_of(
+                variable_geometry_compressor->parameters.begin(),
+                variable_geometry_compressor->parameters.end(),
+                [](const auto& parameter) {
+                    return parameter.name == "geometry_setting" &&
+                        parameter.dimension == "angle";
+                }),
+        "catalog must expose variable-geometry map and angle "
+        "contracts");
     const auto mapped_turbine = std::find_if(
         response.components.begin(),
         response.components.end(),

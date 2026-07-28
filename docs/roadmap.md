@@ -251,6 +251,8 @@ Next:
 10. Add dimensioned, bounds-checked per-case component parameter overrides so controls and
     operating configuration can vary while topology and calibrated global parameters remain
     shared. ✅
+11. Add conditioned three-coordinate performance-map artifacts and variable-geometry
+    fluid/material compressor and turbine components for case-selected IGV/guide-vane angles. ✅
 
 See `docs/calibration-architecture.md`.
 

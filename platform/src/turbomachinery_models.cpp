@@ -42,7 +42,8 @@ ComponentModelDescriptor make_descriptor(
 
 ComponentModelDescriptor make_map_turbomachinery_descriptor(
     std::string kind,
-    std::string shaft_direction) {
+    std::string shaft_direction,
+    bool variable_geometry) {
     auto out = make_descriptor(
         std::move(kind), std::move(shaft_direction));
     out.version = "1.0.0";
@@ -54,6 +55,13 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
          0.0, std::numeric_limits<double>::infinity(), false,
          true},
     };
+    if (variable_geometry) {
+        out.parameters.push_back(
+            {"geometry_setting", "angle", true, std::nullopt,
+             -std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::infinity(), true,
+             true});
+    }
     out.artifacts = {{
         "performance_map",
         performance_map_artifact_type,
@@ -78,8 +86,28 @@ struct TurbomachineryMapContract {
 };
 
 TurbomachineryMapContract validate_turbomachinery_map(
-    const PerformanceMapArtifact& artifact) {
-    const auto& map = *artifact.map;
+    const PerformanceMapArtifact& artifact,
+    bool variable_geometry) {
+    const PerformanceMap* selected = artifact.map.get();
+    if (variable_geometry) {
+        if (!artifact.conditioned_map ||
+            artifact.conditioned_map->condition_variable().name !=
+                "geometry_setting" ||
+            artifact.conditioned_map->condition_variable().dimension !=
+                "angle") {
+            throw std::invalid_argument(
+                "performance-map artifact '" + artifact.id +
+                "' variable-geometry turbomachinery condition "
+                "must be 'geometry_setting' with dimension 'angle'");
+        }
+        selected =
+            artifact.conditioned_map->layers().front().map.get();
+    } else if (!artifact.map) {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' must provide an ordinary two-coordinate map");
+    }
+    const auto& map = *selected;
     if (map.primary_variable().name !=
             "corrected_mass_flow" ||
         map.primary_variable().dimension != "mass_flow") {
@@ -132,6 +160,8 @@ EvaluationStatus evaluate_turbomachinery_map(
     double angular_speed,
     double reference_pressure,
     double reference_temperature,
+    bool variable_geometry,
+    double geometry_setting,
     TurbomachineryMapPoint& point) {
     const auto inlet = properties.state_ph(
         pressure, enthalpy);
@@ -153,8 +183,14 @@ EvaluationStatus evaluate_turbomachinery_map(
     const double corrected_speed =
         angular_speed / root_theta;
     try {
-        const auto evaluated = artifact.map->evaluate(
-            corrected_mass_flow, corrected_speed);
+        const auto evaluated = variable_geometry
+            ? artifact.conditioned_map
+                  ->evaluate(
+                      corrected_mass_flow, corrected_speed,
+                      geometry_setting)
+                  .map
+            : artifact.map->evaluate(
+                  corrected_mass_flow, corrected_speed);
         point.pressure_ratio =
             evaluated.outputs.at(contract.pressure_ratio);
         point.efficiency =
@@ -355,11 +391,14 @@ class MapTurbomachineryModel final : public ComponentModel {
 public:
     MapTurbomachineryModel(
         std::string kind,
-        bool compressor)
+        bool compressor,
+        bool variable_geometry = false)
         : descriptor_(make_map_turbomachinery_descriptor(
               std::move(kind),
-              compressor ? "in" : "out")),
-          compressor_(compressor) {}
+              compressor ? "in" : "out",
+              variable_geometry)),
+          compressor_(compressor),
+          variable_geometry_(variable_geometry) {}
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -372,7 +411,8 @@ public:
             require_performance_map(
                 context, "performance_map");
         const auto contract =
-            validate_turbomachinery_map(*artifact);
+            validate_turbomachinery_map(
+                *artifact, variable_geometry_);
         const auto properties =
             require_property_package(context, "inlet");
         if (properties !=
@@ -385,6 +425,10 @@ public:
             context.component, "reference_pressure", 101325.0);
         const double reference_temperature = parameter_or(
             context.component, "reference_temperature", 288.15);
+        const double geometry_setting = variable_geometry_
+            ? required_parameter(
+                  context.component, "geometry_setting")
+            : 0.0;
 
         const auto inlet_m =
             require_port_variable(context, "inlet.m_dot");
@@ -413,7 +457,9 @@ public:
         const auto map_point =
             [artifact, contract, properties, inlet_m, inlet_p,
              inlet_h, shaft_omega, reference_pressure,
-             reference_temperature](
+             reference_temperature,
+             variable_geometry = variable_geometry_,
+             geometry_setting](
                 const std::vector<double>& x,
                 TurbomachineryMapPoint& point) {
                 return evaluate_turbomachinery_map(
@@ -421,6 +467,7 @@ public:
                     x.at(inlet_m), x.at(inlet_p),
                     x.at(inlet_h), x.at(shaft_omega),
                     reference_pressure, reference_temperature,
+                    variable_geometry, geometry_setting,
                     point);
             };
 
@@ -598,6 +645,7 @@ public:
 private:
     ComponentModelDescriptor descriptor_;
     bool compressor_{false};
+    bool variable_geometry_{false};
 };
 
 }  // namespace
@@ -625,6 +673,14 @@ void register_turbomachinery_component_models(
     registry.register_model(
         std::make_shared<MapTurbomachineryModel>(
             "turbine.fluid.performance_map", false));
+    registry.register_model(
+        std::make_shared<MapTurbomachineryModel>(
+            "compressor.fluid.variable_geometry_map",
+            true, true));
+    registry.register_model(
+        std::make_shared<MapTurbomachineryModel>(
+            "turbine.fluid.variable_geometry_map",
+            false, true));
 }
 
 }  // namespace thermox::platform

@@ -865,6 +865,10 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain generic-fluid compressor");
     require(registry.contains("compressor.fluid.performance_map"),
             "default registry should contain map-driven compressor");
+    require(registry.contains(
+                "compressor.fluid.variable_geometry_map"),
+            "default registry should contain variable-geometry "
+            "compressor");
     require(registry.contains("turbine.fluid.performance_map"),
             "default registry should contain map-driven turbine");
     require(registry.contains("storage.thermal.lumped"),
@@ -922,14 +926,18 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.gas.isentropic_efficiency",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
+        "compressor.fluid.variable_geometry_map",
         "compressor.material.isentropic_efficiency",
         "compressor.material.performance_map",
+        "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
         "turbine.gas.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
+        "turbine.fluid.variable_geometry_map",
         "turbine.material.isentropic_efficiency",
         "turbine.material.performance_map",
+        "turbine.material.variable_geometry_map",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
         "junction.material.mixer.two_inlet",
@@ -1389,7 +1397,7 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
 }
 
 void test_map_driven_compressor_solves_bound_operating_point() {
-    const auto document =
+    auto document =
         thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v2",
   "model": {
@@ -1501,6 +1509,76 @@ void test_map_driven_compressor_solves_bound_operating_point() {
         100.0 *
             (expected_outlet_enthalpy - 1004.5 * 300.0),
         1.0e-2, "mapped compressor shaft power");
+
+    const auto geometry_layer = [](
+        double pressure_ratio, double efficiency) {
+        return std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{80.0, {pressure_ratio, efficiency}},
+                  {120.0, {pressure_ratio, efficiency}}}},
+                {400.0,
+                 {{80.0, {pressure_ratio, efficiency}},
+                  {120.0, {pressure_ratio, efficiency}}}},
+            });
+    };
+    maps.register_artifact({
+        "variable-geometry-compressor-map",
+        thermox::platform::performance_map_artifact_schema_v2,
+        "test-variable-geometry-map",
+        std::string(64, '9'),
+        nullptr,
+        std::make_shared<const
+            thermox::platform::ConditionedPerformanceMap>(
+            thermox::platform::MapVariable{
+                "geometry_setting", "angle"},
+            std::vector<thermox::platform::ConditionedMapLayer>{
+                {60.0 * std::acos(-1.0) / 180.0,
+                 geometry_layer(8.0, 0.80)},
+                {80.0 * std::acos(-1.0) / 180.0,
+                 geometry_layer(12.0, 0.90)},
+            }),
+    });
+    auto geometry_document = document;
+    auto& variable_geometry =
+        geometry_document.components.front();
+    variable_geometry.kind =
+        "compressor.fluid.variable_geometry_map";
+    variable_geometry.artifact_bindings["performance_map"] =
+        "variable-geometry-compressor-map";
+    variable_geometry.parameters["geometry_setting"] = {
+        60.0 * std::acos(-1.0) / 180.0, "rad", "angle"};
+    geometry_document.cases.front().parameter_overrides = {
+        {"components.compressor.parameters.geometry_setting",
+         {70.0 * std::acos(-1.0) / 180.0, "rad", "angle"}},
+    };
+    const auto geometry_graph =
+        thermox::platform::compile_model_graph(
+            geometry_document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, "operating_point");
+    const auto geometry_result =
+        thermox::solve_newton(geometry_graph.problem);
+    require(geometry_result.diagnostics.converged,
+            geometry_result.diagnostics.message);
+    require_near(
+        geometry_result.x.at(require_variable_index(
+            geometry_graph.problem.variable_names,
+            "compressor.outlet.p")),
+        10.0 * 101325.0, 1.0e-4,
+        "case geometry setting must interpolate conditioned "
+        "compressor pressure ratio");
 
     thermox::platform::PerformanceMapRegistry invalid_maps;
     invalid_maps.register_artifact({
@@ -2573,6 +2651,44 @@ void test_map_driven_material_turbomachinery() {
                   {12.0, {5.0, 0.9}}}},
             }),
     });
+    const auto material_geometry_layer = [](
+        double pressure_ratio, double efficiency) {
+        return std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{8.0, {pressure_ratio, efficiency}},
+                  {12.0, {pressure_ratio, efficiency}}}},
+                {350.0,
+                 {{8.0, {pressure_ratio, efficiency}},
+                  {12.0, {pressure_ratio, efficiency}}}},
+            });
+    };
+    maps.register_artifact({
+        "material-variable-geometry-map",
+        thermox::platform::performance_map_artifact_schema_v2,
+        "test-material-variable-geometry-map",
+        std::string(64, '8'),
+        nullptr,
+        std::make_shared<const
+            thermox::platform::ConditionedPerformanceMap>(
+            thermox::platform::MapVariable{
+                "geometry_setting", "angle"},
+            std::vector<thermox::platform::ConditionedMapLayer>{
+                {60.0 * std::acos(-1.0) / 180.0,
+                 material_geometry_layer(1.5, 0.75)},
+                {80.0 * std::acos(-1.0) / 180.0,
+                 material_geometry_layer(2.5, 0.85)},
+            }),
+    });
     thermox::physics::ThermochemistryPackageRegistry chemistry;
     chemistry.register_backend(
         {"test_backend", "test-thermochemistry", "1.0.0",
@@ -2613,6 +2729,38 @@ void test_map_driven_material_turbomachinery() {
         value("compressor.shaft.W_dot"),
         10.0 * (expected_enthalpy - 300000.0),
         1.0e-4, "material map closes shaft power");
+
+    auto geometry_document = document;
+    auto& geometry_machine =
+        geometry_document.components.front();
+    geometry_machine.kind =
+        "compressor.material.variable_geometry_map";
+    geometry_machine.artifact_bindings["performance_map"] =
+        "material-variable-geometry-map";
+    geometry_machine.parameters["geometry_setting"] = {
+        60.0 * std::acos(-1.0) / 180.0, "rad", "angle"};
+    geometry_document.cases.front().parameter_overrides = {
+        {"components.compressor.parameters.geometry_setting",
+         {70.0 * std::acos(-1.0) / 180.0, "rad", "angle"}},
+    };
+    const auto geometry_graph =
+        thermox::platform::compile_model_graph(
+            geometry_document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, chemistry, "off_design");
+    const auto geometry_result =
+        thermox::solve_newton(geometry_graph.problem);
+    require(geometry_result.diagnostics.converged,
+            geometry_result.diagnostics.message);
+    require_near(
+        geometry_result.x.at(require_variable_index(
+            geometry_graph.problem.variable_names,
+            "compressor.outlet.p")),
+        202650.0, 1.0e-6,
+        "material variable-geometry map must interpolate the "
+        "case-selected pressure ratio");
 
     document.model_id = "mapped_material_turbine";
     auto& machine = document.components.front();

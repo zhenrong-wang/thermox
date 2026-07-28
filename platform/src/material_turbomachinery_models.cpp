@@ -173,7 +173,9 @@ public:
         std::size_t inlet_h,
         std::size_t shaft_omega,
         double reference_pressure,
-        double reference_temperature)
+        double reference_temperature,
+        bool variable_geometry,
+        double geometry_setting)
         : properties_(std::move(properties)),
           artifact_(std::move(artifact)),
           species_(std::move(species)),
@@ -182,8 +184,32 @@ public:
           inlet_h_(inlet_h),
           shaft_omega_(shaft_omega),
           reference_pressure_(reference_pressure),
-          reference_temperature_(reference_temperature) {
-        const auto& map = *artifact_->map;
+          reference_temperature_(reference_temperature),
+          variable_geometry_(variable_geometry),
+          geometry_setting_(geometry_setting) {
+        const PerformanceMap* selected = artifact_->map.get();
+        if (variable_geometry_) {
+            if (!artifact_->conditioned_map ||
+                artifact_->conditioned_map
+                        ->condition_variable().name !=
+                    "geometry_setting" ||
+                artifact_->conditioned_map
+                        ->condition_variable().dimension !=
+                    "angle") {
+                throw std::invalid_argument(
+                    "performance-map artifact '" + artifact_->id +
+                    "' variable-geometry turbomachinery condition "
+                    "must be 'geometry_setting' with dimension "
+                    "'angle'");
+            }
+            selected = artifact_->conditioned_map
+                           ->layers().front().map.get();
+        } else if (!selected) {
+            throw std::invalid_argument(
+                "performance-map artifact '" + artifact_->id +
+                "' must provide an ordinary two-coordinate map");
+        }
+        const auto& map = *selected;
         if (map.primary_variable().name !=
                 "corrected_mass_flow" ||
             map.primary_variable().dimension != "mass_flow") {
@@ -273,9 +299,19 @@ public:
         }
         try {
             const double root_theta = std::sqrt(theta);
-            const auto map = artifact_->map->evaluate(
-                total_mass_flow * root_theta / delta,
-                x.at(shaft_omega_) / root_theta);
+            const double corrected_mass_flow =
+                total_mass_flow * root_theta / delta;
+            const double corrected_speed =
+                x.at(shaft_omega_) / root_theta;
+            const auto map = variable_geometry_
+                ? artifact_->conditioned_map
+                      ->evaluate(
+                          corrected_mass_flow,
+                          corrected_speed,
+                          geometry_setting_)
+                      .map
+                : artifact_->map->evaluate(
+                      corrected_mass_flow, corrected_speed);
             const double pressure_ratio =
                 map.outputs.at(*pressure_ratio_index_);
             const double efficiency =
@@ -323,6 +359,8 @@ private:
     std::size_t shaft_omega_;
     double reference_pressure_;
     double reference_temperature_;
+    bool variable_geometry_;
+    double geometry_setting_;
     std::optional<std::size_t> pressure_ratio_index_;
     std::optional<std::size_t> efficiency_index_;
     mutable std::mutex mutex_;
@@ -566,8 +604,10 @@ class MaterialMapTurbomachineryModel final
     : public ComponentModel {
 public:
     MaterialMapTurbomachineryModel(
-        std::string kind, bool compressor)
-        : compressor_(compressor) {
+        std::string kind, bool compressor,
+        bool variable_geometry = false)
+        : compressor_(compressor),
+          variable_geometry_(variable_geometry) {
         descriptor_.kind = std::move(kind);
         descriptor_.version = "1.0.0";
         descriptor_.ports = {
@@ -581,6 +621,13 @@ public:
             {"reference_temperature", "temperature", false, 288.15,
              0.0, std::numeric_limits<double>::infinity(), false,
              true}};
+        if (variable_geometry_) {
+            descriptor_.parameters.push_back(
+                {"geometry_setting", "angle", true, std::nullopt,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(), true,
+                 true});
+        }
         descriptor_.artifacts = {{
             "performance_map",
             performance_map_artifact_type,
@@ -661,7 +708,13 @@ public:
                     101325.0),
                 parameter_or(
                     context.component, "reference_temperature",
-                    288.15));
+                    288.15),
+                variable_geometry_,
+                variable_geometry_
+                    ? required_parameter(
+                          context.component,
+                          "geometry_setting")
+                    : 0.0);
 
         system.add_checked_equation(
             prefix + "map_pressure_ratio",
@@ -734,6 +787,7 @@ public:
 private:
     ComponentModelDescriptor descriptor_;
     bool compressor_{false};
+    bool variable_geometry_{false};
 };
 
 }  // namespace
@@ -752,6 +806,14 @@ void register_material_turbomachinery_component_models(
     registry.register_model(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "turbine.material.performance_map", false));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "compressor.material.variable_geometry_map",
+            true, true));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "turbine.material.variable_geometry_map",
+            false, true));
 }
 
 }  // namespace thermox::platform

@@ -69,6 +69,28 @@ thermox::platform::PerformanceMapArtifact sample_artifact(
     };
 }
 
+std::shared_ptr<const thermox::platform::PerformanceMap>
+scaled_sample_map(double scale) {
+    return std::make_shared<
+        const thermox::platform::PerformanceMap>(
+        thermox::platform::MapVariable{
+            "corrected_flow", "mass_flow"},
+        thermox::platform::MapVariable{
+            "corrected_speed", "angular_speed"},
+        std::vector<thermox::platform::MapVariable>{
+            {"pressure_ratio", "dimensionless"},
+            {"efficiency", "dimensionless"},
+        },
+        std::vector<thermox::platform::MapCurve>{
+            {100.0,
+             {{0.0, {scale, 10.0 * scale}},
+              {10.0, {3.0 * scale, 20.0 * scale}}}},
+            {200.0,
+             {{0.0, {2.0 * scale, 30.0 * scale}},
+              {20.0, {6.0 * scale, 50.0 * scale}}}},
+        });
+}
+
 void test_interpolates_non_rectangular_curve_families() {
     const auto map = sample_map();
     require(
@@ -239,6 +261,51 @@ void test_definition_validation() {
         "non-finite map outputs must be rejected");
 }
 
+void test_conditioned_map_interpolates_third_coordinate() {
+    const thermox::platform::ConditionedPerformanceMap map(
+        {"geometry_setting", "angle"},
+        {
+            {0.0, scaled_sample_map(1.0)},
+            {1.0, scaled_sample_map(2.0)},
+        });
+    const auto value = map.evaluate(5.0, 150.0, 0.5);
+    require_close(
+        value.map.outputs.at(0), 3.75,
+        "conditioned output interpolation is incorrect");
+    require_close(
+        value.map.primary_derivatives.at(0), 0.3,
+        "conditioned primary derivative is incorrect");
+    require_close(
+        value.map.family_derivatives.at(0), 0.015,
+        "conditioned family derivative is incorrect");
+    require_close(
+        value.condition_derivatives.at(0), 2.5,
+        "condition derivative is incorrect");
+    require(
+        map.condition_variable().name == "geometry_setting" &&
+            map.layers().size() == 2 &&
+            !value.condition_extrapolated,
+        "conditioned map must retain its third-axis contract");
+
+    const thermox::platform::ConditionedPerformanceMap clamped(
+        {"geometry_setting", "angle"},
+        {
+            {0.0, scaled_sample_map(1.0)},
+            {1.0, scaled_sample_map(2.0)},
+        },
+        thermox::platform::MapExtrapolationPolicy::clamp);
+    const auto boundary = clamped.evaluate(5.0, 150.0, -1.0);
+    require_close(
+        boundary.map.outputs.at(0), 2.5,
+        "condition clamp must use the boundary layer");
+    require_close(
+        boundary.condition_derivatives.at(0), 0.0,
+        "condition clamp derivative must be zero");
+    require(
+        boundary.condition_extrapolated,
+        "condition clamp must report extrapolation");
+}
+
 void test_versioned_artifact_registry() {
     thermox::platform::PerformanceMapRegistry registry;
     registry.register_artifact(sample_artifact());
@@ -276,6 +343,29 @@ void test_versioned_artifact_registry() {
     require(
         checksum_rejected,
         "artifact registry must reject malformed checksums");
+
+    registry.register_artifact({
+        "conditioned-compressor-map",
+        thermox::platform::performance_map_artifact_schema_v2,
+        "vendor-variable-geometry-3",
+        std::string(64, 'b'),
+        nullptr,
+        std::make_shared<const
+            thermox::platform::ConditionedPerformanceMap>(
+            thermox::platform::MapVariable{
+                "geometry_setting", "angle"},
+            std::vector<thermox::platform::ConditionedMapLayer>{
+                {0.0, scaled_sample_map(1.0)},
+                {1.0, scaled_sample_map(2.0)},
+            }),
+    });
+    require(
+        registry.require_artifact(
+                    "conditioned-compressor-map")
+                ->conditioned_map
+                ->evaluate(5.0, 150.0, 0.5)
+                .map.outputs.at(0) == 3.75,
+        "v2 artifact must preserve conditioned map payload");
 }
 
 }  // namespace
@@ -287,6 +377,7 @@ int main() {
         test_clamp_policy_has_zero_boundary_derivatives();
         test_linear_policy_extrapolates_with_derivatives();
         test_definition_validation();
+        test_conditioned_map_interpolates_third_coordinate();
         test_versioned_artifact_registry();
         std::cout << "thermox performance map tests passed\n";
         return 0;

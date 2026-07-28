@@ -86,10 +86,54 @@ private:
     MapExtrapolationPolicy family_extrapolation_;
 };
 
+struct ConditionedMapLayer {
+    double condition_coordinate{0.0};
+    std::shared_ptr<const PerformanceMap> map;
+};
+
+struct ConditionedMapEvaluation {
+    MapEvaluation map;
+    std::vector<double> condition_derivatives;
+    bool condition_extrapolated{false};
+};
+
+// A third-coordinate family of ordinary two-coordinate maps.
+//
+// Every layer retains the non-rectangular primary/family structure of
+// PerformanceMap. Evaluation interpolates complete map outputs and
+// derivatives between adjacent condition layers.
+class ConditionedPerformanceMap {
+public:
+    ConditionedPerformanceMap(
+        MapVariable condition_variable,
+        std::vector<ConditionedMapLayer> layers,
+        MapExtrapolationPolicy condition_extrapolation =
+            MapExtrapolationPolicy::reject);
+
+    [[nodiscard]] const MapVariable& condition_variable()
+        const noexcept;
+    [[nodiscard]] const std::vector<ConditionedMapLayer>& layers()
+        const noexcept;
+    [[nodiscard]] MapExtrapolationPolicy
+    condition_extrapolation() const noexcept;
+
+    [[nodiscard]] ConditionedMapEvaluation evaluate(
+        double primary_coordinate,
+        double family_coordinate,
+        double condition_coordinate) const;
+
+private:
+    MapVariable condition_variable_;
+    std::vector<ConditionedMapLayer> layers_;
+    MapExtrapolationPolicy condition_extrapolation_;
+};
+
 inline constexpr const char* performance_map_artifact_type =
     "thermox.performance_map";
 inline constexpr const char* performance_map_artifact_schema_v1 =
     "thermox.performance_map/v1";
+inline constexpr const char* performance_map_artifact_schema_v2 =
+    "thermox.performance_map/v2";
 
 // Immutable identity and payload for user-supplied engineering data. The
 // checksum identifies the canonical source payload; revision is a
@@ -100,6 +144,7 @@ struct PerformanceMapArtifact {
     std::string revision;
     std::string checksum_sha256;
     std::shared_ptr<const PerformanceMap> map;
+    std::shared_ptr<const ConditionedPerformanceMap> conditioned_map;
 };
 
 class PerformanceMapRegistry {

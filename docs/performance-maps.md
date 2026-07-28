@@ -41,6 +41,11 @@ are absent from the runtime registry.
 The individual curves may have different primary-coordinate samples, matching common compressor
 and turbine speed-line data without forcing it onto a rectangular grid.
 
+`thermox.performance_map/v2` adds a third, conditioned coordinate. Each strictly ordered condition
+layer contains a complete v1-style non-rectangular map with identical axes, outputs, and
+extrapolation policies. Evaluation resolves corrected flow and corrected speed in the two
+neighboring layers, then interpolates their outputs and derivatives along the condition axis.
+
 Every axis and output has a stable name and physical dimension. Evaluation returns:
 
 - all interpolated outputs;
@@ -87,6 +92,12 @@ recoverable model evaluations, allowing the nonlinear solver to reject invalid t
 pressure-ratio row uses map derivatives and local numerically evaluated property-transformation
 derivatives in sparse Jacobian assembly.
 
+The registered `*.variable_geometry_map` variants bind a v2 artifact whose condition variable is
+`geometry_setting` with dimension `angle`. The component parameter of the same name is normalized
+to radians and may be overridden per operating case. This supports IGV angle, guide-vane position,
+or blade pitch without changing graph topology or treating measured mass flow as a hidden map
+input.
+
 ## Next integration slice
 
 1. Define a versioned map-artifact schema and checksum identity. ✅
@@ -97,5 +108,7 @@ derivatives in sparse Jacobian assembly.
 4. Add the corresponding map-based turbine component with turbine pressure, efficiency, and shaft
    power conventions. ✅
 5. Apply the same map contract to composition-aware material compressor and turbine ports. ✅
-6. Calibrate a designated baseline point, then freeze parameters and predict independent
+6. Add conditioned three-coordinate maps and variable-geometry fluid/material turbomachinery
+   components. ✅
+7. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.

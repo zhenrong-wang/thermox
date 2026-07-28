@@ -41,6 +41,8 @@ Implemented in this sprint:
   cooling, recirculation, and multistream reacting-system graphs.
 - Performance-map compressor and turbine models for both ordinary fluid and composition-aware
   material gas paths.
+- Conditioned three-coordinate map families for variable-geometry turbomachinery, with per-case
+  angle selection across complete corrected-flow/speed maps.
 - Typed per-case component-parameter overrides for operating controls and configuration changes
   without duplicating system topology.
 - Scale-invariant built-in dense/CSR direct solvers for small problems and backend testing.
