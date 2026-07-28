@@ -75,6 +75,15 @@ public:
             pressure, enthalpy, composition, Flash::ph);
     }
 
+    ThermochemicalResult state_ps(
+        double pressure,
+        double entropy,
+        const SpeciesComposition& composition)
+        const override {
+        return evaluate(
+            pressure, entropy, composition, Flash::ps);
+    }
+
     ThermochemicalResult equilibrate_hp(
         double pressure,
         double enthalpy,
@@ -86,7 +95,7 @@ public:
     }
 
 private:
-    enum class Flash { pt, ph, equilibrium_hp };
+    enum class Flash { pt, ph, ps, equilibrium_hp };
 
     void set_composition(
         Cantera::ThermoPhase& thermo,
@@ -137,6 +146,8 @@ private:
             set_composition(*thermo, composition);
             if (flash == Flash::pt) {
                 thermo->setState_TP(second, pressure);
+            } else if (flash == Flash::ps) {
+                thermo->setState_SP(second, pressure);
             } else {
                 thermo->setState_HP(second, pressure);
             }
@@ -206,6 +217,7 @@ void register_cantera_thermochemistry_backend(
             {
                 ThermochemistryCapability::state_pt,
                 ThermochemistryCapability::state_ph,
+                ThermochemistryCapability::state_ps,
                 ThermochemistryCapability::equilibrium_hp,
                 ThermochemistryCapability::transport,
             },

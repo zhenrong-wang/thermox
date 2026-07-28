@@ -50,6 +50,7 @@ private:
 enum class ThermochemistryCapability {
     state_pt,
     state_ph,
+    state_ps,
     equilibrium_hp,
     transport,
 };
@@ -92,6 +93,10 @@ public:
     [[nodiscard]] virtual ThermochemicalResult state_ph(
         double pressure_pa,
         double enthalpy_j_kg,
+        const SpeciesComposition& composition) const = 0;
+    [[nodiscard]] virtual ThermochemicalResult state_ps(
+        double pressure_pa,
+        double entropy_j_kg_k,
         const SpeciesComposition& composition) const = 0;
     [[nodiscard]] virtual ThermochemicalResult equilibrate_hp(
         double pressure_pa,

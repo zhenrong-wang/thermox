@@ -60,6 +60,13 @@ public:
         const override {
         return {};
     }
+    thermox::physics::ThermochemicalResult state_ps(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&)
+        const override {
+        return {};
+    }
     thermox::physics::ThermochemicalResult equilibrate_hp(
         double,
         double,

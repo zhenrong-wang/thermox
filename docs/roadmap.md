@@ -46,9 +46,10 @@ Work items:
    - source/sink
    - pump ✅ *(property-aware PH/PS isentropic-efficiency model, including IF97 regression)*
    - turbine ✅ *(property-aware mass continuity, pressure ratio, isentropic enthalpy change, and
-     shaft-power residuals; outlet temperature is derived)*
+     shaft-power residuals; fixed-fluid and composition-aware material variants are available)*
    - compressor ✅ *(property-aware mass continuity, pressure ratio, isentropic enthalpy change,
-     and shaft-power residuals; outlet temperature is derived)*
+     and shaft-power residuals; fixed-fluid and composition-aware material variants are
+     available)*
    - combustor ✅ *(backend-agnostic adiabatic equilibrium model with composition-aware air,
      fuel, and exhaust material ports)*
    - heat exchanger simplified

@@ -694,6 +694,7 @@ ComponentRegistry make_default_component_registry() {
     ComponentRegistry registry;
     register_boundary_component_models(registry);
     register_turbomachinery_component_models(registry);
+    register_material_turbomachinery_component_models(registry);
     register_transport_component_models(registry);
     register_heat_transfer_component_models(registry);
     register_fluid_inventory_component_models(registry);

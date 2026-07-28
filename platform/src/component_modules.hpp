@@ -8,6 +8,8 @@ void register_boundary_component_models(ComponentRegistry& registry);
 void register_storage_component_models(ComponentRegistry& registry);
 void register_turbomachinery_component_models(
     ComponentRegistry& registry);
+void register_material_turbomachinery_component_models(
+    ComponentRegistry& registry);
 void register_transport_component_models(ComponentRegistry& registry);
 void register_heat_transfer_component_models(
     ComponentRegistry& registry);

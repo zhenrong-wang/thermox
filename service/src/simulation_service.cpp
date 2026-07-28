@@ -61,6 +61,8 @@ std::string_view capability_name(
             return "state_pt";
         case physics::ThermochemistryCapability::state_ph:
             return "state_ph";
+        case physics::ThermochemistryCapability::state_ps:
+            return "state_ps";
         case physics::ThermochemistryCapability::equilibrium_hp:
             return "equilibrium_hp";
         case physics::ThermochemistryCapability::transport:

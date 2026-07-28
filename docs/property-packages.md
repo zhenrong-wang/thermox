@@ -7,6 +7,7 @@ Fixed-fluid property packages and reacting-mixture thermochemistry are separate 
 
 - an ordered species basis and validated mass- or mole-fraction compositions;
 - composition-aware PT and PH states;
+- composition-aware PS states for isentropic compression and expansion;
 - equilibrium at fixed enthalpy and pressure;
 - mechanism, phase, implementation, version, and capability identity.
 
@@ -32,8 +33,14 @@ cmake -S . -B build-cantera -DTHERMOX_ENABLE_CANTERA=ON
 ```
 
 This produces `thermox::cantera_backend`, whose registration function adds composition-aware PT,
-PH, equilibrium-HP, and transport capabilities. The default build remains bounded and does not
-compile Cantera.
+PH, PS, equilibrium-HP, and transport capabilities. The default build remains bounded and does
+not compile Cantera.
+
+The built-in `compressor.material.isentropic_efficiency` and
+`turbine.material.isentropic_efficiency` components preserve each species mass flow, evaluate the
+isentropic outlet through the PS contract, apply isentropic efficiency, and close shaft power.
+They use the same component graph semantics as fixed-fluid turbomachinery and contain no
+gas-turbine-specific assumptions.
 
 `humid_air_state_ptrh` is an always-available CoolProp-backed ambient service. It converts measured
 pressure, dry-bulb temperature, and relative humidity into humidity ratio, water mass fraction,

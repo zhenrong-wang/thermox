@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 28,
+        response.components.size() == 30,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),

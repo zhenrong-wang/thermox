@@ -69,6 +69,8 @@ public:
         return capability ==
                 thermox::physics::ThermochemistryCapability::state_ph ||
             capability ==
+                thermox::physics::ThermochemistryCapability::state_ps ||
+            capability ==
                 thermox::physics::ThermochemistryCapability::
                     equilibrium_hp;
     }
@@ -78,9 +80,22 @@ public:
         return {};
     }
     thermox::physics::ThermochemicalResult state_ph(
-        double, double,
-        const thermox::physics::SpeciesComposition&) const override {
-        return {};
+        double pressure, double enthalpy,
+        const thermox::physics::SpeciesComposition&
+            composition) const override {
+        return state(
+            pressure, enthalpy / 1000.0, composition);
+    }
+    thermox::physics::ThermochemicalResult state_ps(
+        double pressure, double entropy,
+        const thermox::physics::SpeciesComposition&
+            composition) const override {
+        const double temperature =
+            300.0 * std::exp(
+                (entropy +
+                 287.0 * std::log(pressure / 101325.0)) /
+                1000.0);
+        return state(pressure, temperature, composition);
     }
     thermox::physics::ThermochemicalResult equilibrate_hp(
         double pressure, double enthalpy,
@@ -97,6 +112,26 @@ public:
     }
 
 private:
+    thermox::physics::ThermochemicalResult state(
+        double pressure,
+        double temperature,
+        const thermox::physics::SpeciesComposition&
+            composition) const {
+        thermox::physics::ThermochemicalState state;
+        state.thermodynamic.pressure_pa = pressure;
+        state.thermodynamic.temperature_k = temperature;
+        state.thermodynamic.enthalpy_j_kg =
+            1000.0 * temperature;
+        state.thermodynamic.entropy_j_kg_k =
+            1000.0 * std::log(temperature / 300.0) -
+            287.0 * std::log(pressure / 101325.0);
+        state.composition = composition;
+        return {
+            std::move(state),
+            thermox::physics::PropertyStatus::success,
+            {}};
+    }
+
     std::vector<std::string> species_{"N2", "O2"};
 };
 
@@ -736,10 +771,12 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.gas.isentropic_efficiency",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
+        "compressor.material.isentropic_efficiency",
         "pump.fluid.isentropic_efficiency",
         "turbine.gas.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
+        "turbine.material.isentropic_efficiency",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
         "valve.fluid.isenthalpic_pressure_ratio",
@@ -1984,6 +2021,133 @@ void test_adiabatic_equilibrium_combustor() {
     require_near(
         value("combustor.outlet.m_dot[O2]"), 3.0, 1.0e-9,
         "combustor returns backend equilibrium oxygen flow");
+}
+
+void test_material_compressor_and_turbine() {
+    const auto chemistry_registry = [] {
+        thermox::physics::ThermochemistryPackageRegistry registry;
+        registry.register_backend(
+            {"test_backend", "test-thermochemistry", "1.0.0",
+             {thermox::physics::ThermochemistryCapability::state_ph,
+              thermox::physics::ThermochemistryCapability::state_ps}},
+            [](std::string_view, std::string_view) {
+                return std::make_shared<
+                    const TestThermochemistryPackage>();
+            });
+        return registry;
+    };
+    const auto compile_and_solve = [&](
+        const std::string& text) {
+        return thermox::platform::compile_model_graph(
+            thermox::platform::parse_model_document_text(text),
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            thermox::platform::PerformanceMapRegistry{},
+            chemistry_registry(), "design");
+    };
+
+    const auto compressor_graph = compile_and_solve(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_compressor",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "machine",
+      "kind": "compressor.material.isentropic_efficiency",
+      "parameters": {"pressure_ratio": 10.0, "eta_is": 0.8},
+      "materials": {"inlet": "gas", "outlet": "gas"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "machine.inlet.p": {"value": 100.0, "unit": "kPa"},
+      "machine.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "machine.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "machine.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "machine.shaft.omega": 314.1592653589793
+    }
+  }]
+})json");
+    const auto compressor =
+        thermox::solve_newton(compressor_graph.problem);
+    require(compressor.diagnostics.converged,
+            compressor.diagnostics.message);
+    const auto compressor_value = [&](const std::string& name) {
+        return compressor.x.at(require_variable_index(
+            compressor_graph.problem.variable_names, name));
+    };
+    const double compressor_isentropic_h =
+        300000.0 * std::pow(10.0, 0.287);
+    const double compressor_outlet_h =
+        300000.0 +
+        (compressor_isentropic_h - 300000.0) / 0.8;
+    require_near(
+        compressor_value("machine.outlet.h"),
+        compressor_outlet_h, 1.0e-5,
+        "material compressor applies isentropic efficiency");
+    require_near(
+        compressor_value("machine.shaft.W_dot"),
+        10.0 * (compressor_outlet_h - 300000.0), 1.0e-4,
+        "material compressor closes shaft input power");
+
+    const auto turbine_graph = compile_and_solve(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_turbine",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "machine",
+      "kind": "turbine.material.isentropic_efficiency",
+      "parameters": {"pressure_ratio": 10.0, "eta_is": 0.9},
+      "materials": {"inlet": "gas", "outlet": "gas"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "machine.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "machine.inlet.h": {"value": 1000.0, "unit": "kJ/kg"},
+      "machine.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "machine.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "machine.shaft.omega": 314.1592653589793
+    }
+  }]
+})json");
+    const auto turbine = thermox::solve_newton(
+        turbine_graph.problem);
+    require(turbine.diagnostics.converged,
+            turbine.diagnostics.message);
+    const auto turbine_value = [&](const std::string& name) {
+        return turbine.x.at(require_variable_index(
+            turbine_graph.problem.variable_names, name));
+    };
+    const double turbine_isentropic_h =
+        1000000.0 * std::pow(0.1, 0.287);
+    const double turbine_outlet_h =
+        1000000.0 +
+        0.9 * (turbine_isentropic_h - 1000000.0);
+    require_near(
+        turbine_value("machine.outlet.h"),
+        turbine_outlet_h, 1.0e-5,
+        "material turbine applies isentropic efficiency");
+    require_near(
+        turbine_value("machine.shaft.W_dot"),
+        10.0 * (1000000.0 - turbine_outlet_h), 1.0e-4,
+        "material turbine closes shaft output power");
 }
 
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
@@ -3474,6 +3638,7 @@ int main() {
         test_material_connector_and_frozen_transport();
         test_material_thermochemistry_resolves_on_demand();
         test_adiabatic_equilibrium_combustor();
+        test_material_compressor_and_turbine();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();
