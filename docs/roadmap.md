@@ -248,6 +248,9 @@ Next:
    reinjection without introducing gas-turbine-specific graph semantics. ✅
 9. Extend performance-map compressor/turbine contracts to composition-aware material ports so
    reacting gas paths can run frozen-parameter off-design predictions. ✅
+10. Add dimensioned, bounds-checked per-case component parameter overrides so controls and
+    operating configuration can vary while topology and calibrated global parameters remain
+    shared. ✅
 
 See `docs/calibration-architecture.md`.
 

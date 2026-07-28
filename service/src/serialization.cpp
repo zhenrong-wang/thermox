@@ -451,6 +451,12 @@ std::string serialize_model_document_json(
         }
         out << ",\n      \"mode\": ";
         json_string(out, simulation_case.mode);
+        if (!simulation_case.parameter_overrides.empty()) {
+            out << ",\n      \"parameter_overrides\": ";
+            scalar_map(
+                out, simulation_case.parameter_overrides,
+                "        ");
+        }
         if (!simulation_case.fixed_values.empty()) {
             out << ",\n      \"fixed_values\": ";
             scalar_map(out, simulation_case.fixed_values, "        ");

@@ -710,6 +710,26 @@ void test_transient_service() {
     request.model_json = read_source_file(
         "core/examples/lumped_thermal_storage.json");
     request.case_id = "charge";
+    thermox::service::ValidateModelRequest validation_request;
+    validation_request.model_json = request.model_json;
+    validation_request.case_id = request.case_id;
+    const auto validation =
+        service.validate_model(validation_request);
+    require(
+        validation.succeeded() &&
+            validation.canonical_model_json.find(
+                "\"parameter_overrides\"") !=
+                std::string::npos &&
+            validation.canonical_model_json.find(
+                "components.store.parameters.thermal_capacity") !=
+                std::string::npos,
+        "canonical model must retain per-case parameter overrides");
+    thermox::service::ValidateModelRequest round_trip;
+    round_trip.model_json = validation.canonical_model_json;
+    round_trip.case_id = request.case_id;
+    require(
+        service.validate_model(round_trip).succeeded(),
+        "canonical case parameter overrides must round trip");
     request.solver.end_time = 0.2;
     request.solver.max_step = 0.05;
     const auto response = service.run_transient(request);

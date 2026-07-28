@@ -470,6 +470,13 @@ ScalarValue convert_scalar(double value, const std::string& unit, const std::str
     if (unit == "K" || unit == "C" || unit == "degC") {
         return make_scalar(convert_temperature_to_k(value, unit), "K", "temperature");
     }
+    if (unit == "rad") {
+        return make_scalar(value, "rad", "angle");
+    }
+    if (unit == "deg") {
+        return make_scalar(
+            value * std::acos(-1.0) / 180.0, "rad", "angle");
+    }
     if (unit == "kg/s" || unit == "kg/h") {
         return make_scalar(convert_mass_flow_to_kg_s(value, unit), "kg/s", "mass_flow");
     }
@@ -788,6 +795,12 @@ CaseDefinition parse_case(const JsonValue& value) {
     c.id = require_string(value, "id");
     c.label = optional_string(value, "label");
     c.mode = require_string(value, "mode");
+    if (const JsonValue* parameter_overrides =
+            optional_object_member(value, "parameter_overrides")) {
+        c.parameter_overrides = parse_scalar_map(
+            *parameter_overrides,
+            "case '" + c.id + "'.parameter_overrides");
+    }
     if (const JsonValue* fixed_values = optional_object_member(value, "fixed_values")) {
         c.fixed_values = parse_scalar_map(*fixed_values, "case '" + c.id + "'.fixed_values");
     }

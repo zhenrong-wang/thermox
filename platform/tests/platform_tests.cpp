@@ -457,6 +457,12 @@ void test_generic_model_document_loads_components_connections_and_cases() {
       "id": "design",
       "label": "100% load",
       "mode": "steady_state_design",
+      "parameter_overrides": {
+        "components.compressor.parameters.eta_is": {
+          "value": 82.0,
+          "unit": "%"
+        }
+      },
       "fixed_values": {
         "ambient.outlet.p": {
           "value": 1.01325,
@@ -508,6 +514,11 @@ void test_generic_model_document_loads_components_connections_and_cases() {
                  "component power should normalize");
     require_near(document.cases.at(0).initial_guesses.at("compressor.outlet.h").value_si, 650000.0,
                  1.0e-9, "specific enthalpy guess should normalize");
+    require_near(
+        document.cases.at(0).parameter_overrides.at(
+            "components.compressor.parameters.eta_is").value_si,
+        0.82, 1.0e-12,
+        "case parameter override should normalize and retain its target");
 }
 
 void test_generic_model_document_rejects_unknown_medium() {
@@ -1215,7 +1226,7 @@ void test_generic_model_compiles_to_connection_equations() {
 
 
 void test_generic_model_solves_ideal_gas_compressor_residuals() {
-    const auto document = thermox::platform::parse_model_document_text(R"json({
+    auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v2",
   "model": {
     "id": "compressor_physics",
@@ -1333,6 +1344,48 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
         require_result_value(outlet.derived_values, "T"),
         expected_temperature, 1.0e-8,
         "result layer derives compressor outlet temperature");
+
+    auto off_design = document.cases.front();
+    off_design.id = "off_design";
+    off_design.mode = "steady_state_off_design";
+    off_design.parameter_overrides = {
+        {"components.compressor.parameters.pressure_ratio",
+         {6.0, "dimensionless", "dimensionless"}},
+        {"components.compressor.parameters.eta_is",
+         {0.8, "dimensionless", "dimensionless"}},
+    };
+    document.cases.push_back(off_design);
+    const auto off_design_graph =
+        thermox::platform::compile_model_graph(
+            document, registry, "off_design");
+    const auto off_design_result =
+        thermox::solve_newton(off_design_graph.problem);
+    require(off_design_result.diagnostics.converged,
+            off_design_result.diagnostics.message);
+    require_near(
+        off_design_result.x.at(require_variable_index(
+            off_design_graph.problem.variable_names,
+            "compressor.outlet.p")),
+        6.0 * 101325.0, 1.0e-5,
+        "case override must change the effective component "
+        "pressure ratio");
+    require_near(
+        document.components.front()
+            .parameters.at("pressure_ratio").value_si,
+        12.0, 1.0e-12,
+        "case override must not mutate the topology component");
+
+    auto invalid = document;
+    invalid.cases.back().parameter_overrides = {
+        {"components.compressor.parameters.pressure_ratio",
+         {-1.0, "dimensionless", "dimensionless"}},
+    };
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                invalid, registry, "off_design");
+        },
+        "outside its declared bounds");
 }
 
 void test_map_driven_compressor_solves_bound_operating_point() {

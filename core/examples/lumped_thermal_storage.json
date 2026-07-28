@@ -37,6 +37,12 @@
     {
       "id": "charge",
       "mode": "dynamic_transient",
+      "parameter_overrides": {
+        "components.store.parameters.thermal_capacity": {
+          "value": 1.5,
+          "unit": "MJ/K"
+        }
+      },
       "fixed_values": {
         "heater.outlet.Q_dot": {
           "value": 1.0,

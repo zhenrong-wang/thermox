@@ -53,6 +53,7 @@ struct CaseDefinition {
     std::string id;
     std::string label;
     std::string mode;
+    std::map<std::string, ScalarValue> parameter_overrides;
     std::map<std::string, ScalarValue> fixed_values;
     std::map<std::string, ScalarValue> initial_guesses;
     std::map<std::string, ScalarValue> solver_options;

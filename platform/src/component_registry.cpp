@@ -348,6 +348,102 @@ std::optional<double> case_scalar_value(const CaseDefinition* active_case,
     return it->second.value_si;
 }
 
+std::map<
+    std::string,
+    std::map<std::string, ScalarValue>>
+case_parameter_overrides(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const CaseDefinition* active_case) {
+    std::map<
+        std::string,
+        std::map<std::string, ScalarValue>> overrides;
+    if (active_case == nullptr) return overrides;
+    constexpr std::string_view prefix{"components."};
+    constexpr std::string_view marker{".parameters."};
+    for (const auto& [target, scalar] :
+         active_case->parameter_overrides) {
+        if (!target.starts_with(prefix)) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override must use "
+                "components.<component-id>.parameters."
+                "<parameter-name>: " + target);
+        }
+        const auto marker_position =
+            target.find(marker, prefix.size());
+        if (marker_position == std::string::npos) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override must use "
+                "components.<component-id>.parameters."
+                "<parameter-name>: " + target);
+        }
+        const std::string component_id = target.substr(
+            prefix.size(),
+            marker_position - prefix.size());
+        const std::string parameter_name = target.substr(
+            marker_position + marker.size());
+        if (component_id.empty() || parameter_name.empty()) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override has an empty component or "
+                "parameter name: " + target);
+        }
+        const auto component = std::find_if(
+            document.components.begin(),
+            document.components.end(),
+            [&](const auto& candidate) {
+                return candidate.id == component_id;
+            });
+        if (component == document.components.end()) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override references unknown "
+                "component: " + component_id);
+        }
+        const auto& descriptor =
+            registry.require_model(component->kind).descriptor();
+        const auto parameter = std::find_if(
+            descriptor.parameters.begin(),
+            descriptor.parameters.end(),
+            [&](const auto& candidate) {
+                return candidate.name == parameter_name;
+            });
+        if (parameter == descriptor.parameters.end()) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override references unknown "
+                "parameter: " + target);
+        }
+        if (scalar.dimension != "dimensionless" &&
+            scalar.dimension != parameter->dimension) {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' parameter override '" + target +
+                "' requires dimension '" +
+                parameter->dimension + "' but received '" +
+                scalar.dimension + "'");
+        }
+        overrides[component_id][parameter_name] = scalar;
+    }
+    return overrides;
+}
+
+ComponentDefinition effective_component(
+    const ComponentDefinition& component,
+    const std::map<
+        std::string,
+        std::map<std::string, ScalarValue>>& overrides) {
+    ComponentDefinition effective = component;
+    const auto selected = overrides.find(component.id);
+    if (selected == overrides.end()) return effective;
+    for (const auto& [name, value] : selected->second) {
+        effective.parameters[name] = value;
+    }
+    return effective;
+}
+
 void validate_component_bindings(
     const ComponentDefinition& component,
     const ComponentModel& model) {
@@ -755,8 +851,14 @@ CompiledModelGraph compile_model_graph(
     auto medium_properties =
         create_medium_properties(document, property_registry);
     std::set<std::string> seen_case_keys;
+    const auto parameter_overrides =
+        case_parameter_overrides(
+            document, registry, active_case);
 
-    for (const ComponentDefinition& component : document.components) {
+    for (const ComponentDefinition& declared_component :
+         document.components) {
+        const auto component = effective_component(
+            declared_component, parameter_overrides);
         const ComponentModel& model = registry.require_model(component.kind);
         validate_component_bindings(component, model);
         validate_component_parameters(component, model.descriptor());
@@ -1090,8 +1192,14 @@ CompiledTransientModelGraph compile_transient_model_graph(
     std::map<std::size_t, DaeVariableKind> variable_kinds;
     auto medium_properties =
         create_medium_properties(document, property_registry);
+    const auto parameter_overrides =
+        case_parameter_overrides(
+            document, registry, active_case);
 
-    for (const ComponentDefinition& component : document.components) {
+    for (const ComponentDefinition& declared_component :
+         document.components) {
+        const auto component = effective_component(
+            declared_component, parameter_overrides);
         const ComponentModel& model =
             registry.require_model(component.kind);
         validate_component_bindings(component, model);

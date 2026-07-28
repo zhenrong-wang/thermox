@@ -201,6 +201,10 @@ mixing, and other physical behavior belongs to components.
 id: design_100pct
 label: 100% design load
 mode: steady_state_design
+parameter_overrides:
+  components.cooling_split.parameters.outlet_a_fraction:
+    value: 8
+    unit: "%"
 fixed_values:
   ambient.outlet.m_dot:
     value: 100
@@ -222,6 +226,12 @@ solver_options:
   residual_tolerance: 1.0e-8
   max_iterations: 80
 ```
+
+`parameter_overrides` changes registered component parameters for one operating case without
+duplicating topology. Targets use the explicit
+`components.<component-id>.parameters.<parameter-name>` path. Compilation validates the component,
+parameter, dimension, and registered bounds before applying the override. These are declared
+operating inputs, not hidden calibration values; the canonical model retains them per case.
 
 `solver_options` in a case are descriptive model metadata. The service command owns executable
 solver settings; Thermox never silently merges case metadata with command defaults. Every

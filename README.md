@@ -41,6 +41,8 @@ Implemented in this sprint:
   cooling, recirculation, and multistream reacting-system graphs.
 - Performance-map compressor and turbine models for both ordinary fluid and composition-aware
   material gas paths.
+- Typed per-case component-parameter overrides for operating controls and configuration changes
+  without duplicating system topology.
 - Scale-invariant built-in dense/CSR direct solvers for small problems and backend testing.
 - Damped Newton with dimensionless row/column scaling, bounds, recoverable model-evaluation
   failures, backtracking line search, structural matching, and iteration diagnostics.
