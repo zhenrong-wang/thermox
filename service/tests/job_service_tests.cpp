@@ -1,0 +1,270 @@
+#include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/simulation_jobs.hpp"
+
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <thread>
+
+namespace {
+
+void require(bool condition, const std::string& message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+
+std::string read_source_file(const std::string& relative_path) {
+    std::ifstream input(
+        std::string(THERMOX_SOURCE_DIR) + "/" + relative_path);
+    if (!input) {
+        throw std::runtime_error(
+            "could not open source file: " + relative_path);
+    }
+    std::ostringstream content;
+    content << input.rdbuf();
+    return content.str();
+}
+
+thermox::service::SimulationJobRequest steady_request(
+    std::string idempotency_key) {
+    thermox::service::SimulationJobRequest request;
+    request.idempotency_key = std::move(idempotency_key);
+    request.model_json =
+        read_source_file("core/examples/air_compressor.json");
+    return request;
+}
+
+void test_submission_is_idempotent_and_conflict_safe() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    const auto request = steady_request("submission-1");
+    const auto first = service.submit(request);
+    const auto repeated = service.submit(request);
+    require(
+        first.job_id == repeated.job_id &&
+            first.revision == repeated.revision,
+        "an identical idempotent submission must return the "
+        "existing job");
+    require(
+        first.state ==
+                thermox::service::SimulationJobState::queued &&
+            first.revision == 1,
+        "a new job must start queued at revision one");
+
+    auto changed = request;
+    changed.case_id = "a-different-case";
+    bool conflict = false;
+    try {
+        (void)service.submit(changed);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "reusing an idempotency key for a different request "
+        "must fail");
+}
+
+void test_success_publishes_a_readable_artifact() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    const auto queued = service.submit(
+        steady_request("successful-run"));
+    const auto completed = service.run_next("worker-a");
+    require(completed.has_value(), "worker must claim queued job");
+    require(
+        completed->job_id == queued.job_id &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->revision == 3,
+        "successful execution must atomically publish a terminal "
+        "revision");
+    require(
+        completed->worker_id == "worker-a" &&
+            completed->execution.has_value() &&
+            completed->result_artifact.has_value() &&
+            !completed->error.has_value(),
+        "successful job must retain worker, provenance, and "
+        "artifact metadata");
+
+    const auto& manifest = *completed->result_artifact;
+    require(
+        manifest.schema_version ==
+                thermox::service::result_schema_v3 &&
+            manifest.media_type == "application/json" &&
+            manifest.byte_size > 0 &&
+            manifest.checksum.starts_with("fnv1a64:"),
+        "artifact manifest must be versioned and checksummed");
+    const auto content = artifacts->get(manifest.artifact_id);
+    require(
+        content.has_value() &&
+            content->size() == manifest.byte_size &&
+            content->find("\"schema_version\": "
+                          "\"thermox.result/v3\"") !=
+                std::string::npos,
+        "published artifact must be readable before success is "
+        "visible");
+    require(
+        !service.run_next("worker-a").has_value(),
+        "completed jobs must not be claimed again");
+}
+
+void test_solver_failure_is_a_terminal_job_failure() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    auto request = steady_request("failed-run");
+    request.model_json = "{not valid JSON";
+    const auto queued = service.submit(request);
+    const auto completed = service.run_next("worker-b");
+    require(
+        completed.has_value() &&
+            completed->job_id == queued.job_id &&
+            completed->state ==
+                thermox::service::SimulationJobState::failed &&
+            completed->error.has_value() &&
+            !completed->result_artifact.has_value(),
+        "simulation errors must publish failure without an "
+        "artifact");
+    require(
+        completed->error->code == "invalid_model" &&
+            completed->error->stage == "validation",
+        "job failure must preserve the simulation error");
+}
+
+void test_transient_jobs_use_the_same_artifact_boundary() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    thermox::service::SimulationJobRequest request;
+    request.idempotency_key = "transient-run";
+    request.mode = thermox::service::SimulationJobMode::transient;
+    request.model_json = read_source_file(
+        "core/examples/lumped_thermal_storage.json");
+    request.case_id = "charge";
+    request.transient_solver.end_time = 0.2;
+    request.transient_solver.max_step = 0.05;
+    (void)service.submit(request);
+
+    const auto completed = service.run_next("worker-transient");
+    require(
+        completed.has_value() &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->execution.has_value() &&
+            completed->execution->operation == "transient" &&
+            completed->result_artifact.has_value(),
+        "transient execution must publish through the common job "
+        "contract");
+    const auto content = artifacts->get(
+        completed->result_artifact->artifact_id);
+    require(
+        content.has_value() &&
+            content->find("\"trajectory\": [") !=
+                std::string::npos,
+        "transient job artifact must retain its trajectory");
+}
+
+void test_cancel_and_optimistic_revision_rules() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    const auto queued =
+        service.submit(steady_request("cancelled-run"));
+    bool conflict = false;
+    try {
+        (void)service.cancel(queued.job_id, queued.revision + 1);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(conflict, "stale revisions must be rejected");
+
+    const auto cancelled =
+        service.cancel(queued.job_id, queued.revision);
+    require(
+        cancelled.state ==
+                thermox::service::SimulationJobState::cancelled &&
+            cancelled.revision == queued.revision + 1 &&
+            thermox::service::is_terminal(cancelled.state),
+        "queued jobs must support an optimistic cancellation");
+    require(
+        !service.run_next("worker-c").has_value(),
+        "cancelled jobs must not be claimable");
+}
+
+void test_claim_is_atomic() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+    (void)service.submit(steady_request("atomic-claim"));
+
+    std::optional<thermox::service::SimulationJobRecord> first;
+    std::optional<thermox::service::SimulationJobRecord> second;
+    std::thread one([&] { first = jobs->claim_next("worker-one"); });
+    std::thread two([&] { second = jobs->claim_next("worker-two"); });
+    one.join();
+    two.join();
+    require(
+        first.has_value() != second.has_value(),
+        "exactly one concurrent worker may claim a queued job");
+}
+
+void test_request_validation() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+    auto request = steady_request("");
+    bool rejected = false;
+    try {
+        (void)service.submit(request);
+    } catch (const thermox::service::JobRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "job submission must require an idempotency key");
+}
+
+}  // namespace
+
+int main() {
+    try {
+        test_submission_is_idempotent_and_conflict_safe();
+        test_success_publishes_a_readable_artifact();
+        test_solver_failure_is_a_terminal_job_failure();
+        test_transient_jobs_use_the_same_artifact_boundary();
+        test_cancel_and_optimistic_revision_rules();
+        test_claim_is_atomic();
+        test_request_validation();
+        std::cout << "thermox job service tests passed\n";
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "thermox job service tests failed: "
+                  << error.what() << "\n";
+        return 1;
+    }
+}

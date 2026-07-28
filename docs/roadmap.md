@@ -196,6 +196,8 @@ Completed structural slices:
   provenance, including the platform build and effective solver settings; ✅
 - graph-native `thermox.result/v3` steady/transient/event values for every connector domain,
   fluid-derived properties, internal states, and derivatives; ✅
+- transport-neutral `thermox.job/v1` lifecycle with idempotent submission, atomic worker claims,
+  optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 
 ## Persistence boundary decision
 
@@ -256,6 +258,8 @@ Work items:
    - `GET /simulations/{id}/results`
    - `GET /component-types`
 3. Add job state model and run persistence.
+   - transport-neutral job state, repository ports, and in-memory contract adapter; ✅
+   - PostgreSQL and object-storage production adapters.
 4. Add structured logging and run IDs.
 5. Publish the existing versioned result serialization through the API.
 

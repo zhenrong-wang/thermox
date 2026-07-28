@@ -68,6 +68,11 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-The synchronous simulation service, versioned contracts, provenance, and serialization are now in
-place. The remaining gate is an explicit job lifecycle, artifact boundary, and repository contract
-test suite; database adapters can follow without destabilizing the solver architecture.
+All gates are now in place. `thermox.job/v1` defines the job lifecycle, idempotent submission,
+atomic worker claim, optimistic terminal publication, and queued cancellation. The application
+service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
+In-memory adapters exercise the repository contract without a database.
+
+The next persistence slice may add PostgreSQL metadata and object-storage adapters. Those adapters
+must preserve the atomic and compare-and-swap semantics of `SimulationJobRepository`; they do not
+change the service, platform, physics, or numerical contracts.

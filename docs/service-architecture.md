@@ -17,6 +17,9 @@ CLI             Web / RPC             workers
               ├── validate model
               ├── run steady
               ├── run transient
+              ├── submit / inspect jobs
+              ├── claim / execute work
+              ├── publish terminal state
               └── serialize results
                      │
                   platform
@@ -43,6 +46,8 @@ The current synchronous service exposes:
   case, solver contract, and effective solver-setting provenance;
 - canonical model JSON and steady/transient result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
+- `thermox.job/v1` queued/running/succeeded/failed/cancelled jobs with required idempotency keys,
+  optimistic revisions, worker claims, execution provenance, and result-artifact manifests.
 
 The public service DTOs contain only standard C++ data types. Solver and compiler objects do not
 cross this boundary. This keeps local callers simple and permits an RPC adapter to map wire
@@ -77,11 +82,19 @@ parse models, resolve registries, compile graphs, invoke numerical kernels, deri
 construct result contracts.
 
 A future HTTP or RPC adapter follows the same rule: authenticate, decode, invoke one service use
-case, encode the response. Long-running execution will use a separate job application service
-which coordinates repositories and workers while reusing the synchronous simulation service.
+case, encode the response. `SimulationJobService` is the transport-neutral long-running workflow:
+it submits idempotent jobs, coordinates atomic worker claims, reuses `SimulationService` for
+execution, writes the result artifact, and only then publishes success.
 
 ## Persistence
 
 Repository interfaces and job transactions belong beside the service layer. Database and object
 storage adapters depend inward on those ports. They must never be introduced into the platform,
 physics, or numerical libraries.
+
+`SimulationJobRepository` defines atomic create-or-get, claim, terminal publication, and queued-job
+cancellation operations. Every update carries an optimistic revision. `ResultArtifactStore`
+defines the large-result boundary; a successful job contains a versioned, checksummed manifest
+instead of embedding trajectory data in the job record. In-memory implementations are provided
+for local execution and repository contract tests. Production PostgreSQL and object-storage
+adapters can implement the same ports without changing a solver or component.

@@ -45,7 +45,8 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values.
+  values. Its `thermox.job/v1` workflow adds idempotent queued execution, atomic worker claims,
+  optimistic job revisions, terminal states, and checksummed external result artifacts.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -92,9 +93,9 @@ platform/
                         compilation
   tests/                System-agnostic platform and property-integration tests
 service/
-  include/              Transport-neutral application commands and result contracts
-  src/                  Simulation orchestration and serialization
-  tests/                Service-boundary and workflow tests
+  include/              Transport-neutral commands, jobs, repository ports, and result contracts
+  src/                  Simulation/job orchestration, serialization, and local adapters
+  tests/                Service-boundary, repository, and workflow tests
 physics/
   include/              Property-independent physics interfaces
   src/                  Ideal-gas and CoolProp-backed CO2/IF97 adapters
@@ -132,7 +133,7 @@ git submodule update --init --recursive
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake --build build --parallel 2
 ```
 
 ## Run tests
@@ -197,10 +198,17 @@ closure. Mass flow and base pressure are normal case specifications.
 ./scripts/verify.sh
 ```
 
+Verification uses two build jobs by default so the pinned CoolProp build does not monopolize a
+development host. A machine with more available capacity can opt in explicitly, for example:
+
+```sh
+THERMOX_BUILD_JOBS=4 ./scripts/verify.sh
+```
+
 ## Next steps
 
-1. Add asynchronous job-state and repository ports around the synchronous simulation service,
-   followed by database and object-storage adapters.
+1. Map thin HTTP/RPC endpoints onto the synchronous and job application services, then add
+   PostgreSQL and object-storage adapters behind the established repository ports.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently
