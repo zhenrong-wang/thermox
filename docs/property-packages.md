@@ -34,7 +34,9 @@ cmake -S . -B build-cantera -DTHERMOX_ENABLE_CANTERA=ON
 
 This produces `thermox::cantera_backend`, whose registration function adds composition-aware PT,
 PH, PS, equilibrium-HP, and transport capabilities. The default build remains bounded and does
-not compile Cantera.
+not compile Cantera. When the option is enabled, the native service runtime links and registers
+the Cantera backend automatically; callers can still construct an explicit runtime registry for
+dependency injection and testing.
 
 The built-in `compressor.material.isentropic_efficiency` and
 `turbine.material.isentropic_efficiency` components preserve each species mass flow, evaluate the

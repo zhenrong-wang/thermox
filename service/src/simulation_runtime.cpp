@@ -2,6 +2,10 @@
 
 #include "runtime_internal.hpp"
 
+#ifdef THERMOX_HAS_CANTERA_BACKEND
+#include "thermox/physics/cantera_thermochemistry.hpp"
+#endif
+
 #include <cstdint>
 #include <iomanip>
 #include <sstream>
@@ -11,6 +15,15 @@
 namespace thermox::service {
 
 namespace {
+
+physics::ThermochemistryPackageRegistry
+make_default_thermochemistry_registry() {
+    physics::ThermochemistryPackageRegistry registry;
+#ifdef THERMOX_HAS_CANTERA_BACKEND
+    physics::register_cantera_thermochemistry_backend(registry);
+#endif
+    return registry;
+}
 
 void hash_text(std::uint64_t& hash, std::string_view text) {
     constexpr std::uint64_t prime = 1099511628211ULL;
@@ -210,7 +223,7 @@ make_default_simulation_runtime() {
     return make_simulation_runtime(
         platform::make_default_component_registry(),
         physics::make_default_property_package_registry(),
-        {}, {});
+        {}, make_default_thermochemistry_registry());
 }
 
 }  // namespace thermox::service

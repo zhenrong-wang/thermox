@@ -13,6 +13,12 @@ target_include_directories(thermox_service
         $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(thermox_service PRIVATE thermox_platform)
+if(TARGET thermox_cantera_backend)
+    target_link_libraries(
+        thermox_service PRIVATE thermox_cantera_backend)
+    target_compile_definitions(
+        thermox_service PRIVATE THERMOX_HAS_CANTERA_BACKEND=1)
+endif()
 target_compile_features(thermox_service PUBLIC cxx_std_20)
 target_compile_definitions(thermox_service PRIVATE
     THERMOX_PLATFORM_VERSION="${PROJECT_VERSION}"
