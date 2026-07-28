@@ -393,6 +393,63 @@ TimeIntegrationDiagnostics copy_diagnostics(
     };
 }
 
+ResultValue copy_result_value(
+    const platform::ResultValue& source) {
+    return {
+        source.name,
+        source.dimension,
+        source.value_si,
+        source.has_derivative,
+        source.derivative_si_s,
+    };
+}
+
+std::vector<ResultValue> copy_result_values(
+    const std::vector<platform::ResultValue>& source) {
+    std::vector<ResultValue> values;
+    values.reserve(source.size());
+    for (const auto& value : source) {
+        values.push_back(copy_result_value(value));
+    }
+    return values;
+}
+
+GraphResult copy_graph_result(
+    const platform::GraphResult& source) {
+    GraphResult graph;
+    graph.system_balances =
+        copy_result_values(source.system_balances);
+    graph.kpis = copy_result_values(source.kpis);
+    graph.components.reserve(source.components.size());
+    for (const auto& source_component : source.components) {
+        ComponentResult component;
+        component.component_id =
+            source_component.component_id;
+        component.kind = source_component.kind;
+        component.internal_values =
+            copy_result_values(
+                source_component.internal_values);
+        component.metrics =
+            copy_result_values(source_component.metrics);
+        component.ports.reserve(source_component.ports.size());
+        for (const auto& source_port :
+             source_component.ports) {
+            component.ports.push_back({
+                source_port.port_name,
+                source_port.domain,
+                source_port.medium_id,
+                source_port.phase,
+                copy_result_values(
+                    source_port.primary_values),
+                copy_result_values(
+                    source_port.derived_values),
+            });
+        }
+        graph.components.push_back(std::move(component));
+    }
+    return graph;
+}
+
 }  // namespace
 
 struct SimulationService::Impl {
@@ -576,6 +633,16 @@ CatalogResponse SimulationService::get_catalog(
                 parameter.upper_inclusive,
             });
         }
+        for (const auto& variable :
+             descriptor.internal_variables) {
+            component.internal_variables.push_back({
+                variable.name,
+                variable.dimension,
+                variable.kind == DaeVariableKind::differential
+                    ? "differential"
+                    : "algebraic",
+            });
+        }
         for (const auto capability :
              descriptor.required_property_capabilities) {
             component.required_property_capabilities.push_back(
@@ -687,13 +754,6 @@ SteadySimulationResponse SimulationService::run_steady(
         return response;
     }
     response.diagnostics = copy_diagnostics(result.diagnostics);
-    for (std::size_t index = 0;
-         index < graph.problem.variable_names.size() &&
-         index < result.x.size();
-         ++index) {
-        response.variables.push_back(
-            {graph.problem.variable_names[index], result.x[index]});
-    }
     response.reduced_connection_equations =
         graph.reduced_connection_equations;
 
@@ -707,23 +767,11 @@ SteadySimulationResponse SimulationService::run_steady(
     }
 
     try {
-        const auto ports = platform::evaluate_fluid_port_results(
-            document, graph, result.x,
+        const platform::GraphResultEvaluator evaluator(
+            document, graph,
             impl_->runtime->impl_->properties);
-        for (const auto& port : ports) {
-            response.fluid_ports.push_back({
-                port.component_id,
-                port.port_name,
-                port.medium_id,
-                port.mass_flow_kg_s,
-                port.state.pressure_pa,
-                port.state.temperature_k,
-                port.state.density_kg_m3,
-                port.state.enthalpy_j_kg,
-                port.state.entropy_j_kg_k,
-                port.state.vapor_quality,
-            });
-        }
+        response.graph =
+            copy_graph_result(evaluator.evaluate(result.x));
     } catch (const std::exception& ex) {
         response.status = OperationStatus::result_failed;
         response.error = make_error(
@@ -805,21 +853,42 @@ TransientSimulationResponse SimulationService::run_transient(
         return response;
     }
     response.diagnostics = copy_diagnostics(result.diagnostics);
-    response.variable_names = graph.problem.variable_names;
-    for (const auto& sample : result.trajectory) {
-        response.trajectory.push_back(
-            {sample.time, sample.state, sample.derivative});
-    }
-    for (const auto& event : result.events) {
-        response.events.push_back(
-            {event.name, event.time, event.state, event.terminal});
-    }
     if (!result.diagnostics.success) {
         response.status = OperationStatus::solver_failed;
         response.error = make_error(
             "transient_solver_failed",
             "solve",
             result.diagnostics.message);
+        return response;
+    }
+
+    try {
+        const platform::GraphResultEvaluator evaluator(
+            document, graph,
+            impl_->runtime->impl_->properties);
+        response.trajectory.reserve(result.trajectory.size());
+        for (const auto& sample : result.trajectory) {
+            response.trajectory.push_back({
+                sample.time,
+                copy_graph_result(
+                    evaluator.evaluate(
+                        sample.state, sample.derivative)),
+            });
+        }
+        response.events.reserve(result.events.size());
+        for (const auto& event : result.events) {
+            response.events.push_back({
+                event.name,
+                event.time,
+                copy_graph_result(
+                    evaluator.evaluate(event.state)),
+                event.terminal,
+            });
+        }
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::result_failed;
+        response.error = make_error(
+            "result_evaluation_failed", "result", ex.what());
         return response;
     }
 

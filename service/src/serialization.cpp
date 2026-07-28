@@ -214,15 +214,73 @@ void diagnostic_json(
     out << "]}";
 }
 
-void number_array(
+void result_value_json(
     std::ostream& out,
-    const std::vector<double>& values) {
+    const ResultValue& value) {
+    out << "{\"name\": ";
+    json_string(out, value.name);
+    out << ", \"dimension\": ";
+    json_string(out, value.dimension);
+    out << ", \"value_si\": ";
+    json_number(out, value.value_si);
+    if (value.has_derivative) {
+        out << ", \"derivative_si_s\": ";
+        json_number(out, value.derivative_si_s);
+    }
+    out << "}";
+}
+
+void result_values_json(
+    std::ostream& out,
+    const std::vector<ResultValue>& values) {
     out << "[";
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (i != 0) out << ", ";
-        json_number(out, values[i]);
+        result_value_json(out, values[i]);
     }
     out << "]";
+}
+
+void graph_result_json(
+    std::ostream& out,
+    const GraphResult& graph) {
+    out << "{\"components\": [";
+    for (std::size_t i = 0; i < graph.components.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& component = graph.components[i];
+        out << "{\"component_id\": ";
+        json_string(out, component.component_id);
+        out << ", \"kind\": ";
+        json_string(out, component.kind);
+        out << ", \"ports\": [";
+        for (std::size_t j = 0; j < component.ports.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& port = component.ports[j];
+            out << "{\"port_name\": ";
+            json_string(out, port.port_name);
+            out << ", \"domain\": ";
+            json_string(out, port.domain);
+            out << ", \"medium_id\": ";
+            json_string(out, port.medium_id);
+            out << ", \"phase\": ";
+            json_string(out, port.phase);
+            out << ", \"primary_values\": ";
+            result_values_json(out, port.primary_values);
+            out << ", \"derived_values\": ";
+            result_values_json(out, port.derived_values);
+            out << "}";
+        }
+        out << "], \"internal_values\": ";
+        result_values_json(out, component.internal_values);
+        out << ", \"metrics\": ";
+        result_values_json(out, component.metrics);
+        out << "}";
+    }
+    out << "], \"system_balances\": ";
+    result_values_json(out, graph.system_balances);
+    out << ", \"kpis\": ";
+    result_values_json(out, graph.kpis);
+    out << "}";
 }
 
 }  // namespace
@@ -420,6 +478,20 @@ std::string serialize_catalog_response_json(
                 << (parameter.upper_inclusive ? "true" : "false")
                 << "}";
         }
+        out << "], \"internal_variables\": [";
+        for (std::size_t j = 0;
+             j < component.internal_variables.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& variable =
+                component.internal_variables[j];
+            out << "{\"name\": ";
+            json_string(out, variable.name);
+            out << ", \"dimension\": ";
+            json_string(out, variable.dimension);
+            out << ", \"kind\": ";
+            json_string(out, variable.kind);
+            out << "}";
+        }
         out << "], \"required_property_capabilities\": [";
         for (std::size_t j = 0;
              j < component.required_property_capabilities.size();
@@ -484,7 +556,7 @@ std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v2);
+    json_string(out, result_schema_v3);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -527,7 +599,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v2);
+    json_string(out, result_schema_v3);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -549,40 +621,9 @@ std::string serialize_steady_response_json(
         << response.diagnostics.linear_solver_evaluations
         << ", \"message\": ";
     json_string(out, response.diagnostics.message);
-    out << "},\n  \"variables\": {";
-    for (std::size_t i = 0; i < response.variables.size(); ++i) {
-        if (i != 0) out << ", ";
-        json_string(out, response.variables[i].name);
-        out << ": ";
-        json_number(out, response.variables[i].value_si);
-    }
-    out << "},\n  \"fluid_ports\": [";
-    for (std::size_t i = 0; i < response.fluid_ports.size(); ++i) {
-        const auto& port = response.fluid_ports[i];
-        if (i != 0) out << ", ";
-        out << "{\"component_id\": ";
-        json_string(out, port.component_id);
-        out << ", \"port_name\": ";
-        json_string(out, port.port_name);
-        out << ", \"medium_id\": ";
-        json_string(out, port.medium_id);
-        out << ", \"mass_flow_kg_s\": ";
-        json_number(out, port.mass_flow_kg_s);
-        out << ", \"pressure_pa\": ";
-        json_number(out, port.pressure_pa);
-        out << ", \"temperature_k\": ";
-        json_number(out, port.temperature_k);
-        out << ", \"density_kg_m3\": ";
-        json_number(out, port.density_kg_m3);
-        out << ", \"enthalpy_j_kg\": ";
-        json_number(out, port.enthalpy_j_kg);
-        out << ", \"entropy_j_kg_k\": ";
-        json_number(out, port.entropy_j_kg_k);
-        out << ", \"vapor_quality\": ";
-        json_number(out, port.vapor_quality);
-        out << "}";
-    }
-    out << "],\n  \"reduced_connection_equations\": [";
+    out << "},\n  \"graph\": ";
+    graph_result_json(out, response.graph);
+    out << ",\n  \"reduced_connection_equations\": [";
     for (std::size_t i = 0;
          i < response.reduced_connection_equations.size();
          ++i) {
@@ -597,7 +638,7 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v2);
+    json_string(out, result_schema_v3);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -620,21 +661,14 @@ std::string serialize_transient_response_json(
     json_number(out, response.diagnostics.last_step);
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
-    out << "},\n  \"variable_names\": [";
-    for (std::size_t i = 0; i < response.variable_names.size(); ++i) {
-        if (i != 0) out << ", ";
-        json_string(out, response.variable_names[i]);
-    }
-    out << "],\n  \"trajectory\": [";
+    out << "},\n  \"trajectory\": [";
     for (std::size_t i = 0; i < response.trajectory.size(); ++i) {
         if (i != 0) out << ", ";
         const auto& sample = response.trajectory[i];
         out << "{\"time\": ";
         json_number(out, sample.time);
-        out << ", \"state\": ";
-        number_array(out, sample.state);
-        out << ", \"derivative\": ";
-        number_array(out, sample.derivative);
+        out << ", \"graph\": ";
+        graph_result_json(out, sample.graph);
         out << "}";
     }
     out << "],\n  \"events\": [";
@@ -645,8 +679,8 @@ std::string serialize_transient_response_json(
         json_string(out, event.name);
         out << ", \"time\": ";
         json_number(out, event.time);
-        out << ", \"state\": ";
-        number_array(out, event.state);
+        out << ", \"graph\": ";
+        graph_result_json(out, event.graph);
         out << ", \"terminal\": "
             << (event.terminal ? "true" : "false") << "}";
     }

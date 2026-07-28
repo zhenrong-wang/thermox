@@ -16,22 +16,27 @@ struct CanonicalVariableSpec {
     std::string name;
     double initial_value{0.0};
     double scale{1.0};
+    std::string dimension{"dimensionless"};
 };
 
 std::vector<CanonicalVariableSpec> canonical_variables_for_domain(const std::string& domain) {
     if (domain == "fluid") {
-        return {{"m_dot", 1.0, 100.0},
-                {"p", 101325.0, 100000.0},
-                {"h", 300000.0, 100000.0}};
+        return {{"m_dot", 1.0, 100.0, "mass_flow"},
+                {"p", 101325.0, 100000.0, "pressure"},
+                {"h", 300000.0, 100000.0,
+                 "specific_enthalpy"}};
     }
     if (domain == "heat") {
-        return {{"Q_dot", 0.0, 1000000.0}, {"T", 300.0, 100.0}};
+        return {{"Q_dot", 0.0, 1000000.0, "power"},
+                {"T", 300.0, 100.0, "temperature"}};
     }
     if (domain == "shaft") {
-        return {{"W_dot", 0.0, 1000000.0}, {"omega", 314.1592653589793, 100.0}};
+        return {{"W_dot", 0.0, 1000000.0, "power"},
+                {"omega", 314.1592653589793, 100.0,
+                 "angular_speed"}};
     }
     if (domain == "signal" || domain == "control") {
-        return {{"value", 0.0, 1.0}};
+        return {{"value", 0.0, 1.0, "dimensionless"}};
     }
     throw std::invalid_argument("unsupported port domain during graph compilation: " + domain);
 }
@@ -609,7 +614,8 @@ CompiledModelGraph compile_model_graph(
                 graph.port_variables.push_back(
                     CompiledPortVariable{
                         component.id, port.name, spec.name,
-                        full_name, port.domain, medium_id, index});
+                        full_name, port.domain, medium_id,
+                        spec.dimension, index});
             }
         }
         validate_property_capabilities(context, model);
@@ -892,7 +898,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
                 graph.port_variables.push_back(
                     CompiledPortVariable{
                         component.id, port.name, spec.name,
-                        full_name, port.domain, medium_id, index});
+                        full_name, port.domain, medium_id,
+                        spec.dimension, index});
             }
         }
         for (const auto& variable :
@@ -917,7 +924,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
             context.internal_variables.emplace(variable.name, index);
             graph.internal_variables.push_back(
                 CompiledInternalVariable{component.id, variable.name,
-                                         full_name, index});
+                                         full_name,
+                                         variable.dimension, index});
         }
         validate_property_capabilities(context, model);
         model.add_transient_equations(context, system);

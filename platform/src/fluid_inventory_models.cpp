@@ -65,18 +65,19 @@ public:
         descriptor_.internal_variables = {
             {"mass", DaeVariableKind::differential,
              1.0, 10.0, 0.0, 1.0, 1.0e-12,
-             std::numeric_limits<double>::infinity()},
+             std::numeric_limits<double>::infinity(), "mass"},
             {"total_energy", DaeVariableKind::differential,
              200000.0, 1.0e6, 0.0, 1.0e5,
              -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity()},
+             std::numeric_limits<double>::infinity(), "energy"},
             {"pressure", DaeVariableKind::algebraic,
              101325.0, 100000.0, 0.0, 100000.0, 1.0,
-             std::numeric_limits<double>::infinity()},
+             std::numeric_limits<double>::infinity(), "pressure"},
             {"enthalpy", DaeVariableKind::algebraic,
              300000.0, 100000.0, 0.0, 100000.0,
              -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity()}};
+             std::numeric_limits<double>::infinity(),
+             "specific_enthalpy"}};
     }
 
     const ComponentModelDescriptor& descriptor() const override {

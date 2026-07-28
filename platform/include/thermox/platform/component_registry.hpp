@@ -51,6 +51,7 @@ struct InternalVariableDescriptor {
     double derivative_scale{1.0};
     double lower_bound{-std::numeric_limits<double>::infinity()};
     double upper_bound{std::numeric_limits<double>::infinity()};
+    std::string dimension{"unspecified"};
 };
 
 struct ComponentModelDescriptor {
@@ -116,6 +117,7 @@ struct CompiledPortVariable {
     std::string full_name;
     std::string domain;
     std::string medium_id;
+    std::string dimension;
     std::size_t index{0};
 };
 
@@ -130,6 +132,7 @@ struct CompiledInternalVariable {
     std::string component_id;
     std::string variable_name;
     std::string full_name;
+    std::string dimension;
     std::size_t index{0};
 };
 

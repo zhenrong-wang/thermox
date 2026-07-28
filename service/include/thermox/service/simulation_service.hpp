@@ -10,9 +10,9 @@
 namespace thermox::service {
 
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
-inline constexpr char result_schema_v2[] = "thermox.result/v2";
+inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v1[] = "thermox.catalog/v1";
+inline constexpr char catalog_schema_v2[] = "thermox.catalog/v2";
 
 enum class OperationStatus {
     succeeded,
@@ -71,11 +71,18 @@ struct CatalogParameterType {
     bool upper_inclusive{true};
 };
 
+struct CatalogInternalVariableType {
+    std::string name;
+    std::string dimension;
+    std::string kind;
+};
+
 struct ComponentType {
     std::string kind;
     std::string version;
     std::vector<CatalogPortType> ports;
     std::vector<CatalogParameterType> parameters;
+    std::vector<CatalogInternalVariableType> internal_variables;
     std::vector<std::string> required_property_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
@@ -107,7 +114,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v1};
+    std::string schema_version{catalog_schema_v2};
     std::string fingerprint;
     std::vector<ComponentType> components;
     std::vector<PropertyBackendType> property_backends;
@@ -157,7 +164,7 @@ struct SolverProvenance {
 };
 
 struct ExecutionMetadata {
-    std::string result_schema_version{result_schema_v2};
+    std::string result_schema_version{result_schema_v3};
     std::string command_schema_version;
     std::string platform_version;
     std::string operation;
@@ -169,22 +176,35 @@ struct ExecutionMetadata {
     std::vector<ConnectorProvenance> connector_domains;
 };
 
-struct VariableValue {
+struct ResultValue {
     std::string name;
+    std::string dimension;
     double value_si{0.0};
+    bool has_derivative{false};
+    double derivative_si_s{0.0};
 };
 
-struct FluidPortValue {
-    std::string component_id;
+struct PortResult {
     std::string port_name;
+    std::string domain;
     std::string medium_id;
-    double mass_flow_kg_s{0.0};
-    double pressure_pa{0.0};
-    double temperature_k{0.0};
-    double density_kg_m3{0.0};
-    double enthalpy_j_kg{0.0};
-    double entropy_j_kg_k{0.0};
-    double vapor_quality{0.0};
+    std::string phase;
+    std::vector<ResultValue> primary_values;
+    std::vector<ResultValue> derived_values;
+};
+
+struct ComponentResult {
+    std::string component_id;
+    std::string kind;
+    std::vector<PortResult> ports;
+    std::vector<ResultValue> internal_values;
+    std::vector<ResultValue> metrics;
+};
+
+struct GraphResult {
+    std::vector<ComponentResult> components;
+    std::vector<ResultValue> system_balances;
+    std::vector<ResultValue> kpis;
 };
 
 struct NonlinearDiagnostics {
@@ -211,14 +231,13 @@ struct TimeIntegrationDiagnostics {
 
 struct StateSample {
     double time{0.0};
-    std::vector<double> state;
-    std::vector<double> derivative;
+    GraphResult graph;
 };
 
 struct EventValue {
     std::string name;
     double time{0.0};
-    std::vector<double> state;
+    GraphResult graph;
     bool terminal{false};
 };
 
@@ -273,8 +292,7 @@ struct SteadySimulationResponse {
     ServiceError error;
     ExecutionMetadata metadata;
     NonlinearDiagnostics diagnostics;
-    std::vector<VariableValue> variables;
-    std::vector<FluidPortValue> fluid_ports;
+    GraphResult graph;
     std::vector<std::string> reduced_connection_equations;
 
     [[nodiscard]] bool succeeded() const {
@@ -308,7 +326,6 @@ struct TransientSimulationResponse {
     ServiceError error;
     ExecutionMetadata metadata;
     TimeIntegrationDiagnostics diagnostics;
-    std::vector<std::string> variable_names;
     std::vector<StateSample> trajectory;
     std::vector<EventValue> events;
 

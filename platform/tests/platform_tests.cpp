@@ -69,6 +69,55 @@ std::size_t require_variable_index(
         std::distance(names.begin(), it));
 }
 
+const thermox::platform::ComponentResult& require_component_result(
+    const thermox::platform::GraphResult& graph,
+    const std::string& component_id) {
+    const auto component = std::find_if(
+        graph.components.begin(), graph.components.end(),
+        [&](const auto& candidate) {
+            return candidate.component_id == component_id;
+        });
+    if (component == graph.components.end()) {
+        throw std::runtime_error(
+            "missing graph result component: " + component_id);
+    }
+    return *component;
+}
+
+const thermox::platform::PortResult& require_port_result(
+    const thermox::platform::GraphResult& graph,
+    const std::string& component_id,
+    const std::string& port_name) {
+    const auto& component =
+        require_component_result(graph, component_id);
+    const auto port = std::find_if(
+        component.ports.begin(), component.ports.end(),
+        [&](const auto& candidate) {
+            return candidate.port_name == port_name;
+        });
+    if (port == component.ports.end()) {
+        throw std::runtime_error(
+            "missing graph result port: " +
+            component_id + "." + port_name);
+    }
+    return *port;
+}
+
+double require_result_value(
+    const std::vector<thermox::platform::ResultValue>& values,
+    const std::string& name) {
+    const auto value = std::find_if(
+        values.begin(), values.end(),
+        [&](const auto& candidate) {
+            return candidate.name == name;
+        });
+    if (value == values.end()) {
+        throw std::runtime_error(
+            "missing graph result value: " + name);
+    }
+    return value->value_si;
+}
+
 std::string write_temp_model(const std::string& name, const std::string& content) {
     const std::string path = "thermox_" + name + ".json";
     std::ofstream file(path);
@@ -904,18 +953,25 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
                  "compressor derived outlet temperature");
     require_near(shaft_power, expected_power, 1.0e-2, "compressor shaft power");
 
-    const auto port_results =
-        thermox::platform::evaluate_fluid_port_results(
-            document, graph, result.x);
-    require(port_results.size() == 2,
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph,
+        thermox::physics::
+            make_default_property_package_registry());
+    const auto graph_result = evaluator.evaluate(result.x);
+    const auto& compressor =
+        require_component_result(graph_result, "compressor");
+    require(compressor.ports.size() == 3,
+            "compressor exposes fluid and shaft graph ports");
+    const auto& outlet =
+        require_port_result(
+            graph_result, "compressor", "outlet");
+    require(outlet.domain == "fluid" &&
+                outlet.primary_values.size() == 3,
             "compressor exposes two derived fluid-port results");
-    for (const auto& port : port_results) {
-        if (port.port_name == "outlet") {
-            require_near(port.state.temperature_k,
-                         expected_temperature, 1.0e-8,
-                         "result layer derives compressor outlet temperature");
-        }
-    }
+    require_near(
+        require_result_value(outlet.derived_values, "T"),
+        expected_temperature, 1.0e-8,
+        "result layer derives compressor outlet temperature");
 }
 
 void test_generic_model_solves_ideal_gas_turbine_residuals() {
@@ -1698,19 +1754,18 @@ void test_if97_rankine_graph_regression() {
     require(efficiency > 0.20 && efficiency < 0.30,
             "Rankine thermal efficiency remains in regression range");
 
-    const auto ports =
-        thermox::platform::evaluate_fluid_port_results(
-            document, graph, result.x);
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph,
+        thermox::physics::
+            make_default_property_package_registry());
+    const auto graph_result = evaluator.evaluate(result.x);
     const auto quality = [&](const std::string& component,
                              const std::string& port) {
-        const auto it = std::find_if(
-            ports.begin(), ports.end(), [&](const auto& value) {
-                return value.component_id == component &&
-                       value.port_name == port;
-            });
-        require(it != ports.end(),
-                "Rankine result port should exist");
-        return it->state.vapor_quality;
+        return require_result_value(
+            require_port_result(
+                graph_result, component, port)
+                .derived_values,
+            "vapor_quality");
     };
     require_near(quality("evaporator", "outlet"), 0.99,
                  1.0e-8,

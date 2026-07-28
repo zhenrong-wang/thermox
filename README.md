@@ -44,7 +44,8 @@ Implemented in this sprint:
 - First-class `thermox_service` application module with versioned validate, steady, and transient
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
-  `thermox.result/v2` JSON with complete execution provenance.
+  `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
+  values.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.

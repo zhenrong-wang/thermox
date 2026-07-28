@@ -192,7 +192,7 @@ solver_options:
 
 `solver_options` in a case are descriptive model metadata. The service command owns executable
 solver settings; Thermox never silently merges case metadata with command defaults. Every
-effective command setting is recorded in `thermox.result/v2`.
+effective command setting is recorded in `thermox.result/v3`.
 
 Case modes:
 
@@ -225,7 +225,8 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v1`, including a deterministic runtime fingerprint. Optional model behavior reads
+`thermox.catalog/v2`, including internal-state names, dimensions, kinds, and a deterministic
+runtime fingerprint. Optional model behavior reads
 defaults from this same descriptor rather than duplicating them inside the equation implementation.
 Native hosts can assemble and inject an immutable runtime with additional registered C++ models;
 transport adapters remain independent of native registry types.
@@ -308,32 +309,32 @@ residuals:
 ## 9. Result schema
 
 ```yaml
-simulation_id: sim_001
-model_revision: rev_001
-case_id: design_100pct
-status: converged
-summary:
-  net_power:
-    value: 450.0
-    unit: MW
-  heat_rate:
-    value: 6200
-    unit: kJ/kWh
-variables:
-  - id: st_hp.inlet.p
-    value: 12000000
-    unit: Pa
-    display_value: 120
-    display_unit: bar
-    source: solved
-residuals:
-  - id: st_hp.energy_balance
-    scaled_value: 2.1e-10
-diagnostics:
-  iterations: 12
-  final_norm: 7.4e-9
-  warnings: []
+schema_version: thermox.result/v3
+graph:
+  components:
+    - component_id: st_hp
+      kind: turbine.fluid.isentropic_efficiency
+      ports:
+        - port_name: inlet
+          domain: fluid
+          medium_id: water_steam
+          phase: vapor
+          primary_values:
+            - {name: p, dimension: pressure, value_si: 12000000}
+            - {name: h, dimension: specific_enthalpy, value_si: 3400000}
+          derived_values:
+            - {name: T, dimension: temperature, value_si: 813.2}
+      internal_values: []
+      metrics: []
+  system_balances: []
+  kpis: []
 ```
+
+Steady responses contain one `graph`. Each transient trajectory and event sample contains the same
+graph structure; transient primary and internal values also carry `derivative_si_s`. Fluid
+temperature, density, entropy, phase, quality, heat capacities, speed of sound, viscosity, and
+thermal conductivity are derived through the selected property package. Other domains expose their
+canonical primary values without fluid-specific fields.
 
 ## 10. Validation rules
 
@@ -356,6 +357,6 @@ Minimum validation before compilation:
   during early development.
 - Component `kind` + `version` identifies equation semantics.
 - Model revisions are immutable once used for a simulation result.
-- Simulation results use `thermox.result/v2` and record the platform build, model and command
+- Simulation results use `thermox.result/v3` and record the platform build, model and command
   schemas, catalog fingerprint, requested and resolved component/property versions, connector
   contracts, solver contract, and every effective solver setting.

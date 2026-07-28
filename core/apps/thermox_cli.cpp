@@ -40,6 +40,29 @@ double parse_positive_number(
     return value;
 }
 
+void print_graph_text(
+    const thermox::service::GraphResult& graph) {
+    for (const auto& component : graph.components) {
+        for (const auto& port : component.ports) {
+            const std::string prefix =
+                component.component_id + "." + port.port_name;
+            for (const auto& value : port.primary_values) {
+                std::cout << prefix << "." << value.name
+                          << " = " << value.value_si << "\n";
+            }
+            for (const auto& value : port.derived_values) {
+                std::cout << prefix << "." << value.name
+                          << " = " << value.value_si << "\n";
+            }
+        }
+        for (const auto& value : component.internal_values) {
+            std::cout << component.component_id << "."
+                      << value.name << " = " << value.value_si
+                      << "\n";
+        }
+    }
+}
+
 void print_steady_text(
     const thermox::service::SteadySimulationResponse& response) {
     std::cout << "model: " << response.metadata.model.model_id << "\n"
@@ -51,17 +74,7 @@ void print_steady_text(
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";
     }
-    for (const auto& variable : response.variables) {
-        std::cout << variable.name << " = " << variable.value_si << "\n";
-    }
-    for (const auto& port : response.fluid_ports) {
-        const std::string prefix =
-            port.component_id + "." + port.port_name;
-        std::cout << prefix << ".T = " << port.temperature_k << "\n"
-                  << prefix << ".rho = " << port.density_kg_m3 << "\n"
-                  << prefix << ".s = " << port.entropy_j_kg_k << "\n"
-                  << prefix << ".quality = " << port.vapor_quality << "\n";
-    }
+    print_graph_text(response.graph);
 }
 
 void print_transient_text(
@@ -78,13 +91,7 @@ void print_transient_text(
         std::cout << "error: " << response.error.message << "\n";
     }
     if (response.trajectory.empty()) return;
-    const auto& final = response.trajectory.back().state;
-    for (std::size_t i = 0;
-         i < response.variable_names.size() && i < final.size();
-         ++i) {
-        std::cout << response.variable_names[i] << " = "
-                  << final[i] << "\n";
-    }
+    print_graph_text(response.trajectory.back().graph);
 }
 
 }  // namespace

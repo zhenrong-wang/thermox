@@ -1,7 +1,7 @@
 #include "thermox/platform/results.hpp"
 
+#include <algorithm>
 #include <map>
-#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -9,114 +9,231 @@ namespace thermox::platform {
 
 namespace {
 
-const MediumDefinition& require_medium(
-    const ModelDocument& document,
-    const std::string& medium_id) {
-    for (const auto& medium : document.media) {
-        if (medium.id == medium_id) {
-            return medium;
-        }
+std::string phase_name(physics::Phase phase) {
+    switch (phase) {
+        case physics::Phase::liquid: return "liquid";
+        case physics::Phase::vapor: return "vapor";
+        case physics::Phase::supercritical: return "supercritical";
+        case physics::Phase::two_phase: return "two_phase";
+        case physics::Phase::unknown: return "unknown";
     }
-    throw std::invalid_argument(
-        "compiled result references unknown medium: " + medium_id);
+    return "unknown";
 }
 
-struct FluidPortIndices {
-    std::string component_id;
-    std::string port_name;
-    std::string medium_id;
-    std::size_t mass_flow{0};
-    std::size_t pressure{0};
-    std::size_t enthalpy{0};
-    bool has_mass_flow{false};
-    bool has_pressure{false};
-    bool has_enthalpy{false};
-};
+const ResultValue& require_primary(
+    const PortResult& port,
+    const std::string& name) {
+    const auto value = std::find_if(
+        port.primary_values.begin(),
+        port.primary_values.end(),
+        [&](const auto& candidate) {
+            return candidate.name == name;
+        });
+    if (value == port.primary_values.end()) {
+        throw std::logic_error(
+            "fluid port is missing primary result variable '" +
+            name + "'");
+    }
+    return *value;
+}
+
+std::vector<ResultValue> fluid_derived_values(
+    const physics::ThermodynamicState& state) {
+    return {
+        {"T", "temperature", state.temperature_k},
+        {"rho", "density", state.density_kg_m3},
+        {"u", "specific_internal_energy",
+         state.internal_energy_j_kg},
+        {"s", "specific_entropy", state.entropy_j_kg_k},
+        {"cp", "specific_heat_capacity", state.cp_j_kg_k},
+        {"cv", "specific_heat_capacity", state.cv_j_kg_k},
+        {"speed_of_sound", "speed", state.speed_of_sound_m_s},
+        {"viscosity", "dynamic_viscosity",
+         state.viscosity_pa_s},
+        {"thermal_conductivity", "thermal_conductivity",
+         state.thermal_conductivity_w_m_k},
+        {"vapor_quality", "dimensionless", state.vapor_quality},
+    };
+}
 
 }  // namespace
 
-std::vector<FluidPortResult> evaluate_fluid_port_results(
+struct GraphResultEvaluator::Impl {
+    void initialize(
+        const ModelDocument& document,
+        const std::vector<CompiledPortVariable>& compiled_ports,
+        const std::vector<CompiledInternalVariable>& compiled_internal,
+        std::size_t count,
+        const physics::PropertyPackageRegistry& property_registry) {
+        variable_count = count;
+        port_variables = compiled_ports;
+        internal_variables = compiled_internal;
+        for (const auto& component : document.components) {
+            components.push_back({component.id, component.kind});
+        }
+        for (const auto& medium : document.media) {
+            auto package = property_registry.create(
+                medium.backend, medium.substance);
+            if (!medium.package_version.empty() &&
+                medium.package_version != package->version()) {
+                throw std::invalid_argument(
+                    "result evaluator property package version mismatch for medium: " +
+                    medium.id);
+            }
+            properties.emplace(medium.id, std::move(package));
+        }
+    }
+
+    std::size_t variable_count{0};
+    std::vector<std::pair<std::string, std::string>> components;
+    std::vector<CompiledPortVariable> port_variables;
+    std::vector<CompiledInternalVariable> internal_variables;
+    std::map<
+        std::string,
+        std::shared_ptr<const physics::PropertyPackage>>
+        properties;
+};
+
+GraphResultEvaluator::GraphResultEvaluator(
     const ModelDocument& document,
     const CompiledModelGraph& graph,
-    const std::vector<double>& solution) {
-    return evaluate_fluid_port_results(
-        document, graph, solution,
-        physics::make_default_property_package_registry());
+    const physics::PropertyPackageRegistry& property_registry)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->initialize(
+        document, graph.port_variables, {},
+        graph.problem.variable_names.size(), property_registry);
 }
 
-std::vector<FluidPortResult> evaluate_fluid_port_results(
+GraphResultEvaluator::GraphResultEvaluator(
     const ModelDocument& document,
-    const CompiledModelGraph& graph,
-    const std::vector<double>& solution,
-    const physics::PropertyPackageRegistry& property_registry) {
-    if (solution.size() != graph.problem.variable_names.size()) {
+    const CompiledTransientModelGraph& graph,
+    const physics::PropertyPackageRegistry& property_registry)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->initialize(
+        document, graph.port_variables, graph.internal_variables,
+        graph.problem.variable_names.size(), property_registry);
+}
+
+GraphResultEvaluator::~GraphResultEvaluator() = default;
+GraphResultEvaluator::GraphResultEvaluator(
+    GraphResultEvaluator&&) noexcept = default;
+GraphResultEvaluator& GraphResultEvaluator::operator=(
+    GraphResultEvaluator&&) noexcept = default;
+
+GraphResult GraphResultEvaluator::evaluate(
+    const std::vector<double>& state,
+    const std::vector<double>& derivative) const {
+    if (state.size() != impl_->variable_count) {
         throw std::invalid_argument(
-            "solution size does not match compiled model variables");
+            "state size does not match compiled model variables");
+    }
+    if (!derivative.empty() &&
+        derivative.size() != impl_->variable_count) {
+        throw std::invalid_argument(
+            "derivative size does not match compiled model variables");
     }
 
-    std::map<std::pair<std::string, std::string>, FluidPortIndices>
-        grouped;
-    for (const auto& variable : graph.port_variables) {
-        if (variable.domain != "fluid") {
-            continue;
-        }
-        auto& indices = grouped[
-            {variable.component_id, variable.port_name}];
-        indices.component_id = variable.component_id;
-        indices.port_name = variable.port_name;
-        indices.medium_id = variable.medium_id;
-        if (variable.variable_name == "m_dot") {
-            indices.mass_flow = variable.index;
-            indices.has_mass_flow = true;
-        } else if (variable.variable_name == "p") {
-            indices.pressure = variable.index;
-            indices.has_pressure = true;
-        } else if (variable.variable_name == "h") {
-            indices.enthalpy = variable.index;
-            indices.has_enthalpy = true;
-        }
+    GraphResult result;
+    std::map<std::string, std::size_t> component_indices;
+    for (const auto& [component_id, kind] : impl_->components) {
+        component_indices.emplace(
+            component_id, result.components.size());
+        ComponentResult component;
+        component.component_id = component_id;
+        component.kind = kind;
+        result.components.push_back(std::move(component));
     }
 
-    std::map<std::string,
-             std::shared_ptr<const physics::PropertyPackage>>
-        properties;
-    std::vector<FluidPortResult> results;
-    results.reserve(grouped.size());
-    for (const auto& entry : grouped) {
-        const auto& indices = entry.second;
-        if (!indices.has_mass_flow || !indices.has_pressure ||
-            !indices.has_enthalpy) {
+    std::map<
+        std::pair<std::string, std::string>,
+        std::size_t>
+        port_indices;
+    for (const auto& variable : impl_->port_variables) {
+        const auto component =
+            component_indices.find(variable.component_id);
+        if (component == component_indices.end()) {
             throw std::logic_error(
-                "fluid port is missing a primary result variable: " +
-                indices.component_id + "." + indices.port_name);
+                "compiled port references unknown component: " +
+                variable.component_id);
         }
-        auto package = properties.find(indices.medium_id);
-        if (package == properties.end()) {
-            const auto& medium =
-                require_medium(document, indices.medium_id);
-            package = properties
-                          .emplace(
-                              indices.medium_id,
-                              property_registry.create(
-                                  medium.backend, medium.substance))
-                          .first;
+        auto& component_result =
+            result.components.at(component->second);
+        const auto key =
+            std::make_pair(
+                variable.component_id, variable.port_name);
+        auto port = port_indices.find(key);
+        if (port == port_indices.end()) {
+            port = port_indices
+                       .emplace(
+                           key, component_result.ports.size())
+                       .first;
+            PortResult port_result;
+            port_result.port_name = variable.port_name;
+            port_result.domain = variable.domain;
+            port_result.medium_id = variable.medium_id;
+            component_result.ports.push_back(
+                std::move(port_result));
         }
-        const auto property_state = package->second->state_ph(
-            solution.at(indices.pressure),
-            solution.at(indices.enthalpy));
-        if (!property_state.ok()) {
-            throw std::runtime_error(
-                "failed to evaluate fluid-port result '" +
-                indices.component_id + "." + indices.port_name +
-                "': " + property_state.message);
-        }
-        results.push_back(
-            FluidPortResult{indices.component_id, indices.port_name,
-                            indices.medium_id,
-                            solution.at(indices.mass_flow),
-                            property_state.state});
+        auto& port_result =
+            component_result.ports.at(port->second);
+        port_result.primary_values.push_back({
+            variable.variable_name,
+            variable.dimension,
+            state.at(variable.index),
+            !derivative.empty(),
+            derivative.empty()
+                ? 0.0
+                : derivative.at(variable.index),
+        });
     }
-    return results;
+
+    for (const auto& variable : impl_->internal_variables) {
+        const auto component =
+            component_indices.find(variable.component_id);
+        if (component == component_indices.end()) {
+            throw std::logic_error(
+                "compiled internal state references unknown component: " +
+                variable.component_id);
+        }
+        result.components.at(component->second)
+            .internal_values.push_back({
+                variable.variable_name,
+                variable.dimension,
+                state.at(variable.index),
+                !derivative.empty(),
+                derivative.empty()
+                    ? 0.0
+                    : derivative.at(variable.index),
+            });
+    }
+
+    for (auto& component : result.components) {
+        for (auto& port : component.ports) {
+            if (port.domain != "fluid") {
+                continue;
+            }
+            const auto package =
+                impl_->properties.find(port.medium_id);
+            if (package == impl_->properties.end()) {
+                throw std::logic_error(
+                    "fluid result references unresolved medium: " +
+                    port.medium_id);
+            }
+            const auto properties = package->second->state_ph(
+                require_primary(port, "p").value_si,
+                require_primary(port, "h").value_si);
+            if (!properties.ok()) {
+                throw std::runtime_error(
+                    "failed to evaluate fluid-port result '" +
+                    component.component_id + "." + port.port_name +
+                    "': " + properties.message);
+            }
+            port.phase = phase_name(properties.state.phase);
+            port.derived_values =
+                fluid_derived_values(properties.state);
+        }
+    }
+    return result;
 }
 
 }  // namespace thermox::platform

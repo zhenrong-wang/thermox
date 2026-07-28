@@ -52,6 +52,21 @@ void validate_component_descriptor(
                 descriptor.kind + "." + parameter.name);
         }
     }
+    std::map<std::string, bool> internal_variables;
+    for (const auto& variable : descriptor.internal_variables) {
+        if (variable.name.empty() || variable.dimension.empty()) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' has an incomplete internal variable descriptor");
+        }
+        if (!internal_variables.emplace(
+                variable.name, true).second) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' declares duplicate internal variable: " +
+                variable.name);
+        }
+    }
 }
 
 void validate_component_parameters(

@@ -96,14 +96,12 @@ Decision: compilation resolves and records component, property, connector-domain
 runtime-catalog, and build versions. Requested versions must be checked. Solver-option ownership
 must be unambiguous.
 
-### Results
+### Results — graph contract completed
 
-Steady fluid ports are structured, while other domains and transient property-derived values are
-mostly raw variable arrays.
-
-Decision: results become graph-addressable by stable component and port identity for every domain,
-with primary variables, derived properties, internal states, component metrics, system balances,
-and KPIs.
+`thermox.result/v3` makes steady solutions, transient samples, and events graph-addressable by
+stable component and port identity for every domain. It carries primary variables, fluid-derived
+properties, internal states, and transient derivatives. Typed component-metric, system-balance,
+and KPI collections are reserved in the same contract for registered evaluators.
 
 ## Ordered implementation
 
@@ -112,7 +110,7 @@ and KPIs.
 3. Compile-aware validation and compilation preview with structured diagnostics.
 4. Registry-derived model schema and formal connection/cardinality semantics. ✅
 5. Complete version enforcement and provenance. ✅
-6. Graph-native steady and transient result contracts.
+6. Graph-native steady and transient result contracts. ✅
 7. Asynchronous jobs, repository ports, RPC mapping, then visual graph UI.
 
 Database and frontend implementation should not precede the catalog, validation, and graph

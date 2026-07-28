@@ -30,7 +30,8 @@ public:
         descriptor_.internal_variables.push_back(
             {"temperature", DaeVariableKind::differential,
              300.0, 100.0, 0.0, 1.0, 0.0,
-             std::numeric_limits<double>::infinity()});
+             std::numeric_limits<double>::infinity(),
+             "temperature"});
     }
 
     const ComponentModelDescriptor& descriptor() const override {

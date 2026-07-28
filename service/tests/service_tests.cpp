@@ -26,6 +26,38 @@ std::string read_source_file(const std::string& relative_path) {
     return buffer.str();
 }
 
+const thermox::service::ComponentResult& require_component_result(
+    const thermox::service::GraphResult& graph,
+    const std::string& component_id) {
+    const auto component = std::find_if(
+        graph.components.begin(), graph.components.end(),
+        [&](const auto& candidate) {
+            return candidate.component_id == component_id;
+        });
+    require(
+        component != graph.components.end(),
+        "missing service graph component: " + component_id);
+    return *component;
+}
+
+const thermox::service::PortResult& require_port_result(
+    const thermox::service::GraphResult& graph,
+    const std::string& component_id,
+    const std::string& port_name) {
+    const auto& component =
+        require_component_result(graph, component_id);
+    const auto port = std::find_if(
+        component.ports.begin(), component.ports.end(),
+        [&](const auto& candidate) {
+            return candidate.port_name == port_name;
+        });
+    require(
+        port != component.ports.end(),
+        "missing service graph port: " +
+            component_id + "." + port_name);
+    return *port;
+}
+
 void test_request_contract_validation() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -51,7 +83,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v1,
+            thermox::service::catalog_schema_v2,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -79,6 +111,22 @@ void test_catalog_discovery() {
                     return port.maximum_connections == 1;
                 }),
         "catalog must expose ports, cardinality, and parameter forms");
+    const auto storage = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind == "storage.thermal.lumped";
+        });
+    require(
+        storage != response.components.end() &&
+            storage->internal_variables.size() == 1 &&
+            storage->internal_variables.front().name ==
+                "temperature" &&
+            storage->internal_variables.front().dimension ==
+                "temperature" &&
+            storage->internal_variables.front().kind ==
+                "differential",
+        "catalog must expose graph-result internal state metadata");
     const auto if97 = std::find_if(
         response.property_backends.begin(),
         response.property_backends.end(),
@@ -104,7 +152,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v1\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v2\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
 }
@@ -330,7 +378,10 @@ void test_injectable_native_runtime() {
     thermox::platform::ComponentModelDescriptor descriptor;
     descriptor.kind = "sensor.signal.custom";
     descriptor.version = "0.1.0";
-    descriptor.ports = {{"signal", "signal", "out"}};
+    descriptor.ports = {
+        {"signal", "signal", "out"},
+        {"command", "control", "in"},
+    };
     components.register_model(
         std::make_shared<
             thermox::platform::MetadataComponentModel>(
@@ -370,7 +421,8 @@ void test_injectable_native_runtime() {
       "id": "design",
       "mode": "steady_state_design",
       "fixed_values": {
-        "sensor.signal.value": 42.0
+        "sensor.signal.value": 42.0,
+        "sensor.command.value": 0.5
       }
     }
   ]
@@ -384,6 +436,22 @@ void test_injectable_native_runtime() {
         validation.compilation.catalog_fingerprint ==
             catalog.fingerprint,
         "validation must identify the exact runtime catalog");
+
+    thermox::service::SteadySimulationRequest simulation;
+    simulation.model_json = request.model_json;
+    simulation.case_id = "design";
+    const auto solved = service.run_steady(simulation);
+    require(
+        solved.succeeded(),
+        "custom signal/control graph must solve");
+    require(
+        require_port_result(
+            solved.graph, "sensor", "signal")
+                .domain == "signal" &&
+            require_port_result(
+                solved.graph, "sensor", "command")
+                .domain == "control",
+        "custom runtime graph must expose signal and control results");
 }
 
 void test_steady_service() {
@@ -401,7 +469,7 @@ void test_steady_service() {
         "steady result must identify operation");
     require(
         response.metadata.result_schema_version ==
-            thermox::service::result_schema_v2,
+            thermox::service::result_schema_v3,
         "steady result contract must be versioned");
     require(
         response.metadata.platform_version == "0.2.0",
@@ -434,11 +502,29 @@ void test_steady_service() {
         response.metadata.connector_domains.size() == 5,
         "result provenance must include connector contracts");
     require(
-        response.diagnostics.converged && !response.variables.empty(),
-        "steady result must contain converged variables");
+        response.diagnostics.converged &&
+            response.graph.components.size() == 1,
+        "steady result must contain a graph-addressable result");
+    const auto& compressor =
+        require_component_result(response.graph, "compressor");
     require(
-        !response.fluid_ports.empty(),
-        "steady result must contain evaluated fluid ports");
+        compressor.ports.size() == 3,
+        "steady graph must contain every component port domain");
+    const auto& outlet =
+        require_port_result(
+            response.graph, "compressor", "outlet");
+    require(
+        outlet.domain == "fluid" &&
+            outlet.primary_values.size() == 3 &&
+            !outlet.derived_values.empty(),
+        "fluid graph port must contain primary and derived values");
+    const auto& shaft =
+        require_port_result(
+            response.graph, "compressor", "shaft");
+    require(
+        shaft.domain == "shaft" &&
+            shaft.primary_values.size() == 2,
+        "non-fluid graph ports must be first-class results");
 
     const auto json =
         thermox::service::serialize_steady_response_json(response);
@@ -447,7 +533,7 @@ void test_steady_service() {
             std::string::npos,
         "steady JSON must expose service status");
     require(
-        json.find("\"schema_version\": \"thermox.result/v2\"") !=
+        json.find("\"schema_version\": \"thermox.result/v3\"") !=
             std::string::npos,
         "steady JSON must expose result schema");
     require(
@@ -496,15 +582,26 @@ void test_transient_service() {
         std::abs(response.trajectory.back().time - 0.2) < 1.0e-12,
         "transient service must honor requested end time");
     require(
-        response.trajectory.back().state.size() ==
-            response.variable_names.size(),
-        "trajectory state must match service variable contract");
+        response.trajectory.back().graph.components.size() == 2,
+        "transient trajectory must use the graph result contract");
+    const auto& store = require_component_result(
+        response.trajectory.back().graph, "store");
+    require(
+        store.internal_values.size() == 1 &&
+            store.internal_values.front().name ==
+                "temperature" &&
+            store.internal_values.front().has_derivative,
+        "transient graph must expose internal state and derivative");
 
     const auto json =
         thermox::service::serialize_transient_response_json(response);
     require(
-        json.find("\"trajectory\": [") != std::string::npos,
-        "transient JSON must expose trajectory");
+        json.find("\"trajectory\": [") != std::string::npos &&
+            json.find("\"internal_values\": [") !=
+                std::string::npos &&
+            json.find("\"derivative_si_s\":") !=
+                std::string::npos,
+        "transient JSON must expose graph-native trajectory state");
 }
 
 void test_structured_compilation_failure() {

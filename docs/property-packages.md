@@ -40,7 +40,7 @@ The public C++ interface is
 
 Every registered backend also supplies catalog metadata: backend ID, implementation name/version,
 supported substances, and capabilities. `thermox_service` publishes this metadata through
-`thermox.catalog/v1`, allowing graph clients to reject unsupported fluid/backend/component
+`thermox.catalog/v2`, allowing graph clients to reject unsupported fluid/backend/component
 combinations before simulation submission.
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only

@@ -70,6 +70,31 @@ std::string catalog_fingerprint(
                 hash,
                 std::to_string(static_cast<int>(capability)));
         }
+        for (const auto& variable :
+             descriptor.transient_variables) {
+            hash_text(hash, variable.port_name);
+            hash_text(hash, variable.variable_name);
+            hash_text(
+                hash,
+                std::to_string(
+                    static_cast<int>(variable.kind)));
+            hash_number(hash, variable.derivative_scale);
+        }
+        for (const auto& variable :
+             descriptor.internal_variables) {
+            hash_text(hash, variable.name);
+            hash_text(hash, variable.dimension);
+            hash_text(
+                hash,
+                std::to_string(
+                    static_cast<int>(variable.kind)));
+            hash_number(hash, variable.initial_value);
+            hash_number(hash, variable.state_scale);
+            hash_number(hash, variable.initial_derivative);
+            hash_number(hash, variable.derivative_scale);
+            hash_number(hash, variable.lower_bound);
+            hash_number(hash, variable.upper_bound);
+        }
         hash_text(
             hash,
             descriptor.supports_steady ? "steady" : "not_steady");
