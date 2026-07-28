@@ -3,6 +3,7 @@
 
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -55,6 +56,97 @@ physics::SpeciesComposition inlet_composition(
         physics::CompositionBasis::mass_fraction,
         species, std::move(fractions)};
 }
+
+struct IsentropicEvaluation {
+    EvaluationStatus status{
+        EvaluationStatus::fatal("isentropic evaluation has not run")};
+    double residual{0.0};
+};
+
+class IsentropicEvaluationCache {
+public:
+    IsentropicEvaluationCache(
+        std::shared_ptr<const physics::ThermochemistryPackage> properties,
+        std::vector<std::string> species,
+        std::vector<std::size_t> flows,
+        std::size_t inlet_p, std::size_t inlet_h,
+        std::size_t outlet_p, std::size_t outlet_h,
+        double efficiency, bool compressor)
+        : properties_(std::move(properties)),
+          species_(std::move(species)),
+          flows_(std::move(flows)),
+          inlet_p_(inlet_p),
+          inlet_h_(inlet_h),
+          outlet_p_(outlet_p),
+          outlet_h_(outlet_h),
+          efficiency_(efficiency),
+          compressor_(compressor) {}
+
+    IsentropicEvaluation evaluate(
+        const std::vector<double>& x) const {
+        std::scoped_lock lock(mutex_);
+        std::vector<double> key;
+        key.reserve(flows_.size() + 4);
+        for (const auto flow : flows_) {
+            key.push_back(x.at(flow));
+        }
+        key.push_back(x.at(inlet_p_));
+        key.push_back(x.at(inlet_h_));
+        key.push_back(x.at(outlet_p_));
+        key.push_back(x.at(outlet_h_));
+        if (key == last_key_) {
+            return last_;
+        }
+        last_key_ = std::move(key);
+        physics::SpeciesComposition composition;
+        try {
+            composition =
+                inlet_composition(x, species_, flows_);
+        } catch (const std::domain_error& error) {
+            last_ = {
+                EvaluationStatus::recoverable(error.what()), 0.0};
+            return last_;
+        }
+        const auto inlet = properties_->state_ph(
+            x.at(inlet_p_), x.at(inlet_h_), composition);
+        if (!inlet.ok()) {
+            last_ = {thermochemistry_failure(inlet), 0.0};
+            return last_;
+        }
+        const auto isentropic = properties_->state_ps(
+            x.at(outlet_p_),
+            inlet.state.thermodynamic.entropy_j_kg_k,
+            composition);
+        if (!isentropic.ok()) {
+            last_ = {thermochemistry_failure(isentropic), 0.0};
+            return last_;
+        }
+        const double ideal_change =
+            isentropic.state.thermodynamic.enthalpy_j_kg -
+            x.at(inlet_h_);
+        last_ = {
+            EvaluationStatus::success(),
+            x.at(outlet_h_) - x.at(inlet_h_) -
+                (compressor_
+                     ? ideal_change / efficiency_
+                     : efficiency_ * ideal_change)};
+        return last_;
+    }
+
+private:
+    std::shared_ptr<const physics::ThermochemistryPackage> properties_;
+    std::vector<std::string> species_;
+    std::vector<std::size_t> flows_;
+    std::size_t inlet_p_;
+    std::size_t inlet_h_;
+    std::size_t outlet_p_;
+    std::size_t outlet_h_;
+    double efficiency_;
+    bool compressor_;
+    mutable std::mutex mutex_;
+    mutable std::vector<double> last_key_;
+    mutable IsentropicEvaluation last_;
+};
 
 class MaterialTurbomachineryModel final
     : public ComponentModel {
@@ -150,44 +242,20 @@ public:
                       {inlet_p, 1.0},
                       {outlet_p, -pressure_ratio}},
             0.0, 100000.0 * pressure_ratio);
+        const auto isentropic_cache =
+            std::make_shared<IsentropicEvaluationCache>(
+                properties, species, inlet_flows, inlet_p,
+                inlet_h, outlet_p, outlet_h, efficiency,
+                compressor_);
         system.add_checked_equation(
             prefix + "isentropic_efficiency",
-            [properties, species, inlet_flows, inlet_p, inlet_h,
-             outlet_p, outlet_h, efficiency,
-             compressor = compressor_](
+            [isentropic_cache](
                 const std::vector<double>& x,
                 double& residual) {
-                physics::SpeciesComposition composition;
-                try {
-                    composition = inlet_composition(
-                        x, species, inlet_flows);
-                } catch (const std::domain_error& error) {
-                    return EvaluationStatus::recoverable(
-                        error.what());
-                }
-                const auto inlet = properties->state_ph(
-                    x.at(inlet_p), x.at(inlet_h),
-                    composition);
-                if (!inlet.ok()) {
-                    return thermochemistry_failure(inlet);
-                }
-                const auto isentropic = properties->state_ps(
-                    x.at(outlet_p),
-                    inlet.state.thermodynamic.entropy_j_kg_k,
-                    composition);
-                if (!isentropic.ok()) {
-                    return thermochemistry_failure(isentropic);
-                }
-                const double ideal_change =
-                    isentropic.state.thermodynamic
-                        .enthalpy_j_kg -
-                    x.at(inlet_h);
-                residual =
-                    x.at(outlet_h) - x.at(inlet_h) -
-                    (compressor
-                         ? ideal_change / efficiency
-                         : efficiency * ideal_change);
-                return EvaluationStatus::success();
+                const auto evaluation =
+                    isentropic_cache->evaluate(x);
+                residual = evaluation.residual;
+                return evaluation.status;
             },
             1000000.0);
         std::vector<std::size_t> power_variables = inlet_flows;

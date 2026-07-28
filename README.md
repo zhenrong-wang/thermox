@@ -87,6 +87,9 @@ Implemented in this sprint:
 - A bounded multi-case calibration service performs sequential uncertainty-weighted coordinate
   search through ordinary steady simulations and returns fitted parameters, residual attribution,
   execution provenance, and a reusable canonical fitted model.
+- Composition-aware compressor and turbine residuals cache thermochemistry flashes by their local
+  pressure, enthalpy, and species-flow dependencies, preventing unrelated graph perturbations from
+  repeatedly invoking expensive backend calculations.
 - Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
   consistent linear combinations of retained equations; reduced row names remain available as
   graph diagnostics.

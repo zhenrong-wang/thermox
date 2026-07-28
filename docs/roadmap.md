@@ -240,7 +240,9 @@ Next:
 4. Report fitted parameters, per-observation residuals, fitted canonical models, and complete
    provenance. ✅
 5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
-6. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
+6. Add topology-aware/continuation initialization for large reacting graphs so calibration
+   candidates begin from component-consistent neighboring states.
+7. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
    the independent part-load cases.
 
 See `docs/calibration-architecture.md`.
