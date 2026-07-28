@@ -4,6 +4,8 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace thermox::platform {
 
@@ -13,6 +15,30 @@ using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
+
+void require_same_material(
+    const ComponentCompileContext& context,
+    const std::vector<std::string>& ports) {
+    if (ports.empty()) return;
+    const auto first =
+        context.component.material_bindings.find(ports.front());
+    if (first == context.component.material_bindings.end()) {
+        throw std::logic_error(
+            "component '" + context.component.id +
+            "' material binding is missing for port '" +
+            ports.front() + "'");
+    }
+    for (const auto& port : ports) {
+        const auto binding =
+            context.component.material_bindings.find(port);
+        if (binding == context.component.material_bindings.end() ||
+            binding->second != first->second) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same material");
+        }
+    }
+}
 
 ComponentModelDescriptor make_descriptor(
     std::string kind,
@@ -313,6 +339,216 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class TwoInletMaterialMixerModel final : public ComponentModel {
+public:
+    TwoInletMaterialMixerModel()
+        : descriptor_(make_descriptor(
+              "junction.material.mixer.two_inlet",
+              {{"inlet_a", "material", "in"},
+               {"inlet_b", "material", "in"},
+               {"outlet", "material", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        require_same_material(
+            context, {"inlet_a", "inlet_b", "outlet"});
+        const auto species =
+            require_port_species(context, "inlet_a");
+        if (species != require_port_species(context, "inlet_b") ||
+            species != require_port_species(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+
+        std::vector<std::size_t> inlet_a_flows;
+        std::vector<std::size_t> inlet_b_flows;
+        std::vector<std::size_t> outlet_flows;
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (const auto& name : species) {
+            const std::string variable =
+                "m_dot[" + name + "]";
+            const auto inlet_a = require_port_variable(
+                context, "inlet_a." + variable);
+            const auto inlet_b = require_port_variable(
+                context, "inlet_b." + variable);
+            const auto outlet = require_port_variable(
+                context, "outlet." + variable);
+            inlet_a_flows.push_back(inlet_a);
+            inlet_b_flows.push_back(inlet_b);
+            outlet_flows.push_back(outlet);
+            system.add_linear_equation(
+                prefix + "species_balance." + name,
+                {{outlet, 1.0},
+                 {inlet_a, -1.0},
+                 {inlet_b, -1.0}},
+                0.0, 100.0);
+        }
+
+        const auto pressure_a =
+            require_port_variable(context, "inlet_a.p");
+        const auto pressure_b =
+            require_port_variable(context, "inlet_b.p");
+        const auto pressure_out =
+            require_port_variable(context, "outlet.p");
+        system.add_linear_equation(
+            prefix + "pressure_inlet_a",
+            {{pressure_out, 1.0}, {pressure_a, -1.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "pressure_inlet_b",
+            {{pressure_out, 1.0}, {pressure_b, -1.0}},
+            0.0, 100000.0);
+
+        const auto enthalpy_a =
+            require_port_variable(context, "inlet_a.h");
+        const auto enthalpy_b =
+            require_port_variable(context, "inlet_b.h");
+        const auto enthalpy_out =
+            require_port_variable(context, "outlet.h");
+        std::vector<std::size_t> energy_variables;
+        energy_variables.reserve(
+            inlet_a_flows.size() + inlet_b_flows.size() +
+            outlet_flows.size() + 3);
+        energy_variables.insert(
+            energy_variables.end(),
+            inlet_a_flows.begin(), inlet_a_flows.end());
+        energy_variables.insert(
+            energy_variables.end(),
+            inlet_b_flows.begin(), inlet_b_flows.end());
+        energy_variables.insert(
+            energy_variables.end(),
+            outlet_flows.begin(), outlet_flows.end());
+        energy_variables.push_back(enthalpy_a);
+        energy_variables.push_back(enthalpy_b);
+        energy_variables.push_back(enthalpy_out);
+        system.add_sparse_equation(
+            prefix + "energy_balance",
+            std::move(energy_variables),
+            [inlet_a_flows, inlet_b_flows, outlet_flows,
+             enthalpy_a, enthalpy_b, enthalpy_out](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double mass_a = 0.0;
+                double mass_b = 0.0;
+                double mass_out = 0.0;
+                for (const auto variable : inlet_a_flows) {
+                    mass_a += x.at(variable);
+                    jacobian.push_back(
+                        {variable, -x.at(enthalpy_a)});
+                }
+                for (const auto variable : inlet_b_flows) {
+                    mass_b += x.at(variable);
+                    jacobian.push_back(
+                        {variable, -x.at(enthalpy_b)});
+                }
+                for (const auto variable : outlet_flows) {
+                    mass_out += x.at(variable);
+                    jacobian.push_back(
+                        {variable, x.at(enthalpy_out)});
+                }
+                jacobian.push_back({enthalpy_a, -mass_a});
+                jacobian.push_back({enthalpy_b, -mass_b});
+                jacobian.push_back(
+                    {enthalpy_out, mass_out});
+                return mass_out * x.at(enthalpy_out) -
+                    mass_a * x.at(enthalpy_a) -
+                    mass_b * x.at(enthalpy_b);
+            },
+            1.0e8);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class FixedFractionMaterialSplitterModel final
+    : public ComponentModel {
+public:
+    FixedFractionMaterialSplitterModel()
+        : descriptor_(make_descriptor(
+              "junction.material.splitter.fixed_fraction",
+              {{"inlet", "material", "in"},
+               {"outlet_a", "material", "out"},
+               {"outlet_b", "material", "out"}})) {
+        descriptor_.parameters = {
+            {"outlet_a_fraction", "dimensionless", true,
+             std::nullopt, 0.0, 1.0, true, true}};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        require_same_material(
+            context, {"inlet", "outlet_a", "outlet_b"});
+        const auto species =
+            require_port_species(context, "inlet");
+        if (species !=
+                require_port_species(context, "outlet_a") ||
+            species !=
+                require_port_species(context, "outlet_b")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+        const double fraction = required_parameter(
+            context.component, "outlet_a_fraction");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (const auto& name : species) {
+            const std::string variable =
+                "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "inlet." + variable);
+            system.add_linear_equation(
+                prefix + "outlet_a_species." + name,
+                {{require_port_variable(
+                      context, "outlet_a." + variable), 1.0},
+                 {inlet, -fraction}},
+                0.0, 100.0);
+            system.add_linear_equation(
+                prefix + "outlet_b_species." + name,
+                {{require_port_variable(
+                      context, "outlet_b." + variable), 1.0},
+                 {inlet, -(1.0 - fraction)}},
+                0.0, 100.0);
+        }
+
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        for (const auto& outlet :
+             std::vector<std::string>{"outlet_a", "outlet_b"}) {
+            system.add_linear_equation(
+                prefix + outlet + "_pressure",
+                {{require_port_variable(
+                      context, outlet + ".p"), 1.0},
+                 {inlet_p, -1.0}},
+                0.0, 100000.0);
+            system.add_linear_equation(
+                prefix + outlet + "_enthalpy",
+                {{require_port_variable(
+                      context, outlet + ".h"), 1.0},
+                 {inlet_h, -1.0}},
+                0.0, 100000.0);
+        }
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_transport_component_models(
@@ -326,6 +562,11 @@ void register_transport_component_models(
             IsenthalpicPressureRatioValveModel>());
     registry.register_model(
         std::make_shared<FrozenMaterialPressureRatioModel>());
+    registry.register_model(
+        std::make_shared<TwoInletMaterialMixerModel>());
+    registry.register_model(
+        std::make_shared<
+            FixedFractionMaterialSplitterModel>());
 }
 
 }  // namespace thermox::platform

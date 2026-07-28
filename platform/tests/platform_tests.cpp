@@ -868,6 +868,11 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain two-inlet mixer");
     require(registry.contains("junction.fluid.splitter.two_outlet"),
             "default registry should contain two-outlet splitter");
+    require(registry.contains("junction.material.mixer.two_inlet"),
+            "default registry should contain material mixer");
+    require(registry.contains(
+                "junction.material.splitter.fixed_fraction"),
+            "default registry should contain material splitter");
     require(registry.contains("valve.fluid.isenthalpic_pressure_ratio"),
             "default registry should contain fluid valve");
     require(registry.contains("heat_exchanger.fluid.fixed_duty"),
@@ -907,13 +912,17 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
         "compressor.material.isentropic_efficiency",
+        "compressor.material.performance_map",
         "pump.fluid.isentropic_efficiency",
         "turbine.gas.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
         "turbine.material.isentropic_efficiency",
+        "turbine.material.performance_map",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
+        "junction.material.mixer.two_inlet",
+        "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
         "transport.material.frozen_pressure_ratio",
         "combustor.material.adiabatic_equilibrium",
@@ -2015,6 +2024,131 @@ void test_material_connector_and_frozen_transport() {
                  "material connector conserves water mass");
 }
 
+void test_material_mixer_and_fixed_fraction_splitter() {
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto splitter_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_splitter",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "unresolved_test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "splitter",
+      "kind": "junction.material.splitter.fixed_fraction",
+      "parameters": {"outlet_a_fraction": 0.15},
+      "materials": {
+        "inlet": "gas", "outlet_a": "gas", "outlet_b": "gas"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "splitter.inlet.p": {"value": 1.5, "unit": "MPa"},
+      "splitter.inlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "splitter.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "splitter.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+    const auto splitter_graph =
+        thermox::platform::compile_model_graph(
+            splitter_document, registry, "design");
+    const auto splitter =
+        thermox::solve_newton(splitter_graph.problem);
+    require(
+        splitter.diagnostics.converged,
+        splitter.diagnostics.message);
+    const auto split_value = [&](const std::string& name) {
+        return splitter.x.at(require_variable_index(
+            splitter_graph.problem.variable_names, name));
+    };
+    require_near(
+        split_value("splitter.outlet_a.m_dot[N2]"),
+        1.2, 1.0e-10,
+        "material splitter preserves nitrogen composition");
+    require_near(
+        split_value("splitter.outlet_a.m_dot[O2]"),
+        0.3, 1.0e-10,
+        "material splitter preserves oxygen composition");
+    require_near(
+        split_value("splitter.outlet_b.m_dot[N2]"),
+        6.8, 1.0e-10,
+        "material splitter closes remaining nitrogen flow");
+    require_near(
+        split_value("splitter.outlet_b.h"),
+        600000.0, 1.0e-8,
+        "material splitter preserves specific enthalpy");
+
+    const auto mixer_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_mixer",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "unresolved_test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "mixer",
+      "kind": "junction.material.mixer.two_inlet",
+      "materials": {
+        "inlet_a": "gas", "inlet_b": "gas", "outlet": "gas"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "mixer.inlet_a.p": {"value": 200.0, "unit": "kPa"},
+      "mixer.inlet_a.h": {"value": 300.0, "unit": "kJ/kg"},
+      "mixer.inlet_a.m_dot[N2]": {"value": 6.0, "unit": "kg/s"},
+      "mixer.inlet_a.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "mixer.inlet_b.h": {"value": 500.0, "unit": "kJ/kg"},
+      "mixer.inlet_b.m_dot[N2]": {"value": 1.0, "unit": "kg/s"},
+      "mixer.inlet_b.m_dot[O2]": {"value": 1.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+    const auto mixer_graph =
+        thermox::platform::compile_model_graph(
+            mixer_document, registry, "design");
+    const auto mixer =
+        thermox::solve_newton(mixer_graph.problem);
+    require(mixer.diagnostics.converged,
+            mixer.diagnostics.message);
+    const auto mix_value = [&](const std::string& name) {
+        return mixer.x.at(require_variable_index(
+            mixer_graph.problem.variable_names, name));
+    };
+    require_near(
+        mix_value("mixer.outlet.m_dot[N2]"),
+        7.0, 1.0e-10,
+        "material mixer conserves nitrogen");
+    require_near(
+        mix_value("mixer.outlet.m_dot[O2]"),
+        3.0, 1.0e-10,
+        "material mixer conserves oxygen");
+    require_near(
+        mix_value("mixer.outlet.h"),
+        340000.0, 1.0e-7,
+        "material mixer conserves enthalpy flow");
+    require_near(
+        mix_value("mixer.outlet.p"),
+        200000.0, 1.0e-8,
+        "material mixer equalizes pressure");
+}
+
 void test_material_thermochemistry_resolves_on_demand() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -2295,6 +2429,201 @@ void test_material_compressor_and_turbine() {
         turbine_value("machine.shaft.W_dot"),
         10.0 * (1000000.0 - turbine_outlet_h), 1.0e-4,
         "material turbine closes shaft output power");
+}
+
+void test_map_driven_material_turbomachinery() {
+    auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mapped_material_compressor",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.material.performance_map",
+      "artifacts": {"performance_map": "material-compressor-map"},
+      "parameters": {
+        "reference_pressure": {"value": 101.325, "unit": "kPa"},
+        "reference_temperature": {"value": 300.0, "unit": "K"}
+      },
+      "materials": {"inlet": "gas", "outlet": "gas"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "off_design", "mode": "steady_state_off_design",
+    "fixed_values": {
+      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "compressor.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "compressor.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "compressor.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "compressor.shaft.omega": 300.0
+    },
+    "initial_guesses": {
+      "compressor.outlet.p": {"value": 200.0, "unit": "kPa"},
+      "compressor.outlet.h": {"value": 400.0, "unit": "kJ/kg"},
+      "compressor.shaft.W_dot": {"value": 1.0, "unit": "MW"}
+    }
+  }]
+})json");
+    thermox::platform::PerformanceMapRegistry maps;
+    maps.register_artifact({
+        "material-compressor-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-material-map",
+        std::string(64, 'f'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{8.0, {2.0, 0.8}},
+                  {12.0, {2.0, 0.8}}}},
+                {350.0,
+                 {{8.0, {2.0, 0.8}},
+                  {12.0, {2.0, 0.8}}}},
+            }),
+    });
+    maps.register_artifact({
+        "material-turbine-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-material-turbine-map",
+        std::string(64, 'a'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{8.0, {5.0, 0.9}},
+                  {12.0, {5.0, 0.9}}}},
+                {350.0,
+                 {{8.0, {5.0, 0.9}},
+                  {12.0, {5.0, 0.9}}}},
+            }),
+    });
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph,
+          thermox::physics::ThermochemistryCapability::state_ps}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::
+            make_default_property_package_registry(),
+        maps, chemistry, "off_design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const double isentropic_temperature =
+        300.0 * std::exp(287.0 * std::log(2.0) / 1000.0);
+    const double expected_enthalpy =
+        300000.0 +
+        (1000.0 * isentropic_temperature - 300000.0) / 0.8;
+    require_near(
+        value("compressor.outlet.p"), 202650.0, 1.0e-6,
+        "material map applies pressure ratio");
+    require_near(
+        value("compressor.outlet.h"), expected_enthalpy,
+        1.0e-5, "material map applies isentropic efficiency");
+    require_near(
+        value("compressor.outlet.m_dot[N2]"), 8.0,
+        1.0e-10, "material map preserves composition");
+    require_near(
+        value("compressor.shaft.W_dot"),
+        10.0 * (expected_enthalpy - 300000.0),
+        1.0e-4, "material map closes shaft power");
+
+    document.model_id = "mapped_material_turbine";
+    auto& machine = document.components.front();
+    machine.id = "turbine";
+    machine.kind = "turbine.material.performance_map";
+    machine.artifact_bindings["performance_map"] =
+        "material-turbine-map";
+    machine.parameters["reference_pressure"] =
+        {1.0e6, "Pa", "pressure"};
+    machine.parameters["reference_temperature"] =
+        {1000.0, "K", "temperature"};
+    auto& turbine_case = document.cases.front();
+    turbine_case.fixed_values.clear();
+    turbine_case.initial_guesses.clear();
+    turbine_case.fixed_values = {
+        {"turbine.inlet.p", {1.0e6, "Pa", "pressure"}},
+        {"turbine.inlet.h",
+         {1.0e6, "J/kg", "specific_enthalpy"}},
+        {"turbine.inlet.m_dot[N2]",
+         {8.0, "kg/s", "mass_flow"}},
+        {"turbine.inlet.m_dot[O2]",
+         {2.0, "kg/s", "mass_flow"}},
+        {"turbine.shaft.omega",
+         {300.0, "rad/s", "angular_speed"}},
+    };
+    turbine_case.initial_guesses = {
+        {"turbine.outlet.p", {2.0e5, "Pa", "pressure"}},
+        {"turbine.outlet.h",
+         {700000.0, "J/kg", "specific_enthalpy"}},
+        {"turbine.shaft.W_dot", {3.0e6, "W", "power"}},
+    };
+    const auto turbine_graph =
+        thermox::platform::compile_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, chemistry, "off_design");
+    const auto turbine =
+        thermox::solve_newton(turbine_graph.problem);
+    require(turbine.diagnostics.converged,
+            turbine.diagnostics.message);
+    const auto turbine_value = [&](const std::string& name) {
+        return turbine.x.at(require_variable_index(
+            turbine_graph.problem.variable_names, name));
+    };
+    const double turbine_isentropic_temperature =
+        1000.0 *
+        std::exp(287.0 * std::log(1.0 / 5.0) / 1000.0);
+    const double expected_turbine_enthalpy =
+        1.0e6 +
+        0.9 *
+            (1000.0 * turbine_isentropic_temperature - 1.0e6);
+    require_near(
+        turbine_value("turbine.outlet.p"), 2.0e5,
+        1.0e-6, "material turbine map applies pressure ratio");
+    require_near(
+        turbine_value("turbine.outlet.h"),
+        expected_turbine_enthalpy, 1.0e-5,
+        "material turbine map applies isentropic efficiency");
+    require_near(
+        turbine_value("turbine.shaft.W_dot"),
+        10.0 * (1.0e6 - expected_turbine_enthalpy),
+        1.0e-4, "material turbine map closes shaft power");
 }
 
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
@@ -3785,9 +4114,11 @@ int main() {
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
         test_material_connector_and_frozen_transport();
+        test_material_mixer_and_fixed_fraction_splitter();
         test_material_thermochemistry_resolves_on_demand();
         test_adiabatic_equilibrium_combustor();
         test_material_compressor_and_turbine();
+        test_map_driven_material_turbomachinery();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();

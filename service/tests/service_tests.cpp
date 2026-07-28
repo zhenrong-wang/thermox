@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 30,
+        response.components.size() == 34,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -151,6 +151,19 @@ void test_catalog_discovery() {
             combustor->required_thermochemistry_capabilities ==
                 std::vector<std::string>{"equilibrium_hp"},
         "catalog must expose combustor thermochemistry contract");
+    const auto material_splitter = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "junction.material.splitter.fixed_fraction";
+        });
+    require(
+        material_splitter != response.components.end() &&
+            material_splitter->parameters.size() == 1 &&
+            material_splitter->parameters.front().name ==
+                "outlet_a_fraction",
+        "catalog must expose material splitter calibration contract");
     const auto storage = std::find_if(
         response.components.begin(),
         response.components.end(),

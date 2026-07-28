@@ -37,6 +37,10 @@ Implemented in this sprint:
   dependency-free sparse elimination remains available for standalone/reference builds.
 - Fixed sparse patterns with value-only Jacobian updates, dynamic sparse assembly, and hybrid
   analytic/finite-difference derivative rows.
+- Composition-preserving material splitters and enthalpy-conserving material mixers for bleed,
+  cooling, recirculation, and multistream reacting-system graphs.
+- Performance-map compressor and turbine models for both ordinary fluid and composition-aware
+  material gas paths.
 - Scale-invariant built-in dense/CSR direct solvers for small problems and backend testing.
 - Damped Newton with dimensionless row/column scaling, bounds, recoverable model-evaluation
   failures, backtracking line search, structural matching, and iteration diagnostics.

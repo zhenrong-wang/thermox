@@ -244,6 +244,10 @@ Next:
    candidates begin from component-consistent neighboring states. ✅
 7. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
    the independent part-load cases.
+8. Add composition-preserving material split/mix routing for compressor bleed and cooling-air
+   reinjection without introducing gas-turbine-specific graph semantics. ✅
+9. Extend performance-map compressor/turbine contracts to composition-aware material ports so
+   reacting gas paths can run frozen-parameter off-design predictions. ✅
 
 See `docs/calibration-architecture.md`.
 

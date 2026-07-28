@@ -66,8 +66,8 @@ ratio and efficiency as outputs. Those semantics belong to the compressor compon
 descriptor, not to `PerformanceMap` itself. Turbines, pumps, fans, heat-exchanger correlations, and
 other engineering components can use the same map kernel.
 
-The registered `compressor.fluid.performance_map` and
-`turbine.fluid.performance_map` models formalize the following map contract:
+The registered fluid and composition-aware material performance-map
+compressor/turbine models formalize the following map contract:
 
 - primary axis: `corrected_mass_flow`, dimension `mass_flow`;
 - family axis: `corrected_speed`, dimension `angular_speed`;
@@ -96,5 +96,6 @@ derivatives in sparse Jacobian assembly.
    equations. ✅
 4. Add the corresponding map-based turbine component with turbine pressure, efficiency, and shaft
    power conventions. ✅
-5. Calibrate a designated baseline point, then freeze parameters and predict independent
+5. Apply the same map contract to composition-aware material compressor and turbine ports. ✅
+6. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.
