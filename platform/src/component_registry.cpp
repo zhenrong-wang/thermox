@@ -35,6 +35,10 @@ std::vector<CanonicalVariableSpec> canonical_variables_for_domain(const std::str
                 {"omega", 314.1592653589793, 100.0,
                  "angular_speed"}};
     }
+    if (domain == "electrical") {
+        return {{"P", 0.0, 1000000.0, "power"},
+                {"frequency", 50.0, 50.0, "frequency"}};
+    }
     if (domain == "signal" || domain == "control") {
         return {{"value", 0.0, 1.0, "dimensionless"}};
     }
@@ -137,6 +141,7 @@ std::string required_connection_kind(const std::string& domain) {
     if (domain == "fluid") return "fluid_link";
     if (domain == "heat") return "heat_link";
     if (domain == "shaft") return "shaft_link";
+    if (domain == "electrical") return "electrical_link";
     if (domain == "signal" || domain == "control") {
         return "signal_link";
     }
@@ -150,6 +155,9 @@ std::string required_connection_contract(
     if (domain == "fluid") return "thermox.connector.fluid/v1";
     if (domain == "heat") return "thermox.connector.heat/v1";
     if (domain == "shaft") return "thermox.connector.shaft/v1";
+    if (domain == "electrical") {
+        return "thermox.connector.electrical/v1";
+    }
     if (domain == "signal") return "thermox.connector.signal/v1";
     if (domain == "control") return "thermox.connector.control/v1";
     throw std::invalid_argument(
@@ -593,6 +601,7 @@ ComponentRegistry make_default_component_registry() {
     register_heat_transfer_component_models(registry);
     register_fluid_inventory_component_models(registry);
     register_storage_component_models(registry);
+    register_power_component_models(registry);
     return registry;
 }
 

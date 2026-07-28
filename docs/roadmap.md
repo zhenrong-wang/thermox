@@ -234,6 +234,7 @@ Work items:
    - versioned map artifacts, generic component artifact bindings, and runtime registry; ✅
    - map-based compressor graph component; ✅
    - map-based turbine graph component; ✅
+   - two-load shaft train with mechanical losses and an electrical generator component; ✅
 3. Add steam turbine stage/extraction support.
 4. Add design/off-design case handling.
 5. Add heat balance report generation.

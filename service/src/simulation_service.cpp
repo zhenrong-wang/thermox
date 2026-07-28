@@ -305,6 +305,7 @@ ExecutionMetadata execution_metadata(
         {"fluid", "thermox.connector.fluid/v1"},
         {"heat", "thermox.connector.heat/v1"},
         {"shaft", "thermox.connector.shaft/v1"},
+        {"electrical", "thermox.connector.electrical/v1"},
         {"signal", "thermox.connector.signal/v1"},
         {"control", "thermox.connector.control/v1"},
     };
@@ -684,6 +685,8 @@ CatalogResponse SimulationService::get_catalog(
          {{"Q_dot", "power"}, {"T", "temperature"}}},
         {"shaft", "thermox.connector.shaft/v1",
          {{"W_dot", "power"}, {"omega", "angular_speed"}}},
+        {"electrical", "thermox.connector.electrical/v1",
+         {{"P", "power"}, {"frequency", "frequency"}}},
         {"signal", "thermox.connector.signal/v1",
          {{"value", "dimensionless"}}},
         {"control", "thermox.connector.control/v1",

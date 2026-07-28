@@ -57,6 +57,9 @@ Implemented in this sprint:
   off-design operating points.
 - The corresponding map-driven turbine uses the same domain-neutral artifact format with
   turbine-specific expansion, efficiency, and generated shaft-power conventions.
+- Typed shaft-train and generator components balance one driver against two loads, mechanical
+  efficiency, fixed losses, electrical conversion efficiency, and speed/frequency conversion.
+  Electrical power and frequency use their own connector contract.
 - Queryable component catalog descriptors for ports, simulation modes, property capabilities,
   parameters, SI dimensions, defaults, and open/closed bounds. The compiler rejects missing,
   unknown, dimensionally incompatible, and out-of-range component parameters before equation

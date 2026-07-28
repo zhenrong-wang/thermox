@@ -6,6 +6,7 @@ add_library(thermox_platform
     src/heat_transfer_models.cpp
     src/model_document.cpp
     src/performance_map.cpp
+    src/power_models.cpp
     src/results.cpp
     src/storage_models.cpp
     src/turbomachinery_models.cpp

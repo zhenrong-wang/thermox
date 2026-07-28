@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 20,
+        response.components.size() == 24,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -175,7 +175,7 @@ void test_catalog_discovery() {
                 "saturation_p") != if97->capabilities.end(),
         "catalog must expose property compatibility metadata");
     require(
-        response.connector_domains.size() == 5,
+        response.connector_domains.size() == 6,
         "catalog must expose connector contracts");
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
@@ -527,7 +527,7 @@ void test_steady_service() {
                 "1.0.0",
         "medium provenance must include requested and resolved package versions");
     require(
-        response.metadata.connector_domains.size() == 5,
+        response.metadata.connector_domains.size() == 6,
         "result provenance must include connector contracts");
     require(
         response.diagnostics.converged &&

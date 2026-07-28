@@ -137,6 +137,7 @@ std::string catalog_fingerprint(
     hash_text(hash, "thermox.connector.fluid/v1:m_dot,p,h");
     hash_text(hash, "thermox.connector.heat/v1:Q_dot,T");
     hash_text(hash, "thermox.connector.shaft/v1:W_dot,omega");
+    hash_text(hash, "thermox.connector.electrical/v1:P,frequency");
     hash_text(hash, "thermox.connector.signal/v1:value");
     hash_text(hash, "thermox.connector.control/v1:value");
     std::ostringstream out;

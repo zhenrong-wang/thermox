@@ -130,7 +130,18 @@ Canonical variables:
 - `omega` — rad/s where maps require speed.
 - optional torque.
 
-### 5.4 Signal/control domain
+### 5.4 Electrical domain
+
+Canonical variables:
+
+- `P` — active electrical power, W.
+- `frequency` — electrical frequency, Hz.
+
+The `thermox.connector.electrical/v1` contract is distinct from the shaft contract. A generator
+converts shaft power and angular speed into electrical power and frequency; a shaft train balances
+driver power against mechanical loads and explicit losses.
+
+### 5.5 Signal/control domain
 
 Signal ports do not create conservation equations automatically. They supply scalar/vector values to component equations.
 

@@ -673,6 +673,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "sink.fluid.boundary",
         "source.heat.boundary",
         "sink.heat.boundary",
+        "source.electrical.boundary",
+        "sink.electrical.boundary",
         "compressor.gas.isentropic_efficiency",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
@@ -688,7 +690,9 @@ void test_component_catalog_exposes_parameter_contracts() {
         "evaporator.fluid.fixed_outlet_quality",
         "condenser.fluid.fixed_outlet_quality",
         "volume.fluid.rigid_adiabatic",
-        "storage.thermal.lumped"};
+        "storage.thermal.lumped",
+        "shaft.train.two_load",
+        "generator.electrical.efficiency"};
     std::sort(expected_kinds.begin(), expected_kinds.end());
     require(registry.kinds() == expected_kinds,
             "default component modules should preserve the complete catalog");
@@ -3035,6 +3039,94 @@ void test_transient_compiler_rejects_steady_only_components() {
         "does not support transient compilation");
 }
 
+void test_shaft_train_and_generator_close_power_balance() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "shaft_power_balance",
+    "media": [],
+    "components": [
+      {
+        "id": "train",
+        "kind": "shaft.train.two_load",
+        "parameters": {
+          "mechanical_efficiency": 0.99,
+          "fixed_loss": {"value": 1.0, "unit": "MW"}
+        }
+      },
+      {
+        "id": "generator",
+        "kind": "generator.electrical.efficiency",
+        "parameters": {
+          "generator_efficiency": 0.98,
+          "pole_pairs": 1.0
+        }
+      },
+      {
+        "id": "grid",
+        "kind": "sink.electrical.boundary"
+      }
+    ],
+    "connections": [
+      {
+        "id": "generator_shaft",
+        "from": "train.load_2",
+        "to": "generator.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "grid_link",
+        "from": "generator.electrical",
+        "to": "grid.inlet",
+        "kind": "electrical_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "rated",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "train.driver.W_dot": {"value": 300.0, "unit": "MW"},
+      "train.driver.omega": 314.1592653589793,
+      "train.load_1.W_dot": {"value": 40.0, "unit": "MW"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        "rated");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(
+        result.diagnostics.converged,
+        result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(
+            found != graph.problem.variable_names.end(),
+            "power-train result variable missing: " + name);
+        return result.x.at(static_cast<std::size_t>(
+            std::distance(
+                graph.problem.variable_names.begin(), found)));
+    };
+    const double generator_shaft_power =
+        0.99 * 300.0e6 - 40.0e6 - 1.0e6;
+    require_near(
+        value("generator.shaft.W_dot"),
+        generator_shaft_power, 1.0e-6,
+        "shaft train allocates driver power after losses");
+    require_near(
+        value("grid.inlet.P"),
+        0.98 * generator_shaft_power, 1.0e-6,
+        "generator converts shaft power to electrical power");
+    require_near(
+        value("grid.inlet.frequency"), 50.0, 1.0e-10,
+        "generator converts shaft speed to electrical frequency");
+}
+
 void test_transient_compiler_rejects_fixed_differential_state() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -3110,6 +3202,7 @@ int main() {
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();
+        test_shaft_train_and_generator_close_power_balance();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();
     } catch (const std::exception& ex) {

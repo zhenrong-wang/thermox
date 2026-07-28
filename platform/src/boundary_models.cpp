@@ -38,6 +38,14 @@ void register_boundary_component_models(ComponentRegistry& registry) {
         boundary_descriptor(
             "sink.heat.boundary",
             {{"inlet", "heat", "in"}}, true)));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "source.electrical.boundary",
+            {{"outlet", "electrical", "out"}}, false)));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.electrical.boundary",
+            {{"inlet", "electrical", "in"}}, false)));
 }
 
 }  // namespace thermox::platform
