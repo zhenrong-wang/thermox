@@ -2464,14 +2464,6 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
         const double initial_mass = state.state.density_kg_m3;
         const double initial_energy =
             initial_mass * state.state.internal_energy_j_kg;
-        const auto reconstructed = package->state_ph(
-            backend_case.pressure, state.state.enthalpy_j_kg);
-        std::cerr << backend_case.backend
-                  << " pt_rho=" << state.state.density_kg_m3
-                  << " ph_rho=" << reconstructed.state.density_kg_m3
-                  << " pt_u=" << state.state.internal_energy_j_kg
-                  << " ph_u=" << reconstructed.state.internal_energy_j_kg
-                  << '\n';
         std::ostringstream number;
         number << std::setprecision(17);
         const auto format = [&](double value) {
@@ -2542,19 +2534,6 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
             graph.problem.variable_names, "tank.mass");
         const auto energy = require_variable_index(
             graph.problem.variable_names, "tank.total_energy");
-        const auto pressure = require_variable_index(
-            graph.problem.variable_names, "tank.pressure");
-        const auto enthalpy = require_variable_index(
-            graph.problem.variable_names, "tank.enthalpy");
-        std::cerr << backend_case.backend
-                  << " mass_dot=" << initialized.derivative.at(mass)
-                  << " energy_dot=" << initialized.derivative.at(energy)
-                  << " mass=" << initialized.state.at(mass)
-                  << " energy=" << initialized.state.at(energy)
-                  << " pressure=" << initialized.state.at(pressure)
-                  << " enthalpy=" << initialized.state.at(enthalpy)
-                  << " input_h=" << state.state.enthalpy_j_kg
-                  << '\n';
         require_near(initialized.derivative.at(mass), 0.0,
                      1.0e-9,
                      backend_case.backend +

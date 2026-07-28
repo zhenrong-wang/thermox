@@ -10,7 +10,9 @@ thermal components and systems
             |
   +---------+---------+
   |         |         |
-ideal gas  CO2      IF97
+ideal gas  CO2      water/steam
+            \        /
+             CoolProp
             |
      thermox_core
  steady Newton / transient DAE
@@ -41,10 +43,11 @@ supported substances, and capabilities. `thermox_service` publishes this metadat
 `thermox.catalog/v1`, allowing graph clients to reject unsupported fluid/backend/component
 combinations before simulation submission.
 
-CO2 and IF97 remain independent Git repositories under `modules/properties/`.
-Their exported C APIs are namespaced, while legacy implementation symbols are
-hidden inside separate shared libraries. This prevents symbol interposition
-between the two old C implementations.
+CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only
+real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
+backend using its Span-Wagner formulation; water and steam use HEOS with
+IAPWS-95. Thermox keeps its property-package and backend-selection contracts, while no rejected
+CO2 or water/steam implementation or fallback path remains.
 
 ## Verification
 
@@ -67,15 +70,15 @@ evaluations rather than process-level exceptions.
 
 ## Saturation contract and next extensions
 
-The property interface and both real-fluid backends expose an explicit
+The property interface and both real-fluid adapters expose an explicit
 `saturation_p` capability returning saturated-liquid and saturated-vapor
-states at a common pressure and temperature. IF97 currently supports this
-query from its minimum saturation pressure through the Region 1/2 boundary
-(approximately 16.5 MPa); higher-pressure Region 3 saturation remains future
-backend work. The PT call still rejects an exactly saturated state as
-ambiguous, while PH can represent an interior two-phase mixture with vapor
-quality.
+states at a common pressure and temperature. The query is accepted from the
+fluid triple pressure up to, but not including, the critical pressure. This
+includes high-pressure water saturation and near-critical CO2 saturation. The PT
+call rejects an exactly saturated state as ambiguous, while PH and PS can
+represent a two-phase mixture with vapor quality.
 
-Solver-facing analytic derivatives, thread-safety stress testing, broader
-authoritative IAPWS/Span-Wagner vectors, and caching policy remain promotion
-work for production-scale simulations.
+Each worker thread owns its CoolProp state objects, avoiding shared mutable
+backend state while amortizing factory cost. Solver-facing analytic
+derivatives, broader independent reference vectors, and performance profiling
+remain useful promotion work for production-scale simulations.

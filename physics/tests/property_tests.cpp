@@ -158,10 +158,92 @@ void verify_saturation_pairs(
         pressure, saturation.vapor.enthalpy_j_kg);
     require(liquid_ph.ok() && vapor_ph.ok(),
             "PH must reconstruct exact saturation endpoints");
-    require_near(liquid_ph.state.vapor_quality, 0.0, 0.0,
+    require_near(liquid_ph.state.vapor_quality, 0.0, 1.0e-10,
                  "PH saturated-liquid quality");
-    require_near(vapor_ph.state.vapor_quality, 1.0, 0.0,
+    require_near(vapor_ph.state.vapor_quality, 1.0, 1.0e-10,
                  "PH saturated-vapor quality");
+
+    const auto mixture_ph = package.state_ph(
+        pressure,
+        0.5 * (saturation.liquid.enthalpy_j_kg +
+               saturation.vapor.enthalpy_j_kg));
+    require(mixture_ph.ok(), "PH must represent a two-phase mixture");
+    require_near(mixture_ph.state.vapor_quality, 0.5, 1.0e-8,
+                 "PH two-phase quality");
+    require(
+        mixture_ph.state.phase == thermox::physics::Phase::two_phase,
+        "PH two-phase classification");
+    require(
+        mixture_ph.state.density_kg_m3 > 0.0 &&
+            std::isfinite(mixture_ph.state.internal_energy_j_kg),
+        "PH two-phase core properties");
+}
+
+void verify_water_reference_points(
+    const thermox::physics::PropertyPackage& package) {
+    const auto region_1 = package.state_pt(3e6, 300.0);
+    require(region_1.ok(), "water region 1 reference point");
+    require_near(region_1.state.density_kg_m3, 997.85294, 0.1,
+                 "water/IF97 region 1 density agreement");
+    require_near(region_1.state.enthalpy_j_kg, 115331.273, 100.0,
+                 "water/IF97 region 1 enthalpy agreement");
+    require_near(region_1.state.entropy_j_kg_k, 392.294792, 0.5,
+                 "water/IF97 region 1 entropy agreement");
+    require_near(region_1.state.cp_j_kg_k, 4173.01218, 20.0,
+                 "water/IF97 region 1 cp agreement");
+
+    const auto region_2 = package.state_pt(30e6, 700.0);
+    require(region_2.ok(), "water region 2 reference point");
+    require_near(region_2.state.density_kg_m3, 184.180169, 0.2,
+                 "water/IF97 region 2 density agreement");
+    require_near(region_2.state.enthalpy_j_kg, 2631494.74, 1000.0,
+                 "water/IF97 region 2 enthalpy agreement");
+    require_near(region_2.state.entropy_j_kg_k, 5175.40298, 2.0,
+                 "water/IF97 region 2 entropy agreement");
+
+    const auto region_3 = package.state_pt(25.5837018e6, 650.0);
+    require(region_3.ok(), "water region 3 reference point");
+    require_near(region_3.state.density_kg_m3, 500.0, 2.0,
+                 "water/IF97 region 3 density agreement");
+    require_near(region_3.state.enthalpy_j_kg, 1863430.19, 2000.0,
+                 "water/IF97 region 3 enthalpy agreement");
+
+    const auto region_5 = package.state_pt(0.5e6, 1500.0);
+    require(region_5.ok(), "water region 5 reference point");
+    require_near(region_5.state.enthalpy_j_kg, 5219768.55, 2000.0,
+                 "water/IF97 region 5 enthalpy agreement");
+    require_near(region_5.state.entropy_j_kg_k, 9654.08875, 5.0,
+                 "water/IF97 region 5 entropy agreement");
+}
+
+void verify_co2_cycle_points(
+    const thermox::physics::PropertyPackage& package) {
+    const auto compressor_inlet = package.state_pt(8e6, 305.0);
+    require(compressor_inlet.ok(), "sCO2 compressor inlet");
+    require_near(compressor_inlet.state.density_kg_m3, 656.7657, 0.1,
+                 "sCO2 near-critical density");
+    require_near(compressor_inlet.state.cp_j_kg_k, 7312.5, 2.0,
+                 "sCO2 near-critical cp");
+    require(
+        compressor_inlet.state.phase ==
+            thermox::physics::Phase::supercritical,
+        "sCO2 compressor inlet phase");
+
+    verify_round_trip(package, 8e6, 305.0, 0.02);
+    verify_round_trip(package, 20e6, 700.0, 0.02);
+
+    const auto subcritical_liquid = package.state_pt(4e6, 278.0);
+    const auto subcritical_vapor = package.state_pt(4e6, 279.0);
+    require(subcritical_liquid.ok() && subcritical_vapor.ok(),
+            "CO2 subcritical phase points");
+    require(
+        subcritical_liquid.state.phase ==
+            thermox::physics::Phase::liquid,
+        "CO2 liquid phase below saturation temperature");
+    require(
+        subcritical_vapor.state.phase ==
+            thermox::physics::Phase::vapor,
+        "CO2 vapor phase above saturation temperature");
 }
 
 }  // namespace
@@ -173,12 +255,16 @@ int main() {
     verify_round_trip(ideal_gas, 2e5, 600.0, 1e-10);
     verify_round_trip(co2, 1e5, 320.0, 0.1);
     verify_round_trip(if97, 25e6, 873.0, 0.2);
+    verify_co2_cycle_points(co2);
+    verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);
     verify_solver_bridge(co2, 1e5, 340.0, 300.0, 0.02);
     verify_solver_bridge(if97, 6e6, 811.0, 700.0, 0.05);
     verify_transient_bridge(co2);
     verify_saturation_pairs(co2, 1e6);
+    verify_saturation_pairs(co2, 7.2e6);
     verify_saturation_pairs(if97, 1e5);
+    verify_saturation_pairs(if97, 20e6);
     require(!ideal_gas.supports(
                 thermox::physics::PropertyCapability::saturation_p),
             "ideal gas should not advertise saturation_p");
@@ -191,4 +277,13 @@ int main() {
     require(if97.state_pt(1e5, 250.0).status ==
                 thermox::physics::PropertyStatus::out_of_range,
             "IF97 range status");
+    require(co2.saturation_p(1e5).status ==
+                thermox::physics::PropertyStatus::out_of_range,
+            "CO2 saturation below triple point");
+    require(co2.saturation_p(8e6).status ==
+                thermox::physics::PropertyStatus::out_of_range,
+            "CO2 saturation above critical point");
+    require(if97.saturation_p(23e6).status ==
+                thermox::physics::PropertyStatus::out_of_range,
+            "IF97 saturation above critical point");
 }

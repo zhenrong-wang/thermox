@@ -87,8 +87,8 @@ void test_catalog_discovery() {
         });
     require(
         if97 != response.property_backends.end() &&
-            if97->implementation_name == "water-steam-if97" &&
-            if97->implementation_version == "0.4.0" &&
+            if97->implementation_name == "coolprop-heos-water" &&
+            if97->implementation_version == "8.0.0" &&
             std::find(
                 if97->supported_substances.begin(),
                 if97->supported_substances.end(),

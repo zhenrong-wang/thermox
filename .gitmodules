@@ -1,6 +1,3 @@
-[submodule "modules/properties/co2"]
-	path = modules/properties/co2
-	url = git@github.com:zhenrong-wang/co2.git
-[submodule "modules/properties/water-steam-if97"]
-	path = modules/properties/water-steam-if97
-	url = git@github.com:zhenrong-wang/water-steam-if97.git
+[submodule "modules/properties/coolprop"]
+	path = modules/properties/coolprop
+	url = https://github.com/CoolProp/CoolProp.git

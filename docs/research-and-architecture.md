@@ -643,7 +643,7 @@ thermox/
     src/                 # validation, simulation workflows, provenance, serialization
     tests/
   modules/
-    properties/         # pinned CO2 and IF97 implementations
+    properties/         # pinned CoolProp real-fluid implementation
   scripts/
     verify.sh
 ```

@@ -6,8 +6,9 @@ cases—not by a hard-coded cycle type. Gas turbines, steam plants, combined cyc
 systems, refrigeration systems, and other networks use the same platform path.
 
 This repository contains a cycle-agnostic C++ numerical core for steady nonlinear systems and
-implicit transient DAEs, a property-independent physics bridge, production CO2 and IF97 property
-modules, a generic thermal-system schema/compiler platform, and isolated example models.
+implicit transient DAEs, a property-independent physics bridge, production CO2 and water/steam
+property adapters backed by CoolProp, a generic thermal-system schema/compiler platform, and
+isolated example models.
 
 ## Design documents
 
@@ -93,16 +94,17 @@ service/
   tests/                Service-boundary and workflow tests
 physics/
   include/              Property-independent physics interfaces
-  src/                  Ideal-gas, CO2, and IF97 adapters
+  src/                  Ideal-gas and CoolProp-backed CO2/IF97 adapters
   tests/                Property, steady-solver, and transient integration tests
 modules/
-  properties/           Pinned, library-ready CO2 and IF97 submodules
+  properties/           Pinned CoolProp dependency
 scripts/
   verify.sh             Configure, build, test, and run example solve
 ```
 
-The pinned `co2` and `water-steam-if97` repositories are production modules behind the unified
-Thermox property interface.
+CoolProp 8.0.0 is pinned as the sole real-fluid implementation behind the unified Thermox property
+interface. Both CO2 and water/steam use CoolProp HEOS (Span-Wagner and IAPWS-95 respectively).
+The former in-house CO2 and water/steam submodules are not built or retained.
 
 ## Prerequisites
 
@@ -110,7 +112,8 @@ Thermox property interface.
 - A C++20 compiler such as GCC or Clang
 - POSIX shell for `scripts/verify.sh`
 
-The two property submodules are required for the default build.
+The CoolProp submodule is required for the default build. Its pinned build dependencies are
+resolved by CoolProp through CPM during configuration and can be shared through `CPM_SOURCE_CACHE`.
 
 ## Clone
 
