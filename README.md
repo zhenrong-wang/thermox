@@ -103,7 +103,7 @@ scripts/
 ```
 
 CoolProp 8.0.0 is pinned as the sole real-fluid implementation behind the unified Thermox property
-interface. Both CO2 and water/steam use CoolProp HEOS (Span-Wagner and IAPWS-95 respectively).
+interface. CO2 uses CoolProp HEOS/Span-Wagner, while water and steam use CoolProp IF97.
 The former in-house CO2 and water/steam submodules are not built or retained.
 
 ## Prerequisites

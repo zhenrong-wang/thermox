@@ -2461,9 +2461,16 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
         require(state.ok(),
                 backend_case.backend +
                     " volume initial state should be valid");
-        const double initial_mass = state.state.density_kg_m3;
+        const auto reconstructed = package->state_ph(
+            backend_case.pressure, state.state.enthalpy_j_kg);
+        require(reconstructed.ok(),
+                backend_case.backend +
+                    " volume PH initial state should be valid");
+        const double initial_mass =
+            reconstructed.state.density_kg_m3;
         const double initial_energy =
-            initial_mass * state.state.internal_energy_j_kg;
+            initial_mass *
+            reconstructed.state.internal_energy_j_kg;
         std::ostringstream number;
         number << std::setprecision(17);
         const auto format = [&](double value) {

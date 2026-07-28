@@ -19,7 +19,7 @@ CoolProp::AbstractState& backend_state(CoolPropFluid fluid) {
     thread_local StatePtr co2{
         CoolProp::AbstractState::factory("HEOS", "CO2")};
     thread_local StatePtr water{
-        CoolProp::AbstractState::factory("HEOS", "Water")};
+        CoolProp::AbstractState::factory("IF97", "Water")};
     return fluid == CoolPropFluid::co2 ? *co2 : *water;
 }
 
@@ -122,7 +122,7 @@ bool outside_limits(
     if (flash != CoolPropFlash::pt) return false;
     if (fluid == CoolPropFluid::co2)
         return second < 216.592 || second > 2000.0;
-    return second < 273.16 || second > 2000.0;
+    return second < 273.15 || second > 2273.15;
 }
 
 CoolProp::input_pairs input_pair(CoolPropFlash flash) {

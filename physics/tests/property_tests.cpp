@@ -183,37 +183,37 @@ void verify_water_reference_points(
     const thermox::physics::PropertyPackage& package) {
     const auto region_1 = package.state_pt(3e6, 300.0);
     require(region_1.ok(), "water region 1 reference point");
-    require_near(region_1.state.density_kg_m3, 997.85294, 0.1,
-                 "water/IF97 region 1 density agreement");
-    require_near(region_1.state.enthalpy_j_kg, 115331.273, 100.0,
-                 "water/IF97 region 1 enthalpy agreement");
-    require_near(region_1.state.entropy_j_kg_k, 392.294792, 0.5,
-                 "water/IF97 region 1 entropy agreement");
-    require_near(region_1.state.cp_j_kg_k, 4173.01218, 20.0,
-                 "water/IF97 region 1 cp agreement");
+    require_near(region_1.state.density_kg_m3, 997.85294, 0.01,
+                 "IF97 region 1 density");
+    require_near(region_1.state.enthalpy_j_kg, 115331.273, 0.2,
+                 "IF97 region 1 enthalpy");
+    require_near(region_1.state.entropy_j_kg_k, 392.294792, 0.002,
+                 "IF97 region 1 entropy");
+    require_near(region_1.state.cp_j_kg_k, 4173.01218, 0.02,
+                 "IF97 region 1 cp");
 
     const auto region_2 = package.state_pt(30e6, 700.0);
     require(region_2.ok(), "water region 2 reference point");
-    require_near(region_2.state.density_kg_m3, 184.180169, 0.2,
-                 "water/IF97 region 2 density agreement");
-    require_near(region_2.state.enthalpy_j_kg, 2631494.74, 1000.0,
-                 "water/IF97 region 2 enthalpy agreement");
-    require_near(region_2.state.entropy_j_kg_k, 5175.40298, 2.0,
-                 "water/IF97 region 2 entropy agreement");
+    require_near(region_2.state.density_kg_m3, 184.180169, 0.01,
+                 "IF97 region 2 density");
+    require_near(region_2.state.enthalpy_j_kg, 2631494.74, 0.5,
+                 "IF97 region 2 enthalpy");
+    require_near(region_2.state.entropy_j_kg_k, 5175.40298, 0.01,
+                 "IF97 region 2 entropy");
 
     const auto region_3 = package.state_pt(25.5837018e6, 650.0);
     require(region_3.ok(), "water region 3 reference point");
-    require_near(region_3.state.density_kg_m3, 500.0, 2.0,
-                 "water/IF97 region 3 density agreement");
-    require_near(region_3.state.enthalpy_j_kg, 1863430.19, 2000.0,
-                 "water/IF97 region 3 enthalpy agreement");
+    require_near(region_3.state.density_kg_m3, 500.0, 0.02,
+                 "IF97 region 3 density");
+    require_near(region_3.state.enthalpy_j_kg, 1863430.19, 5.0,
+                 "IF97 region 3 enthalpy");
 
     const auto region_5 = package.state_pt(0.5e6, 1500.0);
     require(region_5.ok(), "water region 5 reference point");
-    require_near(region_5.state.enthalpy_j_kg, 5219768.55, 2000.0,
-                 "water/IF97 region 5 enthalpy agreement");
-    require_near(region_5.state.entropy_j_kg_k, 9654.08875, 5.0,
-                 "water/IF97 region 5 entropy agreement");
+    require_near(region_5.state.enthalpy_j_kg, 5219768.55, 1.0,
+                 "IF97 region 5 enthalpy");
+    require_near(region_5.state.entropy_j_kg_k, 9654.08875, 0.02,
+                 "IF97 region 5 entropy");
 }
 
 void verify_co2_cycle_points(

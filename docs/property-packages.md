@@ -45,8 +45,8 @@ combinations before simulation submission.
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only
 real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
-backend using its Span-Wagner formulation; water and steam use HEOS with
-IAPWS-95. Thermox keeps its property-package and backend-selection contracts, while no rejected
+backend using its Span-Wagner formulation; water and steam use CoolProp IF97.
+Thermox keeps its property-package and backend-selection contracts, while no rejected
 CO2 or water/steam implementation or fallback path remains.
 
 ## Verification
