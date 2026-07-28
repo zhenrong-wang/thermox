@@ -1,5 +1,6 @@
 #include "component_modules.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <stdexcept>
@@ -27,6 +28,27 @@ void validate_component_descriptor(
                 "component model '" + descriptor.kind +
                 "' declares duplicate port: " + port.name);
         }
+    }
+    const auto has_domain = [&](const std::string& domain) {
+        return std::any_of(
+            descriptor.ports.begin(), descriptor.ports.end(),
+            [&](const auto& port) {
+                return port.domain == domain;
+            });
+    };
+    if (!descriptor.required_property_capabilities.empty() &&
+        !has_domain("fluid")) {
+        throw std::logic_error(
+            "component model '" + descriptor.kind +
+            "' requests fluid property capabilities without a "
+            "fluid port");
+    }
+    if (!descriptor.required_thermochemistry_capabilities.empty() &&
+        !has_domain("material")) {
+        throw std::logic_error(
+            "component model '" + descriptor.kind +
+            "' requests thermochemistry capabilities without a "
+            "material port");
     }
     std::map<std::string, const ParameterModelDescriptor*> declared;
     for (const auto& parameter : descriptor.parameters) {

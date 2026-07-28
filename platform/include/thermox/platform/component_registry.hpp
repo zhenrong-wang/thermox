@@ -6,6 +6,7 @@
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
 #include "thermox/physics/property_registry.hpp"
+#include "thermox/physics/thermochemistry.hpp"
 
 #include <cstddef>
 #include <limits>
@@ -68,6 +69,8 @@ struct ComponentModelDescriptor {
     std::vector<ParameterModelDescriptor> parameters;
     std::vector<ArtifactModelDescriptor> artifacts;
     std::vector<physics::PropertyCapability> required_property_capabilities;
+    std::vector<physics::ThermochemistryCapability>
+        required_thermochemistry_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
     std::vector<TransientVariableDescriptor> transient_variables;
@@ -81,6 +84,10 @@ struct ComponentCompileContext {
     std::map<std::string, std::size_t> internal_variables;
     std::map<std::string, std::vector<std::string>> port_species;
     std::map<std::string, std::shared_ptr<const physics::PropertyPackage>> port_properties;
+    std::map<
+        std::string,
+        std::shared_ptr<const physics::ThermochemistryPackage>>
+        port_thermochemistry;
     std::map<
         std::string,
         std::shared_ptr<const PerformanceMapArtifact>>
@@ -183,6 +190,14 @@ CompiledModelGraph compile_model_graph(
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
     const PerformanceMapRegistry& performance_map_registry,
+    const std::string& case_id = {});
+CompiledModelGraph compile_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const PerformanceMapRegistry& performance_map_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
     const std::string& case_id = {});
 CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,

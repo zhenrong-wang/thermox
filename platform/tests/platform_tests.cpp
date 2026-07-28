@@ -44,6 +44,51 @@ private:
     thermox::physics::IdealGasPropertyPackage delegate_;
 };
 
+class TestThermochemistryPackage final
+    : public thermox::physics::ThermochemistryPackage {
+public:
+    std::string_view name() const noexcept override {
+        return "test-thermochemistry";
+    }
+    std::string_view version() const noexcept override {
+        return "1.0.0";
+    }
+    std::string_view mechanism() const noexcept override {
+        return "test.yaml";
+    }
+    std::string_view phase() const noexcept override {
+        return "gas";
+    }
+    const std::vector<std::string>& species_basis()
+        const noexcept override {
+        return species_;
+    }
+    bool supports(
+        thermox::physics::ThermochemistryCapability capability)
+        const noexcept override {
+        return capability ==
+            thermox::physics::ThermochemistryCapability::state_ph;
+    }
+    thermox::physics::ThermochemicalResult state_pt(
+        double, double,
+        const thermox::physics::SpeciesComposition&) const override {
+        return {};
+    }
+    thermox::physics::ThermochemicalResult state_ph(
+        double, double,
+        const thermox::physics::SpeciesComposition&) const override {
+        return {};
+    }
+    thermox::physics::ThermochemicalResult equilibrate_hp(
+        double, double,
+        const thermox::physics::SpeciesComposition&) const override {
+        return {};
+    }
+
+private:
+    std::vector<std::string> species_{"N2", "O2"};
+};
+
 void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -1786,6 +1831,73 @@ void test_material_connector_and_frozen_transport() {
                  "material connector conserves water mass");
 }
 
+void test_material_thermochemistry_resolves_on_demand() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "thermochemistry_resolution",
+    "media": [],
+    "materials": [{
+      "id": "air",
+      "backend": "test_backend",
+      "mechanism": "test.yaml",
+      "phase": "gas",
+      "package_version": "1.0.0",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "consumer",
+      "kind": "test.material.consumer",
+      "materials": {"inlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    thermox::platform::ComponentModelDescriptor descriptor;
+    descriptor.kind = "test.material.consumer";
+    descriptor.version = "1.0.0";
+    descriptor.ports = {{"inlet", "material", "in"}};
+    descriptor.required_thermochemistry_capabilities = {
+        thermox::physics::ThermochemistryCapability::state_ph};
+    thermox::platform::ComponentRegistry components;
+    components.register_model(std::make_shared<
+        const thermox::platform::MetadataComponentModel>(
+        descriptor));
+
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, components,
+                thermox::physics::
+                    make_default_property_package_registry(),
+                thermox::platform::PerformanceMapRegistry{},
+                thermox::physics::
+                    ThermochemistryPackageRegistry{});
+        },
+        "no thermochemistry package registered");
+
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, components,
+                thermox::physics::
+                    make_default_property_package_registry(),
+                thermox::platform::PerformanceMapRegistry{},
+                chemistry);
+        },
+        "under-specified");
+}
+
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -3272,6 +3384,7 @@ int main() {
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
         test_material_connector_and_frozen_transport();
+        test_material_thermochemistry_resolves_on_demand();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();

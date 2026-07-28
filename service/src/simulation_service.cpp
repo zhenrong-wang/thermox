@@ -558,6 +558,7 @@ ValidateModelResponse SimulationService::validate_model(
                 impl_->runtime->impl_->components,
                 impl_->runtime->impl_->properties,
                 impl_->runtime->impl_->performance_maps,
+                impl_->runtime->impl_->thermochemistry,
                 request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "steady";
@@ -745,6 +746,7 @@ SteadySimulationResponse SimulationService::run_steady(
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties,
             impl_->runtime->impl_->performance_maps,
+            impl_->runtime->impl_->thermochemistry,
             request.case_id);
         response.metadata = execution_metadata(
             document,

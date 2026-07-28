@@ -78,6 +78,19 @@ require_property_package(
     return it->second;
 }
 
+inline std::shared_ptr<const physics::ThermochemistryPackage>
+require_thermochemistry_package(
+    const ComponentCompileContext& context,
+    const std::string& port) {
+    const auto it = context.port_thermochemistry.find(port);
+    if (it == context.port_thermochemistry.end() || !it->second) {
+        throw std::logic_error(
+            "compiled thermochemistry package missing: " +
+            context.component.id + "." + port);
+    }
+    return it->second;
+}
+
 inline std::shared_ptr<const PerformanceMapArtifact>
 require_performance_map(
     const ComponentCompileContext& context,
