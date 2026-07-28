@@ -8,6 +8,10 @@
 #include <sstream>
 #include <utility>
 
+#if defined(THERMOX_HAS_UMFPACK)
+#include <umfpack.h>
+#endif
+
 namespace thermox {
 
 namespace {
@@ -30,7 +34,9 @@ std::vector<std::map<std::size_t, double>> to_sparse_rows(const SparseMatrix& ma
 
 }  // namespace
 
-LinearSolveResult solve_sparse_linear_system(SparseMatrix a, std::vector<double> b) {
+[[maybe_unused]] static LinearSolveResult
+solve_reference_sparse_linear_system(
+    SparseMatrix a, std::vector<double> b) {
     const std::size_t n = b.size();
     if (a.rows() != n) {
         return {false, {}, "sparse matrix row count does not match RHS size"};
@@ -133,6 +139,102 @@ LinearSolveResult solve_sparse_linear_system(SparseMatrix a, std::vector<double>
     }
 
     return {true, x, "ok"};
+}
+
+#if defined(THERMOX_HAS_UMFPACK)
+LinearSolveResult solve_umfpack_sparse_linear_system(
+    const SparseMatrix& a,
+    const std::vector<double>& b) {
+    const std::size_t n = b.size();
+    if (a.rows() != n) {
+        return {
+            false, {},
+            "sparse matrix row count does not match RHS size"};
+    }
+    if (a.columns() != n) {
+        return {false, {}, "sparse matrix must be square"};
+    }
+    if (n == 0) return {true, {}, "ok (UMFPACK)"};
+    if (n > static_cast<std::size_t>(
+                std::numeric_limits<int>::max()) ||
+        a.nonzeros() > static_cast<std::size_t>(
+                           std::numeric_limits<int>::max())) {
+        return {
+            false, {},
+            "sparse matrix exceeds UMFPACK integer index range"};
+    }
+    std::vector<int> column_offsets(n + 1, 0);
+    for (const auto column : a.column_indices()) {
+        ++column_offsets.at(column + 1);
+    }
+    for (std::size_t column = 0; column < n; ++column) {
+        column_offsets[column + 1] += column_offsets[column];
+    }
+    std::vector<int> row_indices(a.nonzeros(), 0);
+    std::vector<double> values(a.nonzeros(), 0.0);
+    std::vector<int> next = column_offsets;
+    for (std::size_t row = 0; row < n; ++row) {
+        for (std::size_t offset = a.row_offsets()[row];
+             offset < a.row_offsets()[row + 1]; ++offset) {
+            const auto column = a.column_indices()[offset];
+            const int destination = next[column]++;
+            row_indices[static_cast<std::size_t>(destination)] =
+                static_cast<int>(row);
+            values[static_cast<std::size_t>(destination)] =
+                a.values()[offset];
+        }
+    }
+
+    void* symbolic = nullptr;
+    int status = umfpack_di_symbolic(
+        static_cast<int>(n), static_cast<int>(n),
+        column_offsets.data(), row_indices.data(), values.data(),
+        &symbolic, nullptr, nullptr);
+    if (status != UMFPACK_OK) {
+        return {
+            false, {},
+            status == UMFPACK_ERROR_out_of_memory
+                ? "UMFPACK symbolic factorization ran out of memory"
+                : "singular sparse matrix during UMFPACK symbolic factorization"};
+    }
+    void* numeric = nullptr;
+    status = umfpack_di_numeric(
+        column_offsets.data(), row_indices.data(), values.data(),
+        symbolic, &numeric, nullptr, nullptr);
+    umfpack_di_free_symbolic(&symbolic);
+    if (status != UMFPACK_OK) {
+        if (numeric != nullptr) {
+            umfpack_di_free_numeric(&numeric);
+        }
+        return {
+            false, {},
+            status == UMFPACK_ERROR_out_of_memory
+                ? "UMFPACK numeric factorization ran out of memory"
+                : "singular sparse matrix during UMFPACK numeric factorization"};
+    }
+    std::vector<double> x(n, 0.0);
+    status = umfpack_di_solve(
+        UMFPACK_A, column_offsets.data(), row_indices.data(),
+        values.data(), x.data(), b.data(), numeric, nullptr,
+        nullptr);
+    umfpack_di_free_numeric(&numeric);
+    if (status != UMFPACK_OK) {
+        return {
+            false, {},
+            "UMFPACK sparse back substitution failed"};
+    }
+    return {true, std::move(x), "ok (UMFPACK)"};
+}
+#endif
+
+LinearSolveResult solve_sparse_linear_system(
+    SparseMatrix a, std::vector<double> b) {
+#if defined(THERMOX_HAS_UMFPACK)
+    return solve_umfpack_sparse_linear_system(a, b);
+#else
+    return solve_reference_sparse_linear_system(
+        std::move(a), std::move(b));
+#endif
 }
 
 }  // namespace thermox

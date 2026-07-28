@@ -7,6 +7,12 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+option(
+    THERMOX_ENABLE_UMFPACK
+    "Use SuiteSparse UMFPACK for the default sparse linear solve"
+    OFF
+)
 add_library(thermox_core
     src/dae_equation_system.cpp
     src/dense_linear_solver.cpp
@@ -27,6 +33,29 @@ target_include_directories(thermox_core
 target_compile_options(thermox_core PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
 )
+
+if(THERMOX_ENABLE_UMFPACK)
+    find_path(
+        THERMOX_UMFPACK_INCLUDE_DIR
+        NAMES umfpack.h
+        PATH_SUFFIXES suitesparse
+        REQUIRED
+    )
+    find_library(
+        THERMOX_UMFPACK_LIBRARY
+        NAMES umfpack
+        REQUIRED
+    )
+    target_include_directories(
+        thermox_core PRIVATE ${THERMOX_UMFPACK_INCLUDE_DIR}
+    )
+    target_link_libraries(
+        thermox_core PRIVATE ${THERMOX_UMFPACK_LIBRARY}
+    )
+    target_compile_definitions(
+        thermox_core PRIVATE THERMOX_HAS_UMFPACK=1
+    )
+endif()
 
 add_executable(thermox_core_tests tests/core_tests.cpp)
 target_link_libraries(thermox_core_tests PRIVATE thermox_core)

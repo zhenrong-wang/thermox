@@ -33,6 +33,8 @@ Implemented in this sprint:
   derivative scaling, bounds, checked evaluation, and fixed sparse Jacobians.
 - Variable and residual registries for equation-system assembly metadata.
 - Validated CSR matrix/pattern storage and replaceable dense/sparse linear-solver hooks.
+- Optional SuiteSparse UMFPACK sparse LU backend for large, strongly scaled plant graphs; the
+  dependency-free sparse elimination remains available for standalone/reference builds.
 - Fixed sparse patterns with value-only Jacobian updates, dynamic sparse assembly, and hybrid
   analytic/finite-difference derivative rows.
 - Scale-invariant built-in dense/CSR direct solvers for small problems and backend testing.

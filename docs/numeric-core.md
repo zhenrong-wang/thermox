@@ -90,6 +90,11 @@ The built-in dense and CSR direct solvers provide small-model capability and det
 Their pivot tests are relative to matrix magnitude. They are not the intended large-plant
 factorization backend.
 
+When configured with `-DTHERMOX_ENABLE_UMFPACK=ON`, the default sparse solve uses SuiteSparse
+UMFPACK with column-oriented sparse LU factorization. This backend is optional: standalone and
+dependency-minimal builds retain the reference CSR solver. The nonlinear and physics contracts do
+not change with the selected factorization backend.
+
 Compiled models should declare fixed Jacobian patterns wherever possible. A production sparse
 backend should reuse symbolic analysis/factorization metadata across Newton iterations and time
 steps.
@@ -113,5 +118,5 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - The native transient backend is first-order and intended for index-1 DAEs.
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
-- A production sparse factorization backend and higher-order transient backend remain future
-  integrations.
+- Reusing symbolic sparse-factorization analysis across Newton iterations and adding a higher-order
+  transient backend remain future integrations.
