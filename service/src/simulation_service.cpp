@@ -82,10 +82,30 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.suggestions = {
             "Use the component version resolved by the active runtime catalog."};
     } else if (message.find("declares unknown port") !=
-               std::string::npos) {
+                   std::string::npos ||
+               message.find("binds a medium to unknown port") !=
+                   std::string::npos ||
+               message.find("unknown port during graph compilation") !=
+                   std::string::npos) {
         diagnostic.code = "unknown_component_port";
         diagnostic.suggestions = {
             "Derive component ports from the active component type catalog."};
+    } else if (message.find("missing medium binding") !=
+               std::string::npos) {
+        diagnostic.code = "missing_medium_binding";
+        diagnostic.suggestions = {
+            "Bind every fluid port to a medium declared by the model."};
+    } else if (message.find("kind '") != std::string::npos &&
+               message.find("incompatible with domain") !=
+                   std::string::npos) {
+        diagnostic.code = "incompatible_connection_kind";
+        diagnostic.suggestions = {
+            "Use the link contract declared for the connector domain."};
+    } else if (message.find("maximum connection count") !=
+               std::string::npos) {
+        diagnostic.code = "port_cardinality_exceeded";
+        diagnostic.suggestions = {
+            "Insert an explicit mixer, splitter, junction, or distribution component."};
     } else if (message.find("under-specified") !=
                std::string::npos) {
         diagnostic.code = "under_specified_model";
@@ -464,7 +484,8 @@ CatalogResponse SimulationService::get_catalog(
             descriptor.supports_transient;
         for (const auto& port : descriptor.ports) {
             component.ports.push_back(
-                {port.name, port.domain, port.direction});
+                {port.name, port.domain, port.direction,
+                 port.maximum_connections});
         }
         for (const auto& parameter : descriptor.parameters) {
             component.parameters.push_back({

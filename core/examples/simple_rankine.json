@@ -1,5 +1,5 @@
 {
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "simple_if97_rankine",
     "name": "Simple closed-loop IF97 Rankine cycle",
@@ -15,95 +15,47 @@
       {
         "id": "pump",
         "kind": "pump.fluid.isentropic_efficiency",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "in"
-          },
-          "outlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "out"
-          },
-          "shaft": {
-            "domain": "shaft",
-            "direction": "in"
-          }
-        },
         "parameters": {
           "pressure_ratio": 50.0,
           "eta_is": 0.8
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       },
       {
         "id": "evaporator",
         "kind": "evaporator.fluid.fixed_outlet_quality",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "in"
-          },
-          "outlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "out"
-          },
-          "heat": {
-            "domain": "heat",
-            "direction": "in"
-          }
-        },
         "parameters": {
           "outlet_quality": 0.99
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       },
       {
         "id": "turbine",
         "kind": "turbine.fluid.isentropic_efficiency",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "in"
-          },
-          "outlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "out"
-          },
-          "shaft": {
-            "domain": "shaft",
-            "direction": "out"
-          }
-        },
         "parameters": {
           "pressure_ratio": 50.0,
           "eta_is": 0.85
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       },
       {
         "id": "condenser",
         "kind": "condenser.fluid.fixed_outlet_quality",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "in"
-          },
-          "outlet": {
-            "domain": "fluid",
-            "medium": "water",
-            "direction": "out"
-          },
-          "heat": {
-            "domain": "heat",
-            "direction": "out"
-          }
-        },
         "parameters": {
           "outlet_quality": 0.01
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       }
     ],

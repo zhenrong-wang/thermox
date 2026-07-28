@@ -39,6 +39,9 @@ std::string catalog_fingerprint(
             hash_text(hash, port.name);
             hash_text(hash, port.domain);
             hash_text(hash, port.direction);
+            hash_text(
+                hash,
+                std::to_string(port.maximum_connections));
         }
         for (const auto& parameter : descriptor.parameters) {
             hash_text(hash, parameter.name);

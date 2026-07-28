@@ -56,6 +56,7 @@ struct CatalogPortType {
     std::string name;
     std::string domain;
     std::string direction;
+    std::size_t maximum_connections{1};
 };
 
 struct CatalogParameterType {

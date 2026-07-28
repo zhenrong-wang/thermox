@@ -1,5 +1,5 @@
 {
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "lumped_thermal_storage",
     "name": "Generic lumped thermal storage transient",
@@ -8,23 +8,11 @@
     "components": [
       {
         "id": "heater",
-        "kind": "source.heat.boundary",
-        "ports": {
-          "outlet": {
-            "domain": "heat",
-            "direction": "out"
-          }
-        }
+        "kind": "source.heat.boundary"
       },
       {
         "id": "store",
         "kind": "storage.thermal.lumped",
-        "ports": {
-          "thermal": {
-            "domain": "heat",
-            "direction": "in"
-          }
-        },
         "parameters": {
           "thermal_capacity": {
             "value": 2.0,

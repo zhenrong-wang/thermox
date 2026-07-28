@@ -71,8 +71,14 @@ void test_catalog_discovery() {
         "catalog must expose fluid compressor");
     require(
         compressor->ports.size() == 3 &&
-            compressor->parameters.size() == 2,
-        "catalog must expose ports and parameter forms");
+            compressor->parameters.size() == 2 &&
+            std::all_of(
+                compressor->ports.begin(),
+                compressor->ports.end(),
+                [](const auto& port) {
+                    return port.maximum_connections == 1;
+                }),
+        "catalog must expose ports, cardinality, and parameter forms");
     const auto if97 = std::find_if(
         response.property_backends.begin(),
         response.property_backends.end(),
@@ -120,7 +126,7 @@ void test_validation_and_canonicalization() {
                 response.compilation.equation_count,
         "validation must compile and structurally analyze the model");
     require(
-        response.canonical_model_json.find("thermox.model/v1") !=
+        response.canonical_model_json.find("thermox.model/v2") !=
             std::string::npos,
         "canonical model must retain its schema");
 
@@ -148,29 +154,27 @@ void test_compile_aware_validation_diagnostics() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
     request.model_json = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "unknown_component",
     "media": [],
-    "components": [{
-      "id": "custom",
-      "kind": "not.registered",
-      "ports": {
-        "signal": {
-          "domain": "signal",
-          "direction": "out"
-        }
+    "components": [
+      {
+        "id": "custom",
+        "kind": "not.registered"
       }
-    }],
+    ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "custom.signal.value": 1.0
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "custom.signal.value": 1.0
+      }
     }
-  }]
+  ]
 })json";
     const auto response = service.validate_model(request);
     require(
@@ -188,26 +192,26 @@ void test_component_version_is_enforced() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
     request.model_json = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "version_mismatch",
-    "media": [{
-      "id": "water",
-      "backend": "water_steam_if97",
-      "substance": "Water"
-    }],
-    "components": [{
-      "id": "source",
-      "kind": "source.fluid.boundary",
-      "version": "99.0.0",
-      "ports": {
-        "outlet": {
-          "domain": "fluid",
-          "medium": "water",
-          "direction": "out"
+    "media": [
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water"
+      }
+    ],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "version": "99.0.0",
+        "media": {
+          "outlet": "water"
         }
       }
-    }],
+    ],
     "connections": []
   },
   "cases": []
@@ -219,6 +223,44 @@ void test_component_version_is_enforced() {
             response.diagnostics.front().code ==
                 "component_version_mismatch",
         "requested component version must be enforced");
+}
+
+void test_connection_contract_diagnostic() {
+    thermox::service::SimulationService service;
+    thermox::service::ValidateModelRequest request;
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "wrong_link",
+    "media": [],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.heat.boundary"
+      },
+      {
+        "id": "sink",
+        "kind": "sink.heat.boundary"
+      }
+    ],
+    "connections": [
+      {
+        "id": "link",
+        "from": "source.outlet",
+        "to": "sink.inlet",
+        "kind": "fluid_link"
+      }
+    ]
+  },
+  "cases": []
+})json";
+    const auto response = service.validate_model(request);
+    require(
+        !response.succeeded() &&
+            !response.diagnostics.empty() &&
+            response.diagnostics.front().code ==
+                "incompatible_connection_kind",
+        "connection-domain mismatch must have a stable diagnostic");
 }
 
 void test_injectable_native_runtime() {
@@ -250,29 +292,27 @@ void test_injectable_native_runtime() {
 
     thermox::service::ValidateModelRequest request;
     request.model_json = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "custom_runtime_model",
     "media": [],
-    "components": [{
-      "id": "sensor",
-      "kind": "sensor.signal.custom",
-      "ports": {
-        "signal": {
-          "domain": "signal",
-          "direction": "out"
-        }
+    "components": [
+      {
+        "id": "sensor",
+        "kind": "sensor.signal.custom"
       }
-    }],
+    ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "sensor.signal.value": 42.0
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "sensor.signal.value": 42.0
+      }
     }
-  }]
+  ]
 })json";
     const auto validation = service.validate_model(request);
     require(
@@ -419,6 +459,7 @@ int main() {
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();
         test_component_version_is_enforced();
+        test_connection_contract_diagnostic();
         test_injectable_native_runtime();
         test_steady_service();
         test_transient_service();

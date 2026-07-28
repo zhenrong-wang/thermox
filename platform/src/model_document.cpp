@@ -331,6 +331,16 @@ std::string require_string(const JsonValue& object, const std::string& key) {
     return value.string;
 }
 
+std::string require_string_value(
+    const JsonValue& value,
+    const std::string& field_name) {
+    if (value.type != JsonValue::Type::String) {
+        throw std::invalid_argument(
+            "field '" + field_name + "' must be a string");
+    }
+    return value.string;
+}
+
 double require_number_value(const JsonValue& value, const std::string& field_name) {
     if (value.type != JsonValue::Type::Number) {
         throw std::invalid_argument("field '" + field_name + "' must be a finite number");
@@ -602,15 +612,6 @@ std::string endpoint_port(const std::string& endpoint) {
     return endpoint.substr(dot + 1);
 }
 
-bool is_allowed_domain(const std::string& domain) {
-    return domain == "fluid" || domain == "heat" || domain == "shaft" || domain == "signal" ||
-           domain == "control";
-}
-
-bool is_allowed_direction(const std::string& direction) {
-    return direction == "in" || direction == "out" || direction == "bidirectional";
-}
-
 MediumDefinition parse_medium(const JsonValue& value) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("media entries must be objects");
@@ -620,33 +621,6 @@ MediumDefinition parse_medium(const JsonValue& value) {
     medium.backend = require_string(value, "backend");
     medium.substance = require_string(value, "substance");
     return medium;
-}
-
-PortDefinition parse_port(const JsonValue& value,
-                          const std::set<std::string>& medium_ids,
-                          const std::string& field_name) {
-    if (value.type != JsonValue::Type::Object) {
-        throw std::invalid_argument("field '" + field_name + "' must be an object");
-    }
-    PortDefinition port;
-    port.domain = require_string(value, "domain");
-    port.medium = optional_string(value, "medium");
-    port.direction = require_string(value, "direction");
-    if (!is_allowed_domain(port.domain)) {
-        throw std::invalid_argument("unsupported port domain: " + port.domain);
-    }
-    if (!is_allowed_direction(port.direction)) {
-        throw std::invalid_argument("unsupported port direction: " + port.direction);
-    }
-    if (port.domain == "fluid") {
-        if (port.medium.empty()) {
-            throw std::invalid_argument("fluid port '" + field_name + "' must reference a medium");
-        }
-        if (medium_ids.find(port.medium) == medium_ids.end()) {
-            throw std::invalid_argument("unknown medium referenced by port '" + field_name + "': " + port.medium);
-        }
-    }
-    return port;
 }
 
 ComponentDefinition parse_component(const JsonValue& value, const std::set<std::string>& medium_ids) {
@@ -659,13 +633,24 @@ ComponentDefinition parse_component(const JsonValue& value, const std::set<std::
     component.kind = require_string(value, "kind");
     component.version = optional_string(value, "version");
 
-    const std::string ports_key{"ports"};
-    const JsonValue& ports = require_object_member(value, ports_key);
-    if (ports.object.empty()) {
-        throw std::invalid_argument("component '" + component.id + "' must declare at least one port");
-    }
-    for (const auto& [port_name, port_value] : ports.object) {
-        component.ports.emplace(port_name, parse_port(port_value, medium_ids, component.id + "." + port_name));
+    if (const JsonValue* media =
+            optional_object_member(value, "media")) {
+        for (const auto& [port_name, medium_value] :
+             media->object) {
+            const std::string medium_id =
+                require_string_value(
+                    medium_value,
+                    "component '" + component.id +
+                        "'.media." + port_name);
+            if (medium_ids.find(medium_id) == medium_ids.end()) {
+                throw std::invalid_argument(
+                    "unknown medium referenced by component '" +
+                    component.id + "' port '" + port_name +
+                    "': " + medium_id);
+            }
+            component.medium_bindings.emplace(
+                port_name, medium_id);
+        }
     }
 
     if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
@@ -682,10 +667,7 @@ ConnectionDefinition parse_connection(const JsonValue& value) {
     connection.id = require_string(value, "id");
     connection.from = require_string(value, "from");
     connection.to = require_string(value, "to");
-    connection.kind = optional_string(value, "kind");
-    if (connection.kind.empty()) {
-        connection.kind = "link";
-    }
+    connection.kind = require_string(value, "kind");
     if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
         connection.parameters = parse_scalar_map(*parameters, "connection '" + connection.id + "'.parameters", true);
     }
@@ -712,18 +694,15 @@ CaseDefinition parse_case(const JsonValue& value) {
     return c;
 }
 
-const PortDefinition& find_endpoint_port(const ModelDocument& document, const std::string& endpoint) {
+void require_endpoint_component(
+    const ModelDocument& document,
+    const std::string& endpoint) {
     const std::string component_id = endpoint_component(endpoint);
-    const std::string port_name = endpoint_port(endpoint);
+    (void)endpoint_port(endpoint);
     for (const ComponentDefinition& component : document.components) {
-        if (component.id != component_id) {
-            continue;
+        if (component.id == component_id) {
+            return;
         }
-        const auto port_it = component.ports.find(port_name);
-        if (port_it == component.ports.end()) {
-            throw std::invalid_argument("unknown port in connection endpoint: " + endpoint);
-        }
-        return port_it->second;
     }
     throw std::invalid_argument("unknown component in connection endpoint: " + endpoint);
 }
@@ -732,19 +711,12 @@ void validate_connections(const ModelDocument& document) {
     std::set<std::string> connection_ids;
     for (const ConnectionDefinition& connection : document.connections) {
         require_unique_id(connection.id, connection_ids, "connection");
-        const PortDefinition& from_port = find_endpoint_port(document, connection.from);
-        const PortDefinition& to_port = find_endpoint_port(document, connection.to);
-        if (from_port.domain != to_port.domain) {
-            throw std::invalid_argument("connection '" + connection.id + "' links incompatible port domains");
-        }
-        if (from_port.domain == "fluid" && from_port.medium != to_port.medium) {
-            throw std::invalid_argument("connection '" + connection.id + "' links incompatible fluid media");
-        }
-        if (from_port.direction == "in") {
-            throw std::invalid_argument("connection '" + connection.id + "' source port cannot have direction 'in'");
-        }
-        if (to_port.direction == "out") {
-            throw std::invalid_argument("connection '" + connection.id + "' target port cannot have direction 'out'");
+        require_endpoint_component(document, connection.from);
+        require_endpoint_component(document, connection.to);
+        if (connection.from == connection.to) {
+            throw std::invalid_argument(
+                "connection '" + connection.id +
+                "' cannot connect a port to itself");
         }
     }
 }
@@ -753,7 +725,7 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
     const JsonValue& object = require_object_root(root);
     ModelDocument document;
     document.schema_version = require_string(object, "schema_version");
-    if (document.schema_version != "thermox.model/v1") {
+    if (document.schema_version != "thermox.model/v2") {
         throw std::invalid_argument("unsupported schema_version: " + document.schema_version);
     }
     const std::string model_key{"model"};

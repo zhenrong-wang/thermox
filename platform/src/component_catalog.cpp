@@ -16,7 +16,8 @@ void validate_component_descriptor(
     std::map<std::string, bool> ports;
     for (const auto& port : descriptor.ports) {
         if (port.name.empty() || port.domain.empty() ||
-            port.direction.empty()) {
+            port.direction.empty() ||
+            port.maximum_connections == 0) {
             throw std::invalid_argument(
                 "component model '" + descriptor.kind +
                 "' has an incomplete port descriptor");

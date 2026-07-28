@@ -21,6 +21,7 @@ struct PortModelDescriptor {
     std::string name;
     std::string domain;
     std::string direction;
+    std::size_t maximum_connections{1};
 };
 
 struct ParameterModelDescriptor {
@@ -113,6 +114,8 @@ struct CompiledPortVariable {
     std::string port_name;
     std::string variable_name;
     std::string full_name;
+    std::string domain;
+    std::string medium_id;
     std::size_t index{0};
 };
 

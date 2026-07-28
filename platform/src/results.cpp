@@ -9,18 +9,6 @@ namespace thermox::platform {
 
 namespace {
 
-const ComponentDefinition& require_component(
-    const ModelDocument& document,
-    const std::string& component_id) {
-    for (const auto& component : document.components) {
-        if (component.id == component_id) {
-            return component;
-        }
-    }
-    throw std::invalid_argument(
-        "compiled result references unknown component: " + component_id);
-}
-
 const MediumDefinition& require_medium(
     const ModelDocument& document,
     const std::string& medium_id) {
@@ -69,22 +57,14 @@ std::vector<FluidPortResult> evaluate_fluid_port_results(
     std::map<std::pair<std::string, std::string>, FluidPortIndices>
         grouped;
     for (const auto& variable : graph.port_variables) {
-        const auto& component =
-            require_component(document, variable.component_id);
-        const auto port = component.ports.find(variable.port_name);
-        if (port == component.ports.end()) {
-            throw std::invalid_argument(
-                "compiled result references unknown port: " +
-                variable.component_id + "." + variable.port_name);
-        }
-        if (port->second.domain != "fluid") {
+        if (variable.domain != "fluid") {
             continue;
         }
         auto& indices = grouped[
             {variable.component_id, variable.port_name}];
         indices.component_id = variable.component_id;
         indices.port_name = variable.port_name;
-        indices.medium_id = port->second.medium;
+        indices.medium_id = variable.medium_id;
         if (variable.variable_name == "m_dot") {
             indices.mass_flow = variable.index;
             indices.has_mass_flow = true;

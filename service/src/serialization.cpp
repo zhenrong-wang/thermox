@@ -204,7 +204,7 @@ namespace detail {
 
 std::string serialize_model_document_json(
     const platform::ModelDocument& document) {
-    if (document.schema_version != "thermox.model/v1") {
+    if (document.schema_version != "thermox.model/v2") {
         throw std::invalid_argument(
             "unsupported model schema_version for serialization: " +
             document.schema_version);
@@ -250,26 +250,18 @@ std::string serialize_model_document_json(
             out << ",\n        \"version\": ";
             json_string(out, component.version);
         }
-        out << ",\n        \"ports\": {";
-        if (!component.ports.empty()) out << "\n";
-        std::size_t port_index = 0;
-        for (const auto& [name, port] : component.ports) {
-            out << "          ";
-            json_string(out, name);
-            out << ": {\"domain\": ";
-            json_string(out, port.domain);
-            if (!port.medium.empty()) {
-                out << ", \"medium\": ";
-                json_string(out, port.medium);
+        if (!component.medium_bindings.empty()) {
+            out << ",\n        \"media\": {";
+            std::size_t binding_index = 0;
+            for (const auto& [port_name, medium_id] :
+                 component.medium_bindings) {
+                if (binding_index++ != 0) out << ", ";
+                json_string(out, port_name);
+                out << ": ";
+                json_string(out, medium_id);
             }
-            out << ", \"direction\": ";
-            json_string(out, port.direction);
-            out << "}"
-                << (++port_index == component.ports.size()
-                        ? "\n"
-                        : ",\n");
+            out << "}";
         }
-        out << "        }";
         if (!component.parameters.empty()) {
             out << ",\n        \"parameters\": ";
             scalar_map(out, component.parameters, "          ");
@@ -362,6 +354,8 @@ std::string serialize_catalog_response_json(
             json_string(out, port.domain);
             out << ", \"direction\": ";
             json_string(out, port.direction);
+            out << ", \"maximum_connections\": "
+                << port.maximum_connections;
             out << "}";
         }
         out << "], \"parameters\": [";

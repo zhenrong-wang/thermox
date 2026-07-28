@@ -69,12 +69,129 @@ const ComponentDefinition& find_component(const ModelDocument& document, const s
     throw std::invalid_argument("unknown component during graph compilation: " + component_id);
 }
 
-const PortDefinition& find_port(const ComponentDefinition& component, const std::string& port_name) {
-    const auto it = component.ports.find(port_name);
-    if (it == component.ports.end()) {
-        throw std::invalid_argument("unknown port during graph compilation: " + component.id + "." + port_name);
+const PortModelDescriptor& find_port(
+    const ComponentDefinition& component,
+    const ComponentModel& model,
+    const std::string& port_name) {
+    const auto it = std::find_if(
+        model.descriptor().ports.begin(),
+        model.descriptor().ports.end(),
+        [&](const auto& port) {
+            return port.name == port_name;
+        });
+    if (it == model.descriptor().ports.end()) {
+        throw std::invalid_argument(
+            "unknown port during graph compilation: " +
+            component.id + "." + port_name);
     }
-    return it->second;
+    return *it;
+}
+
+const std::string& require_medium_binding(
+    const ComponentDefinition& component,
+    const std::string& port_name) {
+    const auto medium =
+        component.medium_bindings.find(port_name);
+    if (medium == component.medium_bindings.end()) {
+        throw std::invalid_argument(
+            "component '" + component.id +
+            "' is missing medium binding for fluid port: " +
+            port_name);
+    }
+    return medium->second;
+}
+
+std::string required_connection_kind(const std::string& domain) {
+    if (domain == "fluid") return "fluid_link";
+    if (domain == "heat") return "heat_link";
+    if (domain == "shaft") return "shaft_link";
+    if (domain == "signal" || domain == "control") {
+        return "signal_link";
+    }
+    throw std::invalid_argument(
+        "unsupported port domain during connection validation: " +
+        domain);
+}
+
+struct ValidatedConnection {
+    std::string from_component;
+    std::string from_port;
+    std::string to_component;
+    std::string to_port;
+    std::string domain;
+};
+
+ValidatedConnection validate_connection(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const ConnectionDefinition& connection,
+    std::map<std::string, std::size_t>& connection_counts) {
+    ValidatedConnection result{
+        endpoint_component(connection.from),
+        endpoint_port(connection.from),
+        endpoint_component(connection.to),
+        endpoint_port(connection.to),
+        {},
+    };
+    const auto& from_definition =
+        find_component(document, result.from_component);
+    const auto& to_definition =
+        find_component(document, result.to_component);
+    const auto& from_model =
+        registry.require_model(from_definition.kind);
+    const auto& to_model =
+        registry.require_model(to_definition.kind);
+    const auto& from_port = find_port(
+        from_definition, from_model, result.from_port);
+    const auto& to_port = find_port(
+        to_definition, to_model, result.to_port);
+    result.domain = from_port.domain;
+    if (from_port.domain != to_port.domain) {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' links incompatible port domains");
+    }
+    if (from_port.direction == "in") {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' source port cannot have direction 'in'");
+    }
+    if (to_port.direction == "out") {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' target port cannot have direction 'out'");
+    }
+    if (connection.kind !=
+        required_connection_kind(from_port.domain)) {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' kind '" + connection.kind +
+            "' is incompatible with domain '" +
+            from_port.domain + "'");
+    }
+    if (from_port.domain == "fluid" &&
+        require_medium_binding(
+            from_definition, result.from_port) !=
+            require_medium_binding(
+                to_definition, result.to_port)) {
+        throw std::invalid_argument(
+            "connection '" + connection.id +
+            "' links incompatible fluid media");
+    }
+    const auto count_connection =
+        [&](const std::string& endpoint,
+            const PortModelDescriptor& port) {
+            const auto count = ++connection_counts[endpoint];
+            if (count > port.maximum_connections) {
+                throw std::invalid_argument(
+                    "port '" + endpoint +
+                    "' exceeds its maximum connection count of " +
+                    std::to_string(port.maximum_connections));
+            }
+        };
+    count_connection(connection.from, from_port);
+    count_connection(connection.to, to_port);
+    return result;
 }
 
 const CaseDefinition* select_case(const ModelDocument& document, const std::string& case_id) {
@@ -103,7 +220,9 @@ std::optional<double> case_scalar_value(const CaseDefinition* active_case,
     return it->second.value_si;
 }
 
-void validate_declared_ports(const ComponentDefinition& component, const ComponentModel& model) {
+void validate_component_bindings(
+    const ComponentDefinition& component,
+    const ComponentModel& model) {
     const auto& expected_ports = model.descriptor().ports;
     if (!component.version.empty() &&
         component.version != model.descriptor().version) {
@@ -113,37 +232,36 @@ void validate_declared_ports(const ComponentDefinition& component, const Compone
             component.kind + "' provides version '" +
             model.descriptor().version + "'");
     }
-    if (expected_ports.empty()) {
-        return;
-    }
-
-    std::set<std::string> expected_names;
     for (const auto& expected : expected_ports) {
-        expected_names.insert(expected.name);
-        const auto port_it = component.ports.find(expected.name);
-        if (port_it == component.ports.end()) {
-            throw std::invalid_argument("component '" + component.id + "' of kind '" + component.kind +
-                                        "' is missing required port: " + expected.name);
-        }
-        const PortDefinition& actual = port_it->second;
-        if (actual.domain != expected.domain) {
-            throw std::invalid_argument("component '" + component.id + "' port '" + expected.name +
-                                        "' has incompatible domain for kind '" + component.kind + "'");
-        }
-        if (expected.direction != "bidirectional" &&
-            actual.direction != expected.direction &&
-            actual.direction != "bidirectional") {
-            throw std::invalid_argument("component '" + component.id + "' port '" + expected.name +
-                                        "' has incompatible direction for kind '" + component.kind + "'");
-        }
-    }
-    for (const auto& [actual_name, _] : component.ports) {
-        if (expected_names.find(actual_name) ==
-            expected_names.end()) {
+        const auto binding =
+            component.medium_bindings.find(expected.name);
+        if (expected.domain == "fluid" &&
+            binding == component.medium_bindings.end()) {
             throw std::invalid_argument(
                 "component '" + component.id +
-                "' declares unknown port for kind '" +
-                component.kind + "': " + actual_name);
+                "' is missing medium binding for fluid port: " +
+                expected.name);
+        }
+        if (expected.domain != "fluid" &&
+            binding != component.medium_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' supplies a medium binding for non-fluid port: " +
+                expected.name);
+        }
+    }
+    for (const auto& [bound_port, _] :
+         component.medium_bindings) {
+        const auto expected = std::find_if(
+            expected_ports.begin(), expected_ports.end(),
+            [&](const auto& port) {
+                return port.name == bound_port;
+            });
+        if (expected == expected_ports.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' binds a medium to unknown port for kind '" +
+                component.kind + "': " + bound_port);
         }
     }
 }
@@ -406,7 +524,7 @@ CompiledModelGraph compile_model_graph(
 
     for (const ComponentDefinition& component : document.components) {
         const ComponentModel& model = registry.require_model(component.kind);
-        validate_declared_ports(component, model);
+        validate_component_bindings(component, model);
         validate_component_parameters(component, model.descriptor());
         if (!model.descriptor().supports_steady) {
             throw std::invalid_argument(
@@ -415,16 +533,22 @@ CompiledModelGraph compile_model_graph(
         }
 
         ComponentCompileContext context{component, active_case, {}, {}, {}};
-        for (const auto& [port_name, port] : component.ports) {
+        for (const auto& port : model.descriptor().ports) {
+            std::string medium_id;
             if (port.domain == "fluid") {
-                const auto package = medium_properties.find(port.medium);
+                medium_id =
+                    require_medium_binding(component, port.name);
+                const auto package =
+                    medium_properties.find(medium_id);
                 if (package == medium_properties.end())
                     throw std::logic_error("compiled medium property package missing: " +
-                                           port.medium);
-                context.port_properties.emplace(port_name, package->second);
+                                           medium_id);
+                context.port_properties.emplace(
+                    port.name, package->second);
             }
             for (const auto& spec : canonical_variables_for_domain(port.domain)) {
-                const std::string full_name = variable_key(component.id, port_name, spec.name);
+                const std::string full_name =
+                    variable_key(component.id, port.name, spec.name);
                 double initial = spec.initial_value;
                 if (const auto value = case_scalar_value(active_case, full_name, false)) {
                     initial = *value;
@@ -434,29 +558,28 @@ CompiledModelGraph compile_model_graph(
                 }
                 const std::size_t index = system.add_variable(full_name, initial, spec.scale);
                 variable_indices.emplace(full_name, index);
-                context.port_variables.emplace(port_name + "." + spec.name, index);
-                graph.port_variables.push_back(CompiledPortVariable{component.id, port_name, spec.name,
-                                                                     full_name, index});
+                context.port_variables.emplace(
+                    port.name + "." + spec.name, index);
+                graph.port_variables.push_back(
+                    CompiledPortVariable{
+                        component.id, port.name, spec.name,
+                        full_name, port.domain, medium_id, index});
             }
         }
         validate_property_capabilities(context, model);
         model.add_equations(context, system);
     }
 
+    std::map<std::string, std::size_t> connection_counts;
     for (const ConnectionDefinition& connection : document.connections) {
-        const std::string from_component = endpoint_component(connection.from);
-        const std::string from_port_name = endpoint_port(connection.from);
-        const std::string to_component = endpoint_component(connection.to);
-        const std::string to_port_name = endpoint_port(connection.to);
-        const PortDefinition& from_port = find_port(find_component(document, from_component), from_port_name);
-        const PortDefinition& to_port = find_port(find_component(document, to_component), to_port_name);
-        if (from_port.domain != to_port.domain) {
-            throw std::invalid_argument("connection '" + connection.id + "' links incompatible port domains");
-        }
-
-        for (const auto& spec : canonical_variables_for_domain(from_port.domain)) {
-            const std::string from_key = variable_key(from_component, from_port_name, spec.name);
-            const std::string to_key = variable_key(to_component, to_port_name, spec.name);
+        const auto endpoints = validate_connection(
+            document, registry, connection, connection_counts);
+        for (const auto& spec :
+             canonical_variables_for_domain(endpoints.domain)) {
+            const std::string from_key = variable_key(
+                endpoints.from_component, endpoints.from_port, spec.name);
+            const std::string to_key = variable_key(
+                endpoints.to_component, endpoints.to_port, spec.name);
             const auto from_it = variable_indices.find(from_key);
             const auto to_it = variable_indices.find(to_key);
             if (from_it == variable_indices.end() || to_it == variable_indices.end()) {
@@ -512,18 +635,28 @@ CompiledModelGraph compile_model_graph(
                         }
                     }
                     if (component != nullptr) {
-                        const auto port =
-                            component->ports.find(port_name);
-                        if (port != component->ports.end() &&
-                            port->second.domain == "fluid") {
+                        const auto& component_model =
+                            registry.require_model(component->kind);
+                        const auto port = std::find_if(
+                            component_model.descriptor().ports.begin(),
+                            component_model.descriptor().ports.end(),
+                            [&](const auto& candidate) {
+                                return candidate.name == port_name;
+                            });
+                        if (port !=
+                                component_model.descriptor().ports.end() &&
+                            port->domain == "fluid") {
+                            const std::string& medium_id =
+                                require_medium_binding(
+                                    *component, port_name);
                             const auto package =
                                 medium_properties.find(
-                                    port->second.medium);
+                                    medium_id);
                             if (package ==
                                 medium_properties.end()) {
                                 throw std::logic_error(
                                     "compiled medium property package missing: " +
-                                    port->second.medium);
+                                    medium_id);
                             }
                             if (!package->second->supports(
                                     physics::PropertyCapability::
@@ -661,7 +794,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
     for (const ComponentDefinition& component : document.components) {
         const ComponentModel& model =
             registry.require_model(component.kind);
-        validate_declared_ports(component, model);
+        validate_component_bindings(component, model);
         validate_component_parameters(component, model.descriptor());
         if (!model.descriptor().supports_transient) {
             throw std::invalid_argument(
@@ -670,20 +803,26 @@ CompiledTransientModelGraph compile_transient_model_graph(
         }
 
         ComponentCompileContext context{component, active_case, {}, {}, {}};
-        for (const auto& [port_name, port] : component.ports) {
+        for (const auto& port : model.descriptor().ports) {
+            std::string medium_id;
             if (port.domain == "fluid") {
-                const auto package = medium_properties.find(port.medium);
+                medium_id =
+                    require_medium_binding(component, port.name);
+                const auto package =
+                    medium_properties.find(medium_id);
                 if (package == medium_properties.end()) {
                     throw std::logic_error(
                         "compiled medium property package missing: " +
-                        port.medium);
+                        medium_id);
                 }
-                context.port_properties.emplace(port_name, package->second);
+                context.port_properties.emplace(
+                    port.name, package->second);
             }
             for (const auto& spec :
                  canonical_variables_for_domain(port.domain)) {
                 const std::string full_name =
-                    variable_key(component.id, port_name, spec.name);
+                    variable_key(
+                        component.id, port.name, spec.name);
                 double initial = spec.initial_value;
                 if (const auto value =
                         case_scalar_value(active_case, full_name, false)) {
@@ -693,7 +832,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
                     initial = *fixed;
                 }
                 const auto* transient = find_transient_variable(
-                    model.descriptor(), port_name, spec.name);
+                    model.descriptor(), port.name, spec.name);
                 const DaeVariableKind kind =
                     transient == nullptr
                         ? DaeVariableKind::algebraic
@@ -708,10 +847,11 @@ CompiledTransientModelGraph compile_transient_model_graph(
                 variable_indices.emplace(full_name, index);
                 variable_kinds.emplace(index, kind);
                 context.port_variables.emplace(
-                    port_name + "." + spec.name, index);
+                    port.name + "." + spec.name, index);
                 graph.port_variables.push_back(
-                    CompiledPortVariable{component.id, port_name,
-                                         spec.name, full_name, index});
+                    CompiledPortVariable{
+                        component.id, port.name, spec.name,
+                        full_name, port.domain, medium_id, index});
             }
         }
         for (const auto& variable :
@@ -742,31 +882,19 @@ CompiledTransientModelGraph compile_transient_model_graph(
         model.add_transient_equations(context, system);
     }
 
+    std::map<std::string, std::size_t> connection_counts;
     for (const ConnectionDefinition& connection :
          document.connections) {
-        const std::string from_component =
-            endpoint_component(connection.from);
-        const std::string from_port_name =
-            endpoint_port(connection.from);
-        const std::string to_component =
-            endpoint_component(connection.to);
-        const std::string to_port_name =
-            endpoint_port(connection.to);
-        const PortDefinition& from_port = find_port(
-            find_component(document, from_component), from_port_name);
-        const PortDefinition& to_port = find_port(
-            find_component(document, to_component), to_port_name);
-        if (from_port.domain != to_port.domain) {
-            throw std::invalid_argument(
-                "connection '" + connection.id +
-                "' links incompatible port domains");
-        }
+        const auto endpoints = validate_connection(
+            document, registry, connection, connection_counts);
         for (const auto& spec :
-             canonical_variables_for_domain(from_port.domain)) {
+             canonical_variables_for_domain(endpoints.domain)) {
             const auto from_it = variable_indices.find(variable_key(
-                from_component, from_port_name, spec.name));
+                endpoints.from_component, endpoints.from_port,
+                spec.name));
             const auto to_it = variable_indices.find(variable_key(
-                to_component, to_port_name, spec.name));
+                endpoints.to_component, endpoints.to_port,
+                spec.name));
             if (from_it == variable_indices.end() ||
                 to_it == variable_indices.end()) {
                 throw std::logic_error(

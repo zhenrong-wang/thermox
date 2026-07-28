@@ -190,6 +190,8 @@ Completed structural slices:
 - immutable injectable simulation runtime and deterministic catalog fingerprint; ✅
 - versioned component/property/connector catalog discovery contract; ✅
 - compile-aware steady/transient validation summary and structured diagnostic envelope; ✅
+- breaking `thermox.model/v2` schema with registry-derived ports and fluid-only medium bindings; ✅
+- domain-compatible connection kinds, direction checks, and explicit port cardinality; ✅
 
 ## Persistence boundary decision
 

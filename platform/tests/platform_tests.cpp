@@ -98,25 +98,38 @@ void test_generic_model_document_loads_components_connections_and_cases() {
     const std::string path = write_temp_model(
         "generic_valid",
         R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "flexible_cycle",
     "name": "Flexible thermal graph",
     "revision": "rev_001",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
       {
         "id": "ambient",
         "kind": "source.fluid.boundary",
-        "ports": {
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-        },
         "parameters": {
-          "p": {"value": 101.325, "unit": "kPa"},
-          "T": {"value": 15.0, "unit": "degC"},
-          "m_dot": {"value": 360000.0, "unit": "kg/h"}
+          "p": {
+            "value": 101.325,
+            "unit": "kPa"
+          },
+          "T": {
+            "value": 15.0,
+            "unit": "degC"
+          },
+          "m_dot": {
+            "value": 360000.0,
+            "unit": "kg/h"
+          }
+        },
+        "media": {
+          "outlet": "air"
         }
       },
       {
@@ -124,42 +137,69 @@ void test_generic_model_document_loads_components_connections_and_cases() {
         "label": "Main compressor",
         "kind": "compressor.gas.isentropic_efficiency",
         "version": "1.0.0",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-          "shaft": {"domain": "shaft", "direction": "in"}
-        },
         "parameters": {
           "pressure_ratio": 12.0,
-          "eta_is": {"value": 86.0, "unit": "%"}
+          "eta_is": {
+            "value": 86.0,
+            "unit": "%"
+          }
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
         }
       },
       {
         "id": "turbine",
         "kind": "turbine.gas.isentropic_efficiency",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-          "shaft": {"domain": "shaft", "direction": "out"}
-        },
         "parameters": {
-          "eta_is": {"value": 0.89, "unit": "dimensionless"},
-          "target_power": {"value": 25.0, "unit": "MW"}
+          "eta_is": {
+            "value": 0.89,
+            "unit": "dimensionless"
+          },
+          "target_power": {
+            "value": 25.0,
+            "unit": "MW"
+          }
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
         }
       },
       {
         "id": "exhaust",
         "kind": "sink.fluid.boundary",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"}
+        "media": {
+          "inlet": "air"
         }
       }
     ],
     "connections": [
-      {"id": "c1", "from": "ambient.outlet", "to": "compressor.inlet", "kind": "fluid_link"},
-      {"id": "c2", "from": "compressor.outlet", "to": "turbine.inlet", "kind": "fluid_link"},
-      {"id": "c3", "from": "turbine.outlet", "to": "exhaust.inlet", "kind": "fluid_link"},
-      {"id": "shaft", "from": "turbine.shaft", "to": "compressor.shaft", "kind": "shaft_link"}
+      {
+        "id": "c1",
+        "from": "ambient.outlet",
+        "to": "compressor.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "c2",
+        "from": "compressor.outlet",
+        "to": "turbine.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "c3",
+        "from": "turbine.outlet",
+        "to": "exhaust.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "shaft",
+        "from": "turbine.shaft",
+        "to": "compressor.shaft",
+        "kind": "shaft_link"
+      }
     ]
   },
   "cases": [
@@ -168,15 +208,27 @@ void test_generic_model_document_loads_components_connections_and_cases() {
       "label": "100% load",
       "mode": "steady_state_design",
       "fixed_values": {
-        "ambient.outlet.p": {"value": 1.01325, "unit": "bar"},
-        "ambient.outlet.h": {"value": 289.446675, "unit": "kJ/kg"},
-        "generator.W_dot": {"value": 20.0, "unit": "MW"}
+        "ambient.outlet.p": {
+          "value": 1.01325,
+          "unit": "bar"
+        },
+        "ambient.outlet.h": {
+          "value": 289.446675,
+          "unit": "kJ/kg"
+        },
+        "generator.W_dot": {
+          "value": 20.0,
+          "unit": "MW"
+        }
       },
       "initial_guesses": {
-        "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"}
+        "compressor.outlet.h": {
+          "value": 650.0,
+          "unit": "kJ/kg"
+        }
       },
       "solver_options": {
-        "tolerance": 1.0e-8,
+        "tolerance": 1e-08,
         "max_iterations": 80
       }
     }
@@ -184,7 +236,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
 })json");
 
     const auto document = thermox::platform::load_model_document(path);
-    require(document.schema_version == "thermox.model/v1", "schema version should load");
+    require(document.schema_version == "thermox.model/v2", "schema version should load");
     require(document.model_id == "flexible_cycle", "generic model id should load");
     require(document.media.size() == 1, "one medium should load");
     require(document.components.size() == 4, "four components should load");
@@ -193,7 +245,9 @@ void test_generic_model_document_loads_components_connections_and_cases() {
 
     const auto& compressor = document.components.at(1);
     require(compressor.kind == "compressor.gas.isentropic_efficiency", "component kind should load");
-    require(compressor.ports.at("shaft").domain == "shaft", "shaft port should load");
+    require(
+        compressor.medium_bindings.at("inlet") == "air",
+        "fluid medium binding should load");
     require_near(compressor.parameters.at("eta_is").value_si, 0.86, 1.0e-12,
                  "percent parameter should normalize");
     require_near(document.components.at(0).parameters.at("p").value_si, 101325.0, 1.0e-9,
@@ -210,14 +264,18 @@ void test_generic_model_document_rejects_unknown_medium() {
     const std::string path = write_temp_model(
         "generic_unknown_medium",
         R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "bad_medium",
     "media": [],
     "components": [
-      {"id": "source", "kind": "source", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }}
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "media": {
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
@@ -230,48 +288,176 @@ void test_generic_model_document_rejects_invalid_topology() {
     const std::string path = write_temp_model(
         "generic_bad_topology",
         R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "bad_topology",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"},
-      {"id": "water", "backend": "coolprop_if97", "substance": "Water"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      },
+      {
+        "id": "water",
+        "backend": "coolprop_if97",
+        "substance": "Water"
+      }
     ],
     "components": [
-      {"id": "gas", "kind": "source", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }},
-      {"id": "steam", "kind": "sink", "ports": {
-        "inlet": {"domain": "fluid", "medium": "water", "direction": "in"}
-      }}
+      {
+        "id": "gas",
+        "kind": "source.fluid.boundary",
+        "media": {
+          "outlet": "air"
+        }
+      },
+      {
+        "id": "steam",
+        "kind": "sink.fluid.boundary",
+        "media": {
+          "inlet": "water"
+        }
+      }
     ],
     "connections": [
-      {"id": "bad_link", "from": "gas.outlet", "to": "steam.inlet", "kind": "fluid_link"}
+      {
+        "id": "bad_link",
+        "from": "gas.outlet",
+        "to": "steam.inlet",
+        "kind": "fluid_link"
+      }
     ]
   },
   "cases": []
 })json");
-    require_throws([&]() { thermox::platform::load_model_document(path); }, "incompatible fluid media");
+    const auto document =
+        thermox::platform::load_model_document(path);
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, registry);
+        },
+        "incompatible fluid media");
 }
 
 void test_generic_model_document_rejects_unsupported_units() {
     const std::string path = write_temp_model(
         "generic_bad_unit",
         R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "bad_unit",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
     "components": [
-      {"id": "source", "kind": "source", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }, "parameters": {"p": {"value": 14.7, "unit": "psi"}}}
+      {
+        "id": "source",
+        "kind": "source",
+        "parameters": {
+          "p": {
+            "value": 14.7,
+            "unit": "psi"
+          }
+        },
+        "media": {
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
   "cases": []
 })json");
     require_throws([&]() { thermox::platform::load_model_document(path); }, "unsupported unit");
+}
+
+void test_compiler_enforces_connection_contracts() {
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto wrong_kind =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "wrong_connection_kind",
+    "media": [],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.heat.boundary"
+      },
+      {
+        "id": "sink",
+        "kind": "sink.heat.boundary"
+      }
+    ],
+    "connections": [
+      {
+        "id": "heat",
+        "from": "source.outlet",
+        "to": "sink.inlet",
+        "kind": "fluid_link"
+      }
+    ]
+  },
+  "cases": []
+})json");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                wrong_kind, registry);
+        },
+        "incompatible with domain 'heat'");
+
+    const auto fan_out =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "implicit_fan_out",
+    "media": [],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.heat.boundary"
+      },
+      {
+        "id": "sink_a",
+        "kind": "sink.heat.boundary"
+      },
+      {
+        "id": "sink_b",
+        "kind": "sink.heat.boundary"
+      }
+    ],
+    "connections": [
+      {
+        "id": "a",
+        "from": "source.outlet",
+        "to": "sink_a.inlet",
+        "kind": "heat_link"
+      },
+      {
+        "id": "b",
+        "from": "source.outlet",
+        "to": "sink_b.inlet",
+        "kind": "heat_link"
+      }
+    ]
+  },
+  "cases": []
+})json");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                fan_out, registry);
+        },
+        "maximum connection count of 1");
 }
 
 void test_component_registry_exposes_default_models() {
@@ -380,68 +566,103 @@ void test_component_catalog_exposes_parameter_contracts() {
 void test_component_parameter_contracts_are_enforced() {
     const auto unknown_parameter =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "unknown_component_parameter",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
-    "components": [{
-      "id": "compressor",
-      "kind": "compressor.fluid.isentropic_efficiency",
-      "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      },
-      "parameters": {
-        "pressure_ratio": 2.0,
-        "eta_is": 0.8,
-        "cp": {"value": 1.0, "unit": "kJ/kg/K"}
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
       }
-    }],
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 2.0,
+          "eta_is": 0.8,
+          "cp": {
+            "value": 1.0,
+            "unit": "kJ/kg/K"
+          }
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
+    ],
     "connections": []
   },
   "cases": []
 })json");
     const auto wrong_dimension =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "wrong_parameter_dimension",
     "media": [
-      {"id": "hot", "backend": "ideal_gas_mixture", "substance": "Air"},
-      {"id": "cold", "backend": "ideal_gas_mixture", "substance": "Air"}
-    ],
-    "components": [{
-      "id": "hx",
-      "kind": "heat_exchanger.fluid.counterflow_ua",
-      "ports": {
-        "hot_in": {"domain": "fluid", "medium": "hot", "direction": "in"},
-        "hot_out": {"domain": "fluid", "medium": "hot", "direction": "out"},
-        "cold_in": {"domain": "fluid", "medium": "cold", "direction": "in"},
-        "cold_out": {"domain": "fluid", "medium": "cold", "direction": "out"}
+      {
+        "id": "hot",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
       },
-      "parameters": {"UA": {"value": 1.0, "unit": "MW"}}
-    }],
+      {
+        "id": "cold",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
+    "components": [
+      {
+        "id": "hx",
+        "kind": "heat_exchanger.fluid.counterflow_ua",
+        "parameters": {
+          "UA": {
+            "value": 1.0,
+            "unit": "MW"
+          }
+        },
+        "media": {
+          "hot_in": "hot",
+          "hot_out": "hot",
+          "cold_in": "cold",
+          "cold_out": "cold"
+        }
+      }
+    ],
     "connections": []
   },
   "cases": []
 })json");
     const auto invalid_bound =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "invalid_parameter_bound",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
-    "components": [{
-      "id": "compressor",
-      "kind": "compressor.fluid.isentropic_efficiency",
-      "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      },
-      "parameters": {"pressure_ratio": 2.0, "eta_is": 1.1}
-    }],
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 2.0,
+          "eta_is": 1.1
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
+    ],
     "connections": []
   },
   "cases": []
@@ -470,39 +691,73 @@ void test_component_parameter_contracts_are_enforced() {
 
 void test_generic_model_compiles_to_connection_equations() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "compile_demo",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
-      {"id": "ambient", "kind": "source.fluid.boundary", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }},
-      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      }, "parameters": {"pressure_ratio": 12.0, "eta_is": 0.86}}
+      {
+        "id": "ambient",
+        "kind": "source.fluid.boundary",
+        "media": {
+          "outlet": "air"
+        }
+      },
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.86
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
     ],
     "connections": [
-      {"id": "air_link", "from": "ambient.outlet", "to": "compressor.inlet", "kind": "fluid_link"}
+      {
+        "id": "air_link",
+        "from": "ambient.outlet",
+        "to": "compressor.inlet",
+        "kind": "fluid_link"
+      }
     ]
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "ambient.outlet.m_dot": {"value": 100.0, "unit": "kg/s"},
-      "ambient.outlet.p": {"value": 101.325, "unit": "kPa"},
-      "ambient.outlet.T": {"value": 288.15, "unit": "K"},
-      "compressor.shaft.omega": 314.1592653589793
-    },
-    "initial_guesses": {
-      "compressor.inlet.p": {"value": 100.0, "unit": "kPa"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "ambient.outlet.m_dot": {
+          "value": 100.0,
+          "unit": "kg/s"
+        },
+        "ambient.outlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "ambient.outlet.T": {
+          "value": 288.15,
+          "unit": "K"
+        },
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.inlet.p": {
+          "value": 100.0,
+          "unit": "kPa"
+        }
+      }
     }
-  }]
+  ]
 })json");
 
     const auto registry = thermox::platform::make_default_component_registry();
@@ -551,39 +806,67 @@ void test_generic_model_compiles_to_connection_equations() {
 
 void test_generic_model_solves_ideal_gas_compressor_residuals() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "compressor_physics",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
-      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      }, "parameters": {
-        "pressure_ratio": 12.0,
-        "eta_is": 0.86
-      }}
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.86
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
-      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
-      "compressor.inlet.T": {"value": 300.0, "unit": "K"},
-      "compressor.shaft.omega": 314.1592653589793
-    },
-    "initial_guesses": {
-      "compressor.outlet.p": {"value": 1200.0, "unit": "kPa"},
-      "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
-      "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {
+          "value": 100.0,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "compressor.inlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.outlet.p": {
+          "value": 1200.0,
+          "unit": "kPa"
+        },
+        "compressor.outlet.h": {
+          "value": 650.0,
+          "unit": "kJ/kg"
+        },
+        "compressor.shaft.W_dot": {
+          "value": 35.0,
+          "unit": "MW"
+        }
+      }
     }
-  }]
+  ]
 })json");
 
     const auto registry = thermox::platform::make_default_component_registry();
@@ -637,39 +920,67 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
 
 void test_generic_model_solves_ideal_gas_turbine_residuals() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "turbine_physics",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
-      {"id": "turbine", "kind": "turbine.gas.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "out"}
-      }, "parameters": {
-        "pressure_ratio": 12.0,
-        "eta_is": 0.89
-      }}
+      {
+        "id": "turbine",
+        "kind": "turbine.gas.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.89
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "turbine.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
-      "turbine.inlet.p": {"value": 1215.9, "unit": "kPa"},
-      "turbine.inlet.h": {"value": 1406.3, "unit": "kJ/kg"},
-      "turbine.shaft.omega": 314.1592653589793
-    },
-    "initial_guesses": {
-      "turbine.outlet.p": {"value": 101.325, "unit": "kPa"},
-      "turbine.outlet.h": {"value": 803.6, "unit": "kJ/kg"},
-      "turbine.shaft.W_dot": {"value": 60.0, "unit": "MW"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "turbine.inlet.m_dot": {
+          "value": 100.0,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.p": {
+          "value": 1215.9,
+          "unit": "kPa"
+        },
+        "turbine.inlet.h": {
+          "value": 1406.3,
+          "unit": "kJ/kg"
+        },
+        "turbine.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "turbine.outlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "turbine.outlet.h": {
+          "value": 803.6,
+          "unit": "kJ/kg"
+        },
+        "turbine.shaft.W_dot": {
+          "value": 60.0,
+          "unit": "MW"
+        }
+      }
     }
-  }]
+  ]
 })json");
 
     const auto registry = thermox::platform::make_default_component_registry();
@@ -714,36 +1025,57 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
 void test_generic_model_solves_two_inlet_mixer() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "ideal_gas_mixer",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
       {
         "id": "mixer",
         "kind": "junction.fluid.mixer.two_inlet",
-        "ports": {
-          "inlet_a": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "inlet_b": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+        "media": {
+          "inlet_a": "air",
+          "inlet_b": "air",
+          "outlet": "air"
         }
       }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "mixer.inlet_a.m_dot": {"value": 2.0, "unit": "kg/s"},
-      "mixer.inlet_a.p": {"value": 1.0, "unit": "bar"},
-      "mixer.inlet_a.h": {"value": 300.0, "unit": "kJ/kg"},
-      "mixer.inlet_b.m_dot": {"value": 1.0, "unit": "kg/s"},
-      "mixer.inlet_b.h": {"value": 600.0, "unit": "kJ/kg"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "mixer.inlet_a.m_dot": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "mixer.inlet_a.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "mixer.inlet_a.h": {
+          "value": 300.0,
+          "unit": "kJ/kg"
+        },
+        "mixer.inlet_b.m_dot": {
+          "value": 1.0,
+          "unit": "kg/s"
+        },
+        "mixer.inlet_b.h": {
+          "value": 600.0,
+          "unit": "kJ/kg"
+        }
+      }
     }
-  }]
+  ]
 })json");
 
     const auto registry =
@@ -779,35 +1111,53 @@ void test_generic_model_solves_two_inlet_mixer() {
 void test_generic_model_solves_two_outlet_splitter() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "ideal_gas_splitter",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
       {
         "id": "splitter",
         "kind": "junction.fluid.splitter.two_outlet",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "outlet_a": {"domain": "fluid", "medium": "air", "direction": "out"},
-          "outlet_b": {"domain": "fluid", "medium": "air", "direction": "out"}
+        "media": {
+          "inlet": "air",
+          "outlet_a": "air",
+          "outlet_b": "air"
         }
       }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "splitter.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
-      "splitter.inlet.p": {"value": 1.0, "unit": "bar"},
-      "splitter.inlet.h": {"value": 400.0, "unit": "kJ/kg"},
-      "splitter.outlet_a.m_dot": {"value": 4.0, "unit": "kg/s"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "splitter.inlet.m_dot": {
+          "value": 10.0,
+          "unit": "kg/s"
+        },
+        "splitter.inlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "splitter.inlet.h": {
+          "value": 400.0,
+          "unit": "kJ/kg"
+        },
+        "splitter.outlet_a.m_dot": {
+          "value": 4.0,
+          "unit": "kg/s"
+        }
+      }
     }
-  }]
+  ]
 })json");
 
     const auto registry =
@@ -843,32 +1193,51 @@ void test_generic_model_solves_two_outlet_splitter() {
 void test_generic_model_solves_isenthalpic_valve() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "isenthalpic_valve",
     "media": [
-      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water"
+      }
     ],
-    "components": [{
-      "id": "valve",
-      "kind": "valve.fluid.isenthalpic_pressure_ratio",
-      "ports": {
-        "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "water", "direction": "out"}
-      },
-      "parameters": {"pressure_ratio": 10.0}
-    }],
+    "components": [
+      {
+        "id": "valve",
+        "kind": "valve.fluid.isenthalpic_pressure_ratio",
+        "parameters": {
+          "pressure_ratio": 10.0
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
+        }
+      }
+    ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "valve.inlet.m_dot": {"value": 5.0, "unit": "kg/s"},
-      "valve.inlet.p": {"value": 10.0, "unit": "MPa"},
-      "valve.inlet.h": {"value": 1200.0, "unit": "kJ/kg"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "valve.inlet.m_dot": {
+          "value": 5.0,
+          "unit": "kg/s"
+        },
+        "valve.inlet.p": {
+          "value": 10.0,
+          "unit": "MPa"
+        },
+        "valve.inlet.h": {
+          "value": 1200.0,
+          "unit": "kJ/kg"
+        }
+      }
     }
-  }]
+  ]
 })json");
     const auto registry =
         thermox::platform::make_default_component_registry();
@@ -894,42 +1263,75 @@ void test_generic_model_solves_isenthalpic_valve() {
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "cross_medium_heat_exchanger",
     "media": [
-      {"id": "gas", "backend": "ideal_gas_mixture", "substance": "Air"},
-      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
-    ],
-    "components": [{
-      "id": "hx",
-      "kind": "heat_exchanger.fluid.fixed_duty",
-      "ports": {
-        "hot_in": {"domain": "fluid", "medium": "gas", "direction": "in"},
-        "hot_out": {"domain": "fluid", "medium": "gas", "direction": "out"},
-        "cold_in": {"domain": "fluid", "medium": "water", "direction": "in"},
-        "cold_out": {"domain": "fluid", "medium": "water", "direction": "out"}
+      {
+        "id": "gas",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
       },
-      "parameters": {
-        "heat_duty": {"value": 1.0, "unit": "MW"},
-        "hot_pressure_loss_fraction": 0.05,
-        "cold_pressure_loss_fraction": 0.02
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water"
       }
-    }],
+    ],
+    "components": [
+      {
+        "id": "hx",
+        "kind": "heat_exchanger.fluid.fixed_duty",
+        "parameters": {
+          "heat_duty": {
+            "value": 1.0,
+            "unit": "MW"
+          },
+          "hot_pressure_loss_fraction": 0.05,
+          "cold_pressure_loss_fraction": 0.02
+        },
+        "media": {
+          "hot_in": "gas",
+          "hot_out": "gas",
+          "cold_in": "water",
+          "cold_out": "water"
+        }
+      }
+    ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "hx.hot_in.m_dot": {"value": 10.0, "unit": "kg/s"},
-      "hx.hot_in.p": {"value": 10.0, "unit": "bar"},
-      "hx.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
-      "hx.cold_in.m_dot": {"value": 20.0, "unit": "kg/s"},
-      "hx.cold_in.p": {"value": 5.0, "unit": "bar"},
-      "hx.cold_in.h": {"value": 200.0, "unit": "kJ/kg"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "hx.hot_in.m_dot": {
+          "value": 10.0,
+          "unit": "kg/s"
+        },
+        "hx.hot_in.p": {
+          "value": 10.0,
+          "unit": "bar"
+        },
+        "hx.hot_in.h": {
+          "value": 600.0,
+          "unit": "kJ/kg"
+        },
+        "hx.cold_in.m_dot": {
+          "value": 20.0,
+          "unit": "kg/s"
+        },
+        "hx.cold_in.p": {
+          "value": 5.0,
+          "unit": "bar"
+        },
+        "hx.cold_in.h": {
+          "value": 200.0,
+          "unit": "kJ/kg"
+        }
+      }
     }
-  }]
+  ]
 })json");
     const auto registry =
         thermox::platform::make_default_component_registry();
@@ -955,48 +1357,93 @@ void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
 void test_generic_model_solves_counterflow_ua_heat_exchanger() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "counterflow_ua_heat_exchanger",
     "media": [
-      {"id": "hot_air", "backend": "ideal_gas_mixture", "substance": "Air"},
-      {"id": "cold_air", "backend": "ideal_gas_mixture", "substance": "Air"}
-    ],
-    "components": [{
-      "id": "hx",
-      "kind": "heat_exchanger.fluid.counterflow_ua",
-      "ports": {
-        "hot_in": {"domain": "fluid", "medium": "hot_air", "direction": "in"},
-        "hot_out": {"domain": "fluid", "medium": "hot_air", "direction": "out"},
-        "cold_in": {"domain": "fluid", "medium": "cold_air", "direction": "in"},
-        "cold_out": {"domain": "fluid", "medium": "cold_air", "direction": "out"}
+      {
+        "id": "hot_air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
       },
-      "parameters": {
-        "UA": {"value": 1.0, "unit": "kW/K"},
-        "hot_pressure_loss_fraction": 0.01,
-        "cold_pressure_loss_fraction": 0.02
+      {
+        "id": "cold_air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
       }
-    }],
+    ],
+    "components": [
+      {
+        "id": "hx",
+        "kind": "heat_exchanger.fluid.counterflow_ua",
+        "parameters": {
+          "UA": {
+            "value": 1.0,
+            "unit": "kW/K"
+          },
+          "hot_pressure_loss_fraction": 0.01,
+          "cold_pressure_loss_fraction": 0.02
+        },
+        "media": {
+          "hot_in": "hot_air",
+          "hot_out": "hot_air",
+          "cold_in": "cold_air",
+          "cold_out": "cold_air"
+        }
+      }
+    ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "hx.hot_in.m_dot": {"value": 1.0, "unit": "kg/s"},
-      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
-      "hx.hot_in.T": {"value": 500.0, "unit": "K"},
-      "hx.cold_in.m_dot": {"value": 2.0, "unit": "kg/s"},
-      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
-      "hx.cold_in.T": {"value": 300.0, "unit": "K"}
-    },
-    "initial_guesses": {
-      "hx.hot_in.h": {"value": 502.25, "unit": "kJ/kg"},
-      "hx.hot_out.h": {"value": 400.0, "unit": "kJ/kg"},
-      "hx.cold_in.h": {"value": 301.35, "unit": "kJ/kg"},
-      "hx.cold_out.h": {"value": 350.0, "unit": "kJ/kg"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "hx.hot_in.m_dot": {
+          "value": 1.0,
+          "unit": "kg/s"
+        },
+        "hx.hot_in.p": {
+          "value": 2.0,
+          "unit": "bar"
+        },
+        "hx.hot_in.T": {
+          "value": 500.0,
+          "unit": "K"
+        },
+        "hx.cold_in.m_dot": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "hx.cold_in.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "hx.cold_in.T": {
+          "value": 300.0,
+          "unit": "K"
+        }
+      },
+      "initial_guesses": {
+        "hx.hot_in.h": {
+          "value": 502.25,
+          "unit": "kJ/kg"
+        },
+        "hx.hot_out.h": {
+          "value": 400.0,
+          "unit": "kJ/kg"
+        },
+        "hx.cold_in.h": {
+          "value": 301.35,
+          "unit": "kJ/kg"
+        },
+        "hx.cold_out.h": {
+          "value": 350.0,
+          "unit": "kJ/kg"
+        }
+      }
     }
-  }]
+  ]
 })json");
     require_near(
         document.components.at(0).parameters.at("UA").value_si,
@@ -1050,61 +1497,101 @@ void test_generic_model_solves_counterflow_ua_heat_exchanger() {
 void test_if97_fixed_quality_evaporator_and_condenser() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "if97_phase_change_components",
     "media": [
-      {"id": "water", "backend": "water_steam_if97", "substance": "Water"}
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water"
+      }
     ],
     "components": [
       {
         "id": "evaporator",
         "kind": "evaporator.fluid.fixed_outlet_quality",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
-          "heat": {"domain": "heat", "direction": "in"}
-        },
         "parameters": {
           "outlet_quality": 1.0,
           "pressure_loss_fraction": 0.02
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       },
       {
         "id": "condenser",
         "kind": "condenser.fluid.fixed_outlet_quality",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
-          "heat": {"domain": "heat", "direction": "out"}
-        },
         "parameters": {
           "outlet_quality": 0.0
+        },
+        "media": {
+          "inlet": "water",
+          "outlet": "water"
         }
       }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "evaporator.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
-      "evaporator.inlet.p": {"value": 5.0, "unit": "MPa"},
-      "evaporator.inlet.h": {"value": 500.0, "unit": "kJ/kg"},
-      "condenser.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
-      "condenser.inlet.p": {"value": 1.0, "unit": "bar"},
-      "condenser.inlet.h": {"value": 2500.0, "unit": "kJ/kg"}
-    },
-    "initial_guesses": {
-      "evaporator.outlet.h": {"value": 2500.0, "unit": "kJ/kg"},
-      "evaporator.heat.Q_dot": {"value": 4.0, "unit": "MW"},
-      "evaporator.heat.T": {"value": 540.0, "unit": "K"},
-      "condenser.outlet.h": {"value": 530.0, "unit": "kJ/kg"},
-      "condenser.heat.Q_dot": {"value": 4.0, "unit": "MW"},
-      "condenser.heat.T": {"value": 373.0, "unit": "K"}
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "evaporator.inlet.m_dot": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "evaporator.inlet.p": {
+          "value": 5.0,
+          "unit": "MPa"
+        },
+        "evaporator.inlet.h": {
+          "value": 500.0,
+          "unit": "kJ/kg"
+        },
+        "condenser.inlet.m_dot": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "condenser.inlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "condenser.inlet.h": {
+          "value": 2500.0,
+          "unit": "kJ/kg"
+        }
+      },
+      "initial_guesses": {
+        "evaporator.outlet.h": {
+          "value": 2500.0,
+          "unit": "kJ/kg"
+        },
+        "evaporator.heat.Q_dot": {
+          "value": 4.0,
+          "unit": "MW"
+        },
+        "evaporator.heat.T": {
+          "value": 540.0,
+          "unit": "K"
+        },
+        "condenser.outlet.h": {
+          "value": 530.0,
+          "unit": "kJ/kg"
+        },
+        "condenser.heat.Q_dot": {
+          "value": 4.0,
+          "unit": "MW"
+        },
+        "condenser.heat.T": {
+          "value": 373.0,
+          "unit": "K"
+        }
+      }
     }
-  }]
+  ]
 })json");
     const auto registry =
         thermox::platform::make_default_component_registry();
@@ -1247,7 +1734,7 @@ void test_generic_model_solves_if97_pump() {
             "IF97 pump test states should be valid");
 
     std::string model_text = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "if97_pump",
     "media": [
@@ -1257,11 +1744,7 @@ void test_generic_model_solves_if97_pump() {
       {
         "id": "pump",
         "kind": "pump.fluid.isentropic_efficiency",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "water", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "water", "direction": "out"},
-          "shaft": {"domain": "shaft", "direction": "in"}
-        },
+        "media": {"inlet": "water", "outlet": "water"},
         "parameters": {"pressure_ratio": 50.0, "eta_is": 0.8}
       }
     ],
@@ -1335,18 +1818,15 @@ void test_generic_model_solves_supercritical_co2_compressor() {
             "sCO2 test states should be valid");
 
     std::string model_text = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "sco2_compressor",
     "media": [
       {"id": "co2", "backend": "co2_span_wagner", "substance": "CO2"}
     ],
     "components": [
-      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "co2", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "co2", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      }, "parameters": {
+      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency",
+       "media": {"inlet": "co2", "outlet": "co2"}, "parameters": {
         "pressure_ratio": 2.0,
         "eta_is": 0.82
       }}
@@ -1416,14 +1896,24 @@ void test_generic_model_solves_supercritical_co2_compressor() {
 
 void test_generic_model_compiler_rejects_unregistered_component_kind() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "unregistered_kind",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
     "components": [
-      {"id": "x", "kind": "not.registered", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }}
+      {
+        "id": "x",
+        "kind": "not.registered",
+        "media": {
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
@@ -1436,15 +1926,26 @@ void test_generic_model_compiler_rejects_unregistered_component_kind() {
 
 void test_generic_model_compiler_rejects_bad_port_contract() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "bad_contract",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
     "components": [
-      {"id": "compressor", "kind": "compressor.gas.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }}
+      {
+        "id": "compressor",
+        "kind": "compressor.gas.isentropic_efficiency",
+        "media": {
+          "inlet": "air",
+          "outlet": "air",
+          "shaft": "air"
+        }
+      }
     ],
     "connections": []
   },
@@ -1452,27 +1953,44 @@ void test_generic_model_compiler_rejects_bad_port_contract() {
 })json");
     const auto registry = thermox::platform::make_default_component_registry();
     require_throws([&]() { (void)thermox::platform::compile_model_graph(document, registry); },
-                   "missing required port: shaft");
+                   "medium binding for non-fluid port: shaft");
 }
 
 void test_generic_model_compiler_rejects_unknown_case_variable() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "unknown_case_var",
-    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
+    ],
     "components": [
-      {"id": "ambient", "kind": "source.fluid.boundary", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }}
+      {
+        "id": "ambient",
+        "kind": "source.fluid.boundary",
+        "media": {
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {"missing.port.p": {"value": 1.0, "unit": "bar"}}
-  }]
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "missing.port.p": {
+          "value": 1.0,
+          "unit": "bar"
+        }
+      }
+    }
+  ]
 })json");
     const auto registry = thermox::platform::make_default_component_registry();
     require_throws([&]() { (void)thermox::platform::compile_model_graph(document, registry, "design"); },
@@ -1482,20 +2000,33 @@ void test_generic_model_compiler_rejects_unknown_case_variable() {
 void test_compiler_reports_under_and_over_specification() {
     const auto under_specified =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "under_specified",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
-      {"id": "source", "kind": "source.fluid.boundary", "ports": {
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-      }}
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "media": {
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
-  "cases": [{"id": "design", "mode": "steady_state_design"}]
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design"
+    }
+  ]
 })json");
     const auto registry =
         thermox::platform::make_default_component_registry();
@@ -1508,32 +2039,57 @@ void test_compiler_reports_under_and_over_specification() {
 
     const auto over_specified =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "over_specified",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
-      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      }, "parameters": {"pressure_ratio": 2.0, "eta_is": 0.8}}
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 2.0,
+          "eta_is": 0.8
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
     ],
     "connections": []
   },
-  "cases": [{
-    "id": "design",
-    "mode": "steady_state_design",
-    "fixed_values": {
-      "compressor.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
-      "compressor.inlet.p": {"value": 1.0, "unit": "bar"},
-      "compressor.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
-      "compressor.outlet.p": {"value": 2.0, "unit": "bar"},
-      "compressor.shaft.omega": 300.0
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {
+          "value": 1.0,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.p": {
+          "value": 1.0,
+          "unit": "bar"
+        },
+        "compressor.inlet.h": {
+          "value": 300.0,
+          "unit": "kJ/kg"
+        },
+        "compressor.outlet.p": {
+          "value": 2.0,
+          "unit": "bar"
+        },
+        "compressor.shaft.omega": 300.0
+      }
     }
-  }]
+  ]
 })json");
     require_throws(
         [&]() {
@@ -1545,16 +2101,29 @@ void test_compiler_reports_under_and_over_specification() {
 
 void test_component_property_capabilities_are_validated() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "capability_check",
-    "media": [{"id": "limited", "backend": "pt_only", "substance": "Test"}],
+    "media": [
+      {
+        "id": "limited",
+        "backend": "pt_only",
+        "substance": "Test"
+      }
+    ],
     "components": [
-      {"id": "compressor", "kind": "compressor.fluid.isentropic_efficiency", "ports": {
-        "inlet": {"domain": "fluid", "medium": "limited", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "limited", "direction": "out"},
-        "shaft": {"domain": "shaft", "direction": "in"}
-      }, "parameters": {"pressure_ratio": 2.0, "eta_is": 0.8}}
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "pressure_ratio": 2.0,
+          "eta_is": 0.8
+        },
+        "media": {
+          "inlet": "limited",
+          "outlet": "limited"
+        }
+      }
     ],
     "connections": []
   },
@@ -1577,22 +2146,29 @@ void test_component_property_capabilities_are_validated() {
 
     const auto saturation_document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "saturation_capability_check",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
-    "components": [{
-      "id": "evaporator",
-      "kind": "evaporator.fluid.fixed_outlet_quality",
-      "ports": {
-        "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "air", "direction": "out"},
-        "heat": {"domain": "heat", "direction": "in"}
-      },
-      "parameters": {"outlet_quality": 1.0}
-    }],
+    "components": [
+      {
+        "id": "evaporator",
+        "kind": "evaporator.fluid.fixed_outlet_quality",
+        "parameters": {
+          "outlet_quality": 1.0
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
+    ],
     "connections": []
   },
   "cases": []
@@ -1607,32 +2183,23 @@ void test_component_property_capabilities_are_validated() {
 
 void test_transient_model_compiles_and_integrates_lumped_storage() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "thermal_storage_transient",
     "media": [],
     "components": [
       {
         "id": "heater",
-        "kind": "source.heat.boundary",
-        "ports": {
-          "outlet": {
-            "domain": "heat",
-            "direction": "out"
-          }
-        }
+        "kind": "source.heat.boundary"
       },
       {
         "id": "store",
         "kind": "storage.thermal.lumped",
-        "ports": {
-          "thermal": {
-            "domain": "heat",
-            "direction": "in"
-          }
-        },
         "parameters": {
-          "thermal_capacity": {"value": 2.0, "unit": "MJ/K"}
+          "thermal_capacity": {
+            "value": 2.0,
+            "unit": "MJ/K"
+          }
         }
       }
     ],
@@ -1650,10 +2217,16 @@ void test_transient_model_compiles_and_integrates_lumped_storage() {
       "id": "charge",
       "mode": "dynamic_transient",
       "fixed_values": {
-        "heater.outlet.Q_dot": {"value": 1.0, "unit": "MW"}
+        "heater.outlet.Q_dot": {
+          "value": 1.0,
+          "unit": "MW"
+        }
       },
       "initial_guesses": {
-        "store.temperature": {"value": 300.0, "unit": "K"}
+        "store.temperature": {
+          "value": 300.0,
+          "unit": "K"
+        }
       }
     }
   ]
@@ -1717,60 +2290,103 @@ void test_transient_model_compiles_and_integrates_lumped_storage() {
 void test_transient_model_integrates_rigid_fluid_volume() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "rigid_fluid_volume_transient",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
       {
         "id": "source",
         "kind": "source.fluid.boundary",
-        "ports": {
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
+        "media": {
+          "outlet": "air"
         }
       },
       {
         "id": "tank",
         "kind": "volume.fluid.rigid_adiabatic",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"},
-          "outlet": {"domain": "fluid", "medium": "air", "direction": "out"}
-        },
         "parameters": {
-          "volume": {"value": 1000.0, "unit": "L"}
+          "volume": {
+            "value": 1000.0,
+            "unit": "L"
+          }
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
         }
       },
       {
         "id": "sink",
         "kind": "sink.fluid.boundary",
-        "ports": {
-          "inlet": {"domain": "fluid", "medium": "air", "direction": "in"}
+        "media": {
+          "inlet": "air"
         }
       }
     ],
     "connections": [
-      {"id": "feed", "from": "source.outlet", "to": "tank.inlet", "kind": "fluid_link"},
-      {"id": "discharge", "from": "tank.outlet", "to": "sink.inlet", "kind": "fluid_link"}
+      {
+        "id": "feed",
+        "from": "source.outlet",
+        "to": "tank.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "discharge",
+        "from": "tank.outlet",
+        "to": "sink.inlet",
+        "kind": "fluid_link"
+      }
     ]
   },
-  "cases": [{
-    "id": "fill",
-    "mode": "dynamic_transient",
-    "fixed_values": {
-      "source.outlet.m_dot": {"value": 2.0, "unit": "kg/s"},
-      "source.outlet.p": {"value": 1.01325, "unit": "bar"},
-      "source.outlet.h": {"value": 301.35, "unit": "kJ/kg"},
-      "sink.inlet.m_dot": {"value": 1.0, "unit": "kg/s"}
-    },
-    "initial_guesses": {
-      "tank.mass": {"value": 1.17683, "unit": "kg"},
-      "tank.total_energy": {"value": 253.33, "unit": "kJ"},
-      "tank.pressure": {"value": 1.01325, "unit": "bar"},
-      "tank.enthalpy": {"value": 301.35, "unit": "kJ/kg"}
+  "cases": [
+    {
+      "id": "fill",
+      "mode": "dynamic_transient",
+      "fixed_values": {
+        "source.outlet.m_dot": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "source.outlet.p": {
+          "value": 1.01325,
+          "unit": "bar"
+        },
+        "source.outlet.h": {
+          "value": 301.35,
+          "unit": "kJ/kg"
+        },
+        "sink.inlet.m_dot": {
+          "value": 1.0,
+          "unit": "kg/s"
+        }
+      },
+      "initial_guesses": {
+        "tank.mass": {
+          "value": 1.17683,
+          "unit": "kg"
+        },
+        "tank.total_energy": {
+          "value": 253.33,
+          "unit": "kJ"
+        },
+        "tank.pressure": {
+          "value": 1.01325,
+          "unit": "bar"
+        },
+        "tank.enthalpy": {
+          "value": 301.35,
+          "unit": "kJ/kg"
+        }
+      }
     }
-  }]
+  ]
 })json");
     require_near(
         document.components.at(1).parameters.at("volume").value_si,
@@ -1848,6 +2464,14 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
         const double initial_mass = state.state.density_kg_m3;
         const double initial_energy =
             initial_mass * state.state.internal_energy_j_kg;
+        const auto reconstructed = package->state_ph(
+            backend_case.pressure, state.state.enthalpy_j_kg);
+        std::cerr << backend_case.backend
+                  << " pt_rho=" << state.state.density_kg_m3
+                  << " ph_rho=" << reconstructed.state.density_kg_m3
+                  << " pt_u=" << state.state.internal_energy_j_kg
+                  << " ph_u=" << reconstructed.state.internal_energy_j_kg
+                  << '\n';
         std::ostringstream number;
         number << std::setprecision(17);
         const auto format = [&](double value) {
@@ -1857,17 +2481,14 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
             return number.str();
         };
         std::string text = R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "real_fluid_volume",
     "media": [{"id": "fluid", "backend": "__BACKEND__", "substance": "__SUBSTANCE__"}],
     "components": [{
       "id": "tank",
       "kind": "volume.fluid.rigid_adiabatic",
-      "ports": {
-        "inlet": {"domain": "fluid", "medium": "fluid", "direction": "in"},
-        "outlet": {"domain": "fluid", "medium": "fluid", "direction": "out"}
-      },
+      "media": {"inlet": "fluid", "outlet": "fluid"},
       "parameters": {"volume": {"value": 1.0, "unit": "m3"}}
     }],
     "connections": []
@@ -1921,6 +2542,19 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
             graph.problem.variable_names, "tank.mass");
         const auto energy = require_variable_index(
             graph.problem.variable_names, "tank.total_energy");
+        const auto pressure = require_variable_index(
+            graph.problem.variable_names, "tank.pressure");
+        const auto enthalpy = require_variable_index(
+            graph.problem.variable_names, "tank.enthalpy");
+        std::cerr << backend_case.backend
+                  << " mass_dot=" << initialized.derivative.at(mass)
+                  << " energy_dot=" << initialized.derivative.at(energy)
+                  << " mass=" << initialized.state.at(mass)
+                  << " energy=" << initialized.state.at(energy)
+                  << " pressure=" << initialized.state.at(pressure)
+                  << " enthalpy=" << initialized.state.at(enthalpy)
+                  << " input_h=" << state.state.enthalpy_j_kg
+                  << '\n';
         require_near(initialized.derivative.at(mass), 0.0,
                      1.0e-9,
                      backend_case.backend +
@@ -1935,35 +2569,36 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
 void test_transient_compiler_rejects_steady_only_components() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "invalid_dynamic_component",
     "media": [
-      {"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air"
+      }
     ],
     "components": [
       {
         "id": "valve",
         "kind": "valve.fluid.isenthalpic_pressure_ratio",
-        "ports": {
-          "inlet": {
-            "domain": "fluid",
-            "medium": "air",
-            "direction": "in"
-          },
-          "outlet": {
-            "domain": "fluid",
-            "medium": "air",
-            "direction": "out"
-          }
+        "parameters": {
+          "pressure_ratio": 2.0
         },
-        "parameters": {"pressure_ratio": 2.0}
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
       }
     ],
     "connections": []
   },
   "cases": [
-    {"id": "dynamic", "mode": "dynamic_transient"}
+    {
+      "id": "dynamic",
+      "mode": "dynamic_transient"
+    }
   ]
 })json");
     const auto registry =
@@ -1979,7 +2614,7 @@ void test_transient_compiler_rejects_steady_only_components() {
 void test_transient_compiler_rejects_fixed_differential_state() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
-  "schema_version": "thermox.model/v1",
+  "schema_version": "thermox.model/v2",
   "model": {
     "id": "fixed_dynamic_state",
     "media": [],
@@ -1987,13 +2622,9 @@ void test_transient_compiler_rejects_fixed_differential_state() {
       {
         "id": "store",
         "kind": "storage.thermal.lumped",
-        "ports": {
-          "thermal": {
-            "domain": "heat",
-            "direction": "bidirectional"
-          }
-        },
-        "parameters": {"thermal_capacity": 1000.0}
+        "parameters": {
+          "thermal_capacity": 1000.0
+        }
       }
     ],
     "connections": []
@@ -2027,6 +2658,7 @@ int main() {
         test_generic_model_document_rejects_unknown_medium();
         test_generic_model_document_rejects_invalid_topology();
         test_generic_model_document_rejects_unsupported_units();
+        test_compiler_enforces_connection_contracts();
         test_component_registry_exposes_default_models();
         test_component_registry_rejects_unknown_kind();
         test_component_catalog_exposes_parameter_contracts();

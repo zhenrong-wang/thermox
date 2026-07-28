@@ -18,18 +18,12 @@ struct MediumDefinition {
     std::string substance;
 };
 
-struct PortDefinition {
-    std::string domain;
-    std::string medium;
-    std::string direction;
-};
-
 struct ComponentDefinition {
     std::string id;
     std::string label;
     std::string kind;
     std::string version;
-    std::map<std::string, PortDefinition> ports;
+    std::map<std::string, std::string> medium_bindings;
     std::map<std::string, ScalarValue> parameters;
 };
 

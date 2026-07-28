@@ -57,24 +57,26 @@ Decision: validation becomes staged and compile-aware. It returns structured dia
 compilation summary without invoking the numerical solver. Parsing, catalog validation, topology,
 parameters, properties, cases, and structural analysis remain distinguishable stages.
 
-### Graph schema authority
+### Graph schema authority — completed
 
 Component instances currently repeat port names, domains, and directions already owned by the
 component descriptor. This permits drift between a model document and the registry.
 
-Decision: a later model-schema revision derives port contracts from the registered component type.
-Instances retain only identity, kind/version requirement, medium bindings, parameters, and
-annotations. No backward-compatibility adapter is required during early development.
+`thermox.model/v2` derives port contracts from the registered component type. Instances retain only
+identity, kind/version requirement, per-fluid-port medium bindings, parameters, and annotations.
+No backward-compatibility adapter was retained.
 
-### Connector semantics
+### Connector semantics — first contract completed
 
 Canonical connector variables are hard-coded for fluid, heat, shaft, signal, and control domains.
 Connection kinds are stored but compilation currently applies the same equality semantics for a
 domain. Port cardinality is not represented.
 
-Decision: introduce versioned connector-domain descriptors and either formalize one domain-defined
-link or register connection contracts explicitly. Junctions, pressure loss, heat transfer, and
-other physical behavior remain explicit components.
+Versioned connector-domain descriptors now expose canonical variables. Connection kinds must match
+their endpoint domain, port directions are compiler-validated, and registry descriptors declare
+maximum connection counts. Direct fan-out is rejected; junctions, pressure loss, heat transfer,
+and other physical behavior remain explicit components. Moving canonical domain definitions out of
+the compiler into an injectable domain registry remains a later extensibility step.
 
 ### Diagnostics
 
@@ -108,7 +110,7 @@ and KPIs.
 1. Immutable injectable runtime and catalog fingerprint.
 2. Component, property, and connector-domain catalog service contracts.
 3. Compile-aware validation and compilation preview with structured diagnostics.
-4. Registry-derived model schema and formal connection/cardinality semantics.
+4. Registry-derived model schema and formal connection/cardinality semantics. ✅
 5. Complete version enforcement and provenance.
 6. Graph-native steady and transient result contracts.
 7. Asynchronous jobs, repository ports, RPC mapping, then visual graph UI.

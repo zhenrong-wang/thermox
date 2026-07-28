@@ -7,8 +7,8 @@ platform. The project is in early development: the schema is intentionally allow
 without backward-compatibility adapters while the architecture is established.
 
 Implementation status: the first-class `thermox_platform` C++ module parses and validates the
-`thermox.model/v1` boundary for media, components, typed ports, connections, cases, and scalar unit
-normalization. Its metadata-backed component registry and graph compiler validate port contracts
+`thermox.model/v2` boundary for media, registry-derived component ports, connections, cases, and
+scalar unit normalization. Its metadata-backed component registry and graph compiler validate port contracts
 and property capabilities, create canonical port variables, and lower connections, fixed values,
 component equations, internal dynamic states, and accumulation equations into sparse steady or DAE
 assembly metadata. Design-only metadata such as
@@ -26,7 +26,7 @@ current parser.
 ## 2. Top-level model document
 
 ```yaml
-schema_version: thermox.model/v1
+schema_version: thermox.model/v2
 model:
   id: ccgt_demo
   name: Combined Cycle Demo
@@ -64,18 +64,9 @@ id: st_hp
 label: HP Steam Turbine
 kind: turbine.steam.isentropic_efficiency
 version: 1.0.0
-ports:
-  inlet:
-    domain: fluid
-    medium: water_steam
-    direction: in
-  outlet:
-    domain: fluid
-    medium: water_steam
-    direction: out
-  shaft:
-    domain: shaft
-    direction: out
+media:
+  inlet: water_steam
+  outlet: water_steam
 parameters:
   eta_is:
     value: 0.88
@@ -95,12 +86,15 @@ annotations:
 
 ### 5.1 Fluid domain
 
-Required fields:
+Port names, domains, directions, and maximum connection counts come exclusively from the resolved
+component descriptor. Component instances bind a declared medium only to their fluid ports.
+Heat, shaft, signal, and control ports require no instance declaration.
 
 ```yaml
-domain: fluid
-medium: water_steam
-direction: in | out | bidirectional
+kind: turbine.fluid.isentropic_efficiency
+media:
+  inlet: water_steam
+  outlet: water_steam
 ```
 
 Canonical solver variables:
@@ -152,13 +146,18 @@ parameters:
     value: 0.02
 ```
 
-Connection kinds:
+Connection kinds are required and must match the registry-owned endpoint domain:
 
 - `fluid_link`: normal directed fluid connection.
-- `fluid_junction`: multiple ports with generated mass/species/energy balance.
 - `heat_link`: heat transfer connection.
 - `shaft_link`: mechanical power/speed connection.
 - `signal_link`: control/equation signal.
+
+Every built-in port currently has maximum connection count `1`. A direct fan-out is invalid because
+equating one stream to several streams would duplicate flow rather than conserve it. Branching,
+joining, or distribution uses explicit registered mixer, splitter, or junction components. Link
+contracts only equate the canonical variables of their domain; pressure loss, heat transfer,
+mixing, and other physical behavior belongs to components.
 
 ## 7. Case document
 
@@ -202,8 +201,9 @@ Case modes:
 ## 8. Component type metadata schema
 Component type definitions should be served to the frontend and compiler from the same registry.
 The current C++ implementation has registered component models exposing kind/version, required port
-names, domains, directions, fluid-property capabilities, supported simulation modes, and formal
-parameter descriptors. Each parameter descriptor records its SI dimension, requiredness, optional
+names, domains, directions, maximum connection counts, fluid-property capabilities, supported
+simulation modes, and formal parameter descriptors. Each parameter descriptor records its SI
+dimension, requiredness, optional
 default, lower/upper bounds, and whether each bound is inclusive. The compiler rejects missing,
 unknown, dimensionally incompatible, non-finite, and out-of-range values before equation assembly.
 Plain numeric values remain implicit SI; unit-bearing values must match the declared dimension.
