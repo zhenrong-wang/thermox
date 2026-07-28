@@ -56,6 +56,17 @@ public:
     std::size_t add_checked_equation(std::string name,
                                      CheckedEquationCallback evaluate,
                                      double scale = 1.0);
+    std::size_t add_checked_sparse_equation(
+        std::string name,
+        CheckedEquationCallback evaluate,
+        SparseEquationCallback assemble,
+        double scale = 1.0);
+    std::size_t add_checked_sparse_equation(
+        std::string name,
+        CheckedEquationCallback evaluate,
+        std::vector<std::size_t> sparsity_variables,
+        SparseEquationCallback assemble,
+        double scale = 1.0);
     std::size_t add_sparse_equation(std::string name,
                                     SparseEquationCallback assemble,
                                     double scale = 1.0);

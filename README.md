@@ -52,6 +52,9 @@ Implemented in this sprint:
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
+- A map-driven compressor component resolves an instance-bound performance artifact, evaluates
+  corrected mass flow and shaft speed, and closes pressure ratio, efficiency, and shaft power for
+  off-design operating points.
 - Queryable component catalog descriptors for ports, simulation modes, property capabilities,
   parameters, SI dimensions, defaults, and open/closed bounds. The compiler rejects missing,
   unknown, dimensionally incompatible, and out-of-range component parameters before equation

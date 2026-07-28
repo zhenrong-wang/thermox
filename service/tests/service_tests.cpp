@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 18,
+        response.components.size() == 19,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -111,6 +111,21 @@ void test_catalog_discovery() {
                     return port.maximum_connections == 1;
                 }),
         "catalog must expose ports, cardinality, and parameter forms");
+    const auto mapped_compressor = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "compressor.fluid.performance_map";
+        });
+    require(
+        mapped_compressor != response.components.end() &&
+            mapped_compressor->artifacts.size() == 1 &&
+            mapped_compressor->artifacts.front().role ==
+                "performance_map" &&
+            mapped_compressor->artifacts.front().artifact_type ==
+                thermox::platform::performance_map_artifact_type,
+        "catalog must expose mapped compressor artifact contract");
     const auto storage = std::find_if(
         response.components.begin(),
         response.components.end(),

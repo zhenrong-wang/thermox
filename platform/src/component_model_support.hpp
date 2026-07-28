@@ -19,6 +19,16 @@ inline double required_parameter(
     return it->second.value_si;
 }
 
+inline double parameter_or(
+    const ComponentDefinition& component,
+    const std::string& name,
+    double default_value) {
+    const auto it = component.parameters.find(name);
+    return it == component.parameters.end()
+        ? default_value
+        : it->second.value_si;
+}
+
 inline std::size_t require_port_variable(
     const ComponentCompileContext& context,
     const std::string& key) {

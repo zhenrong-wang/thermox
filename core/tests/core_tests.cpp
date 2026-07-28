@@ -187,6 +187,47 @@ void test_equation_builder_propagates_recoverable_evaluations() {
     require_near(solved.x.at(0), 1.5, 1e-8, "checked equation solves normally");
 }
 
+void test_checked_sparse_equation_preserves_status_and_derivative() {
+    thermox::EquationSystemBuilder builder;
+    const auto x = builder.add_variable(
+        "x", 2.0, 1.0, 0.0, 4.0);
+    builder.add_checked_sparse_equation(
+        "checked_analytic",
+        [x](const std::vector<double>& values,
+            double& residual) {
+            if (values.at(x) <= 0.0) {
+                return thermox::EvaluationStatus::recoverable(
+                    "outside positive domain");
+            }
+            residual = values.at(x) * values.at(x) - 4.0;
+            return thermox::EvaluationStatus::success();
+        },
+        {x},
+        [x](const std::vector<double>& values,
+            std::vector<thermox::EquationPartial>& partials) {
+            partials.push_back({x, 2.0 * values.at(x)});
+            return values.at(x) * values.at(x) - 4.0;
+        });
+    const auto problem = builder.build();
+    require(
+        static_cast<bool>(problem.checked_residual),
+        "checked sparse equation installs status-aware residual");
+    require(
+        problem.sparse_jacobian_pattern.has_value() &&
+            static_cast<bool>(problem.sparse_jacobian_values),
+        "checked sparse equation retains fixed analytic pattern");
+    std::vector<double> residual(1, 0.0);
+    require(
+        problem.checked_residual({-1.0}, residual).code ==
+            thermox::EvaluationStatusCode::recoverable_failure,
+        "checked sparse equation preserves recoverable status");
+    std::vector<double> values(1, 0.0);
+    problem.sparse_jacobian_values({2.0}, values);
+    require_near(
+        values.at(0), 4.0, 0.0,
+        "checked sparse equation exposes analytic derivative");
+}
+
 void test_newton_solver_uses_analytic_jacobian() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"x", "y"};
@@ -735,6 +776,7 @@ int main() {
         test_variable_registry();
         test_newton_solver();
         test_equation_builder_propagates_recoverable_evaluations();
+        test_checked_sparse_equation_preserves_status_and_derivative();
         test_newton_solver_uses_analytic_jacobian();
         test_newton_solver_uses_sparse_jacobian_and_solver();
         test_newton_solver_converts_dense_jacobian_for_sparse_solver();

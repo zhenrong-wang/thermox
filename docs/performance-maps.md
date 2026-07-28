@@ -66,12 +66,31 @@ ratio and efficiency as outputs. Those semantics belong to the compressor compon
 descriptor, not to `PerformanceMap` itself. Turbines, pumps, fans, heat-exchanger correlations, and
 other engineering components can use the same map kernel.
 
+The registered `compressor.fluid.performance_map` model formalizes the following map contract:
+
+- primary axis: `corrected_mass_flow`, dimension `mass_flow`;
+- family axis: `corrected_speed`, dimension `angular_speed`;
+- outputs: `pressure_ratio` and `isentropic_efficiency`, both dimensionless.
+
+Using component-instance reference pressure \(p_\mathrm{ref}\) and temperature
+\(T_\mathrm{ref}\), the component evaluates:
+
+```text
+corrected_mass_flow = m_dot * sqrt(T_in / T_ref) / (p_in / p_ref)
+corrected_speed     = omega / sqrt(T_in / T_ref)
+```
+
+The selected map pressure ratio and efficiency close outlet pressure, isentropic enthalpy change,
+and shaft power. Map-domain failures are recoverable model evaluations, allowing the nonlinear
+solver to reject invalid trial states. The pressure-ratio row uses map derivatives and local
+numerically evaluated property-transformation derivatives in sparse Jacobian assembly.
+
 ## Next integration slice
 
 1. Define a versioned map-artifact schema and checksum identity. ✅
 2. Register immutable map artifacts in the application runtime and resolve generic component
    artifact bindings during compilation. ✅
-3. Add a map-based compressor component that lowers map outputs and analytic derivatives into
-   checked graph equations.
+3. Add a map-based compressor component that lowers map outputs and derivatives into checked graph
+   equations. ✅
 4. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.

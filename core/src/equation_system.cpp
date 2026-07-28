@@ -81,6 +81,60 @@ std::size_t EquationSystemBuilder::add_checked_equation(
     return index;
 }
 
+std::size_t EquationSystemBuilder::add_checked_sparse_equation(
+    std::string name,
+    CheckedEquationCallback evaluate,
+    SparseEquationCallback assemble,
+    double scale) {
+    if (!evaluate || !assemble) {
+        throw std::invalid_argument(
+            "checked sparse equation callbacks must not be empty");
+    }
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    equations_.push_back(Equation{
+        index, std::move(name), scale, {}, std::move(evaluate),
+        std::move(assemble), {}});
+    return index;
+}
+
+std::size_t EquationSystemBuilder::add_checked_sparse_equation(
+    std::string name,
+    CheckedEquationCallback evaluate,
+    std::vector<std::size_t> sparsity_variables,
+    SparseEquationCallback assemble,
+    double scale) {
+    if (!evaluate || !assemble) {
+        throw std::invalid_argument(
+            "checked sparse equation callbacks must not be empty");
+    }
+    const std::size_t variable_count =
+        registry_.variables().size();
+    std::sort(
+        sparsity_variables.begin(), sparsity_variables.end());
+    sparsity_variables.erase(
+        std::unique(
+            sparsity_variables.begin(),
+            sparsity_variables.end()),
+        sparsity_variables.end());
+    for (const std::size_t variable : sparsity_variables) {
+        if (variable >= variable_count) {
+            throw std::invalid_argument(
+                "checked sparse equation variable index out of range");
+        }
+    }
+    if (sparsity_variables.empty()) {
+        throw std::invalid_argument(
+            "checked sparse equation pattern must not be empty");
+    }
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    equations_.push_back(Equation{
+        index, std::move(name), scale, {}, std::move(evaluate),
+        std::move(assemble), std::move(sparsity_variables)});
+    return index;
+}
+
 std::size_t EquationSystemBuilder::add_sparse_equation(std::string name,
                                                        SparseEquationCallback assemble,
                                                        double scale) {

@@ -1,6 +1,8 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -11,6 +13,8 @@ namespace thermox::platform {
 namespace {
 
 using component_model_support::property_failure;
+using component_model_support::parameter_or;
+using component_model_support::require_performance_map;
 using component_model_support::require_port_variable;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
@@ -34,6 +38,195 @@ ComponentModelDescriptor make_descriptor(
         physics::PropertyCapability::state_ph,
         physics::PropertyCapability::state_ps};
     return out;
+}
+
+ComponentModelDescriptor make_map_compressor_descriptor() {
+    auto out = make_descriptor(
+        "compressor.fluid.performance_map", "in");
+    out.version = "1.0.0";
+    out.parameters = {
+        {"reference_pressure", "pressure", false, 101325.0,
+         0.0, std::numeric_limits<double>::infinity(), false,
+         true},
+        {"reference_temperature", "temperature", false, 288.15,
+         0.0, std::numeric_limits<double>::infinity(), false,
+         true},
+    };
+    out.artifacts = {{
+        "performance_map",
+        performance_map_artifact_type,
+        true,
+    }};
+    return out;
+}
+
+struct CompressorMapPoint {
+    double pressure_ratio{0.0};
+    double efficiency{0.0};
+    double inlet_temperature{0.0};
+    double corrected_mass_flow{0.0};
+    double corrected_speed{0.0};
+    double pressure_ratio_flow_derivative{0.0};
+    double pressure_ratio_speed_derivative{0.0};
+};
+
+struct CompressorMapContract {
+    std::size_t pressure_ratio{0};
+    std::size_t efficiency{0};
+};
+
+CompressorMapContract validate_compressor_map(
+    const PerformanceMapArtifact& artifact) {
+    const auto& map = *artifact.map;
+    if (map.primary_variable().name !=
+            "corrected_mass_flow" ||
+        map.primary_variable().dimension != "mass_flow") {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' compressor primary axis must be "
+            "'corrected_mass_flow' with dimension 'mass_flow'");
+    }
+    if (map.family_variable().name != "corrected_speed" ||
+        map.family_variable().dimension != "angular_speed") {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' compressor family axis must be "
+            "'corrected_speed' with dimension 'angular_speed'");
+    }
+    CompressorMapContract result;
+    bool found_pressure_ratio = false;
+    bool found_efficiency = false;
+    const auto& outputs = map.output_variables();
+    for (std::size_t index = 0; index < outputs.size();
+         ++index) {
+        if (outputs[index].name == "pressure_ratio" &&
+            outputs[index].dimension == "dimensionless") {
+            result.pressure_ratio = index;
+            found_pressure_ratio = true;
+        }
+        if (outputs[index].name ==
+                "isentropic_efficiency" &&
+            outputs[index].dimension == "dimensionless") {
+            result.efficiency = index;
+            found_efficiency = true;
+        }
+    }
+    if (!found_pressure_ratio || !found_efficiency) {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' compressor outputs must include dimensionless "
+            "'pressure_ratio' and 'isentropic_efficiency'");
+    }
+    return result;
+}
+
+EvaluationStatus evaluate_compressor_map(
+    const PerformanceMapArtifact& artifact,
+    const CompressorMapContract& contract,
+    const physics::PropertyPackage& properties,
+    double mass_flow,
+    double pressure,
+    double enthalpy,
+    double angular_speed,
+    double reference_pressure,
+    double reference_temperature,
+    CompressorMapPoint& point) {
+    const auto inlet = properties.state_ph(
+        pressure, enthalpy);
+    if (!inlet.ok()) {
+        return property_failure(inlet);
+    }
+    const double theta =
+        inlet.state.temperature_k / reference_temperature;
+    const double delta = pressure / reference_pressure;
+    if (!std::isfinite(theta) || !std::isfinite(delta) ||
+        theta <= 0.0 || delta <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "compressor corrected-state ratios must be "
+            "finite and positive");
+    }
+    const double root_theta = std::sqrt(theta);
+    const double corrected_mass_flow =
+        mass_flow * root_theta / delta;
+    const double corrected_speed =
+        angular_speed / root_theta;
+    try {
+        const auto evaluated = artifact.map->evaluate(
+            corrected_mass_flow, corrected_speed);
+        point.pressure_ratio =
+            evaluated.outputs.at(contract.pressure_ratio);
+        point.efficiency =
+            evaluated.outputs.at(contract.efficiency);
+        point.pressure_ratio_flow_derivative =
+            evaluated.primary_derivatives.at(
+                contract.pressure_ratio);
+        point.pressure_ratio_speed_derivative =
+            evaluated.family_derivatives.at(
+                contract.pressure_ratio);
+    } catch (const MapDomainError& error) {
+        return EvaluationStatus::recoverable(error.what());
+    }
+    if (!std::isfinite(point.pressure_ratio) ||
+        point.pressure_ratio <= 1.0) {
+        return EvaluationStatus::recoverable(
+            "compressor map pressure ratio must be finite and "
+            "greater than one");
+    }
+    if (!std::isfinite(point.efficiency) ||
+        point.efficiency <= 0.0 ||
+        point.efficiency > 1.0) {
+        return EvaluationStatus::recoverable(
+            "compressor map isentropic efficiency must be in "
+            "(0, 1]");
+    }
+    point.inlet_temperature = inlet.state.temperature_k;
+    point.corrected_mass_flow = corrected_mass_flow;
+    point.corrected_speed = corrected_speed;
+    return EvaluationStatus::success();
+}
+
+std::pair<double, double> inlet_temperature_derivatives(
+    const physics::PropertyPackage& properties,
+    double pressure,
+    double enthalpy,
+    double base_temperature) {
+    const auto derivative =
+        [&](double coordinate, bool perturb_pressure) {
+            const double step =
+                std::max(std::abs(coordinate) * 1.0e-6, 1.0);
+            const auto lower = perturb_pressure
+                ? properties.state_ph(
+                      pressure - step, enthalpy)
+                : properties.state_ph(
+                      pressure, enthalpy - step);
+            const auto upper = perturb_pressure
+                ? properties.state_ph(
+                      pressure + step, enthalpy)
+                : properties.state_ph(
+                      pressure, enthalpy + step);
+            if (lower.ok() && upper.ok()) {
+                return (upper.state.temperature_k -
+                        lower.state.temperature_k) /
+                    (2.0 * step);
+            }
+            if (upper.ok()) {
+                return (upper.state.temperature_k -
+                        base_temperature) /
+                    step;
+            }
+            if (lower.ok()) {
+                return (base_temperature -
+                        lower.state.temperature_k) /
+                    step;
+            }
+            throw std::runtime_error(
+                "unable to evaluate compressor inlet "
+                "temperature derivatives");
+        };
+    return {
+        derivative(pressure, true),
+        derivative(enthalpy, false),
+    };
 }
 
 void add_turbomachinery_equations(
@@ -156,6 +349,221 @@ private:
     bool compressor_{false};
 };
 
+class MapCompressorModel final : public ComponentModel {
+public:
+    MapCompressorModel()
+        : descriptor_(make_map_compressor_descriptor()) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto artifact =
+            require_performance_map(
+                context, "performance_map");
+        const auto contract =
+            validate_compressor_map(*artifact);
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const double reference_pressure = parameter_or(
+            context.component, "reference_pressure", 101325.0);
+        const double reference_temperature = parameter_or(
+            context.component, "reference_temperature", 288.15);
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto shaft_w =
+            require_port_variable(context, "shaft.W_dot");
+        const auto shaft_omega =
+            require_port_variable(context, "shaft.omega");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}},
+            0.0, 100.0);
+
+        const auto map_point =
+            [artifact, contract, properties, inlet_m, inlet_p,
+             inlet_h, shaft_omega, reference_pressure,
+             reference_temperature](
+                const std::vector<double>& x,
+                CompressorMapPoint& point) {
+                return evaluate_compressor_map(
+                    *artifact, contract, *properties,
+                    x.at(inlet_m), x.at(inlet_p),
+                    x.at(inlet_h), x.at(shaft_omega),
+                    reference_pressure, reference_temperature,
+                    point);
+            };
+
+        system.add_checked_sparse_equation(
+            prefix + "map_pressure_ratio",
+            [map_point, inlet_p, outlet_p](
+                const std::vector<double>& x,
+                double& residual) {
+                CompressorMapPoint point;
+                const auto status = map_point(x, point);
+                if (!status.ok()) return status;
+                residual = x.at(outlet_p) -
+                    x.at(inlet_p) * point.pressure_ratio;
+                return EvaluationStatus::success();
+            },
+            {inlet_m, inlet_p, inlet_h, outlet_p, shaft_omega},
+            [map_point, properties, inlet_m, inlet_p, inlet_h,
+             outlet_p, shaft_omega, reference_pressure,
+             reference_temperature](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                CompressorMapPoint point;
+                const auto status = map_point(x, point);
+                if (!status.ok()) {
+                    throw std::runtime_error(status.message);
+                }
+                const auto [temperature_pressure_derivative,
+                            temperature_enthalpy_derivative] =
+                    inlet_temperature_derivatives(
+                        *properties, x.at(inlet_p),
+                        x.at(inlet_h),
+                        point.inlet_temperature);
+                const double flow_mass_derivative =
+                    std::sqrt(
+                        point.inlet_temperature /
+                        reference_temperature) /
+                    (x.at(inlet_p) / reference_pressure);
+                const double flow_temperature_factor =
+                    point.corrected_mass_flow /
+                    (2.0 * point.inlet_temperature);
+                const double speed_temperature_factor =
+                    -point.corrected_speed /
+                    (2.0 * point.inlet_temperature);
+                const double flow_pressure_derivative =
+                    -point.corrected_mass_flow /
+                        x.at(inlet_p) +
+                    flow_temperature_factor *
+                        temperature_pressure_derivative;
+                const double flow_enthalpy_derivative =
+                    flow_temperature_factor *
+                    temperature_enthalpy_derivative;
+                const double speed_pressure_derivative =
+                    speed_temperature_factor *
+                    temperature_pressure_derivative;
+                const double speed_enthalpy_derivative =
+                    speed_temperature_factor *
+                    temperature_enthalpy_derivative;
+                const double speed_omega_derivative =
+                    std::sqrt(
+                        reference_temperature /
+                        point.inlet_temperature);
+                const auto pressure_ratio_derivative =
+                    [&](double flow_derivative,
+                        double speed_derivative) {
+                        return
+                            point
+                                .pressure_ratio_flow_derivative *
+                                flow_derivative +
+                            point
+                                .pressure_ratio_speed_derivative *
+                                speed_derivative;
+                    };
+                const double inlet_pressure = x.at(inlet_p);
+                jacobian.push_back({
+                    inlet_m,
+                    -inlet_pressure *
+                        pressure_ratio_derivative(
+                            flow_mass_derivative, 0.0)});
+                jacobian.push_back({
+                    inlet_p,
+                    -point.pressure_ratio -
+                        inlet_pressure *
+                            pressure_ratio_derivative(
+                                flow_pressure_derivative,
+                                speed_pressure_derivative)});
+                jacobian.push_back({
+                    inlet_h,
+                    -inlet_pressure *
+                        pressure_ratio_derivative(
+                            flow_enthalpy_derivative,
+                            speed_enthalpy_derivative)});
+                jacobian.push_back({outlet_p, 1.0});
+                jacobian.push_back({
+                    shaft_omega,
+                    -inlet_pressure *
+                        pressure_ratio_derivative(
+                            0.0, speed_omega_derivative)});
+                return x.at(outlet_p) -
+                    inlet_pressure * point.pressure_ratio;
+            },
+            1.0e6);
+        system.add_checked_equation(
+            prefix + "map_isentropic_efficiency",
+            [map_point, properties, inlet_p, inlet_h, outlet_p,
+             outlet_h](const std::vector<double>& x,
+                       double& residual) {
+                CompressorMapPoint point;
+                const auto status = map_point(x, point);
+                if (!status.ok()) return status;
+                const auto inlet = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h));
+                if (!inlet.ok()) return property_failure(inlet);
+                const auto isentropic = properties->state_ps(
+                    x.at(outlet_p),
+                    inlet.state.entropy_j_kg_k);
+                if (!isentropic.ok()) {
+                    return property_failure(isentropic);
+                }
+                residual =
+                    x.at(outlet_h) - x.at(inlet_h) -
+                    (isentropic.state.enthalpy_j_kg -
+                     x.at(inlet_h)) /
+                        point.efficiency;
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+        system.add_sparse_equation(
+            prefix + "shaft_power",
+            [inlet_m, inlet_h, outlet_h, shaft_w](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double enthalpy_change =
+                    x.at(outlet_h) - x.at(inlet_h);
+                jacobian.push_back({shaft_w, 1.0});
+                jacobian.push_back(
+                    {inlet_m, -enthalpy_change});
+                jacobian.push_back(
+                    {inlet_h, x.at(inlet_m)});
+                jacobian.push_back(
+                    {outlet_h, -x.at(inlet_m)});
+                return x.at(shaft_w) -
+                    x.at(inlet_m) * enthalpy_change;
+            },
+            1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_turbomachinery_component_models(
@@ -175,6 +583,8 @@ void register_turbomachinery_component_models(
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "turbine.fluid.isentropic_efficiency", false));
+    registry.register_model(
+        std::make_shared<MapCompressorModel>());
 }
 
 }  // namespace thermox::platform

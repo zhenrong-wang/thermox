@@ -232,7 +232,8 @@ Work items:
    - generic dimensioned, non-rectangular map interpolation kernel; ✅
    - explicit reject/clamp/linear extrapolation policies and derivatives; ✅
    - versioned map artifacts, generic component artifact bindings, and runtime registry; ✅
-   - map-based compressor/turbine graph components;
+   - map-based compressor graph component; ✅
+   - map-based turbine graph component;
 3. Add steam turbine stage/extraction support.
 4. Add design/off-design case handling.
 5. Add heat balance report generation.
