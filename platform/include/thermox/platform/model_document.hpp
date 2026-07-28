@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,34 @@ struct CaseDefinition {
     std::map<std::string, ScalarValue> solver_options;
 };
 
+struct CalibrationParameterDefinition {
+    std::string id;
+    std::string label;
+    std::string scope;
+    std::vector<std::string> targets;
+    std::vector<std::string> case_ids;
+    std::optional<ScalarValue> lower_bound;
+    std::optional<ScalarValue> upper_bound;
+    std::optional<ScalarValue> prior_mean;
+    std::optional<ScalarValue> prior_sigma;
+};
+
+struct CalibrationObservationDefinition {
+    std::string id;
+    std::string label;
+    std::string case_id;
+    std::string target;
+    ScalarValue measured;
+    ScalarValue sigma;
+};
+
+struct CalibrationDefinition {
+    std::string id;
+    std::string label;
+    std::vector<CalibrationParameterDefinition> parameters;
+    std::vector<CalibrationObservationDefinition> observations;
+};
+
 struct ModelDocument {
     std::string schema_version;
     std::string model_id;
@@ -67,6 +96,7 @@ struct ModelDocument {
     std::vector<ComponentDefinition> components;
     std::vector<ConnectionDefinition> connections;
     std::vector<CaseDefinition> cases;
+    std::vector<CalibrationDefinition> calibrations;
 };
 
 ModelDocument load_model_document(const std::string& path);

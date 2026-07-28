@@ -21,6 +21,7 @@ isolated example models.
 - [Graph Platform Architecture Review](docs/graph-platform-review.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
+- [Calibration Architecture](docs/calibration-architecture.md)
 
 ## Current C++ numeric core
 
@@ -77,6 +78,9 @@ Implemented in this sprint:
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
   directions, and connection cardinality come from the active runtime catalog.
+- Calibration campaigns select explicit component/connection parameter targets without changing
+  their physical ownership, and carry component/system sharing scope, cases, bounds, priors,
+  measured graph observations, and uncertainties through canonical service serialization.
 - Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
   consistent linear combinations of retained equations; reduced row names remain available as
   graph diagnostics.

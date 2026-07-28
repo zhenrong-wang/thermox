@@ -218,6 +218,31 @@ Decision:
 
 See `docs/persistence-architecture.md`.
 
+## Calibration and validation foundation
+
+Goal: support component-owned and system-shared calibration without hiding physical ownership or
+coupling estimation to component equations.
+
+Delivered:
+
+1. Top-level calibration campaigns remain separate from model topology and operating cases. ✅
+2. Typed adjustable parameters reference explicit component/connection parameter owners. ✅
+3. Component-local and system-shared scopes coexist, including multi-case sharing. ✅
+4. SI-normalized bounds, priors, measured observations, and uncertainty validation. ✅
+5. Canonical service serialization preserves calibration contracts. ✅
+
+Next:
+
+1. Resolve observation targets against compiled result variables.
+2. Add an estimation service command that evaluates bounded multi-case objectives through the
+   ordinary simulation workflow.
+3. Report fitted parameters, covariance/identifiability diagnostics, per-observation residuals,
+   and complete provenance.
+4. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
+   the independent part-load cases.
+
+See `docs/calibration-architecture.md`.
+
 ## Phase 2 — Combined-cycle prototype
 
 Goal: produce a credible single-pressure combined-cycle heat balance.

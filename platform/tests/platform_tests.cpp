@@ -534,6 +534,141 @@ void test_generic_model_document_rejects_unknown_medium() {
     require_throws([&]() { thermox::platform::load_model_document(path); }, "unknown medium referenced");
 }
 
+void test_model_document_supports_component_and_system_calibration() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "calibrated_plant",
+    "media": [],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {
+          "eta_is": 0.86
+        }
+      },
+      {
+        "id": "shaft_train",
+        "kind": "shaft.train.two_load",
+        "parameters": {
+          "fixed_loss": {"value": 2.0, "unit": "MW"}
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {"id": "baseline", "mode": "steady_state_design"},
+    {"id": "part_load", "mode": "steady_state_off_design"}
+  ],
+  "calibrations": [
+    {
+      "id": "acceptance_fit",
+      "parameters": [
+        {
+          "id": "compressor_eta",
+          "scope": "component",
+          "targets": [
+            "components.compressor.parameters.eta_is"
+          ],
+          "bounds": {"lower": 0.75, "upper": 0.95},
+          "prior": {"mean": 0.86, "sigma": 0.02}
+        },
+        {
+          "id": "plant_mechanical_loss",
+          "scope": "system",
+          "targets": [
+            "components.shaft_train.parameters.fixed_loss"
+          ],
+          "cases": ["baseline", "part_load"],
+          "bounds": {
+            "lower": {"value": 0.0, "unit": "MW"},
+            "upper": {"value": 8.0, "unit": "MW"}
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "baseline_net_power",
+          "case": "baseline",
+          "target": "generator.electrical.P",
+          "measured": {"value": 257.5, "unit": "MW"},
+          "sigma": {"value": 1.0, "unit": "MW"}
+        }
+      ]
+    }
+  ]
+})json");
+
+    require(
+        document.calibrations.size() == 1,
+        "one calibration definition should load");
+    const auto& calibration = document.calibrations.front();
+    require(
+        calibration.parameters.size() == 2,
+        "component and system calibration parameters should coexist");
+    require(
+        calibration.parameters.at(0).scope == "component" &&
+            calibration.parameters.at(0).targets.front() ==
+                "components.compressor.parameters.eta_is",
+        "component calibration should retain physical target ownership");
+    require(
+        calibration.parameters.at(1).scope == "system" &&
+            calibration.parameters.at(1).case_ids.size() == 2,
+        "system calibration should support sharing across cases");
+    require_near(
+        calibration.parameters.at(1).upper_bound->value_si,
+        8.0e6, 1.0e-9,
+        "calibration bounds should normalize to SI");
+    require_near(
+        calibration.observations.front().sigma.value_si,
+        1.0e6, 1.0e-9,
+        "observation uncertainty should normalize to SI");
+}
+
+void test_model_document_rejects_invalid_calibration_target() {
+    require_throws(
+        []() {
+            (void)thermox::platform::parse_model_document_text(
+                R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "bad_calibration",
+    "media": [],
+    "components": [],
+    "connections": []
+  },
+  "cases": [
+    {"id": "baseline", "mode": "steady_state_design"}
+  ],
+  "calibrations": [
+    {
+      "id": "fit",
+      "parameters": [
+        {
+          "id": "hidden_correction",
+          "scope": "system",
+          "targets": ["system.parameters.magic_factor"]
+        }
+      ],
+      "observations": [
+        {
+          "id": "power",
+          "case": "baseline",
+          "target": "grid.P",
+          "measured": {"value": 1.0, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
+    }
+  ]
+})json");
+        },
+        "calibration target must use");
+}
+
 void test_generic_model_document_rejects_invalid_topology() {
     const std::string path = write_temp_model(
         "generic_bad_topology",
@@ -3619,6 +3754,8 @@ int main() {
     try {
         test_component_artifact_bindings_resolve_at_compile_time();
         test_generic_model_document_loads_components_connections_and_cases();
+        test_model_document_supports_component_and_system_calibration();
+        test_model_document_rejects_invalid_calibration_target();
         test_generic_model_document_rejects_unknown_medium();
         test_generic_model_document_rejects_invalid_topology();
         test_generic_model_document_rejects_unsupported_units();

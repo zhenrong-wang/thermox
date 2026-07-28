@@ -63,5 +63,46 @@
         }
       }
     }
+  ],
+  "calibrations": [
+    {
+      "id": "acceptance_fit",
+      "label": "Compressor acceptance-test calibration",
+      "parameters": [
+        {
+          "id": "compressor_efficiency",
+          "scope": "component",
+          "targets": [
+            "components.compressor.parameters.eta_is"
+          ],
+          "cases": [
+            "design"
+          ],
+          "bounds": {
+            "lower": 0.75,
+            "upper": 0.95
+          },
+          "prior": {
+            "mean": 0.86,
+            "sigma": 0.02
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "shaft_power",
+          "case": "design",
+          "target": "compressor.shaft.W_dot",
+          "measured": {
+            "value": 35.0,
+            "unit": "MW"
+          },
+          "sigma": {
+            "value": 0.5,
+            "unit": "MW"
+          }
+        }
+      ]
+    }
   ]
 }

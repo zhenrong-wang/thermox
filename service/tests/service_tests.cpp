@@ -217,6 +217,13 @@ void test_validation_and_canonicalization() {
         response.canonical_model_json.find("thermox.model/v2") !=
             std::string::npos,
         "canonical model must retain its schema");
+    require(
+        response.canonical_model_json.find("\"calibrations\"") !=
+                std::string::npos &&
+            response.canonical_model_json.find(
+                "components.compressor.parameters.eta_is") !=
+                std::string::npos,
+        "canonical model must retain calibration contracts");
 
     thermox::service::ValidateModelRequest round_trip;
     round_trip.model_json = response.canonical_model_json;

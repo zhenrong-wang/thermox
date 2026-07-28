@@ -793,6 +793,345 @@ CaseDefinition parse_case(const JsonValue& value) {
     return c;
 }
 
+std::vector<std::string> parse_nonempty_string_array(
+    const JsonValue& object,
+    const std::string& key,
+    const std::string& field_name,
+    bool required) {
+    const JsonValue* array = find_member(object, key);
+    if (array == nullptr) {
+        if (required) {
+            throw std::invalid_argument(
+                "missing required field: " + key);
+        }
+        return {};
+    }
+    if (array->type != JsonValue::Type::Array) {
+        throw std::invalid_argument(
+            "field '" + field_name + "' must be an array");
+    }
+    std::vector<std::string> result;
+    std::set<std::string> unique;
+    for (const auto& entry : array->array) {
+        const auto text = require_string_value(entry, field_name);
+        if (text.empty()) {
+            throw std::invalid_argument(
+                "field '" + field_name +
+                "' must contain non-empty strings");
+        }
+        if (!unique.insert(text).second) {
+            throw std::invalid_argument(
+                "field '" + field_name +
+                "' contains duplicate value: " + text);
+        }
+        result.push_back(text);
+    }
+    if (required && result.empty()) {
+        throw std::invalid_argument(
+            "field '" + field_name + "' must not be empty");
+    }
+    return result;
+}
+
+const ScalarValue& calibration_target_value(
+    const ModelDocument& document,
+    const std::string& target) {
+    constexpr std::string_view component_prefix{"components."};
+    constexpr std::string_view connection_prefix{"connections."};
+    constexpr std::string_view parameter_marker{".parameters."};
+    const auto resolve = [&](std::string_view prefix,
+                             const auto& owners,
+                             const char* owner_name)
+        -> const ScalarValue& {
+        const std::string_view path{target};
+        const auto marker = path.find(
+            parameter_marker, prefix.size());
+        if (!path.starts_with(prefix) ||
+            marker == std::string_view::npos ||
+            marker == prefix.size() ||
+            marker + parameter_marker.size() >= path.size()) {
+            throw std::invalid_argument(
+                "calibration target must use components.<id>.parameters.<name> "
+                "or connections.<id>.parameters.<name>: " + target);
+        }
+        const std::string owner_id{
+            path.substr(prefix.size(), marker - prefix.size())};
+        const std::string parameter_name{
+            path.substr(marker + parameter_marker.size())};
+        for (const auto& owner : owners) {
+            if (owner.id != owner_id) {
+                continue;
+            }
+            const auto parameter =
+                owner.parameters.find(parameter_name);
+            if (parameter == owner.parameters.end()) {
+                throw std::invalid_argument(
+                    "calibration target references unknown " +
+                    std::string(owner_name) + " parameter: " +
+                    target);
+            }
+            return parameter->second;
+        }
+        throw std::invalid_argument(
+            "calibration target references unknown " +
+            std::string(owner_name) + ": " + target);
+    };
+
+    if (std::string_view{target}.starts_with(component_prefix)) {
+        return resolve(
+            component_prefix, document.components, "component");
+    }
+    if (std::string_view{target}.starts_with(connection_prefix)) {
+        return resolve(
+            connection_prefix, document.connections, "connection");
+    }
+    throw std::invalid_argument(
+        "calibration target must use components.<id>.parameters.<name> "
+        "or connections.<id>.parameters.<name>: " + target);
+}
+
+CalibrationParameterDefinition parse_calibration_parameter(
+    const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "calibration parameters entries must be objects");
+    }
+    CalibrationParameterDefinition parameter;
+    parameter.id = require_string(value, "id");
+    parameter.label = optional_string(value, "label");
+    parameter.scope = require_string(value, "scope");
+    if (parameter.scope != "component" &&
+        parameter.scope != "system") {
+        throw std::invalid_argument(
+            "calibration parameter '" + parameter.id +
+            "' scope must be 'component' or 'system'");
+    }
+    parameter.targets = parse_nonempty_string_array(
+        value, "targets",
+        "calibration parameter '" + parameter.id + "'.targets",
+        true);
+    parameter.case_ids = parse_nonempty_string_array(
+        value, "cases",
+        "calibration parameter '" + parameter.id + "'.cases",
+        false);
+    if (find_member(value, "cases") != nullptr &&
+        parameter.case_ids.empty()) {
+        throw std::invalid_argument(
+            "calibration parameter '" + parameter.id +
+            "'.cases must not be empty when supplied");
+    }
+    if (parameter.scope == "component" &&
+        parameter.targets.size() != 1) {
+        throw std::invalid_argument(
+            "component-scoped calibration parameter '" +
+            parameter.id + "' must have exactly one target");
+    }
+    if (parameter.scope == "component" &&
+        !std::string_view{parameter.targets.front()}.starts_with(
+            "components.")) {
+        throw std::invalid_argument(
+            "component-scoped calibration parameter '" +
+            parameter.id + "' must target a component parameter");
+    }
+    if (const auto* bounds =
+            optional_object_member(value, "bounds")) {
+        if (const auto* lower = find_member(*bounds, "lower")) {
+            parameter.lower_bound = parse_scalar_value(
+                *lower, "calibration parameter '" +
+                            parameter.id + "'.bounds.lower");
+        }
+        if (const auto* upper = find_member(*bounds, "upper")) {
+            parameter.upper_bound = parse_scalar_value(
+                *upper, "calibration parameter '" +
+                            parameter.id + "'.bounds.upper");
+        }
+        if (!parameter.lower_bound.has_value() &&
+            !parameter.upper_bound.has_value()) {
+            throw std::invalid_argument(
+                "calibration parameter '" + parameter.id +
+                "'.bounds must declare lower or upper");
+        }
+    }
+    if (const auto* prior =
+            optional_object_member(value, "prior")) {
+        parameter.prior_mean = parse_scalar_value(
+            require_member(*prior, "mean"),
+            "calibration parameter '" + parameter.id +
+                "'.prior.mean");
+        parameter.prior_sigma = parse_scalar_value(
+            require_member(*prior, "sigma"),
+            "calibration parameter '" + parameter.id +
+                "'.prior.sigma");
+    }
+    return parameter;
+}
+
+CalibrationObservationDefinition parse_calibration_observation(
+    const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "calibration observations entries must be objects");
+    }
+    CalibrationObservationDefinition observation;
+    observation.id = require_string(value, "id");
+    observation.label = optional_string(value, "label");
+    observation.case_id = require_string(value, "case");
+    observation.target = require_string(value, "target");
+    observation.measured = parse_scalar_value(
+        require_member(value, "measured"),
+        "calibration observation '" + observation.id +
+            "'.measured");
+    observation.sigma = parse_scalar_value(
+        require_member(value, "sigma"),
+        "calibration observation '" + observation.id +
+            "'.sigma");
+    if (observation.sigma.value_si <= 0.0) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' sigma must be positive");
+    }
+    if (observation.sigma.dimension !=
+        observation.measured.dimension) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' measured value and sigma must have the same dimension");
+    }
+    return observation;
+}
+
+CalibrationDefinition parse_calibration(const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "calibrations entries must be objects");
+    }
+    CalibrationDefinition calibration;
+    calibration.id = require_string(value, "id");
+    calibration.label = optional_string(value, "label");
+    std::set<std::string> parameter_ids;
+    for (const auto& entry :
+         require_array_member(value, "parameters").array) {
+        auto parameter = parse_calibration_parameter(entry);
+        require_unique_id(
+            parameter.id, parameter_ids,
+            "calibration parameter");
+        calibration.parameters.push_back(std::move(parameter));
+    }
+    std::set<std::string> observation_ids;
+    for (const auto& entry :
+         require_array_member(value, "observations").array) {
+        auto observation =
+            parse_calibration_observation(entry);
+        require_unique_id(
+            observation.id, observation_ids,
+            "calibration observation");
+        calibration.observations.push_back(
+            std::move(observation));
+    }
+    if (calibration.parameters.empty()) {
+        throw std::invalid_argument(
+            "calibration '" + calibration.id +
+            "' must declare at least one parameter");
+    }
+    if (calibration.observations.empty()) {
+        throw std::invalid_argument(
+            "calibration '" + calibration.id +
+            "' must declare at least one observation");
+    }
+    return calibration;
+}
+
+void validate_calibrations(ModelDocument& document) {
+    std::set<std::string> case_ids;
+    for (const auto& simulation_case : document.cases) {
+        case_ids.insert(simulation_case.id);
+    }
+    for (auto& calibration : document.calibrations) {
+        for (auto& parameter : calibration.parameters) {
+            const ScalarValue* reference = nullptr;
+            for (const auto& target : parameter.targets) {
+                const auto& value =
+                    calibration_target_value(document, target);
+                if (reference != nullptr &&
+                    reference->dimension != value.dimension) {
+                    throw std::invalid_argument(
+                        "calibration parameter '" + parameter.id +
+                        "' targets must have the same dimension");
+                }
+                if (reference != nullptr &&
+                    reference->value_si != value.value_si) {
+                    throw std::invalid_argument(
+                        "shared calibration parameter '" +
+                        parameter.id +
+                        "' targets must have the same initial value");
+                }
+                reference = &value;
+            }
+            for (const auto& case_id : parameter.case_ids) {
+                if (!case_ids.contains(case_id)) {
+                    throw std::invalid_argument(
+                        "calibration parameter '" +
+                        parameter.id +
+                        "' references unknown case: " + case_id);
+                }
+            }
+            const auto validate_quantity =
+                [&](const std::optional<ScalarValue>& quantity,
+                    const char* name) {
+                    if (quantity.has_value() &&
+                        quantity->dimension !=
+                            reference->dimension) {
+                        throw std::invalid_argument(
+                            "calibration parameter '" +
+                            parameter.id + "' " + name +
+                            " dimension does not match its targets");
+                    }
+                };
+            validate_quantity(parameter.lower_bound, "lower bound");
+            validate_quantity(parameter.upper_bound, "upper bound");
+            validate_quantity(parameter.prior_mean, "prior mean");
+            validate_quantity(parameter.prior_sigma, "prior sigma");
+            if (parameter.lower_bound.has_value() &&
+                parameter.upper_bound.has_value() &&
+                parameter.lower_bound->value_si >=
+                    parameter.upper_bound->value_si) {
+                throw std::invalid_argument(
+                    "calibration parameter '" + parameter.id +
+                    "' lower bound must be less than upper bound");
+            }
+            if (parameter.lower_bound.has_value() &&
+                reference->value_si <
+                    parameter.lower_bound->value_si) {
+                throw std::invalid_argument(
+                    "calibration parameter '" + parameter.id +
+                    "' initial value is below its lower bound");
+            }
+            if (parameter.upper_bound.has_value() &&
+                reference->value_si >
+                    parameter.upper_bound->value_si) {
+                throw std::invalid_argument(
+                    "calibration parameter '" + parameter.id +
+                    "' initial value is above its upper bound");
+            }
+            if (parameter.prior_sigma.has_value() &&
+                parameter.prior_sigma->value_si <= 0.0) {
+                throw std::invalid_argument(
+                    "calibration parameter '" + parameter.id +
+                    "' prior sigma must be positive");
+            }
+        }
+        for (const auto& observation :
+             calibration.observations) {
+            if (!case_ids.contains(observation.case_id)) {
+                throw std::invalid_argument(
+                    "calibration observation '" +
+                    observation.id +
+                    "' references unknown case: " +
+                    observation.case_id);
+            }
+        }
+    }
+}
+
 void require_endpoint_component(
     const ModelDocument& document,
     const std::string& endpoint) {
@@ -877,7 +1216,22 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
         document.cases.push_back(std::move(c));
     }
 
+    std::set<std::string> calibration_ids;
+    if (const auto* calibrations =
+            optional_array_member(object, "calibrations")) {
+        for (const auto& calibration_value :
+             calibrations->array) {
+            auto calibration =
+                parse_calibration(calibration_value);
+            require_unique_id(
+                calibration.id, calibration_ids, "calibration");
+            document.calibrations.push_back(
+                std::move(calibration));
+        }
+    }
+
     validate_connections(document);
+    validate_calibrations(document);
     return document;
 }
 

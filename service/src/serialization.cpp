@@ -55,6 +55,20 @@ void model_number(std::ostream& out, double value) {
     out << std::setprecision(17) << value;
 }
 
+void scalar_value(
+    std::ostream& out,
+    const platform::ScalarValue& scalar) {
+    if (scalar.dimension == "dimensionless") {
+        model_number(out, scalar.value_si);
+        return;
+    }
+    out << "{\"value\": ";
+    model_number(out, scalar.value_si);
+    out << ", \"unit\": ";
+    json_string(out, scalar.unit);
+    out << "}";
+}
+
 void scalar_map(
     std::ostream& out,
     const std::map<std::string, platform::ScalarValue>& values,
@@ -66,15 +80,7 @@ void scalar_map(
         out << indent;
         json_string(out, name);
         out << ": ";
-        if (scalar.dimension == "dimensionless") {
-            model_number(out, scalar.value_si);
-        } else {
-            out << "{\"value\": ";
-            model_number(out, scalar.value_si);
-            out << ", \"unit\": ";
-            json_string(out, scalar.unit);
-            out << "}";
-        }
+        scalar_value(out, scalar);
         out << (++index == values.size() ? "\n" : ",\n");
     }
     if (!values.empty()) {
@@ -460,7 +466,120 @@ std::string serialize_model_document_json(
         out << "\n    }"
             << (i + 1 == document.cases.size() ? "\n" : ",\n");
     }
-    out << "  ]\n}\n";
+    out << "  ]";
+    if (!document.calibrations.empty()) {
+        out << ",\n  \"calibrations\": [\n";
+        for (std::size_t i = 0;
+             i < document.calibrations.size(); ++i) {
+            const auto& calibration =
+                document.calibrations[i];
+            out << "    {\n      \"id\": ";
+            json_string(out, calibration.id);
+            if (!calibration.label.empty()) {
+                out << ",\n      \"label\": ";
+                json_string(out, calibration.label);
+            }
+            out << ",\n      \"parameters\": [\n";
+            for (std::size_t j = 0;
+                 j < calibration.parameters.size(); ++j) {
+                const auto& parameter =
+                    calibration.parameters[j];
+                out << "        {\"id\": ";
+                json_string(out, parameter.id);
+                if (!parameter.label.empty()) {
+                    out << ", \"label\": ";
+                    json_string(out, parameter.label);
+                }
+                out << ", \"scope\": ";
+                json_string(out, parameter.scope);
+                out << ", \"targets\": [";
+                for (std::size_t target = 0;
+                     target < parameter.targets.size();
+                     ++target) {
+                    if (target != 0) out << ", ";
+                    json_string(
+                        out, parameter.targets[target]);
+                }
+                out << "]";
+                if (!parameter.case_ids.empty()) {
+                    out << ", \"cases\": [";
+                    for (std::size_t case_index = 0;
+                         case_index <
+                         parameter.case_ids.size();
+                         ++case_index) {
+                        if (case_index != 0) out << ", ";
+                        json_string(
+                            out,
+                            parameter.case_ids[case_index]);
+                    }
+                    out << "]";
+                }
+                if (parameter.lower_bound.has_value() ||
+                    parameter.upper_bound.has_value()) {
+                    out << ", \"bounds\": {";
+                    if (parameter.lower_bound.has_value()) {
+                        out << "\"lower\": ";
+                        scalar_value(
+                            out, *parameter.lower_bound);
+                    }
+                    if (parameter.lower_bound.has_value() &&
+                        parameter.upper_bound.has_value()) {
+                        out << ", ";
+                    }
+                    if (parameter.upper_bound.has_value()) {
+                        out << "\"upper\": ";
+                        scalar_value(
+                            out, *parameter.upper_bound);
+                    }
+                    out << "}";
+                }
+                if (parameter.prior_mean.has_value()) {
+                    out << ", \"prior\": {\"mean\": ";
+                    scalar_value(out, *parameter.prior_mean);
+                    out << ", \"sigma\": ";
+                    scalar_value(out, *parameter.prior_sigma);
+                    out << "}";
+                }
+                out << "}"
+                    << (j + 1 ==
+                                calibration.parameters.size()
+                            ? "\n"
+                            : ",\n");
+            }
+            out << "      ],\n"
+                   "      \"observations\": [\n";
+            for (std::size_t j = 0;
+                 j < calibration.observations.size(); ++j) {
+                const auto& observation =
+                    calibration.observations[j];
+                out << "        {\"id\": ";
+                json_string(out, observation.id);
+                if (!observation.label.empty()) {
+                    out << ", \"label\": ";
+                    json_string(out, observation.label);
+                }
+                out << ", \"case\": ";
+                json_string(out, observation.case_id);
+                out << ", \"target\": ";
+                json_string(out, observation.target);
+                out << ", \"measured\": ";
+                scalar_value(out, observation.measured);
+                out << ", \"sigma\": ";
+                scalar_value(out, observation.sigma);
+                out << "}"
+                    << (j + 1 ==
+                                calibration.observations.size()
+                            ? "\n"
+                            : ",\n");
+            }
+            out << "      ]\n    }"
+                << (i + 1 == document.calibrations.size()
+                        ? "\n"
+                        : ",\n");
+        }
+        out << "  ]";
+    }
+    out << "\n}\n";
     return out.str();
 }
 
