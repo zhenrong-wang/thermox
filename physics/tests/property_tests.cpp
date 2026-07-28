@@ -3,6 +3,7 @@
 #include "thermox/physics/co2_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
+#include "thermox/physics/humid_air.hpp"
 #include "thermox/physics/thermochemistry.hpp"
 
 #include <algorithm>
@@ -362,6 +363,37 @@ void verify_thermochemistry_contracts() {
         "and species basis");
 }
 
+void verify_humid_air_ambient_state() {
+    const auto humid =
+        thermox::physics::humid_air_state_ptrh(
+            101325.0, 300.0, 0.8);
+    require(humid.ok(), humid.message);
+    require(
+        humid.state.humidity_ratio_kg_water_kg_dry_air >
+                0.015 &&
+            humid.state.humidity_ratio_kg_water_kg_dry_air <
+                0.025,
+        "humid-air humidity ratio is physically plausible");
+    require_near(
+        humid.state.water_mass_fraction,
+        humid.state.humidity_ratio_kg_water_kg_dry_air /
+            (1.0 +
+             humid.state.humidity_ratio_kg_water_kg_dry_air),
+        1.0e-15,
+        "humidity ratio converts to humid-air mass fraction");
+    require(
+        humid.state.thermodynamic.density_kg_m3 > 1.0 &&
+            humid.state.thermodynamic.density_kg_m3 < 1.3 &&
+            humid.state.thermodynamic.cp_j_kg_k > 1000.0,
+        "humid-air bulk properties are physically plausible");
+    require(
+        thermox::physics::humid_air_state_ptrh(
+            101325.0, 300.0, 1.1)
+                .status ==
+            thermox::physics::PropertyStatus::invalid_input,
+        "humid-air service rejects invalid relative humidity");
+}
+
 }  // namespace
 
 int main() {
@@ -373,6 +405,7 @@ int main() {
     verify_round_trip(if97, 25e6, 873.0, 0.2);
     verify_co2_cycle_points(co2);
     verify_thermochemistry_contracts();
+    verify_humid_air_ambient_state();
     verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);
     verify_solver_bridge(co2, 1e5, 340.0, 300.0, 0.02);

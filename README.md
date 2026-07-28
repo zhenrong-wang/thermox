@@ -45,6 +45,8 @@ Implemented in this sprint:
 - A separate composition-aware thermochemistry contract validates ordered species bases and
   mass/mole fractions, exposes PT/PH/equilibrium-HP capabilities, and supports mechanism-specific
   backends without coupling components directly to a chemistry library.
+- CoolProp-backed ambient moist-air conversion supplies humidity ratio, water mass fraction, and
+  humid-air bulk properties from measured pressure, dry-bulb temperature, and relative humidity.
 - First-class `thermox_service` application module with versioned validate, steady, and transient
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical

@@ -27,6 +27,12 @@ This produces `thermox::cantera_backend`, whose registration function adds compo
 PH, equilibrium-HP, and transport capabilities. The default build remains bounded and does not
 compile Cantera.
 
+`humid_air_state_ptrh` is an always-available CoolProp-backed ambient service. It converts measured
+pressure, dry-bulb temperature, and relative humidity into humidity ratio, water mass fraction,
+and thermodynamic/transport properties on a humid-air mass basis. Its humidity ratio is intended
+to initialize a conserved H₂O composition for the higher-temperature thermochemistry path; the
+humid-air correlations are not used outside their documented range.
+
 Thermox separates numerical algorithms from thermophysical models:
 
 ```text

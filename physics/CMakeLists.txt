@@ -1,6 +1,7 @@
 add_library(thermox_physics
     src/co2_package.cpp
     src/coolprop_backend.cpp
+    src/humid_air.cpp
     src/ideal_gas_package.cpp
     src/if97_package.cpp
     src/property_registry.cpp
