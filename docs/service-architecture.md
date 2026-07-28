@@ -98,3 +98,23 @@ defines the large-result boundary; a successful job contains a versioned, checks
 instead of embedding trajectory data in the job record. In-memory implementations are provided
 for local execution and repository contract tests. Production PostgreSQL and object-storage
 adapters can implement the same ports without changing a solver or component.
+
+## API mapping
+
+The application boundary needed by a thin network adapter is now complete:
+
+| Intended operation | Application call | Wire representation |
+| --- | --- | --- |
+| Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v2` JSON |
+| Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
+| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v1` JSON |
+| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v1` JSON |
+| Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
+
+Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
+request mode, case, stable request fingerprint, state, optimistic revision, structured error,
+execution provenance, and result manifest. Result retrieval is owned by the job application
+service, so an HTTP or RPC adapter never reaches directly into object storage.
+
+The next adapter maps authentication, transport status codes, headers, and request decoding onto
+these calls. Those concerns remain outside `thermox_service`.

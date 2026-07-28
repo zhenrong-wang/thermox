@@ -1,6 +1,6 @@
 #pragma once
 
-#include "thermox/service/simulation_service.hpp"
+#include "thermox/service/simulation_jobs.hpp"
 
 #include <string>
 
@@ -14,5 +14,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response);
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
+std::string serialize_job_record_json(
+    const SimulationJobRecord& record);
 
 }  // namespace thermox::service

@@ -48,6 +48,11 @@ struct ResultArtifactManifest {
     std::string checksum;
 };
 
+struct ResultArtifact {
+    ResultArtifactManifest manifest;
+    std::string content;
+};
+
 struct SimulationJobRecord {
     std::string schema_version{job_schema_v1};
     std::string job_id;
@@ -120,6 +125,8 @@ public:
         const std::string& job_id,
         const std::string& schema_version,
         const std::string& content) = 0;
+    // Implementations must return only content that satisfies the stored
+    // artifact's integrity metadata.
     virtual std::optional<std::string> get(
         const std::string& artifact_id) const = 0;
 };
@@ -142,6 +149,8 @@ public:
     [[nodiscard]] SimulationJobRecord submit(
         const SimulationJobRequest& request);
     [[nodiscard]] std::optional<SimulationJobRecord> get(
+        const std::string& job_id) const;
+    [[nodiscard]] std::optional<ResultArtifact> get_result(
         const std::string& job_id) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
         const std::string& worker_id);

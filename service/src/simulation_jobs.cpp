@@ -183,6 +183,34 @@ std::optional<SimulationJobRecord> SimulationJobService::get(
     return impl_->jobs->get(job_id);
 }
 
+std::optional<ResultArtifact> SimulationJobService::get_result(
+    const std::string& job_id) const {
+    const auto record = get(job_id);
+    if (!record) {
+        return std::nullopt;
+    }
+    if (record->state != SimulationJobState::succeeded ||
+        !record->result_artifact) {
+        throw JobStateError(
+            "result is only available for a succeeded job");
+    }
+    const auto content = impl_->artifacts->get(
+        record->result_artifact->artifact_id);
+    if (!content) {
+        throw JobStateError(
+            "succeeded job references a missing result artifact");
+    }
+    if (content->size() !=
+        record->result_artifact->byte_size) {
+        throw JobStateError(
+            "result artifact size does not match its manifest");
+    }
+    return ResultArtifact{
+        *record->result_artifact,
+        *content,
+    };
+}
+
 std::optional<SimulationJobRecord> SimulationJobService::run_next(
     const std::string& worker_id) {
     if (worker_id.empty()) {

@@ -1,4 +1,5 @@
 #include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
 #include <fstream>
@@ -79,8 +80,18 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::make_in_memory_result_artifact_store();
     thermox::service::SimulationJobService service(jobs, artifacts);
 
-    const auto queued = service.submit(
-        steady_request("successful-run"));
+    const auto request = steady_request("successful-run");
+    const auto queued = service.submit(request);
+    bool unavailable = false;
+    try {
+        (void)service.get_result(queued.job_id);
+    } catch (const thermox::service::JobStateError&) {
+        unavailable = true;
+    }
+    require(
+        unavailable,
+        "queued jobs must not expose a result");
+
     const auto completed = service.run_next("worker-a");
     require(completed.has_value(), "worker must claim queued job");
     require(
@@ -106,15 +117,40 @@ void test_success_publishes_a_readable_artifact() {
             manifest.byte_size > 0 &&
             manifest.checksum.starts_with("fnv1a64:"),
         "artifact manifest must be versioned and checksummed");
-    const auto content = artifacts->get(manifest.artifact_id);
+    const auto result = service.get_result(completed->job_id);
     require(
-        content.has_value() &&
-            content->size() == manifest.byte_size &&
-            content->find("\"schema_version\": "
-                          "\"thermox.result/v3\"") !=
+        result.has_value() &&
+            result->manifest.artifact_id ==
+                manifest.artifact_id &&
+            result->content.size() == manifest.byte_size &&
+            result->content.find("\"schema_version\": "
+                                 "\"thermox.result/v3\"") !=
                 std::string::npos,
-        "published artifact must be readable before success is "
-        "visible");
+        "the application service must retrieve a published "
+        "artifact through its manifest");
+    require(
+        !service.get_result("missing-job").has_value(),
+        "result retrieval must distinguish a missing job");
+
+    const auto json =
+        thermox::service::serialize_job_record_json(*completed);
+    require(
+        json.find("\"schema_version\": "
+                  "\"thermox.job/v1\"") != std::string::npos &&
+            json.find("\"state\": \"succeeded\"") !=
+                std::string::npos &&
+            json.find("\"result_artifact\": {") !=
+                std::string::npos &&
+            json.find("\"execution\": {") !=
+                std::string::npos,
+        "succeeded job JSON must expose state, provenance, and "
+        "the result manifest");
+    require(
+        json.find(request.model_json) == std::string::npos &&
+            json.find(request.idempotency_key) ==
+                std::string::npos,
+        "job status JSON must not echo the model body or "
+        "idempotency key");
     require(
         !service.run_next("worker-a").has_value(),
         "completed jobs must not be claimed again");
@@ -144,6 +180,17 @@ void test_solver_failure_is_a_terminal_job_failure() {
         completed->error->code == "invalid_model" &&
             completed->error->stage == "validation",
         "job failure must preserve the simulation error");
+    const auto json =
+        thermox::service::serialize_job_record_json(*completed);
+    require(
+        json.find("\"state\": \"failed\"") !=
+                std::string::npos &&
+            json.find("\"code\": \"invalid_model\"") !=
+                std::string::npos &&
+            json.find("\"result_artifact\": null") !=
+                std::string::npos,
+        "failed job JSON must expose its structured error "
+        "without a result manifest");
 }
 
 void test_transient_jobs_use_the_same_artifact_boundary() {

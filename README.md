@@ -46,7 +46,8 @@ Implemented in this sprint:
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
   values. Its `thermox.job/v1` workflow adds idempotent queued execution, atomic worker claims,
-  optimistic job revisions, terminal states, and checksummed external result artifacts.
+  optimistic job revisions, terminal states, checksummed external result artifacts, stable job
+  status JSON, and service-owned result retrieval for thin RPC adapters.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.

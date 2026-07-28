@@ -250,6 +250,8 @@ Goal: expose the core through a production-shaped API.
 Work items:
 
 1. Map HTTP/RPC endpoints onto the existing application service and runtime catalog.
+   - transport-neutral operation and wire-response mapping; ✅
+   - concrete HTTP or RPC adapter.
 2. Endpoints:
    - `POST /models/validate`
    - `POST /models/compile`
@@ -262,6 +264,8 @@ Work items:
    - PostgreSQL and object-storage production adapters.
 4. Add structured logging and run IDs.
 5. Publish the existing versioned result serialization through the API.
+   - job status and service-owned result retrieval boundary; ✅
+   - concrete network publication.
 
 Exit criteria:
 

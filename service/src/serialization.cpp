@@ -688,4 +688,61 @@ std::string serialize_transient_response_json(
     return out.str();
 }
 
+std::string serialize_job_record_json(
+    const SimulationJobRecord& record) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, record.schema_version);
+    out << ",\n  \"job_id\": ";
+    json_string(out, record.job_id);
+    out << ",\n  \"revision\": " << record.revision;
+    out << ",\n  \"state\": ";
+    json_string(out, to_string(record.state));
+    out << ",\n  \"request\": {\"schema_version\": ";
+    json_string(out, record.request.schema_version);
+    out << ", \"mode\": ";
+    json_string(out, to_string(record.request.mode));
+    out << ", \"case_id\": ";
+    json_string(out, record.request.case_id);
+    out << ", \"fingerprint\": ";
+    json_string(out, record.request_fingerprint);
+    out << "}";
+    out << ",\n  \"worker_id\": ";
+    if (record.worker_id.empty()) {
+        out << "null";
+    } else {
+        json_string(out, record.worker_id);
+    }
+    out << ",\n  \"execution\": ";
+    if (record.execution) {
+        execution_metadata_json(out, *record.execution);
+    } else {
+        out << "null";
+    }
+    out << ",\n  \"error\": ";
+    if (record.error) {
+        error_json(out, *record.error);
+    } else {
+        out << "null";
+    }
+    out << ",\n  \"result_artifact\": ";
+    if (record.result_artifact) {
+        const auto& artifact = *record.result_artifact;
+        out << "{\"artifact_id\": ";
+        json_string(out, artifact.artifact_id);
+        out << ", \"media_type\": ";
+        json_string(out, artifact.media_type);
+        out << ", \"schema_version\": ";
+        json_string(out, artifact.schema_version);
+        out << ", \"byte_size\": " << artifact.byte_size;
+        out << ", \"checksum\": ";
+        json_string(out, artifact.checksum);
+        out << "}";
+    } else {
+        out << "null";
+    }
+    out << "\n}\n";
+    return out.str();
+}
+
 }  // namespace thermox::service
