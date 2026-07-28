@@ -283,6 +283,38 @@ void test_compile_aware_validation_diagnostics() {
         "validation must return a stable catalog diagnostic");
 }
 
+void test_calibration_observation_contract_validation() {
+    thermox::service::SimulationService service;
+    thermox::service::ValidateModelRequest request;
+    request.model_json =
+        read_source_file("core/examples/air_compressor.json");
+    const std::string valid_target{
+        "compressor.shaft.W_dot"};
+    const auto target = request.model_json.rfind(valid_target);
+    require(
+        target != std::string::npos,
+        "calibration fixture must contain its observation target");
+    request.model_json.replace(
+        target, valid_target.size(),
+        "compressor.shaft.unknown_power");
+
+    const auto response = service.validate_model(request);
+    require(
+        response.status ==
+            thermox::service::OperationStatus::invalid_model,
+        "unknown calibration result target must invalidate model");
+    require(
+        response.error.message.find(
+            "references unknown result value") !=
+            std::string::npos,
+        "calibration validation must identify the bad result target");
+    require(
+        !response.diagnostics.empty() &&
+            response.diagnostics.front().code ==
+                "invalid_calibration_observation",
+        "bad calibration observation must have a stable diagnostic code");
+}
+
 void test_component_version_is_enforced() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -711,6 +743,7 @@ int main() {
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();
+        test_calibration_observation_contract_validation();
         test_component_version_is_enforced();
         test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();

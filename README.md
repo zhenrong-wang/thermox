@@ -81,6 +81,9 @@ Implemented in this sprint:
 - Calibration campaigns select explicit component/connection parameter targets without changing
   their physical ownership, and carry component/system sharing scope, cases, bounds, priors,
   measured graph observations, and uncertainties through canonical service serialization.
+- Service validation resolves calibration observations against registered graph results, while
+  the result layer derives thermodynamic temperature and composition metadata for reacting
+  material ports through the selected thermochemistry backend.
 - Deterministic closed-loop reduction omits only compiler-generated connection rows proven to be
   consistent linear combinations of retained equations; reduced row names remain available as
   graph diagnostics.

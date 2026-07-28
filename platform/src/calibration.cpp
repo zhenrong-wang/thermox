@@ -1,0 +1,265 @@
+#include "thermox/platform/calibration.hpp"
+
+#include <algorithm>
+#include <map>
+#include <stdexcept>
+#include <string_view>
+
+namespace thermox::platform {
+
+namespace {
+
+using DimensionMap = std::map<std::string, std::string>;
+
+const DimensionMap& primary_dimensions(const std::string& domain) {
+    static const DimensionMap fluid{
+        {"m_dot", "mass_flow"},
+        {"p", "pressure"},
+        {"h", "specific_enthalpy"},
+    };
+    static const DimensionMap material{
+        {"p", "pressure"},
+        {"h", "specific_enthalpy"},
+    };
+    static const DimensionMap heat{
+        {"Q_dot", "power"},
+        {"T", "temperature"},
+    };
+    static const DimensionMap shaft{
+        {"W_dot", "power"},
+        {"omega", "angular_speed"},
+    };
+    static const DimensionMap electrical{
+        {"P", "power"},
+        {"frequency", "frequency"},
+    };
+    static const DimensionMap scalar{
+        {"value", "dimensionless"},
+    };
+    if (domain == "fluid") return fluid;
+    if (domain == "material") return material;
+    if (domain == "heat") return heat;
+    if (domain == "shaft") return shaft;
+    if (domain == "electrical") return electrical;
+    if (domain == "signal" || domain == "control") return scalar;
+    throw std::invalid_argument(
+        "unsupported port domain in calibration observation: " +
+        domain);
+}
+
+const DimensionMap& thermodynamic_derived_dimensions() {
+    static const DimensionMap dimensions{
+        {"T", "temperature"},
+        {"vapor_quality", "dimensionless"},
+    };
+    return dimensions;
+}
+
+const ComponentDefinition& require_component(
+    const ModelDocument& document,
+    std::string_view id,
+    const CalibrationObservationDefinition& observation) {
+    const auto component = std::find_if(
+        document.components.begin(), document.components.end(),
+        [&](const auto& candidate) {
+            return candidate.id == id;
+        });
+    if (component == document.components.end()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' references unknown result component: " +
+            std::string(id));
+    }
+    return *component;
+}
+
+const PortModelDescriptor& require_port(
+    const ComponentModelDescriptor& descriptor,
+    std::string_view name,
+    const CalibrationObservationDefinition& observation) {
+    const auto port = std::find_if(
+        descriptor.ports.begin(), descriptor.ports.end(),
+        [&](const auto& candidate) {
+            return candidate.name == name;
+        });
+    if (port == descriptor.ports.end()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' references unknown result port: " +
+            observation.target);
+    }
+    return *port;
+}
+
+const MaterialDefinition& require_port_material(
+    const ModelDocument& document,
+    const ComponentDefinition& component,
+    const std::string& port_name,
+    const CalibrationObservationDefinition& observation) {
+    const auto binding =
+        component.material_bindings.find(port_name);
+    if (binding == component.material_bindings.end()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' material port has no material binding: " +
+            observation.target);
+    }
+    const auto material = std::find_if(
+        document.materials.begin(), document.materials.end(),
+        [&](const auto& candidate) {
+            return candidate.id == binding->second;
+        });
+    if (material == document.materials.end()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' material port references an unknown material: " +
+            observation.target);
+    }
+    return *material;
+}
+
+std::string observation_dimension(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const CalibrationObservationDefinition& observation) {
+    const std::string_view target{observation.target};
+    const auto first = target.find('.');
+    const auto second =
+        first == std::string_view::npos
+            ? std::string_view::npos
+            : target.find('.', first + 1);
+    if (first == std::string_view::npos || first == 0 ||
+        first + 1 >= target.size()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' target must use component.port.value or "
+            "component.internal_value: " + observation.target);
+    }
+    const auto& component = require_component(
+        document, target.substr(0, first), observation);
+    const auto& descriptor =
+        registry.require_model(component.kind).descriptor();
+
+    if (second == std::string_view::npos) {
+        const auto name = target.substr(first + 1);
+        const auto internal = std::find_if(
+            descriptor.internal_variables.begin(),
+            descriptor.internal_variables.end(),
+            [&](const auto& candidate) {
+                return candidate.name == name;
+            });
+        if (internal == descriptor.internal_variables.end()) {
+            throw std::invalid_argument(
+                "calibration observation '" + observation.id +
+                "' references unknown internal result: " +
+                observation.target);
+        }
+        return internal->dimension;
+    }
+    if (target.find('.', second + 1) != std::string_view::npos ||
+        second + 1 >= target.size()) {
+        throw std::invalid_argument(
+            "calibration observation '" + observation.id +
+            "' target must use component.port.value: " +
+            observation.target);
+    }
+    const std::string port_name{
+        target.substr(first + 1, second - first - 1)};
+    const auto& port = require_port(
+        descriptor, port_name, observation);
+    const std::string value_name{target.substr(second + 1)};
+    const auto& primary = primary_dimensions(port.domain);
+    if (const auto value = primary.find(value_name);
+        value != primary.end()) {
+        return value->second;
+    }
+    if (port.domain == "material" &&
+        value_name.starts_with("m_dot[") &&
+        value_name.ends_with("]")) {
+        const auto& material = require_port_material(
+            document, component, port_name, observation);
+        const std::string species = value_name.substr(
+            6, value_name.size() - 7);
+        if (std::find(
+                material.species.begin(),
+                material.species.end(),
+                species) == material.species.end()) {
+            throw std::invalid_argument(
+                "calibration observation '" + observation.id +
+                "' references unknown material species result: " +
+                observation.target);
+        }
+        return "mass_flow";
+    }
+    if (port.domain == "fluid" || port.domain == "material") {
+        const auto& derived =
+            thermodynamic_derived_dimensions();
+        if (const auto value = derived.find(value_name);
+            value != derived.end()) {
+            if (port.domain == "material") {
+                const auto& material = require_port_material(
+                    document, component, port_name,
+                    observation);
+                if (!thermochemistry_registry.contains(
+                        material.backend)) {
+                    throw std::invalid_argument(
+                        "calibration observation '" +
+                        observation.id +
+                        "' requires an unregistered material "
+                        "property backend: " +
+                        material.backend);
+                }
+            }
+            return value->second;
+        }
+        if (port.domain == "material" &&
+            value_name == "mean_molecular_weight") {
+            const auto& material = require_port_material(
+                document, component, port_name, observation);
+            if (!thermochemistry_registry.contains(
+                    material.backend)) {
+                throw std::invalid_argument(
+                    "calibration observation '" +
+                    observation.id +
+                    "' requires an unregistered material "
+                    "property backend: " +
+                    material.backend);
+            }
+            return "molar_mass";
+        }
+    }
+    throw std::invalid_argument(
+        "calibration observation '" + observation.id +
+        "' references unknown result value: " +
+        observation.target);
+}
+
+}  // namespace
+
+void validate_calibration_observation_contracts(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry) {
+    for (const auto& calibration : document.calibrations) {
+        for (const auto& observation :
+             calibration.observations) {
+            const auto dimension = observation_dimension(
+                document, registry, thermochemistry_registry,
+                observation);
+            if (dimension != observation.measured.dimension) {
+                throw std::invalid_argument(
+                    "calibration observation '" +
+                    observation.id +
+                    "' measured dimension '" +
+                    observation.measured.dimension +
+                    "' does not match result dimension '" +
+                    dimension + "'");
+            }
+        }
+    }
+}
+
+}  // namespace thermox::platform

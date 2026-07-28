@@ -47,6 +47,12 @@ public:
         const physics::PropertyPackageRegistry& property_registry);
     GraphResultEvaluator(
         const ModelDocument& document,
+        const CompiledModelGraph& graph,
+        const physics::PropertyPackageRegistry& property_registry,
+        const physics::ThermochemistryPackageRegistry&
+            thermochemistry_registry);
+    GraphResultEvaluator(
+        const ModelDocument& document,
         const CompiledTransientModelGraph& graph,
         const physics::PropertyPackageRegistry& property_registry);
     ~GraphResultEvaluator();

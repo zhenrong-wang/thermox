@@ -4,6 +4,7 @@
 #include "runtime_internal.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/results.hpp"
@@ -78,7 +79,13 @@ Diagnostic compilation_diagnostic(const std::string& message) {
     diagnostic.code = "model_compilation_failed";
     diagnostic.suggestions = {
         "Review the referenced component, connection, medium, and active case."};
-    if (message.find("no component model registered") !=
+    if (message.find("calibration observation") !=
+        std::string::npos) {
+        diagnostic.code = "invalid_calibration_observation";
+        diagnostic.suggestions = {
+            "Select an exposed graph result and use a measured value "
+            "with the same physical dimension."};
+    } else if (message.find("no component model registered") !=
         std::string::npos) {
         diagnostic.code = "unknown_component_type";
         diagnostic.suggestions = {
@@ -543,6 +550,9 @@ ValidateModelResponse SimulationService::validate_model(
         response.model = model_metadata(document);
         response.canonical_model_json =
             detail::serialize_model_document_json(document);
+        platform::validate_calibration_observation_contracts(
+            document, impl_->runtime->impl_->components,
+            impl_->runtime->impl_->thermochemistry);
         const auto* simulation_case =
             selected_case(document, request.case_id);
         if (!request.case_id.empty() && simulation_case == nullptr) {
@@ -827,7 +837,8 @@ SteadySimulationResponse SimulationService::run_steady(
     try {
         const platform::GraphResultEvaluator evaluator(
             document, graph,
-            impl_->runtime->impl_->properties);
+            impl_->runtime->impl_->properties,
+            impl_->runtime->impl_->thermochemistry);
         response.graph =
             copy_graph_result(evaluator.evaluate(result.x));
     } catch (const std::exception& ex) {

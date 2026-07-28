@@ -71,6 +71,11 @@ Model-document parsing currently validates:
 - positive prior and observation uncertainties;
 - measured-value and uncertainty dimensions.
 
-The next service slice will validate observation targets against compiled result variables and
-execute bounded, multi-case estimation by repeatedly invoking the ordinary simulation workflow.
-The numeric solver and component models will remain unaware of calibration campaigns.
+Service validation additionally resolves observation paths against the active component registry
+and checks that measured dimensions match the exposed primary or derived result. Fluid and
+composition-aware material ports both expose derived temperature, so measured gas-path
+temperatures can participate in gas-turbine calibration without becoming connector unknowns.
+
+The next service slice will execute bounded, multi-case estimation by repeatedly invoking the
+ordinary simulation workflow. The numeric solver and component models will remain unaware of
+calibration campaigns.

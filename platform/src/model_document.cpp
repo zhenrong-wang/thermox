@@ -502,6 +502,13 @@ ScalarValue convert_scalar(double value, const std::string& unit, const std::str
     if (unit == "kg") {
         return make_scalar(value, "kg", "mass");
     }
+    if (unit == "kg/mol") {
+        return make_scalar(value, "kg/mol", "molar_mass");
+    }
+    if (unit == "g/mol") {
+        return make_scalar(
+            value * 1.0e-3, "kg/mol", "molar_mass");
+    }
     if (unit == "J" || unit == "kJ" || unit == "MJ") {
         const double multiplier =
             unit == "J" ? 1.0 : (unit == "kJ" ? 1.0e3 : 1.0e6);

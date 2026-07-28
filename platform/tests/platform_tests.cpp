@@ -2156,6 +2156,18 @@ void test_adiabatic_equilibrium_combustor() {
     require_near(
         value("combustor.outlet.m_dot[O2]"), 3.0, 1.0e-9,
         "combustor returns backend equilibrium oxygen flow");
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph,
+        thermox::physics::
+            make_default_property_package_registry(),
+        chemistry);
+    const auto graph_result = evaluator.evaluate(result.x);
+    const auto& outlet = require_port_result(
+        graph_result, "combustor", "outlet");
+    require_near(
+        require_result_value(outlet.derived_values, "T"),
+        1000.0 / 3.0, 1.0e-6,
+        "material result layer derives combustor outlet temperature");
 }
 
 void test_material_compressor_and_turbine() {

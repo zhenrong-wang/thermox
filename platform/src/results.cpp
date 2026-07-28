@@ -56,6 +56,11 @@ std::vector<ResultValue> fluid_derived_values(
     };
 }
 
+struct MaterialResultBackend {
+    std::shared_ptr<const physics::ThermochemistryPackage> package;
+    std::vector<std::string> species;
+};
+
 }  // namespace
 
 struct GraphResultEvaluator::Impl {
@@ -64,7 +69,9 @@ struct GraphResultEvaluator::Impl {
         const std::vector<CompiledPortVariable>& compiled_ports,
         const std::vector<CompiledInternalVariable>& compiled_internal,
         std::size_t count,
-        const physics::PropertyPackageRegistry& property_registry) {
+        const physics::PropertyPackageRegistry& property_registry,
+        const physics::ThermochemistryPackageRegistry*
+            thermochemistry_registry) {
         variable_count = count;
         port_variables = compiled_ports;
         internal_variables = compiled_internal;
@@ -82,6 +89,29 @@ struct GraphResultEvaluator::Impl {
             }
             properties.emplace(medium.id, std::move(package));
         }
+        if (thermochemistry_registry != nullptr) {
+            for (const auto& material : document.materials) {
+                if (!thermochemistry_registry->contains(
+                        material.backend)) {
+                    continue;
+                }
+                auto package = thermochemistry_registry->create(
+                    material.backend, material.mechanism,
+                    material.phase);
+                if (!material.package_version.empty() &&
+                    material.package_version !=
+                        package->version()) {
+                    throw std::invalid_argument(
+                        "result evaluator thermochemistry package "
+                        "version mismatch for material: " +
+                        material.id);
+                }
+                materials.emplace(
+                    material.id,
+                    MaterialResultBackend{
+                        std::move(package), material.species});
+            }
+        }
     }
 
     std::size_t variable_count{0};
@@ -92,6 +122,7 @@ struct GraphResultEvaluator::Impl {
         std::string,
         std::shared_ptr<const physics::PropertyPackage>>
         properties;
+    std::map<std::string, MaterialResultBackend> materials;
 };
 
 GraphResultEvaluator::GraphResultEvaluator(
@@ -101,7 +132,21 @@ GraphResultEvaluator::GraphResultEvaluator(
     : impl_(std::make_unique<Impl>()) {
     impl_->initialize(
         document, graph.port_variables, {},
-        graph.problem.variable_names.size(), property_registry);
+        graph.problem.variable_names.size(), property_registry,
+        nullptr);
+}
+
+GraphResultEvaluator::GraphResultEvaluator(
+    const ModelDocument& document,
+    const CompiledModelGraph& graph,
+    const physics::PropertyPackageRegistry& property_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->initialize(
+        document, graph.port_variables, {},
+        graph.problem.variable_names.size(), property_registry,
+        &thermochemistry_registry);
 }
 
 GraphResultEvaluator::GraphResultEvaluator(
@@ -111,7 +156,8 @@ GraphResultEvaluator::GraphResultEvaluator(
     : impl_(std::make_unique<Impl>()) {
     impl_->initialize(
         document, graph.port_variables, graph.internal_variables,
-        graph.problem.variable_names.size(), property_registry);
+        graph.problem.variable_names.size(), property_registry,
+        nullptr);
 }
 
 GraphResultEvaluator::~GraphResultEvaluator() = default;
@@ -231,6 +277,72 @@ GraphResult GraphResultEvaluator::evaluate(
             port.phase = phase_name(properties.state.phase);
             port.derived_values =
                 fluid_derived_values(properties.state);
+        }
+    }
+    for (auto& component : result.components) {
+        for (auto& port : component.ports) {
+            if (port.domain != "material") {
+                continue;
+            }
+            const auto backend =
+                impl_->materials.find(port.medium_id);
+            if (backend == impl_->materials.end()) {
+                if (impl_->materials.empty()) {
+                    continue;
+                }
+                throw std::logic_error(
+                    "material result references unresolved "
+                    "thermochemistry package: " +
+                    port.medium_id);
+            }
+            std::vector<double> fractions;
+            fractions.reserve(backend->second.species.size());
+            double total_mass_flow = 0.0;
+            for (const auto& species :
+                 backend->second.species) {
+                const double mass_flow = require_primary(
+                    port, "m_dot[" + species + "]").value_si;
+                if (mass_flow < 0.0) {
+                    throw std::runtime_error(
+                        "failed to evaluate material-port result '" +
+                        component.component_id + "." +
+                        port.port_name +
+                        "': species mass flow is negative");
+                }
+                total_mass_flow += mass_flow;
+                fractions.push_back(mass_flow);
+            }
+            if (total_mass_flow <= 0.0) {
+                throw std::runtime_error(
+                    "failed to evaluate material-port result '" +
+                    component.component_id + "." +
+                    port.port_name +
+                    "': total species mass flow is not positive");
+            }
+            for (auto& fraction : fractions) {
+                fraction /= total_mass_flow;
+            }
+            const auto properties =
+                backend->second.package->state_ph(
+                    require_primary(port, "p").value_si,
+                    require_primary(port, "h").value_si,
+                    physics::SpeciesComposition{
+                        physics::CompositionBasis::mass_fraction,
+                        backend->second.species,
+                        std::move(fractions)});
+            if (!properties.ok()) {
+                throw std::runtime_error(
+                    "failed to evaluate material-port result '" +
+                    component.component_id + "." +
+                    port.port_name + "': " +
+                    properties.message);
+            }
+            port.derived_values = fluid_derived_values(
+                properties.state.thermodynamic);
+            port.derived_values.push_back({
+                "mean_molecular_weight", "molar_mass",
+                properties.state.mean_molecular_weight_kg_mol,
+            });
         }
     }
     return result;

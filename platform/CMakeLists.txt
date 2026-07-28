@@ -1,5 +1,6 @@
 add_library(thermox_platform
     src/boundary_models.cpp
+    src/calibration.cpp
     src/component_catalog.cpp
     src/component_registry.cpp
     src/combustion_models.cpp
