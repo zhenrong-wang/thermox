@@ -49,7 +49,8 @@ Work items:
      shaft-power residuals; outlet temperature is derived)*
    - compressor ✅ *(property-aware mass continuity, pressure ratio, isentropic enthalpy change,
      and shaft-power residuals; outlet temperature is derived)*
-   - combustor simplified
+   - combustor ✅ *(backend-agnostic adiabatic equilibrium model with composition-aware air,
+     fuel, and exhaust material ports)*
    - heat exchanger simplified
    - condenser
    - mixer/splitter ✅ *(two-inlet enthalpy-flow mixer and two-outlet splitter)*

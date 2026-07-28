@@ -91,6 +91,8 @@ struct ComponentType {
     std::vector<CatalogArtifactType> artifacts;
     std::vector<CatalogInternalVariableType> internal_variables;
     std::vector<std::string> required_property_capabilities;
+    std::vector<std::string>
+        required_thermochemistry_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
 };
@@ -100,6 +102,13 @@ struct PropertyBackendType {
     std::string implementation_name;
     std::string implementation_version;
     std::vector<std::string> supported_substances;
+    std::vector<std::string> capabilities;
+};
+
+struct ThermochemistryBackendType {
+    std::string backend;
+    std::string implementation_name;
+    std::string implementation_version;
     std::vector<std::string> capabilities;
 };
 
@@ -125,6 +134,8 @@ struct CatalogResponse {
     std::string fingerprint;
     std::vector<ComponentType> components;
     std::vector<PropertyBackendType> property_backends;
+    std::vector<ThermochemistryBackendType>
+        thermochemistry_backends;
     std::vector<ConnectorDomainType> connector_domains;
 
     [[nodiscard]] bool succeeded() const {

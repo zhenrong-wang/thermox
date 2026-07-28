@@ -54,6 +54,21 @@ std::string_view capability_name(
     return "unknown";
 }
 
+std::string_view capability_name(
+    physics::ThermochemistryCapability capability) {
+    switch (capability) {
+        case physics::ThermochemistryCapability::state_pt:
+            return "state_pt";
+        case physics::ThermochemistryCapability::state_ph:
+            return "state_ph";
+        case physics::ThermochemistryCapability::equilibrium_hp:
+            return "equilibrium_hp";
+        case physics::ThermochemistryCapability::transport:
+            return "transport";
+    }
+    return "unknown";
+}
+
 Diagnostic compilation_diagnostic(const std::string& message) {
     Diagnostic diagnostic;
     diagnostic.stage = "compilation";
@@ -660,6 +675,12 @@ CatalogResponse SimulationService::get_catalog(
             component.required_property_capabilities.push_back(
                 std::string(capability_name(capability)));
         }
+        for (const auto capability :
+             descriptor.required_thermochemistry_capabilities) {
+            component.required_thermochemistry_capabilities
+                .push_back(
+                    std::string(capability_name(capability)));
+        }
         response.components.push_back(std::move(component));
     }
     for (const auto& descriptor :
@@ -677,6 +698,21 @@ CatalogResponse SimulationService::get_catalog(
                 std::string(capability_name(capability)));
         }
         response.property_backends.push_back(std::move(backend));
+    }
+    for (const auto& descriptor :
+         impl_->runtime->impl_->thermochemistry.descriptors()) {
+        ThermochemistryBackendType backend;
+        backend.backend = descriptor.backend;
+        backend.implementation_name =
+            descriptor.implementation_name;
+        backend.implementation_version =
+            descriptor.implementation_version;
+        for (const auto capability : descriptor.capabilities) {
+            backend.capabilities.push_back(
+                std::string(capability_name(capability)));
+        }
+        response.thermochemistry_backends.push_back(
+            std::move(backend));
     }
     response.connector_domains = {
         {"fluid", "thermox.connector.fluid/v1",

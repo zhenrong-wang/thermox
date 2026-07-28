@@ -699,6 +699,7 @@ ComponentRegistry make_default_component_registry() {
     register_fluid_inventory_component_models(registry);
     register_storage_component_models(registry);
     register_power_component_models(registry);
+    register_combustion_component_models(registry);
     return registry;
 }
 

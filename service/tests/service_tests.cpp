@@ -89,7 +89,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 27,
+        response.components.size() == 28,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -139,6 +139,18 @@ void test_catalog_discovery() {
             mapped_turbine->artifacts.front().role ==
                 "performance_map",
         "catalog must expose mapped turbine artifact contract");
+    const auto combustor = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "combustor.material.adiabatic_equilibrium";
+        });
+    require(
+        combustor != response.components.end() &&
+            combustor->required_thermochemistry_capabilities ==
+                std::vector<std::string>{"equilibrium_hp"},
+        "catalog must expose combustor thermochemistry contract");
     const auto storage = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -414,10 +426,21 @@ void test_injectable_native_runtime() {
         std::make_shared<
             thermox::platform::MetadataComponentModel>(
             descriptor));
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"catalog_test", "catalog-test", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::
+              equilibrium_hp}},
+        [](std::string_view, std::string_view) {
+            return std::shared_ptr<
+                const thermox::physics::
+                    ThermochemistryPackage>{};
+        });
     auto runtime = thermox::service::make_simulation_runtime(
         std::move(components),
         thermox::physics::
-            make_default_property_package_registry());
+            make_default_property_package_registry(),
+        {}, std::move(chemistry));
     thermox::service::SimulationService service(runtime);
     const auto catalog = service.get_catalog();
     require(
@@ -429,6 +452,14 @@ void test_injectable_native_runtime() {
                     "sensor.signal.custom";
             }),
         "custom runtime component must reach service catalog");
+    require(
+        catalog.thermochemistry_backends.size() == 1 &&
+            catalog.thermochemistry_backends.front().backend ==
+                "catalog_test" &&
+            catalog.thermochemistry_backends.front()
+                    .capabilities.front() ==
+                "equilibrium_hp",
+        "custom thermochemistry backend must reach service catalog");
 
     thermox::service::ValidateModelRequest request;
     request.model_json = R"json({

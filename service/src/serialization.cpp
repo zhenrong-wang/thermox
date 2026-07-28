@@ -566,6 +566,18 @@ std::string serialize_catalog_response_json(
                 out,
                 component.required_property_capabilities[j]);
         }
+        out << "], \"required_thermochemistry_capabilities\": [";
+        for (std::size_t j = 0;
+             j < component
+                     .required_thermochemistry_capabilities
+                     .size();
+             ++j) {
+            if (j != 0) out << ", ";
+            json_string(
+                out,
+                component
+                    .required_thermochemistry_capabilities[j]);
+        }
         out << "]}";
     }
     out << "],\n  \"property_backends\": [";
@@ -586,6 +598,26 @@ std::string serialize_catalog_response_json(
             json_string(out, backend.supported_substances[j]);
         }
         out << "], \"capabilities\": [";
+        for (std::size_t j = 0;
+             j < backend.capabilities.size(); ++j) {
+            if (j != 0) out << ", ";
+            json_string(out, backend.capabilities[j]);
+        }
+        out << "]}";
+    }
+    out << "],\n  \"thermochemistry_backends\": [";
+    for (std::size_t i = 0;
+         i < response.thermochemistry_backends.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& backend =
+            response.thermochemistry_backends[i];
+        out << "{\"backend\": ";
+        json_string(out, backend.backend);
+        out << ", \"implementation_name\": ";
+        json_string(out, backend.implementation_name);
+        out << ", \"implementation_version\": ";
+        json_string(out, backend.implementation_version);
+        out << ", \"capabilities\": [";
         for (std::size_t j = 0;
              j < backend.capabilities.size(); ++j) {
             if (j != 0) out << ", ";

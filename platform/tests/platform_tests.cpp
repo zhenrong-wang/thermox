@@ -67,7 +67,10 @@ public:
         thermox::physics::ThermochemistryCapability capability)
         const noexcept override {
         return capability ==
-            thermox::physics::ThermochemistryCapability::state_ph;
+                thermox::physics::ThermochemistryCapability::state_ph ||
+            capability ==
+                thermox::physics::ThermochemistryCapability::
+                    equilibrium_hp;
     }
     thermox::physics::ThermochemicalResult state_pt(
         double, double,
@@ -80,9 +83,17 @@ public:
         return {};
     }
     thermox::physics::ThermochemicalResult equilibrate_hp(
-        double, double,
-        const thermox::physics::SpeciesComposition&) const override {
-        return {};
+        double pressure, double enthalpy,
+        const thermox::physics::SpeciesComposition&
+            reactants) const override {
+        thermox::physics::ThermochemicalState state;
+        state.thermodynamic.pressure_pa = pressure;
+        state.thermodynamic.enthalpy_j_kg = enthalpy;
+        state.composition = reactants;
+        return {
+            std::move(state),
+            thermox::physics::PropertyStatus::success,
+            {}};
     }
 
 private:
@@ -733,6 +744,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.fluid.splitter.two_outlet",
         "valve.fluid.isenthalpic_pressure_ratio",
         "transport.material.frozen_pressure_ratio",
+        "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "evaporator.fluid.fixed_outlet_quality",
@@ -1896,6 +1908,82 @@ void test_material_thermochemistry_resolves_on_demand() {
                 chemistry);
         },
         "under-specified");
+}
+
+void test_adiabatic_equilibrium_combustor() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "equilibrium_combustor",
+    "media": [],
+    "materials": [{
+      "id": "reacting_gas",
+      "backend": "test_backend",
+      "mechanism": "test.yaml",
+      "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "combustor",
+      "kind": "combustor.material.adiabatic_equilibrium",
+      "parameters": {"pressure_ratio": 0.9},
+      "materials": {
+        "air_inlet": "reacting_gas",
+        "fuel_inlet": "reacting_gas",
+        "outlet": "reacting_gas"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "combustor.air_inlet.p": {"value": 100.0, "unit": "kPa"},
+      "combustor.air_inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "combustor.air_inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "combustor.air_inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "combustor.fuel_inlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "combustor.fuel_inlet.m_dot[N2]": {"value": 1.0, "unit": "kg/s"},
+      "combustor.fuel_inlet.m_dot[O2]": {"value": 1.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::
+              equilibrium_hp}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::
+            make_default_property_package_registry(),
+        thermox::platform::PerformanceMapRegistry{},
+        chemistry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("combustor.outlet.p"), 90000.0, 1.0e-6,
+                 "combustor applies pressure loss");
+    require_near(
+        value("combustor.outlet.h"), 1000000.0 / 3.0,
+        1.0e-5, "combustor preserves adiabatic mixture enthalpy");
+    require_near(
+        value("combustor.outlet.m_dot[N2]"), 9.0, 1.0e-9,
+        "combustor returns backend equilibrium nitrogen flow");
+    require_near(
+        value("combustor.outlet.m_dot[O2]"), 3.0, 1.0e-9,
+        "combustor returns backend equilibrium oxygen flow");
 }
 
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
@@ -3385,6 +3473,7 @@ int main() {
         test_generic_model_solves_isenthalpic_valve();
         test_material_connector_and_frozen_transport();
         test_material_thermochemistry_resolves_on_demand();
+        test_adiabatic_equilibrium_combustor();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();

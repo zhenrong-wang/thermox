@@ -11,9 +11,17 @@ Fixed-fluid property packages and reacting-mixture thermochemistry are separate 
 - mechanism, phase, implementation, version, and capability identity.
 
 `ThermochemistryPackageRegistry` constructs these packages by backend, mechanism, and phase.
-Combustors and reacting-material components will depend on this interface rather than directly on
-Cantera or another chemistry library. This preserves backend replacement, service catalog
-discovery, and execution provenance.
+Combustors and reacting-material components depend on this interface rather than directly on
+Cantera or another chemistry library. This preserves backend replacement and service catalog
+discovery.
+
+The built-in `combustor.material.adiabatic_equilibrium` component accepts independent air and fuel
+material streams on the same complete mechanism species basis. It mixes their species mass flows
+and enthalpy, applies a configured pressure ratio, calls equilibrium at constant enthalpy and
+pressure, and closes every outlet species mass flow from the returned equilibrium composition.
+The model contains no fuel name, stoichiometric formula, or gas-turbine topology. A small
+per-solve cache ensures all species residual rows share one equilibrium evaluation at a given
+Newton iterate.
 
 Cantera 3.2.0 is pinned under `modules/properties/cantera`. The adapter is intentionally optional:
 install the pinned Cantera C++ library into an isolated prefix, make its `cantera.pc` visible to
@@ -72,9 +80,9 @@ The public C++ interface is
 - implementation identity and version for reproducible run provenance.
 
 Every registered backend also supplies catalog metadata: backend ID, implementation name/version,
-supported substances, and capabilities. `thermox_service` publishes this metadata through
-`thermox.catalog/v2`, allowing graph clients to reject unsupported fluid/backend/component
-combinations before simulation submission.
+supported substances where applicable, and capabilities. `thermox_service` publishes separate
+fixed-fluid and thermochemistry backend catalogs through `thermox.catalog/v2`, allowing graph
+clients to reject unsupported backend/component combinations before simulation submission.
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only
 real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS

@@ -14,6 +14,8 @@ void register_heat_transfer_component_models(
 void register_fluid_inventory_component_models(
     ComponentRegistry& registry);
 void register_power_component_models(ComponentRegistry& registry);
+void register_combustion_component_models(
+    ComponentRegistry& registry);
 void validate_component_descriptor(
     const ComponentModelDescriptor& descriptor);
 void validate_component_parameters(

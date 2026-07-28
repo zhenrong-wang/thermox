@@ -2,6 +2,7 @@ add_library(thermox_platform
     src/boundary_models.cpp
     src/component_catalog.cpp
     src/component_registry.cpp
+    src/combustion_models.cpp
     src/fluid_inventory_models.cpp
     src/heat_transfer_models.cpp
     src/model_document.cpp
