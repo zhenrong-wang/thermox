@@ -78,6 +78,11 @@ struct GraphResultEvaluator::Impl {
         port_variables = compiled_ports;
         internal_variables = compiled_internal;
         for (const auto& variable : compiled_ports) {
+            port_directions.emplace(
+                std::make_pair(
+                    variable.component_id,
+                    variable.port_name),
+                variable.direction);
             if (variable.system_boundary_sign != 0) {
                 boundary_ports.emplace(
                     std::make_pair(
@@ -131,6 +136,8 @@ struct GraphResultEvaluator::Impl {
     std::vector<CompiledInternalVariable> internal_variables;
     std::map<std::pair<std::string, std::string>, int>
         boundary_ports;
+    std::map<std::pair<std::string, std::string>, std::string>
+        port_directions;
     bool steady_boundary_audit{false};
     std::map<
         std::string,
@@ -444,6 +451,85 @@ GraphResult GraphResultEvaluator::evaluate(
                 "power",
                 net_energy_flow,
             });
+        }
+
+        for (auto& component : result.components) {
+            if (component.ports.size() < 2) {
+                continue;
+            }
+            double net_mass_flow = 0.0;
+            double net_energy_flow = 0.0;
+            bool has_mass_flow = false;
+            bool has_energy_flow = false;
+            for (const auto& port : component.ports) {
+                const auto direction =
+                    impl_->port_directions.find({
+                        component.component_id,
+                        port.port_name});
+                if (direction ==
+                        impl_->port_directions.end() ||
+                    direction->second == "bidirectional") {
+                    continue;
+                }
+                const double orientation =
+                    direction->second == "in" ? 1.0 : -1.0;
+                if (port.domain == "fluid") {
+                    const double mass_flow =
+                        require_primary(port, "m_dot").value_si;
+                    net_mass_flow += orientation * mass_flow;
+                    net_energy_flow += orientation * mass_flow *
+                        require_primary(port, "h").value_si;
+                    has_mass_flow = true;
+                    has_energy_flow = true;
+                    continue;
+                }
+                if (port.domain == "material") {
+                    double mass_flow = 0.0;
+                    for (const auto& value :
+                         port.primary_values) {
+                        if (value.name.starts_with("m_dot[")) {
+                            mass_flow += value.value_si;
+                        }
+                    }
+                    net_mass_flow += orientation * mass_flow;
+                    net_energy_flow += orientation * mass_flow *
+                        require_primary(port, "h").value_si;
+                    has_mass_flow = true;
+                    has_energy_flow = true;
+                    continue;
+                }
+                if (port.domain == "heat") {
+                    net_energy_flow += orientation *
+                        require_primary(port, "Q_dot").value_si;
+                    has_energy_flow = true;
+                    continue;
+                }
+                if (port.domain == "shaft") {
+                    net_energy_flow += orientation *
+                        require_primary(port, "W_dot").value_si;
+                    has_energy_flow = true;
+                    continue;
+                }
+                if (port.domain == "electrical") {
+                    net_energy_flow += orientation *
+                        require_primary(port, "P").value_si;
+                    has_energy_flow = true;
+                }
+            }
+            if (has_mass_flow) {
+                component.metrics.push_back({
+                    "net_mass_flow",
+                    "mass_flow",
+                    net_mass_flow,
+                });
+            }
+            if (has_energy_flow) {
+                component.metrics.push_back({
+                    "net_energy_flow",
+                    "power",
+                    net_energy_flow,
+                });
+            }
         }
     }
     return result;

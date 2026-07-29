@@ -93,7 +93,9 @@ primary SI values, fluid-derived properties, internal states, and derivatives. T
 metrics, system balances, and KPI collections are part of the contract. Steady evaluation now
 populates topology-aware net boundary mass and energy flows using registered source/sink roles and
 unconnected equipment ports. Positive flow enters the modeled system; the audit does not disguise
-unmodeled losses as numerical closure.
+unmodeled losses as numerical closure. Generic per-component net mass and energy metrics use the
+same port-direction convention, allowing conversion losses to be attributed to their physical
+equipment owner.
 
 ## Interface responsibilities
 

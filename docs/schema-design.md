@@ -390,6 +390,12 @@ may identify modeled conversion losses or an omitted energy carrier that must be
 separately. Transient samples intentionally omit this steady audit until accumulation terms are
 included.
 
+Every steady component with at least two directional energy or material ports also reports
+`net_mass_flow` and/or `net_energy_flow` metrics. The same positive-inward sign convention applies.
+Lossless equipment should approach zero; positive energy flow on a shaft train or generator
+quantifies modeled conversion loss. Summing those losses explains the corresponding nonzero system
+boundary energy flow without inventing a plant-wide correction parameter.
+
 ## 10. Validation rules
 
 Minimum validation before compilation:

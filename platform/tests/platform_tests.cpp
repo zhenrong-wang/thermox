@@ -2445,6 +2445,18 @@ void test_adiabatic_equilibrium_combustor() {
             "net_boundary_energy_flow"),
         0.0, 1.0e-4,
         "material combustor boundary enthalpy flow closes");
+    const auto& combustor = require_component_result(
+        graph_result, "combustor");
+    require_near(
+        require_result_value(
+            combustor.metrics, "net_mass_flow"),
+        0.0, 1.0e-9,
+        "combustor component metric exposes mass closure");
+    require_near(
+        require_result_value(
+            combustor.metrics, "net_energy_flow"),
+        0.0, 1.0e-4,
+        "combustor component metric exposes energy closure");
 }
 
 void test_material_compressor_and_turbine() {
@@ -4271,6 +4283,34 @@ void test_shaft_train_and_generator_close_power_balance() {
     require_near(
         value("grid.inlet.frequency"), 50.0, 1.0e-10,
         "generator converts shaft speed to electrical frequency");
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph,
+        thermox::physics::
+            make_default_property_package_registry());
+    const auto graph_result = evaluator.evaluate(result.x);
+    require_near(
+        require_result_value(
+            require_component_result(
+                graph_result, "train")
+                .metrics,
+            "net_energy_flow"),
+        4.0e6, 1.0e-6,
+        "shaft-train metric attributes mechanical and fixed loss");
+    require_near(
+        require_result_value(
+            require_component_result(
+                graph_result, "generator")
+                .metrics,
+            "net_energy_flow"),
+        0.02 * generator_shaft_power, 1.0e-6,
+        "generator metric attributes conversion loss");
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_energy_flow"),
+        4.0e6 + 0.02 * generator_shaft_power,
+        1.0e-6,
+        "system boundary energy equals attributed conversion losses");
 }
 
 void test_transient_compiler_rejects_fixed_differential_state() {

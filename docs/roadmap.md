@@ -200,6 +200,8 @@ Completed structural slices:
   fluid-derived properties, internal states, and derivatives; ✅
 - registered source/sink semantics plus topology-aware steady system-boundary mass and energy
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
+- generic steady component net-flow metrics that attribute mass closure and energy conversion
+  losses through registered port directions; ✅
 - transport-neutral `thermox.job/v1` lifecycle with idempotent submission, atomic worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 

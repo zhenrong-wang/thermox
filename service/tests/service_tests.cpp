@@ -883,6 +883,17 @@ void test_steady_service() {
     require(
         compressor.ports.size() == 3,
         "steady graph must contain every component port domain");
+    require(
+        std::abs(require_result_value(
+                     compressor.metrics,
+                     "net_mass_flow")
+                     .value_si) < 1.0e-9 &&
+            std::abs(require_result_value(
+                         compressor.metrics,
+                         "net_energy_flow")
+                         .value_si) < 1.0e-5,
+        "component metrics must expose compressor mass and "
+        "energy closure");
     const auto& outlet =
         require_port_result(
             response.graph, "compressor", "outlet");

@@ -90,7 +90,8 @@ Implemented in this sprint:
 - Generic model graph compiler that validates registered component port contracts, creates canonical port variables, lowers connections/fixed values/component equations into sparse equation metadata, and emits a `NonlinearProblem`.
 - Topology-aware steady boundary audits aggregate mass and enthalpy flow for fluid/material streams
   and energy transfer for heat, shaft, and electrical ports, with explicit source/sink semantics
-  discoverable through the component catalog.
+  discoverable through the component catalog. Per-component net-flow metrics attribute conversion
+  losses to the equipment that owns them.
 - `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
   directions, and connection cardinality come from the active runtime catalog.
 - Calibration campaigns select explicit component/connection parameter targets without changing
