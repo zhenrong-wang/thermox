@@ -1,6 +1,7 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/native_runtime.hpp"
+#include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <algorithm>
@@ -11,6 +12,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -1421,6 +1424,150 @@ void test_invalid_solver_settings() {
         "invalid solver settings must have a stable error code");
 }
 
+thermox::service::GraphResult projection_graph(double kpi_value) {
+    thermox::service::GraphResult graph;
+    graph.system_balances = {
+        {"energy_residual", "power", 0.25},
+    };
+    graph.kpis = {
+        {"net_efficiency", "dimensionless", kpi_value},
+    };
+    thermox::service::ComponentResult component;
+    component.component_id = "turbine";
+    component.kind = "expander";
+    component.metrics = {
+        {"shaft_power", "power", 12.0},
+    };
+    component.internal_values = {
+        {"pressure_ratio", "dimensionless", 8.0},
+    };
+    thermox::service::PortResult outlet;
+    outlet.port_name = "outlet";
+    outlet.domain = "fluid";
+    outlet.primary_values = {
+        {"temperature", "temperature", 720.0},
+    };
+    outlet.derived_values = {
+        {"enthalpy", "specific_energy", 900000.0},
+    };
+    component.ports.push_back(std::move(outlet));
+    graph.components.push_back(std::move(component));
+    return graph;
+}
+
+void test_system_agnostic_result_projection() {
+    using thermox::service::ResultAggregation;
+    using thermox::service::ResultProjection;
+    using thermox::service::ResultValueScope;
+
+    const std::vector<ResultProjection> steady_projections{
+        {
+            "cycle_efficiency",
+            ResultValueScope::kpi,
+            {},
+            {},
+            "net_efficiency",
+            "dimensionless",
+            ResultAggregation::final,
+        },
+        {
+            "turbine_outlet_temperature",
+            ResultValueScope::port_primary,
+            "turbine",
+            "outlet",
+            "temperature",
+            "temperature",
+            ResultAggregation::final,
+        },
+    };
+    const auto steady = thermox::service::project_steady_result(
+        projection_graph(0.41), steady_projections);
+    require(
+        steady.schema_version ==
+                thermox::service::result_summary_schema_v1 &&
+            steady.mode == "steady" &&
+            steady.values.size() == 2U &&
+            steady.values[0].value_si == 0.41 &&
+            steady.values[1].value_si == 720.0,
+        "steady summaries must select exact unit-tagged graph "
+        "values without system-specific logic");
+    const auto steady_json =
+        thermox::service::serialize_result_summary_json(steady);
+    require(
+        steady_json.find(
+            "\"schema_version\": "
+            "\"thermox.result_summary/v1\"") !=
+                std::string::npos &&
+            steady_json.find(
+                "\"id\": \"cycle_efficiency\"") !=
+                std::string::npos &&
+            steady_json.find("\"sample_time\": null") !=
+                std::string::npos,
+        "result summaries must have a stable serialized "
+        "service contract");
+
+    std::vector<thermox::service::StateSample> trajectory{
+        {0.0, projection_graph(0.40)},
+        {1.0, projection_graph(0.25)},
+        {2.0, projection_graph(0.35)},
+    };
+    const std::vector<ResultProjection> transient_projections{
+        {
+            "minimum_efficiency",
+            ResultValueScope::kpi,
+            {},
+            {},
+            "net_efficiency",
+            "dimensionless",
+            ResultAggregation::minimum,
+        },
+        {
+            "maximum_efficiency",
+            ResultValueScope::kpi,
+            {},
+            {},
+            "net_efficiency",
+            "dimensionless",
+            ResultAggregation::maximum,
+        },
+        {
+            "final_efficiency",
+            ResultValueScope::kpi,
+            {},
+            {},
+            "net_efficiency",
+            "dimensionless",
+            ResultAggregation::final,
+        },
+    };
+    const auto transient =
+        thermox::service::project_transient_result(
+            trajectory, transient_projections);
+    require(
+        transient.values.size() == 3U &&
+            transient.values[0].value_si == 0.25 &&
+            transient.values[0].sample_time == 1.0 &&
+            transient.values[1].value_si == 0.40 &&
+            transient.values[1].sample_time == 0.0 &&
+            transient.values[2].value_si == 0.35 &&
+            transient.values[2].sample_time == 2.0,
+        "transient summaries must apply explicit reductions and "
+        "retain the selected sample time");
+
+    auto wrong_dimension = steady_projections;
+    wrong_dimension.front().dimension = "power";
+    bool rejected = false;
+    try {
+        (void)thermox::service::project_steady_result(
+            projection_graph(0.41), wrong_dimension);
+    } catch (const thermox::service::ResultProjectionError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "result projection must reject dimension mismatches");
+}
+
 }  // namespace
 
 int main() {
@@ -1444,6 +1591,7 @@ int main() {
         test_transient_service();
         test_structured_compilation_failure();
         test_invalid_solver_settings();
+        test_system_agnostic_result_projection();
         std::cout << "thermox service tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
 #include <string>
@@ -18,6 +19,8 @@ std::string serialize_engineering_study_response_json(
     const EngineeringStudyResponse& response);
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
+std::string serialize_result_summary_json(
+    const ResultSummary& summary);
 std::string serialize_job_record_json(
     const SimulationJobRecord& record);
 std::string serialize_job_page_json(

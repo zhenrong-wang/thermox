@@ -1171,6 +1171,41 @@ std::string serialize_transient_response_json(
     return out.str();
 }
 
+std::string serialize_result_summary_json(
+    const ResultSummary& summary) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, summary.schema_version);
+    out << ",\n  \"mode\": ";
+    json_string(out, summary.mode);
+    out << ",\n  \"values\": [";
+    for (std::size_t index = 0;
+         index < summary.values.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        const auto& value = summary.values[index];
+        out << "{\"id\": ";
+        json_string(out, value.id);
+        out << ", \"dimension\": ";
+        json_string(out, value.dimension);
+        out << ", \"value_si\": ";
+        json_number(out, value.value_si);
+        out << ", \"aggregation\": ";
+        json_string(out, to_string(value.aggregation));
+        out << ", \"sample_time\": ";
+        if (value.has_sample_time) {
+            json_number(out, value.sample_time);
+        } else {
+            out << "null";
+        }
+        out << '}';
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_job_record_json(
     const SimulationJobRecord& record) {
     std::ostringstream out;
