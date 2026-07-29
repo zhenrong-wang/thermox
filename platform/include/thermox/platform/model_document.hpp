@@ -102,5 +102,13 @@ struct ModelDocument {
 
 ModelDocument load_model_document(const std::string& path);
 ModelDocument parse_model_document_text(const std::string& text);
+// Persistence-facing topology documents deliberately contain no operating
+// cases or calibration campaigns. The returned ModelDocument therefore has
+// empty cases/calibrations and can be composed into the existing compiler
+// input without changing numerical or component contracts.
+ModelDocument parse_topology_document_text(
+    const std::string& text);
+CaseDefinition parse_case_document_text(
+    const std::string& text);
 
 }  // namespace thermox::platform

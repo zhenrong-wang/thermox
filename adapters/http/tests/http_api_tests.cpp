@@ -312,7 +312,7 @@ void test_team_scoped_projects_and_model_revisions() {
 
     const std::string model = read_file(
         std::string(THERMOX_SOURCE_DIR) +
-        "/core/examples/air_compressor.json");
+        "/core/examples/air_compressor.topology.json");
     auto revision_request = json_post(
         project_location + "/model-revisions",
         model);
@@ -325,7 +325,7 @@ void test_team_scoped_projects_and_model_revisions() {
             revision.headers.contains("ETag") &&
             revision.body.find(
                 "\"model_schema_version\": "
-                "\"thermox.model/v2\"") !=
+                "\"thermox.topology/v1\"") !=
                 std::string::npos &&
             revision.body.find("\"model\": {") !=
                 std::string::npos,
@@ -348,6 +348,42 @@ void test_team_scoped_projects_and_model_revisions() {
                 std::string::npos,
         "revision history must return metadata without "
         "duplicating model bodies");
+
+    const std::string case_document = read_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.design.case.json");
+    auto case_request = authenticated(json_post(
+        revision.headers.at("Location") + "/case-revisions",
+        case_document));
+    const auto simulation_case = api.handle(case_request);
+    require(
+        simulation_case.status == 201 &&
+            simulation_case.headers.contains("Location") &&
+            simulation_case.headers.contains("ETag") &&
+            simulation_case.body.find(
+                "\"case_id\": \"design\"") !=
+                std::string::npos &&
+            simulation_case.body.find(
+                "\"case_document\": {") !=
+                std::string::npos,
+        "case revision creation must bind canonical operating "
+        "data to the exact model revision");
+
+    auto case_history_request = authenticated({
+        "GET",
+        revision.headers.at("Location") + "/case-revisions",
+        {},
+        {},
+    });
+    const auto case_history = api.handle(case_history_request);
+    require(
+        case_history.status == 200 &&
+            case_history.body.find("\"revision_number\": 1") !=
+                std::string::npos &&
+            case_history.body.find("\"case_document\": {") ==
+                std::string::npos,
+        "case history must return metadata without duplicating "
+        "case documents");
 }
 
 }  // namespace

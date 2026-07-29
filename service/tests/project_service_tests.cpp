@@ -1,5 +1,6 @@
 #include "thermox/service/in_memory_projects.hpp"
 #include "thermox/service/projects.hpp"
+#include "thermox/service/simulation_service.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -66,7 +67,8 @@ void test_model_revisions_are_immutable_and_scoped() {
         team_a, "Cycle model", {},
     });
     const auto model =
-        read_source_file("core/examples/air_compressor.json");
+        read_source_file(
+            "core/examples/air_compressor.topology.json");
     const auto first = service.create_model_revision({
         team_a, project.project_id, {}, model,
     });
@@ -84,7 +86,8 @@ void test_model_revisions_are_immutable_and_scoped() {
             first.checksum == second.checksum &&
             first.checksum.starts_with("sha256:") &&
             first.canonical_model_json.find(
-                "\"schema_version\": \"thermox.model/v2\"") !=
+                "\"schema_version\": "
+                "\"thermox.topology/v1\"") !=
                 std::string::npos,
         "model revisions must be ordered, parent-linked, "
         "canonical, and content checksummed");
@@ -170,7 +173,8 @@ void test_public_json_omits_model_from_history() {
         team_a,
         project.project_id,
         {},
-        read_source_file("core/examples/air_compressor.json"),
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
     });
     const auto detail =
         thermox::service::serialize_model_revision_json(revision);
@@ -188,6 +192,100 @@ void test_public_json_omits_model_from_history() {
         "returns metadata only");
 }
 
+void test_case_revisions_bind_exact_model_revisions() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Case history", {}});
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto case_json = read_source_file(
+        "core/examples/air_compressor.design.case.json");
+    const auto first = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        case_json,
+    });
+    const auto second = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        first.case_revision_id,
+        case_json,
+    });
+    require(
+        first.case_id == "design" &&
+            first.mode == "steady_state_design" &&
+            first.revision_number == 1U &&
+            second.revision_number == 2U &&
+            second.parent_case_revision_id ==
+                first.case_revision_id &&
+            first.model_revision_id ==
+                model.model_revision_id &&
+            first.checksum == second.checksum &&
+            first.checksum.starts_with("sha256:"),
+        "case revisions must be canonical, immutable, ordered, "
+        "and bound to an exact model revision");
+    require(
+        service
+                .list_case_revisions(
+                    team_a,
+                    project.project_id,
+                    model.model_revision_id)
+                .size() == 2U &&
+            !service
+                 .get_case_revision(
+                     team_b,
+                     project.project_id,
+                     model.model_revision_id,
+                     first.case_revision_id)
+                 .has_value(),
+        "case history must be Team scoped");
+
+    const auto detail =
+        thermox::service::serialize_case_revision_json(first);
+    const auto history =
+        thermox::service::serialize_case_revisions_json({first});
+    require(
+        detail.find("\"case_document\": {") !=
+                std::string::npos &&
+            history.find("\"case_document\": {") ==
+                std::string::npos,
+        "case detail must carry its document while history "
+        "returns metadata only");
+
+    const auto resolved = service.resolve_model_case(
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        first.case_revision_id);
+    require(
+        resolved &&
+            resolved->model_checksum == model.checksum &&
+            resolved->case_checksum == first.checksum &&
+            resolved->executable_model_json.find(
+                "\"schema_version\": \"thermox.model/v2\"") !=
+                std::string::npos,
+        "an exact topology/case pair must compose into a "
+        "provenance-pinned executable model");
+    thermox::service::SteadySimulationRequest run;
+    run.model_json = resolved->executable_model_json;
+    run.case_id = resolved->case_id;
+    require(
+        thermox::service::SimulationService{}
+            .run_steady(run)
+            .succeeded(),
+        "the composed persisted topology/case pair must execute "
+        "through the ordinary simulation service");
+}
+
 }  // namespace
 
 int main() {
@@ -196,6 +294,7 @@ int main() {
         test_model_revisions_are_immutable_and_scoped();
         test_invalid_input_is_rejected_before_persistence();
         test_public_json_omits_model_from_history();
+        test_case_revisions_bind_exact_model_revisions();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

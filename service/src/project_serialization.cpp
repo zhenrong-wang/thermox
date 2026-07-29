@@ -109,6 +109,41 @@ void model_revision_json(
     out << '}';
 }
 
+void case_revision_json(
+    std::ostringstream& out,
+    const CaseRevisionRecord& revision,
+    bool include_case) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"case_revision_id\": ";
+    json_string(out, revision.case_revision_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, revision.model_revision_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"case_id\": ";
+    json_string(out, revision.case_id);
+    out << ", \"revision_number\": "
+        << revision.revision_number;
+    out << ", \"parent_case_revision_id\": ";
+    json_string(out, revision.parent_case_revision_id);
+    out << ", \"mode\": ";
+    json_string(out, revision.mode);
+    out << ", \"checksum\": ";
+    json_string(out, revision.checksum);
+    out << ", \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at);
+    if (include_case) {
+        out << ", \"case_document\": "
+            << revision.canonical_case_json;
+    }
+    out << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -156,6 +191,32 @@ std::string serialize_model_revisions_json(
             out << ", ";
         }
         model_revision_json(out, revisions[index], false);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_case_revision_json(
+    const CaseRevisionRecord& revision,
+    bool include_case) {
+    std::ostringstream out;
+    case_revision_json(out, revision, include_case);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_case_revisions_json(
+    const std::vector<CaseRevisionRecord>& revisions) {
+    std::ostringstream out;
+    out << "{\"schema_version\": "
+           "\"thermox.case_revision_list/v1\", "
+        << "\"case_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        case_revision_json(out, revisions[index], false);
     }
     out << "]}\n";
     return out.str();

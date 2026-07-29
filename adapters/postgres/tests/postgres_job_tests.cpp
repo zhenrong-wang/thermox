@@ -87,6 +87,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "001_simulation_jobs.sql",
              "002_worker_leases.sql",
              "003_projects_and_model_revisions.sql",
+             "004_case_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -458,7 +459,7 @@ void test_projects_and_immutable_model_revisions(
 
     std::ifstream model_file(
         std::string(THERMOX_SOURCE_DIR) +
-        "/core/examples/air_compressor.json");
+        "/core/examples/air_compressor.topology.json");
     require(
         static_cast<bool>(model_file),
         "could not read model revision fixture");
@@ -495,6 +496,50 @@ void test_projects_and_immutable_model_revisions(
                  first.model_revision_id)
              .has_value(),
         "cross-Team revision lookup must not reveal existence");
+
+    std::ifstream case_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.design.case.json");
+    require(
+        static_cast<bool>(case_file),
+        "could not read case revision fixture");
+    std::ostringstream simulation_case;
+    simulation_case << case_file.rdbuf();
+    const auto first_case = projects.create_case_revision({
+        team_a,
+        project.project_id,
+        first.model_revision_id,
+        {},
+        simulation_case.str(),
+    });
+    const auto second_case = projects.create_case_revision({
+        team_a,
+        project.project_id,
+        first.model_revision_id,
+        first_case.case_revision_id,
+        simulation_case.str(),
+    });
+    require(
+        first_case.case_id == "design" &&
+            first_case.revision_number == 1 &&
+            second_case.revision_number == 2 &&
+            second_case.parent_case_revision_id ==
+                first_case.case_revision_id &&
+            projects
+                    .list_case_revisions(
+                        team_a,
+                        project.project_id,
+                        first.model_revision_id)
+                    .size() == 2 &&
+            !projects
+                 .get_case_revision(
+                     team_b,
+                     project.project_id,
+                     first.model_revision_id,
+                     first_case.case_revision_id)
+                 .has_value(),
+        "PostgreSQL case revisions must be immutable, ordered, "
+        "model-bound, and Team scoped");
 }
 
 }  // namespace

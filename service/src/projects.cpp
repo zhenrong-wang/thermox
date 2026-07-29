@@ -134,10 +134,10 @@ ModelRevisionRecord ProjectService::create_model_revision(
     platform::ModelDocument document;
     std::string canonical;
     try {
-        document = platform::parse_model_document_text(
+        document = platform::parse_topology_document_text(
             request.model_json);
         canonical =
-            detail::serialize_model_document_json(document);
+            detail::serialize_topology_document_json(document);
     } catch (const std::exception& error) {
         throw ProjectRequestError(
             std::string("invalid model document: ") +
@@ -182,6 +182,127 @@ ProjectService::list_model_revisions(
     }
     return repository_->list_model_revisions(
         identity.team_id, project_id);
+}
+
+CaseRevisionRecord ProjectService::create_case_revision(
+    const CreateCaseRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.model_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and model revision IDs must not be empty");
+    }
+    if (request.case_json.empty()) {
+        throw ProjectRequestError(
+            "case document must not be empty");
+    }
+
+    platform::CaseDefinition simulation_case;
+    std::string canonical;
+    try {
+        simulation_case =
+            platform::parse_case_document_text(request.case_json);
+        canonical =
+            detail::serialize_case_document_json(
+                simulation_case);
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid case document: ") +
+            error.what());
+    }
+    return repository_->create_case_revision(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.model_revision_id,
+        request.parent_case_revision_id,
+        simulation_case.id,
+        simulation_case.mode,
+        canonical,
+        checksum(canonical));
+}
+
+std::optional<CaseRevisionRecord>
+ProjectService::get_case_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& model_revision_id,
+    const std::string& case_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || model_revision_id.empty() ||
+        case_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project, model revision, and case revision IDs "
+            "must not be empty");
+    }
+    return repository_->get_case_revision(
+        identity.team_id,
+        project_id,
+        model_revision_id,
+        case_revision_id);
+}
+
+std::vector<CaseRevisionRecord>
+ProjectService::list_case_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& model_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || model_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and model revision IDs must not be empty");
+    }
+    return repository_->list_case_revisions(
+        identity.team_id, project_id, model_revision_id);
+}
+
+std::optional<ResolvedModelCase>
+ProjectService::resolve_model_case(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& model_revision_id,
+    const std::string& case_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || model_revision_id.empty() ||
+        case_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project, model revision, and case revision IDs "
+            "must not be empty");
+    }
+    const auto model = repository_->get_model_revision(
+        identity.team_id, project_id, model_revision_id);
+    const auto simulation_case =
+        repository_->get_case_revision(
+            identity.team_id,
+            project_id,
+            model_revision_id,
+            case_revision_id);
+    if (!model || !simulation_case) {
+        return std::nullopt;
+    }
+    try {
+        auto document = platform::parse_topology_document_text(
+            model->canonical_model_json);
+        document.schema_version = "thermox.model/v2";
+        document.cases = {
+            platform::parse_case_document_text(
+                simulation_case->canonical_case_json),
+        };
+        return ResolvedModelCase{
+            project_id,
+            model_revision_id,
+            model->checksum,
+            case_revision_id,
+            simulation_case->checksum,
+            simulation_case->case_id,
+            detail::serialize_model_document_json(document),
+        };
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string(
+                "persisted model/case composition failed: ") +
+            error.what());
+    }
 }
 
 }  // namespace thermox::service

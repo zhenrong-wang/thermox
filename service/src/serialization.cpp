@@ -310,16 +310,12 @@ void graph_result_json(
 
 namespace detail {
 
-std::string serialize_model_document_json(
-    const platform::ModelDocument& document) {
-    if (document.schema_version != "thermox.model/v2") {
-        throw std::invalid_argument(
-            "unsupported model schema_version for serialization: " +
-            document.schema_version);
-    }
-    std::ostringstream out;
+void serialize_topology(
+    std::ostringstream& out,
+    const platform::ModelDocument& document,
+    const std::string& schema_version) {
     out << "{\n  \"schema_version\": ";
-    json_string(out, document.schema_version);
+    json_string(out, schema_version);
     out << ",\n  \"model\": {\n    \"id\": ";
     json_string(out, document.model_id);
     if (!document.name.empty()) {
@@ -456,7 +452,64 @@ std::string serialize_model_document_json(
         out << "}"
             << (i + 1 == document.connections.size() ? "\n" : ",\n");
     }
-    out << "    ]\n  },\n  \"cases\": [";
+    out << "    ]\n  }";
+}
+
+std::string serialize_topology_document_json(
+    const platform::ModelDocument& document) {
+    std::ostringstream out;
+    serialize_topology(
+        out, document, "thermox.topology/v1");
+    out << "\n}\n";
+    return out.str();
+}
+
+std::string serialize_case_document_json(
+    const platform::CaseDefinition& simulation_case) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": \"thermox.case/v1\","
+           "\n  \"case\": {\n    \"id\": ";
+    json_string(out, simulation_case.id);
+    if (!simulation_case.label.empty()) {
+        out << ",\n    \"label\": ";
+        json_string(out, simulation_case.label);
+    }
+    out << ",\n    \"mode\": ";
+    json_string(out, simulation_case.mode);
+    if (!simulation_case.parameter_overrides.empty()) {
+        out << ",\n    \"parameter_overrides\": ";
+        scalar_map(
+            out, simulation_case.parameter_overrides, "      ");
+    }
+    if (!simulation_case.fixed_values.empty()) {
+        out << ",\n    \"fixed_values\": ";
+        scalar_map(
+            out, simulation_case.fixed_values, "      ");
+    }
+    if (!simulation_case.initial_guesses.empty()) {
+        out << ",\n    \"initial_guesses\": ";
+        scalar_map(
+            out, simulation_case.initial_guesses, "      ");
+    }
+    if (!simulation_case.solver_options.empty()) {
+        out << ",\n    \"solver_options\": ";
+        scalar_map(
+            out, simulation_case.solver_options, "      ");
+    }
+    out << "\n  }\n}\n";
+    return out.str();
+}
+
+std::string serialize_model_document_json(
+    const platform::ModelDocument& document) {
+    if (document.schema_version != "thermox.model/v2") {
+        throw std::invalid_argument(
+            "unsupported model schema_version for serialization: " +
+            document.schema_version);
+    }
+    std::ostringstream out;
+    serialize_topology(out, document, document.schema_version);
+    out << ",\n  \"cases\": [";
     if (!document.cases.empty()) out << "\n";
     for (std::size_t i = 0; i < document.cases.size(); ++i) {
         const auto& simulation_case = document.cases[i];

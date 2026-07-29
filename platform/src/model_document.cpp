@@ -1179,13 +1179,11 @@ void validate_connections(const ModelDocument& document) {
     }
 }
 
-ModelDocument parse_model_document_root(const JsonValue& root) {
-    const JsonValue& object = require_object_root(root);
+ModelDocument parse_topology(
+    const JsonValue& object,
+    const std::string& schema_version) {
     ModelDocument document;
-    document.schema_version = require_string(object, "schema_version");
-    if (document.schema_version != "thermox.model/v2") {
-        throw std::invalid_argument("unsupported schema_version: " + document.schema_version);
-    }
+    document.schema_version = schema_version;
     const std::string model_key{"model"};
     const JsonValue& model = require_object_member(object, model_key);
     document.model_id = require_string(model, "id");
@@ -1229,6 +1227,20 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
         document.connections.push_back(parse_connection(connection_value));
     }
 
+    validate_connections(document);
+    return document;
+}
+
+ModelDocument parse_model_document_root(const JsonValue& root) {
+    const JsonValue& object = require_object_root(root);
+    const auto schema_version =
+        require_string(object, "schema_version");
+    if (schema_version != "thermox.model/v2") {
+        throw std::invalid_argument(
+            "unsupported schema_version: " + schema_version);
+    }
+    auto document = parse_topology(object, schema_version);
+
     std::set<std::string> case_ids;
     for (const JsonValue& case_value : require_array_member(object, "cases").array) {
         CaseDefinition c = parse_case(case_value);
@@ -1250,9 +1262,40 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
         }
     }
 
-    validate_connections(document);
     validate_calibrations(document);
     return document;
+}
+
+ModelDocument parse_topology_document_root(
+    const JsonValue& root) {
+    const JsonValue& object = require_object_root(root);
+    const auto schema_version =
+        require_string(object, "schema_version");
+    if (schema_version != "thermox.topology/v1") {
+        throw std::invalid_argument(
+            "unsupported topology schema_version: " +
+            schema_version);
+    }
+    if (find_member(object, "cases") != nullptr ||
+        find_member(object, "calibrations") != nullptr) {
+        throw std::invalid_argument(
+            "topology documents cannot embed cases or "
+            "calibrations");
+    }
+    return parse_topology(object, schema_version);
+}
+
+CaseDefinition parse_case_document_root(
+    const JsonValue& root) {
+    const JsonValue& object = require_object_root(root);
+    const auto schema_version =
+        require_string(object, "schema_version");
+    if (schema_version != "thermox.case/v1") {
+        throw std::invalid_argument(
+            "unsupported case schema_version: " +
+            schema_version);
+    }
+    return parse_case(require_object_member(object, "case"));
 }
 
 }  // namespace
@@ -1270,6 +1313,20 @@ std::string read_text_file(const std::string& path) {
 ModelDocument parse_model_document_text(const std::string& text) {
     const JsonValue root_value = JsonParser{text}.parse_document();
     return parse_model_document_root(root_value);
+}
+
+ModelDocument parse_topology_document_text(
+    const std::string& text) {
+    const JsonValue root_value =
+        JsonParser{text}.parse_document();
+    return parse_topology_document_root(root_value);
+}
+
+CaseDefinition parse_case_document_text(
+    const std::string& text) {
+    const JsonValue root_value =
+        JsonParser{text}.parse_document();
+    return parse_case_document_root(root_value);
 }
 
 ModelDocument load_model_document(const std::string& path) {

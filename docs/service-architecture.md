@@ -143,7 +143,9 @@ The application boundary needed by a thin network adapter is now complete:
 | Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v2` JSON |
 | Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
-| Publish/read model revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
+| Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
+| Publish/read operating-case revisions | `ProjectService` | `thermox.case_revision/v1` JSON |
+| Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
 | Submit a simulation | `SimulationJobService::submit` | `thermox.job/v3` JSON |
 | Inspect a simulation | `SimulationJobService::get` | `thermox.job/v3` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
@@ -196,6 +198,8 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions` | List/publish immutable model revisions |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}` | Read canonical revision content |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
+| `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
 | `POST` | `/api/v1/simulations?mode=...&case_id=...` | Submit a Team-owned asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |

@@ -132,6 +132,27 @@ service::ModelRevisionRecord decode_model_revision(
     return record;
 }
 
+service::CaseRevisionRecord decode_case_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::CaseRevisionRecord record;
+    record.case_revision_id = field(result, row, 0);
+    record.model_revision_id = field(result, row, 1);
+    record.project_id = field(result, row, 2);
+    record.team_id = field(result, row, 3);
+    record.case_id = field(result, row, 4);
+    record.revision_number =
+        std::stoull(field(result, row, 5));
+    record.parent_case_revision_id =
+        optional_field(result, row, 6);
+    record.mode = field(result, row, 7);
+    record.canonical_case_json = field(result, row, 8);
+    record.checksum = field(result, row, 9);
+    record.created_by_user_id = field(result, row, 10);
+    record.created_at = decode_time(field(result, row, 11));
+    return record;
+}
+
 constexpr const char project_columns[] =
     "project_id, team_id, name, description, "
     "created_by_user_id, "
@@ -144,6 +165,13 @@ constexpr const char model_revision_columns[] =
     "model_schema_version, model_id, model_revision_label, "
     "canonical_model_payload, checksum, "
     "created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
+constexpr const char case_revision_columns[] =
+    "case_revision_id, model_revision_id, project_id, team_id, "
+    "case_id, revision_number, parent_case_revision_id, mode, "
+    "canonical_case_payload, checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
@@ -161,9 +189,11 @@ public:
         const auto schema = execute(
             connection.get(),
             "SELECT to_regclass('thermox_projects')::text, "
-            "to_regclass('thermox_model_revisions')::text");
+            "to_regclass('thermox_model_revisions')::text, "
+            "to_regclass('thermox_case_revisions')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
-            PQgetisnull(schema.get(), 0, 1)) {
+            PQgetisnull(schema.get(), 0, 1) ||
+            PQgetisnull(schema.get(), 0, 2)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -355,6 +385,158 @@ public:
         for (int row = 0; row < PQntuples(result.get()); ++row) {
             records.push_back(
                 decode_model_revision(result.get(), row));
+        }
+        return records;
+    }
+
+    service::CaseRevisionRecord create_case_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& model_revision_id,
+        const std::string& parent_case_revision_id,
+        const std::string& case_id,
+        const std::string& mode,
+        const std::string& canonical_case_json,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(
+            connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto model = execute(
+            connection.get(),
+            "SELECT 1 FROM thermox_model_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND model_revision_id = $3 FOR UPDATE",
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                model_revision_id.c_str(),
+            });
+        if (PQntuples(model.get()) == 0) {
+            throw service::ProjectStateError(
+                "model revision was not found");
+        }
+        if (!parent_case_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM thermox_case_revisions "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND model_revision_id = $3 AND case_id = $4 "
+                "AND case_revision_id = $5",
+                {
+                    team_id.c_str(),
+                    project_id.c_str(),
+                    model_revision_id.c_str(),
+                    case_id.c_str(),
+                    parent_case_revision_id.c_str(),
+                });
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent case revision was not found");
+            }
+        }
+        const auto number = execute(
+            connection.get(),
+            "SELECT coalesce(max(revision_number), 0) + 1 "
+            "FROM thermox_case_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND model_revision_id = $3 AND case_id = $4",
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                model_revision_id.c_str(),
+                case_id.c_str(),
+            });
+        const auto revision_number = field(number.get(), 0, 0);
+        const char* parent = parent_case_revision_id.empty()
+            ? nullptr
+            : parent_case_revision_id.c_str();
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO thermox_case_revisions ("
+            "model_revision_id, project_id, team_id, case_id, "
+            "revision_number, parent_case_revision_id, mode, "
+            "canonical_case_payload, checksum, "
+            "created_by_user_id"
+            ") VALUES ("
+            "$1, $2, $3, $4, $5::bigint, $6, $7, $8, $9, $10"
+            ") RETURNING "
+            "case_revision_id, model_revision_id, project_id, "
+            "team_id, case_id, revision_number, "
+            "parent_case_revision_id, mode, "
+            "canonical_case_payload, checksum, "
+            "created_by_user_id, "
+            "floor(extract(epoch FROM created_at) * 1000)"
+            "::bigint::text",
+            {
+                model_revision_id.c_str(),
+                project_id.c_str(),
+                team_id.c_str(),
+                case_id.c_str(),
+                revision_number.c_str(),
+                parent,
+                mode.c_str(),
+                canonical_case_json.c_str(),
+                checksum.c_str(),
+                created_by_user_id.c_str(),
+            });
+        (void)execute(
+            connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        return decode_case_revision(result.get());
+    }
+
+    std::optional<service::CaseRevisionRecord>
+    get_case_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            case_revision_columns +
+            " FROM thermox_case_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND model_revision_id = $3 "
+            "AND case_revision_id = $4";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                model_revision_id.c_str(),
+                case_revision_id.c_str(),
+            });
+        if (PQntuples(result.get()) == 0) {
+            return std::nullopt;
+        }
+        return decode_case_revision(result.get());
+    }
+
+    std::vector<service::CaseRevisionRecord>
+    list_case_revisions(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& model_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            case_revision_columns +
+            " FROM thermox_case_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND model_revision_id = $3 "
+            "ORDER BY case_id, revision_number";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                model_revision_id.c_str(),
+            });
+        std::vector<service::CaseRevisionRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            records.push_back(
+                decode_case_revision(result.get(), row));
         }
         return records;
     }

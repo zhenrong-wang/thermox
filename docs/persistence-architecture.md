@@ -106,17 +106,18 @@ The schema migration is
 `adapters/postgres/migrations/001_simulation_jobs.sql`. The local-only Compose service mounts the
 migration into PostgreSQL's initialization directory and binds PostgreSQL to loopback.
 
-Migration `003_projects_and_model_revisions.sql` adds Team-owned projects and immutable model
-revision history. Model revisions are assigned an atomic per-project sequence, may reference a
-parent only inside the same `(team_id, project_id)` scope, preserve exact canonical JSON bytes, and
-publish a SHA-256 checksum. PostgreSQL composite foreign keys make a cross-Team or cross-Project
-parent relationship impossible.
+Migration `003_projects_and_model_revisions.sql` adds Team-owned projects and immutable topology
+revision history. Topology revisions use `thermox.topology/v1`, are assigned an atomic per-project
+sequence, may reference a parent only inside the same `(team_id, project_id)` scope, preserve exact
+canonical JSON bytes, and publish a SHA-256 checksum. PostgreSQL composite foreign keys make a
+cross-Team or cross-Project parent relationship impossible.
 
-The current `thermox.model/v2` execution document embeds operating cases. Consequently this
-milestone persists the exact executable model document as one model revision and does not create a
-nominally independent CaseRevision that would actually duplicate or alias embedded data. The next
-model schema should separate topology and case documents; immutable case revisions can then bind
-cleanly to an exact model revision.
+Migration `004_case_revisions.sql` adds independent `thermox.case/v1` operating-case history. Every
+case revision binds to one exact topology revision. Its parent must have the same Team, Project,
+topology revision, and logical case ID; revision numbering is atomic within that scope. The service
+can compose an exact topology/case pair into the existing internal `thermox.model/v2` compiler
+input. This preserves solver, physics, component, calibration, and direct embedded-caller behavior
+while removing embedded cases from the persisted product model.
 
 ## Object storage
 

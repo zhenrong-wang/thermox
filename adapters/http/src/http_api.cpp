@@ -460,6 +460,21 @@ Response model_revision_response(
     return response;
 }
 
+Response case_revision_response(
+    const service::CaseRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_case_revision_json(revision));
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/model-revisions/" + revision.model_revision_id +
+        "/case-revisions/" + revision.case_revision_id;
+    response.headers["ETag"] =
+        "\"" + revision.checksum + "\"";
+    return response;
+}
+
 std::shared_ptr<service::SimulationJobService>
 make_local_job_service(
     const std::shared_ptr<const service::SimulationRuntime>& runtime) {
@@ -678,20 +693,13 @@ Response Api::handle(const Request& request) const {
             const std::string detail_prefix =
                 std::string(revisions_segment) + "/";
             if (remainder.starts_with(detail_prefix)) {
-                reject_unknown_query(target.query, {});
-                if (method != "get") {
-                    auto response = error_response(
-                        405,
-                        "method_not_allowed",
-                        "model revision detail only supports GET");
-                    response.headers["Allow"] = "GET";
-                    return response;
-                }
-                const auto revision_id =
+                const auto model_path =
                     remainder.substr(detail_prefix.size());
-                if (revision_id.empty() ||
-                    revision_id.find('/') !=
-                        std::string::npos) {
+                const auto nested_separator =
+                    model_path.find('/');
+                const auto revision_id =
+                    model_path.substr(0, nested_separator);
+                if (revision_id.empty()) {
                     return error_response(
                         404,
                         "route_not_found",
@@ -706,7 +714,105 @@ Response Api::handle(const Request& request) const {
                         "model_revision_not_found",
                         "model revision was not found");
                 }
-                return model_revision_response(*revision, 200);
+                if (nested_separator == std::string::npos) {
+                    reject_unknown_query(target.query, {});
+                    if (method != "get") {
+                        auto response = error_response(
+                            405,
+                            "method_not_allowed",
+                            "model revision detail only supports "
+                            "GET");
+                        response.headers["Allow"] = "GET";
+                        return response;
+                    }
+                    return model_revision_response(*revision, 200);
+                }
+
+                constexpr std::string_view cases_segment =
+                    "/case-revisions";
+                const auto case_path =
+                    model_path.substr(nested_separator);
+                if (case_path == cases_segment) {
+                    if (method == "get") {
+                        reject_unknown_query(target.query, {});
+                        return json_response(
+                            200,
+                            service::serialize_case_revisions_json(
+                                impl_->projects
+                                    ->list_case_revisions(
+                                        identity,
+                                        project_id,
+                                        revision_id)));
+                    }
+                    if (method == "post") {
+                        reject_unknown_query(
+                            target.query,
+                            {"parent_revision_id"});
+                        require_json_request(
+                            request,
+                            impl_->options.maximum_body_bytes);
+                        service::CreateCaseRevisionRequest command;
+                        command.identity = identity;
+                        command.project_id = project_id;
+                        command.model_revision_id = revision_id;
+                        command.parent_case_revision_id =
+                            optional_query(
+                                target.query,
+                                "parent_revision_id");
+                        command.case_json = request.body;
+                        return case_revision_response(
+                            impl_->projects
+                                ->create_case_revision(command),
+                            201);
+                    }
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "case revisions only support GET and "
+                        "POST");
+                    response.headers["Allow"] = "GET, POST";
+                    return response;
+                }
+
+                const std::string case_detail_prefix =
+                    std::string(cases_segment) + "/";
+                if (case_path.starts_with(case_detail_prefix)) {
+                    reject_unknown_query(target.query, {});
+                    if (method != "get") {
+                        auto response = error_response(
+                            405,
+                            "method_not_allowed",
+                            "case revision detail only supports "
+                            "GET");
+                        response.headers["Allow"] = "GET";
+                        return response;
+                    }
+                    const auto case_revision_id =
+                        case_path.substr(
+                            case_detail_prefix.size());
+                    if (case_revision_id.empty() ||
+                        case_revision_id.find('/') !=
+                            std::string::npos) {
+                        return error_response(
+                            404,
+                            "route_not_found",
+                            "no route matches the request target");
+                    }
+                    const auto simulation_case =
+                        impl_->projects->get_case_revision(
+                            identity,
+                            project_id,
+                            revision_id,
+                            case_revision_id);
+                    if (!simulation_case) {
+                        return error_response(
+                            404,
+                            "case_revision_not_found",
+                            "case revision was not found");
+                    }
+                    return case_revision_response(
+                        *simulation_case, 200);
+                }
             }
             return error_response(
                 404,

@@ -217,6 +217,9 @@ Completed structural slices:
 - Team-owned logical projects, trusted per-Team membership roles, immutable parent-linked
   canonical model revisions, SHA-256 integrity metadata, PostgreSQL composite tenant constraints,
   and thin project/revision HTTP routes; ✅
+- independent `thermox.topology/v1` and `thermox.case/v1` persistence contracts, immutable
+  model-bound case history, exact topology/case composition into the established compiler input,
+  PostgreSQL migration, and thin case-revision HTTP routes; ✅
 
 ## Persistence boundary decision
 
