@@ -141,6 +141,12 @@ public:
         std::shared_ptr<const SimulationRuntime> runtime,
         std::shared_ptr<SimulationJobRepository> jobs,
         std::shared_ptr<ResultArtifactStore> artifacts);
+    SimulationJobService(
+        std::shared_ptr<const SimulationRuntime> runtime,
+        std::shared_ptr<const EngineeringArtifactResolver>
+            engineering_artifacts,
+        std::shared_ptr<SimulationJobRepository> jobs,
+        std::shared_ptr<ResultArtifactStore> result_artifacts);
     ~SimulationJobService();
     SimulationJobService(SimulationJobService&&) noexcept;
     SimulationJobService& operator=(SimulationJobService&&) noexcept;

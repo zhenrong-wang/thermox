@@ -1,4 +1,5 @@
 #include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
@@ -56,6 +57,17 @@ thermox::service::PerformanceMapArtifactInput unused_test_map() {
     return artifact;
 }
 
+thermox::service::EngineeringArtifactReference map_reference(
+    const thermox::service::PerformanceMapArtifactInput& artifact) {
+    return {
+        artifact.id,
+        "thermox.performance_map",
+        artifact.schema_version,
+        artifact.revision,
+        artifact.checksum_sha256,
+    };
+}
+
 void test_submission_is_idempotent_and_conflict_safe() {
     auto jobs =
         thermox::service::make_in_memory_job_repository();
@@ -93,6 +105,23 @@ void test_submission_is_idempotent_and_conflict_safe() {
         "artifact payload must participate in the idempotency "
         "fingerprint and reusing its key "
         "must fail");
+
+    auto referenced = steady_request("reference-submission");
+    referenced.artifacts.references.push_back(
+        map_reference(unused_test_map()));
+    (void)service.submit(referenced);
+    referenced.artifacts.references.front().checksum_sha256 =
+        std::string(64, 'c');
+    conflict = false;
+    try {
+        (void)service.submit(referenced);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "artifact references must participate in the job "
+        "idempotency fingerprint");
 }
 
 void test_success_publishes_a_readable_artifact() {
@@ -100,11 +129,20 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::make_in_memory_job_repository();
     auto artifacts =
         thermox::service::make_in_memory_result_artifact_store();
-    thermox::service::SimulationJobService service(jobs, artifacts);
+    const auto engineering_artifact = unused_test_map();
+    const auto engineering_resolver =
+        thermox::service::
+            make_in_memory_engineering_artifact_resolver(
+                {engineering_artifact});
+    thermox::service::SimulationJobService service(
+        thermox::service::make_default_simulation_runtime(),
+        engineering_resolver,
+        jobs,
+        artifacts);
 
     auto request = steady_request("successful-run");
-    request.artifacts.performance_maps.push_back(
-        unused_test_map());
+    request.artifacts.references.push_back(
+        map_reference(engineering_artifact));
     const auto queued = service.submit(request);
     bool unavailable = false;
     try {

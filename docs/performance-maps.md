@@ -13,8 +13,9 @@ The separation is deliberate:
   the equations that interpret those inputs;
 - a model-document component **instance** supplies its medium bindings, scalar parameters, and
   artifact IDs;
-- a simulation request carries project/run-scoped immutable artifact payloads, while a native host
-  may also install deployment-wide artifacts in its immutable runtime;
+- a simulation request carries project/run-scoped immutable artifact payloads or exact
+  schema/revision/checksum-pinned references, while a native host may also install deployment-wide
+  artifacts in its immutable runtime;
 - the service builds a private overlay for compilation and never mutates or leaks data into another
   request.
 
@@ -41,9 +42,13 @@ are absent from the effective request/runtime registry. A request cannot silentl
 artifact with the same ID in the deployment runtime.
 
 The transport-neutral `SimulationArtifactBundle` accepts v1 ordinary maps and v2 conditioned maps
-using standard C++ DTOs. Validation, steady, transient, calibration, and queued-job execution all
-resolve the same bundle. Artifact identity, schema, revision, and checksum are recorded in result
-provenance; complete payload content participates in job idempotency fingerprints.
+using standard C++ DTOs, either inline or through `EngineeringArtifactReference`.
+`EngineeringArtifactResolver` is an injectable service port; its in-memory adapter demonstrates
+the contract that a future object-store adapter will implement. Validation, steady, transient,
+calibration, and queued-job execution all resolve the same bundle. The service rejects missing
+artifacts and any mismatch between the referenced and resolved type, schema, revision, or checksum.
+Artifact identity is recorded in result provenance. Complete inline payloads and complete reference
+identities participate in job idempotency fingerprints.
 
 `thermox::platform::PerformanceMap` represents a two-coordinate family of piecewise-linear curves.
 The individual curves may have different primary-coordinate samples, matching common compressor
@@ -118,6 +123,7 @@ input.
 5. Apply the same map contract to composition-aware material compressor and turbine ports. ✅
 6. Add conditioned three-coordinate maps and variable-geometry fluid/material turbomachinery
    components. ✅
-7. Add a persistent artifact resolver/object-store adapter behind the service DTO boundary.
-8. Calibrate a designated baseline point, then freeze parameters and predict independent
+7. Add an injectable artifact resolver and immutable reference contract. ✅
+8. Add a persistent object-store resolver adapter behind the service port.
+9. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points.

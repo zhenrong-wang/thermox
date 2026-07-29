@@ -76,3 +76,8 @@ In-memory adapters exercise the repository contract without a database.
 The next persistence slice may add PostgreSQL metadata and object-storage adapters. Those adapters
 must preserve the atomic and compare-and-swap semantics of `SimulationJobRepository`; they do not
 change the service, platform, physics, or numerical contracts.
+
+Engineering input data has a separate read boundary from result storage.
+`EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references
+into validated service DTOs. Its in-memory adapter is complete; a production object-store adapter
+must verify stored bytes against the referenced checksum before decoding and returning a payload.

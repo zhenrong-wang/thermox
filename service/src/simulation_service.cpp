@@ -163,6 +163,53 @@ std::vector<ArtifactProvenance> artifact_provenance(
     return provenance;
 }
 
+SimulationArtifactBundle resolve_artifacts(
+    const SimulationArtifactBundle& inputs,
+    const EngineeringArtifactResolver* resolver) {
+    SimulationArtifactBundle resolved;
+    resolved.performance_maps = inputs.performance_maps;
+    for (const auto& reference : inputs.references) {
+        if (reference.id.empty() ||
+            reference.artifact_type.empty() ||
+            reference.schema_version.empty() ||
+            reference.revision.empty() ||
+            reference.checksum_sha256.empty()) {
+            throw std::invalid_argument(
+                "engineering artifact references require id, type, "
+                "schema version, revision, and checksum");
+        }
+        if (reference.artifact_type !=
+            platform::performance_map_artifact_type) {
+            throw std::invalid_argument(
+                "unsupported engineering artifact type: " +
+                reference.artifact_type);
+        }
+        if (resolver == nullptr) {
+            throw std::invalid_argument(
+                "no engineering artifact resolver configured for id: " +
+                reference.id);
+        }
+        auto artifact =
+            resolver->resolve_performance_map(reference.id);
+        if (!artifact) {
+            throw std::invalid_argument(
+                "engineering artifact not found: " + reference.id);
+        }
+        if (artifact->id != reference.id ||
+            artifact->schema_version != reference.schema_version ||
+            artifact->revision != reference.revision ||
+            artifact->checksum_sha256 !=
+                reference.checksum_sha256) {
+            throw std::invalid_argument(
+                "resolved engineering artifact identity mismatch for id: " +
+                reference.id);
+        }
+        resolved.performance_maps.push_back(
+            std::move(*artifact));
+    }
+    return resolved;
+}
+
 std::string_view capability_name(
     physics::PropertyCapability capability) {
     switch (capability) {
@@ -835,10 +882,16 @@ ObjectiveEvaluation evaluate_calibration_objective(
 }  // namespace
 
 struct SimulationService::Impl {
-    explicit Impl(std::shared_ptr<const SimulationRuntime> runtime_value)
-        : runtime(std::move(runtime_value)) {}
+    Impl(
+        std::shared_ptr<const SimulationRuntime> runtime_value,
+        std::shared_ptr<const EngineeringArtifactResolver>
+            resolver_value)
+        : runtime(std::move(runtime_value)),
+          artifact_resolver(std::move(resolver_value)) {}
 
     std::shared_ptr<const SimulationRuntime> runtime;
+    std::shared_ptr<const EngineeringArtifactResolver>
+        artifact_resolver;
 };
 
 std::string to_string(OperationStatus status) {
@@ -871,7 +924,14 @@ SimulationService::SimulationService()
 
 SimulationService::SimulationService(
     std::shared_ptr<const SimulationRuntime> runtime)
-    : impl_(std::make_unique<Impl>(std::move(runtime))) {
+    : SimulationService(std::move(runtime), nullptr) {}
+
+SimulationService::SimulationService(
+    std::shared_ptr<const SimulationRuntime> runtime,
+    std::shared_ptr<const EngineeringArtifactResolver>
+        artifact_resolver)
+    : impl_(std::make_unique<Impl>(
+          std::move(runtime), std::move(artifact_resolver))) {
     if (!impl_->runtime) {
         throw std::invalid_argument(
             "simulation service runtime must not be null");
@@ -900,11 +960,15 @@ ValidateModelResponse SimulationService::validate_model(
             "missing_model", "request", "model_json must not be empty");
         return response;
     }
+    SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
     try {
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
             impl_->runtime->impl_->performance_maps,
-            request.artifacts);
+            artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
@@ -1144,11 +1208,15 @@ SteadySimulationResponse SimulationService::run_steady(
             "invalid_solver_settings", "request", ex.what());
         return response;
     }
+    SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
     try {
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
             impl_->runtime->impl_->performance_maps,
-            request.artifacts);
+            artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
@@ -1184,7 +1252,7 @@ SteadySimulationResponse SimulationService::run_steady(
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
         response.metadata.artifacts =
-            artifact_provenance(request.artifacts);
+            artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(
@@ -1274,11 +1342,15 @@ CalibrationResponse SimulationService::run_calibration(
         return response;
     }
 
+    SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
     try {
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
             impl_->runtime->impl_->performance_maps,
-            request.artifacts);
+            artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
@@ -1301,7 +1373,7 @@ CalibrationResponse SimulationService::run_calibration(
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
         response.metadata.artifacts =
-            artifact_provenance(request.artifacts);
+            artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -1545,11 +1617,15 @@ TransientSimulationResponse SimulationService::run_transient(
             "invalid_solver_settings", "request", ex.what());
         return response;
     }
+    SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
     try {
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
             impl_->runtime->impl_->performance_maps,
-            request.artifacts);
+            artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
@@ -1584,7 +1660,7 @@ TransientSimulationResponse SimulationService::run_transient(
             impl_->runtime->impl_->components,
             impl_->runtime->impl_->properties);
         response.metadata.artifacts =
-            artifact_provenance(request.artifacts);
+            artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::compilation_failed;
         response.error = make_error(

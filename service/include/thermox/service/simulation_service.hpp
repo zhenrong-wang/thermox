@@ -244,8 +244,27 @@ struct PerformanceMapArtifactInput {
     std::string condition_extrapolation{"reject"};
 };
 
+struct EngineeringArtifactReference {
+    std::string id;
+    std::string artifact_type;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+};
+
 struct SimulationArtifactBundle {
     std::vector<PerformanceMapArtifactInput> performance_maps;
+    std::vector<EngineeringArtifactReference> references;
+};
+
+class EngineeringArtifactResolver {
+public:
+    virtual ~EngineeringArtifactResolver() = default;
+
+    [[nodiscard]] virtual
+    std::optional<PerformanceMapArtifactInput>
+    resolve_performance_map(const std::string& artifact_id)
+        const = 0;
 };
 
 struct ResultValue {
@@ -479,6 +498,10 @@ public:
     SimulationService();
     explicit SimulationService(
         std::shared_ptr<const SimulationRuntime> runtime);
+    SimulationService(
+        std::shared_ptr<const SimulationRuntime> runtime,
+        std::shared_ptr<const EngineeringArtifactResolver>
+            artifact_resolver);
     ~SimulationService();
     SimulationService(SimulationService&&) noexcept;
     SimulationService& operator=(SimulationService&&) noexcept;

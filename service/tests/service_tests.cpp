@@ -1,4 +1,5 @@
 #include "thermox/service/serialization.hpp"
+#include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/native_runtime.hpp"
 #include "thermox/service/simulation_service.hpp"
 
@@ -84,6 +85,17 @@ thermox::service::PerformanceMapArtifactInput compressor_map() {
     };
     artifact.map = std::move(map);
     return artifact;
+}
+
+thermox::service::EngineeringArtifactReference map_reference(
+    const thermox::service::PerformanceMapArtifactInput& artifact) {
+    return {
+        artifact.id,
+        "thermox.performance_map",
+        artifact.schema_version,
+        artifact.revision,
+        artifact.checksum_sha256,
+    };
 }
 
 std::string mapped_compressor_model() {
@@ -179,6 +191,49 @@ void test_request_scoped_performance_map_artifacts() {
     require(
         !service.validate_model(isolated).succeeded(),
         "request artifacts must not leak into later requests");
+}
+
+void test_resolved_performance_map_artifacts() {
+    const auto artifact = compressor_map();
+    const auto resolver =
+        thermox::service::
+            make_in_memory_engineering_artifact_resolver(
+                {artifact});
+    thermox::service::SimulationService service(
+        thermox::service::make_default_simulation_runtime(),
+        resolver);
+
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = mapped_compressor_model();
+    request.case_id = "operating_point";
+    request.artifacts.references.push_back(
+        map_reference(artifact));
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded() &&
+            response.metadata.artifacts.size() == 1 &&
+            response.metadata.artifacts.front().id == artifact.id,
+        "a checksum-pinned artifact reference must resolve into "
+        "the scoped execution registry");
+
+    auto mismatched = request;
+    mismatched.artifacts.references.front().revision =
+        "different-revision";
+    const auto mismatch = service.run_steady(mismatched);
+    require(
+        mismatch.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            mismatch.error.code == "invalid_artifacts" &&
+            mismatch.error.stage == "artifacts",
+        "resolved artifact metadata must exactly match its reference");
+
+    thermox::service::SimulationService no_resolver;
+    const auto unavailable = no_resolver.run_steady(request);
+    require(
+        unavailable.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            unavailable.error.code == "invalid_artifacts",
+        "artifact references must fail explicitly without a resolver");
 }
 
 void test_request_contract_validation() {
@@ -967,6 +1022,7 @@ int main() {
     try {
         test_request_contract_validation();
         test_request_scoped_performance_map_artifacts();
+        test_resolved_performance_map_artifacts();
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();

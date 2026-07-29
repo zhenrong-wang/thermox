@@ -97,6 +97,14 @@ void append_artifacts(
         }
         append_string(stream, artifact.condition_extrapolation);
     }
+    stream << artifacts.references.size() << '|';
+    for (const auto& reference : artifacts.references) {
+        append_string(stream, reference.id);
+        append_string(stream, reference.artifact_type);
+        append_string(stream, reference.schema_version);
+        append_string(stream, reference.revision);
+        append_string(stream, reference.checksum_sha256);
+    }
 }
 
 std::string request_fingerprint(
@@ -189,9 +197,13 @@ bool is_terminal(SimulationJobState state) {
 struct SimulationJobService::Impl {
     Impl(
         std::shared_ptr<const SimulationRuntime> runtime,
+        std::shared_ptr<const EngineeringArtifactResolver>
+            engineering_artifacts,
         std::shared_ptr<SimulationJobRepository> job_repository,
         std::shared_ptr<ResultArtifactStore> artifact_store)
-        : simulation(std::move(runtime)),
+        : simulation(
+              std::move(runtime),
+              std::move(engineering_artifacts)),
           jobs(std::move(job_repository)),
           artifacts(std::move(artifact_store)) {
         if (!jobs) {
@@ -214,6 +226,7 @@ SimulationJobService::SimulationJobService(
     std::shared_ptr<ResultArtifactStore> artifacts)
     : SimulationJobService(
           make_default_simulation_runtime(),
+          nullptr,
           std::move(jobs),
           std::move(artifacts)) {}
 
@@ -221,8 +234,21 @@ SimulationJobService::SimulationJobService(
     std::shared_ptr<const SimulationRuntime> runtime,
     std::shared_ptr<SimulationJobRepository> jobs,
     std::shared_ptr<ResultArtifactStore> artifacts)
+    : SimulationJobService(
+          std::move(runtime),
+          nullptr,
+          std::move(jobs),
+          std::move(artifacts)) {}
+
+SimulationJobService::SimulationJobService(
+    std::shared_ptr<const SimulationRuntime> runtime,
+    std::shared_ptr<const EngineeringArtifactResolver>
+        engineering_artifacts,
+    std::shared_ptr<SimulationJobRepository> jobs,
+    std::shared_ptr<ResultArtifactStore> artifacts)
     : impl_(std::make_unique<Impl>(
           std::move(runtime),
+          std::move(engineering_artifacts),
           std::move(jobs),
           std::move(artifacts))) {}
 

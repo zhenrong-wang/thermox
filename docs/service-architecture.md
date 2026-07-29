@@ -62,11 +62,14 @@ handle. Native hosts that register C++ component or property implementations use
 `SimulationService`.
 
 Engineering datasets are not service-global mutable state. Validate, steady, transient,
-calibration, and job requests may carry a `SimulationArtifactBundle`; the service validates it and
-constructs an execution-local performance-map registry over any immutable deployment defaults.
-The overlay is destroyed after the call, duplicate identities are rejected, queued jobs preserve
-the bundle, and result-v3 records its artifact provenance. A later database/object-store resolver
-can populate this same DTO boundary without changing platform compilation or component equations.
+calibration, and job requests may carry a `SimulationArtifactBundle` containing inline payloads or
+immutable references. An injected `EngineeringArtifactResolver` resolves references and the
+service requires an exact type/schema/revision/checksum match before constructing an
+execution-local performance-map registry over any immutable deployment defaults. The overlay is
+destroyed after the call, duplicate identities are rejected, queued jobs preserve references, and
+result-v3 records resolved artifact provenance. The provided in-memory resolver is a contract
+adapter; a later database/object-store implementation can replace it without changing platform
+compilation or component equations.
 
 Validation parses, canonicalizes, resolves the active runtime catalog, and compiles the selected
 steady or transient case without invoking a solver. It returns variable/equation counts, reduced

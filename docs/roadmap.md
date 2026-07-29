@@ -305,6 +305,7 @@ Work items:
    - `GET /component-types`
 3. Add job state model and run persistence.
    - transport-neutral job state, repository ports, and in-memory contract adapter; ✅
+   - checksum-pinned engineering-artifact resolver port and in-memory adapter; ✅
    - PostgreSQL and object-storage production adapters.
 4. Add structured logging and run IDs.
 5. Publish the existing versioned result serialization through the API.

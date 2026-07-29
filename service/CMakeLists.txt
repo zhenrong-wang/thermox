@@ -1,4 +1,5 @@
 add_library(thermox_service
+    src/in_memory_artifacts.cpp
     src/in_memory_jobs.cpp
     src/serialization.cpp
     src/simulation_jobs.cpp
