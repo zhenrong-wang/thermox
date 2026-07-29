@@ -481,6 +481,96 @@ void test_team_scope_isolation() {
         "cross-team cancellation must be rejected as not found");
 }
 
+void test_team_scoped_history_filters_and_paginates() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    auto first_request = steady_request("history-1");
+    first_request.source_revisions
+        ->run_configuration_revision_id = "run-a";
+    first_request.source_revisions
+        ->run_configuration_checksum =
+        "sha256:" + std::string(64, '3');
+    const auto first = service.submit(first_request);
+    auto second_request = steady_request("history-2");
+    second_request.source_revisions
+        ->run_configuration_revision_id = "run-b";
+    second_request.source_revisions
+        ->run_configuration_checksum =
+        "sha256:" + std::string(64, '4');
+    const auto second = service.submit(second_request);
+    auto third_request = steady_request("history-3");
+    third_request.source_revisions
+        ->run_configuration_revision_id = "run-a";
+    third_request.source_revisions
+        ->run_configuration_checksum =
+        "sha256:" + std::string(64, '3');
+    const auto third = service.submit(third_request);
+
+    auto other_request = first_request;
+    other_request.identity = team_b;
+    other_request.idempotency_key = "history-other-team";
+    (void)service.submit(other_request);
+
+    thermox::service::SimulationJobQuery query;
+    query.limit = 2;
+    const auto first_page = service.list(team_a, query);
+    require(
+        first_page.jobs.size() == 2U &&
+            first_page.jobs[0].job_id == third.job_id &&
+            first_page.jobs[1].job_id == second.job_id &&
+            first_page.next.has_value(),
+        "history must be newest-first, bounded, and expose a "
+        "continuation cursor");
+    query.before = first_page.next;
+    const auto second_page = service.list(team_a, query);
+    require(
+        second_page.jobs.size() == 1U &&
+            second_page.jobs.front().job_id == first.job_id &&
+            !second_page.next.has_value(),
+        "history cursor must resume without gaps or duplicates");
+
+    (void)service.cancel(team_a, first.job_id, first.revision);
+    query = {};
+    query.run_configuration_revision_id = "run-a";
+    const auto filtered = service.list(team_a, query);
+    require(
+        filtered.jobs.size() == 2U &&
+            filtered.jobs[0].job_id == third.job_id &&
+            filtered.jobs[1].job_id == first.job_id,
+        "history must filter by immutable run configuration "
+        "provenance");
+    query = {};
+    query.state =
+        thermox::service::SimulationJobState::cancelled;
+    const auto cancelled = service.list(team_a, query);
+    require(
+        cancelled.jobs.size() == 1U &&
+            cancelled.jobs.front().job_id == first.job_id,
+        "history must filter by current execution state");
+    require(
+        service.list(team_b, {}).jobs.size() == 1U,
+        "history must never cross Team ownership boundaries");
+
+    const auto json =
+        thermox::service::serialize_job_page_json(
+            first_page, "opaque-test-cursor");
+    require(
+        json.find("\"schema_version\": "
+                  "\"thermox.job_list/v1\"") !=
+                std::string::npos &&
+            json.find("\"next_cursor\": "
+                      "\"opaque-test-cursor\"") !=
+                std::string::npos &&
+            json.find("\"created_at_unix_ms\":") !=
+                std::string::npos,
+        "history JSON must expose a versioned page, timestamps, "
+        "and an opaque continuation cursor");
+}
+
 }  // namespace
 
 int main() {
@@ -494,6 +584,7 @@ int main() {
         test_expired_attempt_is_requeued_and_fenced();
         test_request_validation();
         test_team_scope_isolation();
+        test_team_scoped_history_filters_and_paginates();
         std::cout << "thermox job service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

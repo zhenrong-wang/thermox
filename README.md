@@ -323,6 +323,9 @@ psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
 psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -v ON_ERROR_STOP=1 \
   -f adapters/postgres/migrations/006_run_configuration_revisions.sql
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/007_simulation_job_history.sql
 ```
 
 ## Local MinIO result and engineering-artifact storage

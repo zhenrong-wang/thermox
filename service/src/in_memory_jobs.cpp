@@ -1,5 +1,6 @@
 #include "thermox/service/in_memory_jobs.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <map>
@@ -44,6 +45,12 @@ public:
         record.submitted_by_user_id =
             request.identity.user_id;
         record.revision = 1;
+        record.created_at =
+            std::chrono::system_clock::time_point{
+                std::chrono::duration_cast<
+                    std::chrono::microseconds>(
+                    std::chrono::system_clock::now()
+                        .time_since_epoch())};
         record.request = request;
         record.request_fingerprint = request_fingerprint;
         jobs_by_key_.emplace(
@@ -63,6 +70,65 @@ public:
             return std::nullopt;
         }
         return found->second;
+    }
+
+    SimulationJobPage list(
+        const std::string& team_id,
+        const SimulationJobQuery& query) const override {
+        if (query.limit == 0 || query.limit > 200) {
+            throw std::invalid_argument(
+                "simulation history limit must be between 1 "
+                "and 200");
+        }
+        std::lock_guard lock(mutex_);
+        std::vector<SimulationJobRecord> matches;
+        matches.reserve(jobs_.size());
+        for (const auto& [job_id, record] : jobs_) {
+            (void)job_id;
+            if (record.team_id != team_id ||
+                (query.state && record.state != *query.state)) {
+                continue;
+            }
+            const auto& source = record.request.source_revisions;
+            if (!query.project_id.empty() &&
+                (!source ||
+                 source->project_id != query.project_id)) {
+                continue;
+            }
+            if (!query.run_configuration_revision_id.empty() &&
+                (!source ||
+                 source->run_configuration_revision_id !=
+                     query.run_configuration_revision_id)) {
+                continue;
+            }
+            if (query.before &&
+                !(record.created_at < query.before->created_at ||
+                  (record.created_at == query.before->created_at &&
+                   record.job_id < query.before->job_id))) {
+                continue;
+            }
+            matches.push_back(record);
+        }
+        std::sort(
+            matches.begin(),
+            matches.end(),
+            [](const auto& left, const auto& right) {
+                if (left.created_at != right.created_at) {
+                    return left.created_at > right.created_at;
+                }
+                return left.job_id > right.job_id;
+            });
+        SimulationJobPage page;
+        if (matches.size() > query.limit) {
+            matches.resize(query.limit);
+            const auto& last = matches.back();
+            page.next = SimulationJobCursor{
+                last.created_at,
+                last.job_id,
+            };
+        }
+        page.jobs = std::move(matches);
+        return page;
     }
 
     std::optional<SimulationJobRecord> claim_next(

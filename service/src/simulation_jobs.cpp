@@ -335,6 +335,21 @@ std::optional<SimulationJobRecord> SimulationJobService::get(
     return impl_->jobs->get(identity.team_id, job_id);
 }
 
+SimulationJobPage SimulationJobService::list(
+    const IdentityContext& identity,
+    const SimulationJobQuery& query) const {
+    validate_identity(identity);
+    if (query.limit == 0 || query.limit > 200) {
+        throw JobRequestError(
+            "simulation history limit must be between 1 and 200");
+    }
+    if (query.before && query.before->job_id.empty()) {
+        throw JobRequestError(
+            "simulation history cursor job ID must not be empty");
+    }
+    return impl_->jobs->list(identity.team_id, query);
+}
+
 std::optional<ResultArtifact> SimulationJobService::get_result(
     const IdentityContext& identity,
     const std::string& job_id) const {

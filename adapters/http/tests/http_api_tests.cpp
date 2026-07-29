@@ -359,6 +359,42 @@ void test_tenant_scoped_asynchronous_jobs() {
         queued.headers.at("Location").substr(
             std::string("/api/v1/simulations/").size());
 
+    auto history_request = thermox::http::Request{
+        "GET",
+        "/api/v1/simulations?project_id=" +
+            project.project_id +
+            "&run_configuration_revision_id=" +
+            run_configuration_revision_id +
+            "&state=queued&limit=1",
+        {},
+        {}};
+    const auto history = api.handle(
+        authenticated(history_request));
+    require(
+        history.status == 200 &&
+            history.body.find("\"schema_version\": "
+                              "\"thermox.job_list/v1\"") !=
+                std::string::npos &&
+            history.body.find(job_id) != std::string::npos &&
+            history.body.find("\"next_cursor\": null") !=
+                std::string::npos,
+        "Team history route must delegate filtered listing to "
+        "the job service");
+    const auto other_history = api.handle(authenticated(
+        history_request, "user-b", "team-b"));
+    require(
+        other_history.status == 200 &&
+            other_history.body.find(job_id) ==
+                std::string::npos,
+        "Team history route must not reveal cross-Team jobs");
+    auto bad_history_request = history_request;
+    bad_history_request.target =
+        "/api/v1/simulations?cursor=not-a-cursor";
+    require(
+        api.handle(authenticated(bad_history_request)).status == 400,
+        "malformed history cursors must be rejected at the "
+        "transport boundary");
+
     auto other_lookup = thermox::http::Request{
         "GET",
         "/api/v1/simulations/" + job_id,

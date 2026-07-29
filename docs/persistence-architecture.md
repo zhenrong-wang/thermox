@@ -151,6 +151,13 @@ revision. The application resolves its dependencies, verifies artifact content, 
 composed model, typed artifacts, and solver settings into the durable job. Job and result
 provenance retain the run-configuration revision/checksum alongside topology and case identities.
 
+Migration `007_simulation_job_history.sql` promotes jobs into the queryable execution history used
+by product interfaces. It backfills and persists indexed Project and run-configuration identities,
+while the application exposes bounded, newest-first cursor pagination with optional state,
+Project, and run-configuration filters. The repository always applies Team ownership before any
+filter or cursor, and the HTTP cursor encoding remains outside the transport-neutral service
+contract.
+
 ## Object storage
 
 Durable result content now follows a two-level adapter design:

@@ -263,6 +263,135 @@ double required_positive_double(
     return value;
 }
 
+std::size_t optional_history_limit(const Query& query) {
+    const auto value = optional_query(query, "limit");
+    if (value.empty()) {
+        return 50;
+    }
+    std::size_t limit = 0;
+    const auto parsed = std::from_chars(
+        value.data(), value.data() + value.size(), limit);
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != value.data() + value.size() ||
+        limit == 0 || limit > 200) {
+        throw std::invalid_argument(
+            "limit must be an integer between 1 and 200");
+    }
+    return limit;
+}
+
+std::optional<service::SimulationJobState> optional_job_state(
+    const Query& query) {
+    const auto value = optional_query(query, "state");
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    if (value == "queued") {
+        return service::SimulationJobState::queued;
+    }
+    if (value == "running") {
+        return service::SimulationJobState::running;
+    }
+    if (value == "succeeded") {
+        return service::SimulationJobState::succeeded;
+    }
+    if (value == "failed") {
+        return service::SimulationJobState::failed;
+    }
+    if (value == "cancelled") {
+        return service::SimulationJobState::cancelled;
+    }
+    throw std::invalid_argument(
+        "state must be queued, running, succeeded, failed, or "
+        "cancelled");
+}
+
+std::string hex_encode(std::string_view value) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::string encoded;
+    encoded.reserve(value.size() * 2U);
+    for (const unsigned char byte : value) {
+        encoded.push_back(digits[byte >> 4U]);
+        encoded.push_back(digits[byte & 0x0fU]);
+    }
+    return encoded;
+}
+
+std::string hex_decode(std::string_view value) {
+    if (value.empty() || value.size() % 2U != 0U) {
+        throw std::invalid_argument(
+            "simulation history cursor is invalid");
+    }
+    std::string decoded;
+    decoded.reserve(value.size() / 2U);
+    for (std::size_t index = 0; index < value.size(); index += 2U) {
+        try {
+            const auto high = static_cast<unsigned char>(
+                hex_digit(value[index]));
+            const auto low = static_cast<unsigned char>(
+                hex_digit(value[index + 1U]));
+            decoded.push_back(
+                static_cast<char>((high << 4U) | low));
+        } catch (const std::invalid_argument&) {
+            throw std::invalid_argument(
+                "simulation history cursor is invalid");
+        }
+    }
+    return decoded;
+}
+
+std::string encode_job_cursor(
+    const service::SimulationJobCursor& cursor) {
+    const auto microseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            cursor.created_at.time_since_epoch())
+            .count();
+    return hex_encode(
+        std::to_string(microseconds) + "|" + cursor.job_id);
+}
+
+service::SimulationJobCursor decode_job_cursor(
+    const std::string& encoded) {
+    const auto decoded = hex_decode(encoded);
+    const auto separator = decoded.find('|');
+    if (separator == std::string::npos ||
+        separator == 0 ||
+        separator + 1U >= decoded.size()) {
+        throw std::invalid_argument(
+            "simulation history cursor is invalid");
+    }
+    std::int64_t microseconds = 0;
+    const auto timestamp = std::string_view{decoded}.substr(
+        0, separator);
+    const auto parsed = std::from_chars(
+        timestamp.data(),
+        timestamp.data() + timestamp.size(),
+        microseconds);
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != timestamp.data() + timestamp.size() ||
+        microseconds < 0) {
+        throw std::invalid_argument(
+            "simulation history cursor is invalid");
+    }
+    const auto job_id = decoded.substr(separator + 1U);
+    if (!job_id.starts_with("job-") ||
+        !std::all_of(
+            job_id.begin(),
+            job_id.end(),
+            [](const unsigned char character) {
+                return std::isalnum(character) ||
+                    character == '-';
+            })) {
+        throw std::invalid_argument(
+            "simulation history cursor is invalid");
+    }
+    return {
+        std::chrono::system_clock::time_point{
+            std::chrono::microseconds{microseconds}},
+        job_id,
+    };
+}
+
 const service::IdentityContext& require_identity(
     const Request& request) {
     if (!request.identity ||
@@ -1270,11 +1399,46 @@ Response Api::handle(const Request& request) const {
         }
 
         if (target.path == "/api/v1/simulations") {
+            if (method == "get") {
+                reject_unknown_query(
+                    target.query,
+                    {
+                        "project_id",
+                        "run_configuration_revision_id",
+                        "state",
+                        "limit",
+                        "cursor",
+                    });
+                const auto& identity = require_identity(request);
+                service::SimulationJobQuery query;
+                query.project_id =
+                    optional_query(target.query, "project_id");
+                query.run_configuration_revision_id =
+                    optional_query(
+                        target.query,
+                        "run_configuration_revision_id");
+                query.state = optional_job_state(target.query);
+                query.limit = optional_history_limit(target.query);
+                const auto cursor =
+                    optional_query(target.query, "cursor");
+                if (!cursor.empty()) {
+                    query.before = decode_job_cursor(cursor);
+                }
+                const auto page =
+                    impl_->jobs->list(identity, query);
+                const auto next_cursor = page.next
+                    ? encode_job_cursor(*page.next)
+                    : std::string{};
+                return json_response(
+                    200,
+                    service::serialize_job_page_json(
+                        page, next_cursor));
+            }
             if (method != "post") {
                 auto response = error_response(
                     405, "method_not_allowed",
-                    "simulation submission only supports POST");
-                response.headers["Allow"] = "POST";
+                    "simulations only support GET and POST");
+                response.headers["Allow"] = "GET, POST";
                 return response;
             }
             reject_unknown_query(

@@ -4,6 +4,7 @@
 
 #include <libpq-fe.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -162,6 +163,10 @@ SimulationJobRecord decode_record(
         record.result_artifact =
             detail::decode_result_artifact(*payload);
     }
+    record.created_at =
+        std::chrono::system_clock::time_point{
+            std::chrono::microseconds{
+                std::stoll(field(result, row, 13))}};
     return record;
 }
 
@@ -215,12 +220,14 @@ public:
             "SELECT count(*) FROM pg_attribute "
             "WHERE attrelid = to_regclass("
             "'thermox_simulation_jobs') "
-            "AND attname IN ('attempt', 'lease_expires_at') "
+            "AND attname IN ("
+            "'attempt', 'lease_expires_at', 'project_id', "
+            "'run_configuration_revision_id') "
             "AND NOT attisdropped",
             {});
-        if (field(lease_schema.get(), 0, 0) != "2") {
+        if (field(lease_schema.get(), 0, 0) != "4") {
             throw std::runtime_error(
-                "PostgreSQL Thermox worker-lease schema is "
+                "PostgreSQL Thermox job schema is "
                 "missing; apply all migrations");
         }
     }
@@ -230,12 +237,22 @@ public:
         const std::string& request_fingerprint) override {
         auto connection = connect(connection_string_);
         const auto payload = detail::encode_request(request);
+        const auto project_id = request.source_revisions
+            ? request.source_revisions->project_id
+            : std::string{};
+        const auto run_configuration_revision_id =
+            request.source_revisions
+            ? request.source_revisions
+                  ->run_configuration_revision_id
+            : std::string{};
         const auto inserted = execute(
             connection.get(),
             "INSERT INTO thermox_simulation_jobs ("
             "team_id, submitted_by_user_id, idempotency_key, "
-            "request_fingerprint, request_payload"
-            ") VALUES ($1, $2, $3, $4, $5::jsonb) "
+            "request_fingerprint, request_payload, project_id, "
+            "run_configuration_revision_id"
+            ") VALUES ($1, $2, $3, $4, $5::jsonb, "
+            "NULLIF($6, ''), NULLIF($7, '')) "
             "ON CONFLICT (team_id, idempotency_key) DO NOTHING "
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
@@ -245,13 +262,17 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text",
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text",
             {
                 request.identity.team_id.c_str(),
                 request.identity.user_id.c_str(),
                 request.idempotency_key.c_str(),
                 request_fingerprint.c_str(),
                 payload.c_str(),
+                project_id.c_str(),
+                run_configuration_revision_id.c_str(),
             });
         if (PQntuples(inserted.get()) == 1) {
             return decode_record(inserted.get());
@@ -267,7 +288,9 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text "
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text "
             "FROM thermox_simulation_jobs "
             "WHERE team_id = $1 AND idempotency_key = $2",
             {
@@ -301,7 +324,9 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text "
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text "
             "FROM thermox_simulation_jobs "
             "WHERE team_id = $1 AND job_id = $2",
             {team_id.c_str(), job_id.c_str()});
@@ -309,6 +334,81 @@ public:
             return std::nullopt;
         }
         return decode_record(result.get());
+    }
+
+    service::SimulationJobPage list(
+        const std::string& team_id,
+        const service::SimulationJobQuery& query) const override {
+        if (query.limit == 0 || query.limit > 200) {
+            throw std::invalid_argument(
+                "simulation history limit must be between 1 "
+                "and 200");
+        }
+        auto connection = connect(connection_string_);
+        const auto state =
+            query.state ? service::to_string(*query.state) : "";
+        const auto cursor_microseconds = query.before
+            ? std::to_string(
+                  std::chrono::duration_cast<
+                      std::chrono::microseconds>(
+                      query.before->created_at.time_since_epoch())
+                      .count())
+            : std::string{};
+        const auto cursor_job_id =
+            query.before ? query.before->job_id : std::string{};
+        const auto fetch_limit = std::to_string(query.limit + 1U);
+        const auto result = execute(
+            connection.get(),
+            "SELECT "
+            "job_id, team_id, submitted_by_user_id, revision, "
+            "state, request_payload::text, request_fingerprint, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, error_payload::text, "
+            "result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text "
+            "FROM thermox_simulation_jobs "
+            "WHERE team_id = $1 "
+            "AND ($2 = '' OR project_id = $2) "
+            "AND ($3 = '' OR "
+            "run_configuration_revision_id = $3) "
+            "AND ($4 = '' OR state = $4) "
+            "AND ($5 = '' OR "
+            "(created_at, job_id) < ("
+            "timestamptz 'epoch' + "
+            "$5::bigint * interval '1 microsecond', $6)) "
+            "ORDER BY created_at DESC, job_id DESC "
+            "LIMIT $7::integer",
+            {
+                team_id.c_str(),
+                query.project_id.c_str(),
+                query.run_configuration_revision_id.c_str(),
+                state.c_str(),
+                cursor_microseconds.c_str(),
+                cursor_job_id.c_str(),
+                fetch_limit.c_str(),
+            });
+        service::SimulationJobPage page;
+        const auto row_count = static_cast<std::size_t>(
+            PQntuples(result.get()));
+        const auto returned =
+            std::min(row_count, query.limit);
+        page.jobs.reserve(returned);
+        for (std::size_t row = 0; row < returned; ++row) {
+            page.jobs.push_back(
+                decode_record(result.get(), static_cast<int>(row)));
+        }
+        if (row_count > query.limit) {
+            const auto& last = page.jobs.back();
+            page.next = service::SimulationJobCursor{
+                last.created_at,
+                last.job_id,
+            };
+        }
+        return page;
     }
 
     std::optional<SimulationJobRecord> claim_next(
@@ -348,7 +448,9 @@ public:
             "* 1000)::bigint::text, "
             "jobs.execution_payload::text, "
             "jobs.error_payload::text, "
-            "jobs.result_artifact_payload::text",
+            "jobs.result_artifact_payload::text, "
+            "floor(extract(epoch FROM jobs.created_at) "
+            "* 1000000)::bigint::text",
             {
                 worker_id.c_str(),
                 lease_milliseconds.c_str(),
@@ -463,7 +565,9 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text",
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text",
             {
                 job_id.c_str(),
                 revision.c_str(),
@@ -513,7 +617,9 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text",
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text",
             {
                 job_id.c_str(),
                 revision.c_str(),
@@ -549,7 +655,9 @@ public:
             "ELSE floor(extract(epoch FROM lease_expires_at) "
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
-            "error_payload::text, result_artifact_payload::text",
+            "error_payload::text, result_artifact_payload::text, "
+            "floor(extract(epoch FROM created_at) "
+            "* 1000000)::bigint::text",
             {
                 team_id.c_str(),
                 job_id.c_str(),

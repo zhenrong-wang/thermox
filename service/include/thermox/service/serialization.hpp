@@ -20,5 +20,8 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
 std::string serialize_job_record_json(
     const SimulationJobRecord& record);
+std::string serialize_job_page_json(
+    const SimulationJobPage& page,
+    const std::string& next_cursor);
 
 }  // namespace thermox::service

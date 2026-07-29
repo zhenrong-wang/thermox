@@ -90,6 +90,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "004_case_revisions.sql",
              "005_artifact_revisions.sql",
              "006_run_configuration_revisions.sql",
+             "007_simulation_job_history.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -248,6 +249,60 @@ void test_idempotency_and_tenant_scope(
             !jobs->get("team-b", first.job_id).has_value() &&
             jobs->get("team-a", first.job_id).has_value(),
         "job identity and reads must be Team scoped");
+}
+
+void test_indexed_history_query(
+    const std::shared_ptr<
+        thermox::service::SimulationJobRepository>& jobs,
+    const std::string& connection_string) {
+    clear_test_jobs(connection_string);
+    auto first_request = request("team-a", "history-a");
+    first_request.source_revisions
+        ->run_configuration_revision_id = "run-postgres-a";
+    first_request.source_revisions
+        ->run_configuration_checksum =
+        "sha256:" + std::string(64, '3');
+    const auto first = jobs->create_or_get(
+        first_request, "history-fingerprint-a");
+    auto second_request = request("team-a", "history-b");
+    second_request.source_revisions
+        ->run_configuration_revision_id = "run-postgres-b";
+    second_request.source_revisions
+        ->run_configuration_checksum =
+        "sha256:" + std::string(64, '4');
+    const auto second = jobs->create_or_get(
+        second_request, "history-fingerprint-b");
+    (void)jobs->create_or_get(
+        request("team-b", "history-other"),
+        "history-fingerprint-other");
+
+    thermox::service::SimulationJobQuery query;
+    query.limit = 1;
+    const auto page = jobs->list("team-a", query);
+    require(
+        page.jobs.size() == 1U &&
+            page.jobs.front().job_id == second.job_id &&
+            page.jobs.front().created_at.time_since_epoch().count() >
+                0 &&
+            page.next.has_value(),
+        "PostgreSQL history must return a timestamped, bounded "
+        "newest-first page");
+    query.before = page.next;
+    const auto continuation = jobs->list("team-a", query);
+    require(
+        continuation.jobs.size() == 1U &&
+            continuation.jobs.front().job_id == first.job_id &&
+            !continuation.next.has_value(),
+        "PostgreSQL history cursor must resume deterministically");
+    query = {};
+    query.run_configuration_revision_id = "run-postgres-a";
+    const auto filtered = jobs->list("team-a", query);
+    require(
+        filtered.jobs.size() == 1U &&
+            filtered.jobs.front().job_id == first.job_id &&
+            jobs->list("team-b", {}).jobs.size() == 1U,
+        "PostgreSQL history filters and ownership must use "
+        "indexed Team-scoped metadata");
 }
 
 void test_atomic_claim_and_terminal_publication(
@@ -675,6 +730,7 @@ int main() {
             thermox::postgres::make_postgres_job_repository(
                 connection_string);
         test_idempotency_and_tenant_scope(jobs);
+        test_indexed_history_query(jobs, connection_string);
         test_atomic_claim_and_terminal_publication(
             jobs, connection_string);
         test_expired_lease_recovery_and_fencing(

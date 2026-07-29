@@ -10,6 +10,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace thermox::service {
 
@@ -65,6 +66,7 @@ struct SimulationJobRecord {
     std::string team_id;
     std::string submitted_by_user_id;
     std::uint64_t revision{0};
+    std::chrono::system_clock::time_point created_at;
     SimulationJobState state{SimulationJobState::queued};
     SimulationJobRequest request;
     std::string request_fingerprint;
@@ -75,6 +77,24 @@ struct SimulationJobRecord {
     std::optional<ExecutionMetadata> execution;
     std::optional<ServiceError> error;
     std::optional<ResultArtifactManifest> result_artifact;
+};
+
+struct SimulationJobCursor {
+    std::chrono::system_clock::time_point created_at;
+    std::string job_id;
+};
+
+struct SimulationJobQuery {
+    std::string project_id;
+    std::string run_configuration_revision_id;
+    std::optional<SimulationJobState> state;
+    std::size_t limit{50};
+    std::optional<SimulationJobCursor> before;
+};
+
+struct SimulationJobPage {
+    std::vector<SimulationJobRecord> jobs;
+    std::optional<SimulationJobCursor> next;
 };
 
 struct SimulationWorkerSettings {
@@ -111,6 +131,10 @@ public:
     virtual std::optional<SimulationJobRecord> get(
         const std::string& team_id,
         const std::string& job_id) const = 0;
+
+    virtual SimulationJobPage list(
+        const std::string& team_id,
+        const SimulationJobQuery& query) const = 0;
 
     // Must atomically select one queued job and transition it to running.
     virtual std::optional<SimulationJobRecord> claim_next(
@@ -192,6 +216,9 @@ public:
     [[nodiscard]] std::optional<SimulationJobRecord> get(
         const IdentityContext& identity,
         const std::string& job_id) const;
+    [[nodiscard]] SimulationJobPage list(
+        const IdentityContext& identity,
+        const SimulationJobQuery& query = {}) const;
     [[nodiscard]] std::optional<ResultArtifact> get_result(
         const IdentityContext& identity,
         const std::string& job_id) const;

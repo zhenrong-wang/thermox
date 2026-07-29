@@ -1184,6 +1184,10 @@ std::string serialize_job_record_json(
     json_string(out, record.submitted_by_user_id);
     out << "}";
     out << ",\n  \"revision\": " << record.revision;
+    out << ",\n  \"created_at_unix_ms\": "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+               record.created_at.time_since_epoch())
+               .count();
     out << ",\n  \"state\": ";
     json_string(out, to_string(record.state));
     out << ",\n  \"request\": {\"schema_version\": ";
@@ -1270,6 +1274,32 @@ std::string serialize_job_record_json(
         out << "}";
     } else {
         out << "null";
+    }
+    out << "\n}\n";
+    return out.str();
+}
+
+std::string serialize_job_page_json(
+    const SimulationJobPage& page,
+    const std::string& next_cursor) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": "
+        << "\"thermox.job_list/v1\",\n  \"jobs\": [";
+    for (std::size_t index = 0; index < page.jobs.size(); ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        auto job = serialize_job_record_json(page.jobs[index]);
+        if (!job.empty() && job.back() == '\n') {
+            job.pop_back();
+        }
+        out << job;
+    }
+    out << "],\n  \"next_cursor\": ";
+    if (next_cursor.empty()) {
+        out << "null";
+    } else {
+        json_string(out, next_cursor);
     }
     out << "\n}\n";
     return out.str();
