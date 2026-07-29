@@ -23,37 +23,17 @@ target_compile_definitions(thermox_http_api_tests PRIVATE
 )
 add_test(NAME thermox_http_api_tests COMMAND thermox_http_api_tests)
 
-find_package(Threads REQUIRED)
-add_executable(thermox_http_server
-    apps/thermox_http_server.cpp
+add_executable(thermox_api_server
+    apps/thermox_api_server.cpp
 )
-target_link_libraries(thermox_http_server PRIVATE
+target_link_libraries(thermox_api_server PRIVATE
     thermox_http_api
-    Threads::Threads
+    thermox_host_runtime
 )
-if(TARGET thermox_postgres_jobs)
-    target_link_libraries(
-        thermox_http_server PRIVATE thermox_postgres_jobs)
-    target_compile_definitions(
-        thermox_http_server PRIVATE THERMOX_HAS_POSTGRES_JOBS=1)
-endif()
-if(TARGET thermox_object_artifacts)
-    target_link_libraries(
-        thermox_http_server PRIVATE thermox_object_artifacts)
-    target_compile_definitions(
-        thermox_http_server PRIVATE
-        THERMOX_HAS_OBJECT_ARTIFACTS=1)
-endif()
-if(TARGET thermox_s3_object_store)
-    target_link_libraries(
-        thermox_http_server PRIVATE thermox_s3_object_store)
-    target_compile_definitions(
-        thermox_http_server PRIVATE THERMOX_HAS_S3_OBJECT_STORE=1)
-endif()
-target_compile_definitions(thermox_http_server PRIVATE
+target_compile_definitions(thermox_api_server PRIVATE
     BOOST_ERROR_CODE_HEADER_ONLY
 )
-target_compile_features(thermox_http_server PRIVATE cxx_std_20)
-target_compile_options(thermox_http_server PRIVATE
+target_compile_features(thermox_api_server PRIVATE cxx_std_20)
+target_compile_options(thermox_api_server PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
 )

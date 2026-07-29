@@ -212,6 +212,8 @@ Completed structural slices:
 - provider-neutral object-storage port, SHA-256 result adapter, S3-compatible Signature V4 driver,
   pinned local MinIO Compose stack, restart-safe HTTP composition, and live integration coverage;
   ✅
+- separate durable API and calculation-worker process roles, request-process execution guard,
+  graceful worker stop, and bounded numerical-library thread defaults; ✅
 
 ## Persistence boundary decision
 

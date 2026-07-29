@@ -160,22 +160,29 @@ owns route matching, query decoding, content negotiation, request-size limits, t
 codes, and safe response headers. It delegates model parsing, validation, compilation, simulation,
 and result serialization to `SimulationService`.
 
-`thermox_http_server` is a dependency-light Boost.Beast host for local and integration deployment.
-It defaults to `127.0.0.1:8080`, is intentionally single-threaded, and accepts explicit listen
-address, port, body-limit, local user, local Team, and worker options. It injects that configured
-local identity directly and runs one low-frequency background worker; it does not interpret request
-headers as authentication. Non-loopback binding is rejected unless the operator supplies an
-explicit insecure-development override. Internet-facing production deployment still requires a
-supervised process, authentication gateway, TLS termination, concurrency limits, and request
-timeouts; none of those concerns are pushed into the simulation service.
+`thermox_api_server` is a dependency-light Boost.Beast host for local and integration deployment.
+It defaults to `127.0.0.1:8080`, is intentionally single-threaded, accepts explicit listen address,
+port, body limit, local user, and local Team, and never executes a simulation in the request
+process. It injects the configured local identity directly and does not interpret request headers
+as authentication. Non-loopback binding is rejected unless the operator supplies an explicit
+insecure-development override.
 
-Job metadata is in memory by default. When the optional PostgreSQL adapter is compiled and
-`THERMOX_POSTGRES_URL` is set, the host composes the same job service with PostgreSQL instead.
-Result content is also in memory by default. Setting
-`THERMOX_OBJECT_STORE_DRIVER=s3-compatible` plus the `THERMOX_S3_*` configuration composes the
-provider-neutral result adapter with the S3-compatible driver. PostgreSQL plus object storage
-therefore provides restart-safe job and result retrieval without changing the HTTP or application
-contracts.
+`thermox_worker` is an independent, long-running calculation role. Each worker claims and executes
+one job at a time, renews its lease during a solve, finishes its active calculation during graceful
+shutdown, and relies on lease recovery after a hard stop. Deployments scale calculations by adding
+workers with unique IDs. The default numerical-library thread cap is one, avoiding nested
+oversubscription when several worker processes are deployed. Component-level parallel evaluation
+can be added later behind the same process and service boundaries.
+
+Both process roles compose the same `SimulationJobService` through `thermox_host_runtime` and
+require PostgreSQL plus provider-neutral object-backed result storage. They deliberately reject
+in-memory stores: separate processes cannot share process-local job or result state. The reusable
+application and HTTP adapter still provide in-memory implementations for tests and embedded local
+callers.
+
+Internet-facing production deployment still requires supervised processes, an authentication
+gateway, TLS termination, concurrency limits, and request timeouts; none of those concerns are
+pushed into the simulation service.
 
 The initial routes are:
 
@@ -184,13 +191,13 @@ The initial routes are:
 | `GET` | `/healthz` | Process-level liveness |
 | `GET` | `/api/v1/catalog` | Runtime catalog discovery |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
-| `POST` | `/api/v1/simulations/steady?case_id=...` | Synchronous steady execution |
-| `POST` | `/api/v1/simulations/transient?case_id=...&end_time=...` | Synchronous transient execution |
 | `POST` | `/api/v1/simulations?mode=...&case_id=...` | Submit a Team-owned asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
 
-The POST body is currently the canonical model document with
+The deployed API disables synchronous steady/transient routes so expensive work cannot enter the
+request process. An explicitly configured embedded adapter may enable those routes for tests or
+trusted local use. The POST body is currently the canonical model document with
 `Content-Type: application/json`. This deliberately small first contract does not yet transport
 inline engineering artifacts or arbitrary solver settings. Artifact upload/reference request
 decoding, authentication, authorization policy, and the concrete production persistence/listener

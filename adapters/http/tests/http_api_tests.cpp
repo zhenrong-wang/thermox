@@ -104,7 +104,11 @@ void test_catalog_and_validation() {
 }
 
 void test_simulation_routes() {
-    thermox::http::Api api;
+    thermox::http::Api api{
+        thermox::service::make_default_simulation_runtime(),
+        {
+            .enable_synchronous_simulations = true,
+        }};
     const std::string steady_model = read_file(
         std::string(THERMOX_SOURCE_DIR) +
         "/core/examples/air_compressor.json");
@@ -141,6 +145,21 @@ void test_simulation_routes() {
             missing_time.body.find("missing required query parameter") !=
                 std::string::npos,
         "transient endpoint must require an explicit end time");
+}
+
+void test_production_api_disables_synchronous_execution() {
+    thermox::http::Api api;
+    const auto response = api.handle(
+        json_post(
+            "/api/v1/simulations/steady",
+            "{}"));
+    require(
+        response.status == 404 &&
+            response.body.find(
+                "synchronous simulation routes are disabled") !=
+                std::string::npos,
+        "production API defaults must not execute simulations "
+        "inside the request process");
 }
 
 void test_transport_guards() {
@@ -252,6 +271,7 @@ int main() {
         test_health_and_routing();
         test_catalog_and_validation();
         test_simulation_routes();
+        test_production_api_disables_synchronous_execution();
         test_transport_guards();
         test_tenant_scoped_asynchronous_jobs();
         std::cout << "http api tests passed\n";

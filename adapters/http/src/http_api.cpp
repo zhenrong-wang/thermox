@@ -404,6 +404,13 @@ Response Api::handle(const Request& request) const {
         }
 
         if (target.path == "/api/v1/simulations/steady") {
+            if (!impl_->options.enable_synchronous_simulations) {
+                return error_response(
+                    404,
+                    "route_not_found",
+                    "synchronous simulation routes are disabled; "
+                    "submit an asynchronous simulation job");
+            }
             if (method != "post") {
                 auto response = error_response(
                     405, "method_not_allowed",
@@ -424,6 +431,13 @@ Response Api::handle(const Request& request) const {
         }
 
         if (target.path == "/api/v1/simulations/transient") {
+            if (!impl_->options.enable_synchronous_simulations) {
+                return error_response(
+                    404,
+                    "route_not_found",
+                    "synchronous simulation routes are disabled; "
+                    "submit an asynchronous simulation job");
+            }
             if (method != "post") {
                 auto response = error_response(
                     405, "method_not_allowed",

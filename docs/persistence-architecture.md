@@ -148,6 +148,11 @@ jobs, and makes any historical running row immediately recoverable. Compose init
 it automatically to new volumes. Existing development or deployed databases must run the migration
 explicitly.
 
+The deployed API and worker are independent processes composed through the same durable adapter
+configuration. PostgreSQL is the coordination authority and object storage is the result-content
+authority; neither role permits an in-memory fallback. Each worker executes one calculation at a
+time, and deployments add worker processes for bounded job-level parallelism.
+
 Engineering input data has a separate read boundary from result storage.
 `EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references
 into validated service DTOs. Its in-memory adapter is complete; a production object-store adapter

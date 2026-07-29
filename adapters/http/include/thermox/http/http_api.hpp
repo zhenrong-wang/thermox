@@ -26,6 +26,7 @@ struct Response {
 
 struct ApiOptions {
     std::size_t maximum_body_bytes{10U * 1024U * 1024U};
+    bool enable_synchronous_simulations{false};
 };
 
 // Framework-neutral HTTP application adapter. A network host is responsible

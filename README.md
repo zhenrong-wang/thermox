@@ -71,7 +71,7 @@ Implemented in this sprint:
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, and transient HTTP routes onto `thermox_service`, with strict query decoding,
   JSON content checks, body limits, transport status codes, and safe response headers. A thin
-  Boost.Beast host publishes the same adapter locally without owning simulation logic.
+  Boost.Beast API process publishes the adapter, while a separate worker process owns calculations.
 - Asynchronous HTTP simulations carry a gateway-supplied identity context, namespace idempotency
   and resource access by Team, retain the submitting user for audit, and hide cross-Team job
   existence. The local host injects an explicit local identity; authentication is not yet
@@ -297,13 +297,6 @@ psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -f adapters/postgres/migrations/002_worker_leases.sql
 ```
 
-The local HTTP host selects PostgreSQL job metadata through its environment:
-
-```sh
-THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  ./build/adapters/http/thermox_http_server
-```
-
 ## Local MinIO result storage
 
 The object-storage abstraction is provider-neutral. Thermox result logic depends on `ObjectStore`;
@@ -333,17 +326,22 @@ THERMOX_TEST_S3_SECRET_KEY='thermox-minio-local' \
   --output-on-failure -j1
 ```
 
-Compose the local HTTP host with both durable stores:
+The API and worker are separate long-running roles. Both require the same durable-store
+configuration; process-local storage is intentionally rejected because it cannot be shared between
+roles:
 
 ```sh
-THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-THERMOX_OBJECT_STORE_DRIVER='s3-compatible' \
-THERMOX_S3_ENDPOINT='http://127.0.0.1:59000' \
-THERMOX_S3_REGION='us-east-1' \
-THERMOX_S3_BUCKET='thermox-results' \
-THERMOX_S3_ACCESS_KEY='thermox-minio' \
-THERMOX_S3_SECRET_KEY='thermox-minio-local' \
-  ./build/adapters/http/thermox_http_server
+export THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox'
+export THERMOX_OBJECT_STORE_DRIVER='s3-compatible'
+export THERMOX_S3_ENDPOINT='http://127.0.0.1:59000'
+export THERMOX_S3_REGION='us-east-1'
+export THERMOX_S3_BUCKET='thermox-results'
+export THERMOX_S3_ACCESS_KEY='thermox-minio'
+export THERMOX_S3_SECRET_KEY='thermox-minio-local'
+
+./build/adapters/http/thermox_api_server
+# In another shell with the same environment:
+THERMOX_WORKER_ID='local-worker-1' ./build/adapters/host/thermox_worker
 ```
 
 `THERMOX_S3_ADDRESSING_STYLE` accepts `path` (the MinIO development default) or
@@ -352,14 +350,16 @@ local development credentials only.
 
 Workers default to a 30-second lease, a 10-second heartbeat, and three total attempts. Deployments
 can configure `THERMOX_WORKER_LEASE_MS`, `THERMOX_WORKER_HEARTBEAT_MS`, and
-`THERMOX_WORKER_MAX_ATTEMPTS`. The heartbeat must be shorter than the lease. Expired work is
-atomically requeued with a new fencing revision; exhausted work becomes a structured terminal
-failure.
+`THERMOX_WORKER_MAX_ATTEMPTS`; every concurrent worker must have a unique `THERMOX_WORKER_ID`.
+`THERMOX_WORKER_POLL_MS` defaults to 250 ms. `THERMOX_LIBRARY_THREADS` defaults to one and caps
+common numerical-library thread pools to prevent worker-count multiplication from oversubscribing
+the host. The heartbeat must be shorter than the lease. Expired work is atomically requeued with a
+new fencing revision; exhausted work becomes a structured terminal failure. `SIGINT` and `SIGTERM`
+stop a worker after its current calculation.
 
 ## Next steps
 
-1. Separate API and worker process roles, then add leases/recovery for jobs left running by a
-   terminated worker.
+1. Add immutable Team-scoped project, model-revision, and case-revision persistence.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently
