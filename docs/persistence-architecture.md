@@ -82,7 +82,7 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v3` defines the Team-owned job lifecycle and idempotent
+All gates are now in place. `thermox.job/v4` defines the Team-owned job lifecycle and idempotent
 submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
@@ -94,6 +94,8 @@ service, platform, physics, or numerical contracts:
 - `(team_id, idempotency_key)` is a database uniqueness constraint;
 - complete immutable job requests are stored as internal versioned JSON payloads so any worker can
   reconstruct the calculation;
+- revision-backed submissions retain the exact project, topology revision, and case revision IDs
+  and both source SHA-256 checksums alongside the composed executable model snapshot;
 - workers claim ordered queued jobs using `FOR UPDATE SKIP LOCKED`;
 - success, failure, and cancellation are revision-checked state transitions;
 - all user-facing reads and cancellation predicates include `team_id`;
@@ -118,6 +120,12 @@ topology revision, and logical case ID; revision numbering is atomic within that
 can compose an exact topology/case pair into the existing internal `thermox.model/v2` compiler
 input. This preserves solver, physics, component, calibration, and direct embedded-caller behavior
 while removing embedded cases from the persisted product model.
+
+The production HTTP submission path accepts only an exact Team-scoped project/topology/case
+revision tuple. `ProjectService` resolves that tuple before enqueueing, and `thermox.job/v4`
+captures both its immutable source provenance and a complete composed `thermox.model/v2` snapshot.
+Workers therefore never reread mutable project state and can execute even if newer revisions are
+published later.
 
 ## Object storage
 

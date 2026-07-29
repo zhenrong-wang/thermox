@@ -140,6 +140,14 @@ SimulationJobRequest request(
     value.model_json =
         R"({"schema_version":"thermox.model/v2","name":"persisted"})";
     value.case_id = "design";
+    value.source_revisions =
+        thermox::service::RevisionProvenance{
+            "project-postgres",
+            "model-revision-postgres",
+            "sha256:" + std::string(64, '1'),
+            "case-revision-postgres",
+            "sha256:" + std::string(64, '2'),
+        };
     value.steady_solver.max_iterations = 17;
     value.transient_solver.end_time = 12.5;
 
@@ -190,6 +198,14 @@ thermox::service::ExecutionMetadata execution() {
          "oem-7",
          std::string(64, 'a')}};
     value.connector_domains = {{"fluid", "thermox.fluid/v1"}};
+    value.source_revisions =
+        thermox::service::RevisionProvenance{
+            "project-postgres",
+            "model-revision-postgres",
+            "sha256:" + std::string(64, '1'),
+            "case-revision-postgres",
+            "sha256:" + std::string(64, '2'),
+        };
     return value;
 }
 
@@ -204,7 +220,11 @@ void test_idempotency_and_tenant_scope(
     require(
         first.job_id == repeated.job_id &&
             repeated.request.steady_solver.max_iterations == 17 &&
-            repeated.request.artifacts.performance_maps.size() == 1,
+            repeated.request.artifacts.performance_maps.size() == 1 &&
+            repeated.request.source_revisions &&
+            repeated.request.source_revisions
+                    ->case_revision_id ==
+                "case-revision-postgres",
         "idempotent submission must return the decoded request");
 
     bool conflict = false;

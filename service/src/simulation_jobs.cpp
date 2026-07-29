@@ -120,6 +120,21 @@ std::string request_fingerprint(
            << to_string(request.mode) << '|'
            << request.case_id.size() << ':' << request.case_id << '|'
            << request.model_json.size() << ':' << request.model_json << '|';
+    stream << request.source_revisions.has_value() << '|';
+    if (request.source_revisions) {
+        append_string(
+            stream, request.source_revisions->project_id);
+        append_string(
+            stream,
+            request.source_revisions->model_revision_id);
+        append_string(
+            stream, request.source_revisions->model_checksum);
+        append_string(
+            stream,
+            request.source_revisions->case_revision_id);
+        append_string(
+            stream, request.source_revisions->case_checksum);
+    }
     append_steady_settings(stream, request.steady_solver);
     stream << '|'
            << request.transient_solver.start_time << '|'
@@ -142,7 +157,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v3) {
+    if (request.schema_version != job_schema_v4) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -158,6 +173,18 @@ void validate_request(const SimulationJobRequest& request) {
     }
     if (request.model_json.empty()) {
         throw JobRequestError("model JSON must not be empty");
+    }
+    if (request.source_revisions) {
+        const auto& source = *request.source_revisions;
+        if (source.project_id.empty() ||
+            source.model_revision_id.empty() ||
+            source.model_checksum.empty() ||
+            source.case_revision_id.empty() ||
+            source.case_checksum.empty()) {
+            throw JobRequestError(
+                "revision-backed jobs require complete source "
+                "revision provenance");
+        }
     }
 }
 
@@ -409,7 +436,9 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             request.case_id = claimed->request.case_id;
             request.solver = claimed->request.steady_solver;
             request.artifacts = claimed->request.artifacts;
-            const auto response = impl_->simulation.run_steady(request);
+            auto response = impl_->simulation.run_steady(request);
+            response.metadata.source_revisions =
+                claimed->request.source_revisions;
             require_lease();
             if (!response.succeeded()) {
                 return impl_->jobs->publish_failure(
@@ -437,8 +466,10 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
         request.case_id = claimed->request.case_id;
         request.solver = claimed->request.transient_solver;
         request.artifacts = claimed->request.artifacts;
-        const auto response =
+        auto response =
             impl_->simulation.run_transient(request);
+        response.metadata.source_revisions =
+            claimed->request.source_revisions;
         require_lease();
         if (!response.succeeded()) {
             return impl_->jobs->publish_failure(

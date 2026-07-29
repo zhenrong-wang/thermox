@@ -50,9 +50,10 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v3` Team-owned queued/running/succeeded/failed/cancelled jobs with required
+- `thermox.job/v4` Team-owned queued/running/succeeded/failed/cancelled jobs with required
   idempotency keys,
-  optimistic revisions, worker claims, execution provenance, and result-artifact manifests.
+  optimistic revisions, worker claims, revision-source execution provenance, and result-artifact
+  manifests.
 
 The public service DTOs contain only standard C++ data types. Solver and compiler objects do not
 cross this boundary. This keeps local callers simple and permits an RPC adapter to map wire
@@ -146,14 +147,16 @@ The application boundary needed by a thin network adapter is now complete:
 | Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
 | Publish/read operating-case revisions | `ProjectService` | `thermox.case_revision/v1` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
-| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v3` JSON |
-| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v3` JSON |
+| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v4` JSON |
+| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v4` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
-request mode, case, stable request fingerprint, state, optimistic revision, structured error,
-execution provenance, and result manifest. Result retrieval is owned by the job application
-service, so an HTTP or RPC adapter never reaches directly into object storage.
+request mode, case, exact source revision IDs and checksums, stable request fingerprint, state,
+optimistic revision, structured error, execution provenance, and result manifest. The immutable
+repository payload retains the complete composed model snapshot so a worker never depends on a
+later project read. Result retrieval is owned by the job application service, so an HTTP or RPC
+adapter never reaches directly into object storage.
 
 ## HTTP application adapter
 
@@ -201,14 +204,15 @@ The initial routes are:
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
-| `POST` | `/api/v1/simulations?mode=...&case_id=...` | Submit a Team-owned asynchronous job |
+| `POST` | `/api/v1/simulations?project_id=...&model_revision_id=...&case_revision_id=...` | Submit a revision-backed Team-owned asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
 
 The deployed API disables synchronous steady/transient routes so expensive work cannot enter the
 request process. An explicitly configured embedded adapter may enable those routes for tests or
-trusted local use. The POST body is currently the canonical model document with
-`Content-Type: application/json`. This deliberately small first contract does not yet transport
-inline engineering artifacts or arbitrary solver settings. Artifact upload/reference request
-decoding, authentication, authorization policy, and the concrete production persistence/listener
-follow without changing the simulation application boundary.
+trusted local use. Production asynchronous submission has an empty body and names an exact
+Team-scoped project, topology revision, and case revision in the query. The case revision selects
+steady or transient mode; transient submission additionally requires `end_time`. The API composes
+and snapshots the executable model before enqueueing. Inline engineering-artifact upload,
+arbitrary solver settings, authentication, and authorization policy follow without changing the
+simulation application boundary.

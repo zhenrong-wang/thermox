@@ -475,6 +475,21 @@ Response case_revision_response(
     return response;
 }
 
+service::SimulationJobMode simulation_mode_for_case(
+    const std::string& mode) {
+    if (mode.find("transient") != std::string::npos ||
+        mode.find("dynamic") != std::string::npos) {
+        return service::SimulationJobMode::transient;
+    }
+    if (mode.find("steady") != std::string::npos ||
+        mode == "design" || mode == "off_design") {
+        return service::SimulationJobMode::steady;
+    }
+    throw std::invalid_argument(
+        "persisted case mode is not a supported simulation "
+        "mode: " + mode);
+}
+
 std::shared_ptr<service::SimulationJobService>
 make_local_job_service(
     const std::shared_ptr<const service::SimulationRuntime>& runtime) {
@@ -908,27 +923,63 @@ Response Api::handle(const Request& request) const {
                 return response;
             }
             reject_unknown_query(
-                target.query, {"mode", "case_id", "end_time"});
-            require_json_request(
-                request, impl_->options.maximum_body_bytes);
-            const auto& identity = require_identity(request);
-            const std::string mode =
-                optional_query(target.query, "mode");
-            if (mode != "steady" && mode != "transient") {
+                target.query,
+                {
+                    "project_id",
+                    "model_revision_id",
+                    "case_revision_id",
+                    "end_time",
+                });
+            if (!request.body.empty()) {
                 throw std::invalid_argument(
-                    "mode must be steady or transient");
+                    "revision-backed simulation submission "
+                    "must not contain a request body");
+            }
+            const auto& identity = require_identity(request);
+            const auto project_id =
+                optional_query(target.query, "project_id");
+            const auto model_revision_id =
+                optional_query(
+                    target.query, "model_revision_id");
+            const auto case_revision_id =
+                optional_query(
+                    target.query, "case_revision_id");
+            if (project_id.empty() ||
+                model_revision_id.empty() ||
+                case_revision_id.empty()) {
+                throw std::invalid_argument(
+                    "project_id, model_revision_id, and "
+                    "case_revision_id are required");
+            }
+            const auto resolved =
+                impl_->projects->resolve_model_case(
+                    identity,
+                    project_id,
+                    model_revision_id,
+                    case_revision_id);
+            if (!resolved) {
+                return error_response(
+                    404,
+                    "model_case_not_found",
+                    "model/case revision pair was not found");
             }
             service::SimulationJobRequest command;
             command.identity = identity;
             command.idempotency_key =
                 required_header(request, "idempotency-key");
             command.mode =
-                mode == "steady"
-                    ? service::SimulationJobMode::steady
-                    : service::SimulationJobMode::transient;
-            command.model_json = request.body;
-            command.case_id =
-                optional_query(target.query, "case_id");
+                simulation_mode_for_case(resolved->mode);
+            command.model_json =
+                resolved->executable_model_json;
+            command.case_id = resolved->case_id;
+            command.source_revisions =
+                service::RevisionProvenance{
+                    resolved->project_id,
+                    resolved->model_revision_id,
+                    resolved->model_checksum,
+                    resolved->case_revision_id,
+                    resolved->case_checksum,
+                };
             if (command.mode ==
                 service::SimulationJobMode::transient) {
                 command.transient_solver.end_time =

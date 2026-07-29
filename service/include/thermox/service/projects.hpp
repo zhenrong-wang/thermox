@@ -157,6 +157,7 @@ struct ResolvedModelCase {
     std::string case_revision_id;
     std::string case_checksum;
     std::string case_id;
+    std::string mode;
     std::string executable_model_json;
 };
 

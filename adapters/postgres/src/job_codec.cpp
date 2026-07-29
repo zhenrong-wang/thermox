@@ -443,6 +443,25 @@ std::string encode_request(
     tree.put("mode", service::to_string(request.mode));
     tree.put("model_json", request.model_json);
     tree.put("case_id", request.case_id);
+    if (request.source_revisions) {
+        Tree source;
+        source.put(
+            "project_id",
+            request.source_revisions->project_id);
+        source.put(
+            "model_revision_id",
+            request.source_revisions->model_revision_id);
+        source.put(
+            "model_checksum",
+            request.source_revisions->model_checksum);
+        source.put(
+            "case_revision_id",
+            request.source_revisions->case_revision_id);
+        source.put(
+            "case_checksum",
+            request.source_revisions->case_checksum);
+        tree.add_child("source_revisions", source);
+    }
     tree.add_child(
         "steady_solver", steady_settings(request.steady_solver));
     tree.add_child(
@@ -470,6 +489,19 @@ service::SimulationJobRequest decode_request(
         decode_mode(tree.get<std::string>("mode"));
     request.model_json = tree.get<std::string>("model_json");
     request.case_id = tree.get<std::string>("case_id");
+    if (const auto source =
+            tree.get_child_optional("source_revisions")) {
+        request.source_revisions =
+            service::RevisionProvenance{
+                source->get<std::string>("project_id"),
+                source->get<std::string>(
+                    "model_revision_id"),
+                source->get<std::string>("model_checksum"),
+                source->get<std::string>(
+                    "case_revision_id"),
+                source->get<std::string>("case_checksum"),
+            };
+    }
     request.steady_solver = decode_steady_settings(
         tree.get_child("steady_solver"));
     request.transient_solver = decode_transient_settings(
@@ -502,6 +534,25 @@ std::string encode_execution(
         "model.model_revision",
         execution.model.model_revision);
     tree.put("model.case_id", execution.model.case_id);
+    if (execution.source_revisions) {
+        Tree source;
+        source.put(
+            "project_id",
+            execution.source_revisions->project_id);
+        source.put(
+            "model_revision_id",
+            execution.source_revisions->model_revision_id);
+        source.put(
+            "model_checksum",
+            execution.source_revisions->model_checksum);
+        source.put(
+            "case_revision_id",
+            execution.source_revisions->case_revision_id);
+        source.put(
+            "case_checksum",
+            execution.source_revisions->case_checksum);
+        tree.add_child("source_revisions", source);
+    }
     tree.add_child(
         "components",
         array(
@@ -590,6 +641,19 @@ service::ExecutionMetadata decode_execution(
         tree.get<std::string>("model.model_revision"),
         tree.get<std::string>("model.case_id"),
     };
+    if (const auto source =
+            tree.get_child_optional("source_revisions")) {
+        value.source_revisions =
+            service::RevisionProvenance{
+                source->get<std::string>("project_id"),
+                source->get<std::string>(
+                    "model_revision_id"),
+                source->get<std::string>("model_checksum"),
+                source->get<std::string>(
+                    "case_revision_id"),
+                source->get<std::string>("case_checksum"),
+            };
+    }
     value.components =
         decode_array<service::ComponentProvenance>(
             tree.get_child("components"),

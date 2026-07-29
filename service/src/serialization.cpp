@@ -120,6 +120,22 @@ void model_metadata_json(
     out << "}";
 }
 
+void revision_provenance_json(
+    std::ostream& out,
+    const RevisionProvenance& source) {
+    out << "{\"project_id\": ";
+    json_string(out, source.project_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, source.model_revision_id);
+    out << ", \"model_checksum\": ";
+    json_string(out, source.model_checksum);
+    out << ", \"case_revision_id\": ";
+    json_string(out, source.case_revision_id);
+    out << ", \"case_checksum\": ";
+    json_string(out, source.case_checksum);
+    out << "}";
+}
+
 void execution_metadata_json(
     std::ostream& out,
     const ExecutionMetadata& metadata) {
@@ -146,6 +162,13 @@ void execution_metadata_json(
     json_string(out, metadata.catalog_fingerprint);
     out << ",\n    \"model\": ";
     model_metadata_json(out, metadata.model);
+    out << ",\n    \"source_revisions\": ";
+    if (metadata.source_revisions) {
+        revision_provenance_json(
+            out, *metadata.source_revisions);
+    } else {
+        out << "null";
+    }
     out << ",\n    \"components\": [";
     for (std::size_t i = 0; i < metadata.components.size(); ++i) {
         const auto& component = metadata.components[i];
@@ -1161,6 +1184,13 @@ std::string serialize_job_record_json(
     json_string(out, to_string(record.request.mode));
     out << ", \"case_id\": ";
     json_string(out, record.request.case_id);
+    out << ", \"source_revisions\": ";
+    if (record.request.source_revisions) {
+        revision_provenance_json(
+            out, *record.request.source_revisions);
+    } else {
+        out << "null";
+    }
     out << ", \"fingerprint\": ";
     json_string(out, record.request_fingerprint);
     out << "}";

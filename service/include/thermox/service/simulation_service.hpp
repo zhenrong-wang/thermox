@@ -191,6 +191,14 @@ struct SolverProvenance {
     std::vector<SolverSetting> settings;
 };
 
+struct RevisionProvenance {
+    std::string project_id;
+    std::string model_revision_id;
+    std::string model_checksum;
+    std::string case_revision_id;
+    std::string case_checksum;
+};
+
 struct ExecutionMetadata {
     std::string result_schema_version{result_schema_v3};
     std::string command_schema_version;
@@ -199,6 +207,7 @@ struct ExecutionMetadata {
     SolverProvenance solver;
     std::string catalog_fingerprint;
     ModelMetadata model;
+    std::optional<RevisionProvenance> source_revisions;
     std::vector<ComponentProvenance> components;
     std::vector<MediumProvenance> media;
     std::vector<ArtifactProvenance> artifacts;

@@ -202,7 +202,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v3` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v4` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -220,6 +220,9 @@ Completed structural slices:
 - independent `thermox.topology/v1` and `thermox.case/v1` persistence contracts, immutable
   model-bound case history, exact topology/case composition into the established compiler input,
   PostgreSQL migration, and thin case-revision HTTP routes; ✅
+- production revision-backed simulation submission with Team-scoped source resolution, immutable
+  composed job snapshots, and project/topology/case IDs plus both SHA-256 source identities in job
+  and result provenance; ✅
 
 ## Persistence boundary decision
 

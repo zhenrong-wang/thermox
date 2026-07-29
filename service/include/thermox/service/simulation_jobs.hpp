@@ -13,7 +13,7 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v3[] = "thermox.job/v3";
+inline constexpr char job_schema_v4[] = "thermox.job/v4";
 
 enum class SimulationJobMode {
     steady,
@@ -34,12 +34,13 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v3};
+    std::string schema_version{job_schema_v4};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
     std::string model_json;
     std::string case_id;
+    std::optional<RevisionProvenance> source_revisions;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
     SimulationArtifactBundle artifacts;
@@ -59,7 +60,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v3};
+    std::string schema_version{job_schema_v4};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;

@@ -43,6 +43,14 @@ thermox::service::SimulationJobRequest steady_request(
     request.idempotency_key = std::move(idempotency_key);
     request.model_json =
         read_source_file("core/examples/air_compressor.json");
+    request.source_revisions =
+        thermox::service::RevisionProvenance{
+            "project-job-test",
+            "model-revision-job-test",
+            "sha256:" + std::string(64, '1'),
+            "case-revision-job-test",
+            "sha256:" + std::string(64, '2'),
+        };
     return request;
 }
 
@@ -173,10 +181,17 @@ void test_success_publishes_a_readable_artifact() {
     require(
         completed->worker_id == "worker-a" &&
             completed->execution.has_value() &&
+            completed->execution->source_revisions.has_value() &&
             completed->result_artifact.has_value() &&
             !completed->error.has_value(),
         "successful job must retain worker, provenance, and "
         "artifact metadata");
+    require(
+        completed->execution->source_revisions
+                ->model_revision_id ==
+            "model-revision-job-test",
+        "worker execution metadata must retain source revision "
+        "provenance");
     require(
         completed->execution->artifacts.size() == 1 &&
             completed->execution->artifacts.front().id == "job-map",
@@ -210,7 +225,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v3\"") != std::string::npos &&
+                  "\"thermox.job/v4\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=

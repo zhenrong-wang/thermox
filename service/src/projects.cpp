@@ -295,6 +295,7 @@ ProjectService::resolve_model_case(
             case_revision_id,
             simulation_case->checksum,
             simulation_case->case_id,
+            simulation_case->mode,
             detail::serialize_model_document_json(document),
         };
     } catch (const std::exception& error) {

@@ -201,19 +201,48 @@ void test_tenant_scoped_asynchronous_jobs() {
     const auto job_service = std::make_shared<
         thermox::service::SimulationJobService>(
             runtime, jobs, artifacts);
+    const auto project_service = std::make_shared<
+        thermox::service::ProjectService>(
+            thermox::service::
+                make_in_memory_project_repository());
+    const thermox::service::IdentityContext identity{
+        "user-a", "team-a", "http-job-source"};
     thermox::http::Api api{
         runtime,
         job_service,
-        std::make_shared<thermox::service::ProjectService>(
-            thermox::service::
-                make_in_memory_project_repository())};
-    const std::string model = read_file(
-        std::string(THERMOX_SOURCE_DIR) +
-        "/core/examples/air_compressor.json");
+        project_service};
+    const auto project = project_service->create_project({
+        identity, "Job source", {},
+    });
+    const auto model = project_service->create_model_revision({
+        identity,
+        project.project_id,
+        {},
+        read_file(
+            std::string(THERMOX_SOURCE_DIR) +
+            "/core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case =
+        project_service->create_case_revision({
+            identity,
+            project.project_id,
+            model.model_revision_id,
+            {},
+            read_file(
+                std::string(THERMOX_SOURCE_DIR) +
+                "/core/examples/"
+                "air_compressor.design.case.json"),
+        });
 
-    auto submission = json_post(
-        "/api/v1/simulations?mode=steady&case_id=design",
-        model);
+    auto submission = thermox::http::Request{
+        "POST",
+        "/api/v1/simulations?project_id=" +
+            project.project_id +
+            "&model_revision_id=" + model.model_revision_id +
+            "&case_revision_id=" +
+            simulation_case.case_revision_id,
+        {},
+        {}};
     submission.headers["Idempotency-Key"] = "http-job-1";
     const auto anonymous = api.handle(submission);
     require(
@@ -221,6 +250,13 @@ void test_tenant_scoped_asynchronous_jobs() {
             anonymous.body.find("identity_required") !=
                 std::string::npos,
         "stateful job submission must require trusted identity");
+
+    auto cross_team_submission = authenticated(
+        submission, "user-b", "team-b");
+    require(
+        api.handle(cross_team_submission).status == 404,
+        "cross-team revision submission must not reveal "
+        "project or revision existence");
 
     const auto queued =
         api.handle(authenticated(submission));
@@ -230,8 +266,13 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos &&
             queued.body.find("\"team_id\": \"team-a\"") !=
                 std::string::npos &&
+            queued.body.find(model.checksum) !=
+                std::string::npos &&
+            queued.body.find(simulation_case.checksum) !=
+                std::string::npos &&
             queued.headers.contains("Location"),
-        "authenticated submission must create a team-owned job");
+        "authenticated submission must create a Team-owned "
+        "revision-backed job");
     const std::string job_id =
         queued.headers.at("Location").substr(
             std::string("/api/v1/simulations/").size());
@@ -266,8 +307,13 @@ void test_tenant_scoped_asynchronous_jobs() {
         result.status == 200 &&
             result.body.find("\"converged\": true") !=
                 std::string::npos &&
+            result.body.find(model.model_revision_id) !=
+                std::string::npos &&
+            result.body.find(
+                simulation_case.case_revision_id) !=
+                std::string::npos &&
             result.headers.contains("ETag"),
-        "job result route must publish the stored result artifact");
+        "job result must publish stored revision provenance");
 }
 
 void test_team_scoped_projects_and_model_revisions() {

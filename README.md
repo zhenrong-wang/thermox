@@ -65,7 +65,7 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v3` workflow adds Team-scoped idempotent execution, leased worker claims,
+  values. Its `thermox.job/v4` workflow adds Team-scoped idempotent execution, leased worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
@@ -80,7 +80,9 @@ Implemented in this sprint:
   acting principals, with a trusted per-Team membership role in the identity context. Projects own
   immutable, parent-linked, SHA-256-checksummed topology and case revisions in PostgreSQL. Every
   case revision binds to an exact topology revision; project and revision API reads always retain
-  the Team predicate.
+  the Team predicate. Production job submission resolves an exact project/topology/case tuple,
+  stores the complete composed model snapshot in the immutable job request, and publishes both
+  source revision IDs and checksums in job and result provenance.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -370,8 +372,8 @@ stop a worker after its current calculation.
 
 ## Next steps
 
-1. Let simulation jobs reference exact project/model/case revision IDs and record both SHA-256
-   identities in execution provenance.
+1. Add immutable engineering-artifact revisions under projects and bind exact artifact identities
+   into revision-backed jobs.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently
