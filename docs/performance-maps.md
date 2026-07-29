@@ -99,6 +99,26 @@ corrected_mass_flow = m_dot * sqrt(T_in / T_ref) / (p_in / p_ref)
 corrected_speed     = omega / sqrt(T_in / T_ref)
 ```
 
+Map-driven turbomachinery component version 2 adds three positive, dimensionless,
+component-owned correction parameters. Each defaults to one:
+
+```text
+map_flow       = corrected_mass_flow / flow_capacity_scale
+pressure_ratio = 1 + pressure_ratio_scale * (map_pressure_ratio - 1)
+efficiency     = efficiency_scale * map_efficiency
+```
+
+The flow factor moves the operating point along the map's corrected-flow coordinate; it does not
+alter the physical mass flow reported by the graph. The pressure-ratio factor scales pressure rise
+or expansion ratio relative to unity, and the efficiency factor scales the selected map
+efficiency. Corrected pressure ratio must remain greater than one and corrected efficiency must
+remain in `(0, 1]`. The same convention applies to ordinary and variable-geometry fluid/material
+compressors and turbines. Analytic pressure-ratio derivatives include the correction chain rule.
+
+These values belong to the component instance and can therefore be bounded, calibrated on
+designated baseline cases, frozen into the fitted canonical model, and evaluated on independent
+off-design cases. The immutable source map is never rewritten by calibration.
+
 The selected map pressure ratio and efficiency close outlet pressure, isentropic enthalpy change,
 and shaft power using the appropriate compressor or turbine convention. Map-domain failures are
 recoverable model evaluations, allowing the nonlinear solver to reject invalid trial states. The
@@ -126,4 +146,6 @@ input.
 7. Add an injectable artifact resolver and immutable reference contract. ✅
 8. Add a persistent object-store resolver adapter behind the service port.
 9. Calibrate a designated baseline point, then freeze parameters and predict independent
-   off-design validation points.
+   off-design validation points. ✅
+10. Add standardized component-owned flow-capacity, pressure-ratio, and efficiency map
+    corrections across fluid/material and fixed/variable-geometry turbomachinery. ✅

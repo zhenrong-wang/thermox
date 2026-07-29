@@ -46,12 +46,21 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
     bool variable_geometry) {
     auto out = make_descriptor(
         std::move(kind), std::move(shaft_direction));
-    out.version = "1.0.0";
+    out.version = "2.0.0";
     out.parameters = {
         {"reference_pressure", "pressure", false, 101325.0,
          0.0, std::numeric_limits<double>::infinity(), false,
          true},
         {"reference_temperature", "temperature", false, 288.15,
+         0.0, std::numeric_limits<double>::infinity(), false,
+         true},
+        {"flow_capacity_scale", "dimensionless", false, 1.0,
+         0.0, std::numeric_limits<double>::infinity(), false,
+         true},
+        {"pressure_ratio_scale", "dimensionless", false, 1.0,
+         0.0, std::numeric_limits<double>::infinity(), false,
+         true},
+        {"efficiency_scale", "dimensionless", false, 1.0,
          0.0, std::numeric_limits<double>::infinity(), false,
          true},
     };
@@ -160,6 +169,9 @@ EvaluationStatus evaluate_turbomachinery_map(
     double angular_speed,
     double reference_pressure,
     double reference_temperature,
+    double flow_capacity_scale,
+    double pressure_ratio_scale,
+    double efficiency_scale,
     bool variable_geometry,
     double geometry_setting,
     TurbomachineryMapPoint& point) {
@@ -182,23 +194,32 @@ EvaluationStatus evaluate_turbomachinery_map(
         mass_flow * root_theta / delta;
     const double corrected_speed =
         angular_speed / root_theta;
+    const double map_mass_flow =
+        corrected_mass_flow / flow_capacity_scale;
     try {
         const auto evaluated = variable_geometry
             ? artifact.conditioned_map
                   ->evaluate(
-                      corrected_mass_flow, corrected_speed,
+                      map_mass_flow, corrected_speed,
                       geometry_setting)
                   .map
             : artifact.map->evaluate(
-                  corrected_mass_flow, corrected_speed);
+                  map_mass_flow, corrected_speed);
         point.pressure_ratio =
-            evaluated.outputs.at(contract.pressure_ratio);
+            1.0 + pressure_ratio_scale *
+                (evaluated.outputs.at(
+                     contract.pressure_ratio) -
+                 1.0);
         point.efficiency =
+            efficiency_scale *
             evaluated.outputs.at(contract.efficiency);
         point.pressure_ratio_flow_derivative =
+            pressure_ratio_scale /
+            flow_capacity_scale *
             evaluated.primary_derivatives.at(
                 contract.pressure_ratio);
         point.pressure_ratio_speed_derivative =
+            pressure_ratio_scale *
             evaluated.family_derivatives.at(
                 contract.pressure_ratio);
     } catch (const MapDomainError& error) {
@@ -425,6 +446,12 @@ public:
             context.component, "reference_pressure", 101325.0);
         const double reference_temperature = parameter_or(
             context.component, "reference_temperature", 288.15);
+        const double flow_capacity_scale = parameter_or(
+            context.component, "flow_capacity_scale", 1.0);
+        const double pressure_ratio_scale = parameter_or(
+            context.component, "pressure_ratio_scale", 1.0);
+        const double efficiency_scale = parameter_or(
+            context.component, "efficiency_scale", 1.0);
         const double geometry_setting = variable_geometry_
             ? required_parameter(
                   context.component, "geometry_setting")
@@ -457,7 +484,8 @@ public:
         const auto map_point =
             [artifact, contract, properties, inlet_m, inlet_p,
              inlet_h, shaft_omega, reference_pressure,
-             reference_temperature,
+             reference_temperature, flow_capacity_scale,
+             pressure_ratio_scale, efficiency_scale,
              variable_geometry = variable_geometry_,
              geometry_setting](
                 const std::vector<double>& x,
@@ -467,6 +495,8 @@ public:
                     x.at(inlet_m), x.at(inlet_p),
                     x.at(inlet_h), x.at(shaft_omega),
                     reference_pressure, reference_temperature,
+                    flow_capacity_scale, pressure_ratio_scale,
+                    efficiency_scale,
                     variable_geometry, geometry_setting,
                     point);
             };

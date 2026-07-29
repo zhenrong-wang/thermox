@@ -40,7 +40,8 @@ Implemented in this sprint:
 - Composition-preserving material splitters and enthalpy-conserving material mixers for bleed,
   cooling, recirculation, and multistream reacting-system graphs.
 - Performance-map compressor and turbine models for both ordinary fluid and composition-aware
-  material gas paths.
+  material gas paths, with component-owned flow-capacity, pressure-ratio, and efficiency
+  corrections that can be calibrated without modifying immutable map artifacts.
 - Conditioned three-coordinate map families for variable-geometry turbomachinery, with per-case
   angle selection across complete corrected-flow/speed maps.
 - Typed per-case component-parameter overrides for operating controls and configuration changes

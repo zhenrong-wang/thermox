@@ -92,10 +92,10 @@ thermox::service::PerformanceMapArtifactInput compressor_map() {
     };
     map.curves = {
         {250.0,
-         {{80.0, {10.0, 0.85}},
+         {{70.0, {10.0, 0.85}},
           {120.0, {10.0, 0.85}}}},
         {400.0,
-         {{80.0, {10.0, 0.85}},
+         {{70.0, {10.0, 0.85}},
           {120.0, {10.0, 0.85}}}},
     };
     artifact.map = std::move(map);
@@ -311,14 +311,31 @@ void test_catalog_discovery() {
             return component.kind ==
                 "compressor.fluid.performance_map";
         });
+    const auto has_default_map_scale =
+        [&](const std::string& name) {
+            return mapped_compressor !=
+                    response.components.end() &&
+                std::any_of(
+                    mapped_compressor->parameters.begin(),
+                    mapped_compressor->parameters.end(),
+                    [&](const auto& parameter) {
+                        return parameter.name == name &&
+                            parameter.default_value_si ==
+                                std::optional<double>{1.0};
+                    });
+        };
     require(
         mapped_compressor != response.components.end() &&
             mapped_compressor->artifacts.size() == 1 &&
             mapped_compressor->artifacts.front().role ==
                 "performance_map" &&
             mapped_compressor->artifacts.front().artifact_type ==
-                thermox::platform::performance_map_artifact_type,
-        "catalog must expose mapped compressor artifact contract");
+                thermox::platform::performance_map_artifact_type &&
+            has_default_map_scale("flow_capacity_scale") &&
+            has_default_map_scale("pressure_ratio_scale") &&
+            has_default_map_scale("efficiency_scale"),
+        "catalog must expose mapped compressor artifact and "
+        "correction contracts");
     const auto variable_geometry_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -654,6 +671,76 @@ std::string independent_study_model(
     return model.str();
 }
 
+std::string mapped_independent_study_model(
+    double baseline_power_w) {
+    std::ostringstream model;
+    model << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mapped_independent_study",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.fluid.performance_map",
+      "artifacts": {"performance_map": "request-compressor-map"},
+      "parameters": {
+        "reference_pressure": {"value": 101.325, "unit": "kPa"},
+        "reference_temperature": {"value": 300.0, "unit": "K"},
+        "efficiency_scale": 0.8
+      },
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "baseline",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      }
+    },
+    {
+      "id": "validation",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 80.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      }
+    }
+  ],
+  "calibrations": [{
+    "id": "map_correction_fit",
+    "parameters": [{
+      "id": "compressor_efficiency_scale",
+      "scope": "component",
+      "targets": [
+        "components.compressor.parameters.efficiency_scale"
+      ],
+      "bounds": {"lower": 0.7, "upper": 1.1}
+    }],
+    "observations": [{
+      "id": "baseline_power",
+      "case": "baseline",
+      "target": "compressor.shaft.W_dot",
+      "measured": {"value": )json"
+          << baseline_power_w << R"json(, "unit": "W"},
+      "sigma": {"value": 10000.0, "unit": "W"}
+    }]
+  }]
+})json";
+    return model.str();
+}
+
 void test_engineering_study_freezes_before_prediction() {
     constexpr double gamma = 1.4;
     constexpr double cp = 1004.5;
@@ -741,6 +828,62 @@ void test_engineering_study_freezes_before_prediction() {
             rejected.error.code ==
                 "invalid_study_predictions",
         "calibration cases must not be reused as independent predictions");
+}
+
+void test_map_correction_is_calibrated_then_frozen() {
+    constexpr double gamma = 1.4;
+    constexpr double cp = 1004.5;
+    constexpr double map_efficiency = 0.85;
+    const double isentropic_delta_h =
+        cp * 300.0 *
+        (std::pow(
+             10.0, (gamma - 1.0) / gamma) -
+         1.0);
+    const double baseline_power =
+        100.0 * isentropic_delta_h / map_efficiency;
+    const double validation_power = 0.8 * baseline_power;
+
+    thermox::service::SimulationService service;
+    thermox::service::EngineeringStudyRequest request;
+    request.model_json =
+        mapped_independent_study_model(baseline_power);
+    request.calibration_id = "map_correction_fit";
+    request.calibration_solver.max_iterations = 24;
+    request.artifacts.performance_maps.push_back(
+        compressor_map());
+    request.prediction_cases = {{
+        "validation",
+        {{
+            "validation_power",
+            "compressor.shaft.W_dot",
+            "power",
+            validation_power,
+            10000.0,
+        }},
+    }};
+
+    const auto response =
+        service.run_engineering_study(request);
+    require(
+        response.succeeded(),
+        "map correction study must calibrate then predict: " +
+            response.error.message);
+    require(
+        response.calibration.parameters.size() == 1 &&
+            std::abs(
+                response.calibration.parameters.front()
+                    .fitted_value_si -
+                1.0) <
+                2.0e-3,
+        "ordinary calibration must fit a component-owned map "
+        "efficiency correction");
+    require(
+        std::abs(
+            response.predictions.front()
+                .observations.front().residual_si) <
+            5000.0,
+        "the fitted map correction must remain frozen for the "
+        "independent operating point");
 }
 
 void test_component_version_is_enforced() {
@@ -1275,6 +1418,7 @@ int main() {
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
         test_engineering_study_freezes_before_prediction();
+        test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();
         test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();

@@ -257,6 +257,8 @@ Next:
     shared. ✅
 11. Add conditioned three-coordinate performance-map artifacts and variable-geometry
     fluid/material compressor and turbine components for case-selected IGV/guide-vane angles. ✅
+12. Standardize component-owned flow-capacity, pressure-ratio, and efficiency map corrections,
+    and prove ordinary calibration can fit and freeze them for independent prediction. ✅
 
 See `docs/calibration-architecture.md`.
 
@@ -279,6 +281,7 @@ Work items:
    - request-scoped artifact bundles, job propagation, idempotency, and result provenance; ✅
    - map-based compressor graph component; ✅
    - map-based turbine graph component; ✅
+   - standardized calibratable map corrections without mutating source artifacts; ✅
    - two-load shaft train with mechanical losses and an electrical generator component; ✅
 3. Add steam turbine stage/extraction support.
 4. Add design/off-design case handling.

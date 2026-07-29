@@ -174,6 +174,9 @@ public:
         std::size_t shaft_omega,
         double reference_pressure,
         double reference_temperature,
+        double flow_capacity_scale,
+        double pressure_ratio_scale,
+        double efficiency_scale,
         bool variable_geometry,
         double geometry_setting)
         : properties_(std::move(properties)),
@@ -185,6 +188,9 @@ public:
           shaft_omega_(shaft_omega),
           reference_pressure_(reference_pressure),
           reference_temperature_(reference_temperature),
+          flow_capacity_scale_(flow_capacity_scale),
+          pressure_ratio_scale_(pressure_ratio_scale),
+          efficiency_scale_(efficiency_scale),
           variable_geometry_(variable_geometry),
           geometry_setting_(geometry_setting) {
         const PerformanceMap* selected = artifact_->map.get();
@@ -303,18 +309,25 @@ public:
                 total_mass_flow * root_theta / delta;
             const double corrected_speed =
                 x.at(shaft_omega_) / root_theta;
+            const double map_mass_flow =
+                corrected_mass_flow /
+                flow_capacity_scale_;
             const auto map = variable_geometry_
                 ? artifact_->conditioned_map
                       ->evaluate(
-                          corrected_mass_flow,
+                          map_mass_flow,
                           corrected_speed,
                           geometry_setting_)
                       .map
                 : artifact_->map->evaluate(
-                      corrected_mass_flow, corrected_speed);
+                      map_mass_flow, corrected_speed);
             const double pressure_ratio =
-                map.outputs.at(*pressure_ratio_index_);
+                1.0 + pressure_ratio_scale_ *
+                    (map.outputs.at(
+                         *pressure_ratio_index_) -
+                     1.0);
             const double efficiency =
+                efficiency_scale_ *
                 map.outputs.at(*efficiency_index_);
             if (!std::isfinite(pressure_ratio) ||
                 pressure_ratio <= 1.0) {
@@ -359,6 +372,9 @@ private:
     std::size_t shaft_omega_;
     double reference_pressure_;
     double reference_temperature_;
+    double flow_capacity_scale_;
+    double pressure_ratio_scale_;
+    double efficiency_scale_;
     bool variable_geometry_;
     double geometry_setting_;
     std::optional<std::size_t> pressure_ratio_index_;
@@ -457,7 +473,7 @@ public:
         std::string kind, bool compressor)
         : compressor_(compressor) {
         descriptor_.kind = std::move(kind);
-        descriptor_.version = "1.0.0";
+        descriptor_.version = "2.0.0";
         descriptor_.ports = {
             {"inlet", "material", "in"},
             {"outlet", "material", "out"},
@@ -620,6 +636,15 @@ public:
              true},
             {"reference_temperature", "temperature", false, 288.15,
              0.0, std::numeric_limits<double>::infinity(), false,
+             true},
+            {"flow_capacity_scale", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), false,
+             true},
+            {"pressure_ratio_scale", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), false,
+             true},
+            {"efficiency_scale", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), false,
              true}};
         if (variable_geometry_) {
             descriptor_.parameters.push_back(
@@ -709,6 +734,15 @@ public:
                 parameter_or(
                     context.component, "reference_temperature",
                     288.15),
+                parameter_or(
+                    context.component, "flow_capacity_scale",
+                    1.0),
+                parameter_or(
+                    context.component, "pressure_ratio_scale",
+                    1.0),
+                parameter_or(
+                    context.component, "efficiency_scale",
+                    1.0),
                 variable_geometry_,
                 variable_geometry_
                     ? required_parameter(

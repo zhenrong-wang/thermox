@@ -34,6 +34,11 @@ shaft-train component, generator loss to a generator, bleed and cooling flows to
 loss to a transport component, and auxiliary power to an auxiliary-load component. Calibration
 must not introduce an unowned global correction that hides missing physics.
 
+Map-driven compressor and turbine instances expose `flow_capacity_scale`,
+`pressure_ratio_scale`, and `efficiency_scale` as bounded component parameters. They provide a
+standard calibration surface while leaving the bound OEM or test map immutable. Calibration uses
+the same generic parameter-target contract; no map-specific optimizer path exists.
+
 The optional `cases` list specifies the operating cases over which a fitted value is shared. An
 omitted list means that the future estimation workflow may use the parameter wherever the
 calibration campaign requires it.

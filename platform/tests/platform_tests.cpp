@@ -1454,11 +1454,19 @@ void test_map_driven_compressor_solves_bound_operating_point() {
             },
             std::vector<thermox::platform::MapCurve>{
                 {250.0,
-                 {{80.0, {10.0, 0.85}},
-                  {120.0, {10.0, 0.85}}}},
+                 {{60.0, {8.0, 0.85}},
+                  {90.0, {8.0, 0.85}},
+                  {95.0, {10.0, 0.85}},
+                  {105.0, {10.0, 0.85}},
+                  {110.0, {12.0, 0.85}},
+                  {140.0, {12.0, 0.85}}}},
                 {400.0,
-                 {{80.0, {10.0, 0.85}},
-                  {120.0, {10.0, 0.85}}}},
+                 {{60.0, {8.0, 0.85}},
+                  {90.0, {8.0, 0.85}},
+                  {95.0, {10.0, 0.85}},
+                  {105.0, {10.0, 0.85}},
+                  {110.0, {12.0, 0.85}},
+                  {140.0, {12.0, 0.85}}}},
             }),
     });
     const auto graph = thermox::platform::compile_model_graph(
@@ -1509,6 +1517,49 @@ void test_map_driven_compressor_solves_bound_operating_point() {
         100.0 *
             (expected_outlet_enthalpy - 1004.5 * 300.0),
         1.0e-2, "mapped compressor shaft power");
+
+    auto corrected_document = document;
+    auto& corrected_component =
+        corrected_document.components.front();
+    corrected_component.parameters["flow_capacity_scale"] = {
+        1.25, "dimensionless", "dimensionless"};
+    corrected_component.parameters["pressure_ratio_scale"] = {
+        0.5, "dimensionless", "dimensionless"};
+    corrected_component.parameters["efficiency_scale"] = {
+        0.9, "dimensionless", "dimensionless"};
+    const auto corrected_graph =
+        thermox::platform::compile_model_graph(
+            corrected_document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, "operating_point");
+    const auto corrected =
+        thermox::solve_newton(corrected_graph.problem);
+    require(corrected.diagnostics.converged,
+            corrected.diagnostics.message);
+    const auto corrected_value = [&](const std::string& name) {
+        return corrected.x.at(require_variable_index(
+            corrected_graph.problem.variable_names, name));
+    };
+    constexpr double corrected_pressure_ratio = 4.5;
+    constexpr double corrected_efficiency = 0.765;
+    const double corrected_outlet_temperature =
+        300.0 *
+        (1.0 +
+         (std::pow(
+              corrected_pressure_ratio,
+              (gamma - 1.0) / gamma) -
+          1.0) /
+             corrected_efficiency);
+    require_near(
+        corrected_value("compressor.outlet.p"),
+        corrected_pressure_ratio * 101325.0, 1.0e-4,
+        "map correction scales must shift flow lookup and pressure ratio");
+    require_near(
+        corrected_value("compressor.outlet.h"),
+        1004.5 * corrected_outlet_temperature, 1.0e-4,
+        "map efficiency correction scale must change compressor work");
 
     const auto geometry_layer = [](
         double pressure_ratio, double efficiency) {
@@ -2604,7 +2655,10 @@ void test_map_driven_material_turbomachinery() {
       "artifacts": {"performance_map": "material-compressor-map"},
       "parameters": {
         "reference_pressure": {"value": 101.325, "unit": "kPa"},
-        "reference_temperature": {"value": 300.0, "unit": "K"}
+        "reference_temperature": {"value": 300.0, "unit": "K"},
+        "flow_capacity_scale": 1.25,
+        "pressure_ratio_scale": 0.5,
+        "efficiency_scale": 0.9
       },
       "materials": {"inlet": "gas", "outlet": "gas"}
     }],
@@ -2735,14 +2789,23 @@ void test_map_driven_material_turbomachinery() {
         return result.x.at(require_variable_index(
             graph.problem.variable_names, name));
     };
+    constexpr double corrected_compressor_pressure_ratio = 1.5;
+    constexpr double corrected_compressor_efficiency = 0.72;
     const double isentropic_temperature =
-        300.0 * std::exp(287.0 * std::log(2.0) / 1000.0);
+        300.0 *
+        std::exp(
+            287.0 *
+            std::log(corrected_compressor_pressure_ratio) /
+            1000.0);
     const double expected_enthalpy =
         300000.0 +
-        (1000.0 * isentropic_temperature - 300000.0) / 0.8;
+        (1000.0 * isentropic_temperature - 300000.0) /
+            corrected_compressor_efficiency;
     require_near(
-        value("compressor.outlet.p"), 202650.0, 1.0e-6,
-        "material map applies pressure ratio");
+        value("compressor.outlet.p"),
+        corrected_compressor_pressure_ratio * 101325.0,
+        1.0e-6,
+        "material map applies flow and pressure-ratio corrections");
     require_near(
         value("compressor.outlet.h"), expected_enthalpy,
         1.0e-5, "material map applies isentropic efficiency");
@@ -2782,9 +2845,9 @@ void test_map_driven_material_turbomachinery() {
         geometry_result.x.at(require_variable_index(
             geometry_graph.problem.variable_names,
             "compressor.outlet.p")),
-        202650.0, 1.0e-6,
-        "material variable-geometry map must interpolate the "
-        "case-selected pressure ratio");
+        1.5 * 101325.0, 1.0e-6,
+        "material variable-geometry map must apply corrections "
+        "after interpolating the case-selected pressure ratio");
 
     document.model_id = "mapped_material_turbine";
     auto& machine = document.components.front();
@@ -2831,16 +2894,23 @@ void test_map_driven_material_turbomachinery() {
         return turbine.x.at(require_variable_index(
             turbine_graph.problem.variable_names, name));
     };
+    constexpr double corrected_turbine_pressure_ratio = 3.0;
+    constexpr double corrected_turbine_efficiency = 0.81;
     const double turbine_isentropic_temperature =
         1000.0 *
-        std::exp(287.0 * std::log(1.0 / 5.0) / 1000.0);
+        std::exp(
+            287.0 *
+            std::log(1.0 / corrected_turbine_pressure_ratio) /
+            1000.0);
     const double expected_turbine_enthalpy =
         1.0e6 +
-        0.9 *
+        corrected_turbine_efficiency *
             (1000.0 * turbine_isentropic_temperature - 1.0e6);
     require_near(
-        turbine_value("turbine.outlet.p"), 2.0e5,
-        1.0e-6, "material turbine map applies pressure ratio");
+        turbine_value("turbine.outlet.p"),
+        1.0e6 / corrected_turbine_pressure_ratio,
+        1.0e-6,
+        "material turbine map applies pressure-ratio correction");
     require_near(
         turbine_value("turbine.outlet.h"),
         expected_turbine_enthalpy, 1.0e-5,
