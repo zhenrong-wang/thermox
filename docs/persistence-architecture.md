@@ -64,6 +64,14 @@ The actor user ID is audit metadata rather than the tenant boundary. A missing o
 scope returns not found. This contract is already enforced by the in-memory adapter and must be
 preserved by PostgreSQL row constraints and repository queries.
 
+The Team is the tenant and hard isolation boundary. A Project is only a Team-owned logical
+workspace for related engineering models, cases, runs, and artifacts; it is not a nested tenant
+and does not own users. A User is the acting principal. The trusted identity context carries the
+selected Team membership role, allowing the same user to be an admin in one Team and a regular
+member in another. Authentication, membership resolution, and role policy belong to the identity
+gateway/application boundary. Repository predicates still enforce Team isolation independently of
+that policy.
+
 ## Implementation gate
 
 Add database code when all of the following are ready:
@@ -97,6 +105,18 @@ HTTP host selects it when `THERMOX_POSTGRES_URL` is set.
 The schema migration is
 `adapters/postgres/migrations/001_simulation_jobs.sql`. The local-only Compose service mounts the
 migration into PostgreSQL's initialization directory and binds PostgreSQL to loopback.
+
+Migration `003_projects_and_model_revisions.sql` adds Team-owned projects and immutable model
+revision history. Model revisions are assigned an atomic per-project sequence, may reference a
+parent only inside the same `(team_id, project_id)` scope, preserve exact canonical JSON bytes, and
+publish a SHA-256 checksum. PostgreSQL composite foreign keys make a cross-Team or cross-Project
+parent relationship impossible.
+
+The current `thermox.model/v2` execution document embeds operating cases. Consequently this
+milestone persists the exact executable model document as one model revision and does not create a
+nominally independent CaseRevision that would actually duplicate or alias embedded data. The next
+model schema should separate topology and case documents; immutable case revisions can then bind
+cleanly to an exact model revision.
 
 ## Object storage
 

@@ -1,8 +1,12 @@
 #include "thermox/http/http_api.hpp"
 
 #include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/in_memory_projects.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
+
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include <algorithm>
 #include <charconv>
@@ -10,6 +14,7 @@
 #include <cctype>
 #include <map>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -292,6 +297,169 @@ Response job_record_response(
     return response;
 }
 
+void skip_json_whitespace(
+    const std::string& input,
+    std::size_t& position) {
+    while (position < input.size() &&
+           std::isspace(static_cast<unsigned char>(
+               input[position]))) {
+        ++position;
+    }
+}
+
+void scan_json_string(
+    const std::string& input,
+    std::size_t& position) {
+    if (position >= input.size() ||
+        input[position] != '"') {
+        throw std::invalid_argument(
+            "project fields must be JSON strings");
+    }
+    ++position;
+    while (position < input.size()) {
+        const char character = input[position++];
+        if (character == '"') {
+            return;
+        }
+        if (static_cast<unsigned char>(character) < 0x20U) {
+            throw std::invalid_argument(
+                "project JSON string contains a control byte");
+        }
+        if (character == '\\') {
+            if (position >= input.size()) {
+                break;
+            }
+            const char escape = input[position++];
+            if (escape == 'u') {
+                for (int digit = 0; digit < 4; ++digit) {
+                    if (position >= input.size() ||
+                        !std::isxdigit(
+                            static_cast<unsigned char>(
+                                input[position++]))) {
+                        throw std::invalid_argument(
+                            "invalid Unicode escape in project "
+                            "JSON");
+                    }
+                }
+            } else if (
+                std::string_view{"\"\\/bfnrt"}.find(escape) ==
+                std::string_view::npos) {
+                throw std::invalid_argument(
+                    "invalid escape in project JSON");
+            }
+        }
+    }
+    throw std::invalid_argument(
+        "unterminated string in project JSON");
+}
+
+void require_json_string_object_shape(
+    const std::string& input) {
+    std::size_t position = 0;
+    skip_json_whitespace(input, position);
+    if (position >= input.size() || input[position++] != '{') {
+        throw std::invalid_argument(
+            "project request must be a JSON object");
+    }
+    skip_json_whitespace(input, position);
+    if (position < input.size() && input[position] == '}') {
+        ++position;
+    } else {
+        for (;;) {
+            scan_json_string(input, position);
+            skip_json_whitespace(input, position);
+            if (position >= input.size() ||
+                input[position++] != ':') {
+                throw std::invalid_argument(
+                    "invalid project JSON object");
+            }
+            skip_json_whitespace(input, position);
+            scan_json_string(input, position);
+            skip_json_whitespace(input, position);
+            if (position < input.size() &&
+                input[position] == ',') {
+                ++position;
+                skip_json_whitespace(input, position);
+                continue;
+            }
+            if (position < input.size() &&
+                input[position] == '}') {
+                ++position;
+                break;
+            }
+            throw std::invalid_argument(
+                "invalid project JSON object");
+        }
+    }
+    skip_json_whitespace(input, position);
+    if (position != input.size()) {
+        throw std::invalid_argument(
+            "trailing content after project JSON object");
+    }
+}
+
+service::CreateProjectRequest parse_create_project_request(
+    const Request& request) {
+    require_json_string_object_shape(request.body);
+    boost::property_tree::ptree tree;
+    std::istringstream input(request.body);
+    try {
+        boost::property_tree::read_json(input, tree);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid project JSON: ") +
+            error.what());
+    }
+    std::set<std::string> fields;
+    for (const auto& [key, value] : tree) {
+        (void)value;
+        if (key != "schema_version" &&
+            key != "name" && key != "description") {
+            throw std::invalid_argument(
+                "unknown project field: " + key);
+        }
+        if (!fields.insert(key).second) {
+            throw std::invalid_argument(
+                "duplicate project field: " + key);
+        }
+    }
+    const auto schema =
+        tree.get<std::string>("schema_version", "");
+    if (schema != "thermox.project.create/v1") {
+        throw std::invalid_argument(
+            "unsupported project create schema_version");
+    }
+    service::CreateProjectRequest command;
+    command.name = tree.get<std::string>("name", "");
+    command.description =
+        tree.get<std::string>("description", "");
+    return command;
+}
+
+Response project_response(
+    const service::ProjectRecord& project,
+    int status) {
+    auto response = json_response(
+        status, service::serialize_project_json(project));
+    response.headers["Location"] =
+        "/api/v1/projects/" + project.project_id;
+    return response;
+}
+
+Response model_revision_response(
+    const service::ModelRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_model_revision_json(revision));
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/model-revisions/" + revision.model_revision_id;
+    response.headers["ETag"] =
+        "\"" + revision.checksum + "\"";
+    return response;
+}
+
 std::shared_ptr<service::SimulationJobService>
 make_local_job_service(
     const std::shared_ptr<const service::SimulationRuntime>& runtime) {
@@ -307,9 +475,11 @@ struct Api::Impl {
     explicit Impl(
         std::shared_ptr<const service::SimulationRuntime> runtime,
         std::shared_ptr<service::SimulationJobService> job_service,
+        std::shared_ptr<service::ProjectService> project_service,
         ApiOptions api_options)
         : simulation(std::move(runtime)),
           jobs(std::move(job_service)),
+          projects(std::move(project_service)),
           options(api_options) {
         if (options.maximum_body_bytes == 0U) {
             throw std::invalid_argument(
@@ -319,10 +489,15 @@ struct Api::Impl {
             throw std::invalid_argument(
                 "simulation job service must not be null");
         }
+        if (!projects) {
+            throw std::invalid_argument(
+                "project service must not be null");
+        }
     }
 
     service::SimulationService simulation;
     std::shared_ptr<service::SimulationJobService> jobs;
+    std::shared_ptr<service::ProjectService> projects;
     ApiOptions options;
 };
 
@@ -335,14 +510,20 @@ Api::Api(
     : Api(
           runtime,
           make_local_job_service(runtime),
+          std::make_shared<service::ProjectService>(
+              service::make_in_memory_project_repository()),
           options) {}
 
 Api::Api(
     std::shared_ptr<const service::SimulationRuntime> runtime,
     std::shared_ptr<service::SimulationJobService> jobs,
+    std::shared_ptr<service::ProjectService> projects,
     ApiOptions options)
     : impl_(std::make_unique<Impl>(
-          std::move(runtime), std::move(jobs), options)) {}
+          std::move(runtime),
+          std::move(jobs),
+          std::move(projects),
+          options)) {}
 
 Api::~Api() = default;
 Api::Api(Api&&) noexcept = default;
@@ -380,6 +561,157 @@ Response Api::handle(const Request& request) const {
             return json_response(
                 operation_status(result.status),
                 service::serialize_catalog_response_json(result));
+        }
+
+        if (target.path == "/api/v1/projects") {
+            reject_unknown_query(target.query, {});
+            const auto& identity = require_identity(request);
+            if (method == "get") {
+                return json_response(
+                    200,
+                    service::serialize_projects_json(
+                        impl_->projects->list_projects(identity)));
+            }
+            if (method == "post") {
+                require_json_request(
+                    request, impl_->options.maximum_body_bytes);
+                auto command =
+                    parse_create_project_request(request);
+                command.identity = identity;
+                return project_response(
+                    impl_->projects->create_project(command),
+                    201);
+            }
+            auto response = error_response(
+                405,
+                "method_not_allowed",
+                "projects only support GET and POST");
+            response.headers["Allow"] = "GET, POST";
+            return response;
+        }
+
+        constexpr std::string_view project_prefix =
+            "/api/v1/projects/";
+        if (target.path.starts_with(project_prefix)) {
+            const auto& identity = require_identity(request);
+            const std::string suffix =
+                target.path.substr(project_prefix.size());
+            const auto separator = suffix.find('/');
+            const std::string project_id =
+                suffix.substr(0, separator);
+            if (project_id.empty()) {
+                return error_response(
+                    404,
+                    "route_not_found",
+                    "no route matches the request target");
+            }
+            if (separator == std::string::npos) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "project detail only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto project =
+                    impl_->projects->get_project(
+                        identity, project_id);
+                if (!project) {
+                    return error_response(
+                        404,
+                        "project_not_found",
+                        "project was not found");
+                }
+                return project_response(*project, 200);
+            }
+
+            constexpr std::string_view revisions_segment =
+                "/model-revisions";
+            const std::string remainder =
+                suffix.substr(separator);
+            if (remainder == revisions_segment) {
+                if (!impl_->projects
+                         ->get_project(identity, project_id)) {
+                    return error_response(
+                        404,
+                        "project_not_found",
+                        "project was not found");
+                }
+                if (method == "get") {
+                    reject_unknown_query(target.query, {});
+                    return json_response(
+                        200,
+                        service::serialize_model_revisions_json(
+                            impl_->projects
+                                ->list_model_revisions(
+                                    identity, project_id)));
+                }
+                if (method == "post") {
+                    reject_unknown_query(
+                        target.query, {"parent_revision_id"});
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    service::CreateModelRevisionRequest command;
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    command.parent_model_revision_id =
+                        optional_query(
+                            target.query,
+                            "parent_revision_id");
+                    command.model_json = request.body;
+                    return model_revision_response(
+                        impl_->projects
+                            ->create_model_revision(command),
+                        201);
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "model revisions only support GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
+
+            const std::string detail_prefix =
+                std::string(revisions_segment) + "/";
+            if (remainder.starts_with(detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "model revision detail only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto revision_id =
+                    remainder.substr(detail_prefix.size());
+                if (revision_id.empty() ||
+                    revision_id.find('/') !=
+                        std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto revision =
+                    impl_->projects->get_model_revision(
+                        identity, project_id, revision_id);
+                if (!revision) {
+                    return error_response(
+                        404,
+                        "model_revision_not_found",
+                        "model revision was not found");
+                }
+                return model_revision_response(*revision, 200);
+            }
+            return error_response(
+                404,
+                "route_not_found",
+                "no route matches the request target");
         }
 
         if (target.path == "/api/v1/models/validate") {
@@ -568,6 +900,12 @@ Response Api::handle(const Request& request) const {
         return error_response(409, "job_state_conflict", error.what());
     } catch (const service::JobRequestError& error) {
         return error_response(400, "invalid_job_request", error.what());
+    } catch (const service::ProjectRequestError& error) {
+        return error_response(
+            400, "invalid_project_request", error.what());
+    } catch (const service::ProjectStateError& error) {
+        return error_response(
+            404, "project_not_found", error.what());
     } catch (const std::length_error& error) {
         return error_response(413, "body_too_large", error.what());
     } catch (const std::domain_error& error) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/service/simulation_jobs.hpp"
+#include "thermox/service/projects.hpp"
 
 #include <cstddef>
 #include <map>
@@ -40,6 +41,7 @@ public:
     Api(
         std::shared_ptr<const service::SimulationRuntime> runtime,
         std::shared_ptr<service::SimulationJobService> jobs,
+        std::shared_ptr<service::ProjectService> projects,
         ApiOptions options = {});
     ~Api();
     Api(Api&&) noexcept;

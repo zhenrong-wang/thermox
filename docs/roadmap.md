@@ -214,6 +214,9 @@ Completed structural slices:
   ✅
 - separate durable API and calculation-worker process roles, request-process execution guard,
   graceful worker stop, and bounded numerical-library thread defaults; ✅
+- Team-owned logical projects, trusted per-Team membership roles, immutable parent-linked
+  canonical model revisions, SHA-256 integrity metadata, PostgreSQL composite tenant constraints,
+  and thin project/revision HTTP routes; ✅
 
 ## Persistence boundary decision
 

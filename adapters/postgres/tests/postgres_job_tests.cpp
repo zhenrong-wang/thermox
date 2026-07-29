@@ -1,4 +1,7 @@
 #include "thermox/postgres/postgres_job_repository.hpp"
+#include "thermox/postgres/postgres_project_repository.hpp"
+
+#include "thermox/service/projects.hpp"
 
 #include <libpq-fe.h>
 
@@ -83,6 +86,7 @@ void prepare_test_schema(const std::string& connection_string) {
     for (const std::string migration_name : {
              "001_simulation_jobs.sql",
              "002_worker_leases.sql",
+             "003_projects_and_model_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -430,6 +434,69 @@ void test_failure_and_cancellation(
         "queued jobs must support revision-checked cancellation");
 }
 
+void test_projects_and_immutable_model_revisions(
+    const std::string& connection_string) {
+    thermox::service::ProjectService projects{
+        thermox::postgres::make_postgres_project_repository(
+            connection_string)};
+    const thermox::service::IdentityContext team_a{
+        "postgres-user-a", "postgres-team-a", "project-test"};
+    const thermox::service::IdentityContext team_b{
+        "postgres-user-b", "postgres-team-b", "project-test"};
+    const auto project = projects.create_project({
+        team_a, "PostgreSQL cycle", "Repository contract",
+    });
+    require(
+        project.team_id == team_a.team_id &&
+            projects.list_projects(team_a).size() == 1 &&
+            projects.list_projects(team_b).empty() &&
+            !projects
+                 .get_project(team_b, project.project_id)
+                 .has_value(),
+        "PostgreSQL projects must use Team as their ownership "
+        "and query boundary");
+
+    std::ifstream model_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.json");
+    require(
+        static_cast<bool>(model_file),
+        "could not read model revision fixture");
+    std::ostringstream model;
+    model << model_file.rdbuf();
+    const auto first = projects.create_model_revision({
+        team_a, project.project_id, {}, model.str(),
+    });
+    const auto second = projects.create_model_revision({
+        team_a,
+        project.project_id,
+        first.model_revision_id,
+        model.str(),
+    });
+    require(
+        first.revision_number == 1 &&
+            second.revision_number == 2 &&
+            second.parent_model_revision_id ==
+                first.model_revision_id &&
+            first.canonical_model_json ==
+                second.canonical_model_json &&
+            first.checksum == second.checksum &&
+            projects
+                    .list_model_revisions(
+                        team_a, project.project_id)
+                    .size() == 2,
+        "PostgreSQL must preserve immutable canonical model "
+        "bytes and ordered revision history");
+    require(
+        !projects
+             .get_model_revision(
+                 team_b,
+                 project.project_id,
+                 first.model_revision_id)
+             .has_value(),
+        "cross-Team revision lookup must not reveal existence");
+}
+
 }  // namespace
 
 int main() {
@@ -456,8 +523,11 @@ int main() {
         test_failure_and_cancellation(
             jobs, connection_string);
         jobs.reset();
+        test_projects_and_immutable_model_revisions(
+            connection_string);
         drop_test_schema(connection_string);
-        std::cout << "thermox PostgreSQL job tests passed\n";
+        std::cout
+            << "thermox PostgreSQL repository tests passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr

@@ -77,6 +77,20 @@ add_test(
     COMMAND thermox_job_service_tests
 )
 
+add_executable(thermox_project_service_tests
+    service/tests/project_service_tests.cpp
+)
+target_link_libraries(thermox_project_service_tests PRIVATE
+    thermox_service
+)
+target_compile_definitions(thermox_project_service_tests PRIVATE
+    THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+add_test(
+    NAME thermox_project_service_tests
+    COMMAND thermox_project_service_tests
+)
+
 add_executable(thermox_example_tests core/example_models/tests/example_tests.cpp)
 target_link_libraries(thermox_example_tests PRIVATE thermox_examples)
 add_test(NAME thermox_example_tests COMMAND thermox_example_tests)

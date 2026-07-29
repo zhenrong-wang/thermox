@@ -202,9 +202,14 @@ int main(int argc, char** argv) {
                 thermox::host::make_job_repository(persistence),
                 thermox::host::make_result_artifact_store(
                     persistence));
+        const auto project_service = std::make_shared<
+            thermox::service::ProjectService>(
+                thermox::host::make_project_repository(
+                    persistence));
         thermox::http::Api api{
             runtime,
             job_service,
+            project_service,
             {
                 .maximum_body_bytes =
                     options.maximum_body_bytes,

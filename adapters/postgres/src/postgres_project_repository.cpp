@@ -1,0 +1,375 @@
+#include "thermox/postgres/postgres_project_repository.hpp"
+
+#include <libpq-fe.h>
+
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace thermox::postgres {
+
+namespace {
+
+struct ConnectionDeleter {
+    void operator()(PGconn* connection) const {
+        if (connection != nullptr) {
+            PQfinish(connection);
+        }
+    }
+};
+
+struct ResultDeleter {
+    void operator()(PGresult* result) const {
+        if (result != nullptr) {
+            PQclear(result);
+        }
+    }
+};
+
+using Connection = std::unique_ptr<PGconn, ConnectionDeleter>;
+using Result = std::unique_ptr<PGresult, ResultDeleter>;
+
+Connection connect(const std::string& connection_string) {
+    Connection connection{PQconnectdb(connection_string.c_str())};
+    if (!connection ||
+        PQstatus(connection.get()) != CONNECTION_OK) {
+        const std::string message = connection
+            ? PQerrorMessage(connection.get())
+            : "allocation failed";
+        throw std::runtime_error(
+            "could not connect to PostgreSQL: " + message);
+    }
+    return connection;
+}
+
+Result execute(
+    PGconn* connection,
+    const char* sql,
+    const std::vector<const char*>& values = {},
+    ExecStatusType expected = PGRES_TUPLES_OK) {
+    Result result{PQexecParams(
+        connection,
+        sql,
+        static_cast<int>(values.size()),
+        nullptr,
+        values.empty() ? nullptr : values.data(),
+        nullptr,
+        nullptr,
+        0)};
+    if (!result || PQresultStatus(result.get()) != expected) {
+        const std::string message = result
+            ? PQresultErrorMessage(result.get())
+            : PQerrorMessage(connection);
+        throw std::runtime_error(
+            "PostgreSQL project repository query failed: " +
+            message);
+    }
+    return result;
+}
+
+std::string field(
+    const PGresult* result,
+    int row,
+    int column) {
+    if (PQgetisnull(result, row, column)) {
+        throw std::runtime_error(
+            "PostgreSQL project row contains an unexpected null");
+    }
+    return PQgetvalue(result, row, column);
+}
+
+std::string optional_field(
+    const PGresult* result,
+    int row,
+    int column) {
+    return PQgetisnull(result, row, column)
+        ? std::string{}
+        : std::string(PQgetvalue(result, row, column));
+}
+
+std::chrono::system_clock::time_point decode_time(
+    const std::string& milliseconds) {
+    return std::chrono::system_clock::time_point{
+        std::chrono::milliseconds{std::stoll(milliseconds)}};
+}
+
+service::ProjectRecord decode_project(
+    const PGresult* result,
+    int row = 0) {
+    service::ProjectRecord record;
+    record.project_id = field(result, row, 0);
+    record.team_id = field(result, row, 1);
+    record.name = field(result, row, 2);
+    record.description = field(result, row, 3);
+    record.created_by_user_id = field(result, row, 4);
+    record.created_at = decode_time(field(result, row, 5));
+    return record;
+}
+
+service::ModelRevisionRecord decode_model_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::ModelRevisionRecord record;
+    record.model_revision_id = field(result, row, 0);
+    record.project_id = field(result, row, 1);
+    record.team_id = field(result, row, 2);
+    record.revision_number =
+        std::stoull(field(result, row, 3));
+    record.parent_model_revision_id =
+        optional_field(result, row, 4);
+    record.model_schema_version = field(result, row, 5);
+    record.model_id = field(result, row, 6);
+    record.model_revision_label = field(result, row, 7);
+    record.canonical_model_json = field(result, row, 8);
+    record.checksum = field(result, row, 9);
+    record.created_by_user_id = field(result, row, 10);
+    record.created_at = decode_time(field(result, row, 11));
+    return record;
+}
+
+constexpr const char project_columns[] =
+    "project_id, team_id, name, description, "
+    "created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
+constexpr const char model_revision_columns[] =
+    "model_revision_id, project_id, team_id, "
+    "revision_number, parent_model_revision_id, "
+    "model_schema_version, model_id, model_revision_label, "
+    "canonical_model_payload, checksum, "
+    "created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
+class PostgresProjectRepository final
+    : public service::ProjectRepository {
+public:
+    explicit PostgresProjectRepository(
+        std::string connection_string)
+        : connection_string_(std::move(connection_string)) {
+        if (connection_string_.empty()) {
+            throw std::invalid_argument(
+                "PostgreSQL connection string must not be empty");
+        }
+        auto connection = connect(connection_string_);
+        const auto schema = execute(
+            connection.get(),
+            "SELECT to_regclass('thermox_projects')::text, "
+            "to_regclass('thermox_model_revisions')::text");
+        if (PQgetisnull(schema.get(), 0, 0) ||
+            PQgetisnull(schema.get(), 0, 1)) {
+            throw std::runtime_error(
+                "PostgreSQL project schema is not installed; "
+                "apply all migrations");
+        }
+    }
+
+    service::ProjectRecord create_project(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& name,
+        const std::string& description) override {
+        auto connection = connect(connection_string_);
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO thermox_projects ("
+            "team_id, created_by_user_id, name, description"
+            ") VALUES ($1, $2, $3, $4) RETURNING "
+            "project_id, team_id, name, description, "
+            "created_by_user_id, "
+            "floor(extract(epoch FROM created_at) * 1000)"
+            "::bigint::text",
+            {
+                team_id.c_str(),
+                created_by_user_id.c_str(),
+                name.c_str(),
+                description.c_str(),
+            });
+        return decode_project(result.get());
+    }
+
+    std::optional<service::ProjectRecord> get_project(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            project_columns +
+            " FROM thermox_projects "
+            "WHERE team_id = $1 AND project_id = $2";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        if (PQntuples(result.get()) == 0) {
+            return std::nullopt;
+        }
+        return decode_project(result.get());
+    }
+
+    std::vector<service::ProjectRecord> list_projects(
+        const std::string& team_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            project_columns +
+            " FROM thermox_projects WHERE team_id = $1 "
+            "ORDER BY created_at, project_id";
+        const auto result = execute(
+            connection.get(), sql.c_str(), {team_id.c_str()});
+        std::vector<service::ProjectRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            records.push_back(
+                decode_project(result.get(), row));
+        }
+        return records;
+    }
+
+    service::ModelRevisionRecord create_model_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& parent_model_revision_id,
+        const std::string& model_schema_version,
+        const std::string& model_id,
+        const std::string& model_revision_label,
+        const std::string& canonical_model_json,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(
+            connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto number = execute(
+            connection.get(),
+            "UPDATE thermox_projects "
+            "SET next_model_revision_number = "
+            "next_model_revision_number + 1 "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "RETURNING next_model_revision_number - 1",
+            {team_id.c_str(), project_id.c_str()});
+        if (PQntuples(number.get()) == 0) {
+            throw service::ProjectStateError(
+                "project was not found");
+        }
+        if (!parent_model_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM thermox_model_revisions "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND model_revision_id = $3",
+                {
+                    team_id.c_str(),
+                    project_id.c_str(),
+                    parent_model_revision_id.c_str(),
+                });
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent model revision was not found");
+            }
+        }
+        const auto revision_number =
+            field(number.get(), 0, 0);
+        const char* parent = parent_model_revision_id.empty()
+            ? nullptr
+            : parent_model_revision_id.c_str();
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO thermox_model_revisions ("
+            "project_id, team_id, revision_number, "
+            "parent_model_revision_id, model_schema_version, "
+            "model_id, model_revision_label, "
+            "canonical_model_payload, checksum, "
+            "created_by_user_id"
+            ") VALUES ("
+            "$1, $2, $3::bigint, $4, $5, $6, $7, "
+            "$8, $9, $10"
+            ") RETURNING "
+            "model_revision_id, project_id, team_id, "
+            "revision_number, parent_model_revision_id, "
+            "model_schema_version, model_id, "
+            "model_revision_label, "
+            "canonical_model_payload, checksum, "
+            "created_by_user_id, "
+            "floor(extract(epoch FROM created_at) * 1000)"
+            "::bigint::text",
+            {
+                project_id.c_str(),
+                team_id.c_str(),
+                revision_number.c_str(),
+                parent,
+                model_schema_version.c_str(),
+                model_id.c_str(),
+                model_revision_label.c_str(),
+                canonical_model_json.c_str(),
+                checksum.c_str(),
+                created_by_user_id.c_str(),
+            });
+        (void)execute(
+            connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        return decode_model_revision(result.get());
+    }
+
+    std::optional<service::ModelRevisionRecord>
+    get_model_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& model_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            model_revision_columns +
+            " FROM thermox_model_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND model_revision_id = $3";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                model_revision_id.c_str(),
+            });
+        if (PQntuples(result.get()) == 0) {
+            return std::nullopt;
+        }
+        return decode_model_revision(result.get());
+    }
+
+    std::vector<service::ModelRevisionRecord>
+    list_model_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            model_revision_columns +
+            " FROM thermox_model_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "ORDER BY revision_number";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        std::vector<service::ModelRevisionRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            records.push_back(
+                decode_model_revision(result.get(), row));
+        }
+        return records;
+    }
+
+private:
+    std::string connection_string_;
+};
+
+}  // namespace
+
+std::shared_ptr<service::ProjectRepository>
+make_postgres_project_repository(
+    std::string connection_string) {
+    return std::make_shared<PostgresProjectRepository>(
+        std::move(connection_string));
+}
+
+}  // namespace thermox::postgres

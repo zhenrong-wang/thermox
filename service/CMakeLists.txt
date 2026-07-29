@@ -1,6 +1,11 @@
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+
 add_library(thermox_service
     src/in_memory_artifacts.cpp
     src/in_memory_jobs.cpp
+    src/in_memory_projects.cpp
+    src/project_serialization.cpp
+    src/projects.cpp
     src/serialization.cpp
     src/simulation_jobs.cpp
     src/simulation_runtime.cpp
@@ -13,7 +18,10 @@ target_include_directories(thermox_service
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(thermox_service PRIVATE thermox_platform)
+target_link_libraries(thermox_service PRIVATE
+    thermox_platform
+    OpenSSL::Crypto
+)
 if(TARGET thermox_cantera_backend)
     target_link_libraries(
         thermox_service PRIVATE thermox_cantera_backend)

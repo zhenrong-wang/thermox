@@ -8,7 +8,9 @@ target_include_directories(thermox_http_api
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(thermox_http_api PUBLIC thermox_service)
+target_link_libraries(thermox_http_api
+    PUBLIC thermox_service
+)
 target_compile_features(thermox_http_api PUBLIC cxx_std_20)
 target_compile_options(thermox_http_api PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>

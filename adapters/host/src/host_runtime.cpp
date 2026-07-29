@@ -1,9 +1,11 @@
 #include "thermox/host/host_runtime.hpp"
 
 #include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/in_memory_projects.hpp"
 
 #ifdef THERMOX_HAS_POSTGRES_JOBS
 #include "thermox/postgres/postgres_job_repository.hpp"
+#include "thermox/postgres/postgres_project_repository.hpp"
 #endif
 
 #ifdef THERMOX_HAS_OBJECT_ARTIFACTS
@@ -190,6 +192,22 @@ make_job_repository(
     }
 #ifdef THERMOX_HAS_POSTGRES_JOBS
     return postgres::make_postgres_job_repository(
+        configuration.postgres_url);
+#else
+    throw std::runtime_error(
+        "PostgreSQL was configured, but this build does not "
+        "include the PostgreSQL adapter");
+#endif
+}
+
+std::shared_ptr<service::ProjectRepository>
+make_project_repository(
+    const PersistenceConfiguration& configuration) {
+    if (configuration.postgres_url.empty()) {
+        return service::make_in_memory_project_repository();
+    }
+#ifdef THERMOX_HAS_POSTGRES_JOBS
+    return postgres::make_postgres_project_repository(
         configuration.postgres_url);
 #else
     throw std::runtime_error(

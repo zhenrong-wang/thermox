@@ -9,6 +9,7 @@ endif()
 add_library(thermox_postgres_jobs
     src/job_codec.cpp
     src/postgres_job_repository.cpp
+    src/postgres_project_repository.cpp
 )
 add_library(thermox::postgres_jobs ALIAS thermox_postgres_jobs)
 

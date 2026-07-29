@@ -1,5 +1,6 @@
 #include "thermox/http/http_api.hpp"
 #include "thermox/service/in_memory_jobs.hpp"
+#include "thermox/service/in_memory_projects.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -200,7 +201,12 @@ void test_tenant_scoped_asynchronous_jobs() {
     const auto job_service = std::make_shared<
         thermox::service::SimulationJobService>(
             runtime, jobs, artifacts);
-    thermox::http::Api api{runtime, job_service};
+    thermox::http::Api api{
+        runtime,
+        job_service,
+        std::make_shared<thermox::service::ProjectService>(
+            thermox::service::
+                make_in_memory_project_repository())};
     const std::string model = read_file(
         std::string(THERMOX_SOURCE_DIR) +
         "/core/examples/air_compressor.json");
@@ -264,6 +270,86 @@ void test_tenant_scoped_asynchronous_jobs() {
         "job result route must publish the stored result artifact");
 }
 
+void test_team_scoped_projects_and_model_revisions() {
+    thermox::http::Api api;
+    auto invalid_create = authenticated(json_post(
+        "/api/v1/projects",
+        R"({"schema_version":"thermox.project.create/v1",)"
+        R"("name":42})"));
+    require(
+        api.handle(invalid_create).status == 400,
+        "project request fields must retain JSON types");
+
+    auto create = json_post(
+        "/api/v1/projects",
+        R"({"schema_version":"thermox.project.create/v1",)"
+        R"("name":"Cycle workspace",)"
+        R"("description":"Team-owned models"})");
+    create = authenticated(std::move(create));
+    const auto created = api.handle(create);
+    require(
+        created.status == 201 &&
+            created.headers.contains("Location") &&
+            created.body.find("\"team_id\": \"team-a\"") !=
+                std::string::npos &&
+            created.body.find(
+                "\"created_by_user_id\": \"user-a\"") !=
+                std::string::npos,
+        "project creation must expose Team ownership and actor "
+        "audit metadata");
+    const auto project_location =
+        created.headers.at("Location");
+    const auto project_id = project_location.substr(
+        std::string("/api/v1/projects/").size());
+
+    auto other_lookup = authenticated(
+        {"GET", project_location, {}, {}},
+        "user-b",
+        "team-b");
+    require(
+        api.handle(other_lookup).status == 404,
+        "cross-Team project lookup must hide existence");
+
+    const std::string model = read_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.json");
+    auto revision_request = json_post(
+        project_location + "/model-revisions",
+        model);
+    revision_request =
+        authenticated(std::move(revision_request));
+    const auto revision = api.handle(revision_request);
+    require(
+        revision.status == 201 &&
+            revision.headers.contains("Location") &&
+            revision.headers.contains("ETag") &&
+            revision.body.find(
+                "\"model_schema_version\": "
+                "\"thermox.model/v2\"") !=
+                std::string::npos &&
+            revision.body.find("\"model\": {") !=
+                std::string::npos,
+        "model revision creation must publish immutable "
+        "canonical content and checksum metadata");
+
+    auto history_request = authenticated({
+        "GET",
+        "/api/v1/projects/" + project_id +
+            "/model-revisions",
+        {},
+        {},
+    });
+    const auto history = api.handle(history_request);
+    require(
+        history.status == 200 &&
+            history.body.find("\"revision_number\": 1") !=
+                std::string::npos &&
+            history.body.find("\"model\": {") ==
+                std::string::npos,
+        "revision history must return metadata without "
+        "duplicating model bodies");
+}
+
 }  // namespace
 
 int main() {
@@ -274,6 +360,7 @@ int main() {
         test_production_api_disables_synchronous_execution();
         test_transport_guards();
         test_tenant_scoped_asynchronous_jobs();
+        test_team_scoped_projects_and_model_revisions();
         std::cout << "http api tests passed\n";
         return 0;
     } catch (const std::exception& error) {

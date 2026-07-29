@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/service/simulation_jobs.hpp"
+#include "thermox/service/projects.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -39,6 +40,9 @@ void configure_library_thread_limit(std::uint32_t threads);
 
 std::shared_ptr<service::SimulationJobRepository>
 make_job_repository(
+    const PersistenceConfiguration& configuration);
+std::shared_ptr<service::ProjectRepository>
+make_project_repository(
     const PersistenceConfiguration& configuration);
 std::shared_ptr<service::ResultArtifactStore>
 make_result_artifact_store(

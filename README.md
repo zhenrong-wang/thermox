@@ -76,6 +76,10 @@ Implemented in this sprint:
   and resource access by Team, retain the submitting user for audit, and hide cross-Team job
   existence. The local host injects an explicit local identity; authentication is not yet
   implemented.
+- Team-owned projects provide logical workspaces inside the tenant boundary. Users remain the
+  acting principals, with a trusted per-Team membership role in the identity context. Projects own
+  immutable, parent-linked, SHA-256-checksummed canonical model revisions in PostgreSQL; project
+  and revision API reads always retain the Team predicate.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -295,6 +299,9 @@ explicitly to an existing volume, for example:
 psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -v ON_ERROR_STOP=1 \
   -f adapters/postgres/migrations/002_worker_leases.sql
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/003_projects_and_model_revisions.sql
 ```
 
 ## Local MinIO result storage
@@ -359,7 +366,8 @@ stop a worker after its current calculation.
 
 ## Next steps
 
-1. Add immutable Team-scoped project, model-revision, and case-revision persistence.
+1. Separate topology and operating-case documents in the next model schema, then add immutable
+   case revisions that bind to an exact model revision.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

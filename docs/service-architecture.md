@@ -114,7 +114,7 @@ it submits idempotent jobs, coordinates leased worker claims, reuses `Simulation
 execution, writes the result artifact, and only then publishes success.
 
 Stateful job operations require a trusted `IdentityContext` containing an opaque user ID, Team ID,
-and optional request ID. Job ownership and idempotency are Team-scoped, the submitting user is
+optional request ID, and the user's role in that Team. Job ownership and idempotency are Team-scoped, the submitting user is
 recorded for audit, and lookup/result/cancellation operations require the same Team scope.
 Cross-Team lookup returns not found rather than revealing resource existence. The context is
 supplied after authentication by an outer gateway or trusted local host; no service code accepts
@@ -142,6 +142,8 @@ The application boundary needed by a thin network adapter is now complete:
 | --- | --- | --- |
 | Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v2` JSON |
 | Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
+| Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
+| Publish/read model revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
 | Submit a simulation | `SimulationJobService::submit` | `thermox.job/v3` JSON |
 | Inspect a simulation | `SimulationJobService::get` | `thermox.job/v3` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
@@ -190,6 +192,10 @@ The initial routes are:
 | --- | --- | --- |
 | `GET` | `/healthz` | Process-level liveness |
 | `GET` | `/api/v1/catalog` | Runtime catalog discovery |
+| `GET`, `POST` | `/api/v1/projects` | List/create Team-owned logical workspaces |
+| `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions` | List/publish immutable model revisions |
+| `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}` | Read canonical revision content |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
 | `POST` | `/api/v1/simulations?mode=...&case_id=...` | Submit a Team-owned asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
