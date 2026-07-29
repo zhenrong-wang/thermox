@@ -304,7 +304,10 @@ Work items:
 
 1. Map HTTP/RPC endpoints onto the existing application service and runtime catalog.
    - transport-neutral operation and wire-response mapping; ✅
-   - concrete HTTP or RPC adapter.
+   - framework-neutral concrete HTTP application adapter for catalog, validation, steady, and
+     transient operations; ✅
+   - dependency-light local/integration network host; ✅
+   - production-hardened listener and asynchronous job routes.
 2. Endpoints:
    - `POST /models/validate`
    - `POST /models/compile`

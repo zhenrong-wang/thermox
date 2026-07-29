@@ -68,6 +68,10 @@ Implemented in this sprint:
   values. Its `thermox.job/v1` workflow adds idempotent queued execution, atomic worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
+- A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
+  validation, steady, and transient HTTP routes onto `thermox_service`, with strict query decoding,
+  JSON content checks, body limits, transport status codes, and safe response headers. A thin
+  Boost.Beast host publishes the same adapter locally without owning simulation logic.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.

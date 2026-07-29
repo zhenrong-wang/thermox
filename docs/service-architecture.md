@@ -142,5 +142,33 @@ request mode, case, stable request fingerprint, state, optimistic revision, stru
 execution provenance, and result manifest. Result retrieval is owned by the job application
 service, so an HTTP or RPC adapter never reaches directly into object storage.
 
-The next adapter maps authentication, transport status codes, headers, and request decoding onto
-these calls. Those concerns remain outside `thermox_service`.
+## HTTP application adapter
+
+`thermox_http_api` is the first concrete transport adapter. It remains outside
+`thermox_service` and accepts framework-neutral HTTP request/response values so a socket server,
+embedded host, reverse proxy integration, or test harness can provide the network I/O. The adapter
+owns route matching, query decoding, content negotiation, request-size limits, transport status
+codes, and safe response headers. It delegates model parsing, validation, compilation, simulation,
+and result serialization to `SimulationService`.
+
+`thermox_http_server` is a dependency-light Boost.Beast host for local and integration deployment.
+It defaults to `127.0.0.1:8080`, is intentionally single-threaded, and accepts explicit listen
+address, port, and body-limit options. Internet-facing production deployment still requires a
+supervised process, authentication gateway, TLS termination, concurrency limits, and request
+timeouts; none of those concerns are pushed into the simulation service.
+
+The initial synchronous routes are:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/healthz` | Process-level liveness |
+| `GET` | `/api/v1/catalog` | Runtime catalog discovery |
+| `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
+| `POST` | `/api/v1/simulations/steady?case_id=...` | Synchronous steady execution |
+| `POST` | `/api/v1/simulations/transient?case_id=...&end_time=...` | Synchronous transient execution |
+
+The POST body is currently the canonical model document with
+`Content-Type: application/json`. This deliberately small first contract does not yet transport
+inline engineering artifacts or arbitrary solver settings. Asynchronous job routes, artifact
+upload/reference contracts, authentication context, and the concrete production listener follow
+without changing the simulation application boundary.
