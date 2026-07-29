@@ -202,7 +202,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v1` lifecycle with idempotent submission, atomic worker claims,
+- transport-neutral `thermox.job/v2` lifecycle with Team-scoped idempotency, atomic worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 
 ## Persistence boundary decision
@@ -307,7 +307,8 @@ Work items:
    - framework-neutral concrete HTTP application adapter for catalog, validation, steady, and
      transient operations; ✅
    - dependency-light local/integration network host; ✅
-   - production-hardened listener and asynchronous job routes.
+   - Team-scoped asynchronous submission/status/result routes; ✅
+   - production-hardened listener.
 2. Endpoints:
    - `POST /models/validate`
    - `POST /models/compile`
@@ -322,7 +323,7 @@ Work items:
 4. Add structured logging and run IDs.
 5. Publish the existing versioned result serialization through the API.
    - job status and service-owned result retrieval boundary; ✅
-   - concrete network publication.
+   - concrete network publication. ✅
 
 Exit criteria:
 

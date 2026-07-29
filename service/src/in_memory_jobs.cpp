@@ -18,8 +18,11 @@ public:
         const SimulationJobRequest& request,
         const std::string& request_fingerprint) override {
         std::lock_guard lock(mutex_);
+        const std::string scoped_key =
+            request.identity.team_id + '\0' +
+            request.idempotency_key;
         const auto existing_key =
-            jobs_by_key_.find(request.idempotency_key);
+            jobs_by_key_.find(scoped_key);
         if (existing_key != jobs_by_key_.end()) {
             const auto& existing = jobs_.at(existing_key->second);
             if (existing.request_fingerprint !=
@@ -36,21 +39,26 @@ public:
            << next_id_++;
         SimulationJobRecord record;
         record.job_id = id.str();
+        record.team_id = request.identity.team_id;
+        record.submitted_by_user_id =
+            request.identity.user_id;
         record.revision = 1;
         record.request = request;
         record.request_fingerprint = request_fingerprint;
         jobs_by_key_.emplace(
-            request.idempotency_key, record.job_id);
+            scoped_key, record.job_id);
         queue_order_.emplace(next_queue_sequence_++, record.job_id);
         jobs_.emplace(record.job_id, record);
         return record;
     }
 
     std::optional<SimulationJobRecord> get(
+        const std::string& team_id,
         const std::string& job_id) const override {
         std::lock_guard lock(mutex_);
         const auto found = jobs_.find(job_id);
-        if (found == jobs_.end()) {
+        if (found == jobs_.end() ||
+            found->second.team_id != team_id) {
             return std::nullopt;
         }
         return found->second;
@@ -110,10 +118,14 @@ public:
     }
 
     SimulationJobRecord cancel(
+        const std::string& team_id,
         const std::string& job_id,
         std::uint64_t expected_revision) override {
         std::lock_guard lock(mutex_);
         auto& record = require(job_id);
+        if (record.team_id != team_id) {
+            throw JobStateError("simulation job does not exist");
+        }
         require_revision(record, expected_revision);
         if (record.state != SimulationJobState::queued) {
             throw JobStateError(

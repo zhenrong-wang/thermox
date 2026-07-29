@@ -1,10 +1,11 @@
 #pragma once
 
-#include "thermox/service/simulation_runtime.hpp"
+#include "thermox/service/simulation_jobs.hpp"
 
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace thermox::http {
@@ -14,6 +15,7 @@ struct Request {
     std::string target;
     std::map<std::string, std::string> headers;
     std::string body;
+    std::optional<service::IdentityContext> identity;
 };
 
 struct Response {
@@ -33,6 +35,10 @@ public:
     Api();
     explicit Api(
         std::shared_ptr<const service::SimulationRuntime> runtime,
+        ApiOptions options = {});
+    Api(
+        std::shared_ptr<const service::SimulationRuntime> runtime,
+        std::shared_ptr<service::SimulationJobService> jobs,
         ApiOptions options = {});
     ~Api();
     Api(Api&&) noexcept;

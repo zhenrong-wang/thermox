@@ -12,6 +12,11 @@
 
 namespace {
 
+const thermox::service::IdentityContext team_a{
+    "user-a", "team-a", "request-test"};
+const thermox::service::IdentityContext team_b{
+    "user-b", "team-b", "request-test"};
+
 void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -33,6 +38,7 @@ std::string read_source_file(const std::string& relative_path) {
 thermox::service::SimulationJobRequest steady_request(
     std::string idempotency_key) {
     thermox::service::SimulationJobRequest request;
+    request.identity = team_a;
     request.idempotency_key = std::move(idempotency_key);
     request.model_json =
         read_source_file("core/examples/air_compressor.json");
@@ -146,7 +152,7 @@ void test_success_publishes_a_readable_artifact() {
     const auto queued = service.submit(request);
     bool unavailable = false;
     try {
-        (void)service.get_result(queued.job_id);
+        (void)service.get_result(team_a, queued.job_id);
     } catch (const thermox::service::JobStateError&) {
         unavailable = true;
     }
@@ -183,7 +189,8 @@ void test_success_publishes_a_readable_artifact() {
             manifest.byte_size > 0 &&
             manifest.checksum.starts_with("fnv1a64:"),
         "artifact manifest must be versioned and checksummed");
-    const auto result = service.get_result(completed->job_id);
+    const auto result =
+        service.get_result(team_a, completed->job_id);
     require(
         result.has_value() &&
             result->manifest.artifact_id ==
@@ -195,14 +202,14 @@ void test_success_publishes_a_readable_artifact() {
         "the application service must retrieve a published "
         "artifact through its manifest");
     require(
-        !service.get_result("missing-job").has_value(),
+        !service.get_result(team_a, "missing-job").has_value(),
         "result retrieval must distinguish a missing job");
 
     const auto json =
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v1\"") != std::string::npos &&
+                  "\"thermox.job/v2\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -267,6 +274,7 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
     thermox::service::SimulationJobService service(jobs, artifacts);
 
     thermox::service::SimulationJobRequest request;
+    request.identity = team_a;
     request.idempotency_key = "transient-run";
     request.mode = thermox::service::SimulationJobMode::transient;
     request.model_json = read_source_file(
@@ -306,14 +314,15 @@ void test_cancel_and_optimistic_revision_rules() {
         service.submit(steady_request("cancelled-run"));
     bool conflict = false;
     try {
-        (void)service.cancel(queued.job_id, queued.revision + 1);
+        (void)service.cancel(
+            team_a, queued.job_id, queued.revision + 1);
     } catch (const thermox::service::JobConflictError&) {
         conflict = true;
     }
     require(conflict, "stale revisions must be rejected");
 
     const auto cancelled =
-        service.cancel(queued.job_id, queued.revision);
+        service.cancel(team_a, queued.job_id, queued.revision);
     require(
         cancelled.state ==
                 thermox::service::SimulationJobState::cancelled &&
@@ -360,6 +369,50 @@ void test_request_validation() {
     require(
         rejected,
         "job submission must require an idempotency key");
+
+    request = steady_request("missing-identity");
+    request.identity = {};
+    rejected = false;
+    try {
+        (void)service.submit(request);
+    } catch (const thermox::service::JobRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "job submission must require a trusted identity scope");
+}
+
+void test_team_scope_isolation() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    const auto owned =
+        service.submit(steady_request("shared-key"));
+    auto other_request = steady_request("shared-key");
+    other_request.identity = team_b;
+    const auto other = service.submit(other_request);
+    require(
+        owned.job_id != other.job_id,
+        "idempotency keys must be scoped by team");
+    require(
+        !service.get(team_b, owned.job_id).has_value() &&
+            service.get(team_a, owned.job_id).has_value(),
+        "cross-team job lookup must not reveal existence");
+
+    bool hidden = false;
+    try {
+        (void)service.cancel(
+            team_b, owned.job_id, owned.revision);
+    } catch (const thermox::service::JobStateError&) {
+        hidden = true;
+    }
+    require(
+        hidden,
+        "cross-team cancellation must be rejected as not found");
 }
 
 }  // namespace
@@ -373,6 +426,7 @@ int main() {
         test_cancel_and_optimistic_revision_rules();
         test_claim_is_atomic();
         test_request_validation();
+        test_team_scope_isolation();
         std::cout << "thermox job service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -1,5 +1,6 @@
 #include "thermox/http/http_api.hpp"
 
+#include "thermox/service/in_memory_jobs.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
 
@@ -22,6 +23,11 @@ using Query = std::map<std::string, std::string>;
 struct Target {
     std::string path;
     Query query;
+};
+
+class IdentityRequired : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
 };
 
 std::string lower_ascii(std::string value) {
@@ -251,34 +257,92 @@ double required_positive_double(
     return value;
 }
 
+const service::IdentityContext& require_identity(
+    const Request& request) {
+    if (!request.identity ||
+        request.identity->user_id.empty() ||
+        request.identity->team_id.empty()) {
+        throw IdentityRequired(
+            "this operation requires a verified identity context");
+    }
+    return *request.identity;
+}
+
+std::string required_header(
+    const Request& request,
+    const std::string& name) {
+    const auto value = header(request, name);
+    if (!value || value->empty()) {
+        throw std::invalid_argument(
+            "missing required header: " + name);
+    }
+    return *value;
+}
+
+Response job_record_response(
+    const service::SimulationJobRecord& record,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_job_record_json(record));
+    response.headers["ETag"] =
+        "\"revision-" + std::to_string(record.revision) + "\"";
+    response.headers["Location"] =
+        "/api/v1/simulations/" + record.job_id;
+    return response;
+}
+
+std::shared_ptr<service::SimulationJobService>
+make_local_job_service(
+    const std::shared_ptr<const service::SimulationRuntime>& runtime) {
+    return std::make_shared<service::SimulationJobService>(
+        runtime,
+        service::make_in_memory_job_repository(),
+        service::make_in_memory_result_artifact_store());
+}
+
 }  // namespace
 
 struct Api::Impl {
     explicit Impl(
         std::shared_ptr<const service::SimulationRuntime> runtime,
+        std::shared_ptr<service::SimulationJobService> job_service,
         ApiOptions api_options)
         : simulation(std::move(runtime)),
+          jobs(std::move(job_service)),
           options(api_options) {
         if (options.maximum_body_bytes == 0U) {
             throw std::invalid_argument(
                 "maximum_body_bytes must be positive");
         }
+        if (!jobs) {
+            throw std::invalid_argument(
+                "simulation job service must not be null");
+        }
     }
 
     service::SimulationService simulation;
+    std::shared_ptr<service::SimulationJobService> jobs;
     ApiOptions options;
 };
 
 Api::Api()
-    : impl_(std::make_unique<Impl>(
-          service::make_default_simulation_runtime(),
-          ApiOptions{})) {}
+    : Api(service::make_default_simulation_runtime()) {}
 
 Api::Api(
     std::shared_ptr<const service::SimulationRuntime> runtime,
     ApiOptions options)
+    : Api(
+          runtime,
+          make_local_job_service(runtime),
+          options) {}
+
+Api::Api(
+    std::shared_ptr<const service::SimulationRuntime> runtime,
+    std::shared_ptr<service::SimulationJobService> jobs,
+    ApiOptions options)
     : impl_(std::make_unique<Impl>(
-          std::move(runtime), options)) {}
+          std::move(runtime), std::move(jobs), options)) {}
 
 Api::~Api() = default;
 Api::Api(Api&&) noexcept = default;
@@ -383,9 +447,113 @@ Response Api::handle(const Request& request) const {
                 service::serialize_transient_response_json(result));
         }
 
+        if (target.path == "/api/v1/simulations") {
+            if (method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "simulation submission only supports POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
+            reject_unknown_query(
+                target.query, {"mode", "case_id", "end_time"});
+            require_json_request(
+                request, impl_->options.maximum_body_bytes);
+            const auto& identity = require_identity(request);
+            const std::string mode =
+                optional_query(target.query, "mode");
+            if (mode != "steady" && mode != "transient") {
+                throw std::invalid_argument(
+                    "mode must be steady or transient");
+            }
+            service::SimulationJobRequest command;
+            command.identity = identity;
+            command.idempotency_key =
+                required_header(request, "idempotency-key");
+            command.mode =
+                mode == "steady"
+                    ? service::SimulationJobMode::steady
+                    : service::SimulationJobMode::transient;
+            command.model_json = request.body;
+            command.case_id =
+                optional_query(target.query, "case_id");
+            if (command.mode ==
+                service::SimulationJobMode::transient) {
+                command.transient_solver.end_time =
+                    required_positive_double(
+                        target.query, "end_time");
+            } else if (target.query.contains("end_time")) {
+                throw std::invalid_argument(
+                    "end_time is only valid for transient jobs");
+            }
+            const auto record = impl_->jobs->submit(command);
+            return job_record_response(
+                record,
+                service::is_terminal(record.state) ? 200 : 202);
+        }
+
+        constexpr std::string_view job_prefix =
+            "/api/v1/simulations/";
+        if (target.path.starts_with(job_prefix)) {
+            reject_unknown_query(target.query, {});
+            if (method != "get") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "simulation status and results only support GET");
+                response.headers["Allow"] = "GET";
+                return response;
+            }
+            const auto& identity = require_identity(request);
+            std::string suffix =
+                target.path.substr(job_prefix.size());
+            bool result_requested = false;
+            constexpr std::string_view result_suffix = "/result";
+            if (suffix.ends_with(result_suffix)) {
+                result_requested = true;
+                suffix.resize(
+                    suffix.size() - result_suffix.size());
+            }
+            if (suffix.empty() ||
+                suffix.find('/') != std::string::npos) {
+                return error_response(
+                    404, "route_not_found",
+                    "no route matches the request target");
+            }
+            if (!result_requested) {
+                const auto record =
+                    impl_->jobs->get(identity, suffix);
+                if (!record) {
+                    return error_response(
+                        404, "simulation_not_found",
+                        "simulation job was not found");
+                }
+                return job_record_response(*record, 200);
+            }
+            const auto result =
+                impl_->jobs->get_result(identity, suffix);
+            if (!result) {
+                return error_response(
+                    404, "simulation_not_found",
+                    "simulation job was not found");
+            }
+            auto response = json_response(
+                200, result->content);
+            response.headers["ETag"] =
+                "\"" + result->manifest.checksum + "\"";
+            return response;
+        }
+
         return error_response(
             404, "route_not_found",
             "no route matches the request target");
+    } catch (const IdentityRequired& error) {
+        return error_response(401, "identity_required", error.what());
+    } catch (const service::JobConflictError& error) {
+        return error_response(409, "job_conflict", error.what());
+    } catch (const service::JobStateError& error) {
+        return error_response(409, "job_state_conflict", error.what());
+    } catch (const service::JobRequestError& error) {
+        return error_response(400, "invalid_job_request", error.what());
     } catch (const std::length_error& error) {
         return error_response(413, "body_too_large", error.what());
     } catch (const std::domain_error& error) {

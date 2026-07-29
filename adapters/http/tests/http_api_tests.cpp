@@ -1,4 +1,5 @@
 #include "thermox/http/http_api.hpp"
+#include "thermox/service/in_memory_jobs.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -32,6 +33,17 @@ thermox::http::Request json_post(
         },
         std::move(body),
     };
+}
+
+thermox::http::Request authenticated(
+    thermox::http::Request request,
+    std::string user_id = "user-a",
+    std::string team_id = "team-a") {
+    request.identity = thermox::service::IdentityContext{
+        std::move(user_id),
+        std::move(team_id),
+        "http-test-request"};
+    return request;
 }
 
 void test_health_and_routing() {
@@ -159,6 +171,80 @@ void test_transport_guards() {
         "unsupported command schemas must be explicit");
 }
 
+void test_tenant_scoped_asynchronous_jobs() {
+    const auto runtime =
+        thermox::service::make_default_simulation_runtime();
+    const auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    const auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    const auto job_service = std::make_shared<
+        thermox::service::SimulationJobService>(
+            runtime, jobs, artifacts);
+    thermox::http::Api api{runtime, job_service};
+    const std::string model = read_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.json");
+
+    auto submission = json_post(
+        "/api/v1/simulations?mode=steady&case_id=design",
+        model);
+    submission.headers["Idempotency-Key"] = "http-job-1";
+    const auto anonymous = api.handle(submission);
+    require(
+        anonymous.status == 401 &&
+            anonymous.body.find("identity_required") !=
+                std::string::npos,
+        "stateful job submission must require trusted identity");
+
+    const auto queued =
+        api.handle(authenticated(submission));
+    require(
+        queued.status == 202 &&
+            queued.body.find("\"state\": \"queued\"") !=
+                std::string::npos &&
+            queued.body.find("\"team_id\": \"team-a\"") !=
+                std::string::npos &&
+            queued.headers.contains("Location"),
+        "authenticated submission must create a team-owned job");
+    const std::string job_id =
+        queued.headers.at("Location").substr(
+            std::string("/api/v1/simulations/").size());
+
+    auto other_lookup = thermox::http::Request{
+        "GET",
+        "/api/v1/simulations/" + job_id,
+        {},
+        {}};
+    other_lookup = authenticated(
+        std::move(other_lookup), "user-b", "team-b");
+    require(
+        api.handle(other_lookup).status == 404,
+        "cross-team status lookup must not reveal job existence");
+
+    const auto completed =
+        job_service->run_next("http-test-worker");
+    require(
+        completed.has_value() &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "worker must execute the submitted job");
+
+    auto result_request = thermox::http::Request{
+        "GET",
+        "/api/v1/simulations/" + job_id + "/result",
+        {},
+        {}};
+    const auto result = api.handle(
+        authenticated(std::move(result_request)));
+    require(
+        result.status == 200 &&
+            result.body.find("\"converged\": true") !=
+                std::string::npos &&
+            result.headers.contains("ETag"),
+        "job result route must publish the stored result artifact");
+}
+
 }  // namespace
 
 int main() {
@@ -167,6 +253,7 @@ int main() {
         test_catalog_and_validation();
         test_simulation_routes();
         test_transport_guards();
+        test_tenant_scoped_asynchronous_jobs();
         std::cout << "http api tests passed\n";
         return 0;
     } catch (const std::exception& error) {

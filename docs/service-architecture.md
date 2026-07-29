@@ -50,7 +50,8 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v1` queued/running/succeeded/failed/cancelled jobs with required idempotency keys,
+- `thermox.job/v2` Team-owned queued/running/succeeded/failed/cancelled jobs with required
+  idempotency keys,
   optimistic revisions, worker claims, execution provenance, and result-artifact manifests.
 
 The public service DTOs contain only standard C++ data types. Solver and compiler objects do not
@@ -112,6 +113,13 @@ case, encode the response. `SimulationJobService` is the transport-neutral long-
 it submits idempotent jobs, coordinates atomic worker claims, reuses `SimulationService` for
 execution, writes the result artifact, and only then publishes success.
 
+Stateful job operations require a trusted `IdentityContext` containing an opaque user ID, Team ID,
+and optional request ID. Job ownership and idempotency are Team-scoped, the submitting user is
+recorded for audit, and lookup/result/cancellation operations require the same Team scope.
+Cross-Team lookup returns not found rather than revealing resource existence. The context is
+supplied after authentication by an outer gateway or trusted local host; no service code accepts
+unverified identity headers, and platform/physics/numeric layers remain identity-agnostic.
+
 ## Persistence
 
 Repository interfaces and job transactions belong beside the service layer. Database and object
@@ -133,8 +141,8 @@ The application boundary needed by a thin network adapter is now complete:
 | --- | --- | --- |
 | Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v2` JSON |
 | Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
-| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v1` JSON |
-| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v1` JSON |
+| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v2` JSON |
+| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v2` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
@@ -153,11 +161,14 @@ and result serialization to `SimulationService`.
 
 `thermox_http_server` is a dependency-light Boost.Beast host for local and integration deployment.
 It defaults to `127.0.0.1:8080`, is intentionally single-threaded, and accepts explicit listen
-address, port, and body-limit options. Internet-facing production deployment still requires a
+address, port, body-limit, local user, local Team, and worker options. It injects that configured
+local identity directly and runs one low-frequency in-memory worker; it does not interpret request
+headers as authentication. Non-loopback binding is rejected unless the operator supplies an
+explicit insecure-development override. Internet-facing production deployment still requires a
 supervised process, authentication gateway, TLS termination, concurrency limits, and request
 timeouts; none of those concerns are pushed into the simulation service.
 
-The initial synchronous routes are:
+The initial routes are:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
@@ -166,9 +177,12 @@ The initial synchronous routes are:
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
 | `POST` | `/api/v1/simulations/steady?case_id=...` | Synchronous steady execution |
 | `POST` | `/api/v1/simulations/transient?case_id=...&end_time=...` | Synchronous transient execution |
+| `POST` | `/api/v1/simulations?mode=...&case_id=...` | Submit a Team-owned asynchronous job |
+| `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
+| `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
 
 The POST body is currently the canonical model document with
 `Content-Type: application/json`. This deliberately small first contract does not yet transport
-inline engineering artifacts or arbitrary solver settings. Asynchronous job routes, artifact
-upload/reference contracts, authentication context, and the concrete production listener follow
-without changing the simulation application boundary.
+inline engineering artifacts or arbitrary solver settings. Artifact upload/reference request
+decoding, authentication, authorization policy, and the concrete production persistence/listener
+follow without changing the simulation application boundary.

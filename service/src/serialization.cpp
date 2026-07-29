@@ -1093,6 +1093,11 @@ std::string serialize_job_record_json(
     json_string(out, record.schema_version);
     out << ",\n  \"job_id\": ";
     json_string(out, record.job_id);
+    out << ",\n  \"owner\": {\"team_id\": ";
+    json_string(out, record.team_id);
+    out << ", \"submitted_by_user_id\": ";
+    json_string(out, record.submitted_by_user_id);
+    out << "}";
     out << ",\n  \"revision\": " << record.revision;
     out << ",\n  \"state\": ";
     json_string(out, to_string(record.state));

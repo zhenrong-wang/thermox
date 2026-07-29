@@ -65,13 +65,17 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v1` workflow adds idempotent queued execution, atomic worker claims,
+  values. Its `thermox.job/v2` workflow adds Team-scoped idempotent execution, atomic worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, and transient HTTP routes onto `thermox_service`, with strict query decoding,
   JSON content checks, body limits, transport status codes, and safe response headers. A thin
   Boost.Beast host publishes the same adapter locally without owning simulation logic.
+- Asynchronous HTTP simulations carry a gateway-supplied identity context, namespace idempotency
+  and resource access by Team, retain the submitting user for audit, and hide cross-Team job
+  existence. The local host injects an explicit local identity; authentication is not yet
+  implemented.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.

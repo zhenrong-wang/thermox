@@ -138,7 +138,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v1) {
+    if (request.schema_version != job_schema_v2) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -146,8 +146,23 @@ void validate_request(const SimulationJobRequest& request) {
     if (request.idempotency_key.empty()) {
         throw JobRequestError("idempotency key must not be empty");
     }
+    if (request.identity.user_id.empty()) {
+        throw JobRequestError("identity user ID must not be empty");
+    }
+    if (request.identity.team_id.empty()) {
+        throw JobRequestError("identity team ID must not be empty");
+    }
     if (request.model_json.empty()) {
         throw JobRequestError("model JSON must not be empty");
+    }
+}
+
+void validate_identity(const IdentityContext& identity) {
+    if (identity.user_id.empty()) {
+        throw JobRequestError("identity user ID must not be empty");
+    }
+    if (identity.team_id.empty()) {
+        throw JobRequestError("identity team ID must not be empty");
     }
 }
 
@@ -266,16 +281,19 @@ SimulationJobRecord SimulationJobService::submit(
 }
 
 std::optional<SimulationJobRecord> SimulationJobService::get(
+    const IdentityContext& identity,
     const std::string& job_id) const {
+    validate_identity(identity);
     if (job_id.empty()) {
         throw JobRequestError("job ID must not be empty");
     }
-    return impl_->jobs->get(job_id);
+    return impl_->jobs->get(identity.team_id, job_id);
 }
 
 std::optional<ResultArtifact> SimulationJobService::get_result(
+    const IdentityContext& identity,
     const std::string& job_id) const {
-    const auto record = get(job_id);
+    const auto record = get(identity, job_id);
     if (!record) {
         return std::nullopt;
     }
@@ -378,12 +396,15 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
 }
 
 SimulationJobRecord SimulationJobService::cancel(
+    const IdentityContext& identity,
     const std::string& job_id,
     std::uint64_t expected_revision) {
+    validate_identity(identity);
     if (job_id.empty()) {
         throw JobRequestError("job ID must not be empty");
     }
-    return impl_->jobs->cancel(job_id, expected_revision);
+    return impl_->jobs->cancel(
+        identity.team_id, job_id, expected_revision);
 }
 
 }  // namespace thermox::service

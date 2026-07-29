@@ -1,5 +1,6 @@
 #pragma once
 
+#include "thermox/service/identity.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <cstdint>
@@ -10,7 +11,7 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v1[] = "thermox.job/v1";
+inline constexpr char job_schema_v2[] = "thermox.job/v2";
 
 enum class SimulationJobMode {
     steady,
@@ -31,7 +32,8 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v1};
+    std::string schema_version{job_schema_v2};
+    IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
     std::string model_json;
@@ -55,8 +57,10 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v1};
+    std::string schema_version{job_schema_v2};
     std::string job_id;
+    std::string team_id;
+    std::string submitted_by_user_id;
     std::uint64_t revision{0};
     SimulationJobState state{SimulationJobState::queued};
     SimulationJobRequest request;
@@ -87,12 +91,13 @@ public:
     virtual ~SimulationJobRepository() = default;
 
     // Must atomically create a queued job, or return the existing job when
-    // both the idempotency key and request fingerprint match.
+    // team, idempotency key, and request fingerprint match.
     virtual SimulationJobRecord create_or_get(
         const SimulationJobRequest& request,
         const std::string& request_fingerprint) = 0;
 
     virtual std::optional<SimulationJobRecord> get(
+        const std::string& team_id,
         const std::string& job_id) const = 0;
 
     // Must atomically select one queued job and transition it to running.
@@ -111,6 +116,7 @@ public:
         const ServiceError& error,
         const std::optional<ExecutionMetadata>& execution) = 0;
     virtual SimulationJobRecord cancel(
+        const std::string& team_id,
         const std::string& job_id,
         std::uint64_t expected_revision) = 0;
 };
@@ -156,12 +162,15 @@ public:
     [[nodiscard]] SimulationJobRecord submit(
         const SimulationJobRequest& request);
     [[nodiscard]] std::optional<SimulationJobRecord> get(
+        const IdentityContext& identity,
         const std::string& job_id) const;
     [[nodiscard]] std::optional<ResultArtifact> get_result(
+        const IdentityContext& identity,
         const std::string& job_id) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
         const std::string& worker_id);
     [[nodiscard]] SimulationJobRecord cancel(
+        const IdentityContext& identity,
         const std::string& job_id,
         std::uint64_t expected_revision);
 
