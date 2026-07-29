@@ -71,10 +71,21 @@ struct GraphResultEvaluator::Impl {
         std::size_t count,
         const physics::PropertyPackageRegistry& property_registry,
         const physics::ThermochemistryPackageRegistry*
-            thermochemistry_registry) {
+            thermochemistry_registry,
+        bool include_steady_boundary_audit) {
         variable_count = count;
+        steady_boundary_audit = include_steady_boundary_audit;
         port_variables = compiled_ports;
         internal_variables = compiled_internal;
+        for (const auto& variable : compiled_ports) {
+            if (variable.system_boundary_sign != 0) {
+                boundary_ports.emplace(
+                    std::make_pair(
+                        variable.component_id,
+                        variable.port_name),
+                    variable.system_boundary_sign);
+            }
+        }
         for (const auto& component : document.components) {
             components.push_back({component.id, component.kind});
         }
@@ -118,6 +129,9 @@ struct GraphResultEvaluator::Impl {
     std::vector<std::pair<std::string, std::string>> components;
     std::vector<CompiledPortVariable> port_variables;
     std::vector<CompiledInternalVariable> internal_variables;
+    std::map<std::pair<std::string, std::string>, int>
+        boundary_ports;
+    bool steady_boundary_audit{false};
     std::map<
         std::string,
         std::shared_ptr<const physics::PropertyPackage>>
@@ -133,7 +147,7 @@ GraphResultEvaluator::GraphResultEvaluator(
     impl_->initialize(
         document, graph.port_variables, {},
         graph.problem.variable_names.size(), property_registry,
-        nullptr);
+        nullptr, true);
 }
 
 GraphResultEvaluator::GraphResultEvaluator(
@@ -146,7 +160,7 @@ GraphResultEvaluator::GraphResultEvaluator(
     impl_->initialize(
         document, graph.port_variables, {},
         graph.problem.variable_names.size(), property_registry,
-        &thermochemistry_registry);
+        &thermochemistry_registry, true);
 }
 
 GraphResultEvaluator::GraphResultEvaluator(
@@ -157,7 +171,7 @@ GraphResultEvaluator::GraphResultEvaluator(
     impl_->initialize(
         document, graph.port_variables, graph.internal_variables,
         graph.problem.variable_names.size(), property_registry,
-        nullptr);
+        nullptr, false);
 }
 
 GraphResultEvaluator::~GraphResultEvaluator() = default;
@@ -342,6 +356,93 @@ GraphResult GraphResultEvaluator::evaluate(
             port.derived_values.push_back({
                 "mean_molecular_weight", "molar_mass",
                 properties.state.mean_molecular_weight_kg_mol,
+            });
+        }
+    }
+    if (impl_->steady_boundary_audit) {
+        double net_mass_flow = 0.0;
+        double net_energy_flow = 0.0;
+        bool has_mass_flow = false;
+        bool has_energy_flow = false;
+        for (const auto& [key, sign] :
+             impl_->boundary_ports) {
+            const auto component = component_indices.find(
+                key.first);
+            if (component == component_indices.end()) {
+                throw std::logic_error(
+                    "system boundary references unknown component: " +
+                    key.first);
+            }
+            const auto& component_result =
+                result.components.at(component->second);
+            const auto port = std::find_if(
+                component_result.ports.begin(),
+                component_result.ports.end(),
+                [&](const auto& candidate) {
+                    return candidate.port_name == key.second;
+                });
+            if (port == component_result.ports.end()) {
+                throw std::logic_error(
+                    "system boundary references unknown port: " +
+                    key.first + "." + key.second);
+            }
+            const double orientation =
+                static_cast<double>(sign);
+            if (port->domain == "fluid") {
+                const double mass_flow =
+                    require_primary(*port, "m_dot").value_si;
+                net_mass_flow += orientation * mass_flow;
+                net_energy_flow += orientation * mass_flow *
+                    require_primary(*port, "h").value_si;
+                has_mass_flow = true;
+                has_energy_flow = true;
+                continue;
+            }
+            if (port->domain == "material") {
+                double mass_flow = 0.0;
+                for (const auto& value :
+                     port->primary_values) {
+                    if (value.name.starts_with("m_dot[")) {
+                        mass_flow += value.value_si;
+                    }
+                }
+                net_mass_flow += orientation * mass_flow;
+                net_energy_flow += orientation * mass_flow *
+                    require_primary(*port, "h").value_si;
+                has_mass_flow = true;
+                has_energy_flow = true;
+                continue;
+            }
+            if (port->domain == "heat") {
+                net_energy_flow += orientation *
+                    require_primary(*port, "Q_dot").value_si;
+                has_energy_flow = true;
+                continue;
+            }
+            if (port->domain == "shaft") {
+                net_energy_flow += orientation *
+                    require_primary(*port, "W_dot").value_si;
+                has_energy_flow = true;
+                continue;
+            }
+            if (port->domain == "electrical") {
+                net_energy_flow += orientation *
+                    require_primary(*port, "P").value_si;
+                has_energy_flow = true;
+            }
+        }
+        if (has_mass_flow) {
+            result.system_balances.push_back({
+                "net_boundary_mass_flow",
+                "mass_flow",
+                net_mass_flow,
+            });
+        }
+        if (has_energy_flow) {
+            result.system_balances.push_back({
+                "net_boundary_energy_flow",
+                "power",
+                net_energy_flow,
             });
         }
     }

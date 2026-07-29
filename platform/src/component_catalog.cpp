@@ -14,6 +14,14 @@ void validate_component_descriptor(
             "component model '" + descriptor.kind +
             "' must declare a version");
     }
+    if (!descriptor.system_boundary_role.empty() &&
+        descriptor.system_boundary_role != "source" &&
+        descriptor.system_boundary_role != "sink") {
+        throw std::invalid_argument(
+            "component model '" + descriptor.kind +
+            "' has invalid system boundary role: " +
+            descriptor.system_boundary_role);
+    }
     std::map<std::string, bool> ports;
     for (const auto& port : descriptor.ports) {
         if (port.name.empty() || port.domain.empty() ||
@@ -22,6 +30,14 @@ void validate_component_descriptor(
             throw std::invalid_argument(
                 "component model '" + descriptor.kind +
                 "' has an incomplete port descriptor");
+        }
+        if (port.direction != "in" &&
+            port.direction != "out" &&
+            port.direction != "bidirectional") {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' has invalid port direction: " +
+                port.direction);
         }
         if (!ports.emplace(port.name, true).second) {
             throw std::invalid_argument(

@@ -198,6 +198,8 @@ Completed structural slices:
   provenance, including the platform build and effective solver settings; ✅
 - graph-native `thermox.result/v3` steady/transient/event values for every connector domain,
   fluid-derived properties, internal states, and derivatives; ✅
+- registered source/sink semantics plus topology-aware steady system-boundary mass and energy
+  accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - transport-neutral `thermox.job/v1` lifecycle with idempotent submission, atomic worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 

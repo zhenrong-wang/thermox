@@ -59,6 +59,20 @@ const thermox::service::PortResult& require_port_result(
     return *port;
 }
 
+const thermox::service::ResultValue& require_result_value(
+    const std::vector<thermox::service::ResultValue>& values,
+    const std::string& name) {
+    const auto value = std::find_if(
+        values.begin(), values.end(),
+        [&](const auto& candidate) {
+            return candidate.name == name;
+        });
+    require(
+        value != values.end(),
+        "missing service result value: " + name);
+    return *value;
+}
+
 thermox::service::PerformanceMapArtifactInput compressor_map() {
     using namespace thermox::service;
     PerformanceMapArtifactInput artifact;
@@ -884,6 +898,19 @@ void test_steady_service() {
         shaft.domain == "shaft" &&
             shaft.primary_values.size() == 2,
         "non-fluid graph ports must be first-class results");
+    require(
+        std::abs(require_result_value(
+                     response.graph.system_balances,
+                     "net_boundary_mass_flow")
+                     .value_si) < 1.0e-9,
+        "steady result must close external compressor mass flow");
+    require(
+        std::abs(require_result_value(
+                     response.graph.system_balances,
+                     "net_boundary_energy_flow")
+                     .value_si) < 1.0e-5,
+        "steady result must include unconnected shaft work in "
+        "the system energy boundary");
 
     const auto json =
         thermox::service::serialize_steady_response_json(response);
@@ -900,6 +927,61 @@ void test_steady_service() {
                 std::string::npos &&
             json.find("\"settings\": {") != std::string::npos,
         "steady JSON must serialize complete execution provenance");
+}
+
+void test_explicit_system_boundary_balance() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "explicit_heat_boundary",
+    "media": [],
+    "components": [
+      {"id": "source", "kind": "source.heat.boundary"},
+      {"id": "sink", "kind": "sink.heat.boundary"}
+    ],
+    "connections": [{
+      "id": "heat",
+      "from": "source.outlet",
+      "to": "sink.inlet",
+      "kind": "heat_link"
+    }]
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "source.outlet.Q_dot": {"value": 5.0, "unit": "MW"},
+      "source.outlet.T": {"value": 400.0, "unit": "K"}
+    }
+  }]
+})json";
+    request.case_id = "design";
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "explicit boundary graph must solve: " +
+            response.error.message);
+    require(
+        response.graph.system_balances.size() == 1 &&
+            std::abs(require_result_value(
+                         response.graph.system_balances,
+                         "net_boundary_energy_flow")
+                         .value_si) < 1.0e-9,
+        "registered source and sink roles must close a connected "
+        "system boundary");
+
+    const auto catalog = service.get_catalog();
+    const auto source = std::find_if(
+        catalog.components.begin(), catalog.components.end(),
+        [](const auto& component) {
+            return component.kind == "source.heat.boundary";
+        });
+    require(
+        source != catalog.components.end() &&
+            source->system_boundary_role == "source",
+        "catalog must expose registered system boundary semantics");
 }
 
 void test_transient_service() {
@@ -1033,6 +1115,7 @@ int main() {
         test_connection_contract_diagnostic();
         test_injectable_native_runtime();
         test_steady_service();
+        test_explicit_system_boundary_balance();
         test_transient_service();
         test_structured_compilation_failure();
         test_invalid_solver_settings();

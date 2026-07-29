@@ -369,7 +369,9 @@ graph:
             - {name: T, dimension: temperature, value_si: 813.2}
       internal_values: []
       metrics: []
-  system_balances: []
+  system_balances:
+    - {name: net_boundary_mass_flow, dimension: mass_flow, value_si: 0}
+    - {name: net_boundary_energy_flow, dimension: power, value_si: 0}
   kpis: []
 ```
 
@@ -378,6 +380,15 @@ graph structure; transient primary and internal values also carry `derivative_si
 temperature, density, entropy, phase, quality, heat capacities, speed of sound, viscosity, and
 thermal conductivity are derived through the selected property package. Other domains expose their
 canonical primary values without fluid-specific fields.
+
+Steady results audit system boundaries directly from registered component/port semantics and graph
+connectivity. Explicit source/sink components declare their boundary role; every unconnected
+directional ordinary-equipment port is also an external boundary. Positive values enter the modeled system.
+Fluid and material streams contribute mass and enthalpy flow, while heat, shaft, and electrical
+ports contribute energy flow. A nonzero net energy flow is not silently labeled a solver error: it
+may identify modeled conversion losses or an omitted energy carrier that must be reported
+separately. Transient samples intentionally omit this steady audit until accumulation terms are
+included.
 
 ## 10. Validation rules
 

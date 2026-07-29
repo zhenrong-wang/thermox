@@ -626,6 +626,8 @@ std::string serialize_catalog_response_json(
         json_string(out, component.kind);
         out << ", \"version\": ";
         json_string(out, component.version);
+        out << ", \"system_boundary_role\": ";
+        json_string(out, component.system_boundary_role);
         out << ", \"supports_steady\": "
             << (component.supports_steady ? "true" : "false")
             << ", \"supports_transient\": "

@@ -87,6 +87,7 @@ struct CatalogInternalVariableType {
 struct ComponentType {
     std::string kind;
     std::string version;
+    std::string system_boundary_role;
     std::vector<CatalogPortType> ports;
     std::vector<CatalogParameterType> parameters;
     std::vector<CatalogArtifactType> artifacts;

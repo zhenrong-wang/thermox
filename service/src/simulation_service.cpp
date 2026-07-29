@@ -1075,6 +1075,8 @@ CatalogResponse SimulationService::get_catalog(
         ComponentType component;
         component.kind = descriptor.kind;
         component.version = descriptor.version;
+        component.system_boundary_role =
+            descriptor.system_boundary_role;
         component.supports_steady = descriptor.supports_steady;
         component.supports_transient =
             descriptor.supports_transient;

@@ -2433,6 +2433,18 @@ void test_adiabatic_equilibrium_combustor() {
         require_result_value(outlet.derived_values, "T"),
         1000.0 / 3.0, 1.0e-6,
         "material result layer derives combustor outlet temperature");
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_mass_flow"),
+        0.0, 1.0e-9,
+        "material combustor boundary mass flow closes by species");
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_energy_flow"),
+        0.0, 1.0e-4,
+        "material combustor boundary enthalpy flow closes");
 }
 
 void test_material_compressor_and_turbine() {
@@ -3270,6 +3282,16 @@ void test_if97_rankine_graph_regression() {
         thermox::physics::
             make_default_property_package_registry());
     const auto graph_result = evaluator.evaluate(result.x);
+    require(
+        graph_result.system_balances.size() == 1,
+        "closed Rankine graph should expose one external energy balance");
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_energy_flow"),
+        0.0,
+        1.0e-3,
+        "generic system boundary audit closes Rankine energy");
     const auto quality = [&](const std::string& component,
                              const std::string& port) {
         return require_result_value(

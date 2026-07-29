@@ -65,6 +65,10 @@ struct InternalVariableDescriptor {
 struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
+    // "source" or "sink" marks a component as an explicit system
+    // boundary. Empty means ordinary equipment; its unconnected ports
+    // are still treated as system boundaries in steady result audits.
+    std::string system_boundary_role;
     std::vector<PortModelDescriptor> ports;
     std::vector<ParameterModelDescriptor> parameters;
     std::vector<ArtifactModelDescriptor> artifacts;
@@ -138,6 +142,8 @@ struct CompiledPortVariable {
     std::string domain;
     std::string medium_id;
     std::string dimension;
+    std::string direction;
+    int system_boundary_sign{0};
     std::size_t index{0};
 };
 

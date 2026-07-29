@@ -83,6 +83,44 @@ std::string variable_key(const std::string& component_id,
     return component_id + "." + port_name + "." + variable_name;
 }
 
+int explicit_boundary_sign(
+    const ComponentModelDescriptor& descriptor) {
+    if (descriptor.system_boundary_role.empty()) {
+        return 0;
+    }
+    if (descriptor.system_boundary_role == "source") {
+        return 1;
+    }
+    if (descriptor.system_boundary_role == "sink") {
+        return -1;
+    }
+    throw std::invalid_argument(
+        "component kind '" + descriptor.kind +
+        "' has invalid system boundary role: " +
+        descriptor.system_boundary_role);
+}
+
+void mark_unconnected_system_boundaries(
+    std::vector<CompiledPortVariable>& variables,
+    const std::map<std::string, std::size_t>&
+        connection_counts) {
+    for (auto& variable : variables) {
+        if (variable.system_boundary_sign != 0) {
+            continue;
+        }
+        const auto endpoint =
+            variable.component_id + "." + variable.port_name;
+        if (connection_counts.contains(endpoint)) {
+            continue;
+        }
+        if (variable.direction == "in") {
+            variable.system_boundary_sign = 1;
+        } else if (variable.direction == "out") {
+            variable.system_boundary_sign = -1;
+        }
+    }
+}
+
 const ComponentDefinition& find_component(const ModelDocument& document, const std::string& component_id) {
     for (const ComponentDefinition& component : document.components) {
         if (component.id == component_id) {
@@ -956,7 +994,10 @@ CompiledModelGraph compile_model_graph(
                     CompiledPortVariable{
                         component.id, port.name, spec.name,
                         full_name, port.domain, medium_id,
-                        spec.dimension, index});
+                        spec.dimension, port.direction,
+                        explicit_boundary_sign(
+                            model.descriptor()),
+                        index});
             }
         }
         resolve_component_artifacts(
@@ -1000,6 +1041,8 @@ CompiledModelGraph compile_model_graph(
                                                                             residual_name, residual_index});
         }
     }
+    mark_unconnected_system_boundaries(
+        graph.port_variables, connection_counts);
 
     if (active_case != nullptr) {
         for (const auto& [key, scalar] : active_case->fixed_values) {
@@ -1273,7 +1316,10 @@ CompiledTransientModelGraph compile_transient_model_graph(
                     CompiledPortVariable{
                         component.id, port.name, spec.name,
                         full_name, port.domain, medium_id,
-                        spec.dimension, index});
+                        spec.dimension, port.direction,
+                        explicit_boundary_sign(
+                            model.descriptor()),
+                        index});
             }
         }
         for (const auto& variable :
@@ -1341,6 +1387,8 @@ CompiledTransientModelGraph compile_transient_model_graph(
                     residual_index});
         }
     }
+    mark_unconnected_system_boundaries(
+        graph.port_variables, connection_counts);
 
     if (active_case != nullptr) {
         for (const auto& [key, scalar] :

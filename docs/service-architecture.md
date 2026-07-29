@@ -90,8 +90,10 @@ attribution. Neither the platform compiler nor the nonlinear solver owns calibra
 Result-v3 represents steady solutions and every transient sample through the same graph structure:
 components contain stable port identities for fluid, heat, shaft, signal, and control domains,
 primary SI values, fluid-derived properties, internal states, and derivatives. Typed component
-metrics, system balances, and KPI collections are part of the contract and can be populated by
-future registered evaluators without changing its topology.
+metrics, system balances, and KPI collections are part of the contract. Steady evaluation now
+populates topology-aware net boundary mass and energy flows using registered source/sink roles and
+unconnected equipment ports. Positive flow enters the modeled system; the audit does not disguise
+unmodeled losses as numerical closure.
 
 ## Interface responsibilities
 

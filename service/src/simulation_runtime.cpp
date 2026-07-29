@@ -51,6 +51,7 @@ std::string catalog_fingerprint(
     for (const auto& descriptor : components.descriptors()) {
         hash_text(hash, descriptor.kind);
         hash_text(hash, descriptor.version);
+        hash_text(hash, descriptor.system_boundary_role);
         for (const auto& port : descriptor.ports) {
             hash_text(hash, port.name);
             hash_text(hash, port.domain);
