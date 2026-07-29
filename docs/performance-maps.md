@@ -44,9 +44,11 @@ artifact with the same ID in the deployment runtime.
 The transport-neutral `SimulationArtifactBundle` accepts v1 ordinary maps and v2 conditioned maps
 using standard C++ DTOs, either inline or through `EngineeringArtifactReference`.
 `EngineeringArtifactResolver` is an injectable service port; its in-memory adapter demonstrates
-the contract that a future object-store adapter will implement. Validation, steady, transient,
-calibration, and queued-job execution all resolve the same bundle. The service rejects missing
-artifacts and any mismatch between the referenced and resolved type, schema, revision, or checksum.
+the contract for deployment-installed references and embedded callers. Production project
+artifacts instead use immutable PostgreSQL revision metadata plus provider-neutral object content,
+then become verified inline snapshots at job submission. Validation, steady, transient,
+calibration, and queued-job execution all consume the same bundle. The service rejects missing
+artifacts and any mismatch between the resolved type, schema, revision, or checksum.
 Artifact identity is recorded in result provenance. Complete inline payloads and complete reference
 identities participate in job idempotency fingerprints.
 
@@ -144,7 +146,8 @@ input.
 6. Add conditioned three-coordinate maps and variable-geometry fluid/material turbomachinery
    components. ✅
 7. Add an injectable artifact resolver and immutable reference contract. ✅
-8. Add a persistent object-store resolver adapter behind the service port.
+8. Add persistent project artifact revisions with PostgreSQL metadata, provider-neutral object
+   content, integrity-checked decoding, and immutable job snapshots. ✅
 9. Calibrate a designated baseline point, then freeze parameters and predict independent
    off-design validation points. ✅
 10. Add standardized component-owned flow-capacity, pressure-ratio, and efficiency map

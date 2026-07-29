@@ -88,6 +88,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "002_worker_leases.sql",
              "003_projects_and_model_revisions.sql",
              "004_case_revisions.sql",
+             "005_artifact_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -560,6 +561,60 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL case revisions must be immutable, ordered, "
         "model-bound, and Team scoped");
+
+    const auto artifact = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "postgres-compressor-map",
+        {},
+        "thermox.performance_map",
+        "thermox.performance_map/v1",
+        R"json({
+          "primary_variable": {
+            "name": "corrected_mass_flow",
+            "dimension": "mass_flow"
+          },
+          "family_variable": {
+            "name": "corrected_speed",
+            "dimension": "angular_speed"
+          },
+          "output_variables": [
+            {"name": "pressure_ratio",
+             "dimension": "dimensionless"},
+            {"name": "isentropic_efficiency",
+             "dimension": "dimensionless"}
+          ],
+          "curves": [
+            {"family_coordinate": 250.0, "samples": [
+              {"coordinate": 70.0,
+               "outputs": [10.0, 0.85]},
+              {"coordinate": 120.0,
+               "outputs": [10.0, 0.85]}
+            ]},
+            {"family_coordinate": 400.0, "samples": [
+              {"coordinate": 70.0,
+               "outputs": [10.0, 0.85]},
+              {"coordinate": 120.0,
+               "outputs": [10.0, 0.85]}
+            ]}
+          ]
+        })json",
+    });
+    require(
+        artifact.revision_number == 1U &&
+            artifact.content.checksum.starts_with("sha256:") &&
+            projects
+                    .list_artifact_revisions(
+                        team_a, project.project_id)
+                    .size() == 1U &&
+            !projects
+                 .get_artifact_revision(
+                     team_b,
+                     project.project_id,
+                     artifact.artifact_revision_id)
+                 .has_value(),
+        "PostgreSQL artifact metadata must be immutable and "
+        "Team scoped");
 }
 
 }  // namespace

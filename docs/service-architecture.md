@@ -203,8 +203,10 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}` | Read canonical revision content |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/artifact-revisions` | List/publish immutable engineering artifacts |
+| `GET` | `/api/v1/projects/{project_id}/artifact-revisions/{artifact_revision_id}` | Read artifact revision metadata |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
-| `POST` | `/api/v1/simulations?project_id=...&model_revision_id=...&case_revision_id=...` | Submit a revision-backed Team-owned asynchronous job |
+| `POST` | `/api/v1/simulations?project_id=...&model_revision_id=...&case_revision_id=...&artifact_revision_ids=...` | Submit a revision-backed Team-owned asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
 
@@ -215,4 +217,6 @@ Team-scoped project, topology revision, and case revision in the query. The case
 steady or transient mode; transient submission additionally requires `end_time`. The API composes
 and snapshots the executable model before enqueueing. Inline engineering-artifact upload,
 arbitrary solver settings, authentication, and authorization policy follow without changing the
-simulation application boundary.
+simulation application boundary. `artifact_revision_ids` is an optional comma-separated list of
+exact project artifact revisions; their verified typed content is included in the immutable job
+snapshot.

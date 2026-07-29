@@ -6,6 +6,7 @@ if(NOT OpenSSL_FOUND)
 endif()
 
 add_library(thermox_object_artifacts
+    src/engineering_artifact_store.cpp
     src/result_artifact_store.cpp
 )
 add_library(

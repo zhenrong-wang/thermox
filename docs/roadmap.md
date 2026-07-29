@@ -223,6 +223,9 @@ Completed structural slices:
 - production revision-backed simulation submission with Team-scoped source resolution, immutable
   composed job snapshots, and project/topology/case IDs plus both SHA-256 source identities in job
   and result provenance; ✅
+- Team/project-scoped immutable engineering-artifact revisions, PostgreSQL metadata and parent
+  constraints, provider-neutral content-addressed object payloads, exact revision selection,
+  verified inline job snapshots, and artifact revision/checksum execution provenance; ✅
 
 ## Persistence boundary decision
 

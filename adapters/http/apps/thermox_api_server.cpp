@@ -205,7 +205,10 @@ int main(int argc, char** argv) {
         const auto project_service = std::make_shared<
             thermox::service::ProjectService>(
                 thermox::host::make_project_repository(
-                    persistence));
+                    persistence),
+                thermox::host::
+                    make_engineering_artifact_content_store(
+                        persistence));
         thermox::http::Api api{
             runtime,
             job_service,

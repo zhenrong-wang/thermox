@@ -1,14 +1,18 @@
 #include "thermox/service/projects.hpp"
 
+#include "artifact_payload.hpp"
 #include "serialization_internal.hpp"
 
+#include "thermox/service/in_memory_projects.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/performance_map.hpp"
 
 #include <openssl/evp.h>
 
 #include <cctype>
 #include <iomanip>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -74,10 +78,24 @@ std::string checksum(std::string_view value) {
 
 ProjectService::ProjectService(
     std::shared_ptr<ProjectRepository> repository)
-    : repository_(std::move(repository)) {
+    : ProjectService(
+          std::move(repository),
+          make_in_memory_engineering_artifact_content_store()) {}
+
+ProjectService::ProjectService(
+    std::shared_ptr<ProjectRepository> repository,
+    std::shared_ptr<EngineeringArtifactContentStore>
+        artifact_content)
+    : repository_(std::move(repository)),
+      artifact_content_(std::move(artifact_content)) {
     if (!repository_) {
         throw std::invalid_argument(
             "project repository must not be null");
+    }
+    if (!artifact_content_) {
+        throw std::invalid_argument(
+            "engineering artifact content store must not be "
+            "null");
     }
 }
 
@@ -304,6 +322,164 @@ ProjectService::resolve_model_case(
                 "persisted model/case composition failed: ") +
             error.what());
     }
+}
+
+ArtifactRevisionRecord
+ProjectService::create_artifact_revision(
+    const CreateArtifactRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.artifact_id.empty()) {
+        throw ProjectRequestError(
+            "project and artifact IDs must not be empty");
+    }
+    if (request.artifact_type !=
+        platform::performance_map_artifact_type) {
+        throw ProjectRequestError(
+            "unsupported engineering artifact type: " +
+            request.artifact_type);
+    }
+    if (request.artifact_json.empty()) {
+        throw ProjectRequestError(
+            "artifact payload must not be empty");
+    }
+    if (!repository_->get_project(
+            request.identity.team_id, request.project_id)) {
+        throw ProjectStateError("project was not found");
+    }
+    std::string canonical;
+    try {
+        canonical =
+            detail::canonicalize_performance_map_payload(
+                request.artifact_schema_version,
+                request.artifact_json);
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid engineering artifact: ") +
+            error.what());
+    }
+    const auto expected_checksum = checksum(canonical);
+    auto content = artifact_content_->put_json(
+        request.identity.team_id,
+        request.project_id,
+        request.artifact_id,
+        request.artifact_schema_version,
+        canonical);
+    if (content.object_key.empty() ||
+        content.media_type != "application/json" ||
+        content.byte_size != canonical.size()) {
+        throw ProjectStateError(
+            "artifact content store returned an invalid "
+            "manifest");
+    }
+    if (!content.checksum.empty() &&
+        content.checksum != expected_checksum) {
+        throw ProjectStateError(
+            "artifact content store checksum mismatch");
+    }
+    content.checksum = expected_checksum;
+    return repository_->create_artifact_revision(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.artifact_id,
+        request.parent_artifact_revision_id,
+        request.artifact_type,
+        request.artifact_schema_version,
+        content);
+}
+
+std::optional<ArtifactRevisionRecord>
+ProjectService::get_artifact_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& artifact_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() ||
+        artifact_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and artifact revision IDs must not be "
+            "empty");
+    }
+    return repository_->get_artifact_revision(
+        identity.team_id,
+        project_id,
+        artifact_revision_id);
+}
+
+std::vector<ArtifactRevisionRecord>
+ProjectService::list_artifact_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError(
+            "project ID must not be empty");
+    }
+    return repository_->list_artifact_revisions(
+        identity.team_id, project_id);
+}
+
+std::optional<ResolvedEngineeringArtifacts>
+ProjectService::resolve_artifact_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::vector<std::string>&
+        artifact_revision_ids) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError(
+            "project ID must not be empty");
+    }
+    ResolvedEngineeringArtifacts result;
+    std::set<std::string> logical_ids;
+    for (const auto& revision_id : artifact_revision_ids) {
+        if (revision_id.empty()) {
+            throw ProjectRequestError(
+                "artifact revision IDs must not be empty");
+        }
+        const auto revision =
+            repository_->get_artifact_revision(
+                identity.team_id,
+                project_id,
+                revision_id);
+        if (!revision) {
+            return std::nullopt;
+        }
+        if (!logical_ids.insert(revision->artifact_id).second) {
+            throw ProjectRequestError(
+                "only one revision may be selected for "
+                "artifact ID: " + revision->artifact_id);
+        }
+        const auto payload =
+            artifact_content_->get(revision->content);
+        if (!payload) {
+            throw ProjectStateError(
+                "persisted engineering artifact content was "
+                "not found");
+        }
+        if (payload->size() != revision->content.byte_size ||
+            checksum(*payload) != revision->content.checksum) {
+            throw ProjectStateError(
+                "persisted engineering artifact content "
+                "failed integrity verification");
+        }
+        if (revision->artifact_type !=
+            platform::performance_map_artifact_type) {
+            throw ProjectStateError(
+                "persisted engineering artifact type is not "
+                "supported");
+        }
+        result.snapshot.performance_maps.push_back(
+            detail::performance_map_from_payload(
+                revision->artifact_id,
+                revision->artifact_schema_version,
+                revision->artifact_revision_id,
+                revision->content.checksum.substr(7),
+                *payload));
+        result.revisions.push_back(*revision);
+    }
+    return result;
 }
 
 }  // namespace thermox::service

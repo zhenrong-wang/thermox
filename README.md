@@ -83,6 +83,11 @@ Implemented in this sprint:
   the Team predicate. Production job submission resolves an exact project/topology/case tuple,
   stores the complete composed model snapshot in the immutable job request, and publishes both
   source revision IDs and checksums in job and result provenance.
+- Project engineering artifacts have independent immutable revision history. PostgreSQL owns
+  Team/project-scoped metadata and parent relationships; provider-neutral object storage owns
+  content-addressed payloads. Revision-backed jobs resolve selected map revisions once, embed the
+  verified payload snapshot, and expose each artifact revision/checksum in job and result
+  provenance.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -308,9 +313,12 @@ psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
 psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -v ON_ERROR_STOP=1 \
   -f adapters/postgres/migrations/004_case_revisions.sql
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/005_artifact_revisions.sql
 ```
 
-## Local MinIO result storage
+## Local MinIO result and engineering-artifact storage
 
 The object-storage abstraction is provider-neutral. Thermox result logic depends on `ObjectStore`;
 the first concrete driver speaks the S3-compatible REST protocol using Signature V4. MinIO is the
@@ -358,8 +366,9 @@ THERMOX_WORKER_ID='local-worker-1' ./build/adapters/host/thermox_worker
 ```
 
 `THERMOX_S3_ADDRESSING_STYLE` accepts `path` (the MinIO development default) or
-`virtual-hosted`. `THERMOX_OBJECT_KEY_PREFIX` defaults to `results`. The credentials above are
-local development credentials only.
+`virtual-hosted`. `THERMOX_OBJECT_KEY_PREFIX` defaults to `results`, while
+`THERMOX_ARTIFACT_KEY_PREFIX` defaults to `engineering-artifacts`. The credentials above are local
+development credentials only.
 
 Workers default to a 30-second lease, a 10-second heartbeat, and three total attempts. Deployments
 can configure `THERMOX_WORKER_LEASE_MS`, `THERMOX_WORKER_HEARTBEAT_MS`, and
@@ -372,8 +381,8 @@ stop a worker after its current calculation.
 
 ## Next steps
 
-1. Add immutable engineering-artifact revisions under projects and bind exact artifact identities
-   into revision-backed jobs.
+1. Add a persisted run-configuration revision that binds one topology, one case, selected
+   engineering-artifact revisions, and solver settings as a reusable execution intent.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

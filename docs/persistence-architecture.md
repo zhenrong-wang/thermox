@@ -127,6 +127,18 @@ captures both its immutable source provenance and a complete composed `thermox.m
 Workers therefore never reread mutable project state and can execute even if newer revisions are
 published later.
 
+Migration `005_artifact_revisions.sql` adds independent project engineering-artifact history.
+Each logical artifact has an ordered, parent-linked revision chain inside one Team and Project.
+PostgreSQL stores type/schema identity plus the object manifest; canonical payload bytes live in
+provider-neutral object storage. The service verifies checksum and byte size before decoding a
+supported payload.
+
+Simulation submission may select exact artifact revision IDs from the same Team and Project. The
+API resolves and verifies those revisions once and stores complete typed payloads in the immutable
+job snapshot. Consequently workers do not need project or object-store metadata reads during
+calculation, and job/result provenance records the logical artifact ID, persisted revision ID,
+schema, and SHA-256 identity.
+
 ## Object storage
 
 Durable result content now follows a two-level adapter design:
@@ -146,9 +158,12 @@ authentication, endpoint/bucket or container addressing, transport, retries, and
 This keeps the abstraction usable by both S3-compatible APIs and native object-storage APIs that
 are not S3-compatible.
 
-`ObjectResultArtifactStore` owns Thermox semantics. It derives immutable content-addressed keys,
+`ObjectResultArtifactStore` owns Thermox result semantics. It derives immutable content-addressed keys,
 publishes SHA-256 manifests, and verifies downloaded bytes against the PostgreSQL-published
 checksum, size, media type, schema version, and provider metadata before returning content.
+`ObjectEngineeringArtifactContentStore` uses the same provider-neutral byte boundary for project
+inputs, with Team/Project namespacing and content-addressed keys. Neither adapter exposes provider
+keys through the public service API.
 
 The first driver uses libcurl's AWS Signature V4 support and accepts endpoint, region, bucket,
 credentials, and path or virtual-hosted addressing. MinIO is the first integration target, not a
@@ -182,7 +197,8 @@ configuration. PostgreSQL is the coordination authority and object storage is th
 authority; neither role permits an in-memory fallback. Each worker executes one calculation at a
 time, and deployments add worker processes for bounded job-level parallelism.
 
-Engineering input data has a separate read boundary from result storage.
-`EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references
-into validated service DTOs. Its in-memory adapter is complete; a production object-store adapter
-must verify stored bytes against the referenced checksum before decoding and returning a payload.
+Engineering input data has a separate read boundary from result storage. Project artifact
+revisions are now resolved through `EngineeringArtifactContentStore`; its object adapter verifies
+stored bytes against the PostgreSQL manifest before decoding them into service DTOs. The older
+`EngineeringArtifactResolver` remains useful for deployment-installed references and embedded
+callers, while production revision-backed HTTP jobs carry verified inline snapshots.

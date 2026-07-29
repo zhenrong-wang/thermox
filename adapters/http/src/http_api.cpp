@@ -475,6 +475,44 @@ Response case_revision_response(
     return response;
 }
 
+Response artifact_revision_response(
+    const service::ArtifactRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_artifact_revision_json(revision));
+    response.headers["ETag"] =
+        "\"" + revision.content.checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/artifact-revisions/" +
+        revision.artifact_revision_id;
+    return response;
+}
+
+std::vector<std::string> comma_separated_ids(
+    const std::string& value) {
+    std::vector<std::string> ids;
+    if (value.empty()) {
+        return ids;
+    }
+    std::string_view remaining{value};
+    while (true) {
+        const auto separator = remaining.find(',');
+        const auto id = remaining.substr(0, separator);
+        if (id.empty()) {
+            throw std::invalid_argument(
+                "artifact_revision_ids contains an empty ID");
+        }
+        ids.emplace_back(id);
+        if (separator == std::string_view::npos) {
+            break;
+        }
+        remaining.remove_prefix(separator + 1U);
+    }
+    return ids;
+}
+
 service::SimulationJobMode simulation_mode_for_case(
     const std::string& mode) {
     if (mode.find("transient") != std::string::npos ||
@@ -661,6 +699,106 @@ Response Api::handle(const Request& request) const {
                 "/model-revisions";
             const std::string remainder =
                 suffix.substr(separator);
+            constexpr std::string_view artifacts_segment =
+                "/artifact-revisions";
+            if (remainder == artifacts_segment) {
+                if (!impl_->projects
+                         ->get_project(identity, project_id)) {
+                    return error_response(
+                        404,
+                        "project_not_found",
+                        "project was not found");
+                }
+                if (method == "get") {
+                    reject_unknown_query(target.query, {});
+                    return json_response(
+                        200,
+                        service::
+                            serialize_artifact_revisions_json(
+                                impl_->projects
+                                    ->list_artifact_revisions(
+                                        identity, project_id)));
+                }
+                if (method == "post") {
+                    reject_unknown_query(
+                        target.query,
+                        {
+                            "artifact_id",
+                            "artifact_type",
+                            "artifact_schema_version",
+                            "parent_revision_id",
+                        });
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    service::CreateArtifactRevisionRequest
+                        command;
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    command.artifact_id = optional_query(
+                        target.query, "artifact_id");
+                    command.artifact_type = optional_query(
+                        target.query, "artifact_type");
+                    command.artifact_schema_version =
+                        optional_query(
+                            target.query,
+                            "artifact_schema_version");
+                    command.parent_artifact_revision_id =
+                        optional_query(
+                            target.query,
+                            "parent_revision_id");
+                    command.artifact_json = request.body;
+                    return artifact_revision_response(
+                        impl_->projects
+                            ->create_artifact_revision(command),
+                        201);
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "artifact revisions only support GET and "
+                    "POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
+            const std::string artifact_detail_prefix =
+                std::string(artifacts_segment) + "/";
+            if (remainder.starts_with(
+                    artifact_detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "artifact revision detail only supports "
+                        "GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto artifact_revision_id =
+                    remainder.substr(
+                        artifact_detail_prefix.size());
+                if (artifact_revision_id.empty() ||
+                    artifact_revision_id.find('/') !=
+                        std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto artifact =
+                    impl_->projects->get_artifact_revision(
+                        identity,
+                        project_id,
+                        artifact_revision_id);
+                if (!artifact) {
+                    return error_response(
+                        404,
+                        "artifact_revision_not_found",
+                        "artifact revision was not found");
+                }
+                return artifact_revision_response(*artifact, 200);
+            }
             if (remainder == revisions_segment) {
                 if (!impl_->projects
                          ->get_project(identity, project_id)) {
@@ -928,6 +1066,7 @@ Response Api::handle(const Request& request) const {
                     "project_id",
                     "model_revision_id",
                     "case_revision_id",
+                    "artifact_revision_ids",
                     "end_time",
                 });
             if (!request.body.empty()) {
@@ -980,6 +1119,23 @@ Response Api::handle(const Request& request) const {
                     resolved->case_revision_id,
                     resolved->case_checksum,
                 };
+            const auto artifact_revision_ids =
+                comma_separated_ids(optional_query(
+                    target.query,
+                    "artifact_revision_ids"));
+            const auto artifacts =
+                impl_->projects->resolve_artifact_revisions(
+                    identity,
+                    project_id,
+                    artifact_revision_ids);
+            if (!artifacts) {
+                return error_response(
+                    404,
+                    "artifact_revision_not_found",
+                    "one or more artifact revisions were not "
+                    "found");
+            }
+            command.artifacts = artifacts->snapshot;
             if (command.mode ==
                 service::SimulationJobMode::transient) {
                 command.transient_solver.end_time =

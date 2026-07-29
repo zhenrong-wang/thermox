@@ -144,6 +144,39 @@ void case_revision_json(
     out << '}';
 }
 
+void artifact_revision_json(
+    std::ostringstream& out,
+    const ArtifactRevisionRecord& revision) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"artifact_revision_id\": ";
+    json_string(out, revision.artifact_revision_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"artifact_id\": ";
+    json_string(out, revision.artifact_id);
+    out << ", \"revision_number\": "
+        << revision.revision_number;
+    out << ", \"parent_artifact_revision_id\": ";
+    json_string(out, revision.parent_artifact_revision_id);
+    out << ", \"artifact_type\": ";
+    json_string(out, revision.artifact_type);
+    out << ", \"artifact_schema_version\": ";
+    json_string(out, revision.artifact_schema_version);
+    out << ", \"content\": {\"media_type\": ";
+    json_string(out, revision.content.media_type);
+    out << ", \"byte_size\": "
+        << revision.content.byte_size;
+    out << ", \"checksum\": ";
+    json_string(out, revision.content.checksum);
+    out << "}, \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at) << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -217,6 +250,31 @@ std::string serialize_case_revisions_json(
             out << ", ";
         }
         case_revision_json(out, revisions[index], false);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_artifact_revision_json(
+    const ArtifactRevisionRecord& revision) {
+    std::ostringstream out;
+    artifact_revision_json(out, revision);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_artifact_revisions_json(
+    const std::vector<ArtifactRevisionRecord>& revisions) {
+    std::ostringstream out;
+    out << "{\"schema_version\": "
+           "\"thermox.artifact_revision_list/v1\", "
+        << "\"artifact_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        artifact_revision_json(out, revisions[index]);
     }
     out << "]}\n";
     return out.str();

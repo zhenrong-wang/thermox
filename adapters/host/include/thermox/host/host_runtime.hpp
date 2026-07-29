@@ -14,6 +14,7 @@ struct PersistenceConfiguration {
     std::string postgres_url;
     std::string object_store_driver;
     std::string object_key_prefix{"results"};
+    std::string artifact_key_prefix{"engineering-artifacts"};
     std::string s3_endpoint;
     std::string s3_region{"us-east-1"};
     std::string s3_bucket;
@@ -46,6 +47,9 @@ make_project_repository(
     const PersistenceConfiguration& configuration);
 std::shared_ptr<service::ResultArtifactStore>
 make_result_artifact_store(
+    const PersistenceConfiguration& configuration);
+std::shared_ptr<service::EngineeringArtifactContentStore>
+make_engineering_artifact_content_store(
     const PersistenceConfiguration& configuration);
 
 std::string persistence_description(

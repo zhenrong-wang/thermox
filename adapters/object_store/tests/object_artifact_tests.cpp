@@ -1,3 +1,4 @@
+#include "thermox/object_store/engineering_artifact_store.hpp"
 #include "thermox/object_store/result_artifact_store.hpp"
 
 #include <iostream>
@@ -127,12 +128,48 @@ void test_prefix_is_a_hard_boundary() {
         "artifact adapters must not read outside their key prefix");
 }
 
+void test_engineering_artifact_content_store() {
+    auto objects = std::make_shared<FakeObjectStore>();
+    auto artifacts = thermox::object_store::
+        make_object_engineering_artifact_content_store(
+            objects, "engineering");
+    const std::string content = R"({"map":"immutable"})";
+    const auto manifest = artifacts->put_json(
+        "team-a",
+        "project-a",
+        "compressor/map",
+        "thermox.performance_map/v1",
+        content);
+    require(
+        manifest.object_key.starts_with("engineering/") &&
+            manifest.object_key.find("compressor/map") ==
+                std::string::npos &&
+            manifest.checksum.starts_with("sha256:") &&
+            artifacts->get(manifest) ==
+                std::optional<std::string>{content},
+        "engineering content must use safe content-addressed "
+        "keys and verify its manifest");
+    objects->objects.at(manifest.object_key)
+        .content.push_back('!');
+    bool rejected = false;
+    try {
+        (void)artifacts->get(manifest);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "tampered engineering artifact content must be "
+        "rejected");
+}
+
 }  // namespace
 
 int main() {
     try {
         test_provider_neutral_result_contract();
         test_prefix_is_a_hard_boundary();
+        test_engineering_artifact_content_store();
         std::cout << "thermox object artifact tests passed\n";
         return 0;
     } catch (const std::exception& error) {

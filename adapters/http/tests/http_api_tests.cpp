@@ -233,6 +233,56 @@ void test_tenant_scoped_asynchronous_jobs() {
                 "/core/examples/"
                 "air_compressor.design.case.json"),
         });
+    auto artifact_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions"
+            "?artifact_id=http-test-map"
+            "&artifact_type=thermox.performance_map"
+            "&artifact_schema_version="
+            "thermox.performance_map%2Fv1",
+        R"json({
+          "primary_variable": {
+            "name": "corrected_mass_flow",
+            "dimension": "mass_flow"
+          },
+          "family_variable": {
+            "name": "corrected_speed",
+            "dimension": "angular_speed"
+          },
+          "output_variables": [
+            {"name": "pressure_ratio",
+             "dimension": "dimensionless"},
+            {"name": "isentropic_efficiency",
+             "dimension": "dimensionless"}
+          ],
+          "curves": [
+            {"family_coordinate": 250.0, "samples": [
+              {"coordinate": 70.0,
+               "outputs": [10.0, 0.85]},
+              {"coordinate": 120.0,
+               "outputs": [10.0, 0.85]}
+            ]},
+            {"family_coordinate": 400.0, "samples": [
+              {"coordinate": 70.0,
+               "outputs": [10.0, 0.85]},
+              {"coordinate": 120.0,
+               "outputs": [10.0, 0.85]}
+            ]}
+          ]
+        })json");
+    const auto uploaded = api.handle(
+        authenticated(std::move(artifact_upload)));
+    require(
+        uploaded.status == 201 &&
+            uploaded.headers.contains("Location") &&
+            uploaded.body.find("sha256:") !=
+                std::string::npos,
+        "artifact upload must publish immutable revision "
+        "metadata");
+    const auto artifact_revision_id =
+        uploaded.headers.at("Location").substr(
+            uploaded.headers.at("Location").find_last_of('/') +
+            1U);
 
     auto submission = thermox::http::Request{
         "POST",
@@ -240,7 +290,9 @@ void test_tenant_scoped_asynchronous_jobs() {
             project.project_id +
             "&model_revision_id=" + model.model_revision_id +
             "&case_revision_id=" +
-            simulation_case.case_revision_id,
+            simulation_case.case_revision_id +
+            "&artifact_revision_ids=" +
+            artifact_revision_id,
         {},
         {}};
     submission.headers["Idempotency-Key"] = "http-job-1";
@@ -269,6 +321,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             queued.body.find(model.checksum) !=
                 std::string::npos &&
             queued.body.find(simulation_case.checksum) !=
+                std::string::npos &&
+            queued.body.find(artifact_revision_id) !=
                 std::string::npos &&
             queued.headers.contains("Location"),
         "authenticated submission must create a Team-owned "
@@ -311,6 +365,8 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos &&
             result.body.find(
                 simulation_case.case_revision_id) !=
+                std::string::npos &&
+            result.body.find(artifact_revision_id) !=
                 std::string::npos &&
             result.headers.contains("ETag"),
         "job result must publish stored revision provenance");

@@ -261,6 +261,105 @@ public:
         return records;
     }
 
+    ArtifactRevisionRecord create_artifact_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& artifact_id,
+        const std::string& parent_artifact_revision_id,
+        const std::string& artifact_type,
+        const std::string& artifact_schema_version,
+        const ArtifactContentManifest& content) override {
+        std::lock_guard lock(mutex_);
+        const auto project = projects_.find(project_id);
+        if (project == projects_.end() ||
+            project->second.team_id != team_id) {
+            throw ProjectStateError("project was not found");
+        }
+        if (!parent_artifact_revision_id.empty()) {
+            const auto parent = artifact_revisions_.find(
+                parent_artifact_revision_id);
+            if (parent == artifact_revisions_.end() ||
+                parent->second.team_id != team_id ||
+                parent->second.project_id != project_id ||
+                parent->second.artifact_id != artifact_id ||
+                parent->second.artifact_type != artifact_type) {
+                throw ProjectStateError(
+                    "parent artifact revision was not found");
+            }
+        }
+        const auto sequence_key =
+            project_id + '\0' + artifact_id;
+        ArtifactRevisionRecord record;
+        record.artifact_revision_id = next_id(
+            "artifact-revision",
+            next_artifact_revision_id_++);
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.artifact_id = artifact_id;
+        record.revision_number =
+            ++artifact_revision_sequences_[sequence_key];
+        record.parent_artifact_revision_id =
+            parent_artifact_revision_id;
+        record.artifact_type = artifact_type;
+        record.artifact_schema_version =
+            artifact_schema_version;
+        record.content = content;
+        record.created_by_user_id = created_by_user_id;
+        record.created_at = std::chrono::system_clock::now();
+        artifact_revisions_.emplace(
+            record.artifact_revision_id, record);
+        return record;
+    }
+
+    std::optional<ArtifactRevisionRecord>
+    get_artifact_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto found =
+            artifact_revisions_.find(artifact_revision_id);
+        if (found == artifact_revisions_.end() ||
+            found->second.team_id != team_id ||
+            found->second.project_id != project_id) {
+            return std::nullopt;
+        }
+        return found->second;
+    }
+
+    std::vector<ArtifactRevisionRecord>
+    list_artifact_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto project = projects_.find(project_id);
+        if (project == projects_.end() ||
+            project->second.team_id != team_id) {
+            return {};
+        }
+        std::vector<ArtifactRevisionRecord> records;
+        for (const auto& [id, record] : artifact_revisions_) {
+            (void)id;
+            if (record.team_id == team_id &&
+                record.project_id == project_id) {
+                records.push_back(record);
+            }
+        }
+        std::sort(
+            records.begin(),
+            records.end(),
+            [](const auto& left, const auto& right) {
+                if (left.artifact_id != right.artifact_id) {
+                    return left.artifact_id <
+                        right.artifact_id;
+                }
+                return left.revision_number <
+                    right.revision_number;
+            });
+        return records;
+    }
+
 private:
     static std::string next_id(
         const std::string& prefix,
@@ -275,15 +374,57 @@ private:
     std::uint64_t next_project_id_{1};
     std::uint64_t next_model_revision_id_{1};
     std::uint64_t next_case_revision_id_{1};
+    std::uint64_t next_artifact_revision_id_{1};
     std::unordered_map<std::string, ProjectRecord> projects_;
     std::unordered_map<std::string, ModelRevisionRecord>
         model_revisions_;
     std::unordered_map<std::string, CaseRevisionRecord>
         case_revisions_;
+    std::unordered_map<std::string, ArtifactRevisionRecord>
+        artifact_revisions_;
     std::unordered_map<std::string, std::uint64_t>
         project_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         case_revision_sequences_;
+    std::unordered_map<std::string, std::uint64_t>
+        artifact_revision_sequences_;
+};
+
+class InMemoryEngineeringArtifactContentStore final
+    : public EngineeringArtifactContentStore {
+public:
+    ArtifactContentManifest put_json(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_id,
+        const std::string& artifact_schema_version,
+        const std::string& canonical_json) override {
+        const auto key =
+            team_id + "/" + project_id + "/" + artifact_id +
+            "/" + artifact_schema_version + "/" +
+            std::to_string(next_id_++);
+        content_[key] = canonical_json;
+        return {
+            key,
+            "application/json",
+            static_cast<std::uint64_t>(
+                canonical_json.size()),
+            {},
+        };
+    }
+
+    std::optional<std::string> get(
+        const ArtifactContentManifest& manifest) const override {
+        const auto found = content_.find(manifest.object_key);
+        if (found == content_.end()) {
+            return std::nullopt;
+        }
+        return found->second;
+    }
+
+private:
+    std::uint64_t next_id_{1};
+    std::unordered_map<std::string, std::string> content_;
 };
 
 }  // namespace
@@ -291,6 +432,12 @@ private:
 std::shared_ptr<ProjectRepository>
 make_in_memory_project_repository() {
     return std::make_shared<InMemoryProjectRepository>();
+}
+
+std::shared_ptr<EngineeringArtifactContentStore>
+make_in_memory_engineering_artifact_content_store() {
+    return std::make_shared<
+        InMemoryEngineeringArtifactContentStore>();
 }
 
 }  // namespace thermox::service

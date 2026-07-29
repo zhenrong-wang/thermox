@@ -286,6 +286,109 @@ void test_case_revisions_bind_exact_model_revisions() {
         "through the ordinary simulation service");
 }
 
+std::string performance_map_payload() {
+    return R"json({
+  "primary_variable": {
+    "name": "corrected_mass_flow",
+    "dimension": "mass_flow"
+  },
+  "family_variable": {
+    "name": "corrected_speed",
+    "dimension": "angular_speed"
+  },
+  "output_variables": [
+    {"name": "pressure_ratio", "dimension": "dimensionless"},
+    {"name": "isentropic_efficiency", "dimension": "dimensionless"}
+  ],
+  "curves": [
+    {
+      "family_coordinate": 250.0,
+      "samples": [
+        {"coordinate": 70.0, "outputs": [10.0, 0.85]},
+        {"coordinate": 120.0, "outputs": [10.0, 0.85]}
+      ]
+    },
+    {
+      "family_coordinate": 400.0,
+      "samples": [
+        {"coordinate": 70.0, "outputs": [10.0, 0.85]},
+        {"coordinate": 120.0, "outputs": [10.0, 0.85]}
+      ]
+    }
+  ]
+})json";
+}
+
+void test_artifact_revisions_are_snapshotted_and_scoped() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Artifact history", {}});
+    const auto first = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "oem-compressor-map",
+        {},
+        "thermox.performance_map",
+        "thermox.performance_map/v1",
+        performance_map_payload(),
+    });
+    const auto second = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "oem-compressor-map",
+        first.artifact_revision_id,
+        "thermox.performance_map",
+        "thermox.performance_map/v1",
+        performance_map_payload(),
+    });
+    require(
+        first.revision_number == 1U &&
+            second.revision_number == 2U &&
+            second.parent_artifact_revision_id ==
+                first.artifact_revision_id &&
+            first.content.checksum ==
+                second.content.checksum &&
+            first.content.checksum.starts_with("sha256:") &&
+            service
+                    .list_artifact_revisions(
+                        team_a, project.project_id)
+                    .size() == 2U &&
+            !service
+                 .get_artifact_revision(
+                     team_b,
+                     project.project_id,
+                     first.artifact_revision_id)
+                 .has_value(),
+        "artifact revisions must be immutable, ordered, "
+        "content-addressed, and Team scoped");
+    const auto resolved = service.resolve_artifact_revisions(
+        team_a,
+        project.project_id,
+        {first.artifact_revision_id});
+    require(
+        resolved &&
+            resolved->snapshot.performance_maps.size() == 1U &&
+            resolved->snapshot.performance_maps.front().id ==
+                "oem-compressor-map" &&
+            resolved->snapshot.performance_maps.front().revision ==
+                first.artifact_revision_id &&
+            resolved->snapshot.performance_maps.front()
+                    .checksum_sha256 ==
+                first.content.checksum.substr(7),
+        "artifact resolution must produce an immutable "
+        "execution snapshot with persisted provenance");
+    const auto serialized =
+        thermox::service::serialize_artifact_revision_json(first);
+    require(
+        serialized.find(first.content.checksum) !=
+                std::string::npos &&
+            serialized.find(first.content.object_key) ==
+                std::string::npos,
+        "public artifact metadata must publish integrity but "
+        "hide provider object keys");
+}
+
 }  // namespace
 
 int main() {
@@ -295,6 +398,7 @@ int main() {
         test_invalid_input_is_rejected_before_persistence();
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
+        test_artifact_revisions_are_snapshotted_and_scoped();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

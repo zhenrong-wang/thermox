@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/service/identity.hpp"
+#include "thermox/service/simulation_service.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -18,6 +19,8 @@ inline constexpr char model_revision_schema_v1[] =
     "thermox.model_revision/v1";
 inline constexpr char case_revision_schema_v1[] =
     "thermox.case_revision/v1";
+inline constexpr char artifact_revision_schema_v1[] =
+    "thermox.artifact_revision/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};
@@ -59,6 +62,42 @@ struct CaseRevisionRecord {
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
+};
+
+struct ArtifactContentManifest {
+    std::string object_key;
+    std::string media_type;
+    std::uint64_t byte_size{0};
+    std::string checksum;
+};
+
+struct ArtifactRevisionRecord {
+    std::string schema_version{artifact_revision_schema_v1};
+    std::string artifact_revision_id;
+    std::string project_id;
+    std::string team_id;
+    std::string artifact_id;
+    std::uint64_t revision_number{0};
+    std::string parent_artifact_revision_id;
+    std::string artifact_type;
+    std::string artifact_schema_version;
+    ArtifactContentManifest content;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
+};
+
+class EngineeringArtifactContentStore {
+public:
+    virtual ~EngineeringArtifactContentStore() = default;
+
+    virtual ArtifactContentManifest put_json(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_id,
+        const std::string& artifact_schema_version,
+        const std::string& canonical_json) = 0;
+    virtual std::optional<std::string> get(
+        const ArtifactContentManifest& manifest) const = 0;
 };
 
 class ProjectRequestError : public std::invalid_argument {
@@ -127,6 +166,25 @@ public:
         const std::string& team_id,
         const std::string& project_id,
         const std::string& model_revision_id) const = 0;
+
+    virtual ArtifactRevisionRecord create_artifact_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& artifact_id,
+        const std::string& parent_artifact_revision_id,
+        const std::string& artifact_type,
+        const std::string& artifact_schema_version,
+        const ArtifactContentManifest& content) = 0;
+    virtual std::optional<ArtifactRevisionRecord>
+    get_artifact_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const = 0;
+    virtual std::vector<ArtifactRevisionRecord>
+    list_artifact_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const = 0;
 };
 
 struct CreateProjectRequest {
@@ -150,6 +208,21 @@ struct CreateCaseRevisionRequest {
     std::string case_json;
 };
 
+struct CreateArtifactRevisionRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string artifact_id;
+    std::string parent_artifact_revision_id;
+    std::string artifact_type;
+    std::string artifact_schema_version;
+    std::string artifact_json;
+};
+
+struct ResolvedEngineeringArtifacts {
+    SimulationArtifactBundle snapshot;
+    std::vector<ArtifactRevisionRecord> revisions;
+};
+
 struct ResolvedModelCase {
     std::string project_id;
     std::string model_revision_id;
@@ -165,6 +238,10 @@ class ProjectService {
 public:
     explicit ProjectService(
         std::shared_ptr<ProjectRepository> repository);
+    ProjectService(
+        std::shared_ptr<ProjectRepository> repository,
+        std::shared_ptr<EngineeringArtifactContentStore>
+            artifact_content);
 
     [[nodiscard]] ProjectRecord create_project(
         const CreateProjectRequest& request) const;
@@ -203,9 +280,29 @@ public:
         const std::string& project_id,
         const std::string& model_revision_id,
         const std::string& case_revision_id) const;
+    [[nodiscard]] ArtifactRevisionRecord
+    create_artifact_revision(
+        const CreateArtifactRevisionRequest& request) const;
+    [[nodiscard]] std::optional<ArtifactRevisionRecord>
+    get_artifact_revision(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const;
+    [[nodiscard]] std::vector<ArtifactRevisionRecord>
+    list_artifact_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
+    [[nodiscard]] std::optional<ResolvedEngineeringArtifacts>
+    resolve_artifact_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::vector<std::string>&
+            artifact_revision_ids) const;
 
 private:
     std::shared_ptr<ProjectRepository> repository_;
+    std::shared_ptr<EngineeringArtifactContentStore>
+        artifact_content_;
 };
 
 std::string serialize_project_json(
@@ -222,5 +319,9 @@ std::string serialize_case_revision_json(
     bool include_case = true);
 std::string serialize_case_revisions_json(
     const std::vector<CaseRevisionRecord>& revisions);
+std::string serialize_artifact_revision_json(
+    const ArtifactRevisionRecord& revision);
+std::string serialize_artifact_revisions_json(
+    const std::vector<ArtifactRevisionRecord>& revisions);
 
 }  // namespace thermox::service
