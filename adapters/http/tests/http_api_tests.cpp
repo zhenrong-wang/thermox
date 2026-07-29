@@ -595,6 +595,81 @@ void test_team_scoped_projects_and_model_revisions() {
         "model revision creation must publish immutable "
         "canonical content and checksum metadata");
 
+    auto edit_request = authenticated(json_post(
+        revision.headers.at("Location") + "/edits",
+        R"json({
+          "schema_version": "thermox.graph_edit_batch/v1",
+          "operations": [{
+            "action": "upsert",
+            "entity_type": "component",
+            "entity_id": "compressor",
+            "entity": {
+              "id": "compressor",
+              "label": "Main compressor",
+              "kind": "compressor.fluid.isentropic_efficiency",
+              "version": "1.0.0",
+              "media": {
+                "inlet": "air",
+                "outlet": "air"
+              },
+              "parameters": {
+                "pressure_ratio": 14.0,
+                "eta_is": 0.87
+              }
+            }
+          }]
+        })json"));
+    const auto edited = api.handle(edit_request);
+    require(
+        edited.status == 201 &&
+            edited.headers.contains("Location") &&
+            edited.headers.at("Location") !=
+                revision.headers.at("Location") &&
+            edited.body.find(
+                "\"parent_model_revision_id\": \"") !=
+                std::string::npos &&
+            edited.body.find(
+                "\"label\": \"Main compressor\"") !=
+                std::string::npos &&
+            edited.body.find(
+                "\"pressure_ratio\": 14") !=
+                std::string::npos,
+        "graph edits must publish a typed immutable child "
+        "revision without losing JSON numeric types");
+
+    auto invalid_edit = authenticated(json_post(
+        edited.headers.at("Location") + "/edits",
+        R"json({
+          "schema_version": "thermox.graph_edit_batch/v1",
+          "operations": [{
+            "action": "remove",
+            "entity_type": "medium",
+            "entity_id": "air"
+          }]
+        })json"));
+    require(
+        api.handle(invalid_edit).status == 400,
+        "graph edits must reject removal of referenced domain "
+        "entities");
+
+    auto foreign_edit = authenticated(
+        json_post(
+            revision.headers.at("Location") + "/edits",
+            R"json({
+              "schema_version": "thermox.graph_edit_batch/v1",
+              "operations": [{
+                "action": "remove",
+                "entity_type": "component",
+                "entity_id": "compressor",
+                "cascade": true
+              }]
+            })json"),
+        "user-b",
+        "team-b");
+    require(
+        api.handle(foreign_edit).status == 404,
+        "cross-Team graph edits must hide revision existence");
+
     auto history_request = authenticated({
         "GET",
         "/api/v1/projects/" + project_id +
@@ -606,6 +681,8 @@ void test_team_scoped_projects_and_model_revisions() {
     require(
         history.status == 200 &&
             history.body.find("\"revision_number\": 1") !=
+                std::string::npos &&
+            history.body.find("\"revision_number\": 2") !=
                 std::string::npos &&
             history.body.find("\"model\": {") ==
                 std::string::npos,

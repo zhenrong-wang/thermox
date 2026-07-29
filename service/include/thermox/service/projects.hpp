@@ -252,6 +252,33 @@ struct CreateModelRevisionRequest {
     std::string model_json;
 };
 
+enum class GraphEntityType {
+    medium,
+    material,
+    component,
+    connection,
+};
+
+enum class GraphEditAction {
+    upsert,
+    remove,
+};
+
+struct GraphEditOperation {
+    GraphEditAction action{GraphEditAction::upsert};
+    GraphEntityType entity_type{GraphEntityType::component};
+    std::string entity_id;
+    std::string entity_json;
+    bool cascade{false};
+};
+
+struct ApplyGraphEditsRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string base_model_revision_id;
+    std::vector<GraphEditOperation> operations;
+};
+
 struct CreateCaseRevisionRequest {
     IdentityContext identity;
     std::string project_id;
@@ -332,6 +359,8 @@ public:
     list_model_revisions(
         const IdentityContext& identity,
         const std::string& project_id) const;
+    [[nodiscard]] ModelRevisionRecord apply_graph_edits(
+        const ApplyGraphEditsRequest& request) const;
     [[nodiscard]] CaseRevisionRecord create_case_revision(
         const CreateCaseRevisionRequest& request) const;
     [[nodiscard]] std::optional<CaseRevisionRecord>

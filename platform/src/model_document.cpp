@@ -1,8 +1,10 @@
 #include "thermox/platform/model_document.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <initializer_list>
 #include <map>
 #include <set>
 #include <sstream>
@@ -313,6 +315,28 @@ const JsonValue* find_member(const JsonValue& object, const std::string& key) {
         return nullptr;
     }
     return &it->second;
+}
+
+void require_only_members(
+    const JsonValue& object,
+    std::initializer_list<std::string_view> allowed,
+    std::string_view context) {
+    if (object.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            std::string(context) + " must be an object");
+    }
+    for (const auto& [key, unused] : object.object) {
+        (void)unused;
+        if (std::find(
+                allowed.begin(),
+                allowed.end(),
+                std::string_view{key}) ==
+            allowed.end()) {
+            throw std::invalid_argument(
+                "unknown " + std::string(context) +
+                " field: " + key);
+        }
+    }
 }
 
 const JsonValue& require_member(const JsonValue& object, const std::string& key) {
@@ -1327,6 +1351,106 @@ CaseDefinition parse_case_document_text(
     const JsonValue root_value =
         JsonParser{text}.parse_document();
     return parse_case_document_root(root_value);
+}
+
+MediumDefinition parse_medium_definition_text(
+    const std::string& text) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "medium"},
+        "medium definition");
+    if (require_string(root, "schema_version") !=
+        "thermox.medium_definition/v1") {
+        throw std::invalid_argument(
+            "unsupported medium definition schema_version");
+    }
+    const std::string medium_key{"medium"};
+    const auto& medium =
+        require_object_member(root, medium_key);
+    require_only_members(
+        medium,
+        {"id", "backend", "substance", "package_version"},
+        "medium");
+    return parse_medium(medium);
+}
+
+MaterialDefinition parse_material_definition_text(
+    const std::string& text) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "material"},
+        "material definition");
+    if (require_string(root, "schema_version") !=
+        "thermox.material_definition/v1") {
+        throw std::invalid_argument(
+            "unsupported material definition schema_version");
+    }
+    const std::string material_key{"material"};
+    const auto& material =
+        require_object_member(root, material_key);
+    require_only_members(
+        material,
+        {"id", "backend", "mechanism", "phase",
+         "package_version", "species"},
+        "material");
+    return parse_material(material);
+}
+
+ComponentDefinition parse_component_definition_text(
+    const std::string& text,
+    const ModelDocument& context) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "component"},
+        "component definition");
+    if (require_string(root, "schema_version") !=
+        "thermox.component_definition/v1") {
+        throw std::invalid_argument(
+            "unsupported component definition schema_version");
+    }
+    std::set<std::string> medium_ids;
+    for (const auto& medium : context.media) {
+        medium_ids.insert(medium.id);
+    }
+    std::set<std::string> material_ids;
+    for (const auto& material : context.materials) {
+        material_ids.insert(material.id);
+    }
+    const std::string component_key{"component"};
+    const auto& component =
+        require_object_member(root, component_key);
+    require_only_members(
+        component,
+        {"id", "label", "kind", "version", "media",
+         "materials", "artifacts", "parameters"},
+        "component");
+    return parse_component(component, medium_ids, material_ids);
+}
+
+ConnectionDefinition parse_connection_definition_text(
+    const std::string& text) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "connection"},
+        "connection definition");
+    if (require_string(root, "schema_version") !=
+        "thermox.connection_definition/v1") {
+        throw std::invalid_argument(
+            "unsupported connection definition schema_version");
+    }
+    const std::string connection_key{"connection"};
+    const auto& connection =
+        require_object_member(root, connection_key);
+    require_only_members(
+        connection,
+        {"id", "from", "to", "kind", "contract_version",
+         "parameters"},
+        "connection");
+    return parse_connection(connection);
 }
 
 ModelDocument load_model_document(const std::string& path) {

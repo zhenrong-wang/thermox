@@ -203,6 +203,7 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions` | List/publish immutable model revisions |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}` | Read canonical revision content |
+| `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/edits` | Apply a typed atomic edit batch and publish a child revision |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/artifact-revisions` | List/publish immutable engineering artifacts |

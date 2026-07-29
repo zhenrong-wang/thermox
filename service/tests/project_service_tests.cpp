@@ -497,6 +497,103 @@ void test_run_configurations_bind_complete_execution_intent() {
         "solver and result-projection policy");
 }
 
+void test_graph_edits_publish_valid_child_revisions() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Graph edits", {}});
+    const auto base = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+
+    thermox::service::ApplyGraphEditsRequest edit;
+    edit.identity = team_a;
+    edit.project_id = project.project_id;
+    edit.base_model_revision_id = base.model_revision_id;
+    edit.operations = {
+        {
+            thermox::service::GraphEditAction::upsert,
+            thermox::service::GraphEntityType::component,
+            "compressor",
+            R"json({
+              "schema_version":
+                "thermox.component_definition/v1",
+              "component": {
+                "id": "compressor",
+                "label": "Main compressor",
+                "kind":
+                  "compressor.fluid.isentropic_efficiency",
+                "version": "1.0.0",
+                "media": {
+                  "inlet": "air",
+                  "outlet": "air"
+                },
+                "parameters": {
+                  "pressure_ratio": 14.0,
+                  "eta_is": 0.87
+                }
+              }
+            })json",
+            false,
+        },
+    };
+    const auto child = service.apply_graph_edits(edit);
+    require(
+        child.parent_model_revision_id ==
+                base.model_revision_id &&
+            child.revision_number == 2U &&
+            child.canonical_model_json.find(
+                "\"label\": \"Main compressor\"") !=
+                std::string::npos &&
+            child.canonical_model_json.find(
+                "\"pressure_ratio\": 14") !=
+                std::string::npos,
+        "a graph edit batch must publish one canonical child "
+        "revision");
+
+    auto invalid = edit;
+    invalid.base_model_revision_id = child.model_revision_id;
+    invalid.operations = {
+        {
+            thermox::service::GraphEditAction::remove,
+            thermox::service::GraphEntityType::medium,
+            "air",
+            {},
+            false,
+        },
+    };
+    bool rejected = false;
+    try {
+        (void)service.apply_graph_edits(invalid);
+    } catch (const thermox::service::ProjectRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected &&
+            service
+                    .list_model_revisions(
+                        team_a, project.project_id)
+                    .size() == 2U,
+        "invalid graph edits must be rejected without publishing "
+        "a partial revision");
+
+    edit.identity = team_b;
+    rejected = false;
+    try {
+        (void)service.apply_graph_edits(edit);
+    } catch (const thermox::service::ProjectStateError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "graph edits must not reveal or modify another Team's "
+        "base revision");
+}
+
 }  // namespace
 
 int main() {
@@ -508,6 +605,7 @@ int main() {
         test_case_revisions_bind_exact_model_revisions();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
+        test_graph_edits_publish_valid_child_revisions();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

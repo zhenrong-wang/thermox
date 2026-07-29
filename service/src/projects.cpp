@@ -48,6 +48,57 @@ std::string trim(std::string value) {
     return value.substr(first, last - first);
 }
 
+template <typename Entity>
+typename std::vector<Entity>::iterator find_entity(
+    std::vector<Entity>& entities,
+    const std::string& id) {
+    return std::find_if(
+        entities.begin(),
+        entities.end(),
+        [&](const auto& entity) {
+            return entity.id == id;
+        });
+}
+
+template <typename Entity>
+void upsert_entity(
+    std::vector<Entity>& entities,
+    Entity entity,
+    const std::string& expected_id) {
+    if (entity.id != expected_id) {
+        throw ProjectRequestError(
+            "graph entity document ID does not match operation "
+            "entity_id");
+    }
+    const auto existing =
+        find_entity(entities, expected_id);
+    if (existing == entities.end()) {
+        entities.push_back(std::move(entity));
+    } else {
+        *existing = std::move(entity);
+    }
+}
+
+template <typename Entity>
+void remove_entity(
+    std::vector<Entity>& entities,
+    const std::string& id,
+    const std::string& type) {
+    const auto existing = find_entity(entities, id);
+    if (existing == entities.end()) {
+        throw ProjectRequestError(
+            type + " '" + id + "' does not exist");
+    }
+    entities.erase(existing);
+}
+
+std::string endpoint_component_id(const std::string& endpoint) {
+    const auto separator = endpoint.find('.');
+    return separator == std::string::npos
+        ? endpoint
+        : endpoint.substr(0, separator);
+}
+
 std::string checksum(std::string_view value) {
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>
         context{EVP_MD_CTX_new(), EVP_MD_CTX_free};
@@ -318,6 +369,205 @@ ProjectService::list_model_revisions(
     }
     return repository_->list_model_revisions(
         identity.team_id, project_id);
+}
+
+ModelRevisionRecord ProjectService::apply_graph_edits(
+    const ApplyGraphEditsRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.base_model_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and base model revision IDs must not be "
+            "empty");
+    }
+    if (request.operations.empty() ||
+        request.operations.size() > 256U) {
+        throw ProjectRequestError(
+            "graph edit batch must contain 1 to 256 operations");
+    }
+    const auto base = repository_->get_model_revision(
+        request.identity.team_id,
+        request.project_id,
+        request.base_model_revision_id);
+    if (!base) {
+        throw ProjectStateError(
+            "base model revision was not found");
+    }
+
+    platform::ModelDocument document;
+    try {
+        document = platform::parse_topology_document_text(
+            base->canonical_model_json);
+        for (const auto& operation : request.operations) {
+            if (operation.entity_id.empty()) {
+                throw ProjectRequestError(
+                    "graph edit entity_id must not be empty");
+            }
+            if (operation.action == GraphEditAction::upsert &&
+                operation.entity_json.empty()) {
+                throw ProjectRequestError(
+                    "graph upsert requires an entity document");
+            }
+            if (operation.action == GraphEditAction::remove &&
+                !operation.entity_json.empty()) {
+                throw ProjectRequestError(
+                    "graph removal must not contain an entity "
+                    "document");
+            }
+
+            if (operation.action == GraphEditAction::upsert) {
+                switch (operation.entity_type) {
+                    case GraphEntityType::medium:
+                        upsert_entity(
+                            document.media,
+                            platform::
+                                parse_medium_definition_text(
+                                    operation.entity_json),
+                            operation.entity_id);
+                        break;
+                    case GraphEntityType::material:
+                        upsert_entity(
+                            document.materials,
+                            platform::
+                                parse_material_definition_text(
+                                    operation.entity_json),
+                            operation.entity_id);
+                        break;
+                    case GraphEntityType::component:
+                        upsert_entity(
+                            document.components,
+                            platform::
+                                parse_component_definition_text(
+                                    operation.entity_json,
+                                    document),
+                            operation.entity_id);
+                        break;
+                    case GraphEntityType::connection:
+                        upsert_entity(
+                            document.connections,
+                            platform::
+                                parse_connection_definition_text(
+                                    operation.entity_json),
+                            operation.entity_id);
+                        break;
+                }
+                continue;
+            }
+
+            switch (operation.entity_type) {
+                case GraphEntityType::medium:
+                    if (std::any_of(
+                            document.components.begin(),
+                            document.components.end(),
+                            [&](const auto& component) {
+                                return std::any_of(
+                                    component.medium_bindings
+                                        .begin(),
+                                    component.medium_bindings
+                                        .end(),
+                                    [&](const auto& binding) {
+                                        return binding.second ==
+                                            operation.entity_id;
+                                    });
+                            })) {
+                        throw ProjectRequestError(
+                            "cannot remove a medium referenced by "
+                            "a component");
+                    }
+                    remove_entity(
+                        document.media,
+                        operation.entity_id,
+                        "medium");
+                    break;
+                case GraphEntityType::material:
+                    if (std::any_of(
+                            document.components.begin(),
+                            document.components.end(),
+                            [&](const auto& component) {
+                                return std::any_of(
+                                    component.material_bindings
+                                        .begin(),
+                                    component.material_bindings
+                                        .end(),
+                                    [&](const auto& binding) {
+                                        return binding.second ==
+                                            operation.entity_id;
+                                    });
+                            })) {
+                        throw ProjectRequestError(
+                            "cannot remove a material referenced "
+                            "by a component");
+                    }
+                    remove_entity(
+                        document.materials,
+                        operation.entity_id,
+                        "material");
+                    break;
+                case GraphEntityType::component: {
+                    const auto attached = std::count_if(
+                        document.connections.begin(),
+                        document.connections.end(),
+                        [&](const auto& connection) {
+                            return endpoint_component_id(
+                                       connection.from) ==
+                                    operation.entity_id ||
+                                endpoint_component_id(
+                                    connection.to) ==
+                                    operation.entity_id;
+                        });
+                    if (attached != 0 && !operation.cascade) {
+                        throw ProjectRequestError(
+                            "component removal requires cascade "
+                            "when connections are attached");
+                    }
+                    if (operation.cascade) {
+                        std::erase_if(
+                            document.connections,
+                            [&](const auto& connection) {
+                                return endpoint_component_id(
+                                           connection.from) ==
+                                        operation.entity_id ||
+                                    endpoint_component_id(
+                                        connection.to) ==
+                                        operation.entity_id;
+                            });
+                    }
+                    remove_entity(
+                        document.components,
+                        operation.entity_id,
+                        "component");
+                    break;
+                }
+                case GraphEntityType::connection:
+                    remove_entity(
+                        document.connections,
+                        operation.entity_id,
+                        "connection");
+                    break;
+            }
+        }
+
+        const auto canonical =
+            detail::serialize_topology_document_json(document);
+        document = platform::parse_topology_document_text(
+            canonical);
+        return repository_->create_model_revision(
+            request.identity.team_id,
+            request.identity.user_id,
+            request.project_id,
+            request.base_model_revision_id,
+            document.schema_version,
+            document.model_id,
+            document.revision,
+            canonical,
+            checksum(canonical));
+    } catch (const ProjectRequestError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid graph edit batch: ") +
+            error.what());
+    }
 }
 
 CaseRevisionRecord ProjectService::create_case_revision(

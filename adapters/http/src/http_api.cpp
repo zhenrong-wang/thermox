@@ -5,6 +5,8 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
 
+#include <boost/json.hpp>
+#include <boost/json/src.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
@@ -599,6 +601,174 @@ service::CreateProjectRequest parse_create_project_request(
     command.name = tree.get<std::string>("name", "");
     command.description =
         tree.get<std::string>("description", "");
+    return command;
+}
+
+const boost::json::value& require_graph_edit_field(
+    const boost::json::object& object,
+    std::string_view name) {
+    const auto* value = object.if_contains(name);
+    if (value == nullptr) {
+        throw std::invalid_argument(
+            "missing graph edit field: " + std::string(name));
+    }
+    return *value;
+}
+
+std::string require_graph_edit_string(
+    const boost::json::object& object,
+    std::string_view name) {
+    const auto& value = require_graph_edit_field(object, name);
+    if (!value.is_string()) {
+        throw std::invalid_argument(
+            "graph edit field must be a string: " +
+            std::string(name));
+    }
+    return std::string(value.as_string());
+}
+
+service::ApplyGraphEditsRequest parse_graph_edit_request(
+    const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid graph edit JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "graph edit request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "operations") {
+            throw std::invalid_argument(
+                "unknown graph edit request field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_graph_edit_string(root, "schema_version") !=
+        "thermox.graph_edit_batch/v1") {
+        throw std::invalid_argument(
+            "unsupported graph edit schema_version");
+    }
+    const auto& operations_value =
+        require_graph_edit_field(root, "operations");
+    if (!operations_value.is_array()) {
+        throw std::invalid_argument(
+            "graph edit operations must be an array");
+    }
+
+    service::ApplyGraphEditsRequest command;
+    for (const auto& item : operations_value.as_array()) {
+        if (!item.is_object()) {
+            throw std::invalid_argument(
+                "each graph edit operation must be an object");
+        }
+        const auto& object = item.as_object();
+        for (const auto& field : object) {
+            if (field.key() != "action" &&
+                field.key() != "entity_type" &&
+                field.key() != "entity_id" &&
+                field.key() != "entity" &&
+                field.key() != "cascade") {
+                throw std::invalid_argument(
+                    "unknown graph edit operation field: " +
+                    std::string(field.key()));
+            }
+        }
+
+        service::GraphEditOperation operation;
+        const auto action =
+            require_graph_edit_string(object, "action");
+        if (action == "upsert") {
+            operation.action =
+                service::GraphEditAction::upsert;
+        } else if (action == "remove") {
+            operation.action =
+                service::GraphEditAction::remove;
+        } else {
+            throw std::invalid_argument(
+                "graph edit action must be upsert or remove");
+        }
+
+        const auto entity_type =
+            require_graph_edit_string(object, "entity_type");
+        std::string fragment_key;
+        std::string fragment_schema;
+        if (entity_type == "medium") {
+            operation.entity_type =
+                service::GraphEntityType::medium;
+            fragment_key = "medium";
+            fragment_schema = "thermox.medium_definition/v1";
+        } else if (entity_type == "material") {
+            operation.entity_type =
+                service::GraphEntityType::material;
+            fragment_key = "material";
+            fragment_schema =
+                "thermox.material_definition/v1";
+        } else if (entity_type == "component") {
+            operation.entity_type =
+                service::GraphEntityType::component;
+            fragment_key = "component";
+            fragment_schema =
+                "thermox.component_definition/v1";
+        } else if (entity_type == "connection") {
+            operation.entity_type =
+                service::GraphEntityType::connection;
+            fragment_key = "connection";
+            fragment_schema =
+                "thermox.connection_definition/v1";
+        } else {
+            throw std::invalid_argument(
+                "unknown graph edit entity_type: " +
+                entity_type);
+        }
+        operation.entity_id =
+            require_graph_edit_string(object, "entity_id");
+
+        if (const auto* cascade =
+                object.if_contains("cascade")) {
+            if (!cascade->is_bool()) {
+                throw std::invalid_argument(
+                    "graph edit cascade must be a boolean");
+            }
+            operation.cascade = cascade->as_bool();
+        }
+        const auto* entity = object.if_contains("entity");
+        if (operation.action ==
+            service::GraphEditAction::upsert) {
+            if (entity == nullptr || !entity->is_object()) {
+                throw std::invalid_argument(
+                    "graph upsert entity must be an object");
+            }
+            if (operation.cascade) {
+                throw std::invalid_argument(
+                    "graph upsert does not support cascade");
+            }
+            boost::json::object fragment;
+            fragment["schema_version"] = fragment_schema;
+            fragment[fragment_key] = *entity;
+            operation.entity_json =
+                boost::json::serialize(fragment);
+        } else {
+            if (entity != nullptr) {
+                throw std::invalid_argument(
+                    "graph removal must not contain entity");
+            }
+            if (operation.cascade &&
+                operation.entity_type !=
+                    service::GraphEntityType::component) {
+                throw std::invalid_argument(
+                    "cascade is only valid for component "
+                    "removal");
+            }
+        }
+        command.operations.push_back(std::move(operation));
+    }
     return command;
 }
 
@@ -1315,10 +1485,36 @@ Response Api::handle(const Request& request) const {
                     return model_revision_response(*revision, 200);
                 }
 
+                constexpr std::string_view edits_segment =
+                    "/edits";
                 constexpr std::string_view cases_segment =
                     "/case-revisions";
                 const auto case_path =
                     model_path.substr(nested_separator);
+                if (case_path == edits_segment) {
+                    reject_unknown_query(target.query, {});
+                    if (method != "post") {
+                        auto response = error_response(
+                            405,
+                            "method_not_allowed",
+                            "graph edits only support POST");
+                        response.headers["Allow"] = "POST";
+                        return response;
+                    }
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_graph_edit_request(request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    command.base_model_revision_id =
+                        revision_id;
+                    return model_revision_response(
+                        impl_->projects->apply_graph_edits(
+                            command),
+                        201);
+                }
                 if (case_path == cases_segment) {
                     if (method == "get") {
                         reject_unknown_query(target.query, {});

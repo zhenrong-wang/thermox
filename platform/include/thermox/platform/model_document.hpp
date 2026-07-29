@@ -110,5 +110,14 @@ ModelDocument parse_topology_document_text(
     const std::string& text);
 CaseDefinition parse_case_document_text(
     const std::string& text);
+MediumDefinition parse_medium_definition_text(
+    const std::string& text);
+MaterialDefinition parse_material_definition_text(
+    const std::string& text);
+ComponentDefinition parse_component_definition_text(
+    const std::string& text,
+    const ModelDocument& context);
+ConnectionDefinition parse_connection_definition_text(
+    const std::string& text);
 
 }  // namespace thermox::platform

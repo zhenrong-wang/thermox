@@ -19,6 +19,7 @@ isolated example models.
 - [Property Packages](docs/property-packages.md)
 - [Service Architecture](docs/service-architecture.md)
 - [Graph Platform Architecture Review](docs/graph-platform-review.md)
+- [Graph Authoring Architecture](docs/graph-authoring-architecture.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
 - [Calibration Architecture](docs/calibration-architecture.md)

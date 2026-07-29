@@ -362,13 +362,15 @@ Goal: let users build models visually and inspect results.
 
 Work items:
 
-1. Create React/TypeScript web app.
-2. Implement graph canvas with typed ports.
-3. Component palette generated from backend component registry.
-4. Parameter forms with units and validation.
-5. Case editor for fixed values and initial guesses.
-6. Run monitor and result overlay on graph.
-7. Stream/result table views.
+1. Provide a transport-neutral, Team-scoped graph authoring service with typed atomic edit batches
+   against immutable base revisions. ✅
+2. Create React/TypeScript web app.
+3. Implement graph canvas with typed ports.
+4. Component palette generated from backend component registry.
+5. Parameter forms with units and validation.
+6. Case editor for fixed values and initial guesses.
+7. Run monitor and result overlay on graph.
+8. Stream/result table views.
 
 Exit criteria:
 
