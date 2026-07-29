@@ -91,6 +91,15 @@ The response includes initial/fitted values, bounds, per-observation physical an
 residuals, objective diagnostics, complete execution settings, and a canonical fitted model that
 can be submitted directly for independent validation runs.
 
+`EngineeringStudyRequest` formalizes that independent workflow. It runs one named calibration,
+freezes the returned canonical model, executes each declared prediction case sequentially through
+the ordinary steady service, and evaluates prediction observations only after the solve. A case
+referenced by calibration observations is rejected as a prediction case, preventing accidental
+training/validation overlap. Changing a prediction measurement cannot change the predicted state.
+The response preserves the complete calibration and per-case graph results while reporting
+physical residuals, normalized residuals, weighted sums of squares, RMS normalized residual, and
+the maximum absolute normalized residual.
+
 Coordinate search is intended for a small number of engineering calibration parameters. A later
 optimizer interface can add trust-region least squares and covariance/identifiability analysis
 without changing model, component, property, or observation contracts. Transient estimation is

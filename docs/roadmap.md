@@ -246,8 +246,8 @@ Next:
 5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
 6. Add topology-aware/continuation initialization for large reacting graphs so calibration
    candidates begin from component-consistent neighboring states. ✅
-7. Calibrate only designated gas-turbine baseline cases, freeze the fitted parameters, and predict
-   the independent part-load cases.
+7. Calibrate only designated baseline cases, freeze the fitted canonical model, and predict
+   independent cases through a leakage-guarded engineering-study service. ✅
 8. Add composition-preserving material split/mix routing for compressor bleed and cooling-air
    reinjection without introducing gas-turbine-specific graph semantics. ✅
 9. Extend performance-map compressor/turbine contracts to composition-aware material ports so

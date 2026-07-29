@@ -459,6 +459,56 @@ struct CalibrationResponse {
     }
 };
 
+struct StudyObservation {
+    std::string id;
+    std::string target;
+    std::string dimension;
+    double measured_si{0.0};
+    double sigma_si{0.0};
+};
+
+struct StudyPredictionCase {
+    std::string case_id;
+    std::vector<StudyObservation> observations;
+};
+
+struct EngineeringStudyRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string calibration_id;
+    CalibrationSolverSettings calibration_solver;
+    SteadySolverSettings prediction_solver;
+    std::vector<StudyPredictionCase> prediction_cases;
+    SimulationArtifactBundle artifacts;
+};
+
+struct StudyCaseResult {
+    std::string case_id;
+    SteadySimulationResponse simulation;
+    std::vector<CalibrationObservationResidual> observations;
+    double weighted_sum_squares{0.0};
+};
+
+struct EngineeringStudyDiagnostics {
+    std::size_t prediction_case_count{0};
+    std::size_t observation_count{0};
+    double weighted_sum_squares{0.0};
+    double rms_normalized_residual{0.0};
+    double maximum_absolute_normalized_residual{0.0};
+};
+
+struct EngineeringStudyResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    CalibrationResponse calibration;
+    std::vector<StudyCaseResult> predictions;
+    EngineeringStudyDiagnostics diagnostics;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct TransientSolverSettings {
     double start_time{0.0};
     double end_time{1.0};
@@ -517,6 +567,8 @@ public:
         const SteadySimulationRequest& request) const;
     [[nodiscard]] CalibrationResponse run_calibration(
         const CalibrationRequest& request) const;
+    [[nodiscard]] EngineeringStudyResponse run_engineering_study(
+        const EngineeringStudyRequest& request) const;
     [[nodiscard]] TransientSimulationResponse run_transient(
         const TransientSimulationRequest& request) const;
 

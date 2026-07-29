@@ -14,6 +14,8 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response);
 std::string serialize_calibration_response_json(
     const CalibrationResponse& response);
+std::string serialize_engineering_study_response_json(
+    const EngineeringStudyResponse& response);
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
 std::string serialize_job_record_json(

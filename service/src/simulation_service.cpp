@@ -17,6 +17,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -744,6 +745,70 @@ const platform::ResultValue& require_graph_value(
     }
     throw std::runtime_error(
         "calibration result value missing: " + target);
+}
+
+const ResultValue& require_graph_value(
+    const GraphResult& graph,
+    const std::string& target) {
+    const auto first = target.find('.');
+    const auto second = target.find('.', first + 1);
+    if (first == std::string::npos) {
+        throw std::invalid_argument(
+            "study observation target must identify a component");
+    }
+    const auto component = std::find_if(
+        graph.components.begin(), graph.components.end(),
+        [&](const auto& candidate) {
+            return candidate.component_id ==
+                target.substr(0, first);
+        });
+    if (component == graph.components.end()) {
+        throw std::invalid_argument(
+            "study observation component is missing: " + target);
+    }
+    const auto find_value = [&](const auto& values,
+                                const std::string& name)
+        -> const ResultValue* {
+        const auto value = std::find_if(
+            values.begin(), values.end(),
+            [&](const auto& candidate) {
+                return candidate.name == name;
+            });
+        return value == values.end() ? nullptr : &*value;
+    };
+    if (second == std::string::npos) {
+        if (const auto* value = find_value(
+                component->internal_values,
+                target.substr(first + 1))) {
+            return *value;
+        }
+        if (const auto* value = find_value(
+                component->metrics,
+                target.substr(first + 1))) {
+            return *value;
+        }
+    } else {
+        const auto port = std::find_if(
+            component->ports.begin(), component->ports.end(),
+            [&](const auto& candidate) {
+                return candidate.port_name ==
+                    target.substr(
+                        first + 1, second - first - 1);
+            });
+        if (port != component->ports.end()) {
+            const auto name = target.substr(second + 1);
+            if (const auto* value =
+                    find_value(port->primary_values, name)) {
+                return *value;
+            }
+            if (const auto* value =
+                    find_value(port->derived_values, name)) {
+                return *value;
+            }
+        }
+    }
+    throw std::invalid_argument(
+        "study observation value is missing: " + target);
 }
 
 using CalibrationState =
@@ -1588,6 +1653,177 @@ CalibrationResponse SimulationService::run_calibration(
     }
     response.fitted_model_json =
         detail::serialize_model_document_json(document);
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
+EngineeringStudyResponse
+SimulationService::run_engineering_study(
+    const EngineeringStudyRequest& request) const {
+    EngineeringStudyResponse response;
+    if (!valid_schema(request.schema_version) ||
+        request.model_json.empty() ||
+        request.calibration_id.empty() ||
+        request.prediction_cases.empty()) {
+        response.error = make_error(
+            "invalid_engineering_study_request",
+            "request",
+            "schema_version, model_json, calibration_id, and "
+            "prediction_cases are required");
+        return response;
+    }
+
+    std::set<std::string> case_ids;
+    std::set<std::string> observation_ids;
+    try {
+        const auto document =
+            platform::parse_model_document_text(
+                request.model_json);
+        const auto& calibration = require_calibration(
+            document, request.calibration_id);
+        std::set<std::string> calibration_cases;
+        for (const auto& observation :
+             calibration.observations) {
+            calibration_cases.insert(observation.case_id);
+        }
+        for (const auto& prediction :
+             request.prediction_cases) {
+            if (prediction.case_id.empty() ||
+                !case_ids.insert(prediction.case_id).second) {
+                throw std::invalid_argument(
+                    "prediction case IDs must be nonempty and unique");
+            }
+            if (calibration_cases.contains(
+                    prediction.case_id)) {
+                throw std::invalid_argument(
+                    "prediction case '" + prediction.case_id +
+                    "' is also used by calibration observations");
+            }
+            if (prediction.observations.empty()) {
+                throw std::invalid_argument(
+                    "prediction case '" + prediction.case_id +
+                    "' must declare observations");
+            }
+            for (const auto& observation :
+                 prediction.observations) {
+                if (observation.id.empty() ||
+                    observation.target.empty() ||
+                    observation.dimension.empty() ||
+                    !observation_ids.insert(
+                         observation.id).second ||
+                    !std::isfinite(observation.measured_si) ||
+                    !std::isfinite(observation.sigma_si) ||
+                    observation.sigma_si <= 0.0) {
+                    throw std::invalid_argument(
+                        "study observations require unique IDs, "
+                        "targets, dimensions, finite measurements, "
+                        "and positive finite uncertainties");
+                }
+            }
+        }
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_study_predictions", "request", ex.what());
+        return response;
+    }
+
+    CalibrationRequest calibration;
+    calibration.schema_version = request.schema_version;
+    calibration.model_json = request.model_json;
+    calibration.calibration_id = request.calibration_id;
+    calibration.solver = request.calibration_solver;
+    calibration.artifacts = request.artifacts;
+    response.calibration = run_calibration(calibration);
+    if (!response.calibration.succeeded()) {
+        response.status = response.calibration.status;
+        response.error = response.calibration.error;
+        return response;
+    }
+
+    for (const auto& prediction : request.prediction_cases) {
+        StudyCaseResult result;
+        result.case_id = prediction.case_id;
+        SteadySimulationRequest simulation;
+        simulation.schema_version = request.schema_version;
+        simulation.model_json =
+            response.calibration.fitted_model_json;
+        simulation.case_id = prediction.case_id;
+        simulation.solver = request.prediction_solver;
+        simulation.artifacts = request.artifacts;
+        result.simulation = run_steady(simulation);
+        if (!result.simulation.succeeded()) {
+            response.predictions.push_back(std::move(result));
+            response.status =
+                response.predictions.back().simulation.status;
+            response.error = make_error(
+                "study_prediction_failed",
+                "prediction",
+                "prediction case '" + prediction.case_id +
+                    "' failed: " +
+                    response.predictions.back()
+                        .simulation.error.message);
+            return response;
+        }
+        try {
+            for (const auto& observation :
+                 prediction.observations) {
+                const auto& predicted = require_graph_value(
+                    result.simulation.graph,
+                    observation.target);
+                if (predicted.dimension !=
+                    observation.dimension) {
+                    throw std::invalid_argument(
+                        "study observation '" + observation.id +
+                        "' dimension '" + observation.dimension +
+                        "' does not match result dimension '" +
+                        predicted.dimension + "'");
+                }
+                const double residual =
+                    predicted.value_si -
+                    observation.measured_si;
+                const double normalized =
+                    residual / observation.sigma_si;
+                result.weighted_sum_squares +=
+                    normalized * normalized;
+                response.diagnostics
+                    .maximum_absolute_normalized_residual =
+                    std::max(
+                        response.diagnostics
+                            .maximum_absolute_normalized_residual,
+                        std::abs(normalized));
+                result.observations.push_back({
+                    observation.id,
+                    prediction.case_id,
+                    observation.target,
+                    observation.dimension,
+                    observation.measured_si,
+                    predicted.value_si,
+                    observation.sigma_si,
+                    residual,
+                    normalized,
+                });
+            }
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::invalid_request;
+            response.error = make_error(
+                "invalid_study_observation",
+                "prediction",
+                ex.what());
+            return response;
+        }
+        response.diagnostics.weighted_sum_squares +=
+            result.weighted_sum_squares;
+        response.diagnostics.observation_count +=
+            result.observations.size();
+        response.predictions.push_back(std::move(result));
+    }
+    response.diagnostics.prediction_case_count =
+        response.predictions.size();
+    response.diagnostics.rms_normalized_residual =
+        std::sqrt(
+            response.diagnostics.weighted_sum_squares /
+            static_cast<double>(
+                response.diagnostics.observation_count));
     response.status = OperationStatus::succeeded;
     return response;
 }

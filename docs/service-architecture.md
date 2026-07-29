@@ -41,6 +41,7 @@ The current synchronous service exposes:
 - `SteadySimulationRequest` / `SteadySimulationResponse`;
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
+- `EngineeringStudyRequest` / `EngineeringStudyResponse`;
 - `thermox.command/v1`, `thermox.catalog/v2`, `thermox.result/v3`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
@@ -86,6 +87,9 @@ Calibration is also service orchestration: the service applies bounded candidate
 model copies, invokes ordinary steady simulations sequentially across the observation cases, and
 forms an uncertainty-weighted objective. It returns the fitted canonical model and residual
 attribution. Neither the platform compiler nor the nonlinear solver owns calibration behavior.
+Engineering studies compose calibration with independent steady prediction cases: calibration
+cases cannot be reused as predictions, the fitted canonical model is frozen before prediction,
+and measurements are evaluated only against completed graph results.
 
 Result-v3 represents steady solutions and every transient sample through the same graph structure:
 components contain stable port identities for fluid, heat, shaft, signal, and control domains,

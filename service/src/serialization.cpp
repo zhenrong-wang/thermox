@@ -956,6 +956,82 @@ std::string serialize_calibration_response_json(
     return out.str();
 }
 
+std::string serialize_engineering_study_response_json(
+    const EngineeringStudyResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, result_schema_v3);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"diagnostics\": {"
+        << "\"prediction_case_count\": "
+        << response.diagnostics.prediction_case_count
+        << ", \"observation_count\": "
+        << response.diagnostics.observation_count
+        << ", \"weighted_sum_squares\": ";
+    json_number(
+        out, response.diagnostics.weighted_sum_squares);
+    out << ", \"rms_normalized_residual\": ";
+    json_number(
+        out,
+        response.diagnostics.rms_normalized_residual);
+    out << ", \"maximum_absolute_normalized_residual\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .maximum_absolute_normalized_residual);
+    out << "},\n  \"calibration\": "
+        << serialize_calibration_response_json(
+               response.calibration);
+    out << ",  \"predictions\": [";
+    for (std::size_t i = 0;
+         i < response.predictions.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& prediction = response.predictions[i];
+        out << "{\"case_id\": ";
+        json_string(out, prediction.case_id);
+        out << ", \"weighted_sum_squares\": ";
+        json_number(out, prediction.weighted_sum_squares);
+        out << ", \"observations\": [";
+        for (std::size_t observation_index = 0;
+             observation_index <
+             prediction.observations.size();
+             ++observation_index) {
+            if (observation_index != 0) out << ", ";
+            const auto& observation =
+                prediction.observations[observation_index];
+            out << "{\"id\": ";
+            json_string(out, observation.id);
+            out << ", \"case_id\": ";
+            json_string(out, observation.case_id);
+            out << ", \"target\": ";
+            json_string(out, observation.target);
+            out << ", \"dimension\": ";
+            json_string(out, observation.dimension);
+            out << ", \"measured_si\": ";
+            json_number(out, observation.measured_si);
+            out << ", \"predicted_si\": ";
+            json_number(out, observation.predicted_si);
+            out << ", \"sigma_si\": ";
+            json_number(out, observation.sigma_si);
+            out << ", \"residual_si\": ";
+            json_number(out, observation.residual_si);
+            out << ", \"normalized_residual\": ";
+            json_number(
+                out, observation.normalized_residual);
+            out << "}";
+        }
+        out << "], \"simulation\": "
+            << serialize_steady_response_json(
+                   prediction.simulation)
+            << "}";
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;

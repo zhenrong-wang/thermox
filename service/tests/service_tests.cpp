@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -590,6 +591,158 @@ void test_bounded_calibration_service() {
         "calibration JSON must expose residuals and fitted model");
 }
 
+std::string independent_study_model(
+    double baseline_power_w) {
+    std::ostringstream model;
+    model << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "independent_study",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "compressor",
+      "kind": "compressor.fluid.isentropic_efficiency",
+      "parameters": {"pressure_ratio": 10.0, "eta_is": 0.80},
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "baseline",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      }
+    },
+    {
+      "id": "validation",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 80.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      }
+    }
+  ],
+  "calibrations": [{
+    "id": "baseline_fit",
+    "parameters": [{
+      "id": "eta",
+      "scope": "component",
+      "targets": ["components.compressor.parameters.eta_is"],
+      "bounds": {"lower": 0.75, "upper": 0.95}
+    }],
+    "observations": [{
+      "id": "baseline_power",
+      "case": "baseline",
+      "target": "compressor.shaft.W_dot",
+      "measured": {"value": )json"
+          << baseline_power_w << R"json(, "unit": "W"},
+      "sigma": {"value": 10000.0, "unit": "W"}
+    }]
+  }]
+})json";
+    return model.str();
+}
+
+void test_engineering_study_freezes_before_prediction() {
+    constexpr double gamma = 1.4;
+    constexpr double cp = 1004.5;
+    constexpr double true_eta = 0.88;
+    const double isentropic_delta_h =
+        cp * 300.0 *
+        (std::pow(
+             10.0, (gamma - 1.0) / gamma) -
+         1.0);
+    const double baseline_power =
+        100.0 * isentropic_delta_h / true_eta;
+    const double validation_power =
+        0.8 * baseline_power;
+
+    thermox::service::SimulationService service;
+    thermox::service::EngineeringStudyRequest request;
+    request.model_json =
+        independent_study_model(baseline_power);
+    request.calibration_id = "baseline_fit";
+    request.calibration_solver.max_iterations = 20;
+    request.prediction_cases = {{
+        "validation",
+        {{
+            "validation_power",
+            "compressor.shaft.W_dot",
+            "power",
+            validation_power,
+            10000.0,
+        }},
+    }};
+    const auto response =
+        service.run_engineering_study(request);
+    require(
+        response.succeeded(),
+        "engineering study must calibrate then predict: " +
+            response.error.message);
+    require(
+        response.calibration.succeeded() &&
+            response.predictions.size() == 1 &&
+            response.predictions.front()
+                    .simulation.succeeded() &&
+            response.diagnostics.prediction_case_count == 1 &&
+            response.diagnostics.observation_count == 1,
+        "study response must preserve calibration and prediction results");
+    require(
+        std::abs(
+            response.predictions.front()
+                .observations.front().residual_si) <
+            5000.0,
+        "frozen baseline efficiency must predict independent load");
+    const auto json =
+        thermox::service::
+            serialize_engineering_study_response_json(
+                response);
+    require(
+        json.find("\"calibration\": {") !=
+                std::string::npos &&
+            json.find("\"predictions\": [") !=
+                std::string::npos &&
+            json.find("\"weighted_sum_squares\":") !=
+                std::string::npos,
+        "study JSON must expose calibration, predictions, and "
+        "aggregate diagnostics");
+
+    auto changed_measurement = request;
+    changed_measurement.prediction_cases.front()
+        .observations.front().measured_si += 5.0e6;
+    const auto changed =
+        service.run_engineering_study(
+            changed_measurement);
+    require(
+        changed.succeeded() &&
+            changed.predictions.front()
+                    .observations.front().predicted_si ==
+                response.predictions.front()
+                    .observations.front().predicted_si,
+        "prediction observations must not influence the solve");
+
+    auto leaked = request;
+    leaked.prediction_cases.front().case_id = "baseline";
+    const auto rejected =
+        service.run_engineering_study(leaked);
+    require(
+        !rejected.succeeded() &&
+            rejected.error.code ==
+                "invalid_study_predictions",
+        "calibration cases must not be reused as independent predictions");
+}
+
 void test_component_version_is_enforced() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -1121,6 +1274,7 @@ int main() {
         test_compile_aware_validation_diagnostics();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
+        test_engineering_study_freezes_before_prediction();
         test_component_version_is_enforced();
         test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();

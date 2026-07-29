@@ -103,6 +103,9 @@ Implemented in this sprint:
 - A bounded multi-case calibration service performs sequential uncertainty-weighted coordinate
   search through ordinary steady simulations and returns fitted parameters, residual attribution,
   execution provenance, and a reusable canonical fitted model.
+- A leakage-guarded engineering-study service calibrates designated baseline cases, freezes the
+  canonical fitted model, runs independent steady prediction cases, and reports per-observation
+  and aggregate normalized validation residuals.
 - Composition-aware compressor and turbine residuals cache thermochemistry flashes by their local
   pressure, enthalpy, and species-flow dependencies, preventing unrelated graph perturbations from
   repeatedly invoking expensive backend calculations.
