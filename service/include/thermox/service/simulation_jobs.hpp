@@ -3,6 +3,8 @@
 #include "thermox/service/identity.hpp"
 #include "thermox/service/simulation_service.hpp"
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -11,7 +13,7 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v2[] = "thermox.job/v2";
+inline constexpr char job_schema_v3[] = "thermox.job/v3";
 
 enum class SimulationJobMode {
     steady,
@@ -32,7 +34,7 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v2};
+    std::string schema_version{job_schema_v3};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
@@ -57,7 +59,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v2};
+    std::string schema_version{job_schema_v3};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;
@@ -66,9 +68,18 @@ struct SimulationJobRecord {
     SimulationJobRequest request;
     std::string request_fingerprint;
     std::string worker_id;
+    std::uint32_t attempt{0};
+    std::optional<std::chrono::system_clock::time_point>
+        lease_expires_at;
     std::optional<ExecutionMetadata> execution;
     std::optional<ServiceError> error;
     std::optional<ResultArtifactManifest> result_artifact;
+};
+
+struct SimulationWorkerSettings {
+    std::chrono::milliseconds lease_duration{30000};
+    std::chrono::milliseconds heartbeat_interval{10000};
+    std::uint32_t maximum_attempts{3};
 };
 
 class JobRequestError : public std::invalid_argument {
@@ -102,7 +113,23 @@ public:
 
     // Must atomically select one queued job and transition it to running.
     virtual std::optional<SimulationJobRecord> claim_next(
-        const std::string& worker_id) = 0;
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration =
+            std::chrono::milliseconds{30000}) = 0;
+
+    // Heartbeats extend the lease without changing the fencing revision.
+    // False means the worker no longer owns a live lease.
+    virtual bool renew_lease(
+        const std::string& job_id,
+        std::uint64_t expected_revision,
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration) = 0;
+
+    // Expired attempts below the limit are atomically requeued with a new
+    // revision. Exhausted jobs are atomically failed with the given error.
+    virtual std::size_t recover_expired(
+        std::uint32_t maximum_attempts,
+        const ServiceError& exhausted_error) = 0;
 
     // Terminal publication operations are compare-and-swap updates.
     virtual SimulationJobRecord publish_success(
@@ -168,7 +195,8 @@ public:
         const IdentityContext& identity,
         const std::string& job_id) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
-        const std::string& worker_id);
+        const std::string& worker_id,
+        const SimulationWorkerSettings& settings = {});
     [[nodiscard]] SimulationJobRecord cancel(
         const IdentityContext& identity,
         const std::string& job_id,

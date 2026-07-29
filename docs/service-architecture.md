@@ -50,7 +50,7 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v2` Team-owned queued/running/succeeded/failed/cancelled jobs with required
+- `thermox.job/v3` Team-owned queued/running/succeeded/failed/cancelled jobs with required
   idempotency keys,
   optimistic revisions, worker claims, execution provenance, and result-artifact manifests.
 
@@ -110,7 +110,7 @@ construct result contracts.
 
 A future HTTP or RPC adapter follows the same rule: authenticate, decode, invoke one service use
 case, encode the response. `SimulationJobService` is the transport-neutral long-running workflow:
-it submits idempotent jobs, coordinates atomic worker claims, reuses `SimulationService` for
+it submits idempotent jobs, coordinates leased worker claims, reuses `SimulationService` for
 execution, writes the result artifact, and only then publishes success.
 
 Stateful job operations require a trusted `IdentityContext` containing an opaque user ID, Team ID,
@@ -142,8 +142,8 @@ The application boundary needed by a thin network adapter is now complete:
 | --- | --- | --- |
 | Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v2` JSON |
 | Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
-| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v2` JSON |
-| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v2` JSON |
+| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v3` JSON |
+| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v3` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the

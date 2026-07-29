@@ -74,8 +74,8 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v2` defines the Team-owned job lifecycle and idempotent
-submission, atomic worker claim, optimistic terminal publication, and queued cancellation. The application
+All gates are now in place. `thermox.job/v3` defines the Team-owned job lifecycle and idempotent
+submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
 
@@ -130,6 +130,23 @@ the result, job, HTTP, platform, physics, or numerical layers.
 The local MinIO stack is `deploy/compose.object-storage.yml`. It is loopback-only, creates a
 private `thermox-results` bucket, and uses pinned container versions. Integration tests are gated
 by `THERMOX_TEST_S3_*` variables.
+
+## Worker leases and recovery
+
+Every running job has an attempt number, fencing revision, worker ID, and lease expiry. Heartbeats
+extend only the expiry; they never change the fencing revision. Terminal publication requires the
+same revision and a live lease.
+
+Workers recover expired rows before claiming new work. An eligible expired attempt is requeued
+with its revision incremented and worker cleared, so the previous worker can no longer publish.
+When the configured attempt limit is reached, recovery publishes a structured
+`worker_attempts_exhausted` failure instead. PostgreSQL performs recovery in one atomic update;
+concurrent workers cannot recover the same row twice.
+
+Migration `002_worker_leases.sql` adds the attempt and lease columns, backfills historical terminal
+jobs, and makes any historical running row immediately recoverable. Compose initialization applies
+it automatically to new volumes. Existing development or deployed databases must run the migration
+explicitly.
 
 Engineering input data has a separate read boundary from result storage.
 `EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references

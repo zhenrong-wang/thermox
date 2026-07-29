@@ -22,6 +22,7 @@
 #include <charconv>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -46,6 +47,9 @@ struct Options {
     std::string local_user_id{"local-user"};
     std::string local_team_id{"local-team"};
     std::string worker_id{"local-worker"};
+    std::chrono::milliseconds worker_lease_duration{30000};
+    std::chrono::milliseconds worker_heartbeat_interval{10000};
+    std::uint32_t worker_maximum_attempts{3};
     std::string postgres_url;
     std::string object_store_driver;
     std::string object_key_prefix{"results"};
@@ -70,7 +74,10 @@ void usage(std::ostream& out) {
         << "Set THERMOX_POSTGRES_URL to persist simulation "
            "job metadata in PostgreSQL.\n"
         << "Set THERMOX_OBJECT_STORE_DRIVER=s3-compatible and "
-           "THERMOX_S3_* variables for durable result content.\n";
+           "THERMOX_S3_* variables for durable result content.\n"
+        << "Worker lease policy uses THERMOX_WORKER_LEASE_MS, "
+           "THERMOX_WORKER_HEARTBEAT_MS, and "
+           "THERMOX_WORKER_MAX_ATTEMPTS.\n";
 }
 
 template <typename Integer>
@@ -119,6 +126,29 @@ Options parse_options(int argc, char** argv) {
         environment("THERMOX_S3_SECRET_KEY");
     options.s3_addressing_style =
         environment("THERMOX_S3_ADDRESSING_STYLE", "path");
+    options.worker_lease_duration =
+        std::chrono::milliseconds{
+            parse_integer<long long>(
+                environment(
+                    "THERMOX_WORKER_LEASE_MS", "30000"),
+                "THERMOX_WORKER_LEASE_MS",
+                1,
+                std::numeric_limits<long long>::max())};
+    options.worker_heartbeat_interval =
+        std::chrono::milliseconds{
+            parse_integer<long long>(
+                environment(
+                    "THERMOX_WORKER_HEARTBEAT_MS", "10000"),
+                "THERMOX_WORKER_HEARTBEAT_MS",
+                1,
+                std::numeric_limits<long long>::max())};
+    options.worker_maximum_attempts =
+        parse_integer<std::uint32_t>(
+            environment(
+                "THERMOX_WORKER_MAX_ATTEMPTS", "3"),
+            "THERMOX_WORKER_MAX_ATTEMPTS",
+            1,
+            std::numeric_limits<std::uint32_t>::max());
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         const auto require_value = [&]() -> std::string {
@@ -164,6 +194,12 @@ Options parse_options(int argc, char** argv) {
         throw std::invalid_argument(
             "unsupported object store driver: " +
             options.object_store_driver);
+    }
+    if (options.worker_heartbeat_interval >=
+        options.worker_lease_duration) {
+        throw std::invalid_argument(
+            "worker heartbeat interval must be shorter than "
+            "the worker lease");
     }
     return options;
 }
@@ -315,12 +351,24 @@ int main(int argc, char** argv) {
             options.local_user_id,
             options.local_team_id,
             "local-http"};
+        const thermox::service::SimulationWorkerSettings
+            worker_settings{
+                options.worker_lease_duration,
+                options.worker_heartbeat_interval,
+                options.worker_maximum_attempts,
+            };
         std::jthread worker(
-            [job_service, worker_id = options.worker_id](
+            [
+                job_service,
+                worker_id = options.worker_id,
+                worker_settings
+            ](
                 const std::stop_token& stop) {
                 while (!stop.stop_requested()) {
                     try {
-                        if (job_service->run_next(worker_id)) {
+                        if (job_service->run_next(
+                                worker_id,
+                                worker_settings)) {
                             continue;
                         }
                     } catch (const std::exception& error) {

@@ -65,7 +65,7 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v2` workflow adds Team-scoped idempotent execution, atomic worker claims,
+  values. Its `thermox.job/v3` workflow adds Team-scoped idempotent execution, leased worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
@@ -288,6 +288,15 @@ THERMOX_TEST_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/th
   ctest --test-dir build -R thermox_postgres_job_tests --output-on-failure -j1
 ```
 
+Compose applies every SQL migration when it initializes a new volume. Apply later migrations
+explicitly to an existing volume, for example:
+
+```sh
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/002_worker_leases.sql
+```
+
 The local HTTP host selects PostgreSQL job metadata through its environment:
 
 ```sh
@@ -340,6 +349,12 @@ THERMOX_S3_SECRET_KEY='thermox-minio-local' \
 `THERMOX_S3_ADDRESSING_STYLE` accepts `path` (the MinIO development default) or
 `virtual-hosted`. `THERMOX_OBJECT_KEY_PREFIX` defaults to `results`. The credentials above are
 local development credentials only.
+
+Workers default to a 30-second lease, a 10-second heartbeat, and three total attempts. Deployments
+can configure `THERMOX_WORKER_LEASE_MS`, `THERMOX_WORKER_HEARTBEAT_MS`, and
+`THERMOX_WORKER_MAX_ATTEMPTS`. The heartbeat must be shorter than the lease. Expired work is
+atomically requeued with a new fencing revision; exhausted work becomes a structured terminal
+failure.
 
 ## Next steps
 

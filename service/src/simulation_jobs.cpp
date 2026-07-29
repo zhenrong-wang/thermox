@@ -3,6 +3,10 @@
 #include "thermox/service/serialization.hpp"
 
 #include <iomanip>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <limits>
 #include <sstream>
 #include <string_view>
@@ -138,7 +142,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v2) {
+    if (request.schema_version != job_schema_v3) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -320,14 +324,83 @@ std::optional<ResultArtifact> SimulationJobService::get_result(
 }
 
 std::optional<SimulationJobRecord> SimulationJobService::run_next(
-    const std::string& worker_id) {
+    const std::string& worker_id,
+    const SimulationWorkerSettings& settings) {
     if (worker_id.empty()) {
         throw JobRequestError("worker ID must not be empty");
     }
-    auto claimed = impl_->jobs->claim_next(worker_id);
+    if (settings.lease_duration.count() <= 0 ||
+        settings.heartbeat_interval.count() <= 0 ||
+        settings.heartbeat_interval >= settings.lease_duration ||
+        settings.maximum_attempts == 0) {
+        throw JobRequestError(
+            "worker lease settings are invalid");
+    }
+    const ServiceError exhausted_error{
+        error_schema_v1,
+        "worker_attempts_exhausted",
+        "worker",
+        "simulation exceeded the maximum number of worker "
+        "lease attempts",
+    };
+    (void)impl_->jobs->recover_expired(
+        settings.maximum_attempts, exhausted_error);
+    auto claimed = impl_->jobs->claim_next(
+        worker_id, settings.lease_duration);
     if (!claimed) {
         return std::nullopt;
     }
+
+    struct HeartbeatState {
+        std::mutex mutex;
+        std::condition_variable_any changed;
+        std::atomic<bool> lost{false};
+    };
+    const auto heartbeat_state =
+        std::make_shared<HeartbeatState>();
+    std::jthread heartbeat(
+        [
+            jobs = impl_->jobs,
+            heartbeat_state,
+            job_id = claimed->job_id,
+            revision = claimed->revision,
+            worker_id,
+            settings
+        ](const std::stop_token& stop) {
+            std::unique_lock lock(heartbeat_state->mutex);
+            while (!stop.stop_requested()) {
+                heartbeat_state->changed.wait_for(
+                    lock,
+                    stop,
+                    settings.heartbeat_interval,
+                    [] { return false; });
+                if (stop.stop_requested()) {
+                    break;
+                }
+                lock.unlock();
+                bool renewed = false;
+                try {
+                    renewed = jobs->renew_lease(
+                        job_id,
+                        revision,
+                        worker_id,
+                        settings.lease_duration);
+                } catch (...) {
+                    renewed = false;
+                }
+                lock.lock();
+                if (!renewed) {
+                    heartbeat_state->lost = true;
+                    break;
+                }
+            }
+        });
+    const auto require_lease = [&]() {
+        if (heartbeat_state->lost.load()) {
+            throw JobStateError(
+                "worker lost its simulation job lease");
+        }
+    };
 
     try {
         if (claimed->request.mode == SimulationJobMode::steady) {
@@ -337,6 +410,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             request.solver = claimed->request.steady_solver;
             request.artifacts = claimed->request.artifacts;
             const auto response = impl_->simulation.run_steady(request);
+            require_lease();
             if (!response.succeeded()) {
                 return impl_->jobs->publish_failure(
                     claimed->job_id,
@@ -350,6 +424,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 claimed->job_id,
                 response.metadata.result_schema_version,
                 content);
+            require_lease();
             return impl_->jobs->publish_success(
                 claimed->job_id,
                 claimed->revision,
@@ -364,6 +439,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
         request.artifacts = claimed->request.artifacts;
         const auto response =
             impl_->simulation.run_transient(request);
+        require_lease();
         if (!response.succeeded()) {
             return impl_->jobs->publish_failure(
                 claimed->job_id,
@@ -377,6 +453,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             claimed->job_id,
             response.metadata.result_schema_version,
             content);
+        require_lease();
         return impl_->jobs->publish_success(
             claimed->job_id,
             claimed->revision,

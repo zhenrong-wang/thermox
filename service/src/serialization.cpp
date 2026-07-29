@@ -2,6 +2,7 @@
 
 #include "serialization_internal.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <map>
@@ -1115,6 +1116,16 @@ std::string serialize_job_record_json(
         out << "null";
     } else {
         json_string(out, record.worker_id);
+    }
+    out << ",\n  \"attempt\": " << record.attempt;
+    out << ",\n  \"lease_expires_at_unix_ms\": ";
+    if (record.lease_expires_at) {
+        out << std::chrono::duration_cast<
+                   std::chrono::milliseconds>(
+                   record.lease_expires_at->time_since_epoch())
+                   .count();
+    } else {
+        out << "null";
     }
     out << ",\n  \"execution\": ";
     if (record.execution) {

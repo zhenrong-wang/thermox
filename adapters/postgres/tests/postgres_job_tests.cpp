@@ -2,6 +2,7 @@
 
 #include <libpq-fe.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -79,17 +80,25 @@ void prepare_test_schema(const std::string& connection_string) {
         "SET search_path TO thermox_repository_contract_test",
         "prepare the isolated PostgreSQL test schema");
 
-    std::ifstream migration(
-        std::string(THERMOX_SOURCE_DIR) +
-        "/adapters/postgres/migrations/"
-        "001_simulation_jobs.sql");
-    require(
-        static_cast<bool>(migration),
-        "could not read the PostgreSQL test migration");
-    std::ostringstream sql;
-    sql << migration.rdbuf();
-    execute_sql(
-        connection.get(), sql.str(), "apply the test migration");
+    for (const std::string migration_name : {
+             "001_simulation_jobs.sql",
+             "002_worker_leases.sql",
+         }) {
+        std::ifstream migration(
+            std::string(THERMOX_SOURCE_DIR) +
+            "/adapters/postgres/migrations/" +
+            migration_name);
+        require(
+            static_cast<bool>(migration),
+            "could not read PostgreSQL test migration " +
+                migration_name);
+        std::ostringstream sql;
+        sql << migration.rdbuf();
+        execute_sql(
+            connection.get(),
+            sql.str(),
+            "apply test migration " + migration_name);
+    }
 }
 
 void clear_test_jobs(const std::string& connection_string) {
@@ -239,7 +248,9 @@ void test_atomic_claim_and_terminal_publication(
         claimed.job_id == queued.job_id &&
             claimed.state == SimulationJobState::running &&
             claimed.revision == 2 &&
-            !claimed.worker_id.empty(),
+            !claimed.worker_id.empty() &&
+            claimed.attempt == 1 &&
+            claimed.lease_expires_at.has_value(),
         "claim must atomically publish a running revision");
 
     const thermox::service::ResultArtifactManifest manifest{
@@ -257,7 +268,8 @@ void test_atomic_claim_and_terminal_publication(
             succeeded.execution.has_value() &&
             succeeded.execution->components.size() == 1 &&
             succeeded.result_artifact.has_value() &&
-            succeeded.result_artifact->byte_size == 42,
+            succeeded.result_artifact->byte_size == 42 &&
+            !succeeded.lease_expires_at.has_value(),
         "success publication must preserve provenance and "
         "artifact metadata");
 
@@ -274,6 +286,99 @@ void test_atomic_claim_and_terminal_publication(
     require(
         conflict,
         "terminal publication must reject a stale revision");
+}
+
+void test_expired_lease_recovery_and_fencing(
+    const std::shared_ptr<
+        thermox::service::SimulationJobRepository>& jobs,
+    const std::string& connection_string) {
+    using namespace std::chrono_literals;
+    clear_test_jobs(connection_string);
+    const auto queued = jobs->create_or_get(
+        request("team-a", "lease-recovery"),
+        "fingerprint-lease-recovery");
+    const auto first =
+        jobs->claim_next("worker-dead", 20ms);
+    require(
+        first && first->job_id == queued.job_id &&
+            first->attempt == 1,
+        "first lease attempt must be claimed");
+    std::this_thread::sleep_for(30ms);
+
+    bool fenced = false;
+    try {
+        (void)jobs->publish_failure(
+            first->job_id,
+            first->revision,
+            {
+                thermox::service::error_schema_v1,
+                "late_worker",
+                "worker",
+                "late",
+            },
+            std::nullopt);
+    } catch (const thermox::service::JobStateError&) {
+        fenced = true;
+    }
+    require(
+        fenced,
+        "an expired worker must be fenced before recovery");
+
+    const thermox::service::ServiceError exhausted{
+        thermox::service::error_schema_v1,
+        "worker_attempts_exhausted",
+        "worker",
+        "attempt limit reached",
+    };
+    require(
+        jobs->recover_expired(2, exhausted) == 1,
+        "one expired first attempt must be recovered");
+    const auto requeued = jobs->get("team-a", first->job_id);
+    require(
+        requeued &&
+            requeued->state == SimulationJobState::queued &&
+            requeued->revision == first->revision + 1 &&
+            requeued->attempt == 1 &&
+            requeued->worker_id.empty() &&
+            !requeued->lease_expires_at,
+        "an eligible expired attempt must be requeued with a "
+        "new fencing revision");
+
+    const auto second =
+        jobs->claim_next("worker-dead-again", 20ms);
+    require(
+        second && second->attempt == 2 &&
+            second->revision == requeued->revision + 1,
+        "reclaimed jobs must increment attempt and revision");
+    require(
+        jobs->renew_lease(
+            second->job_id,
+            second->revision,
+            second->worker_id,
+            40ms),
+        "the current worker must be able to renew a live lease");
+    require(
+        !jobs->renew_lease(
+            second->job_id,
+            second->revision,
+            "other-worker",
+            40ms),
+        "another worker must not renew the claimed lease");
+    std::this_thread::sleep_for(50ms);
+    require(
+        jobs->recover_expired(2, exhausted) == 1,
+        "the exhausted second attempt must be recovered");
+    const auto failed = jobs->get("team-a", second->job_id);
+    require(
+        failed &&
+            failed->state == SimulationJobState::failed &&
+            failed->revision == second->revision + 1 &&
+            failed->error &&
+            failed->error->code ==
+                "worker_attempts_exhausted" &&
+            !failed->lease_expires_at,
+        "an exhausted job must terminate with a structured "
+        "worker error");
 }
 
 void test_failure_and_cancellation(
@@ -345,6 +450,8 @@ int main() {
                 connection_string);
         test_idempotency_and_tenant_scope(jobs);
         test_atomic_claim_and_terminal_publication(
+            jobs, connection_string);
+        test_expired_lease_recovery_and_fencing(
             jobs, connection_string);
         test_failure_and_cancellation(
             jobs, connection_string);

@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS thermox_simulation_jobs (
         ),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     worker_id text,
+    attempt integer NOT NULL DEFAULT 0 CHECK (attempt >= 0),
+    lease_expires_at timestamptz,
     execution_payload jsonb,
     error_payload jsonb,
     result_artifact_payload jsonb,
@@ -58,12 +60,23 @@ CREATE TABLE IF NOT EXISTS thermox_simulation_jobs (
         (
             state IN ('queued', 'cancelled')
             AND worker_id IS NULL
+            AND lease_expires_at IS NULL
         )
         OR
         (
-            state IN ('running', 'succeeded', 'failed')
+            state = 'running'
             AND worker_id IS NOT NULL
             AND worker_id <> ''
+            AND lease_expires_at IS NOT NULL
+            AND attempt > 0
+        )
+        OR
+        (
+            state IN ('succeeded', 'failed')
+            AND worker_id IS NOT NULL
+            AND worker_id <> ''
+            AND lease_expires_at IS NULL
+            AND attempt > 0
         )
     ),
     CONSTRAINT thermox_simulation_jobs_terminal_payloads CHECK (
@@ -90,5 +103,10 @@ WHERE state = 'queued';
 CREATE INDEX IF NOT EXISTS
     thermox_simulation_jobs_team_created_idx
 ON thermox_simulation_jobs (team_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS
+    thermox_simulation_jobs_expired_lease_idx
+ON thermox_simulation_jobs (lease_expires_at)
+WHERE state = 'running';
 
 COMMIT;

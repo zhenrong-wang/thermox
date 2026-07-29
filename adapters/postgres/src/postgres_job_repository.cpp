@@ -4,6 +4,7 @@
 
 #include <libpq-fe.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -142,14 +143,22 @@ SimulationJobRecord decode_record(
     record.request_fingerprint = field(result, row, 6);
     record.worker_id =
         optional_field(result, row, 7).value_or("");
-    if (const auto payload = optional_field(result, row, 8)) {
+    record.attempt = static_cast<std::uint32_t>(
+        std::stoul(field(result, row, 8)));
+    if (const auto lease = optional_field(result, row, 9)) {
+        record.lease_expires_at =
+            std::chrono::system_clock::time_point{
+                std::chrono::milliseconds{
+                    std::stoll(*lease)}};
+    }
+    if (const auto payload = optional_field(result, row, 10)) {
         record.execution =
             detail::decode_execution(*payload);
     }
-    if (const auto payload = optional_field(result, row, 9)) {
+    if (const auto payload = optional_field(result, row, 11)) {
         record.error = detail::decode_error(*payload);
     }
-    if (const auto payload = optional_field(result, row, 10)) {
+    if (const auto payload = optional_field(result, row, 12)) {
         record.result_artifact =
             detail::decode_result_artifact(*payload);
     }
@@ -201,6 +210,19 @@ public:
                 "PostgreSQL Thermox schema is not installed; "
                 "apply migrations before creating the repository");
         }
+        const auto lease_schema = execute(
+            connection.get(),
+            "SELECT count(*) FROM pg_attribute "
+            "WHERE attrelid = to_regclass("
+            "'thermox_simulation_jobs') "
+            "AND attname IN ('attempt', 'lease_expires_at') "
+            "AND NOT attisdropped",
+            {});
+        if (field(lease_schema.get(), 0, 0) != "2") {
+            throw std::runtime_error(
+                "PostgreSQL Thermox worker-lease schema is "
+                "missing; apply all migrations");
+        }
     }
 
     SimulationJobRecord create_or_get(
@@ -218,7 +240,11 @@ public:
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text",
             {
                 request.identity.team_id.c_str(),
@@ -236,7 +262,11 @@ public:
             "SELECT "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text "
             "FROM thermox_simulation_jobs "
             "WHERE team_id = $1 AND idempotency_key = $2",
@@ -266,7 +296,11 @@ public:
             "SELECT "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text "
             "FROM thermox_simulation_jobs "
             "WHERE team_id = $1 AND job_id = $2",
@@ -278,8 +312,15 @@ public:
     }
 
     std::optional<SimulationJobRecord> claim_next(
-        const std::string& worker_id) override {
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration) override {
+        if (worker_id.empty() || lease_duration.count() <= 0) {
+            throw std::invalid_argument(
+                "worker ID and lease duration must be valid");
+        }
         auto connection = connect(connection_string_);
+        const auto lease_milliseconds =
+            std::to_string(lease_duration.count());
         const auto result = execute(
             connection.get(),
             "WITH candidate AS ("
@@ -290,6 +331,9 @@ public:
             ") "
             "UPDATE thermox_simulation_jobs AS jobs "
             "SET state = 'running', worker_id = $1, "
+            "attempt = jobs.attempt + 1, "
+            "lease_expires_at = clock_timestamp() + "
+            "$2::bigint * interval '1 millisecond', "
             "revision = jobs.revision + 1, "
             "updated_at = clock_timestamp() "
             "FROM candidate "
@@ -299,14 +343,87 @@ public:
             "jobs.submitted_by_user_id, jobs.revision, "
             "jobs.state, jobs.request_payload::text, "
             "jobs.request_fingerprint, jobs.worker_id, "
+            "jobs.attempt, "
+            "floor(extract(epoch FROM jobs.lease_expires_at) "
+            "* 1000)::bigint::text, "
             "jobs.execution_payload::text, "
             "jobs.error_payload::text, "
             "jobs.result_artifact_payload::text",
-            {worker_id.c_str()});
+            {
+                worker_id.c_str(),
+                lease_milliseconds.c_str(),
+            });
         if (PQntuples(result.get()) == 0) {
             return std::nullopt;
         }
         return decode_record(result.get());
+    }
+
+    bool renew_lease(
+        const std::string& job_id,
+        std::uint64_t expected_revision,
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration) override {
+        if (worker_id.empty() || lease_duration.count() <= 0) {
+            throw std::invalid_argument(
+                "worker ID and lease duration must be valid");
+        }
+        auto connection = connect(connection_string_);
+        const auto revision =
+            std::to_string(expected_revision);
+        const auto lease_milliseconds =
+            std::to_string(lease_duration.count());
+        const auto result = execute(
+            connection.get(),
+            "UPDATE thermox_simulation_jobs "
+            "SET lease_expires_at = clock_timestamp() + "
+            "$4::bigint * interval '1 millisecond', "
+            "updated_at = clock_timestamp() "
+            "WHERE job_id = $1 AND revision = $2::bigint "
+            "AND worker_id = $3 AND state = 'running' "
+            "AND lease_expires_at > clock_timestamp() "
+            "RETURNING 1",
+            {
+                job_id.c_str(),
+                revision.c_str(),
+                worker_id.c_str(),
+                lease_milliseconds.c_str(),
+            });
+        return PQntuples(result.get()) == 1;
+    }
+
+    std::size_t recover_expired(
+        std::uint32_t maximum_attempts,
+        const service::ServiceError&
+            exhausted_error) override {
+        if (maximum_attempts == 0) {
+            throw std::invalid_argument(
+                "maximum worker attempts must be positive");
+        }
+        auto connection = connect(connection_string_);
+        const auto attempts = std::to_string(maximum_attempts);
+        const auto error_payload =
+            detail::encode_error(exhausted_error);
+        const auto result = execute(
+            connection.get(),
+            "UPDATE thermox_simulation_jobs "
+            "SET state = CASE WHEN attempt < $1::integer "
+            "THEN 'queued' ELSE 'failed' END, "
+            "worker_id = CASE WHEN attempt < $1::integer "
+            "THEN NULL ELSE worker_id END, "
+            "lease_expires_at = NULL, "
+            "revision = revision + 1, "
+            "execution_payload = NULL, "
+            "error_payload = CASE WHEN attempt < $1::integer "
+            "THEN NULL ELSE $2::jsonb END, "
+            "result_artifact_payload = NULL, "
+            "updated_at = clock_timestamp() "
+            "WHERE state = 'running' "
+            "AND lease_expires_at <= clock_timestamp() "
+            "RETURNING job_id",
+            {attempts.c_str(), error_payload.c_str()});
+        return static_cast<std::size_t>(
+            PQntuples(result.get()));
     }
 
     SimulationJobRecord publish_success(
@@ -333,13 +450,19 @@ public:
             "execution_payload = $3::jsonb, "
             "result_artifact_payload = $4::jsonb, "
             "error_payload = NULL, "
+            "lease_expires_at = NULL, "
             "updated_at = clock_timestamp() "
             "WHERE job_id = $1 AND revision = $2::bigint "
             "AND state = 'running' "
+            "AND lease_expires_at > clock_timestamp() "
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text",
             {
                 job_id.c_str(),
@@ -377,13 +500,19 @@ public:
             "execution_payload = $3::jsonb, "
             "error_payload = $4::jsonb, "
             "result_artifact_payload = NULL, "
+            "lease_expires_at = NULL, "
             "updated_at = clock_timestamp() "
             "WHERE job_id = $1 AND revision = $2::bigint "
             "AND state = 'running' "
+            "AND lease_expires_at > clock_timestamp() "
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text",
             {
                 job_id.c_str(),
@@ -415,7 +544,11 @@ public:
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
             "state, request_payload::text, request_fingerprint, "
-            "worker_id, execution_payload::text, "
+            "worker_id, attempt, "
+            "CASE WHEN lease_expires_at IS NULL THEN NULL "
+            "ELSE floor(extract(epoch FROM lease_expires_at) "
+            "* 1000)::bigint::text END, "
+            "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text",
             {
                 team_id.c_str(),

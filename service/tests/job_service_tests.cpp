@@ -3,6 +3,7 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -209,7 +210,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v2\"") != std::string::npos &&
+                  "\"thermox.job/v3\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -353,6 +354,56 @@ void test_claim_is_atomic() {
         "exactly one concurrent worker may claim a queued job");
 }
 
+void test_expired_attempt_is_requeued_and_fenced() {
+    using namespace std::chrono_literals;
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+    const auto queued =
+        service.submit(steady_request("in-memory-lease"));
+    const auto claimed =
+        jobs->claim_next("abandoned-worker", 10ms);
+    require(
+        claimed && claimed->job_id == queued.job_id &&
+            claimed->attempt == 1 &&
+            claimed->lease_expires_at,
+        "in-memory claims must carry an attempt and lease");
+    std::this_thread::sleep_for(15ms);
+    const thermox::service::ServiceError exhausted{
+        thermox::service::error_schema_v1,
+        "worker_attempts_exhausted",
+        "worker",
+        "attempt limit reached",
+    };
+    require(
+        jobs->recover_expired(2, exhausted) == 1,
+        "an expired in-memory attempt must be recovered");
+    const auto requeued = service.get(team_a, queued.job_id);
+    require(
+        requeued &&
+            requeued->state ==
+                thermox::service::SimulationJobState::queued &&
+            requeued->revision == claimed->revision + 1 &&
+            requeued->worker_id.empty() &&
+            !requeued->lease_expires_at,
+        "recovery must requeue with a new fencing revision");
+    bool fenced = false;
+    try {
+        (void)jobs->publish_failure(
+            claimed->job_id,
+            claimed->revision,
+            exhausted,
+            std::nullopt);
+    } catch (const thermox::service::JobConflictError&) {
+        fenced = true;
+    }
+    require(
+        fenced,
+        "the abandoned worker revision must be fenced");
+}
+
 void test_request_validation() {
     auto jobs =
         thermox::service::make_in_memory_job_repository();
@@ -425,6 +476,7 @@ int main() {
         test_transient_jobs_use_the_same_artifact_boundary();
         test_cancel_and_optimistic_revision_rules();
         test_claim_is_atomic();
+        test_expired_attempt_is_requeued_and_fenced();
         test_request_validation();
         test_team_scope_isolation();
         std::cout << "thermox job service tests passed\n";

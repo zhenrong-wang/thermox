@@ -1,5 +1,6 @@
 #include "thermox/service/in_memory_jobs.hpp"
 
+#include <chrono>
 #include <iomanip>
 #include <map>
 #include <mutex>
@@ -65,7 +66,12 @@ public:
     }
 
     std::optional<SimulationJobRecord> claim_next(
-        const std::string& worker_id) override {
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration) override {
+        if (worker_id.empty() || lease_duration.count() <= 0) {
+            throw std::invalid_argument(
+                "worker ID and lease duration must be valid");
+        }
         std::lock_guard lock(mutex_);
         for (const auto& [sequence, job_id] : queue_order_) {
             (void)sequence;
@@ -75,10 +81,74 @@ public:
             }
             record.state = SimulationJobState::running;
             record.worker_id = worker_id;
+            ++record.attempt;
+            record.lease_expires_at =
+                std::chrono::system_clock::now() +
+                lease_duration;
             ++record.revision;
             return record;
         }
         return std::nullopt;
+    }
+
+    bool renew_lease(
+        const std::string& job_id,
+        std::uint64_t expected_revision,
+        const std::string& worker_id,
+        std::chrono::milliseconds lease_duration) override {
+        if (worker_id.empty() || lease_duration.count() <= 0) {
+            throw std::invalid_argument(
+                "worker ID and lease duration must be valid");
+        }
+        std::lock_guard lock(mutex_);
+        const auto found = jobs_.find(job_id);
+        if (found == jobs_.end()) {
+            return false;
+        }
+        auto& record = found->second;
+        const auto now = std::chrono::system_clock::now();
+        if (record.revision != expected_revision ||
+            record.state != SimulationJobState::running ||
+            record.worker_id != worker_id ||
+            !record.lease_expires_at ||
+            *record.lease_expires_at <= now) {
+            return false;
+        }
+        record.lease_expires_at = now + lease_duration;
+        return true;
+    }
+
+    std::size_t recover_expired(
+        std::uint32_t maximum_attempts,
+        const ServiceError& exhausted_error) override {
+        if (maximum_attempts == 0) {
+            throw std::invalid_argument(
+                "maximum worker attempts must be positive");
+        }
+        std::lock_guard lock(mutex_);
+        const auto now = std::chrono::system_clock::now();
+        std::size_t recovered = 0;
+        for (auto& [job_id, record] : jobs_) {
+            (void)job_id;
+            if (record.state != SimulationJobState::running ||
+                !record.lease_expires_at ||
+                *record.lease_expires_at > now) {
+                continue;
+            }
+            record.lease_expires_at.reset();
+            ++record.revision;
+            ++recovered;
+            if (record.attempt < maximum_attempts) {
+                record.state = SimulationJobState::queued;
+                record.worker_id.clear();
+            } else {
+                record.state = SimulationJobState::failed;
+                record.error = exhausted_error;
+                record.execution.reset();
+                record.result_artifact.reset();
+            }
+        }
+        return recovered;
     }
 
     SimulationJobRecord publish_success(
@@ -97,6 +167,7 @@ public:
         record.execution = execution;
         record.result_artifact = result_artifact;
         record.error.reset();
+        record.lease_expires_at.reset();
         ++record.revision;
         return record;
     }
@@ -113,6 +184,7 @@ public:
         record.execution = execution;
         record.error = error;
         record.result_artifact.reset();
+        record.lease_expires_at.reset();
         ++record.revision;
         return record;
     }
@@ -163,6 +235,12 @@ private:
             throw JobStateError(
                 "terminal result may only be published for a "
                 "running job");
+        }
+        if (!record.lease_expires_at ||
+            *record.lease_expires_at <=
+                std::chrono::system_clock::now()) {
+            throw JobStateError(
+                "terminal result requires a live worker lease");
         }
         return record;
     }
