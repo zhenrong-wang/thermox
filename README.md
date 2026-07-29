@@ -65,7 +65,7 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v4` workflow adds Team-scoped idempotent execution, leased worker claims,
+  values. Its `thermox.job/v5` workflow adds Team-scoped idempotent execution, leased worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
@@ -326,6 +326,9 @@ psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
 psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -v ON_ERROR_STOP=1 \
   -f adapters/postgres/migrations/007_simulation_job_history.sql
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/008_run_result_projections.sql
 ```
 
 ## Local MinIO result and engineering-artifact storage

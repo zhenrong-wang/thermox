@@ -430,6 +430,17 @@ void test_run_configurations_bind_complete_execution_intent() {
         artifact.artifact_revision_id,
     };
     request.steady_solver.max_iterations = 37;
+    request.result_projections = {
+        {
+            "compressor_outlet_temperature",
+            thermox::service::ResultValueScope::port_derived,
+            "compressor",
+            "outlet",
+            "T",
+            "temperature",
+            thermox::service::ResultAggregation::final,
+        },
+    };
     const auto first =
         service.create_run_configuration_revision(request);
     request.parent_run_configuration_revision_id =
@@ -449,6 +460,9 @@ void test_run_configurations_bind_complete_execution_intent() {
             first.checksum == second.checksum &&
             first.checksum.starts_with("sha256:") &&
             first.steady_solver.max_iterations == 37 &&
+            first.result_projections.size() == 1U &&
+            first.result_projections.front().component_id ==
+                "compressor" &&
             resolved &&
             resolved->model_case.model_revision_id ==
                 model.model_revision_id &&
@@ -474,9 +488,13 @@ void test_run_configurations_bind_complete_execution_intent() {
         serialized.find(first.run_configuration_revision_id) !=
                 std::string::npos &&
             serialized.find("\"max_iterations\": 37") !=
+                std::string::npos &&
+            serialized.find(
+                "\"id\": "
+                "\"compressor_outlet_temperature\"") !=
                 std::string::npos,
         "run configuration JSON must publish bindings and "
-        "solver policy");
+        "solver and result-projection policy");
 }
 
 }  // namespace

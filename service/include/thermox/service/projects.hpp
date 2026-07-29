@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/service/identity.hpp"
+#include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <chrono>
@@ -21,8 +22,8 @@ inline constexpr char case_revision_schema_v1[] =
     "thermox.case_revision/v1";
 inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
-inline constexpr char run_configuration_revision_schema_v1[] =
-    "thermox.run_configuration_revision/v1";
+inline constexpr char run_configuration_revision_schema_v2[] =
+    "thermox.run_configuration_revision/v2";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};
@@ -90,7 +91,7 @@ struct ArtifactRevisionRecord {
 
 struct RunConfigurationRevisionRecord {
     std::string schema_version{
-        run_configuration_revision_schema_v1};
+        run_configuration_revision_schema_v2};
     std::string run_configuration_revision_id;
     std::string run_configuration_id;
     std::string project_id;
@@ -103,6 +104,7 @@ struct RunConfigurationRevisionRecord {
     std::string mode;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
+    std::vector<ResultProjection> result_projections;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -223,6 +225,7 @@ public:
         const std::string& mode,
         const SteadySolverSettings& steady_solver,
         const TransientSolverSettings& transient_solver,
+        const std::vector<ResultProjection>& result_projections,
         const std::string& checksum) = 0;
     virtual std::optional<RunConfigurationRevisionRecord>
     get_run_configuration_revision(
@@ -277,6 +280,7 @@ struct CreateRunConfigurationRevisionRequest {
     std::vector<std::string> artifact_revision_ids;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
+    std::vector<ResultProjection> result_projections;
 };
 
 struct ResolvedEngineeringArtifacts {

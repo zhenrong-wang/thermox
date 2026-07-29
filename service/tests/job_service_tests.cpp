@@ -158,6 +158,17 @@ void test_success_publishes_a_readable_artifact() {
     auto request = steady_request("successful-run");
     request.artifacts.references.push_back(
         map_reference(engineering_artifact));
+    request.result_projections = {
+        {
+            "compressor_outlet_temperature",
+            thermox::service::ResultValueScope::port_derived,
+            "compressor",
+            "outlet",
+            "T",
+            "temperature",
+            thermox::service::ResultAggregation::final,
+        },
+    };
     const auto queued = service.submit(request);
     bool unavailable = false;
     try {
@@ -183,6 +194,7 @@ void test_success_publishes_a_readable_artifact() {
             completed->execution.has_value() &&
             completed->execution->source_revisions.has_value() &&
             completed->result_artifact.has_value() &&
+            completed->result_summary.has_value() &&
             !completed->error.has_value(),
         "successful job must retain worker, provenance, and "
         "artifact metadata");
@@ -196,6 +208,13 @@ void test_success_publishes_a_readable_artifact() {
         completed->execution->artifacts.size() == 1 &&
             completed->execution->artifacts.front().id == "job-map",
         "workers must propagate request artifacts and provenance");
+    require(
+        completed->result_summary->values.size() == 1U &&
+            completed->result_summary->values.front().id ==
+                "compressor_outlet_temperature" &&
+            completed->result_summary->values.front().dimension ==
+                "temperature",
+        "workers must materialize configured result projections");
 
     const auto& manifest = *completed->result_artifact;
     require(
@@ -225,10 +244,12 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v4\"") != std::string::npos &&
+                  "\"thermox.job/v5\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
+                std::string::npos &&
+            json.find("\"result_summary\": {") !=
                 std::string::npos &&
             json.find("\"execution\": {") !=
                 std::string::npos,
@@ -280,6 +301,41 @@ void test_solver_failure_is_a_terminal_job_failure() {
                 std::string::npos,
         "failed job JSON must expose its structured error "
         "without a result manifest");
+}
+
+void test_projection_failure_is_structured() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    auto request = steady_request("missing-projection-value");
+    request.result_projections = {
+        {
+            "missing_output",
+            thermox::service::ResultValueScope::kpi,
+            {},
+            {},
+            "not_a_real_kpi",
+            "dimensionless",
+            thermox::service::ResultAggregation::final,
+        },
+    };
+    (void)service.submit(request);
+    const auto completed = service.run_next("projection-worker");
+    require(
+        completed &&
+            completed->state ==
+                thermox::service::SimulationJobState::failed &&
+            completed->error &&
+            completed->error->code ==
+                "result_projection_failed" &&
+            completed->error->stage == "result" &&
+            !completed->result_artifact &&
+            !completed->result_summary,
+        "an unresolved result projection must fail the job with "
+        "a structured result-stage error");
 }
 
 void test_transient_jobs_use_the_same_artifact_boundary() {
@@ -578,6 +634,7 @@ int main() {
         test_submission_is_idempotent_and_conflict_safe();
         test_success_publishes_a_readable_artifact();
         test_solver_failure_is_a_terminal_job_failure();
+        test_projection_failure_is_structured();
         test_transient_jobs_use_the_same_artifact_boundary();
         test_cancel_and_optimistic_revision_rules();
         test_claim_is_atomic();

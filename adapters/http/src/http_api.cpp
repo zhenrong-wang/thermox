@@ -711,6 +711,7 @@ parse_create_run_configuration_request(
         "artifact_revision_ids",
         "steady_solver",
         "transient_solver",
+        "result_projections",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -720,7 +721,7 @@ parse_create_run_configuration_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.run_configuration.create/v1") {
+        "thermox.run_configuration.create/v2") {
         throw std::invalid_argument(
             "unsupported run configuration create "
             "schema_version");
@@ -755,6 +756,57 @@ parse_create_run_configuration_request(
             tree.get_child_optional("transient_solver")) {
         parse_transient_solver(
             *transient, command.transient_solver);
+    }
+    if (const auto projections =
+            tree.get_child_optional("result_projections")) {
+        const std::set<std::string> projection_fields = {
+            "id",
+            "scope",
+            "component_id",
+            "port_name",
+            "value_name",
+            "dimension",
+            "aggregation",
+        };
+        for (const auto& [key, value] : *projections) {
+            if (!key.empty()) {
+                throw std::invalid_argument(
+                    "result_projections must be an array");
+            }
+            for (const auto& [field, unused] : value) {
+                (void)unused;
+                if (!projection_fields.contains(field)) {
+                    throw std::invalid_argument(
+                        "unknown result projection field: " +
+                        field);
+                }
+            }
+            service::ResultProjection projection;
+            projection.id =
+                value.get<std::string>("id", "");
+            projection.component_id =
+                value.get<std::string>("component_id", "");
+            projection.port_name =
+                value.get<std::string>("port_name", "");
+            projection.value_name =
+                value.get<std::string>("value_name", "");
+            projection.dimension =
+                value.get<std::string>("dimension", "");
+            try {
+                projection.scope =
+                    service::result_value_scope_from_string(
+                        value.get<std::string>("scope", ""));
+                projection.aggregation =
+                    service::result_aggregation_from_string(
+                        value.get<std::string>(
+                            "aggregation", "final"));
+            } catch (
+                const service::ResultProjectionError& error) {
+                throw std::invalid_argument(error.what());
+            }
+            command.result_projections.push_back(
+                std::move(projection));
+        }
     }
     return command;
 }
@@ -1541,6 +1593,8 @@ Response Api::handle(const Request& request) const {
                 resolved->configuration.steady_solver;
             command.transient_solver =
                 resolved->configuration.transient_solver;
+            command.result_projections =
+                resolved->configuration.result_projections;
             const auto record = impl_->jobs->submit(command);
             return job_record_response(
                 record,

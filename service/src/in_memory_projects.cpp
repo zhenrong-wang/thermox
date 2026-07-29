@@ -375,6 +375,7 @@ public:
         const std::string& mode,
         const SteadySolverSettings& steady_solver,
         const TransientSolverSettings& transient_solver,
+        const std::vector<ResultProjection>& result_projections,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
         const auto simulation_case =
@@ -434,6 +435,7 @@ public:
         record.mode = mode;
         record.steady_solver = steady_solver;
         record.transient_solver = transient_solver;
+        record.result_projections = result_projections;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;
         record.created_at = std::chrono::system_clock::now();

@@ -139,6 +139,62 @@ service::TransientSolverSettings decode_transient_solver(
     return value;
 }
 
+std::string result_projections_payload(
+    const std::vector<service::ResultProjection>& projections) {
+    if (projections.empty()) {
+        return R"({"items":[]})";
+    }
+    Tree values;
+    for (const auto& projection : projections) {
+        Tree value;
+        value.put("id", projection.id);
+        value.put(
+            "scope", service::to_string(projection.scope));
+        value.put("component_id", projection.component_id);
+        value.put("port_name", projection.port_name);
+        value.put("value_name", projection.value_name);
+        value.put("dimension", projection.dimension);
+        value.put(
+            "aggregation",
+            service::to_string(projection.aggregation));
+        values.push_back({"", value});
+    }
+    Tree wrapper;
+    wrapper.add_child("items", values);
+    return write_tree(wrapper);
+}
+
+std::vector<service::ResultProjection>
+decode_result_projections(const std::string& payload) {
+    const auto tree = read_tree(payload);
+    std::vector<service::ResultProjection> projections;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::runtime_error(
+                "persisted result projections are not an array");
+        }
+        service::ResultProjection projection;
+        projection.id = value.get<std::string>("id");
+        projection.scope =
+            service::result_value_scope_from_string(
+                value.get<std::string>("scope"));
+        projection.component_id =
+            value.get<std::string>("component_id", "");
+        projection.port_name =
+            value.get<std::string>("port_name", "");
+        projection.value_name =
+            value.get<std::string>("value_name");
+        projection.dimension =
+            value.get<std::string>("dimension");
+        projection.aggregation =
+            service::result_aggregation_from_string(
+                value.get<std::string>("aggregation"));
+        projections.push_back(std::move(projection));
+    }
+    service::validate_result_projections(projections);
+    return projections;
+}
+
 Connection connect(const std::string& connection_string) {
     Connection connection{PQconnectdb(connection_string.c_str())};
     if (!connection ||
@@ -303,9 +359,11 @@ decode_run_configuration_revision(
         read_tree(field(result, row, 9)));
     record.transient_solver = decode_transient_solver(
         read_tree(field(result, row, 10)));
-    record.checksum = field(result, row, 11);
-    record.created_by_user_id = field(result, row, 12);
-    record.created_at = decode_time(field(result, row, 13));
+    record.result_projections =
+        decode_result_projections(field(result, row, 11));
+    record.checksum = field(result, row, 12);
+    record.created_by_user_id = field(result, row, 13);
+    record.created_at = decode_time(field(result, row, 14));
     return record;
 }
 
@@ -345,7 +403,7 @@ constexpr const char run_configuration_revision_columns[] =
     "parent_run_configuration_revision_id, "
     "model_revision_id, case_revision_id, mode, "
     "steady_solver_payload, transient_solver_payload, "
-    "checksum, created_by_user_id, "
+    "result_projections_payload, checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
@@ -375,6 +433,18 @@ public:
             PQgetisnull(schema.get(), 0, 4)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
+                "apply all migrations");
+        }
+        const auto projection_schema = execute(
+            connection.get(),
+            "SELECT count(*) FROM pg_attribute "
+            "WHERE attrelid = to_regclass("
+            "'thermox_run_configuration_revisions') "
+            "AND attname = 'result_projections_payload' "
+            "AND NOT attisdropped");
+        if (field(projection_schema.get(), 0, 0) != "1") {
+            throw std::runtime_error(
+                "PostgreSQL run projection schema is missing; "
                 "apply all migrations");
         }
     }
@@ -883,6 +953,8 @@ public:
         const service::SteadySolverSettings& steady_solver,
         const service::TransientSolverSettings&
             transient_solver,
+        const std::vector<service::ResultProjection>&
+            result_projections,
         const std::string& checksum) override {
         auto connection = connect(connection_string_);
         (void)execute(
@@ -938,6 +1010,8 @@ public:
             write_tree(steady_solver_tree(steady_solver));
         const auto transient_payload = write_tree(
             transient_solver_tree(transient_solver));
+        const auto projections_payload =
+            result_projections_payload(result_projections);
         const auto result = execute(
             connection.get(),
             "INSERT INTO "
@@ -947,11 +1021,12 @@ public:
             "parent_run_configuration_revision_id, "
             "model_revision_id, case_revision_id, mode, "
             "steady_solver_payload, "
-            "transient_solver_payload, checksum, "
+            "transient_solver_payload, "
+            "result_projections_payload, checksum, "
             "created_by_user_id"
             ") VALUES ("
             "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
-            "$9, $10, $11, $12"
+            "$9, $10, ($11::jsonb)->'items', $12, $13"
             ") RETURNING "
             "run_configuration_revision_id, "
             "run_configuration_id, project_id, team_id, "
@@ -959,7 +1034,8 @@ public:
             "parent_run_configuration_revision_id, "
             "model_revision_id, case_revision_id, mode, "
             "steady_solver_payload, "
-            "transient_solver_payload, checksum, "
+            "transient_solver_payload, "
+            "result_projections_payload, checksum, "
             "created_by_user_id, "
             "floor(extract(epoch FROM created_at) * 1000)"
             "::bigint::text",
@@ -974,6 +1050,7 @@ public:
                 mode.c_str(),
                 steady_payload.c_str(),
                 transient_payload.c_str(),
+                projections_payload.c_str(),
                 checksum.c_str(),
                 created_by_user_id.c_str(),
             });

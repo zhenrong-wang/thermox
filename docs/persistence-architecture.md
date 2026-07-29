@@ -82,7 +82,7 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v4` defines the Team-owned job lifecycle and idempotent
+All gates are now in place. `thermox.job/v5` defines the Team-owned job lifecycle and idempotent
 submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
@@ -123,7 +123,7 @@ while removing embedded cases from the persisted product model.
 
 `ProjectService` can resolve an exact Team-scoped project/topology/case tuple into a complete
 composed `thermox.model/v2` snapshot. Run configurations use this internal operation during job
-submission. `thermox.job/v4` captures the immutable source provenance and composed snapshot, so
+submission. `thermox.job/v5` captures the immutable source provenance and composed snapshot, so
 workers never reread mutable project state and can execute even if newer revisions are published
 later.
 
@@ -162,6 +162,12 @@ Queued jobs may be cancelled through `DELETE /api/v1/simulations/{job_id}`. The 
 requires the exact ETag returned by submission or status lookup in `If-Match`; missing, stale, and
 malformed preconditions remain distinct from job-state conflicts. Cancellation publishes a new
 terminal revision rather than deleting history, and cross-Team targets are reported as missing.
+
+Migration `008_run_result_projections.sql` adds unit-checked, system-agnostic output selections to
+immutable run configurations. The selections are checksummed and snapshotted into jobs. Successful
+workers atomically publish the projected `thermox.result_summary/v1` in PostgreSQL alongside the
+full result-artifact manifest, allowing history and status views to render selected engineering
+outputs without reading large object-store results.
 
 ## Object storage
 

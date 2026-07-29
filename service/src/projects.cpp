@@ -176,6 +176,19 @@ std::string run_configuration_identity(
             transient.compute_consistent_initial_conditions
         << '|';
     append_steady(out, transient.nonlinear_solver);
+    out << '|' << request.result_projections.size() << '|';
+    for (const auto& projection : request.result_projections) {
+        const auto append = [&](const std::string& value) {
+            out << value.size() << ':' << value << '|';
+        };
+        append(projection.id);
+        append(to_string(projection.scope));
+        append(projection.component_id);
+        append(projection.port_name);
+        append(projection.value_name);
+        append(projection.dimension);
+        append(to_string(projection.aggregation));
+    }
     return out.str();
 }
 
@@ -626,6 +639,23 @@ ProjectService::create_run_configuration_revision(
     const auto mode = run_mode(model_case->mode);
     validate_steady_solver(request.steady_solver);
     validate_transient_solver(request.transient_solver);
+    try {
+        validate_result_projections(request.result_projections);
+    } catch (const ResultProjectionError& error) {
+        throw ProjectRequestError(error.what());
+    }
+    if (mode == "steady" &&
+        std::any_of(
+            request.result_projections.begin(),
+            request.result_projections.end(),
+            [](const auto& projection) {
+                return projection.aggregation !=
+                    ResultAggregation::final;
+            })) {
+        throw ProjectRequestError(
+            "steady run configurations only support final "
+            "result projection aggregation");
+    }
     return repository_->create_run_configuration_revision(
         request.identity.team_id,
         request.identity.user_id,
@@ -638,6 +668,7 @@ ProjectService::create_run_configuration_revision(
         mode,
         request.steady_solver,
         request.transient_solver,
+        request.result_projections,
         checksum(run_configuration_identity(
             request, mode, artifact_ids)));
 }

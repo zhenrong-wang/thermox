@@ -2,6 +2,7 @@
 
 #include "thermox/service/serialization.hpp"
 
+#include <algorithm>
 #include <iomanip>
 #include <atomic>
 #include <condition_variable>
@@ -161,11 +162,21 @@ std::string request_fingerprint(
         stream, request.transient_solver.nonlinear_solver);
     stream << '|';
     append_artifacts(stream, request.artifacts);
+    stream << '|' << request.result_projections.size() << '|';
+    for (const auto& projection : request.result_projections) {
+        append_string(stream, projection.id);
+        append_string(stream, to_string(projection.scope));
+        append_string(stream, projection.component_id);
+        append_string(stream, projection.port_name);
+        append_string(stream, projection.value_name);
+        append_string(stream, projection.dimension);
+        append_string(stream, to_string(projection.aggregation));
+    }
     return fnv1a64(stream.str());
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v4) {
+    if (request.schema_version != job_schema_v5) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -199,6 +210,23 @@ void validate_request(const SimulationJobRequest& request) {
                 "run configuration revision provenance "
                 "requires both revision ID and checksum");
         }
+    }
+    try {
+        validate_result_projections(request.result_projections);
+    } catch (const ResultProjectionError& error) {
+        throw JobRequestError(error.what());
+    }
+    if (request.mode == SimulationJobMode::steady &&
+        std::any_of(
+            request.result_projections.begin(),
+            request.result_projections.end(),
+            [](const auto& projection) {
+                return projection.aggregation !=
+                    ResultAggregation::final;
+            })) {
+        throw JobRequestError(
+            "steady jobs only support final result projection "
+            "aggregation");
     }
 }
 
@@ -476,6 +504,13 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                     response.error,
                     response.metadata);
             }
+            const auto summary =
+                claimed->request.result_projections.empty()
+                ? std::optional<ResultSummary>{}
+                : std::optional<ResultSummary>{
+                      project_steady_result(
+                          response.graph,
+                          claimed->request.result_projections)};
             const auto content =
                 serialize_steady_response_json(response);
             const auto manifest = impl_->artifacts->put_json(
@@ -487,7 +522,8 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 claimed->job_id,
                 claimed->revision,
                 response.metadata,
-                manifest);
+                manifest,
+                summary);
         }
 
         TransientSimulationRequest request;
@@ -507,6 +543,13 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 response.error,
                 response.metadata);
         }
+        const auto summary =
+            claimed->request.result_projections.empty()
+            ? std::optional<ResultSummary>{}
+            : std::optional<ResultSummary>{
+                  project_transient_result(
+                      response.trajectory,
+                      claimed->request.result_projections)};
         const auto content =
             serialize_transient_response_json(response);
         const auto manifest = impl_->artifacts->put_json(
@@ -518,11 +561,23 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             claimed->job_id,
             claimed->revision,
             response.metadata,
-            manifest);
+            manifest,
+            summary);
     } catch (const JobConflictError&) {
         throw;
     } catch (const JobStateError&) {
         throw;
+    } catch (const ResultProjectionError& error) {
+        return impl_->jobs->publish_failure(
+            claimed->job_id,
+            claimed->revision,
+            {
+                error_schema_v1,
+                "result_projection_failed",
+                "result",
+                error.what(),
+            },
+            std::nullopt);
     } catch (const std::exception& error) {
         return impl_->jobs->publish_failure(
             claimed->job_id,

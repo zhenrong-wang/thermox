@@ -1263,6 +1263,32 @@ std::string serialize_job_record_json(
         out << '}';
     }
     out << ']';
+    out << ", \"result_projections\": [";
+    for (std::size_t index = 0;
+         index < record.request.result_projections.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        const auto& projection =
+            record.request.result_projections[index];
+        out << "{\"id\": ";
+        json_string(out, projection.id);
+        out << ", \"scope\": ";
+        json_string(out, to_string(projection.scope));
+        out << ", \"component_id\": ";
+        json_string(out, projection.component_id);
+        out << ", \"port_name\": ";
+        json_string(out, projection.port_name);
+        out << ", \"value_name\": ";
+        json_string(out, projection.value_name);
+        out << ", \"dimension\": ";
+        json_string(out, projection.dimension);
+        out << ", \"aggregation\": ";
+        json_string(out, to_string(projection.aggregation));
+        out << '}';
+    }
+    out << ']';
     out << ", \"fingerprint\": ";
     json_string(out, record.request_fingerprint);
     out << "}";
@@ -1307,6 +1333,17 @@ std::string serialize_job_record_json(
         out << ", \"checksum\": ";
         json_string(out, artifact.checksum);
         out << "}";
+    } else {
+        out << "null";
+    }
+    out << ",\n  \"result_summary\": ";
+    if (record.result_summary) {
+        auto summary =
+            serialize_result_summary_json(*record.result_summary);
+        if (!summary.empty() && summary.back() == '\n') {
+            summary.pop_back();
+        }
+        out << summary;
     } else {
         out << "null";
     }

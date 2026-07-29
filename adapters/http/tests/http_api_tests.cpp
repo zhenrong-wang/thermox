@@ -288,7 +288,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/run-configuration-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.run_configuration.create/v1",)"
+            R"("thermox.run_configuration.create/v2",)"
             R"("run_configuration_id":"http-design-run",)"
             R"("model_revision_id":")"} +
             model.model_revision_id +
@@ -296,7 +296,15 @@ void test_tenant_scoped_asynchronous_jobs() {
             simulation_case.case_revision_id +
             R"(","artifact_revision_ids":[")" +
             artifact_revision_id +
-            R"("],"steady_solver":{"max_iterations":37}})");
+            R"("],"steady_solver":{"max_iterations":37},)"
+            R"("result_projections":[{)"
+            R"("id":"compressor_outlet_temperature",)"
+            R"("scope":"port_derived",)"
+            R"("component_id":"compressor",)"
+            R"("port_name":"outlet",)"
+            R"("value_name":"T",)"
+            R"("dimension":"temperature",)"
+            R"("aggregation":"final"}]})");
     const auto run_created = api.handle(
         authenticated(std::move(run_upload)));
     require(
@@ -304,9 +312,13 @@ void test_tenant_scoped_asynchronous_jobs() {
             run_created.headers.contains("Location") &&
             run_created.body.find(
                 "\"max_iterations\": 37") !=
+                std::string::npos &&
+            run_created.body.find(
+                "\"id\": "
+                "\"compressor_outlet_temperature\"") !=
                 std::string::npos,
         "run configuration route must persist bindings and "
-        "solver policy");
+        "solver and projection policy");
     const auto run_configuration_revision_id =
         run_created.headers.at("Location").substr(
             run_created.headers.at("Location").find_last_of('/') +
@@ -489,7 +501,11 @@ void test_tenant_scoped_asynchronous_jobs() {
     require(
         completed.has_value() &&
             completed->state ==
-                thermox::service::SimulationJobState::succeeded,
+                thermox::service::SimulationJobState::succeeded &&
+            completed->result_summary.has_value() &&
+            completed->result_summary->values.size() == 1U &&
+            completed->result_summary->values.front().id ==
+                "compressor_outlet_temperature",
         "worker must execute the submitted job");
 
     auto result_request = thermox::http::Request{

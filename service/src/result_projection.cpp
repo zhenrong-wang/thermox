@@ -136,6 +136,30 @@ std::string to_string(ResultValueScope scope) {
     return "unknown";
 }
 
+ResultValueScope result_value_scope_from_string(
+    const std::string& value) {
+    if (value == "system_balance") {
+        return ResultValueScope::system_balance;
+    }
+    if (value == "kpi") {
+        return ResultValueScope::kpi;
+    }
+    if (value == "component_metric") {
+        return ResultValueScope::component_metric;
+    }
+    if (value == "component_internal") {
+        return ResultValueScope::component_internal;
+    }
+    if (value == "port_primary") {
+        return ResultValueScope::port_primary;
+    }
+    if (value == "port_derived") {
+        return ResultValueScope::port_derived;
+    }
+    throw ResultProjectionError(
+        "unsupported result projection scope: " + value);
+}
+
 std::string to_string(ResultAggregation aggregation) {
     switch (aggregation) {
         case ResultAggregation::final:
@@ -148,8 +172,28 @@ std::string to_string(ResultAggregation aggregation) {
     return "unknown";
 }
 
+ResultAggregation result_aggregation_from_string(
+    const std::string& value) {
+    if (value == "final") {
+        return ResultAggregation::final;
+    }
+    if (value == "minimum") {
+        return ResultAggregation::minimum;
+    }
+    if (value == "maximum") {
+        return ResultAggregation::maximum;
+    }
+    throw ResultProjectionError(
+        "unsupported result projection aggregation: " + value);
+}
+
 void validate_result_projections(
     const std::vector<ResultProjection>& projections) {
+    if (projections.size() > 256U) {
+        throw ResultProjectionError(
+            "a run configuration may define at most 256 result "
+            "projections");
+    }
     std::set<std::string> ids;
     for (const auto& projection : projections) {
         if (projection.id.empty() ||

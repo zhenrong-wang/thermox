@@ -430,6 +430,40 @@ service::SolverProvenance decode_solver_provenance(
     return value;
 }
 
+Tree result_projection(
+    const service::ResultProjection& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("scope", service::to_string(value.scope));
+    tree.put("component_id", value.component_id);
+    tree.put("port_name", value.port_name);
+    tree.put("value_name", value.value_name);
+    tree.put("dimension", value.dimension);
+    tree.put(
+        "aggregation", service::to_string(value.aggregation));
+    return tree;
+}
+
+service::ResultProjection decode_result_projection(
+    const Tree& tree) {
+    service::ResultProjection value;
+    value.id = tree.get<std::string>("id");
+    value.scope = service::result_value_scope_from_string(
+        tree.get<std::string>("scope"));
+    value.component_id =
+        tree.get<std::string>("component_id", "");
+    value.port_name =
+        tree.get<std::string>("port_name", "");
+    value.value_name =
+        tree.get<std::string>("value_name");
+    value.dimension =
+        tree.get<std::string>("dimension");
+    value.aggregation =
+        service::result_aggregation_from_string(
+            tree.get<std::string>("aggregation"));
+    return value;
+}
+
 }  // namespace
 
 std::string encode_request(
@@ -476,6 +510,13 @@ std::string encode_request(
         "transient_solver",
         transient_settings(request.transient_solver));
     tree.add_child("artifacts", artifact_bundle(request.artifacts));
+    tree.add_child(
+        "result_projections",
+        array(
+            request.result_projections,
+            [](const service::ResultProjection& projection) {
+                return result_projection(projection);
+            }));
     return write(tree);
 }
 
@@ -520,6 +561,14 @@ service::SimulationJobRequest decode_request(
         tree.get_child("transient_solver"));
     request.artifacts =
         decode_artifact_bundle(tree.get_child("artifacts"));
+    request.result_projections =
+        decode_array<service::ResultProjection>(
+            tree.get_child("result_projections"),
+            [](const Tree& encoded) {
+                return decode_result_projection(encoded);
+            });
+    service::validate_result_projections(
+        request.result_projections);
     return request;
 }
 
@@ -773,6 +822,70 @@ service::ResultArtifactManifest decode_result_artifact(
         tree.get<std::uint64_t>("byte_size"),
         tree.get<std::string>("checksum"),
     };
+}
+
+std::string encode_result_summary(
+    const service::ResultSummary& summary) {
+    Tree tree;
+    tree.put("schema_version", summary.schema_version);
+    tree.put("mode", summary.mode);
+    tree.add_child(
+        "values",
+        array(
+            summary.values,
+            [](const service::ProjectedResultValue& value) {
+                Tree encoded;
+                encoded.put("id", value.id);
+                encoded.put("dimension", value.dimension);
+                encoded.put("value_si", value.value_si);
+                encoded.put(
+                    "aggregation",
+                    service::to_string(value.aggregation));
+                encoded.put(
+                    "has_sample_time",
+                    value.has_sample_time);
+                encoded.put(
+                    "sample_time", value.sample_time);
+                return encoded;
+            }));
+    return write(tree);
+}
+
+service::ResultSummary decode_result_summary(
+    const std::string& payload) {
+    const Tree tree = read(payload);
+    service::ResultSummary summary;
+    summary.schema_version =
+        tree.get<std::string>("schema_version");
+    summary.mode = tree.get<std::string>("mode");
+    if (summary.schema_version !=
+            service::result_summary_schema_v1 ||
+        (summary.mode != "steady" &&
+         summary.mode != "transient")) {
+        throw std::runtime_error(
+            "persisted result summary has an invalid contract");
+    }
+    summary.values =
+        decode_array<service::ProjectedResultValue>(
+            tree.get_child("values"),
+            [](const Tree& encoded) {
+                service::ProjectedResultValue value;
+                value.id = encoded.get<std::string>("id");
+                value.dimension =
+                    encoded.get<std::string>("dimension");
+                value.value_si =
+                    encoded.get<double>("value_si");
+                value.aggregation =
+                    service::result_aggregation_from_string(
+                        encoded.get<std::string>(
+                            "aggregation"));
+                value.has_sample_time =
+                    encoded.get<bool>("has_sample_time");
+                value.sample_time =
+                    encoded.get<double>("sample_time");
+                return value;
+            });
+    return summary;
 }
 
 }  // namespace thermox::postgres::detail

@@ -25,4 +25,9 @@ std::string encode_result_artifact(
 service::ResultArtifactManifest decode_result_artifact(
     const std::string& payload);
 
+std::string encode_result_summary(
+    const service::ResultSummary& summary);
+service::ResultSummary decode_result_summary(
+    const std::string& payload);
+
 }  // namespace thermox::postgres::detail

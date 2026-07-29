@@ -21,6 +21,8 @@ enum class ResultValueScope {
 };
 
 std::string to_string(ResultValueScope scope);
+ResultValueScope result_value_scope_from_string(
+    const std::string& value);
 
 enum class ResultAggregation {
     final,
@@ -29,6 +31,8 @@ enum class ResultAggregation {
 };
 
 std::string to_string(ResultAggregation aggregation);
+ResultAggregation result_aggregation_from_string(
+    const std::string& value);
 
 struct ResultProjection {
     std::string id;

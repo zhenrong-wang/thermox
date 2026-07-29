@@ -202,6 +202,7 @@ public:
                 continue;
             }
             record.lease_expires_at.reset();
+            record.result_summary.reset();
             ++record.revision;
             ++recovered;
             if (record.attempt < maximum_attempts) {
@@ -221,7 +222,9 @@ public:
         const std::string& job_id,
         std::uint64_t expected_revision,
         const ExecutionMetadata& execution,
-        const ResultArtifactManifest& result_artifact) override {
+        const ResultArtifactManifest& result_artifact,
+        const std::optional<ResultSummary>&
+            result_summary) override {
         std::lock_guard lock(mutex_);
         auto& record = require_running(
             job_id, expected_revision);
@@ -232,6 +235,7 @@ public:
         record.state = SimulationJobState::succeeded;
         record.execution = execution;
         record.result_artifact = result_artifact;
+        record.result_summary = result_summary;
         record.error.reset();
         record.lease_expires_at.reset();
         ++record.revision;
@@ -250,6 +254,7 @@ public:
         record.execution = execution;
         record.error = error;
         record.result_artifact.reset();
+        record.result_summary.reset();
         record.lease_expires_at.reset();
         ++record.revision;
         return record;

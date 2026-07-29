@@ -163,10 +163,14 @@ SimulationJobRecord decode_record(
         record.result_artifact =
             detail::decode_result_artifact(*payload);
     }
+    if (const auto payload = optional_field(result, row, 13)) {
+        record.result_summary =
+            detail::decode_result_summary(*payload);
+    }
     record.created_at =
         std::chrono::system_clock::time_point{
             std::chrono::microseconds{
-                std::stoll(field(result, row, 13))}};
+                std::stoll(field(result, row, 14))}};
     return record;
 }
 
@@ -222,10 +226,11 @@ public:
             "'thermox_simulation_jobs') "
             "AND attname IN ("
             "'attempt', 'lease_expires_at', 'project_id', "
-            "'run_configuration_revision_id') "
+            "'run_configuration_revision_id', "
+            "'result_summary_payload') "
             "AND NOT attisdropped",
             {});
-        if (field(lease_schema.get(), 0, 0) != "4") {
+        if (field(lease_schema.get(), 0, 0) != "5") {
             throw std::runtime_error(
                 "PostgreSQL Thermox job schema is "
                 "missing; apply all migrations");
@@ -263,6 +268,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text",
             {
@@ -289,6 +295,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text "
             "FROM thermox_simulation_jobs "
@@ -325,6 +332,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text "
             "FROM thermox_simulation_jobs "
@@ -368,6 +376,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, error_payload::text, "
             "result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text "
             "FROM thermox_simulation_jobs "
@@ -449,6 +458,7 @@ public:
             "jobs.execution_payload::text, "
             "jobs.error_payload::text, "
             "jobs.result_artifact_payload::text, "
+            "jobs.result_summary_payload::text, "
             "floor(extract(epoch FROM jobs.created_at) "
             "* 1000000)::bigint::text",
             {
@@ -519,6 +529,7 @@ public:
             "error_payload = CASE WHEN attempt < $1::integer "
             "THEN NULL ELSE $2::jsonb END, "
             "result_artifact_payload = NULL, "
+            "result_summary_payload = NULL, "
             "updated_at = clock_timestamp() "
             "WHERE state = 'running' "
             "AND lease_expires_at <= clock_timestamp() "
@@ -533,7 +544,9 @@ public:
         std::uint64_t expected_revision,
         const service::ExecutionMetadata& execution,
         const service::ResultArtifactManifest&
-            result_artifact) override {
+            result_artifact,
+        const std::optional<service::ResultSummary>&
+            result_summary) override {
         if (result_artifact.artifact_id.empty()) {
             throw service::JobStateError(
                 "cannot publish success without a result artifact");
@@ -545,12 +558,19 @@ public:
             detail::encode_execution(execution);
         const auto artifact_payload =
             detail::encode_result_artifact(result_artifact);
+        const auto summary_payload = result_summary
+            ? detail::encode_result_summary(*result_summary)
+            : std::string{};
+        const char* encoded_summary = result_summary
+            ? summary_payload.c_str()
+            : nullptr;
         const auto result = execute(
             connection.get(),
             "UPDATE thermox_simulation_jobs "
             "SET state = 'succeeded', revision = revision + 1, "
             "execution_payload = $3::jsonb, "
             "result_artifact_payload = $4::jsonb, "
+            "result_summary_payload = $5::jsonb, "
             "error_payload = NULL, "
             "lease_expires_at = NULL, "
             "updated_at = clock_timestamp() "
@@ -566,6 +586,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text",
             {
@@ -573,6 +594,7 @@ public:
                 revision.c_str(),
                 execution_payload.c_str(),
                 artifact_payload.c_str(),
+                encoded_summary,
             });
         if (PQntuples(result.get()) == 0) {
             diagnose_terminal_update(
@@ -604,6 +626,7 @@ public:
             "execution_payload = $3::jsonb, "
             "error_payload = $4::jsonb, "
             "result_artifact_payload = NULL, "
+            "result_summary_payload = NULL, "
             "lease_expires_at = NULL, "
             "updated_at = clock_timestamp() "
             "WHERE job_id = $1 AND revision = $2::bigint "
@@ -618,6 +641,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text",
             {
@@ -656,6 +680,7 @@ public:
             "* 1000)::bigint::text END, "
             "execution_payload::text, "
             "error_payload::text, result_artifact_payload::text, "
+            "result_summary_payload::text, "
             "floor(extract(epoch FROM created_at) "
             "* 1000000)::bigint::text",
             {

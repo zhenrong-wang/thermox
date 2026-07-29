@@ -91,6 +91,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "005_artifact_revisions.sql",
              "006_run_configuration_revisions.sql",
              "007_simulation_job_history.sql",
+             "008_run_result_projections.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -342,8 +343,24 @@ void test_atomic_claim_and_terminal_publication(
         42,
         "sha256:test",
     };
+    thermox::service::ResultSummary summary;
+    summary.mode = "steady";
+    summary.values = {
+        {
+            "net_power",
+            "power",
+            42.0,
+            thermox::service::ResultAggregation::final,
+            false,
+            0.0,
+        },
+    };
     const auto succeeded = jobs->publish_success(
-        claimed.job_id, claimed.revision, execution(), manifest);
+        claimed.job_id,
+        claimed.revision,
+        execution(),
+        manifest,
+        summary);
     require(
         succeeded.state == SimulationJobState::succeeded &&
             succeeded.revision == 3 &&
@@ -351,6 +368,10 @@ void test_atomic_claim_and_terminal_publication(
             succeeded.execution->components.size() == 1 &&
             succeeded.result_artifact.has_value() &&
             succeeded.result_artifact->byte_size == 42 &&
+            succeeded.result_summary.has_value() &&
+            succeeded.result_summary->values.size() == 1U &&
+            succeeded.result_summary->values.front().value_si ==
+                42.0 &&
             !succeeded.lease_expires_at.has_value(),
         "success publication must preserve provenance and "
         "artifact metadata");
@@ -361,7 +382,8 @@ void test_atomic_claim_and_terminal_publication(
             claimed.job_id,
             claimed.revision,
             execution(),
-            manifest);
+            manifest,
+            summary);
     } catch (const thermox::service::JobConflictError&) {
         conflict = true;
     }
@@ -684,6 +706,17 @@ void test_projects_and_immutable_model_revisions(
         artifact.artifact_revision_id,
     };
     run_request.steady_solver.max_iterations = 41;
+    run_request.result_projections = {
+        {
+            "compressor_outlet_temperature",
+            thermox::service::ResultValueScope::port_derived,
+            "compressor",
+            "outlet",
+            "T",
+            "temperature",
+            thermox::service::ResultAggregation::final,
+        },
+    };
     const auto run =
         projects.create_run_configuration_revision(run_request);
     const auto loaded =
@@ -696,6 +729,8 @@ void test_projects_and_immutable_model_revisions(
             loaded->artifact_revision_ids ==
                 run_request.artifact_revision_ids &&
             loaded->steady_solver.max_iterations == 41 &&
+            loaded->result_projections.size() == 1U &&
+            loaded->result_projections.front().value_name == "T" &&
             loaded->checksum == run.checksum &&
             projects
                     .list_run_configuration_revisions(
