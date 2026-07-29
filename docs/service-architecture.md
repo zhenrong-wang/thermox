@@ -130,8 +130,9 @@ physics, or numerical libraries.
 cancellation operations. Every update carries an optimistic revision. `ResultArtifactStore`
 defines the large-result boundary; a successful job contains a versioned, checksummed manifest
 instead of embedding trajectory data in the job record. In-memory implementations are provided
-for local execution and repository contract tests. Production PostgreSQL and object-storage
-adapters can implement the same ports without changing a solver or component.
+for local execution and repository contract tests. The PostgreSQL job-metadata adapter now
+implements the same port without changing a solver or component; object storage remains the next
+adapter boundary.
 
 ## API mapping
 
@@ -162,11 +163,16 @@ and result serialization to `SimulationService`.
 `thermox_http_server` is a dependency-light Boost.Beast host for local and integration deployment.
 It defaults to `127.0.0.1:8080`, is intentionally single-threaded, and accepts explicit listen
 address, port, body-limit, local user, local Team, and worker options. It injects that configured
-local identity directly and runs one low-frequency in-memory worker; it does not interpret request
+local identity directly and runs one low-frequency background worker; it does not interpret request
 headers as authentication. Non-loopback binding is rejected unless the operator supplies an
 explicit insecure-development override. Internet-facing production deployment still requires a
 supervised process, authentication gateway, TLS termination, concurrency limits, and request
 timeouts; none of those concerns are pushed into the simulation service.
+
+Job metadata is in memory by default. When the optional PostgreSQL adapter is compiled and
+`THERMOX_POSTGRES_URL` is set, the host composes the same job service with PostgreSQL instead. The
+result artifact store is still in memory in this local host, so production restart durability
+requires the separate object-storage adapter.
 
 The initial routes are:
 

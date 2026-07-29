@@ -204,6 +204,9 @@ Completed structural slices:
   losses through registered port directions; ✅
 - transport-neutral `thermox.job/v2` lifecycle with Team-scoped idempotency, atomic worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
+- optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
+  `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
+  integration contract coverage; ✅
 
 ## Persistence boundary decision
 

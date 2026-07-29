@@ -31,6 +31,12 @@ target_link_libraries(thermox_http_server PRIVATE
     thermox_http_api
     Threads::Threads
 )
+if(TARGET thermox_postgres_jobs)
+    target_link_libraries(
+        thermox_http_server PRIVATE thermox_postgres_jobs)
+    target_compile_definitions(
+        thermox_http_server PRIVATE THERMOX_HAS_POSTGRES_JOBS=1)
+endif()
 target_compile_definitions(thermox_http_server PRIVATE
     BOOST_ERROR_CODE_HEADER_ONLY
 )

@@ -1,0 +1,690 @@
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+
+#include "job_codec.hpp"
+
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace thermox::postgres::detail {
+
+namespace {
+
+using Tree = boost::property_tree::ptree;
+
+std::string write(const Tree& tree) {
+    std::ostringstream output;
+    boost::property_tree::write_json(output, tree, false);
+    return output.str();
+}
+
+Tree read(const std::string& payload) {
+    try {
+        std::istringstream input(payload);
+        Tree tree;
+        boost::property_tree::read_json(input, tree);
+        return tree;
+    } catch (const boost::property_tree::json_parser_error& error) {
+        throw std::runtime_error(
+            "invalid persisted job payload: " +
+            std::string(error.what()));
+    }
+}
+
+template <typename Item, typename Encoder>
+Tree array(
+    const std::vector<Item>& items,
+    Encoder&& encoder) {
+    Tree result;
+    for (const auto& item : items) {
+        result.push_back(
+            {"", std::forward<Encoder>(encoder)(item)});
+    }
+    return result;
+}
+
+template <typename Item, typename Decoder>
+std::vector<Item> decode_array(
+    const Tree& tree,
+    Decoder&& decoder) {
+    std::vector<Item> result;
+    result.reserve(tree.size());
+    for (const auto& entry : tree) {
+        result.push_back(
+            std::forward<Decoder>(decoder)(entry.second));
+    }
+    return result;
+}
+
+Tree map_variable(const service::MapVariableInput& value) {
+    Tree tree;
+    tree.put("name", value.name);
+    tree.put("dimension", value.dimension);
+    return tree;
+}
+
+service::MapVariableInput decode_map_variable(
+    const Tree& tree) {
+    return {
+        tree.get<std::string>("name"),
+        tree.get<std::string>("dimension"),
+    };
+}
+
+Tree map_payload(
+    const service::PerformanceMapPayloadInput& value) {
+    Tree tree;
+    tree.add_child(
+        "primary_variable", map_variable(value.primary_variable));
+    tree.add_child(
+        "family_variable", map_variable(value.family_variable));
+    tree.add_child(
+        "output_variables",
+        array(
+            value.output_variables,
+            [](const auto& item) {
+                return map_variable(item);
+            }));
+    tree.add_child(
+        "curves",
+        array(
+            value.curves,
+            [](const service::MapCurveInput& curve) {
+                Tree encoded;
+                encoded.put(
+                    "family_coordinate",
+                    curve.family_coordinate);
+                encoded.add_child(
+                    "samples",
+                    array(
+                        curve.samples,
+                        [](const service::MapSampleInput& sample) {
+                            Tree encoded_sample;
+                            encoded_sample.put(
+                                "coordinate",
+                                sample.coordinate);
+                            encoded_sample.add_child(
+                                "outputs",
+                                array(
+                                    sample.outputs,
+                                    [](double output) {
+                                        Tree scalar;
+                                        scalar.put_value(output);
+                                        return scalar;
+                                    }));
+                            return encoded_sample;
+                        }));
+                return encoded;
+            }));
+    tree.put("primary_extrapolation", value.primary_extrapolation);
+    tree.put("family_extrapolation", value.family_extrapolation);
+    return tree;
+}
+
+service::PerformanceMapPayloadInput decode_map_payload(
+    const Tree& tree) {
+    service::PerformanceMapPayloadInput value;
+    value.primary_variable = decode_map_variable(
+        tree.get_child("primary_variable"));
+    value.family_variable = decode_map_variable(
+        tree.get_child("family_variable"));
+    value.output_variables =
+        decode_array<service::MapVariableInput>(
+            tree.get_child("output_variables"),
+            [](const Tree& item) {
+                return decode_map_variable(item);
+            });
+    value.curves = decode_array<service::MapCurveInput>(
+        tree.get_child("curves"),
+        [](const Tree& encoded_curve) {
+            service::MapCurveInput curve;
+            curve.family_coordinate =
+                encoded_curve.get<double>("family_coordinate");
+            curve.samples =
+                decode_array<service::MapSampleInput>(
+                    encoded_curve.get_child("samples"),
+                    [](const Tree& encoded_sample) {
+                        service::MapSampleInput sample;
+                        sample.coordinate =
+                            encoded_sample.get<double>(
+                                "coordinate");
+                        sample.outputs = decode_array<double>(
+                            encoded_sample.get_child("outputs"),
+                            [](const Tree& scalar) {
+                                return scalar.get_value<double>();
+                            });
+                        return sample;
+                    });
+            return curve;
+        });
+    value.primary_extrapolation =
+        tree.get<std::string>("primary_extrapolation");
+    value.family_extrapolation =
+        tree.get<std::string>("family_extrapolation");
+    return value;
+}
+
+Tree performance_map(
+    const service::PerformanceMapArtifactInput& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("schema_version", value.schema_version);
+    tree.put("revision", value.revision);
+    tree.put("checksum_sha256", value.checksum_sha256);
+    if (value.map) {
+        tree.add_child("map", map_payload(*value.map));
+    }
+    if (value.condition_variable) {
+        tree.add_child(
+            "condition_variable",
+            map_variable(*value.condition_variable));
+    }
+    tree.add_child(
+        "layers",
+        array(
+            value.layers,
+            [](const service::ConditionedMapLayerInput& layer) {
+                Tree encoded;
+                encoded.put(
+                    "condition_coordinate",
+                    layer.condition_coordinate);
+                encoded.add_child("map", map_payload(layer.map));
+                return encoded;
+            }));
+    tree.put(
+        "condition_extrapolation",
+        value.condition_extrapolation);
+    return tree;
+}
+
+service::PerformanceMapArtifactInput decode_performance_map(
+    const Tree& tree) {
+    service::PerformanceMapArtifactInput value;
+    value.id = tree.get<std::string>("id");
+    value.schema_version =
+        tree.get<std::string>("schema_version");
+    value.revision = tree.get<std::string>("revision");
+    value.checksum_sha256 =
+        tree.get<std::string>("checksum_sha256");
+    if (const auto encoded = tree.get_child_optional("map")) {
+        value.map = decode_map_payload(*encoded);
+    }
+    if (const auto encoded =
+            tree.get_child_optional("condition_variable")) {
+        value.condition_variable =
+            decode_map_variable(*encoded);
+    }
+    value.layers =
+        decode_array<service::ConditionedMapLayerInput>(
+            tree.get_child("layers"),
+            [](const Tree& encoded) {
+                service::ConditionedMapLayerInput layer;
+                layer.condition_coordinate =
+                    encoded.get<double>(
+                        "condition_coordinate");
+                layer.map =
+                    decode_map_payload(encoded.get_child("map"));
+                return layer;
+            });
+    value.condition_extrapolation =
+        tree.get<std::string>("condition_extrapolation");
+    return value;
+}
+
+Tree artifact_reference(
+    const service::EngineeringArtifactReference& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("artifact_type", value.artifact_type);
+    tree.put("schema_version", value.schema_version);
+    tree.put("revision", value.revision);
+    tree.put("checksum_sha256", value.checksum_sha256);
+    return tree;
+}
+
+service::EngineeringArtifactReference decode_artifact_reference(
+    const Tree& tree) {
+    return {
+        tree.get<std::string>("id"),
+        tree.get<std::string>("artifact_type"),
+        tree.get<std::string>("schema_version"),
+        tree.get<std::string>("revision"),
+        tree.get<std::string>("checksum_sha256"),
+    };
+}
+
+Tree artifact_bundle(
+    const service::SimulationArtifactBundle& value) {
+    Tree tree;
+    tree.add_child(
+        "performance_maps",
+        array(
+            value.performance_maps,
+            [](const auto& item) {
+                return performance_map(item);
+            }));
+    tree.add_child(
+        "references",
+        array(
+            value.references,
+            [](const auto& item) {
+                return artifact_reference(item);
+            }));
+    return tree;
+}
+
+service::SimulationArtifactBundle decode_artifact_bundle(
+    const Tree& tree) {
+    service::SimulationArtifactBundle value;
+    value.performance_maps =
+        decode_array<service::PerformanceMapArtifactInput>(
+            tree.get_child("performance_maps"),
+            [](const Tree& item) {
+                return decode_performance_map(item);
+            });
+    value.references =
+        decode_array<service::EngineeringArtifactReference>(
+            tree.get_child("references"),
+            [](const Tree& item) {
+                return decode_artifact_reference(item);
+            });
+    return value;
+}
+
+Tree steady_settings(
+    const service::SteadySolverSettings& value) {
+    Tree tree;
+    tree.put("max_iterations", value.max_iterations);
+    tree.put(
+        "residual_tolerance", value.residual_tolerance);
+    tree.put("step_tolerance", value.step_tolerance);
+    tree.put(
+        "finite_difference_epsilon",
+        value.finite_difference_epsilon);
+    tree.put("min_damping", value.min_damping);
+    tree.put(
+        "damping_reduction", value.damping_reduction);
+    tree.put(
+        "sufficient_decrease", value.sufficient_decrease);
+    tree.put(
+        "max_line_search_steps",
+        value.max_line_search_steps);
+    return tree;
+}
+
+service::SteadySolverSettings decode_steady_settings(
+    const Tree& tree) {
+    service::SteadySolverSettings value;
+    value.max_iterations = tree.get<int>("max_iterations");
+    value.residual_tolerance =
+        tree.get<double>("residual_tolerance");
+    value.step_tolerance =
+        tree.get<double>("step_tolerance");
+    value.finite_difference_epsilon =
+        tree.get<double>("finite_difference_epsilon");
+    value.min_damping = tree.get<double>("min_damping");
+    value.damping_reduction =
+        tree.get<double>("damping_reduction");
+    value.sufficient_decrease =
+        tree.get<double>("sufficient_decrease");
+    value.max_line_search_steps =
+        tree.get<int>("max_line_search_steps");
+    return value;
+}
+
+Tree transient_settings(
+    const service::TransientSolverSettings& value) {
+    Tree tree;
+    tree.put("start_time", value.start_time);
+    tree.put("end_time", value.end_time);
+    tree.put("initial_step", value.initial_step);
+    tree.put("min_step", value.min_step);
+    tree.put("max_step", value.max_step);
+    tree.put(
+        "absolute_tolerance", value.absolute_tolerance);
+    tree.put(
+        "relative_tolerance", value.relative_tolerance);
+    tree.put("max_steps", value.max_steps);
+    tree.put(
+        "max_consecutive_rejections",
+        value.max_consecutive_rejections);
+    tree.put(
+        "compute_consistent_initial_conditions",
+        value.compute_consistent_initial_conditions);
+    tree.add_child(
+        "nonlinear_solver",
+        steady_settings(value.nonlinear_solver));
+    return tree;
+}
+
+service::TransientSolverSettings decode_transient_settings(
+    const Tree& tree) {
+    service::TransientSolverSettings value;
+    value.start_time = tree.get<double>("start_time");
+    value.end_time = tree.get<double>("end_time");
+    value.initial_step = tree.get<double>("initial_step");
+    value.min_step = tree.get<double>("min_step");
+    value.max_step = tree.get<double>("max_step");
+    value.absolute_tolerance =
+        tree.get<double>("absolute_tolerance");
+    value.relative_tolerance =
+        tree.get<double>("relative_tolerance");
+    value.max_steps = tree.get<int>("max_steps");
+    value.max_consecutive_rejections =
+        tree.get<int>("max_consecutive_rejections");
+    value.compute_consistent_initial_conditions =
+        tree.get<bool>(
+            "compute_consistent_initial_conditions");
+    value.nonlinear_solver = decode_steady_settings(
+        tree.get_child("nonlinear_solver"));
+    return value;
+}
+
+service::SimulationJobMode decode_mode(
+    const std::string& mode) {
+    if (mode == "steady") {
+        return service::SimulationJobMode::steady;
+    }
+    if (mode == "transient") {
+        return service::SimulationJobMode::transient;
+    }
+    throw std::runtime_error(
+        "invalid persisted simulation mode: " + mode);
+}
+
+Tree solver_provenance(
+    const service::SolverProvenance& value) {
+    Tree tree;
+    tree.put("contract_version", value.contract_version);
+    tree.add_child(
+        "settings",
+        array(
+            value.settings,
+            [](const service::SolverSetting& setting) {
+                Tree encoded;
+                encoded.put("name", setting.name);
+                encoded.put("value", setting.value);
+                return encoded;
+            }));
+    return tree;
+}
+
+service::SolverProvenance decode_solver_provenance(
+    const Tree& tree) {
+    service::SolverProvenance value;
+    value.contract_version =
+        tree.get<std::string>("contract_version");
+    value.settings = decode_array<service::SolverSetting>(
+        tree.get_child("settings"),
+        [](const Tree& encoded) {
+            return service::SolverSetting{
+                encoded.get<std::string>("name"),
+                encoded.get<double>("value"),
+            };
+        });
+    return value;
+}
+
+}  // namespace
+
+std::string encode_request(
+    const service::SimulationJobRequest& request) {
+    Tree tree;
+    tree.put("schema_version", request.schema_version);
+    tree.put("identity.user_id", request.identity.user_id);
+    tree.put("identity.team_id", request.identity.team_id);
+    tree.put("identity.request_id", request.identity.request_id);
+    tree.put("idempotency_key", request.idempotency_key);
+    tree.put("mode", service::to_string(request.mode));
+    tree.put("model_json", request.model_json);
+    tree.put("case_id", request.case_id);
+    tree.add_child(
+        "steady_solver", steady_settings(request.steady_solver));
+    tree.add_child(
+        "transient_solver",
+        transient_settings(request.transient_solver));
+    tree.add_child("artifacts", artifact_bundle(request.artifacts));
+    return write(tree);
+}
+
+service::SimulationJobRequest decode_request(
+    const std::string& payload) {
+    const Tree tree = read(payload);
+    service::SimulationJobRequest request;
+    request.schema_version =
+        tree.get<std::string>("schema_version");
+    request.identity.user_id =
+        tree.get<std::string>("identity.user_id");
+    request.identity.team_id =
+        tree.get<std::string>("identity.team_id");
+    request.identity.request_id =
+        tree.get<std::string>("identity.request_id");
+    request.idempotency_key =
+        tree.get<std::string>("idempotency_key");
+    request.mode =
+        decode_mode(tree.get<std::string>("mode"));
+    request.model_json = tree.get<std::string>("model_json");
+    request.case_id = tree.get<std::string>("case_id");
+    request.steady_solver = decode_steady_settings(
+        tree.get_child("steady_solver"));
+    request.transient_solver = decode_transient_settings(
+        tree.get_child("transient_solver"));
+    request.artifacts =
+        decode_artifact_bundle(tree.get_child("artifacts"));
+    return request;
+}
+
+std::string encode_execution(
+    const service::ExecutionMetadata& execution) {
+    Tree tree;
+    tree.put(
+        "result_schema_version",
+        execution.result_schema_version);
+    tree.put(
+        "command_schema_version",
+        execution.command_schema_version);
+    tree.put("platform_version", execution.platform_version);
+    tree.put("operation", execution.operation);
+    tree.add_child("solver", solver_provenance(execution.solver));
+    tree.put(
+        "catalog_fingerprint",
+        execution.catalog_fingerprint);
+    tree.put(
+        "model.schema_version",
+        execution.model.schema_version);
+    tree.put("model.model_id", execution.model.model_id);
+    tree.put(
+        "model.model_revision",
+        execution.model.model_revision);
+    tree.put("model.case_id", execution.model.case_id);
+    tree.add_child(
+        "components",
+        array(
+            execution.components,
+            [](const service::ComponentProvenance& value) {
+                Tree encoded;
+                encoded.put(
+                    "component_id", value.component_id);
+                encoded.put("kind", value.kind);
+                encoded.put(
+                    "requested_version",
+                    value.requested_version);
+                encoded.put(
+                    "resolved_version",
+                    value.resolved_version);
+                return encoded;
+            }));
+    tree.add_child(
+        "media",
+        array(
+            execution.media,
+            [](const service::MediumProvenance& value) {
+                Tree encoded;
+                encoded.put("medium_id", value.medium_id);
+                encoded.put("backend", value.backend);
+                encoded.put("substance", value.substance);
+                encoded.put("package", value.package);
+                encoded.put(
+                    "requested_package_version",
+                    value.requested_package_version);
+                encoded.put(
+                    "resolved_package_version",
+                    value.resolved_package_version);
+                return encoded;
+            }));
+    tree.add_child(
+        "artifacts",
+        array(
+            execution.artifacts,
+            [](const service::ArtifactProvenance& value) {
+                Tree encoded;
+                encoded.put("id", value.id);
+                encoded.put(
+                    "artifact_type", value.artifact_type);
+                encoded.put(
+                    "schema_version", value.schema_version);
+                encoded.put("revision", value.revision);
+                encoded.put(
+                    "checksum_sha256",
+                    value.checksum_sha256);
+                return encoded;
+            }));
+    tree.add_child(
+        "connector_domains",
+        array(
+            execution.connector_domains,
+            [](const service::ConnectorProvenance& value) {
+                Tree encoded;
+                encoded.put("domain", value.domain);
+                encoded.put(
+                    "contract_version",
+                    value.contract_version);
+                return encoded;
+            }));
+    return write(tree);
+}
+
+service::ExecutionMetadata decode_execution(
+    const std::string& payload) {
+    const Tree tree = read(payload);
+    service::ExecutionMetadata value;
+    value.result_schema_version =
+        tree.get<std::string>("result_schema_version");
+    value.command_schema_version =
+        tree.get<std::string>("command_schema_version");
+    value.platform_version =
+        tree.get<std::string>("platform_version");
+    value.operation = tree.get<std::string>("operation");
+    value.solver =
+        decode_solver_provenance(tree.get_child("solver"));
+    value.catalog_fingerprint =
+        tree.get<std::string>("catalog_fingerprint");
+    value.model = {
+        tree.get<std::string>("model.schema_version"),
+        tree.get<std::string>("model.model_id"),
+        tree.get<std::string>("model.model_revision"),
+        tree.get<std::string>("model.case_id"),
+    };
+    value.components =
+        decode_array<service::ComponentProvenance>(
+            tree.get_child("components"),
+            [](const Tree& encoded) {
+                return service::ComponentProvenance{
+                    encoded.get<std::string>("component_id"),
+                    encoded.get<std::string>("kind"),
+                    encoded.get<std::string>(
+                        "requested_version"),
+                    encoded.get<std::string>(
+                        "resolved_version"),
+                };
+            });
+    value.media = decode_array<service::MediumProvenance>(
+        tree.get_child("media"),
+        [](const Tree& encoded) {
+            return service::MediumProvenance{
+                encoded.get<std::string>("medium_id"),
+                encoded.get<std::string>("backend"),
+                encoded.get<std::string>("substance"),
+                encoded.get<std::string>("package"),
+                encoded.get<std::string>(
+                    "requested_package_version"),
+                encoded.get<std::string>(
+                    "resolved_package_version"),
+            };
+        });
+    value.artifacts =
+        decode_array<service::ArtifactProvenance>(
+            tree.get_child("artifacts"),
+            [](const Tree& encoded) {
+                return service::ArtifactProvenance{
+                    encoded.get<std::string>("id"),
+                    encoded.get<std::string>("artifact_type"),
+                    encoded.get<std::string>(
+                        "schema_version"),
+                    encoded.get<std::string>("revision"),
+                    encoded.get<std::string>(
+                        "checksum_sha256"),
+                };
+            });
+    value.connector_domains =
+        decode_array<service::ConnectorProvenance>(
+            tree.get_child("connector_domains"),
+            [](const Tree& encoded) {
+                return service::ConnectorProvenance{
+                    encoded.get<std::string>("domain"),
+                    encoded.get<std::string>(
+                        "contract_version"),
+                };
+            });
+    return value;
+}
+
+std::string encode_error(const service::ServiceError& error) {
+    Tree tree;
+    tree.put("schema_version", error.schema_version);
+    tree.put("code", error.code);
+    tree.put("stage", error.stage);
+    tree.put("message", error.message);
+    return write(tree);
+}
+
+service::ServiceError decode_error(
+    const std::string& payload) {
+    const Tree tree = read(payload);
+    return {
+        tree.get<std::string>("schema_version"),
+        tree.get<std::string>("code"),
+        tree.get<std::string>("stage"),
+        tree.get<std::string>("message"),
+    };
+}
+
+std::string encode_result_artifact(
+    const service::ResultArtifactManifest& artifact) {
+    Tree tree;
+    tree.put("artifact_id", artifact.artifact_id);
+    tree.put("media_type", artifact.media_type);
+    tree.put("schema_version", artifact.schema_version);
+    tree.put("byte_size", artifact.byte_size);
+    tree.put("checksum", artifact.checksum);
+    return write(tree);
+}
+
+service::ResultArtifactManifest decode_result_artifact(
+    const std::string& payload) {
+    const Tree tree = read(payload);
+    return {
+        tree.get<std::string>("artifact_id"),
+        tree.get<std::string>("media_type"),
+        tree.get<std::string>("schema_version"),
+        tree.get<std::uint64_t>("byte_size"),
+        tree.get<std::string>("checksum"),
+    };
+}
+
+}  // namespace thermox::postgres::detail

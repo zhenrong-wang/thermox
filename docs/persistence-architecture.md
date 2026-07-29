@@ -79,9 +79,28 @@ submission, atomic worker claim, optimistic terminal publication, and queued can
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
 
-The next persistence slice may add PostgreSQL metadata and object-storage adapters. Those adapters
-must preserve the atomic and compare-and-swap semantics of `SimulationJobRepository`; they do not
-change the service, platform, physics, or numerical contracts.
+The first PostgreSQL metadata adapter is now implemented under `adapters/postgres`. It preserves
+the atomic and compare-and-swap semantics of `SimulationJobRepository` without changing the
+service, platform, physics, or numerical contracts:
+
+- `(team_id, idempotency_key)` is a database uniqueness constraint;
+- complete immutable job requests are stored as internal versioned JSON payloads so any worker can
+  reconstruct the calculation;
+- workers claim ordered queued jobs using `FOR UPDATE SKIP LOCKED`;
+- success, failure, and cancellation are revision-checked state transitions;
+- all user-facing reads and cancellation predicates include `team_id`;
+- result content remains behind `ResultArtifactStore`; PostgreSQL stores only its manifest.
+
+The adapter is optional at build time and uses the standard PostgreSQL `libpq` client. The local
+HTTP host selects it when `THERMOX_POSTGRES_URL` is set. That host still uses the in-memory result
+artifact store, so its PostgreSQL mode currently validates durable job metadata and distributed
+claim behavior but is not restart-complete for succeeded result content. Production deployment
+must pair the job repository with the planned checksummed object-storage adapter before claiming
+durable result retrieval.
+
+The schema migration is
+`adapters/postgres/migrations/001_simulation_jobs.sql`. The local-only Compose service mounts the
+migration into PostgreSQL's initialization directory and binds PostgreSQL to loopback.
 
 Engineering input data has a separate read boundary from result storage.
 `EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references

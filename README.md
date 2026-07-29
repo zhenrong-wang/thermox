@@ -269,10 +269,40 @@ development host. A machine with more available capacity can opt in explicitly, 
 THERMOX_BUILD_JOBS=4 ./scripts/verify.sh
 ```
 
+## Local PostgreSQL job metadata
+
+PostgreSQL is an optional outer adapter; the numerical, physics, graph, and service libraries do
+not depend on it. Start the loopback-only development database:
+
+```sh
+docker compose -f deploy/compose.postgres.yml up -d --wait
+```
+
+Configure after installing the standard `libpq` development package, then run the gated
+repository contract test:
+
+```sh
+cmake -S . -B build
+cmake --build build --target thermox_postgres_job_tests --parallel 1
+THERMOX_TEST_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  ctest --test-dir build -R thermox_postgres_job_tests --output-on-failure -j1
+```
+
+The local HTTP host selects PostgreSQL job metadata through its environment:
+
+```sh
+THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  ./build/adapters/http/thermox_http_server
+```
+
+The development host still stores result content in memory. PostgreSQL persists job requests,
+ownership, states, provenance, errors, and result manifests; restart-safe result retrieval will be
+enabled by the planned checksummed object-storage adapter.
+
 ## Next steps
 
-1. Map thin HTTP/RPC endpoints onto the synchronous and job application services, then add
-   PostgreSQL and object-storage adapters behind the established repository ports.
+1. Add a checksummed object-storage result adapter and pair it with the completed PostgreSQL job
+   metadata adapter in the deployable service host.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

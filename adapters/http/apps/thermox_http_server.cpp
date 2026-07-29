@@ -1,6 +1,10 @@
 #include "thermox/http/http_api.hpp"
 #include "thermox/service/in_memory_jobs.hpp"
 
+#ifdef THERMOX_HAS_POSTGRES_JOBS
+#include "thermox/postgres/postgres_job_repository.hpp"
+#endif
+
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/io_context.hpp>
@@ -32,6 +36,7 @@ struct Options {
     std::string local_user_id{"local-user"};
     std::string local_team_id{"local-team"};
     std::string worker_id{"local-worker"};
+    std::string postgres_url;
     bool allow_insecure_remote{false};
 };
 
@@ -43,7 +48,9 @@ void usage(std::ostream& out) {
         << " [--local-user-id <id>]"
         << " [--local-team-id <id>]"
         << " [--worker-id <id>]"
-        << " [--allow-insecure-remote]\n";
+        << " [--allow-insecure-remote]\n"
+        << "Set THERMOX_POSTGRES_URL to persist simulation "
+           "job metadata in PostgreSQL.\n";
 }
 
 template <typename Integer>
@@ -66,6 +73,10 @@ Integer parse_integer(
 
 Options parse_options(int argc, char** argv) {
     Options options;
+    if (const char* postgres_url =
+            std::getenv("THERMOX_POSTGRES_URL")) {
+        options.postgres_url = postgres_url;
+    }
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         const auto require_value = [&]() -> std::string {
@@ -188,8 +199,22 @@ int main(int argc, char** argv) {
             context, {address, options.port}};
         const auto runtime =
             thermox::service::make_default_simulation_runtime();
-        const auto jobs =
-            thermox::service::make_in_memory_job_repository();
+        std::shared_ptr<
+            thermox::service::SimulationJobRepository> jobs;
+        if (options.postgres_url.empty()) {
+            jobs =
+                thermox::service::make_in_memory_job_repository();
+        } else {
+#ifdef THERMOX_HAS_POSTGRES_JOBS
+            jobs =
+                thermox::postgres::make_postgres_job_repository(
+                    options.postgres_url);
+#else
+            throw std::runtime_error(
+                "THERMOX_POSTGRES_URL was set, but this build "
+                "does not include the PostgreSQL adapter");
+#endif
+        }
         const auto artifacts =
             thermox::service::make_in_memory_result_artifact_store();
         const auto job_service = std::make_shared<
@@ -222,7 +247,12 @@ int main(int argc, char** argv) {
             });
 
         std::cout << "Thermox HTTP listening on "
-                  << address.to_string() << ':' << options.port << '\n';
+                  << address.to_string() << ':' << options.port
+                  << " (job metadata: "
+                  << (options.postgres_url.empty()
+                          ? "memory"
+                          : "postgresql")
+                  << ")\n";
         for (;;) {
             try {
                 serve_connection(
