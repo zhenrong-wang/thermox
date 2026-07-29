@@ -303,7 +303,7 @@ std::optional<ResultArtifact> SimulationJobService::get_result(
             "result is only available for a succeeded job");
     }
     const auto content = impl_->artifacts->get(
-        record->result_artifact->artifact_id);
+        *record->result_artifact);
     if (!content) {
         throw JobStateError(
             "succeeded job references a missing result artifact");

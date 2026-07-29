@@ -131,8 +131,8 @@ cancellation operations. Every update carries an optimistic revision. `ResultArt
 defines the large-result boundary; a successful job contains a versioned, checksummed manifest
 instead of embedding trajectory data in the job record. In-memory implementations are provided
 for local execution and repository contract tests. The PostgreSQL job-metadata adapter now
-implements the same port without changing a solver or component; object storage remains the next
-adapter boundary.
+implements the same port without changing a solver or component. The provider-neutral object
+result adapter and its first S3-compatible driver implement the content boundary independently.
 
 ## API mapping
 
@@ -170,9 +170,12 @@ supervised process, authentication gateway, TLS termination, concurrency limits,
 timeouts; none of those concerns are pushed into the simulation service.
 
 Job metadata is in memory by default. When the optional PostgreSQL adapter is compiled and
-`THERMOX_POSTGRES_URL` is set, the host composes the same job service with PostgreSQL instead. The
-result artifact store is still in memory in this local host, so production restart durability
-requires the separate object-storage adapter.
+`THERMOX_POSTGRES_URL` is set, the host composes the same job service with PostgreSQL instead.
+Result content is also in memory by default. Setting
+`THERMOX_OBJECT_STORE_DRIVER=s3-compatible` plus the `THERMOX_S3_*` configuration composes the
+provider-neutral result adapter with the S3-compatible driver. PostgreSQL plus object storage
+therefore provides restart-safe job and result retrieval without changing the HTTP or application
+contracts.
 
 The initial routes are:
 

@@ -92,15 +92,44 @@ service, platform, physics, or numerical contracts:
 - result content remains behind `ResultArtifactStore`; PostgreSQL stores only its manifest.
 
 The adapter is optional at build time and uses the standard PostgreSQL `libpq` client. The local
-HTTP host selects it when `THERMOX_POSTGRES_URL` is set. That host still uses the in-memory result
-artifact store, so its PostgreSQL mode currently validates durable job metadata and distributed
-claim behavior but is not restart-complete for succeeded result content. Production deployment
-must pair the job repository with the planned checksummed object-storage adapter before claiming
-durable result retrieval.
+HTTP host selects it when `THERMOX_POSTGRES_URL` is set.
 
 The schema migration is
 `adapters/postgres/migrations/001_simulation_jobs.sql`. The local-only Compose service mounts the
 migration into PostgreSQL's initialization directory and binds PostgreSQL to loopback.
+
+## Object storage
+
+Durable result content now follows a two-level adapter design:
+
+```text
+ResultArtifactStore (service contract)
+  └── ObjectResultArtifactStore
+        └── ObjectStore (provider-neutral byte-object port)
+              ├── S3CompatibleObjectStore → MinIO / S3-compatible services
+              ├── future AWS-specific composition if required
+              └── future Alibaba OSS or other native provider driver
+```
+
+`ObjectStore` knows only relative keys, bytes, media type, and string metadata. It does not expose
+S3 buckets, ETags, MinIO concepts, presigned URLs, or provider exceptions. Provider drivers own
+authentication, endpoint/bucket or container addressing, transport, retries, and error mapping.
+This keeps the abstraction usable by both S3-compatible APIs and native object-storage APIs that
+are not S3-compatible.
+
+`ObjectResultArtifactStore` owns Thermox semantics. It derives immutable content-addressed keys,
+publishes SHA-256 manifests, and verifies downloaded bytes against the PostgreSQL-published
+checksum, size, media type, schema version, and provider metadata before returning content.
+
+The first driver uses libcurl's AWS Signature V4 support and accepts endpoint, region, bucket,
+credentials, and path or virtual-hosted addressing. MinIO is the first integration target, not a
+platform dependency. The same driver can address conforming S3-compatible services through
+configuration. A future native Alibaba OSS driver implements `ObjectStore` rather than changing
+the result, job, HTTP, platform, physics, or numerical layers.
+
+The local MinIO stack is `deploy/compose.object-storage.yml`. It is loopback-only, creates a
+private `thermox-results` bucket, and uses pinned container versions. Integration tests are gated
+by `THERMOX_TEST_S3_*` variables.
 
 Engineering input data has a separate read boundary from result storage.
 `EngineeringArtifactResolver` resolves immutable type/schema/revision/checksum-pinned references

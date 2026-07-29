@@ -135,7 +135,7 @@ public:
     // Implementations must return only content that satisfies the stored
     // artifact's integrity metadata.
     virtual std::optional<std::string> get(
-        const std::string& artifact_id) const = 0;
+        const ResultArtifactManifest& manifest) const = 0;
 };
 
 class SimulationJobService {

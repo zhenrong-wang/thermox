@@ -295,14 +295,56 @@ THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox
   ./build/adapters/http/thermox_http_server
 ```
 
-The development host still stores result content in memory. PostgreSQL persists job requests,
-ownership, states, provenance, errors, and result manifests; restart-safe result retrieval will be
-enabled by the planned checksummed object-storage adapter.
+## Local MinIO result storage
+
+The object-storage abstraction is provider-neutral. Thermox result logic depends on `ObjectStore`;
+the first concrete driver speaks the S3-compatible REST protocol using Signature V4. MinIO is the
+local integration provider, while a future native OSS driver can implement the same byte-object
+port.
+
+Start the loopback-only MinIO API and console:
+
+```sh
+docker compose -f deploy/compose.object-storage.yml up -d --wait
+```
+
+- S3-compatible API: `http://127.0.0.1:59000`
+- MinIO console: `http://127.0.0.1:59001`
+- Development bucket: `thermox-results`
+- Development login: `thermox-minio` / `thermox-minio-local`
+
+Run the gated live driver test:
+
+```sh
+THERMOX_TEST_S3_ENDPOINT='http://127.0.0.1:59000' \
+THERMOX_TEST_S3_BUCKET='thermox-results' \
+THERMOX_TEST_S3_ACCESS_KEY='thermox-minio' \
+THERMOX_TEST_S3_SECRET_KEY='thermox-minio-local' \
+  ctest --test-dir build -R thermox_s3_object_store_tests \
+  --output-on-failure -j1
+```
+
+Compose the local HTTP host with both durable stores:
+
+```sh
+THERMOX_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+THERMOX_OBJECT_STORE_DRIVER='s3-compatible' \
+THERMOX_S3_ENDPOINT='http://127.0.0.1:59000' \
+THERMOX_S3_REGION='us-east-1' \
+THERMOX_S3_BUCKET='thermox-results' \
+THERMOX_S3_ACCESS_KEY='thermox-minio' \
+THERMOX_S3_SECRET_KEY='thermox-minio-local' \
+  ./build/adapters/http/thermox_http_server
+```
+
+`THERMOX_S3_ADDRESSING_STYLE` accepts `path` (the MinIO development default) or
+`virtual-hosted`. `THERMOX_OBJECT_KEY_PREFIX` defaults to `results`. The credentials above are
+local development credentials only.
 
 ## Next steps
 
-1. Add a checksummed object-storage result adapter and pair it with the completed PostgreSQL job
-   metadata adapter in the deployable service host.
+1. Separate API and worker process roles, then add leases/recovery for jobs left running by a
+   terminated worker.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

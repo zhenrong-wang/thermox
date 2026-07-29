@@ -207,6 +207,9 @@ Completed structural slices:
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
   integration contract coverage; ✅
+- provider-neutral object-storage port, SHA-256 result adapter, S3-compatible Signature V4 driver,
+  pinned local MinIO Compose stack, restart-safe HTTP composition, and live integration coverage;
+  ✅
 
 ## Persistence boundary decision
 

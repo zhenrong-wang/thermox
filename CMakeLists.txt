@@ -17,6 +17,7 @@ add_subdirectory(core)
 add_subdirectory(platform)
 add_subdirectory(service)
 add_subdirectory(adapters/postgres)
+add_subdirectory(adapters/object_store)
 add_subdirectory(adapters/http)
 
 add_library(thermox_examples

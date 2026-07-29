@@ -196,11 +196,17 @@ public:
     }
 
     std::optional<std::string> get(
-        const std::string& artifact_id) const override {
+        const ResultArtifactManifest& manifest) const override {
         std::lock_guard lock(mutex_);
-        const auto found = artifacts_.find(artifact_id);
+        const auto found = artifacts_.find(manifest.artifact_id);
         if (found == artifacts_.end()) {
             return std::nullopt;
+        }
+        if (found->second.size() != manifest.byte_size ||
+            checksum_for(found->second) != manifest.checksum) {
+            throw std::runtime_error(
+                "in-memory result artifact failed manifest "
+                "verification");
         }
         return found->second;
     }

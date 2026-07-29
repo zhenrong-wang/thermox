@@ -295,7 +295,7 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
         "transient execution must publish through the common job "
         "contract");
     const auto content = artifacts->get(
-        completed->result_artifact->artifact_id);
+        *completed->result_artifact);
     require(
         content.has_value() &&
             content->find("\"trajectory\": [") !=

@@ -37,6 +37,19 @@ if(TARGET thermox_postgres_jobs)
     target_compile_definitions(
         thermox_http_server PRIVATE THERMOX_HAS_POSTGRES_JOBS=1)
 endif()
+if(TARGET thermox_object_artifacts)
+    target_link_libraries(
+        thermox_http_server PRIVATE thermox_object_artifacts)
+    target_compile_definitions(
+        thermox_http_server PRIVATE
+        THERMOX_HAS_OBJECT_ARTIFACTS=1)
+endif()
+if(TARGET thermox_s3_object_store)
+    target_link_libraries(
+        thermox_http_server PRIVATE thermox_s3_object_store)
+    target_compile_definitions(
+        thermox_http_server PRIVATE THERMOX_HAS_S3_OBJECT_STORE=1)
+endif()
 target_compile_definitions(thermox_http_server PRIVATE
     BOOST_ERROR_CODE_HEADER_ONLY
 )

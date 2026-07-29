@@ -5,6 +5,14 @@
 #include "thermox/postgres/postgres_job_repository.hpp"
 #endif
 
+#ifdef THERMOX_HAS_OBJECT_ARTIFACTS
+#include "thermox/object_store/result_artifact_store.hpp"
+#endif
+
+#ifdef THERMOX_HAS_S3_OBJECT_STORE
+#include "thermox/object_store/s3_compatible_object_store.hpp"
+#endif
+
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/io_context.hpp>
@@ -18,9 +26,11 @@
 #include <exception>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace {
 
@@ -37,6 +47,14 @@ struct Options {
     std::string local_team_id{"local-team"};
     std::string worker_id{"local-worker"};
     std::string postgres_url;
+    std::string object_store_driver;
+    std::string object_key_prefix{"results"};
+    std::string s3_endpoint;
+    std::string s3_region{"us-east-1"};
+    std::string s3_bucket;
+    std::string s3_access_key;
+    std::string s3_secret_key;
+    std::string s3_addressing_style{"path"};
     bool allow_insecure_remote{false};
 };
 
@@ -50,7 +68,9 @@ void usage(std::ostream& out) {
         << " [--worker-id <id>]"
         << " [--allow-insecure-remote]\n"
         << "Set THERMOX_POSTGRES_URL to persist simulation "
-           "job metadata in PostgreSQL.\n";
+           "job metadata in PostgreSQL.\n"
+        << "Set THERMOX_OBJECT_STORE_DRIVER=s3-compatible and "
+           "THERMOX_S3_* variables for durable result content.\n";
 }
 
 template <typename Integer>
@@ -73,10 +93,32 @@ Integer parse_integer(
 
 Options parse_options(int argc, char** argv) {
     Options options;
-    if (const char* postgres_url =
-            std::getenv("THERMOX_POSTGRES_URL")) {
-        options.postgres_url = postgres_url;
-    }
+    const auto environment = [](
+                                 const char* name,
+                                 std::string fallback = {}) {
+        const char* value = std::getenv(name);
+        return value == nullptr
+            ? std::move(fallback)
+            : std::string(value);
+    };
+    options.postgres_url =
+        environment("THERMOX_POSTGRES_URL");
+    options.object_store_driver =
+        environment("THERMOX_OBJECT_STORE_DRIVER");
+    options.object_key_prefix = environment(
+        "THERMOX_OBJECT_KEY_PREFIX", "results");
+    options.s3_endpoint =
+        environment("THERMOX_S3_ENDPOINT");
+    options.s3_region =
+        environment("THERMOX_S3_REGION", "us-east-1");
+    options.s3_bucket =
+        environment("THERMOX_S3_BUCKET");
+    options.s3_access_key =
+        environment("THERMOX_S3_ACCESS_KEY");
+    options.s3_secret_key =
+        environment("THERMOX_S3_SECRET_KEY");
+    options.s3_addressing_style =
+        environment("THERMOX_S3_ADDRESSING_STYLE", "path");
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         const auto require_value = [&]() -> std::string {
@@ -116,6 +158,12 @@ Options parse_options(int argc, char** argv) {
         options.worker_id.empty()) {
         throw std::invalid_argument(
             "local identity and worker IDs must not be empty");
+    }
+    if (!options.object_store_driver.empty() &&
+        options.object_store_driver != "s3-compatible") {
+        throw std::invalid_argument(
+            "unsupported object store driver: " +
+            options.object_store_driver);
     }
     return options;
 }
@@ -215,8 +263,48 @@ int main(int argc, char** argv) {
                 "does not include the PostgreSQL adapter");
 #endif
         }
-        const auto artifacts =
-            thermox::service::make_in_memory_result_artifact_store();
+        std::shared_ptr<
+            thermox::service::ResultArtifactStore> artifacts;
+        if (options.object_store_driver.empty()) {
+            artifacts =
+                thermox::service::
+                    make_in_memory_result_artifact_store();
+        } else {
+#if defined(THERMOX_HAS_OBJECT_ARTIFACTS) && \
+    defined(THERMOX_HAS_S3_OBJECT_STORE)
+            thermox::object_store::S3AddressingStyle style;
+            if (options.s3_addressing_style == "path") {
+                style = thermox::object_store::
+                    S3AddressingStyle::path;
+            } else if (
+                options.s3_addressing_style ==
+                "virtual-hosted") {
+                style = thermox::object_store::
+                    S3AddressingStyle::virtual_hosted;
+            } else {
+                throw std::invalid_argument(
+                    "THERMOX_S3_ADDRESSING_STYLE must be path "
+                    "or virtual-hosted");
+            }
+            auto objects = thermox::object_store::
+                make_s3_compatible_object_store({
+                    .endpoint = options.s3_endpoint,
+                    .region = options.s3_region,
+                    .bucket = options.s3_bucket,
+                    .access_key = options.s3_access_key,
+                    .secret_key = options.s3_secret_key,
+                    .addressing_style = style,
+                });
+            artifacts = thermox::object_store::
+                make_object_result_artifact_store(
+                    std::move(objects),
+                    options.object_key_prefix);
+#else
+            throw std::runtime_error(
+                "object storage was configured, but this build "
+                "does not include the S3-compatible driver");
+#endif
+        }
         const auto job_service = std::make_shared<
             thermox::service::SimulationJobService>(
                 runtime, jobs, artifacts);
@@ -252,6 +340,10 @@ int main(int argc, char** argv) {
                   << (options.postgres_url.empty()
                           ? "memory"
                           : "postgresql")
+                  << ", result content: "
+                  << (options.object_store_driver.empty()
+                          ? "memory"
+                          : options.object_store_driver)
                   << ")\n";
         for (;;) {
             try {
