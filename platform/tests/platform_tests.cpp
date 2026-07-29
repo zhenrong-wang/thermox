@@ -918,6 +918,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "source.fluid.boundary",
         "sink.fluid.boundary",
         "source.material.boundary",
+        "source.material.fixed_composition",
         "sink.material.boundary",
         "source.heat.boundary",
         "sink.heat.boundary",
@@ -2921,6 +2922,192 @@ void test_map_driven_material_turbomachinery() {
         1.0e-4, "material turbine map closes shaft power");
 }
 
+void test_fixed_composition_source_allows_map_solved_flow() {
+    auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "composition_controlled_map_flow",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.material.fixed_composition",
+        "parameters": {
+          "mass_fraction[N2]": 0.8,
+          "mass_fraction[O2]": 0.2
+        },
+        "materials": {"outlet": "gas"}
+      },
+      {
+        "id": "compressor",
+        "kind": "compressor.material.performance_map",
+        "artifacts": {"performance_map": "flow-solving-map"},
+        "parameters": {
+          "reference_pressure": {"value": 101.325, "unit": "kPa"},
+          "reference_temperature": {"value": 300.0, "unit": "K"}
+        },
+        "materials": {"inlet": "gas", "outlet": "gas"}
+      },
+      {
+        "id": "sink",
+        "kind": "sink.material.boundary",
+        "materials": {"inlet": "gas"}
+      }
+    ],
+    "connections": [
+      {
+        "id": "source_to_compressor",
+        "from": "source.outlet",
+        "to": "compressor.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "compressor_to_sink",
+        "from": "compressor.outlet",
+        "to": "sink.inlet",
+        "kind": "material_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "source.outlet.p": {"value": 101.325, "unit": "kPa"},
+      "source.outlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "compressor.shaft.omega": 300.0,
+      "sink.inlet.p": {"value": 202.65, "unit": "kPa"}
+    },
+    "initial_guesses": {
+      "source.outlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "source.outlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "compressor.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "compressor.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "compressor.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "compressor.outlet.p": {"value": 202.65, "unit": "kPa"},
+      "compressor.outlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "compressor.outlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "compressor.outlet.h": {"value": 370.0, "unit": "kJ/kg"},
+      "compressor.shaft.W_dot": {"value": 0.7, "unit": "MW"},
+      "sink.inlet.h": {"value": 370.0, "unit": "kJ/kg"},
+      "sink.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "sink.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+
+    thermox::platform::PerformanceMapRegistry maps;
+    maps.register_artifact({
+        "flow-solving-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "synthetic-sloped-flow-map",
+        std::string(64, '7'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{8.0, {1.6, 0.8}},
+                  {12.0, {2.4, 0.8}}}},
+                {350.0,
+                 {{8.0, {1.6, 0.8}},
+                  {12.0, {2.4, 0.8}}}},
+            }),
+    });
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph,
+          thermox::physics::ThermochemistryCapability::state_ps}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto solve = [&](const auto& selected_document) {
+        const auto graph =
+            thermox::platform::compile_model_graph(
+                selected_document,
+                thermox::platform::
+                    make_default_component_registry(),
+                thermox::physics::
+                    make_default_property_package_registry(),
+                maps, chemistry, "operating_point");
+        require(
+            thermox::analyze_problem_structure(
+                graph.problem).valid_for_newton(),
+            "composition-controlled source graph must be square");
+        const auto result =
+            thermox::solve_newton(graph.problem);
+        require(result.diagnostics.converged,
+                result.diagnostics.message);
+        return std::pair{graph, result};
+    };
+
+    const auto [graph, result] = solve(document);
+    const auto flow = [&](const std::string& species) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names,
+            "source.outlet.m_dot[" + species + "]"));
+    };
+    require_near(
+        flow("N2"), 8.0, 1.0e-8,
+        "map pressure closure must solve nitrogen flow");
+    require_near(
+        flow("O2"), 2.0, 1.0e-8,
+        "map pressure closure must preserve source composition");
+
+    document.cases.front().parameter_overrides = {
+        {"components.source.parameters.mass_fraction[N2]",
+         {0.75, "dimensionless", "dimensionless"}},
+        {"components.source.parameters.mass_fraction[O2]",
+         {0.25, "dimensionless", "dimensionless"}},
+    };
+    const auto [override_graph, override_result] =
+        solve(document);
+    require_near(
+        override_result.x.at(require_variable_index(
+            override_graph.problem.variable_names,
+            "source.outlet.m_dot[N2]")),
+        7.5, 1.0e-8,
+        "case override must resolve a species-keyed parameter");
+    require_near(
+        override_result.x.at(require_variable_index(
+            override_graph.problem.variable_names,
+            "source.outlet.m_dot[O2]")),
+        2.5, 1.0e-8,
+        "case composition override must retain map-solved total flow");
+
+    auto incomplete = document;
+    incomplete.components.front().parameters.erase(
+        "mass_fraction[O2]");
+    incomplete.cases.front().parameter_overrides.clear();
+    require_throws(
+        [&]() { (void)solve(incomplete); },
+        "missing required parameter: mass_fraction[O2]");
+
+    auto unknown_species = document;
+    unknown_species.components.front().parameters[
+        "mass_fraction[CO2]"] = {
+        0.0, "dimensionless", "dimensionless"};
+    require_throws(
+        [&]() { (void)solve(unknown_species); },
+        "outside its material basis");
+}
+
 void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -4452,6 +4639,7 @@ int main() {
         test_adiabatic_equilibrium_combustor();
         test_material_compressor_and_turbine();
         test_map_driven_material_turbomachinery();
+        test_fixed_composition_source_allows_map_solved_flow();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();

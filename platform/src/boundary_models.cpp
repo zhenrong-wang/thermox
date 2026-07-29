@@ -1,7 +1,14 @@
 #include "component_modules.hpp"
+#include "component_model_support.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
+#include <set>
+#include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace thermox::platform {
 
@@ -21,6 +28,101 @@ ComponentModelDescriptor boundary_descriptor(
     return descriptor;
 }
 
+class FixedCompositionMaterialSourceModel final
+    : public ComponentModel {
+public:
+    FixedCompositionMaterialSourceModel() {
+        descriptor_ = boundary_descriptor(
+            "source.material.fixed_composition",
+            {{"outlet", "material", "out"}}, false, "source");
+        descriptor_.parameters = {{
+            "mass_fraction[{species}]",
+            "dimensionless",
+            true,
+            std::nullopt,
+            0.0,
+            1.0,
+            true,
+            true,
+        }};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        using component_model_support::require_port_species;
+        using component_model_support::require_port_variable;
+        using component_model_support::required_parameter;
+
+        const auto species =
+            require_port_species(context, "outlet");
+        if (species.empty()) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' fixed-composition source requires a nonempty "
+                "material species basis");
+        }
+        std::vector<double> fractions;
+        std::vector<std::size_t> flows;
+        std::set<std::string> expected_parameters;
+        fractions.reserve(species.size());
+        flows.reserve(species.size());
+        double sum = 0.0;
+        for (const auto& name : species) {
+            const auto parameter =
+                "mass_fraction[" + name + "]";
+            expected_parameters.insert(parameter);
+            const double fraction = required_parameter(
+                context.component, parameter);
+            fractions.push_back(fraction);
+            sum += fraction;
+            flows.push_back(require_port_variable(
+                context, "outlet.m_dot[" + name + "]"));
+        }
+        for (const auto& [name, _] :
+             context.component.parameters) {
+            if (!expected_parameters.contains(name)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' fixed-composition source parameter "
+                    "references a species outside its material "
+                    "basis: " + name);
+            }
+        }
+        if (!std::isfinite(sum) ||
+            std::abs(sum - 1.0) > 1.0e-10) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material source mass fractions must sum to one");
+        }
+
+        const std::string prefix =
+            "component." + context.component.id +
+            ".composition.";
+        const auto reference = static_cast<std::size_t>(
+            std::distance(
+                fractions.begin(),
+                std::max_element(
+                    fractions.begin(), fractions.end())));
+        for (std::size_t row = 0;
+             row < species.size(); ++row) {
+            if (row == reference) continue;
+            system.add_linear_equation(
+                prefix + species[row],
+                {{flows[row], fractions[reference]},
+                 {flows[reference], -fractions[row]}},
+                0.0, 100.0);
+        }
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_boundary_component_models(ComponentRegistry& registry) {
@@ -36,6 +138,8 @@ void register_boundary_component_models(ComponentRegistry& registry) {
         boundary_descriptor(
             "source.material.boundary",
             {{"outlet", "material", "out"}}, false, "source")));
+    registry.register_model(
+        std::make_shared<FixedCompositionMaterialSourceModel>());
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
             "sink.material.boundary",

@@ -282,7 +282,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 38,
+        response.components.size() == 39,
         "service must expose the complete component registry");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -369,6 +369,22 @@ void test_catalog_discovery() {
             mapped_turbine->artifacts.front().role ==
                 "performance_map",
         "catalog must expose mapped turbine artifact contract");
+    const auto composition_source = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "source.material.fixed_composition";
+        });
+    require(
+        composition_source != response.components.end() &&
+            composition_source->system_boundary_role ==
+                "source" &&
+            composition_source->parameters.size() == 1 &&
+            composition_source->parameters.front().name ==
+                "mass_fraction[{species}]",
+        "catalog must expose the species-keyed composition "
+        "boundary contract");
     const auto combustor = std::find_if(
         response.components.begin(),
         response.components.end(),

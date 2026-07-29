@@ -23,5 +23,9 @@ void validate_component_descriptor(
 void validate_component_parameters(
     const ComponentDefinition& component,
     const ComponentModelDescriptor& descriptor);
+const ParameterModelDescriptor*
+find_component_parameter_descriptor(
+    const ComponentModelDescriptor& descriptor,
+    const std::string& parameter_name);
 
 }  // namespace thermox::platform

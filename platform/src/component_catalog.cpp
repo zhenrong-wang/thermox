@@ -7,6 +7,60 @@
 
 namespace thermox::platform {
 
+namespace {
+
+bool is_parameter_template(const std::string& name) {
+    const auto open = name.find('{');
+    const auto close =
+        open == std::string::npos
+            ? std::string::npos
+            : name.find('}', open + 1);
+    return open != std::string::npos &&
+        close != std::string::npos &&
+        close > open + 1 &&
+        name.find('{', open + 1) == std::string::npos &&
+        name.find('}', close + 1) == std::string::npos;
+}
+
+bool matches_parameter_template(
+    const std::string& pattern,
+    const std::string& candidate) {
+    if (!is_parameter_template(pattern)) return false;
+    const auto open = pattern.find('{');
+    const auto close = pattern.find('}', open + 1);
+    const auto prefix = pattern.substr(0, open);
+    const auto suffix = pattern.substr(close + 1);
+    return candidate.size() >
+            prefix.size() + suffix.size() &&
+        candidate.starts_with(prefix) &&
+        candidate.ends_with(suffix);
+}
+
+}  // namespace
+
+const ParameterModelDescriptor*
+find_component_parameter_descriptor(
+    const ComponentModelDescriptor& descriptor,
+    const std::string& parameter_name) {
+    const auto exact = std::find_if(
+        descriptor.parameters.begin(),
+        descriptor.parameters.end(),
+        [&](const auto& candidate) {
+            return candidate.name == parameter_name;
+        });
+    if (exact != descriptor.parameters.end()) return &*exact;
+    const auto templated = std::find_if(
+        descriptor.parameters.begin(),
+        descriptor.parameters.end(),
+        [&](const auto& candidate) {
+            return matches_parameter_template(
+                candidate.name, parameter_name);
+        });
+    return templated == descriptor.parameters.end()
+        ? nullptr
+        : &*templated;
+}
+
 void validate_component_descriptor(
     const ComponentModelDescriptor& descriptor) {
     if (descriptor.version.empty()) {
@@ -73,6 +127,16 @@ void validate_component_descriptor(
                 "component model '" + descriptor.kind +
                 "' declares an empty parameter name");
         }
+        const bool contains_brace =
+            parameter.name.find('{') != std::string::npos ||
+            parameter.name.find('}') != std::string::npos;
+        if (contains_brace &&
+            !is_parameter_template(parameter.name)) {
+            throw std::logic_error(
+                "component model '" + descriptor.kind +
+                "' declares an invalid parameter template: " +
+                parameter.name);
+        }
         if (!declared.emplace(parameter.name, &parameter).second) {
             throw std::logic_error(
                 "component model '" + descriptor.kind +
@@ -137,6 +201,7 @@ void validate_component_parameters(
         declared.emplace(parameter.name, &parameter);
     }
     for (const auto& parameter : descriptor.parameters) {
+        if (is_parameter_template(parameter.name)) continue;
         const auto supplied =
             component.parameters.find(parameter.name);
         if (supplied == component.parameters.end()) {
@@ -179,12 +244,45 @@ void validate_component_parameters(
         }
     }
 
-    for (const auto& [name, _] : component.parameters) {
-        if (declared.find(name) == declared.end()) {
+    for (const auto& [name, scalar] : component.parameters) {
+        const auto* parameter =
+            find_component_parameter_descriptor(
+                descriptor, name);
+        if (parameter == nullptr) {
             throw std::invalid_argument(
                 "component '" + component.id +
                 "' supplies unknown parameter for kind '" +
                 descriptor.kind + "': " + name);
+        }
+        if (declared.contains(name)) continue;
+        if (scalar.dimension != "dimensionless" &&
+            scalar.dimension != parameter->dimension) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' parameter '" + name +
+                "' requires dimension '" +
+                parameter->dimension + "' but received '" +
+                scalar.dimension + "'");
+        }
+        const double value = scalar.value_si;
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' parameter '" + name + "' must be finite");
+        }
+        const bool below =
+            parameter->lower_inclusive
+                ? value < parameter->lower_bound
+                : value <= parameter->lower_bound;
+        const bool above =
+            parameter->upper_inclusive
+                ? value > parameter->upper_bound
+                : value >= parameter->upper_bound;
+        if (below || above) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' parameter '" + name +
+                "' is outside its declared bounds");
         }
     }
 }

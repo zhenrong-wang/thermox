@@ -135,6 +135,25 @@ species in the declared basis. Species mass flow is transported directly so conn
 components can conserve each species without redundant fraction-normalization equations. A
 `material_link` equates that complete, material-specific variable set.
 
+`source.material.fixed_composition` supplies a material boundary whose total mass flow remains an
+unknown available to the connected graph. Its species-keyed parameters use the catalog template
+`mass_fraction[{species}]`; an instance supplies one bounded value for every species in its bound
+material:
+
+```yaml
+kind: source.material.fixed_composition
+parameters:
+  mass_fraction[N2]: 0.7552
+  mass_fraction[O2]: 0.2314
+  mass_fraction[H2O]: 0.0134
+```
+
+Fractions must sum to one and cannot reference species outside the material basis. The component
+adds `N-1` independent, sparse linear ratio equations using the largest fraction as the numerical
+reference. Pressure and enthalpy remain ordinary boundary specifications, while one downstream
+physical closure—such as a sloped performance map against a fixed discharge pressure—can determine
+total flow. This avoids fixing every species flow merely to state inlet composition.
+
 ### 5.3 Heat domain
 
 Canonical variables:
@@ -255,6 +274,9 @@ dimension, requiredness, optional
 default, lower/upper bounds, and whether each bound is inclusive. The compiler rejects missing,
 unknown, dimensionally incompatible, non-finite, and out-of-range values before equation assembly.
 Plain numeric values remain implicit SI; unit-bearing values must match the declared dimension.
+Descriptors may expose one keyed name template such as `mass_fraction[{species}]`; concrete
+instance values and case overrides retain the same dimension and bound validation, while the
+component validates keys against its bound material context.
 
 The compiler resolves model media
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware

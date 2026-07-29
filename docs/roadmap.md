@@ -259,6 +259,8 @@ Next:
     fluid/material compressor and turbine components for case-selected IGV/guide-vane angles. ✅
 12. Standardize component-owned flow-capacity, pressure-ratio, and efficiency map corrections,
     and prove ordinary calibration can fit and freeze them for independent prediction. ✅
+13. Add species-keyed parameter templates and a fixed-composition material source that leaves
+    total flow available for downstream map/pressure closure. ✅
 
 See `docs/calibration-architecture.md`.
 

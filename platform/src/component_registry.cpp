@@ -442,13 +442,10 @@ case_parameter_overrides(
         }
         const auto& descriptor =
             registry.require_model(component->kind).descriptor();
-        const auto parameter = std::find_if(
-            descriptor.parameters.begin(),
-            descriptor.parameters.end(),
-            [&](const auto& candidate) {
-                return candidate.name == parameter_name;
-            });
-        if (parameter == descriptor.parameters.end()) {
+        const auto* parameter =
+            find_component_parameter_descriptor(
+                descriptor, parameter_name);
+        if (parameter == nullptr) {
             throw std::invalid_argument(
                 "case '" + active_case->id +
                 "' parameter override references unknown "

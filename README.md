@@ -39,6 +39,8 @@ Implemented in this sprint:
   analytic/finite-difference derivative rows.
 - Composition-preserving material splitters and enthalpy-conserving material mixers for bleed,
   cooling, recirculation, and multistream reacting-system graphs.
+- Fixed-composition material sources use species-keyed, bounds-checked mass fractions while
+  leaving total flow available for the connected equipment graph to solve.
 - Performance-map compressor and turbine models for both ordinary fluid and composition-aware
   material gas paths, with component-owned flow-capacity, pressure-ratio, and efficiency
   corrections that can be calibrated without modifying immutable map artifacts.
