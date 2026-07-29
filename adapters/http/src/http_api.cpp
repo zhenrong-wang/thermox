@@ -35,6 +35,11 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+class PreconditionRequired : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 std::string lower_ascii(std::string value) {
     std::transform(
         value.begin(), value.end(), value.begin(),
@@ -412,6 +417,37 @@ std::string required_header(
             "missing required header: " + name);
     }
     return *value;
+}
+
+std::uint64_t required_revision_precondition(
+    const Request& request) {
+    const auto value = header(request, "if-match");
+    if (!value || value->empty()) {
+        throw PreconditionRequired(
+            "If-Match is required for simulation cancellation");
+    }
+    constexpr std::string_view prefix{"\"revision-"};
+    if (!value->starts_with(prefix) ||
+        !value->ends_with('"') ||
+        value->size() <= prefix.size() + 1U) {
+        throw std::invalid_argument(
+            "If-Match must use a simulation revision ETag");
+    }
+    const std::string_view revision{
+        value->data() + prefix.size(),
+        value->size() - prefix.size() - 1U};
+    std::uint64_t parsed_revision = 0;
+    const auto parsed = std::from_chars(
+        revision.data(),
+        revision.data() + revision.size(),
+        parsed_revision);
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != revision.data() + revision.size() ||
+        parsed_revision == 0) {
+        throw std::invalid_argument(
+            "If-Match must use a simulation revision ETag");
+    }
+    return parsed_revision;
 }
 
 Response job_record_response(
@@ -1515,13 +1551,6 @@ Response Api::handle(const Request& request) const {
             "/api/v1/simulations/";
         if (target.path.starts_with(job_prefix)) {
             reject_unknown_query(target.query, {});
-            if (method != "get") {
-                auto response = error_response(
-                    405, "method_not_allowed",
-                    "simulation status and results only support GET");
-                response.headers["Allow"] = "GET";
-                return response;
-            }
             const auto& identity = require_identity(request);
             std::string suffix =
                 target.path.substr(job_prefix.size());
@@ -1537,6 +1566,54 @@ Response Api::handle(const Request& request) const {
                 return error_response(
                     404, "route_not_found",
                     "no route matches the request target");
+            }
+            if (result_requested && method != "get") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "simulation results only support GET");
+                response.headers["Allow"] = "GET";
+                return response;
+            }
+            if (!result_requested &&
+                method != "get" && method != "delete") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "simulation jobs only support GET and DELETE");
+                response.headers["Allow"] = "GET, DELETE";
+                return response;
+            }
+            if (method == "delete") {
+                if (!request.body.empty()) {
+                    throw std::invalid_argument(
+                        "simulation cancellation must not contain "
+                        "a request body");
+                }
+                std::uint64_t expected_revision = 0;
+                try {
+                    expected_revision =
+                        required_revision_precondition(request);
+                } catch (const PreconditionRequired& error) {
+                    return error_response(
+                        428,
+                        "precondition_required",
+                        error.what());
+                }
+                if (!impl_->jobs->get(identity, suffix)) {
+                    return error_response(
+                        404,
+                        "simulation_not_found",
+                        "simulation job was not found");
+                }
+                try {
+                    const auto cancelled = impl_->jobs->cancel(
+                        identity, suffix, expected_revision);
+                    return job_record_response(cancelled, 200);
+                } catch (const service::JobConflictError& error) {
+                    return error_response(
+                        412,
+                        "revision_precondition_failed",
+                        error.what());
+                }
             }
             if (!result_requested) {
                 const auto record =

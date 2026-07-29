@@ -395,6 +395,84 @@ void test_tenant_scoped_asynchronous_jobs() {
         "malformed history cursors must be rejected at the "
         "transport boundary");
 
+    auto cancellable_submission = submission;
+    cancellable_submission.headers["Idempotency-Key"] =
+        "http-job-cancellable";
+    const auto cancellable =
+        api.handle(authenticated(cancellable_submission));
+    require(
+        cancellable.status == 202 &&
+            cancellable.headers.contains("Location") &&
+            cancellable.headers.at("ETag") == "\"revision-1\"",
+        "a second queued job must expose its concurrency ETag");
+    const auto cancellable_job_id =
+        cancellable.headers.at("Location").substr(
+            std::string("/api/v1/simulations/").size());
+
+    thermox::http::Request cancellation{
+        "DELETE",
+        "/api/v1/simulations/" + cancellable_job_id,
+        {{"If-Match", "\"revision-1\""}},
+        {},
+    };
+    require(
+        api.handle(authenticated(
+            cancellation, "user-b", "team-b")).status == 404,
+        "cross-Team cancellation must not reveal job existence");
+    auto missing_precondition = cancellation;
+    missing_precondition.headers.clear();
+    require(
+        api.handle(authenticated(missing_precondition)).status == 428,
+        "cancellation must require an optimistic concurrency "
+        "precondition");
+    auto malformed_precondition = cancellation;
+    malformed_precondition.headers["If-Match"] = "revision-1";
+    const auto malformed_response =
+        api.handle(authenticated(malformed_precondition));
+    require(
+        malformed_response.status == 400,
+        "cancellation must reject malformed revision ETags, got " +
+            std::to_string(malformed_response.status));
+    auto stale_precondition = cancellation;
+    stale_precondition.headers["If-Match"] = "\"revision-999\"";
+    require(
+        api.handle(authenticated(stale_precondition)).status == 412,
+        "cancellation must distinguish stale revisions from "
+        "state conflicts");
+    const auto cancelled =
+        api.handle(authenticated(cancellation));
+    require(
+        cancelled.status == 200 &&
+            cancelled.headers.at("ETag") == "\"revision-2\"" &&
+            cancelled.body.find("\"state\": \"cancelled\"") !=
+                std::string::npos,
+        "valid cancellation must publish a new terminal job "
+        "revision");
+    require(
+        api.handle(authenticated(cancellation)).status == 412,
+        "repeating cancellation with a stale ETag must fail its "
+        "precondition");
+    auto terminal_cancellation = cancellation;
+    terminal_cancellation.headers["If-Match"] = "\"revision-2\"";
+    require(
+        api.handle(authenticated(terminal_cancellation)).status ==
+            409,
+        "cancelling a terminal job at its current revision must "
+        "report a state conflict");
+
+    auto cancelled_history_request = thermox::http::Request{
+        "GET",
+        "/api/v1/simulations?state=cancelled",
+        {},
+        {}};
+    const auto cancelled_history = api.handle(
+        authenticated(cancelled_history_request));
+    require(
+        cancelled_history.status == 200 &&
+            cancelled_history.body.find(cancellable_job_id) !=
+                std::string::npos,
+        "cancelled jobs must remain visible in run history");
+
     auto other_lookup = thermox::http::Request{
         "GET",
         "/api/v1/simulations/" + job_id,

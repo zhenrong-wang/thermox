@@ -158,6 +158,11 @@ Project, and run-configuration filters. The repository always applies Team owner
 filter or cursor, and the HTTP cursor encoding remains outside the transport-neutral service
 contract.
 
+Queued jobs may be cancelled through `DELETE /api/v1/simulations/{job_id}`. The thin HTTP adapter
+requires the exact ETag returned by submission or status lookup in `If-Match`; missing, stale, and
+malformed preconditions remain distinct from job-state conflicts. Cancellation publishes a new
+terminal revision rather than deleting history, and cross-Team targets are reported as missing.
+
 ## Object storage
 
 Durable result content now follows a two-level adapter design:
