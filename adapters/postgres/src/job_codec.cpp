@@ -449,6 +449,14 @@ std::string encode_request(
             "project_id",
             request.source_revisions->project_id);
         source.put(
+            "run_configuration_revision_id",
+            request.source_revisions
+                ->run_configuration_revision_id);
+        source.put(
+            "run_configuration_checksum",
+            request.source_revisions
+                ->run_configuration_checksum);
+        source.put(
             "model_revision_id",
             request.source_revisions->model_revision_id);
         source.put(
@@ -500,6 +508,10 @@ service::SimulationJobRequest decode_request(
                 source->get<std::string>(
                     "case_revision_id"),
                 source->get<std::string>("case_checksum"),
+                source->get<std::string>(
+                    "run_configuration_revision_id", ""),
+                source->get<std::string>(
+                    "run_configuration_checksum", ""),
             };
     }
     request.steady_solver = decode_steady_settings(
@@ -539,6 +551,14 @@ std::string encode_execution(
         source.put(
             "project_id",
             execution.source_revisions->project_id);
+        source.put(
+            "run_configuration_revision_id",
+            execution.source_revisions
+                ->run_configuration_revision_id);
+        source.put(
+            "run_configuration_checksum",
+            execution.source_revisions
+                ->run_configuration_checksum);
         source.put(
             "model_revision_id",
             execution.source_revisions->model_revision_id);
@@ -652,6 +672,10 @@ service::ExecutionMetadata decode_execution(
                 source->get<std::string>(
                     "case_revision_id"),
                 source->get<std::string>("case_checksum"),
+                source->get<std::string>(
+                    "run_configuration_revision_id", ""),
+                source->get<std::string>(
+                    "run_configuration_checksum", ""),
             };
     }
     value.components =

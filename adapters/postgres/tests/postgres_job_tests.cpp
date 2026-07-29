@@ -89,6 +89,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "003_projects_and_model_revisions.sql",
              "004_case_revisions.sql",
              "005_artifact_revisions.sql",
+             "006_run_configuration_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -615,6 +616,44 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL artifact metadata must be immutable and "
         "Team scoped");
+
+    thermox::service::CreateRunConfigurationRevisionRequest
+        run_request;
+    run_request.identity = team_a;
+    run_request.project_id = project.project_id;
+    run_request.run_configuration_id = "postgres-design-run";
+    run_request.model_revision_id = first.model_revision_id;
+    run_request.case_revision_id =
+        first_case.case_revision_id;
+    run_request.artifact_revision_ids = {
+        artifact.artifact_revision_id,
+    };
+    run_request.steady_solver.max_iterations = 41;
+    const auto run =
+        projects.create_run_configuration_revision(run_request);
+    const auto loaded =
+        projects.get_run_configuration_revision(
+            team_a,
+            project.project_id,
+            run.run_configuration_revision_id);
+    require(
+        loaded &&
+            loaded->artifact_revision_ids ==
+                run_request.artifact_revision_ids &&
+            loaded->steady_solver.max_iterations == 41 &&
+            loaded->checksum == run.checksum &&
+            projects
+                    .list_run_configuration_revisions(
+                        team_a, project.project_id)
+                    .size() == 1U &&
+            !projects
+                 .get_run_configuration_revision(
+                     team_b,
+                     project.project_id,
+                     run.run_configuration_revision_id)
+                 .has_value(),
+        "PostgreSQL run configurations must preserve exact "
+        "bindings, solver policy, and Team isolation");
 }
 
 }  // namespace

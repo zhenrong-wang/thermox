@@ -146,7 +146,9 @@ The application boundary needed by a thin network adapter is now complete:
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
 | Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
 | Publish/read operating-case revisions | `ProjectService` | `thermox.case_revision/v1` JSON |
+| Publish/read run-configuration revisions | `ProjectService` | `thermox.run_configuration_revision/v1` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
+| Resolve a complete execution intent | `ProjectService::resolve_run_configuration` | immutable model/artifact/solver snapshot |
 | Submit a simulation | `SimulationJobService::submit` | `thermox.job/v4` JSON |
 | Inspect a simulation | `SimulationJobService::get` | `thermox.job/v4` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
@@ -205,18 +207,17 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/artifact-revisions` | List/publish immutable engineering artifacts |
 | `GET` | `/api/v1/projects/{project_id}/artifact-revisions/{artifact_revision_id}` | Read artifact revision metadata |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/run-configuration-revisions` | List/publish reusable execution intents |
+| `GET` | `/api/v1/projects/{project_id}/run-configuration-revisions/{revision_id}` | Read an exact execution intent |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
-| `POST` | `/api/v1/simulations?project_id=...&model_revision_id=...&case_revision_id=...&artifact_revision_ids=...` | Submit a revision-backed Team-owned asynchronous job |
+| `POST` | `/api/v1/simulations?project_id=...&run_configuration_revision_id=...` | Submit a run-configuration-backed asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
 
 The deployed API disables synchronous steady/transient routes so expensive work cannot enter the
 request process. An explicitly configured embedded adapter may enable those routes for tests or
 trusted local use. Production asynchronous submission has an empty body and names an exact
-Team-scoped project, topology revision, and case revision in the query. The case revision selects
-steady or transient mode; transient submission additionally requires `end_time`. The API composes
-and snapshots the executable model before enqueueing. Inline engineering-artifact upload,
-arbitrary solver settings, authentication, and authorization policy follow without changing the
-simulation application boundary. `artifact_revision_ids` is an optional comma-separated list of
-exact project artifact revisions; their verified typed content is included in the immutable job
-snapshot.
+Team-scoped Project and run-configuration revision. That immutable revision selects topology,
+case, artifact revisions, steady/transient mode, and complete solver policy. The API verifies and
+snapshots the executable model and typed artifacts before enqueueing. Authentication and
+authorization policy follow without changing the simulation application boundary.

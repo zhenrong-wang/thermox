@@ -283,16 +283,41 @@ void test_tenant_scoped_asynchronous_jobs() {
         uploaded.headers.at("Location").substr(
             uploaded.headers.at("Location").find_last_of('/') +
             1U);
+    auto run_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/run-configuration-revisions",
+        std::string{
+            R"({"schema_version":)"
+            R"("thermox.run_configuration.create/v1",)"
+            R"("run_configuration_id":"http-design-run",)"
+            R"("model_revision_id":")"} +
+            model.model_revision_id +
+            R"(","case_revision_id":")" +
+            simulation_case.case_revision_id +
+            R"(","artifact_revision_ids":[")" +
+            artifact_revision_id +
+            R"("],"steady_solver":{"max_iterations":37}})");
+    const auto run_created = api.handle(
+        authenticated(std::move(run_upload)));
+    require(
+        run_created.status == 201 &&
+            run_created.headers.contains("Location") &&
+            run_created.body.find(
+                "\"max_iterations\": 37") !=
+                std::string::npos,
+        "run configuration route must persist bindings and "
+        "solver policy");
+    const auto run_configuration_revision_id =
+        run_created.headers.at("Location").substr(
+            run_created.headers.at("Location").find_last_of('/') +
+            1U);
 
     auto submission = thermox::http::Request{
         "POST",
         "/api/v1/simulations?project_id=" +
             project.project_id +
-            "&model_revision_id=" + model.model_revision_id +
-            "&case_revision_id=" +
-            simulation_case.case_revision_id +
-            "&artifact_revision_ids=" +
-            artifact_revision_id,
+            "&run_configuration_revision_id=" +
+            run_configuration_revision_id,
         {},
         {}};
     submission.headers["Idempotency-Key"] = "http-job-1";
@@ -323,6 +348,9 @@ void test_tenant_scoped_asynchronous_jobs() {
             queued.body.find(simulation_case.checksum) !=
                 std::string::npos &&
             queued.body.find(artifact_revision_id) !=
+                std::string::npos &&
+            queued.body.find(
+                run_configuration_revision_id) !=
                 std::string::npos &&
             queued.headers.contains("Location"),
         "authenticated submission must create a Team-owned "
@@ -367,6 +395,9 @@ void test_tenant_scoped_asynchronous_jobs() {
                 simulation_case.case_revision_id) !=
                 std::string::npos &&
             result.body.find(artifact_revision_id) !=
+                std::string::npos &&
+            result.body.find(
+                run_configuration_revision_id) !=
                 std::string::npos &&
             result.headers.contains("ETag"),
         "job result must publish stored revision provenance");

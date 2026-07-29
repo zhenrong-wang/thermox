@@ -1,6 +1,7 @@
 #include "thermox/service/projects.hpp"
 
 #include <chrono>
+#include <iomanip>
 #include <sstream>
 
 namespace thermox::service {
@@ -177,6 +178,97 @@ void artifact_revision_json(
         << epoch_milliseconds(revision.created_at) << '}';
 }
 
+void steady_solver_json(
+    std::ostringstream& out,
+    const SteadySolverSettings& solver) {
+    out << "{\"max_iterations\": "
+        << solver.max_iterations
+        << ", \"residual_tolerance\": "
+        << solver.residual_tolerance
+        << ", \"step_tolerance\": "
+        << solver.step_tolerance
+        << ", \"finite_difference_epsilon\": "
+        << solver.finite_difference_epsilon
+        << ", \"min_damping\": "
+        << solver.min_damping
+        << ", \"damping_reduction\": "
+        << solver.damping_reduction
+        << ", \"sufficient_decrease\": "
+        << solver.sufficient_decrease
+        << ", \"max_line_search_steps\": "
+        << solver.max_line_search_steps << '}';
+}
+
+void transient_solver_json(
+    std::ostringstream& out,
+    const TransientSolverSettings& solver) {
+    out << "{\"start_time\": " << solver.start_time
+        << ", \"end_time\": " << solver.end_time
+        << ", \"initial_step\": " << solver.initial_step
+        << ", \"min_step\": " << solver.min_step
+        << ", \"max_step\": " << solver.max_step
+        << ", \"absolute_tolerance\": "
+        << solver.absolute_tolerance
+        << ", \"relative_tolerance\": "
+        << solver.relative_tolerance
+        << ", \"max_steps\": " << solver.max_steps
+        << ", \"max_consecutive_rejections\": "
+        << solver.max_consecutive_rejections
+        << ", \"compute_consistent_initial_conditions\": "
+        << (solver.compute_consistent_initial_conditions
+                ? "true"
+                : "false")
+        << ", \"nonlinear_solver\": ";
+    steady_solver_json(out, solver.nonlinear_solver);
+    out << '}';
+}
+
+void run_configuration_revision_json(
+    std::ostringstream& out,
+    const RunConfigurationRevisionRecord& revision) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"run_configuration_revision_id\": ";
+    json_string(out, revision.run_configuration_revision_id);
+    out << ", \"run_configuration_id\": ";
+    json_string(out, revision.run_configuration_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"revision_number\": "
+        << revision.revision_number;
+    out << ", \"parent_run_configuration_revision_id\": ";
+    json_string(
+        out,
+        revision.parent_run_configuration_revision_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, revision.model_revision_id);
+    out << ", \"case_revision_id\": ";
+    json_string(out, revision.case_revision_id);
+    out << ", \"artifact_revision_ids\": [";
+    for (std::size_t index = 0;
+         index < revision.artifact_revision_ids.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        json_string(out, revision.artifact_revision_ids[index]);
+    }
+    out << "], \"mode\": ";
+    json_string(out, revision.mode);
+    out << ", \"steady_solver\": ";
+    steady_solver_json(out, revision.steady_solver);
+    out << ", \"transient_solver\": ";
+    transient_solver_json(out, revision.transient_solver);
+    out << ", \"checksum\": ";
+    json_string(out, revision.checksum);
+    out << ", \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at) << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -275,6 +367,35 @@ std::string serialize_artifact_revisions_json(
             out << ", ";
         }
         artifact_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_run_configuration_revision_json(
+    const RunConfigurationRevisionRecord& revision) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    run_configuration_revision_json(out, revision);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_run_configuration_revisions_json(
+    const std::vector<RunConfigurationRevisionRecord>&
+        revisions) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    out << "{\"schema_version\": "
+           "\"thermox.run_configuration_revision_list/v1\", "
+        << "\"run_configuration_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size();
+         ++index) {
+        if (index != 0U) {
+            out << ", ";
+        }
+        run_configuration_revision_json(
+            out, revisions[index]);
     }
     out << "]}\n";
     return out.str();

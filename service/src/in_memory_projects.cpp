@@ -360,6 +360,134 @@ public:
         return records;
     }
 
+    RunConfigurationRevisionRecord
+    create_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& run_configuration_id,
+        const std::string&
+            parent_run_configuration_revision_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id,
+        const std::vector<std::string>&
+            artifact_revision_ids,
+        const std::string& mode,
+        const SteadySolverSettings& steady_solver,
+        const TransientSolverSettings& transient_solver,
+        const std::string& checksum) override {
+        std::lock_guard lock(mutex_);
+        const auto simulation_case =
+            case_revisions_.find(case_revision_id);
+        if (simulation_case == case_revisions_.end() ||
+            simulation_case->second.team_id != team_id ||
+            simulation_case->second.project_id != project_id ||
+            simulation_case->second.model_revision_id !=
+                model_revision_id) {
+            throw ProjectStateError(
+                "model/case revision pair was not found");
+        }
+        if (!parent_run_configuration_revision_id.empty()) {
+            const auto parent =
+                run_configuration_revisions_.find(
+                    parent_run_configuration_revision_id);
+            if (parent ==
+                    run_configuration_revisions_.end() ||
+                parent->second.team_id != team_id ||
+                parent->second.project_id != project_id ||
+                parent->second.run_configuration_id !=
+                    run_configuration_id) {
+                throw ProjectStateError(
+                    "parent run configuration revision was "
+                    "not found");
+            }
+        }
+        for (const auto& revision_id :
+             artifact_revision_ids) {
+            const auto artifact =
+                artifact_revisions_.find(revision_id);
+            if (artifact == artifact_revisions_.end() ||
+                artifact->second.team_id != team_id ||
+                artifact->second.project_id != project_id) {
+                throw ProjectStateError(
+                    "artifact revision was not found");
+            }
+        }
+        const auto sequence_key =
+            project_id + '\0' + run_configuration_id;
+        RunConfigurationRevisionRecord record;
+        record.run_configuration_revision_id = next_id(
+            "run-configuration-revision",
+            next_run_configuration_revision_id_++);
+        record.run_configuration_id = run_configuration_id;
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.revision_number =
+            ++run_configuration_revision_sequences_[
+                sequence_key];
+        record.parent_run_configuration_revision_id =
+            parent_run_configuration_revision_id;
+        record.model_revision_id = model_revision_id;
+        record.case_revision_id = case_revision_id;
+        record.artifact_revision_ids =
+            artifact_revision_ids;
+        record.mode = mode;
+        record.steady_solver = steady_solver;
+        record.transient_solver = transient_solver;
+        record.checksum = checksum;
+        record.created_by_user_id = created_by_user_id;
+        record.created_at = std::chrono::system_clock::now();
+        run_configuration_revisions_.emplace(
+            record.run_configuration_revision_id, record);
+        return record;
+    }
+
+    std::optional<RunConfigurationRevisionRecord>
+    get_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto found = run_configuration_revisions_.find(
+            run_configuration_revision_id);
+        if (found == run_configuration_revisions_.end() ||
+            found->second.team_id != team_id ||
+            found->second.project_id != project_id) {
+            return std::nullopt;
+        }
+        return found->second;
+    }
+
+    std::vector<RunConfigurationRevisionRecord>
+    list_run_configuration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        std::lock_guard lock(mutex_);
+        std::vector<RunConfigurationRevisionRecord> records;
+        for (const auto& [id, record] :
+             run_configuration_revisions_) {
+            (void)id;
+            if (record.team_id == team_id &&
+                record.project_id == project_id) {
+                records.push_back(record);
+            }
+        }
+        std::sort(
+            records.begin(),
+            records.end(),
+            [](const auto& left, const auto& right) {
+                if (left.run_configuration_id !=
+                    right.run_configuration_id) {
+                    return left.run_configuration_id <
+                        right.run_configuration_id;
+                }
+                return left.revision_number <
+                    right.revision_number;
+            });
+        return records;
+    }
+
 private:
     static std::string next_id(
         const std::string& prefix,
@@ -375,6 +503,7 @@ private:
     std::uint64_t next_model_revision_id_{1};
     std::uint64_t next_case_revision_id_{1};
     std::uint64_t next_artifact_revision_id_{1};
+    std::uint64_t next_run_configuration_revision_id_{1};
     std::unordered_map<std::string, ProjectRecord> projects_;
     std::unordered_map<std::string, ModelRevisionRecord>
         model_revisions_;
@@ -382,12 +511,18 @@ private:
         case_revisions_;
     std::unordered_map<std::string, ArtifactRevisionRecord>
         artifact_revisions_;
+    std::unordered_map<
+        std::string,
+        RunConfigurationRevisionRecord>
+        run_configuration_revisions_;
     std::unordered_map<std::string, std::uint64_t>
         project_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         case_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         artifact_revision_sequences_;
+    std::unordered_map<std::string, std::uint64_t>
+        run_configuration_revision_sequences_;
 };
 
 class InMemoryEngineeringArtifactContentStore final

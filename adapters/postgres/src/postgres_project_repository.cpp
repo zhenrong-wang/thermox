@@ -1,11 +1,16 @@
 #include "thermox/postgres/postgres_project_repository.hpp"
 
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
 #include <libpq-fe.h>
 
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -33,6 +38,106 @@ struct ResultDeleter {
 
 using Connection = std::unique_ptr<PGconn, ConnectionDeleter>;
 using Result = std::unique_ptr<PGresult, ResultDeleter>;
+using Tree = boost::property_tree::ptree;
+
+std::string write_tree(const Tree& tree) {
+    std::ostringstream output;
+    boost::property_tree::write_json(output, tree, false);
+    return output.str();
+}
+
+Tree read_tree(const std::string& payload) {
+    std::istringstream input(payload);
+    Tree tree;
+    boost::property_tree::read_json(input, tree);
+    return tree;
+}
+
+Tree steady_solver_tree(
+    const service::SteadySolverSettings& value) {
+    Tree tree;
+    tree.put("max_iterations", value.max_iterations);
+    tree.put("residual_tolerance", value.residual_tolerance);
+    tree.put("step_tolerance", value.step_tolerance);
+    tree.put(
+        "finite_difference_epsilon",
+        value.finite_difference_epsilon);
+    tree.put("min_damping", value.min_damping);
+    tree.put("damping_reduction", value.damping_reduction);
+    tree.put(
+        "sufficient_decrease", value.sufficient_decrease);
+    tree.put(
+        "max_line_search_steps",
+        value.max_line_search_steps);
+    return tree;
+}
+
+service::SteadySolverSettings decode_steady_solver(
+    const Tree& tree) {
+    service::SteadySolverSettings value;
+    value.max_iterations =
+        tree.get<int>("max_iterations");
+    value.residual_tolerance =
+        tree.get<double>("residual_tolerance");
+    value.step_tolerance =
+        tree.get<double>("step_tolerance");
+    value.finite_difference_epsilon =
+        tree.get<double>("finite_difference_epsilon");
+    value.min_damping = tree.get<double>("min_damping");
+    value.damping_reduction =
+        tree.get<double>("damping_reduction");
+    value.sufficient_decrease =
+        tree.get<double>("sufficient_decrease");
+    value.max_line_search_steps =
+        tree.get<int>("max_line_search_steps");
+    return value;
+}
+
+Tree transient_solver_tree(
+    const service::TransientSolverSettings& value) {
+    Tree tree;
+    tree.put("start_time", value.start_time);
+    tree.put("end_time", value.end_time);
+    tree.put("initial_step", value.initial_step);
+    tree.put("min_step", value.min_step);
+    tree.put("max_step", value.max_step);
+    tree.put("absolute_tolerance", value.absolute_tolerance);
+    tree.put("relative_tolerance", value.relative_tolerance);
+    tree.put("max_steps", value.max_steps);
+    tree.put(
+        "max_consecutive_rejections",
+        value.max_consecutive_rejections);
+    tree.put(
+        "compute_consistent_initial_conditions",
+        value.compute_consistent_initial_conditions);
+    tree.add_child(
+        "nonlinear_solver",
+        steady_solver_tree(value.nonlinear_solver));
+    return tree;
+}
+
+service::TransientSolverSettings decode_transient_solver(
+    const Tree& tree) {
+    service::TransientSolverSettings value;
+    value.start_time = tree.get<double>("start_time");
+    value.end_time = tree.get<double>("end_time");
+    value.initial_step = tree.get<double>("initial_step");
+    value.min_step = tree.get<double>("min_step");
+    value.max_step = tree.get<double>("max_step");
+    value.absolute_tolerance =
+        tree.get<double>("absolute_tolerance");
+    value.relative_tolerance =
+        tree.get<double>("relative_tolerance");
+    value.max_steps = tree.get<int>("max_steps");
+    value.max_consecutive_rejections =
+        tree.get<int>("max_consecutive_rejections");
+    value.compute_consistent_initial_conditions =
+        tree.get<bool>(
+            "compute_consistent_initial_conditions");
+    value.nonlinear_solver = decode_steady_solver(
+        tree.get_child("nonlinear_solver"));
+    return value;
+}
 
 Connection connect(const std::string& connection_string) {
     Connection connection{PQconnectdb(connection_string.c_str())};
@@ -177,6 +282,33 @@ service::ArtifactRevisionRecord decode_artifact_revision(
     return record;
 }
 
+service::RunConfigurationRevisionRecord
+decode_run_configuration_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::RunConfigurationRevisionRecord record;
+    record.run_configuration_revision_id =
+        field(result, row, 0);
+    record.run_configuration_id = field(result, row, 1);
+    record.project_id = field(result, row, 2);
+    record.team_id = field(result, row, 3);
+    record.revision_number =
+        std::stoull(field(result, row, 4));
+    record.parent_run_configuration_revision_id =
+        optional_field(result, row, 5);
+    record.model_revision_id = field(result, row, 6);
+    record.case_revision_id = field(result, row, 7);
+    record.mode = field(result, row, 8);
+    record.steady_solver = decode_steady_solver(
+        read_tree(field(result, row, 9)));
+    record.transient_solver = decode_transient_solver(
+        read_tree(field(result, row, 10)));
+    record.checksum = field(result, row, 11);
+    record.created_by_user_id = field(result, row, 12);
+    record.created_at = decode_time(field(result, row, 13));
+    return record;
+}
+
 constexpr const char project_columns[] =
     "project_id, team_id, name, description, "
     "created_by_user_id, "
@@ -207,6 +339,16 @@ constexpr const char artifact_revision_columns[] =
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
+constexpr const char run_configuration_revision_columns[] =
+    "run_configuration_revision_id, run_configuration_id, "
+    "project_id, team_id, revision_number, "
+    "parent_run_configuration_revision_id, "
+    "model_revision_id, case_revision_id, mode, "
+    "steady_solver_payload, transient_solver_payload, "
+    "checksum, created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
 class PostgresProjectRepository final
     : public service::ProjectRepository {
 public:
@@ -223,11 +365,14 @@ public:
             "SELECT to_regclass('thermox_projects')::text, "
             "to_regclass('thermox_model_revisions')::text, "
             "to_regclass('thermox_case_revisions')::text, "
-            "to_regclass('thermox_artifact_revisions')::text");
+            "to_regclass('thermox_artifact_revisions')::text, "
+            "to_regclass("
+            "'thermox_run_configuration_revisions')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
             PQgetisnull(schema.get(), 0, 1) ||
             PQgetisnull(schema.get(), 0, 2) ||
-            PQgetisnull(schema.get(), 0, 3)) {
+            PQgetisnull(schema.get(), 0, 3) ||
+            PQgetisnull(schema.get(), 0, 4)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -722,7 +867,235 @@ public:
         return records;
     }
 
+    service::RunConfigurationRevisionRecord
+    create_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& run_configuration_id,
+        const std::string&
+            parent_run_configuration_revision_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id,
+        const std::vector<std::string>&
+            artifact_revision_ids,
+        const std::string& mode,
+        const service::SteadySolverSettings& steady_solver,
+        const service::TransientSolverSettings&
+            transient_solver,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(
+            connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto project = execute(
+            connection.get(),
+            "SELECT 1 FROM thermox_projects "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "FOR UPDATE",
+            {team_id.c_str(), project_id.c_str()});
+        if (PQntuples(project.get()) == 0) {
+            throw service::ProjectStateError(
+                "project was not found");
+        }
+        if (!parent_run_configuration_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM "
+                "thermox_run_configuration_revisions "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND run_configuration_id = $3 "
+                "AND run_configuration_revision_id = $4",
+                {
+                    team_id.c_str(),
+                    project_id.c_str(),
+                    run_configuration_id.c_str(),
+                    parent_run_configuration_revision_id
+                        .c_str(),
+                });
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent run configuration revision was "
+                    "not found");
+            }
+        }
+        const auto number = execute(
+            connection.get(),
+            "SELECT coalesce(max(revision_number), 0) + 1 "
+            "FROM thermox_run_configuration_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND run_configuration_id = $3",
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                run_configuration_id.c_str(),
+            });
+        const auto revision_number = field(number.get(), 0, 0);
+        const char* parent =
+            parent_run_configuration_revision_id.empty()
+            ? nullptr
+            : parent_run_configuration_revision_id.c_str();
+        const auto steady_payload =
+            write_tree(steady_solver_tree(steady_solver));
+        const auto transient_payload = write_tree(
+            transient_solver_tree(transient_solver));
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO "
+            "thermox_run_configuration_revisions ("
+            "run_configuration_id, project_id, team_id, "
+            "revision_number, "
+            "parent_run_configuration_revision_id, "
+            "model_revision_id, case_revision_id, mode, "
+            "steady_solver_payload, "
+            "transient_solver_payload, checksum, "
+            "created_by_user_id"
+            ") VALUES ("
+            "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
+            "$9, $10, $11, $12"
+            ") RETURNING "
+            "run_configuration_revision_id, "
+            "run_configuration_id, project_id, team_id, "
+            "revision_number, "
+            "parent_run_configuration_revision_id, "
+            "model_revision_id, case_revision_id, mode, "
+            "steady_solver_payload, "
+            "transient_solver_payload, checksum, "
+            "created_by_user_id, "
+            "floor(extract(epoch FROM created_at) * 1000)"
+            "::bigint::text",
+            {
+                run_configuration_id.c_str(),
+                project_id.c_str(),
+                team_id.c_str(),
+                revision_number.c_str(),
+                parent,
+                model_revision_id.c_str(),
+                case_revision_id.c_str(),
+                mode.c_str(),
+                steady_payload.c_str(),
+                transient_payload.c_str(),
+                checksum.c_str(),
+                created_by_user_id.c_str(),
+            });
+        auto record =
+            decode_run_configuration_revision(result.get());
+        for (std::size_t index = 0;
+             index < artifact_revision_ids.size();
+             ++index) {
+            const auto position = std::to_string(index);
+            (void)execute(
+                connection.get(),
+                "INSERT INTO "
+                "thermox_run_configuration_artifacts ("
+                "run_configuration_revision_id, project_id, "
+                "team_id, position, artifact_revision_id"
+                ") VALUES ($1, $2, $3, $4::integer, $5)",
+                {
+                    record.run_configuration_revision_id
+                        .c_str(),
+                    project_id.c_str(),
+                    team_id.c_str(),
+                    position.c_str(),
+                    artifact_revision_ids[index].c_str(),
+                },
+                PGRES_COMMAND_OK);
+        }
+        (void)execute(
+            connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        record.artifact_revision_ids =
+            artifact_revision_ids;
+        return record;
+    }
+
+    std::optional<service::RunConfigurationRevisionRecord>
+    get_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            run_configuration_revision_columns +
+            " FROM thermox_run_configuration_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND run_configuration_revision_id = $3";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                run_configuration_revision_id.c_str(),
+            });
+        if (PQntuples(result.get()) == 0) {
+            return std::nullopt;
+        }
+        auto record =
+            decode_run_configuration_revision(result.get());
+        record.artifact_revision_ids = artifact_ids(
+            connection.get(),
+            team_id,
+            project_id,
+            run_configuration_revision_id);
+        return record;
+    }
+
+    std::vector<service::RunConfigurationRevisionRecord>
+    list_run_configuration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            run_configuration_revision_columns +
+            " FROM thermox_run_configuration_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "ORDER BY run_configuration_id, revision_number";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        std::vector<service::RunConfigurationRevisionRecord>
+            records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            auto record =
+                decode_run_configuration_revision(
+                    result.get(), row);
+            record.artifact_revision_ids = artifact_ids(
+                connection.get(),
+                team_id,
+                project_id,
+                record.run_configuration_revision_id);
+            records.push_back(std::move(record));
+        }
+        return records;
+    }
+
 private:
+    static std::vector<std::string> artifact_ids(
+        PGconn* connection,
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) {
+        const auto result = execute(
+            connection,
+            "SELECT artifact_revision_id FROM "
+            "thermox_run_configuration_artifacts "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND run_configuration_revision_id = $3 "
+            "ORDER BY position",
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                run_configuration_revision_id.c_str(),
+            });
+        std::vector<std::string> ids;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            ids.push_back(field(result.get(), row, 0));
+        }
+        return ids;
+    }
+
     std::string connection_string_;
 };
 

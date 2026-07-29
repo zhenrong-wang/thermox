@@ -121,11 +121,11 @@ can compose an exact topology/case pair into the existing internal `thermox.mode
 input. This preserves solver, physics, component, calibration, and direct embedded-caller behavior
 while removing embedded cases from the persisted product model.
 
-The production HTTP submission path accepts only an exact Team-scoped project/topology/case
-revision tuple. `ProjectService` resolves that tuple before enqueueing, and `thermox.job/v4`
-captures both its immutable source provenance and a complete composed `thermox.model/v2` snapshot.
-Workers therefore never reread mutable project state and can execute even if newer revisions are
-published later.
+`ProjectService` can resolve an exact Team-scoped project/topology/case tuple into a complete
+composed `thermox.model/v2` snapshot. Run configurations use this internal operation during job
+submission. `thermox.job/v4` captures the immutable source provenance and composed snapshot, so
+workers never reread mutable project state and can execute even if newer revisions are published
+later.
 
 Migration `005_artifact_revisions.sql` adds independent project engineering-artifact history.
 Each logical artifact has an ordered, parent-linked revision chain inside one Team and Project.
@@ -138,6 +138,18 @@ API resolves and verifies those revisions once and stores complete typed payload
 job snapshot. Consequently workers do not need project or object-store metadata reads during
 calculation, and job/result provenance records the logical artifact ID, persisted revision ID,
 schema, and SHA-256 identity.
+
+Migration `006_run_configuration_revisions.sql` adds reusable execution-intent history. Each
+run-configuration revision binds one exact topology/case pair, a canonical set of exact artifact
+revisions, and complete steady/transient solver settings. Composite foreign keys prevent
+cross-Team and cross-Project bindings. Parent revisions must remain in the same logical
+run-configuration chain, and a deterministic SHA-256 checksum identifies the complete binding and
+solver policy.
+
+Production simulation submission now names only a Team-scoped Project and run-configuration
+revision. The application resolves its dependencies, verifies artifact content, and snapshots the
+composed model, typed artifacts, and solver settings into the durable job. Job and result
+provenance retain the run-configuration revision/checksum alongside topology and case identities.
 
 ## Object storage
 

@@ -134,6 +134,14 @@ std::string request_fingerprint(
             request.source_revisions->case_revision_id);
         append_string(
             stream, request.source_revisions->case_checksum);
+        append_string(
+            stream,
+            request.source_revisions
+                ->run_configuration_revision_id);
+        append_string(
+            stream,
+            request.source_revisions
+                ->run_configuration_checksum);
     }
     append_steady_settings(stream, request.steady_solver);
     stream << '|'
@@ -184,6 +192,12 @@ void validate_request(const SimulationJobRequest& request) {
             throw JobRequestError(
                 "revision-backed jobs require complete source "
                 "revision provenance");
+        }
+        if (source.run_configuration_revision_id.empty() !=
+            source.run_configuration_checksum.empty()) {
+            throw JobRequestError(
+                "run configuration revision provenance "
+                "requires both revision ID and checksum");
         }
     }
 }

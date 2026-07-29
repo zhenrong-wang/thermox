@@ -21,6 +21,8 @@ inline constexpr char case_revision_schema_v1[] =
     "thermox.case_revision/v1";
 inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
+inline constexpr char run_configuration_revision_schema_v1[] =
+    "thermox.run_configuration_revision/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};
@@ -82,6 +84,26 @@ struct ArtifactRevisionRecord {
     std::string artifact_type;
     std::string artifact_schema_version;
     ArtifactContentManifest content;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
+};
+
+struct RunConfigurationRevisionRecord {
+    std::string schema_version{
+        run_configuration_revision_schema_v1};
+    std::string run_configuration_revision_id;
+    std::string run_configuration_id;
+    std::string project_id;
+    std::string team_id;
+    std::uint64_t revision_number{0};
+    std::string parent_run_configuration_revision_id;
+    std::string model_revision_id;
+    std::string case_revision_id;
+    std::vector<std::string> artifact_revision_ids;
+    std::string mode;
+    SteadySolverSettings steady_solver;
+    TransientSolverSettings transient_solver;
+    std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
 };
@@ -185,6 +207,33 @@ public:
     list_artifact_revisions(
         const std::string& team_id,
         const std::string& project_id) const = 0;
+
+    virtual RunConfigurationRevisionRecord
+    create_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& run_configuration_id,
+        const std::string&
+            parent_run_configuration_revision_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id,
+        const std::vector<std::string>&
+            artifact_revision_ids,
+        const std::string& mode,
+        const SteadySolverSettings& steady_solver,
+        const TransientSolverSettings& transient_solver,
+        const std::string& checksum) = 0;
+    virtual std::optional<RunConfigurationRevisionRecord>
+    get_run_configuration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) const = 0;
+    virtual std::vector<RunConfigurationRevisionRecord>
+    list_run_configuration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const = 0;
 };
 
 struct CreateProjectRequest {
@@ -218,6 +267,18 @@ struct CreateArtifactRevisionRequest {
     std::string artifact_json;
 };
 
+struct CreateRunConfigurationRevisionRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string run_configuration_id;
+    std::string parent_run_configuration_revision_id;
+    std::string model_revision_id;
+    std::string case_revision_id;
+    std::vector<std::string> artifact_revision_ids;
+    SteadySolverSettings steady_solver;
+    TransientSolverSettings transient_solver;
+};
+
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
     std::vector<ArtifactRevisionRecord> revisions;
@@ -232,6 +293,12 @@ struct ResolvedModelCase {
     std::string case_id;
     std::string mode;
     std::string executable_model_json;
+};
+
+struct ResolvedRunConfiguration {
+    RunConfigurationRevisionRecord configuration;
+    ResolvedModelCase model_case;
+    ResolvedEngineeringArtifacts artifacts;
 };
 
 class ProjectService {
@@ -298,6 +365,28 @@ public:
         const std::string& project_id,
         const std::vector<std::string>&
             artifact_revision_ids) const;
+    [[nodiscard]] RunConfigurationRevisionRecord
+    create_run_configuration_revision(
+        const CreateRunConfigurationRevisionRequest&
+            request) const;
+    [[nodiscard]]
+    std::optional<RunConfigurationRevisionRecord>
+    get_run_configuration_revision(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) const;
+    [[nodiscard]]
+    std::vector<RunConfigurationRevisionRecord>
+    list_run_configuration_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
+    [[nodiscard]] std::optional<ResolvedRunConfiguration>
+    resolve_run_configuration(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string&
+            run_configuration_revision_id) const;
 
 private:
     std::shared_ptr<ProjectRepository> repository_;
@@ -323,5 +412,9 @@ std::string serialize_artifact_revision_json(
     const ArtifactRevisionRecord& revision);
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions);
+std::string serialize_run_configuration_revision_json(
+    const RunConfigurationRevisionRecord& revision);
+std::string serialize_run_configuration_revisions_json(
+    const std::vector<RunConfigurationRevisionRecord>& revisions);
 
 }  // namespace thermox::service

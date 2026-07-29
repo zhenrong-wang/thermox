@@ -226,6 +226,9 @@ Completed structural slices:
 - Team/project-scoped immutable engineering-artifact revisions, PostgreSQL metadata and parent
   constraints, provider-neutral content-addressed object payloads, exact revision selection,
   verified inline job snapshots, and artifact revision/checksum execution provenance; ✅
+- immutable run-configuration revision history binding exact topology, case, artifact revisions,
+  and complete steady/transient solver policy; normalized PostgreSQL constraints; thin HTTP
+  routes; run-backed job submission; and run-configuration checksum provenance; ✅
 
 ## Persistence boundary decision
 

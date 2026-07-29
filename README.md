@@ -80,14 +80,18 @@ Implemented in this sprint:
   acting principals, with a trusted per-Team membership role in the identity context. Projects own
   immutable, parent-linked, SHA-256-checksummed topology and case revisions in PostgreSQL. Every
   case revision binds to an exact topology revision; project and revision API reads always retain
-  the Team predicate. Production job submission resolves an exact project/topology/case tuple,
-  stores the complete composed model snapshot in the immutable job request, and publishes both
+  the Team predicate. Run-configuration resolution selects an exact project/topology/case tuple,
+  stores the complete composed model snapshot in the immutable job request, and publishes all
   source revision IDs and checksums in job and result provenance.
 - Project engineering artifacts have independent immutable revision history. PostgreSQL owns
   Team/project-scoped metadata and parent relationships; provider-neutral object storage owns
   content-addressed payloads. Revision-backed jobs resolve selected map revisions once, embed the
   verified payload snapshot, and expose each artifact revision/checksum in job and result
   provenance.
+- Immutable run-configuration revisions bind one topology revision, one case revision, selected
+  artifact revisions, and complete steady/transient solver settings. Production submission names
+  only the Project and run-configuration revision; the API resolves a self-contained job snapshot
+  and records the run-configuration ID and SHA-256 identity in execution provenance.
 - Base C++ `ComponentModel` interface with physical compressor, turbine, pump, valve, fixed-duty
   and counterflow-UA two-stream heat exchangers, quality-target evaporator/condenser, mixer,
   splitter, lumped thermal storage, and rigid adiabatic fluid volume implementations.
@@ -316,6 +320,9 @@ psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
 psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
   -v ON_ERROR_STOP=1 \
   -f adapters/postgres/migrations/005_artifact_revisions.sql
+psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
+  -v ON_ERROR_STOP=1 \
+  -f adapters/postgres/migrations/006_run_configuration_revisions.sql
 ```
 
 ## Local MinIO result and engineering-artifact storage
@@ -381,8 +388,8 @@ stop a worker after its current calculation.
 
 ## Next steps
 
-1. Add a persisted run-configuration revision that binds one topology, one case, selected
-   engineering-artifact revisions, and solver settings as a reusable execution intent.
+1. Add Team-scoped run history/listing and query APIs so product clients can navigate executions
+   without retaining individual job IDs.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

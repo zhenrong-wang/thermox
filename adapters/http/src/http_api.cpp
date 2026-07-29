@@ -204,7 +204,8 @@ void require_json_request(
     const Request& request,
     std::size_t maximum_body_bytes) {
     if (request.body.empty()) {
-        throw std::invalid_argument("request body must contain a model document");
+        throw std::invalid_argument(
+            "request body must contain a JSON document");
     }
     if (request.body.size() > maximum_body_bytes) {
         throw std::length_error("request body exceeds the configured limit");
@@ -436,6 +437,163 @@ service::CreateProjectRequest parse_create_project_request(
     return command;
 }
 
+void parse_steady_solver(
+    const boost::property_tree::ptree& tree,
+    service::SteadySolverSettings& solver) {
+    const std::set<std::string> allowed = {
+        "max_iterations",
+        "residual_tolerance",
+        "step_tolerance",
+        "finite_difference_epsilon",
+        "min_damping",
+        "damping_reduction",
+        "sufficient_decrease",
+        "max_line_search_steps",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown steady solver field: " + key);
+        }
+    }
+    solver.max_iterations =
+        tree.get("max_iterations", solver.max_iterations);
+    solver.residual_tolerance = tree.get(
+        "residual_tolerance", solver.residual_tolerance);
+    solver.step_tolerance =
+        tree.get("step_tolerance", solver.step_tolerance);
+    solver.finite_difference_epsilon = tree.get(
+        "finite_difference_epsilon",
+        solver.finite_difference_epsilon);
+    solver.min_damping =
+        tree.get("min_damping", solver.min_damping);
+    solver.damping_reduction = tree.get(
+        "damping_reduction", solver.damping_reduction);
+    solver.sufficient_decrease = tree.get(
+        "sufficient_decrease", solver.sufficient_decrease);
+    solver.max_line_search_steps = tree.get(
+        "max_line_search_steps",
+        solver.max_line_search_steps);
+}
+
+void parse_transient_solver(
+    const boost::property_tree::ptree& tree,
+    service::TransientSolverSettings& solver) {
+    const std::set<std::string> allowed = {
+        "start_time",
+        "end_time",
+        "initial_step",
+        "min_step",
+        "max_step",
+        "absolute_tolerance",
+        "relative_tolerance",
+        "max_steps",
+        "max_consecutive_rejections",
+        "compute_consistent_initial_conditions",
+        "nonlinear_solver",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown transient solver field: " + key);
+        }
+    }
+    solver.start_time =
+        tree.get("start_time", solver.start_time);
+    solver.end_time = tree.get("end_time", solver.end_time);
+    solver.initial_step =
+        tree.get("initial_step", solver.initial_step);
+    solver.min_step = tree.get("min_step", solver.min_step);
+    solver.max_step = tree.get("max_step", solver.max_step);
+    solver.absolute_tolerance = tree.get(
+        "absolute_tolerance", solver.absolute_tolerance);
+    solver.relative_tolerance = tree.get(
+        "relative_tolerance", solver.relative_tolerance);
+    solver.max_steps =
+        tree.get("max_steps", solver.max_steps);
+    solver.max_consecutive_rejections = tree.get(
+        "max_consecutive_rejections",
+        solver.max_consecutive_rejections);
+    solver.compute_consistent_initial_conditions = tree.get(
+        "compute_consistent_initial_conditions",
+        solver.compute_consistent_initial_conditions);
+    if (const auto nonlinear =
+            tree.get_child_optional("nonlinear_solver")) {
+        parse_steady_solver(*nonlinear, solver.nonlinear_solver);
+    }
+}
+
+service::CreateRunConfigurationRevisionRequest
+parse_create_run_configuration_request(
+    const Request& request) {
+    boost::property_tree::ptree tree;
+    std::istringstream input(request.body);
+    try {
+        boost::property_tree::read_json(input, tree);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid run configuration JSON: ") +
+            error.what());
+    }
+    const std::set<std::string> allowed = {
+        "schema_version",
+        "run_configuration_id",
+        "parent_run_configuration_revision_id",
+        "model_revision_id",
+        "case_revision_id",
+        "artifact_revision_ids",
+        "steady_solver",
+        "transient_solver",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown run configuration field: " + key);
+        }
+    }
+    if (tree.get<std::string>("schema_version", "") !=
+        "thermox.run_configuration.create/v1") {
+        throw std::invalid_argument(
+            "unsupported run configuration create "
+            "schema_version");
+    }
+    service::CreateRunConfigurationRevisionRequest command;
+    command.run_configuration_id =
+        tree.get<std::string>("run_configuration_id", "");
+    command.parent_run_configuration_revision_id =
+        tree.get<std::string>(
+            "parent_run_configuration_revision_id", "");
+    command.model_revision_id =
+        tree.get<std::string>("model_revision_id", "");
+    command.case_revision_id =
+        tree.get<std::string>("case_revision_id", "");
+    if (const auto artifacts =
+            tree.get_child_optional(
+                "artifact_revision_ids")) {
+        for (const auto& [key, value] : *artifacts) {
+            if (!key.empty()) {
+                throw std::invalid_argument(
+                    "artifact_revision_ids must be an array");
+            }
+            command.artifact_revision_ids.push_back(
+                value.get_value<std::string>());
+        }
+    }
+    if (const auto steady =
+            tree.get_child_optional("steady_solver")) {
+        parse_steady_solver(*steady, command.steady_solver);
+    }
+    if (const auto transient =
+            tree.get_child_optional("transient_solver")) {
+        parse_transient_solver(
+            *transient, command.transient_solver);
+    }
+    return command;
+}
+
 Response project_response(
     const service::ProjectRecord& project,
     int status) {
@@ -490,42 +648,21 @@ Response artifact_revision_response(
     return response;
 }
 
-std::vector<std::string> comma_separated_ids(
-    const std::string& value) {
-    std::vector<std::string> ids;
-    if (value.empty()) {
-        return ids;
-    }
-    std::string_view remaining{value};
-    while (true) {
-        const auto separator = remaining.find(',');
-        const auto id = remaining.substr(0, separator);
-        if (id.empty()) {
-            throw std::invalid_argument(
-                "artifact_revision_ids contains an empty ID");
-        }
-        ids.emplace_back(id);
-        if (separator == std::string_view::npos) {
-            break;
-        }
-        remaining.remove_prefix(separator + 1U);
-    }
-    return ids;
-}
-
-service::SimulationJobMode simulation_mode_for_case(
-    const std::string& mode) {
-    if (mode.find("transient") != std::string::npos ||
-        mode.find("dynamic") != std::string::npos) {
-        return service::SimulationJobMode::transient;
-    }
-    if (mode.find("steady") != std::string::npos ||
-        mode == "design" || mode == "off_design") {
-        return service::SimulationJobMode::steady;
-    }
-    throw std::invalid_argument(
-        "persisted case mode is not a supported simulation "
-        "mode: " + mode);
+Response run_configuration_revision_response(
+    const service::RunConfigurationRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::
+            serialize_run_configuration_revision_json(
+                revision));
+    response.headers["ETag"] =
+        "\"" + revision.checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/run-configuration-revisions/" +
+        revision.run_configuration_revision_id;
+    return response;
 }
 
 std::shared_ptr<service::SimulationJobService>
@@ -701,6 +838,86 @@ Response Api::handle(const Request& request) const {
                 suffix.substr(separator);
             constexpr std::string_view artifacts_segment =
                 "/artifact-revisions";
+            constexpr std::string_view run_configurations_segment =
+                "/run-configuration-revisions";
+            if (remainder == run_configurations_segment) {
+                if (!impl_->projects
+                         ->get_project(identity, project_id)) {
+                    return error_response(
+                        404,
+                        "project_not_found",
+                        "project was not found");
+                }
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    return json_response(
+                        200,
+                        service::
+                            serialize_run_configuration_revisions_json(
+                                impl_->projects
+                                    ->list_run_configuration_revisions(
+                                        identity, project_id)));
+                }
+                if (method == "post") {
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_create_run_configuration_request(
+                            request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    return run_configuration_revision_response(
+                        impl_->projects
+                            ->create_run_configuration_revision(
+                                command),
+                        201);
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "run configuration revisions only support "
+                    "GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
+            const std::string run_configuration_detail_prefix =
+                std::string(run_configurations_segment) + "/";
+            if (remainder.starts_with(
+                    run_configuration_detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "run configuration revision detail "
+                        "only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto revision_id = remainder.substr(
+                    run_configuration_detail_prefix.size());
+                if (revision_id.empty() ||
+                    revision_id.find('/') !=
+                        std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto revision = impl_->projects
+                    ->get_run_configuration_revision(
+                        identity, project_id, revision_id);
+                if (!revision) {
+                    return error_response(
+                        404,
+                        "run_configuration_revision_not_found",
+                        "run configuration revision was not "
+                        "found");
+                }
+                return run_configuration_revision_response(
+                    *revision, 200);
+            }
             if (remainder == artifacts_segment) {
                 if (!impl_->projects
                          ->get_project(identity, project_id)) {
@@ -1064,10 +1281,7 @@ Response Api::handle(const Request& request) const {
                 target.query,
                 {
                     "project_id",
-                    "model_revision_id",
-                    "case_revision_id",
-                    "artifact_revision_ids",
-                    "end_time",
+                    "run_configuration_revision_id",
                 });
             if (!request.body.empty()) {
                 throw std::invalid_argument(
@@ -1077,74 +1291,56 @@ Response Api::handle(const Request& request) const {
             const auto& identity = require_identity(request);
             const auto project_id =
                 optional_query(target.query, "project_id");
-            const auto model_revision_id =
+            const auto run_configuration_revision_id =
                 optional_query(
-                    target.query, "model_revision_id");
-            const auto case_revision_id =
-                optional_query(
-                    target.query, "case_revision_id");
+                    target.query,
+                    "run_configuration_revision_id");
             if (project_id.empty() ||
-                model_revision_id.empty() ||
-                case_revision_id.empty()) {
+                run_configuration_revision_id.empty()) {
                 throw std::invalid_argument(
-                    "project_id, model_revision_id, and "
-                    "case_revision_id are required");
+                    "project_id and "
+                    "run_configuration_revision_id are "
+                    "required");
             }
             const auto resolved =
-                impl_->projects->resolve_model_case(
+                impl_->projects->resolve_run_configuration(
                     identity,
                     project_id,
-                    model_revision_id,
-                    case_revision_id);
+                    run_configuration_revision_id);
             if (!resolved) {
                 return error_response(
                     404,
-                    "model_case_not_found",
-                    "model/case revision pair was not found");
+                    "run_configuration_revision_not_found",
+                    "run configuration revision was not found");
             }
             service::SimulationJobRequest command;
             command.identity = identity;
             command.idempotency_key =
                 required_header(request, "idempotency-key");
             command.mode =
-                simulation_mode_for_case(resolved->mode);
+                resolved->configuration.mode == "steady"
+                ? service::SimulationJobMode::steady
+                : service::SimulationJobMode::transient;
             command.model_json =
-                resolved->executable_model_json;
-            command.case_id = resolved->case_id;
+                resolved->model_case.executable_model_json;
+            command.case_id = resolved->model_case.case_id;
             command.source_revisions =
                 service::RevisionProvenance{
-                    resolved->project_id,
-                    resolved->model_revision_id,
-                    resolved->model_checksum,
-                    resolved->case_revision_id,
-                    resolved->case_checksum,
+                    resolved->model_case.project_id,
+                    resolved->model_case.model_revision_id,
+                    resolved->model_case.model_checksum,
+                    resolved->model_case.case_revision_id,
+                    resolved->model_case.case_checksum,
+                    resolved->configuration
+                        .run_configuration_revision_id,
+                    resolved->configuration.checksum,
                 };
-            const auto artifact_revision_ids =
-                comma_separated_ids(optional_query(
-                    target.query,
-                    "artifact_revision_ids"));
-            const auto artifacts =
-                impl_->projects->resolve_artifact_revisions(
-                    identity,
-                    project_id,
-                    artifact_revision_ids);
-            if (!artifacts) {
-                return error_response(
-                    404,
-                    "artifact_revision_not_found",
-                    "one or more artifact revisions were not "
-                    "found");
-            }
-            command.artifacts = artifacts->snapshot;
-            if (command.mode ==
-                service::SimulationJobMode::transient) {
-                command.transient_solver.end_time =
-                    required_positive_double(
-                        target.query, "end_time");
-            } else if (target.query.contains("end_time")) {
-                throw std::invalid_argument(
-                    "end_time is only valid for transient jobs");
-            }
+            command.artifacts =
+                resolved->artifacts.snapshot;
+            command.steady_solver =
+                resolved->configuration.steady_solver;
+            command.transient_solver =
+                resolved->configuration.transient_solver;
             const auto record = impl_->jobs->submit(command);
             return job_record_response(
                 record,

@@ -389,6 +389,96 @@ void test_artifact_revisions_are_snapshotted_and_scoped() {
         "hide provider object keys");
 }
 
+void test_run_configurations_bind_complete_execution_intent() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Run history", {}});
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+    const auto artifact = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "run-map",
+        {},
+        "thermox.performance_map",
+        "thermox.performance_map/v1",
+        performance_map_payload(),
+    });
+    thermox::service::CreateRunConfigurationRevisionRequest
+        request;
+    request.identity = team_a;
+    request.project_id = project.project_id;
+    request.run_configuration_id = "design-run";
+    request.model_revision_id = model.model_revision_id;
+    request.case_revision_id =
+        simulation_case.case_revision_id;
+    request.artifact_revision_ids = {
+        artifact.artifact_revision_id,
+    };
+    request.steady_solver.max_iterations = 37;
+    const auto first =
+        service.create_run_configuration_revision(request);
+    request.parent_run_configuration_revision_id =
+        first.run_configuration_revision_id;
+    const auto second =
+        service.create_run_configuration_revision(request);
+    const auto resolved = service.resolve_run_configuration(
+        team_a,
+        project.project_id,
+        first.run_configuration_revision_id);
+    require(
+        first.mode == "steady" &&
+            first.revision_number == 1U &&
+            second.revision_number == 2U &&
+            second.parent_run_configuration_revision_id ==
+                first.run_configuration_revision_id &&
+            first.checksum == second.checksum &&
+            first.checksum.starts_with("sha256:") &&
+            first.steady_solver.max_iterations == 37 &&
+            resolved &&
+            resolved->model_case.model_revision_id ==
+                model.model_revision_id &&
+            resolved->artifacts.snapshot.performance_maps
+                    .size() == 1U,
+        "run configurations must immutably bind the complete "
+        "execution intent and resolve its snapshots");
+    require(
+        service
+                .list_run_configuration_revisions(
+                    team_a, project.project_id)
+                .size() == 2U &&
+            !service
+                 .get_run_configuration_revision(
+                     team_b,
+                     project.project_id,
+                     first.run_configuration_revision_id)
+                 .has_value(),
+        "run configuration history must be Team scoped");
+    const auto serialized = thermox::service::
+        serialize_run_configuration_revision_json(first);
+    require(
+        serialized.find(first.run_configuration_revision_id) !=
+                std::string::npos &&
+            serialized.find("\"max_iterations\": 37") !=
+                std::string::npos,
+        "run configuration JSON must publish bindings and "
+        "solver policy");
+}
+
 }  // namespace
 
 int main() {
@@ -399,6 +489,7 @@ int main() {
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
         test_artifact_revisions_are_snapshotted_and_scoped();
+        test_run_configurations_bind_complete_execution_intent();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

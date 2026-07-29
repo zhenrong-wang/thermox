@@ -127,6 +127,12 @@ void revision_provenance_json(
     const RevisionProvenance& source) {
     out << "{\"project_id\": ";
     json_string(out, source.project_id);
+    out << ", \"run_configuration_revision_id\": ";
+    json_string(
+        out, source.run_configuration_revision_id);
+    out << ", \"run_configuration_checksum\": ";
+    json_string(
+        out, source.run_configuration_checksum);
     out << ", \"model_revision_id\": ";
     json_string(out, source.model_revision_id);
     out << ", \"model_checksum\": ";

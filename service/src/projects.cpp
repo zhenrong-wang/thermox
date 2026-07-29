@@ -9,7 +9,9 @@
 
 #include <openssl/evp.h>
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <iomanip>
 #include <memory>
 #include <set>
@@ -72,6 +74,109 @@ std::string checksum(std::string_view value) {
                 << static_cast<unsigned int>(digest[index]);
     }
     return encoded.str();
+}
+
+std::string run_mode(const std::string& case_mode) {
+    if (case_mode.find("transient") != std::string::npos ||
+        case_mode.find("dynamic") != std::string::npos) {
+        return "transient";
+    }
+    if (case_mode.find("steady") != std::string::npos ||
+        case_mode == "design" ||
+        case_mode == "off_design") {
+        return "steady";
+    }
+    throw ProjectRequestError(
+        "case mode is not executable: " + case_mode);
+}
+
+void validate_steady_solver(
+    const SteadySolverSettings& value) {
+    if (value.max_iterations <= 0 ||
+        value.max_line_search_steps <= 0 ||
+        !std::isfinite(value.residual_tolerance) ||
+        value.residual_tolerance <= 0.0 ||
+        !std::isfinite(value.step_tolerance) ||
+        value.step_tolerance <= 0.0 ||
+        !std::isfinite(value.finite_difference_epsilon) ||
+        value.finite_difference_epsilon <= 0.0 ||
+        !std::isfinite(value.min_damping) ||
+        value.min_damping <= 0.0 ||
+        !std::isfinite(value.damping_reduction) ||
+        value.damping_reduction <= 0.0 ||
+        value.damping_reduction >= 1.0 ||
+        !std::isfinite(value.sufficient_decrease) ||
+        value.sufficient_decrease <= 0.0) {
+        throw ProjectRequestError(
+            "invalid steady solver settings");
+    }
+}
+
+void validate_transient_solver(
+    const TransientSolverSettings& value) {
+    validate_steady_solver(value.nonlinear_solver);
+    if (!std::isfinite(value.start_time) ||
+        !std::isfinite(value.end_time) ||
+        value.end_time <= value.start_time ||
+        !std::isfinite(value.initial_step) ||
+        value.initial_step <= 0.0 ||
+        !std::isfinite(value.min_step) ||
+        value.min_step <= 0.0 ||
+        !std::isfinite(value.max_step) ||
+        value.max_step < value.min_step ||
+        !std::isfinite(value.absolute_tolerance) ||
+        value.absolute_tolerance <= 0.0 ||
+        !std::isfinite(value.relative_tolerance) ||
+        value.relative_tolerance <= 0.0 ||
+        value.max_steps <= 0 ||
+        value.max_consecutive_rejections <= 0) {
+        throw ProjectRequestError(
+            "invalid transient solver settings");
+    }
+}
+
+void append_steady(
+    std::ostream& out,
+    const SteadySolverSettings& value) {
+    out << value.max_iterations << '|'
+        << value.residual_tolerance << '|'
+        << value.step_tolerance << '|'
+        << value.finite_difference_epsilon << '|'
+        << value.min_damping << '|'
+        << value.damping_reduction << '|'
+        << value.sufficient_decrease << '|'
+        << value.max_line_search_steps;
+}
+
+std::string run_configuration_identity(
+    const CreateRunConfigurationRevisionRequest& request,
+    const std::string& mode,
+    const std::vector<std::string>& artifacts) {
+    std::ostringstream out;
+    out << std::setprecision(17)
+        << request.run_configuration_id << '|'
+        << request.model_revision_id << '|'
+        << request.case_revision_id << '|'
+        << mode << '|';
+    for (const auto& id : artifacts) {
+        out << id.size() << ':' << id << '|';
+    }
+    append_steady(out, request.steady_solver);
+    const auto& transient = request.transient_solver;
+    out << '|' << transient.start_time
+        << '|' << transient.end_time
+        << '|' << transient.initial_step
+        << '|' << transient.min_step
+        << '|' << transient.max_step
+        << '|' << transient.absolute_tolerance
+        << '|' << transient.relative_tolerance
+        << '|' << transient.max_steps
+        << '|' << transient.max_consecutive_rejections
+        << '|' <<
+            transient.compute_consistent_initial_conditions
+        << '|';
+    append_steady(out, transient.nonlinear_solver);
+    return out.str();
 }
 
 }  // namespace
@@ -480,6 +585,128 @@ ProjectService::resolve_artifact_revisions(
         result.revisions.push_back(*revision);
     }
     return result;
+}
+
+RunConfigurationRevisionRecord
+ProjectService::create_run_configuration_revision(
+    const CreateRunConfigurationRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.run_configuration_id.empty() ||
+        request.model_revision_id.empty() ||
+        request.case_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project, run configuration, model revision, and "
+            "case revision IDs must not be empty");
+    }
+    const auto model_case = resolve_model_case(
+        request.identity,
+        request.project_id,
+        request.model_revision_id,
+        request.case_revision_id);
+    if (!model_case) {
+        throw ProjectStateError(
+            "model/case revision pair was not found");
+    }
+    auto artifact_ids = request.artifact_revision_ids;
+    std::sort(artifact_ids.begin(), artifact_ids.end());
+    if (std::adjacent_find(
+            artifact_ids.begin(), artifact_ids.end()) !=
+        artifact_ids.end()) {
+        throw ProjectRequestError(
+            "artifact revision IDs must be unique");
+    }
+    if (!resolve_artifact_revisions(
+            request.identity,
+            request.project_id,
+            artifact_ids)) {
+        throw ProjectStateError(
+            "artifact revision was not found");
+    }
+    const auto mode = run_mode(model_case->mode);
+    validate_steady_solver(request.steady_solver);
+    validate_transient_solver(request.transient_solver);
+    return repository_->create_run_configuration_revision(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.run_configuration_id,
+        request.parent_run_configuration_revision_id,
+        request.model_revision_id,
+        request.case_revision_id,
+        artifact_ids,
+        mode,
+        request.steady_solver,
+        request.transient_solver,
+        checksum(run_configuration_identity(
+            request, mode, artifact_ids)));
+}
+
+std::optional<RunConfigurationRevisionRecord>
+ProjectService::get_run_configuration_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string&
+        run_configuration_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() ||
+        run_configuration_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and run configuration revision IDs must "
+            "not be empty");
+    }
+    return repository_->get_run_configuration_revision(
+        identity.team_id,
+        project_id,
+        run_configuration_revision_id);
+}
+
+std::vector<RunConfigurationRevisionRecord>
+ProjectService::list_run_configuration_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError(
+            "project ID must not be empty");
+    }
+    return repository_->list_run_configuration_revisions(
+        identity.team_id, project_id);
+}
+
+std::optional<ResolvedRunConfiguration>
+ProjectService::resolve_run_configuration(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string&
+        run_configuration_revision_id) const {
+    const auto configuration =
+        get_run_configuration_revision(
+            identity,
+            project_id,
+            run_configuration_revision_id);
+    if (!configuration) {
+        return std::nullopt;
+    }
+    const auto model_case = resolve_model_case(
+        identity,
+        project_id,
+        configuration->model_revision_id,
+        configuration->case_revision_id);
+    const auto artifacts = resolve_artifact_revisions(
+        identity,
+        project_id,
+        configuration->artifact_revision_ids);
+    if (!model_case || !artifacts) {
+        throw ProjectStateError(
+            "persisted run configuration dependencies were "
+            "not found");
+    }
+    return ResolvedRunConfiguration{
+        *configuration,
+        *model_case,
+        *artifacts,
+    };
 }
 
 }  // namespace thermox::service
