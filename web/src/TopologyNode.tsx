@@ -1,9 +1,11 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { formatResultValue, type ResultNodeValue } from './resultPresentation'
 import type { CatalogPort, ComponentDefinition } from './types'
 
 export interface TopologyNodeData extends Record<string, unknown> {
   component: ComponentDefinition
   ports: CatalogPort[]
+  resultValues?: ResultNodeValue[]
 }
 
 const domainColors: Record<string, string> = {
@@ -80,6 +82,20 @@ export function TopologyNode({ data, selected }: NodeProps) {
           ))}
         </div>
       </div>
+      {nodeData.resultValues && nodeData.resultValues.length > 0 && (
+        <div className="node-results">
+          {nodeData.resultValues.slice(0, 3).map((value) => (
+            <div key={`${value.label}-${value.dimension}`}>
+              <span>{value.label}</span>
+              <code>{formatResultValue(value.valueSi)}</code>
+              <small>{value.dimension}</small>
+            </div>
+          ))}
+          {nodeData.resultValues.length > 3 && (
+            <small>+{nodeData.resultValues.length - 3} more</small>
+          )}
+        </div>
+      )}
     </article>
   )
 }

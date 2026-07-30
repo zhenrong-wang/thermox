@@ -11,6 +11,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { TopologyNode, type TopologyNodeData } from './TopologyNode'
 import type { GraphSelection } from './InspectorPanel'
+import type { ResultNodeValue } from './resultPresentation'
 import type { CatalogComponent, TopologyDocument } from './types'
 
 interface TopologyCanvasProps {
@@ -20,6 +21,8 @@ interface TopologyCanvasProps {
   publishing: boolean
   onConnect: (connection: Connection) => Promise<void>
   onSelect: (selection?: GraphSelection) => void
+  readOnly?: boolean
+  resultValues?: Record<string, ResultNodeValue[]>
 }
 
 function endpoint(value: string): [string, string] {
@@ -32,18 +35,21 @@ function endpoint(value: string): [string, string] {
 function layoutNodes(
   topology: TopologyDocument,
   catalog: Map<string, CatalogComponent>,
+  resultValues: Record<string, ResultNodeValue[]>,
 ): Node<TopologyNodeData>[] {
   const columns = Math.max(1, Math.ceil(Math.sqrt(topology.model.components.length)))
+  const rowHeight = Object.keys(resultValues).length > 0 ? 310 : 230
   return topology.model.components.map((component, index) => ({
     id: component.id,
     type: 'topology',
     position: {
       x: (index % columns) * 330,
-      y: Math.floor(index / columns) * 230,
+      y: Math.floor(index / columns) * rowHeight,
     },
     data: {
       component,
       ports: catalog.get(component.kind)?.ports ?? [],
+      resultValues: resultValues[component.id] ?? [],
     },
   }))
 }
@@ -75,6 +81,8 @@ export function TopologyCanvas({
   publishing,
   onConnect,
   onSelect,
+  readOnly = false,
+  resultValues = {},
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
@@ -87,7 +95,7 @@ export function TopologyCanvas({
   }
 
   const catalogByKind = new Map(catalog.map((item) => [item.kind, item]))
-  const nodes = layoutNodes(topology, catalogByKind)
+  const nodes = layoutNodes(topology, catalogByKind, resultValues)
   const edges = layoutEdges(topology)
   const componentsById = new Map(
     topology.model.components.map((component) => [component.id, component]),
@@ -130,11 +138,11 @@ export function TopologyCanvas({
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.22 }}
-      nodesDraggable
-      nodesConnectable={!publishing}
+      nodesDraggable={!readOnly}
+      nodesConnectable={!readOnly && !publishing}
       isValidConnection={validConnection}
       onConnect={(connection) => {
-        void onConnect(connection)
+        if (!readOnly) void onConnect(connection)
       }}
       onNodeClick={(_, node) =>
         onSelect({ type: 'component', id: node.id })

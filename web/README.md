@@ -28,6 +28,10 @@ The workspace currently provides:
 - optimistic queued/running-job cancellation, structured worker errors, result summaries, and
   result-artifact manifests;
 - bounded four-second refresh only while the Runs workspace contains an active job;
+- on-demand retrieval of successful `thermox.result/v3` artifacts through the service;
+- read-only projected-result overlays on the bound system topology;
+- system balance, KPI, component, internal-state, and port/stream result tables;
+- transient trajectory sample selection and event inspection using the same graph-native contract;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

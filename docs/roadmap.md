@@ -391,8 +391,9 @@ Work items:
      and immutable configuration history; ✅
    - idempotent durable job submission, state-filtered cursor history, active-job-only polling,
      optimistic cancellation, structured errors, and projected-result summaries; ✅
-   - result-summary overlay on the graph.
-10. Stream/result table views.
+   - result-summary overlay on the graph; ✅
+10. Graph-native steady/transient result inspection with system balance, KPI, component,
+    internal-state, and port/stream tables. ✅
 
 Exit criteria:
 

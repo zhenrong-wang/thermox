@@ -15,6 +15,7 @@ import type {
   RunConfigurationRevisionList,
   SimulationJob,
   SimulationJobPage,
+  SimulationResult,
   SimulationJobState,
 } from './types'
 
@@ -267,6 +268,11 @@ export const api = {
   simulationJob: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationJob>(
       `/api/v1/simulations/${encodeURIComponent(jobId)}`,
+      signal,
+    ),
+  simulationResult: (jobId: string, signal?: AbortSignal) =>
+    getJson<SimulationResult>(
+      `/api/v1/simulations/${encodeURIComponent(jobId)}/result`,
       signal,
     ),
   submitSimulation: (

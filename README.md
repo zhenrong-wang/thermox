@@ -422,8 +422,9 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Add full-result retrieval, result-summary graph overlays, and stream/result tables.
-2. Add display-unit conversion to the catalog-driven component, case, and result views.
+1. Add display-unit conversion to the catalog-driven component, case, and result views.
+2. Add result-table filtering/export and richer transient plotting over the graph-native result
+   contract.
 3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 4. Add analytic property-derivative APIs; the rigid volume currently

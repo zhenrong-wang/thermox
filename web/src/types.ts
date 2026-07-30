@@ -330,6 +330,96 @@ export interface SimulationJobPage {
   next_cursor: string | null
 }
 
+export interface GraphResultValue {
+  name: string
+  dimension: string
+  value_si: number
+  derivative_si_s?: number
+}
+
+export interface GraphPortResult {
+  port_name: string
+  domain: string
+  medium_id: string
+  phase: string
+  primary_values: GraphResultValue[]
+  derived_values: GraphResultValue[]
+}
+
+export interface GraphComponentResult {
+  component_id: string
+  kind: string
+  ports: GraphPortResult[]
+  internal_values: GraphResultValue[]
+  metrics: GraphResultValue[]
+}
+
+export interface GraphResult {
+  components: GraphComponentResult[]
+  system_balances: GraphResultValue[]
+  kpis: GraphResultValue[]
+}
+
+export interface SteadySimulationResult {
+  schema_version: 'thermox.result/v3'
+  status: 'succeeded'
+  error: {
+    schema_version: string
+    code: string
+    stage: string
+    message: string
+  }
+  metadata: NonNullable<SimulationJob['execution']>
+  diagnostics: {
+    converged: boolean
+    iterations: number
+    final_residual_norm: number
+    final_step_norm: number
+    function_evaluations: number
+    jacobian_evaluations: number
+    linear_solver_evaluations: number
+    message: string
+  }
+  graph: GraphResult
+  reduced_connection_equations: string[]
+}
+
+export interface TransientGraphSample {
+  time: number
+  graph: GraphResult
+}
+
+export interface TransientSimulationResult {
+  schema_version: 'thermox.result/v3'
+  status: 'succeeded'
+  error: {
+    schema_version: string
+    code: string
+    stage: string
+    message: string
+  }
+  metadata: NonNullable<SimulationJob['execution']>
+  diagnostics: {
+    success: boolean
+    accepted_steps: number
+    rejected_steps: number
+    nonlinear_solves: number
+    nonlinear_iterations: number
+    final_time: number
+    last_step: number
+    message: string
+  }
+  trajectory: TransientGraphSample[]
+  events: Array<TransientGraphSample & {
+    name: string
+    terminal: boolean
+  }>
+}
+
+export type SimulationResult =
+  | SteadySimulationResult
+  | TransientSimulationResult
+
 export type CaseScalarField =
   | 'parameter_override'
   | 'fixed_value'

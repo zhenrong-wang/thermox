@@ -28,3 +28,11 @@ dimensionally incompatible selector produces a structured result-stage job failu
 This keeps summary policy owned by the run definition rather than the HTTP API, worker host, or a
 particular UI. Run-history and status responses can display the compact summary without loading or
 parsing the full result artifact from object storage.
+
+The thin Results workspace displays the compact summary as the run's configured reductions. It
+requests the full `thermox.result/v3` artifact only when a user selects a succeeded job, then joins
+the immutable projection selectors to the current steady graph or selected transient sample for
+the node overlay. The same graph feeds system-balance, KPI, component, internal-state, and
+port/stream tables. The browser does not derive thermal-cycle semantics: custom components,
+connector domains, and result dimensions remain first-class because the presentation follows
+stable graph identities.

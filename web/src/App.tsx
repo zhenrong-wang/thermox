@@ -18,6 +18,8 @@ import { MediumForm } from './MediumForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
+import { ResultSelectionPanel } from './ResultSelectionPanel'
+import { ResultsWorkspace } from './ResultsWorkspace'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
   ArtifactRevision,
@@ -36,6 +38,7 @@ import type {
   Project,
   RunConfigurationRevision,
   SimulationJob,
+  SimulationResult,
   SimulationJobState,
   TopologyDocument,
 } from './types'
@@ -47,7 +50,7 @@ function shortKind(kind: string): string {
 
 function App() {
   const [workspaceView, setWorkspaceView] =
-    useState<'topology' | 'cases' | 'runs'>('topology')
+    useState<'topology' | 'cases' | 'runs' | 'results'>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -105,6 +108,12 @@ function App() {
     useState<'' | SimulationJobState>('')
   const [jobsNextCursor, setJobsNextCursor] = useState<string | null>(null)
   const [submissionIdempotencyKey, setSubmissionIdempotencyKey] = useState('')
+  const [resultJobs, setResultJobs] = useState<SimulationJob[]>([])
+  const [selectedResultJobId, setSelectedResultJobId] = useState('')
+  const [resultJobsLoading, setResultJobsLoading] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<SimulationResult>()
+  const [resultLoading, setResultLoading] = useState(false)
+  const [resultError, setResultError] = useState('')
 
   useEffect(() => {
     setSubmissionIdempotencyKey('')
@@ -260,6 +269,9 @@ function App() {
   const selectedRevision = revisions.find(
     (revision) => revision.model_revision_id === selectedRevisionId,
   )
+  const selectedResultJob = resultJobs.find(
+    (job) => job.job_id === selectedResultJobId,
+  )
   const palette = useMemo(() => {
     const query = filter.trim().toLowerCase()
     return (catalog?.components ?? []).filter(
@@ -409,6 +421,66 @@ function App() {
     selectedRunConfigurationRevisionId,
     workspaceView,
   ])
+
+  useEffect(() => {
+    if (workspaceView !== 'results') return
+    setResultJobs([])
+    setSelectedResultJobId('')
+    setSimulationResult(undefined)
+    setResultError('')
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    const controller = new AbortController()
+    setResultJobsLoading(true)
+    api
+      .simulationJobs(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        'succeeded',
+        undefined,
+        controller.signal,
+      )
+      .then((page) => {
+        setResultJobs(page.jobs)
+        setSelectedResultJobId(
+          page.jobs.some((job) => job.job_id === selectedSimulationJobId)
+            ? selectedSimulationJobId
+            : page.jobs[0]?.job_id ?? '',
+        )
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setResultError(errorMessage(reason))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setResultJobsLoading(false)
+      })
+    return () => controller.abort()
+  }, [
+    selectedProjectId,
+    selectedRunConfigurationRevisionId,
+    selectedSimulationJobId,
+    workspaceView,
+  ])
+
+  useEffect(() => {
+    setSimulationResult(undefined)
+    setResultError('')
+    if (workspaceView !== 'results' || !selectedResultJobId) return
+    const controller = new AbortController()
+    setResultLoading(true)
+    api
+      .simulationResult(selectedResultJobId, controller.signal)
+      .then((result) => {
+        setResultError('')
+        setSimulationResult(result)
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setResultError(errorMessage(reason))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setResultLoading(false)
+      })
+    return () => controller.abort()
+  }, [selectedResultJobId, workspaceView])
 
   async function publishEdits(
     operations: GraphEditOperation[],
@@ -749,6 +821,42 @@ function App() {
     }
   }
 
+  async function refreshResultJobs() {
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    setResultJobsLoading(true)
+    setResultError('')
+    try {
+      const page = await api.simulationJobs(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        'succeeded',
+      )
+      setResultJobs(page.jobs)
+      setSelectedResultJobId((current) =>
+        page.jobs.some((job) => job.job_id === current)
+          ? current
+          : page.jobs[0]?.job_id ?? '',
+      )
+    } catch (reason) {
+      setResultError(errorMessage(reason))
+    } finally {
+      setResultJobsLoading(false)
+    }
+  }
+
+  async function retryResult() {
+    if (!selectedResultJobId) return
+    setResultLoading(true)
+    setResultError('')
+    try {
+      setSimulationResult(await api.simulationResult(selectedResultJobId))
+    } catch (reason) {
+      setResultError(errorMessage(reason))
+    } finally {
+      setResultLoading(false)
+    }
+  }
+
   async function updateComponent(component: ComponentDefinition) {
     await publishEdits(
       [
@@ -944,7 +1052,12 @@ function App() {
               <span className="nav-icon">▶</span>
               Runs
             </button>
-            <button className="nav-item" disabled>
+            <button
+              className={
+                workspaceView === 'results' ? 'nav-item active' : 'nav-item'
+              }
+              onClick={() => setWorkspaceView('results')}
+            >
               <span className="nav-icon">▥</span>
               Results
             </button>
@@ -1033,7 +1146,7 @@ function App() {
             onValidate={validateCase}
             onCreate={() => setAddingCase(true)}
           />
-        ) : (
+        ) : workspaceView === 'runs' ? (
           <RunConfigurationWorkspace
             revision={selectedRunConfiguration}
             publishing={runPublishing}
@@ -1066,6 +1179,18 @@ function App() {
               void cancelSimulationJob(job)
             }}
           />
+        ) : (
+          <ResultsWorkspace
+            topology={topology}
+            catalog={catalog?.components ?? []}
+            job={selectedResultJob}
+            result={simulationResult}
+            loading={resultLoading}
+            error={resultError}
+            onRetry={() => {
+              void retryResult()
+            }}
+          />
         )}
 
         <aside className="palette">
@@ -1077,6 +1202,19 @@ function App() {
               onSelect={setSelectedRunConfigurationRevisionId}
               onCreate={beginCreateRunConfiguration}
               onRevise={() => setRevisingRunConfiguration(true)}
+            />
+          ) : workspaceView === 'results' ? (
+            <ResultSelectionPanel
+              revisions={visibleRunConfigurations}
+              selectedRevisionId={selectedRunConfigurationRevisionId}
+              jobs={resultJobs}
+              selectedJobId={selectedResultJobId}
+              loading={resultJobsLoading}
+              onSelectRevision={setSelectedRunConfigurationRevisionId}
+              onSelectJob={setSelectedResultJobId}
+              onRefresh={() => {
+                void refreshResultJobs()
+              }}
             />
           ) : workspaceView === 'cases' ? (
             <CaseRevisionPanel
