@@ -154,12 +154,36 @@ void register_boundary_component_models(ComponentRegistry& registry) {
             {{"inlet", "heat", "in"}}, true, "sink")));
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
+            "source.shaft.boundary",
+            {{"outlet", "shaft", "out"}}, true, "source")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.shaft.boundary",
+            {{"inlet", "shaft", "in"}}, true, "sink")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
             "source.electrical.boundary",
             {{"outlet", "electrical", "out"}}, false, "source")));
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
             "sink.electrical.boundary",
             {{"inlet", "electrical", "in"}}, false, "sink")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "source.signal.boundary",
+            {{"outlet", "signal", "out"}}, true, "source")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.signal.boundary",
+            {{"inlet", "signal", "in"}}, true, "sink")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "source.control.boundary",
+            {{"outlet", "control", "out"}}, true, "source")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.control.boundary",
+            {{"inlet", "control", "in"}}, true, "sink")));
 }
 
 }  // namespace thermox::platform

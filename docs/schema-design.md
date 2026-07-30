@@ -183,6 +183,9 @@ driver power against mechanical loads and explicit losses.
 ### 5.6 Signal/control domain
 
 Signal ports do not create conservation equations automatically. They supply scalar/vector values to component equations.
+The built-in contracts currently carry normalized dimensionless values. Registered proportional
+and first-order-lag components provide algebraic and dynamic control paths without embedding
+equipment-specific actuator semantics.
 
 ## 6. Connection
 

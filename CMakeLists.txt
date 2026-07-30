@@ -55,6 +55,15 @@ add_test(
     NAME thermox_unit_registry_tests
     COMMAND thermox_unit_registry_tests)
 
+add_executable(
+    thermox_dynamic_component_tests
+    platform/tests/dynamic_component_tests.cpp)
+target_link_libraries(
+    thermox_dynamic_component_tests PRIVATE thermox_platform)
+add_test(
+    NAME thermox_dynamic_component_tests
+    COMMAND thermox_dynamic_component_tests)
+
 add_executable(thermox_performance_map_tests
     platform/tests/performance_map_tests.cpp
 )

@@ -424,11 +424,9 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 1. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
-2. Add wall thermal mass, rotating inertia, and control components using the established
-   transient component contract.
-3. Add analytic property-derivative APIs; the rigid volume currently
+2. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+3. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-5. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

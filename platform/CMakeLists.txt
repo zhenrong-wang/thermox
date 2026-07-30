@@ -3,6 +3,7 @@ add_library(thermox_platform
     src/calibration.cpp
     src/component_catalog.cpp
     src/component_registry.cpp
+    src/control_models.cpp
     src/combustion_models.cpp
     src/fluid_inventory_models.cpp
     src/heat_transfer_models.cpp

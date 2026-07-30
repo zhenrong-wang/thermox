@@ -243,6 +243,30 @@ UnitRegistry make_default_unit_registry() {
             accepted("kJ", 1.0e3),
             accepted("MJ", 1.0e6),
         }));
+    registry.register_dimension(dimension(
+        "time", "s", display("s"),
+        {
+            accepted("s"),
+            accepted("min", 60.0),
+            accepted("h", 3600.0),
+        }));
+    registry.register_dimension(dimension(
+        "moment_of_inertia", "kg*m2", display("kg·m²"),
+        {
+            accepted("kg*m2", 1.0, 0.0, {"kg*m^2"}),
+        }));
+    registry.register_dimension(dimension(
+        "angular_speed", "rad/s",
+        display("rpm", 60.0 / (2.0 * std::acos(-1.0))),
+        {
+            accepted("rad/s"),
+            accepted("rpm", 2.0 * std::acos(-1.0) / 60.0),
+        }));
+    registry.register_dimension(dimension(
+        "frequency", "Hz", display("Hz"),
+        {
+            accepted("Hz"),
+        }));
     registry.register_dimension({
         "dimensionless",
         "dimensionless",
@@ -274,16 +298,12 @@ UnitRegistry make_default_unit_registry() {
     display_only(
         "specific_heat_capacity", "J/kg/K",
         display("kJ/kg/K", 1.0e-3));
-    display_only(
-        "angular_speed", "rad/s",
-        display("rpm", 60.0 / (2.0 * std::acos(-1.0))));
     display_only("density", "kg/m3", display("kg/m³"));
     display_only(
         "dynamic_viscosity", "Pa*s", display("Pa·s"));
     display_only(
         "thermal_conductivity", "W/m/K", display("W/m/K"));
     display_only("speed", "m/s", display("m/s"));
-    display_only("electrical_frequency", "Hz", display("Hz"));
     return registry;
 }
 

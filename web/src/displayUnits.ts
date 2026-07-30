@@ -65,6 +65,14 @@ const units: Record<string, DimensionUnits> = {
     si: identity('J'),
     engineering: { unit: 'MJ', scale: 1.0e-6 },
   },
+  time: {
+    si: identity('s'),
+    engineering: identity('s'),
+  },
+  moment_of_inertia: {
+    si: identity('kg*m²'),
+    engineering: identity('kg·m²'),
+  },
   thermal_capacity: {
     si: identity('J/K'),
     engineering: { unit: 'MJ/K', scale: 1.0e-6 },
@@ -109,7 +117,7 @@ const units: Record<string, DimensionUnits> = {
     si: identity('kg'),
     engineering: identity('kg'),
   },
-  electrical_frequency: {
+  frequency: {
     si: identity('Hz'),
     engineering: identity('Hz'),
   },
@@ -262,6 +270,11 @@ export const supportedCaseUnits = [
   'J',
   'kJ',
   'MJ',
+  's',
+  'min',
+  'h',
+  'kg*m2',
+  'kg*m^2',
   'J/K',
   'kJ/K',
   'MJ/K',
@@ -275,6 +288,9 @@ export const supportedCaseUnits = [
   'g/mol',
   'rad',
   'deg',
+  'rad/s',
+  'rpm',
+  'Hz',
   'dimensionless',
   '%',
 ] as const

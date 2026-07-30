@@ -922,8 +922,14 @@ void test_component_catalog_exposes_parameter_contracts() {
         "sink.material.boundary",
         "source.heat.boundary",
         "sink.heat.boundary",
+        "source.shaft.boundary",
+        "sink.shaft.boundary",
         "source.electrical.boundary",
         "sink.electrical.boundary",
+        "source.signal.boundary",
+        "sink.signal.boundary",
+        "source.control.boundary",
+        "sink.control.boundary",
         "compressor.gas.isentropic_efficiency",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
@@ -952,8 +958,12 @@ void test_component_catalog_exposes_parameter_contracts() {
         "condenser.fluid.fixed_outlet_quality",
         "volume.fluid.rigid_adiabatic",
         "storage.thermal.lumped",
+        "storage.thermal.wall_two_sided",
         "shaft.train.two_load",
-        "generator.electrical.efficiency"};
+        "shaft.inertia.two_port",
+        "generator.electrical.efficiency",
+        "control.proportional.normalized",
+        "control.first_order_lag.normalized"};
     std::sort(expected_kinds.begin(), expected_kinds.end());
     require(registry.kinds() == expected_kinds,
             "default component modules should preserve the complete catalog");

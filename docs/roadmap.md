@@ -102,6 +102,21 @@ Delivered:
 5. Consistent initialization, adaptive integration, release, sanitizer, and CLI regression
    coverage. ✅
 
+## Reusable dynamic equipment primitives
+
+Goal: make stored wall energy, rotating inertia, and normalized control dynamics available as
+ordinary registered graph components. ✅
+
+Delivered:
+
+1. Two-sided lumped wall with steady heat balance and transient thermal-capacity accumulation. ✅
+2. Two-port shaft inertia with kinetic-energy state, speed closure, mechanical efficiency, and
+   explicit fixed loss. ✅
+3. Normalized proportional controller and first-order control lag with steady/transient forms. ✅
+4. Shaft, signal, and control source/sink boundaries for independently composable graphs. ✅
+5. Registry-owned time and moment-of-inertia units plus fixed-sparse graph-level integration
+   regressions. ✅
+
 ## Thermofluid connector foundation
 
 Goal: establish non-redundant, property-independent stream semantics before expanding the

@@ -27,6 +27,25 @@ int main() {
             temperature.dimension == "temperature" &&
                 std::abs(temperature.value_si - 293.15) < 1.0e-12,
             "offset conversion must produce canonical SI");
+        const auto time = units.convert(2.0, "min");
+        require(
+            time.dimension == "time" &&
+                time.unit == "s" &&
+                time.value_si == 120.0,
+            "time conversion must produce canonical seconds");
+        const auto inertia = units.convert(4.0, "kg*m^2");
+        require(
+            inertia.dimension == "moment_of_inertia" &&
+                inertia.unit == "kg*m2" &&
+                inertia.value_si == 4.0,
+            "moment-of-inertia aliases must normalize");
+        const auto speed = units.convert(60.0, "rpm");
+        require(
+            speed.dimension == "angular_speed" &&
+                speed.unit == "rad/s" &&
+                std::abs(speed.value_si -
+                    2.0 * std::acos(-1.0)) < 1.0e-12,
+            "rotational speed must normalize to radians per second");
 
         thermox::platform::DimensionUnitDescriptor custom{
             "custom_flux",

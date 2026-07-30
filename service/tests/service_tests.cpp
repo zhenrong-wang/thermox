@@ -285,8 +285,20 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 39,
+        response.components.size() == 49,
         "service must expose the complete component registry");
+    const auto rotor = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind == "shaft.inertia.two_port";
+        });
+    require(
+        rotor != response.components.end() &&
+            rotor->supports_steady &&
+            rotor->supports_transient &&
+            rotor->internal_variables.size() == 2,
+        "catalog must expose reusable shaft-inertia dynamics");
     const auto compressor = std::find_if(
         response.components.begin(),
         response.components.end(),
