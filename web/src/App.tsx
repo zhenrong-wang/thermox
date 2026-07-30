@@ -2,12 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
 import { ComponentForm } from './ComponentForm'
-import { buildConnectionOperation } from './graphAuthoring'
+import { ConnectionForm } from './ConnectionForm'
+import {
+  buildConnectionOperation,
+  type ConnectionIntent,
+} from './graphAuthoring'
+import {
+  InspectorPanel,
+  type GraphSelection,
+} from './InspectorPanel'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
   Catalog,
   CatalogComponent,
   ComponentDefinition,
+  ConnectionDefinition,
   GraphEditOperation,
   ModelRevision,
   Project,
@@ -34,6 +43,11 @@ function App() {
   const [operationStatus, setOperationStatus] = useState('')
   const [newComponentType, setNewComponentType] =
     useState<CatalogComponent>()
+  const [editingComponent, setEditingComponent] =
+    useState<ComponentDefinition>()
+  const [editingConnection, setEditingConnection] =
+    useState<ConnectionDefinition>()
+  const [selection, setSelection] = useState<GraphSelection>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -78,6 +92,7 @@ function App() {
 
   useEffect(() => {
     setTopology(undefined)
+    setSelection(undefined)
     if (!selectedProjectId || !selectedRevisionId) return
     const controller = new AbortController()
     api
@@ -163,6 +178,84 @@ function App() {
       `Added ${component.id}.`,
     )
     setNewComponentType(undefined)
+  }
+
+  async function updateComponent(component: ComponentDefinition) {
+    await publishEdits(
+      [
+        {
+          action: 'upsert',
+          entity_type: 'component',
+          entity_id: component.id,
+          entity: { ...component },
+        },
+      ],
+      `Updated ${component.id}.`,
+    )
+    setEditingComponent(undefined)
+  }
+
+  async function updateConnection(
+    connection: ConnectionIntent,
+    existing: ConnectionDefinition,
+  ) {
+    if (!topology || !catalog) {
+      throw new Error('Topology and runtime catalog are required.')
+    }
+    const operation = buildConnectionOperation(
+      connection,
+      topology,
+      catalog,
+      existing.id,
+    )
+    await publishEdits(
+      [operation],
+      `Updated connection ${existing.id}.`,
+    )
+    setEditingConnection(undefined)
+  }
+
+  async function removeComponent(component: ComponentDefinition) {
+    if (
+      !window.confirm(
+        `Remove ${component.id}? Attached connections will also be removed in the new revision.`,
+      )
+    ) {
+      return
+    }
+    try {
+      await publishEdits(
+        [
+          {
+            action: 'remove',
+            entity_type: 'component',
+            entity_id: component.id,
+            cascade: true,
+          },
+        ],
+        `Removed ${component.id}.`,
+      )
+    } catch {
+      // publishEdits exposes the service diagnostic in the workspace.
+    }
+  }
+
+  async function removeConnection(connection: ConnectionDefinition) {
+    if (!window.confirm(`Remove connection ${connection.id}?`)) return
+    try {
+      await publishEdits(
+        [
+          {
+            action: 'remove',
+            entity_type: 'connection',
+            entity_id: connection.id,
+          },
+        ],
+        `Removed connection ${connection.id}.`,
+      )
+    } catch {
+      // publishEdits exposes the service diagnostic in the workspace.
+    }
   }
 
   async function connectPorts(connection: Connection) {
@@ -332,63 +425,115 @@ function App() {
               revisionId={selectedRevisionId}
               publishing={publishing}
               onConnect={connectPorts}
+              onSelect={setSelection}
             />
           )}
         </section>
 
         <aside className="palette">
-          <div className="palette-heading">
-            <span className="eyebrow">Runtime catalog</span>
-            <h2>Components</h2>
-            <p>{catalog?.components.length ?? 0} registered types</p>
-          </div>
-          <label className="search">
-            <span>⌕</span>
-            <input
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Filter type or domain"
+          {selection && topology && catalog ? (
+            <InspectorPanel
+              selection={selection}
+              topology={topology}
+              catalog={catalog}
+              publishing={publishing}
+              onEditComponent={setEditingComponent}
+              onEditConnection={setEditingConnection}
+              onRemoveComponent={(component) => {
+                void removeComponent(component)
+              }}
+              onRemoveConnection={(connection) => {
+                void removeConnection(connection)
+              }}
+              onClose={() => setSelection(undefined)}
             />
-          </label>
-          <div className="component-list">
-            {palette.map((component) => (
-              <button
-                type="button"
-                className="component-card"
-                key={component.kind}
-                disabled={!topology || publishing}
-                onClick={() => setNewComponentType(component)}
-              >
-                <div>
-                  <span className="kind-family">{shortKind(component.kind)}</span>
-                  {component.supports_transient && (
-                    <span className="transient-badge">transient</span>
-                  )}
-                </div>
-                <strong>{component.kind.split('.').at(-1)}</strong>
-                <div className="port-summary">
-                  {component.ports.map((port) => (
-                    <span key={`${port.name}-${port.domain}`}>
-                      <i className={`port-${port.domain}`} />
-                      {port.name}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-          <footer>
-            <span>Catalog</span>
-            <code>{catalog?.fingerprint.slice(0, 18) ?? 'loading…'}</code>
-          </footer>
+          ) : (
+            <>
+              <div className="palette-heading">
+                <span className="eyebrow">Runtime catalog</span>
+                <h2>Components</h2>
+                <p>{catalog?.components.length ?? 0} registered types</p>
+              </div>
+              <label className="search">
+                <span>⌕</span>
+                <input
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="Filter type or domain"
+                />
+              </label>
+              <div className="component-list">
+                {palette.map((component) => (
+                  <button
+                    type="button"
+                    className="component-card"
+                    key={component.kind}
+                    disabled={!topology || publishing}
+                    onClick={() => setNewComponentType(component)}
+                  >
+                    <div>
+                      <span className="kind-family">
+                        {shortKind(component.kind)}
+                      </span>
+                      {component.supports_transient && (
+                        <span className="transient-badge">transient</span>
+                      )}
+                    </div>
+                    <strong>{component.kind.split('.').at(-1)}</strong>
+                    <div className="port-summary">
+                      {component.ports.map((port) => (
+                        <span key={`${port.name}-${port.domain}`}>
+                          <i className={`port-${port.domain}`} />
+                          {port.name}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <footer>
+                <span>Catalog</span>
+                <code>
+                  {catalog?.fingerprint.slice(0, 18) ?? 'loading…'}
+                </code>
+              </footer>
+            </>
+          )}
         </aside>
       </section>
       {newComponentType && topology && (
         <ComponentForm
+          key={`new-${newComponentType.kind}`}
           componentType={newComponentType}
           topology={topology}
           onCancel={() => setNewComponentType(undefined)}
           onSubmit={addComponent}
+        />
+      )}
+      {editingComponent && topology && catalog && (
+        <ComponentForm
+          key={`edit-${editingComponent.id}`}
+          componentType={
+            catalog.components.find(
+              (item) => item.kind === editingComponent.kind,
+            )!
+          }
+          topology={topology}
+          component={editingComponent}
+          onCancel={() => setEditingComponent(undefined)}
+          onSubmit={updateComponent}
+        />
+      )}
+      {editingConnection && topology && catalog && (
+        <ConnectionForm
+          key={`edit-${editingConnection.id}`}
+          connection={editingConnection}
+          topology={topology}
+          catalog={catalog}
+          onCancel={() => setEditingConnection(undefined)}
+          onSubmit={(intent) =>
+            updateConnection(intent, editingConnection)
+          }
         />
       )}
     </main>

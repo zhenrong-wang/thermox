@@ -68,6 +68,12 @@ domain, connection kind, and exact contract version. A successful command select
 child revision; the browser never mutates the loaded parent document in place. Client checks are
 interaction guidance only—the service remains authoritative and may reject the whole batch.
 
+Selecting a canvas node or edge opens an instance inspector backed entirely by the selected
+revision. Editing sends an `upsert` with the existing entity ID, so labels, bindings, parameters,
+and connection endpoints can change without changing instance identity. Removal is a separate,
+guarded action. Component removal explicitly requests `cascade: true` only after confirmation, so
+attached connection removal is visible user intent rather than an implicit canvas mutation.
+
 ## Case authoring
 
 Operating cases use the same immutable-parent pattern:

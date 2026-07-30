@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { TopologyNode, type TopologyNodeData } from './TopologyNode'
+import type { GraphSelection } from './InspectorPanel'
 import type { CatalogComponent, TopologyDocument } from './types'
 
 interface TopologyCanvasProps {
@@ -18,6 +19,7 @@ interface TopologyCanvasProps {
   revisionId: string
   publishing: boolean
   onConnect: (connection: Connection) => Promise<void>
+  onSelect: (selection?: GraphSelection) => void
 }
 
 function endpoint(value: string): [string, string] {
@@ -72,6 +74,7 @@ export function TopologyCanvas({
   revisionId,
   publishing,
   onConnect,
+  onSelect,
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
@@ -133,6 +136,13 @@ export function TopologyCanvas({
       onConnect={(connection) => {
         void onConnect(connection)
       }}
+      onNodeClick={(_, node) =>
+        onSelect({ type: 'component', id: node.id })
+      }
+      onEdgeClick={(_, edge) =>
+        onSelect({ type: 'connection', id: edge.id })
+      }
+      onPaneClick={() => onSelect(undefined)}
       elementsSelectable
       minZoom={0.2}
       maxZoom={2}

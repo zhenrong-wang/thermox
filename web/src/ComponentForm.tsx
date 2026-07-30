@@ -8,8 +8,26 @@ import type {
 interface ComponentFormProps {
   componentType: CatalogComponent
   topology: TopologyDocument
+  component?: ComponentDefinition
   onCancel: () => void
   onSubmit: (component: ComponentDefinition) => Promise<void>
+}
+
+function parameterValue(
+  value: unknown,
+  fallback: number | null,
+): string {
+  if (typeof value === 'number') return String(value)
+  if (value && typeof value === 'object') {
+    const scalar = value as Record<string, unknown>
+    if (typeof scalar.value_si === 'number') {
+      return String(scalar.value_si)
+    }
+    if (typeof scalar.value === 'number') {
+      return String(scalar.value)
+    }
+  }
+  return fallback === null ? '' : String(fallback)
 }
 
 function suggestedId(
@@ -34,22 +52,29 @@ function suggestedId(
 export function ComponentForm({
   componentType,
   topology,
+  component,
   onCancel,
   onSubmit,
 }: ComponentFormProps) {
   const [componentId, setComponentId] = useState(() =>
-    suggestedId(componentType, topology),
+    component?.id ?? suggestedId(componentType, topology),
   )
-  const [label, setLabel] = useState('')
-  const [bindings, setBindings] = useState<Record<string, string>>({})
-  const [artifacts, setArtifacts] = useState<Record<string, string>>({})
+  const [label, setLabel] = useState(component?.label ?? '')
+  const [bindings, setBindings] = useState<Record<string, string>>({
+    ...component?.media,
+    ...component?.materials,
+  })
+  const [artifacts, setArtifacts] = useState<Record<string, string>>({
+    ...component?.artifacts,
+  })
   const [parameters, setParameters] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       componentType.parameters.map((parameter) => [
         parameter.name,
-        parameter.default_value_si === null
-          ? ''
-          : String(parameter.default_value_si),
+        parameterValue(
+          component?.parameters?.[parameter.name],
+          parameter.default_value_si,
+        ),
       ]),
     ),
   )
@@ -145,7 +170,7 @@ export function ComponentForm({
         <header>
           <div>
             <span className="eyebrow">Catalog-driven instance</span>
-            <h2>Add component</h2>
+            <h2>{component ? 'Edit component' : 'Add component'}</h2>
           </div>
           <button type="button" className="icon-button" onClick={onCancel}>
             ×
@@ -163,6 +188,7 @@ export function ComponentForm({
             <input
               value={componentId}
               onChange={(event) => setComponentId(event.target.value)}
+              disabled={Boolean(component)}
               required
             />
           </label>
@@ -281,7 +307,11 @@ export function ComponentForm({
             Cancel
           </button>
           <button type="submit" className="primary-button" disabled={submitting}>
-            {submitting ? 'Publishing…' : 'Publish child revision'}
+            {submitting
+              ? 'Publishing…'
+              : component
+                ? 'Publish updated revision'
+                : 'Publish child revision'}
           </button>
         </footer>
       </form>

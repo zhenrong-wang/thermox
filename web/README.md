@@ -12,6 +12,9 @@ The workspace currently provides:
 - a searchable component palette generated from `thermox.catalog/v3`;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - typed port-to-port connection authoring using registered connector contracts;
+- selection-driven component and connection inspection;
+- component and connection updates that preserve instance identity;
+- guarded component and connection removal, including explicit component cascade confirmation;
 - atomic publication of every accepted edit as a new immutable child revision;
 - API, loading, empty, and revision-integrity states.
 

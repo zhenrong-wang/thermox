@@ -144,4 +144,20 @@ describe('buildConnectionOperation', () => {
       ),
     ).toThrow('same registered domain')
   })
+
+  it('preserves an existing connection identity during updates', () => {
+    const operation = buildConnectionOperation(
+      {
+        source: 'source',
+        sourceHandle: 'outlet',
+        target: 'sink',
+        targetHandle: 'inlet',
+      },
+      topology,
+      catalog,
+      'existing-link',
+    )
+    expect(operation.entity_id).toBe('existing-link')
+    expect(operation.entity.id).toBe('existing-link')
+  })
 })

@@ -37,6 +37,7 @@ export function buildConnectionOperation(
   connection: ConnectionIntent,
   topology: TopologyDocument,
   catalog: Catalog,
+  existingConnectionId?: string,
 ): GraphUpsertOperation {
   if (
     !connection.source ||
@@ -84,7 +85,8 @@ export function buildConnectionOperation(
   }
 
   const complete = connection as Required<ConnectionIntent>
-  const id = nextConnectionId(complete, topology)
+  const id =
+    existingConnectionId || nextConnectionId(complete, topology)
   return {
     action: 'upsert',
     entity_type: 'connection',

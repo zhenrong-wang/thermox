@@ -373,11 +373,12 @@ Work items:
    - immutable topology visualization and revision selection; ✅
    - catalog-driven component creation and typed connection authoring through immutable edit
      batches; ✅
-   - selection-driven update and removal.
+   - selection-driven inspection, identity-preserving update, and guarded removal. ✅
 6. Component palette generated from backend component registry. ✅
 7. Parameter forms with units and validation.
    - catalog-driven SI component creation forms with service-authoritative validation; ✅
-   - display-unit conversion and instance editing.
+   - catalog-driven instance editing; ✅
+   - display-unit conversion.
 8. Case editor using the revision-backed authoring service.
 9. Run monitor and result overlay on graph.
 10. Stream/result table views.
