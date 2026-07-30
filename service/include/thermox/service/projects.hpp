@@ -289,6 +289,36 @@ struct CreateCaseRevisionRequest {
     std::string case_json;
 };
 
+enum class CaseEditField {
+    label,
+    mode,
+    parameter_override,
+    fixed_value,
+    initial_guess,
+    solver_option,
+};
+
+enum class CaseEditAction {
+    upsert,
+    remove,
+};
+
+struct CaseEditOperation {
+    CaseEditAction action{CaseEditAction::upsert};
+    CaseEditField field{CaseEditField::fixed_value};
+    std::string key;
+    std::string string_value;
+    std::string scalar_json;
+};
+
+struct ApplyCaseEditsRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string model_revision_id;
+    std::string base_case_revision_id;
+    std::vector<CaseEditOperation> operations;
+};
+
 struct CreateArtifactRevisionRequest {
     IdentityContext identity;
     std::string project_id;
@@ -385,6 +415,8 @@ public:
         const ApplyGraphEditsRequest& request) const;
     [[nodiscard]] CaseRevisionRecord create_case_revision(
         const CreateCaseRevisionRequest& request) const;
+    [[nodiscard]] CaseRevisionRecord apply_case_edits(
+        const ApplyCaseEditsRequest& request) const;
     [[nodiscard]] std::optional<CaseRevisionRecord>
     get_case_revision(
         const IdentityContext& identity,

@@ -60,6 +60,38 @@ The HTTP adapter only validates and maps the wire document. It wraps each entity
 platform fragment schema and invokes the transport-neutral `ProjectService` command. Consequently,
 future RPC and local bindings do not need to reproduce graph rules.
 
+## Case authoring
+
+Operating cases use the same immutable-parent pattern:
+
+```text
+POST /api/v1/projects/{project_id}/model-revisions/{model_revision_id}/case-revisions/{base_case_revision_id}/edits
+```
+
+The `thermox.case_edit_batch/v1` request applies one atomic batch. Case ID and model-revision
+binding are immutable. Operations may update or remove the optional label, update the required
+mode, or upsert/remove entries in `parameter_override`, `fixed_value`, `initial_guess`, and
+`solver_option` maps:
+
+```json
+{
+  "schema_version": "thermox.case_edit_batch/v1",
+  "operations": [
+    {
+      "action": "upsert",
+      "field": "fixed_value",
+      "key": "compressor.inlet.p",
+      "value": {"value": 101.325, "unit": "kPa"}
+    }
+  ]
+}
+```
+
+Scalar values pass through the platform unit authority and are stored canonically in SI. Removing
+a missing scalar, removing the required mode, supplying an invalid unit, or any other invalid
+operation rejects the entire batch without publishing a partial revision. A successful request
+publishes one child case revision linked to the exact base.
+
 ## Validation boundary
 
 Fragment parsing uses the same strict platform parser as complete topology documents. It preserves

@@ -595,6 +595,116 @@ void test_graph_edits_publish_valid_child_revisions() {
         "base revision");
 }
 
+void test_case_edits_publish_atomic_child_revisions() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Case edits", {}});
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto base = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+
+    thermox::service::ApplyCaseEditsRequest edit;
+    edit.identity = team_a;
+    edit.project_id = project.project_id;
+    edit.model_revision_id = model.model_revision_id;
+    edit.base_case_revision_id = base.case_revision_id;
+    edit.operations = {
+        {
+            thermox::service::CaseEditAction::upsert,
+            thermox::service::CaseEditField::label,
+            {},
+            "Hot-day design",
+            {},
+        },
+        {
+            thermox::service::CaseEditAction::upsert,
+            thermox::service::CaseEditField::fixed_value,
+            "compressor.inlet.p",
+            {},
+            R"json({
+              "schema_version": "thermox.scalar_value/v1",
+              "scalar": {"value": 2.0, "unit": "bar"}
+            })json",
+        },
+        {
+            thermox::service::CaseEditAction::remove,
+            thermox::service::CaseEditField::initial_guess,
+            "compressor.outlet.h",
+            {},
+            {},
+        },
+    };
+    const auto child = service.apply_case_edits(edit);
+    require(
+        child.parent_case_revision_id ==
+                base.case_revision_id &&
+            child.revision_number == 2U &&
+            child.case_id == base.case_id &&
+            child.canonical_case_json.find(
+                "\"label\": \"Hot-day design\"") !=
+                std::string::npos &&
+            child.canonical_case_json.find(
+                "\"value\": 200000") !=
+                std::string::npos &&
+            child.canonical_case_json.find(
+                "compressor.outlet.h") ==
+                std::string::npos,
+        "case edits must preserve identity, normalize units, "
+        "and publish one immutable child revision");
+
+    auto invalid = edit;
+    invalid.base_case_revision_id = child.case_revision_id;
+    invalid.operations = {
+        {
+            thermox::service::CaseEditAction::remove,
+            thermox::service::CaseEditField::fixed_value,
+            "missing.value",
+            {},
+            {},
+        },
+    };
+    bool rejected = false;
+    try {
+        (void)service.apply_case_edits(invalid);
+    } catch (const thermox::service::ProjectRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected &&
+            service
+                    .list_case_revisions(
+                        team_a,
+                        project.project_id,
+                        model.model_revision_id)
+                    .size() == 2U,
+        "invalid case edits must not publish partial "
+        "revisions");
+
+    edit.identity = team_b;
+    rejected = false;
+    try {
+        (void)service.apply_case_edits(edit);
+    } catch (const thermox::service::ProjectStateError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "case edits must hide another Team's base revision");
+}
+
 void test_revision_backed_validation_resolves_exact_inputs() {
     auto projects = std::make_shared<
         thermox::service::ProjectService>(
@@ -688,6 +798,7 @@ int main() {
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_graph_edits_publish_valid_child_revisions();
+        test_case_edits_publish_atomic_child_revisions();
         test_revision_backed_validation_resolves_exact_inputs();
         std::cout << "project service tests passed\n";
         return 0;

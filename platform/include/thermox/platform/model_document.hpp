@@ -110,6 +110,8 @@ ModelDocument parse_topology_document_text(
     const std::string& text);
 CaseDefinition parse_case_document_text(
     const std::string& text);
+ScalarValue parse_scalar_value_document_text(
+    const std::string& text);
 MediumDefinition parse_medium_definition_text(
     const std::string& text);
 MaterialDefinition parse_material_definition_text(

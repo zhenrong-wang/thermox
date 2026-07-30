@@ -1353,6 +1353,26 @@ CaseDefinition parse_case_document_text(
     return parse_case_document_root(root_value);
 }
 
+ScalarValue parse_scalar_value_document_text(
+    const std::string& text) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "scalar"}, "scalar document");
+    if (require_string(root, "schema_version") !=
+        "thermox.scalar_value/v1") {
+        throw std::invalid_argument(
+            "unsupported scalar value schema_version");
+    }
+    const std::string scalar_key{"scalar"};
+    const auto& scalar = require_member(root, scalar_key);
+    if (scalar.type == JsonValue::Type::Object) {
+        require_only_members(
+            scalar, {"value", "unit"}, "scalar");
+    }
+    return parse_scalar_value(scalar, "scalar");
+}
+
 MediumDefinition parse_medium_definition_text(
     const std::string& text) {
     const auto root =

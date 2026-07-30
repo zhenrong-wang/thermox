@@ -772,6 +772,144 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
     return command;
 }
 
+service::ApplyCaseEditsRequest parse_case_edit_request(
+    const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid case edit JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "case edit request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "operations") {
+            throw std::invalid_argument(
+                "unknown case edit request field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_json_string(root, "schema_version") !=
+        "thermox.case_edit_batch/v1") {
+        throw std::invalid_argument(
+            "unsupported case edit schema_version");
+    }
+    const auto& operations =
+        require_json_field(root, "operations");
+    if (!operations.is_array()) {
+        throw std::invalid_argument(
+            "case edit operations must be an array");
+    }
+
+    service::ApplyCaseEditsRequest command;
+    for (const auto& item : operations.as_array()) {
+        if (!item.is_object()) {
+            throw std::invalid_argument(
+                "each case edit operation must be an object");
+        }
+        const auto& object = item.as_object();
+        for (const auto& field : object) {
+            if (field.key() != "action" &&
+                field.key() != "field" &&
+                field.key() != "key" &&
+                field.key() != "value") {
+                throw std::invalid_argument(
+                    "unknown case edit operation field: " +
+                    std::string(field.key()));
+            }
+        }
+
+        service::CaseEditOperation operation;
+        const auto action =
+            require_json_string(object, "action");
+        if (action == "upsert") {
+            operation.action =
+                service::CaseEditAction::upsert;
+        } else if (action == "remove") {
+            operation.action =
+                service::CaseEditAction::remove;
+        } else {
+            throw std::invalid_argument(
+                "case edit action must be upsert or remove");
+        }
+
+        const auto field =
+            require_json_string(object, "field");
+        if (field == "label") {
+            operation.field =
+                service::CaseEditField::label;
+        } else if (field == "mode") {
+            operation.field =
+                service::CaseEditField::mode;
+        } else if (field == "parameter_override") {
+            operation.field =
+                service::CaseEditField::parameter_override;
+        } else if (field == "fixed_value") {
+            operation.field =
+                service::CaseEditField::fixed_value;
+        } else if (field == "initial_guess") {
+            operation.field =
+                service::CaseEditField::initial_guess;
+        } else if (field == "solver_option") {
+            operation.field =
+                service::CaseEditField::solver_option;
+        } else {
+            throw std::invalid_argument(
+                "unknown case edit field: " + field);
+        }
+
+        const auto* key = object.if_contains("key");
+        if (key != nullptr) {
+            if (!key->is_string()) {
+                throw std::invalid_argument(
+                    "case edit key must be a string");
+            }
+            operation.key = std::string(key->as_string());
+        }
+        const auto* edit_value =
+            object.if_contains("value");
+        if (operation.action ==
+            service::CaseEditAction::remove) {
+            if (edit_value != nullptr) {
+                throw std::invalid_argument(
+                    "case removal must not contain value");
+            }
+        } else if (
+            operation.field == service::CaseEditField::label ||
+            operation.field == service::CaseEditField::mode) {
+            if (edit_value == nullptr ||
+                !edit_value->is_string()) {
+                throw std::invalid_argument(
+                    "case metadata value must be a string");
+            }
+            operation.string_value =
+                std::string(edit_value->as_string());
+        } else {
+            if (edit_value == nullptr ||
+                (!edit_value->is_number() &&
+                 !edit_value->is_object())) {
+                throw std::invalid_argument(
+                    "case scalar value must be a number or "
+                    "quantity object");
+            }
+            boost::json::object scalar;
+            scalar["schema_version"] =
+                "thermox.scalar_value/v1";
+            scalar["scalar"] = *edit_value;
+            operation.scalar_json =
+                boost::json::serialize(scalar);
+        }
+        command.operations.push_back(std::move(operation));
+    }
+    return command;
+}
+
 service::ValidateProjectModelRequest
 parse_project_model_validation_request(
     const Request& request) {
@@ -1620,6 +1758,47 @@ Response Api::handle(const Request& request) const {
                     const auto case_suffix =
                         case_path.substr(
                             case_detail_prefix.size());
+                    constexpr std::string_view
+                        case_edits_suffix{"/edits"};
+                    if (case_suffix.ends_with(
+                            case_edits_suffix)) {
+                        const auto case_revision_id =
+                            case_suffix.substr(
+                                0,
+                                case_suffix.size() -
+                                    case_edits_suffix.size());
+                        if (case_revision_id.empty() ||
+                            case_revision_id.find('/') !=
+                                std::string::npos) {
+                            return error_response(
+                                404,
+                                "route_not_found",
+                                "no route matches the request "
+                                "target");
+                        }
+                        if (method != "post") {
+                            auto response = error_response(
+                                405,
+                                "method_not_allowed",
+                                "case edits only support POST");
+                            response.headers["Allow"] = "POST";
+                            return response;
+                        }
+                        require_json_request(
+                            request,
+                            impl_->options.maximum_body_bytes);
+                        auto command =
+                            parse_case_edit_request(request);
+                        command.identity = identity;
+                        command.project_id = project_id;
+                        command.model_revision_id = revision_id;
+                        command.base_case_revision_id =
+                            case_revision_id;
+                        return case_revision_response(
+                            impl_->projects->apply_case_edits(
+                                command),
+                            201);
+                    }
                     constexpr std::string_view
                         validation_suffix{"/validate"};
                     if (case_suffix.ends_with(

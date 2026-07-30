@@ -366,13 +366,15 @@ Work items:
    against immutable base revisions. ✅
 2. Provide revision-backed, compile-aware validation for an exact topology, case, and engineering
    artifact set. ✅
-3. Create React/TypeScript web app.
-4. Implement graph canvas with typed ports.
-5. Component palette generated from backend component registry.
-6. Parameter forms with units and validation.
-7. Case editor for fixed values and initial guesses.
-8. Run monitor and result overlay on graph.
-9. Stream/result table views.
+3. Provide typed, SI-normalized case authoring for metadata, parameter overrides, fixed values,
+   initial guesses, and solver options against immutable base revisions. ✅
+4. Create React/TypeScript web app.
+5. Implement graph canvas with typed ports.
+6. Component palette generated from backend component registry.
+7. Parameter forms with units and validation.
+8. Case editor using the revision-backed authoring service.
+9. Run monitor and result overlay on graph.
+10. Stream/result table views.
 
 Exit criteria:
 

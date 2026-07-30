@@ -13,6 +13,7 @@
 #include <cctype>
 #include <cmath>
 #include <iomanip>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -97,6 +98,28 @@ std::string endpoint_component_id(const std::string& endpoint) {
     return separator == std::string::npos
         ? endpoint
         : endpoint.substr(0, separator);
+}
+
+std::map<std::string, platform::ScalarValue>&
+case_scalar_values(
+    platform::CaseDefinition& simulation_case,
+    CaseEditField field) {
+    switch (field) {
+        case CaseEditField::parameter_override:
+            return simulation_case.parameter_overrides;
+        case CaseEditField::fixed_value:
+            return simulation_case.fixed_values;
+        case CaseEditField::initial_guess:
+            return simulation_case.initial_guesses;
+        case CaseEditField::solver_option:
+            return simulation_case.solver_options;
+        case CaseEditField::label:
+        case CaseEditField::mode:
+            throw ProjectRequestError(
+                "case metadata is not a scalar field");
+    }
+    throw ProjectRequestError(
+        "unknown case edit field");
 }
 
 std::string checksum(std::string_view value) {
@@ -606,6 +629,128 @@ CaseRevisionRecord ProjectService::create_case_revision(
         simulation_case.mode,
         canonical,
         checksum(canonical));
+}
+
+CaseRevisionRecord ProjectService::apply_case_edits(
+    const ApplyCaseEditsRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.model_revision_id.empty() ||
+        request.base_case_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project, model revision, and base case revision "
+            "IDs must not be empty");
+    }
+    if (request.operations.empty() ||
+        request.operations.size() > 256U) {
+        throw ProjectRequestError(
+            "case edit batch must contain 1 to 256 operations");
+    }
+    const auto base = repository_->get_case_revision(
+        request.identity.team_id,
+        request.project_id,
+        request.model_revision_id,
+        request.base_case_revision_id);
+    if (!base) {
+        throw ProjectStateError(
+            "base case revision was not found");
+    }
+
+    try {
+        auto simulation_case =
+            platform::parse_case_document_text(
+                base->canonical_case_json);
+        for (const auto& operation : request.operations) {
+            const bool metadata =
+                operation.field == CaseEditField::label ||
+                operation.field == CaseEditField::mode;
+            if (metadata && !operation.key.empty()) {
+                throw ProjectRequestError(
+                    "case metadata edits must not contain a "
+                    "key");
+            }
+            if (!metadata && operation.key.empty()) {
+                throw ProjectRequestError(
+                    "case scalar edits require a non-empty key");
+            }
+
+            if (operation.action ==
+                CaseEditAction::remove) {
+                if (!operation.string_value.empty() ||
+                    !operation.scalar_json.empty()) {
+                    throw ProjectRequestError(
+                        "case removal must not contain a value");
+                }
+                if (operation.field == CaseEditField::mode) {
+                    throw ProjectRequestError(
+                        "case mode cannot be removed");
+                }
+                if (operation.field == CaseEditField::label) {
+                    simulation_case.label.clear();
+                    continue;
+                }
+                auto& values = case_scalar_values(
+                    simulation_case, operation.field);
+                if (values.erase(operation.key) == 0U) {
+                    throw ProjectRequestError(
+                        "case scalar field '" + operation.key +
+                        "' does not exist");
+                }
+                continue;
+            }
+
+            if (metadata) {
+                if (!operation.scalar_json.empty() ||
+                    operation.string_value.empty()) {
+                    throw ProjectRequestError(
+                        "case metadata upsert requires a "
+                        "non-empty string value");
+                }
+                if (operation.field == CaseEditField::label) {
+                    simulation_case.label =
+                        operation.string_value;
+                } else {
+                    simulation_case.mode =
+                        operation.string_value;
+                }
+                continue;
+            }
+            if (!operation.string_value.empty() ||
+                operation.scalar_json.empty()) {
+                throw ProjectRequestError(
+                    "case scalar upsert requires a scalar "
+                    "value document");
+            }
+            const auto scalar =
+                platform::parse_scalar_value_document_text(
+                    operation.scalar_json);
+            case_scalar_values(
+                simulation_case,
+                operation.field)[operation.key] = scalar;
+        }
+
+        const auto canonical =
+            detail::serialize_case_document_json(
+                simulation_case);
+        simulation_case =
+            platform::parse_case_document_text(canonical);
+        return repository_->create_case_revision(
+            request.identity.team_id,
+            request.identity.user_id,
+            request.project_id,
+            request.model_revision_id,
+            request.base_case_revision_id,
+            simulation_case.id,
+            simulation_case.mode,
+            canonical,
+            checksum(canonical));
+    } catch (const ProjectRequestError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid case edit batch: ") +
+            error.what());
+    }
 }
 
 std::optional<CaseRevisionRecord>

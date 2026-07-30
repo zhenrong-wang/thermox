@@ -709,8 +709,58 @@ void test_team_scoped_projects_and_model_revisions() {
         "case revision creation must bind canonical operating "
         "data to the exact model revision");
 
+    auto case_edit_request = authenticated(json_post(
+        simulation_case.headers.at("Location") + "/edits",
+        R"json({
+          "schema_version": "thermox.case_edit_batch/v1",
+          "operations": [
+            {
+              "action": "upsert",
+              "field": "label",
+              "value": "Hot-day design"
+            },
+            {
+              "action": "upsert",
+              "field": "fixed_value",
+              "key": "compressor.inlet.p",
+              "value": {"value": 2.0, "unit": "bar"}
+            }
+          ]
+        })json"));
+    const auto edited_case = api.handle(case_edit_request);
+    require(
+        edited_case.status == 201 &&
+            edited_case.headers.contains("Location") &&
+            edited_case.headers.at("Location") !=
+                simulation_case.headers.at("Location") &&
+            edited_case.body.find(
+                "\"label\": \"Hot-day design\"") !=
+                std::string::npos &&
+            edited_case.body.find(
+                "\"value\": 200000") !=
+                std::string::npos &&
+            edited_case.body.find(
+                "\"parent_case_revision_id\": \"") !=
+                std::string::npos,
+        "typed case edits must publish an SI-normalized "
+        "immutable child revision");
+
+    auto invalid_case_edit = authenticated(json_post(
+        edited_case.headers.at("Location") + "/edits",
+        R"json({
+          "schema_version": "thermox.case_edit_batch/v1",
+          "operations": [{
+            "action": "remove",
+            "field": "fixed_value",
+            "key": "missing.value"
+          }]
+        })json"));
+    require(
+        api.handle(invalid_case_edit).status == 400,
+        "invalid case edit batches must be rejected");
+
     auto validation_request = authenticated(json_post(
-        simulation_case.headers.at("Location") + "/validate",
+        edited_case.headers.at("Location") + "/validate",
         R"json({
           "schema_version":
             "thermox.project_model_validation_request/v1",
@@ -770,6 +820,8 @@ void test_team_scoped_projects_and_model_revisions() {
     require(
         case_history.status == 200 &&
             case_history.body.find("\"revision_number\": 1") !=
+                std::string::npos &&
+            case_history.body.find("\"revision_number\": 2") !=
                 std::string::npos &&
             case_history.body.find("\"case_document\": {") ==
                 std::string::npos,
