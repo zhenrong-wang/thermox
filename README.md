@@ -224,6 +224,14 @@ cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
+## Verify the native extension SDK
+
+This explicit target stages an install and builds the separate SDK consumer serially:
+
+```sh
+cmake --build build --target thermox_sdk_conformance --parallel 1
+```
+
 ## Run a generic model
 
 Text output:

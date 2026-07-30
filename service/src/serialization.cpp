@@ -703,6 +703,17 @@ std::string serialize_catalog_response_json(
     error_json(out, response.error);
     out << ",\n  \"fingerprint\": ";
     json_string(out, response.fingerprint);
+    out << ",\n  \"native_extensions\": [";
+    for (std::size_t i = 0;
+         i < response.native_extensions.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& extension = response.native_extensions[i];
+        out << "{\"package_id\": ";
+        json_string(out, extension.package_id);
+        out << ", \"package_version\": ";
+        json_string(out, extension.package_version);
+        out << "}";
+    }
     out << ",\n  \"components\": [";
     for (std::size_t i = 0; i < response.components.size(); ++i) {
         if (i != 0) out << ", ";

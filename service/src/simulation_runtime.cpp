@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 
@@ -184,6 +185,11 @@ std::string catalog_fingerprint(
                     : "fixed_variable");
         }
     }
+    for (const auto& extension :
+         components.runtime_extension_descriptors()) {
+        hash_text(hash, extension.package_id);
+        hash_text(hash, extension.package_version);
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;
@@ -196,6 +202,45 @@ SimulationRuntime::SimulationRuntime(std::unique_ptr<Impl> impl)
     : impl_(std::move(impl)) {}
 
 SimulationRuntime::~SimulationRuntime() = default;
+
+void apply_native_extension(
+    const NativeExtensionPackage& extension,
+    platform::ComponentRegistry& components,
+    physics::PropertyPackageRegistry& properties,
+    platform::PerformanceMapRegistry& performance_maps,
+    physics::ThermochemistryPackageRegistry& thermochemistry) {
+    if (extension.package_id.empty() ||
+        extension.package_version.empty()) {
+        throw std::invalid_argument(
+            "native extension package requires a non-empty ID "
+            "and version");
+    }
+    if (!extension.register_components &&
+        !extension.register_properties &&
+        !extension.register_performance_maps &&
+        !extension.register_thermochemistry) {
+        throw std::invalid_argument(
+            "native extension package must register at least "
+            "one capability");
+    }
+    if (extension.register_components) {
+        extension.register_components(components);
+    }
+    if (extension.register_properties) {
+        extension.register_properties(properties);
+    }
+    if (extension.register_performance_maps) {
+        extension.register_performance_maps(performance_maps);
+    }
+    if (extension.register_thermochemistry) {
+        extension.register_thermochemistry(thermochemistry);
+    }
+    components.register_runtime_extension(
+        {
+            extension.package_id,
+            extension.package_version,
+        });
+}
 
 std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,

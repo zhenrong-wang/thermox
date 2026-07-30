@@ -1131,6 +1131,15 @@ CatalogResponse SimulationService::get_catalog(
         return response;
     }
     response.fingerprint = impl_->runtime->impl_->fingerprint;
+    for (const auto& extension :
+         impl_->runtime->impl_->components
+             .runtime_extension_descriptors()) {
+        response.native_extensions.push_back(
+            {
+                extension.package_id,
+                extension.package_version,
+            });
+    }
     for (const auto& descriptor :
          impl_->runtime->impl_->components.descriptors()) {
         ComponentType component;

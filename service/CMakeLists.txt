@@ -14,6 +14,8 @@ add_library(thermox_service
     src/simulation_service.cpp
 )
 add_library(thermox::service ALIAS thermox_service)
+set_target_properties(
+    thermox_service PROPERTIES EXPORT_NAME service)
 
 target_include_directories(thermox_service
     PUBLIC
@@ -40,6 +42,8 @@ target_compile_options(thermox_service PRIVATE
 
 add_library(thermox_service_native INTERFACE)
 add_library(thermox::service_native ALIAS thermox_service_native)
+set_target_properties(
+    thermox_service_native PROPERTIES EXPORT_NAME service_native)
 target_link_libraries(thermox_service_native INTERFACE
     thermox_service
     thermox_platform

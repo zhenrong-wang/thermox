@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 project(thermox VERSION 0.2.0 LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 enable_testing()
 
 set(COOLPROP_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
@@ -113,3 +116,97 @@ add_test(NAME platform_rankine_example_cli
 add_executable(thermox_property_tests physics/tests/property_tests.cpp)
 target_link_libraries(thermox_property_tests PRIVATE thermox_physics thermox_core)
 add_test(NAME thermox_property_tests COMMAND thermox_property_tests)
+
+set(THERMOX_SDK_TARGETS
+    thermox_core
+    thermox_physics
+    thermox_platform
+    thermox_service
+    thermox_service_native
+)
+install(
+    FILES $<TARGET_FILE:thermox_coolprop>
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+if(TARGET thermox_cantera_backend)
+    list(APPEND THERMOX_SDK_TARGETS thermox_cantera_backend)
+endif()
+
+install(
+    TARGETS ${THERMOX_SDK_TARGETS}
+    EXPORT ThermoxTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(
+    DIRECTORY
+        core/include/
+        physics/include/
+        platform/include/
+        service/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+)
+install(
+    EXPORT ThermoxTargets
+    FILE ThermoxTargets.cmake
+    NAMESPACE thermox::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Thermox
+)
+
+configure_package_config_file(
+    cmake/ThermoxConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ThermoxConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Thermox
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/ThermoxConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/ThermoxConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/ThermoxConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Thermox
+)
+
+set(THERMOX_SDK_STAGE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/sdk-stage)
+set(THERMOX_SDK_CONFORMANCE_BUILD_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/sdk-conformance)
+set(THERMOX_SDK_CONFORMANCE_ENV)
+if(THERMOX_ENABLE_CANTERA)
+    list(APPEND THERMOX_SDK_CONFORMANCE_ENV
+        PKG_CONFIG_PATH=${CANTERA_LIBDIR}/pkgconfig)
+endif()
+add_custom_target(
+    thermox_sdk_conformance
+    COMMAND
+        ${CMAKE_COMMAND} -E rm -rf
+        ${THERMOX_SDK_STAGE_DIR}
+        ${THERMOX_SDK_CONFORMANCE_BUILD_DIR}
+    COMMAND
+        ${CMAKE_COMMAND} --install
+        ${CMAKE_CURRENT_BINARY_DIR}
+        --prefix ${THERMOX_SDK_STAGE_DIR}
+    COMMAND
+        ${CMAKE_COMMAND} -E env
+        ${THERMOX_SDK_CONFORMANCE_ENV}
+        ${CMAKE_COMMAND}
+        -S ${CMAKE_CURRENT_SOURCE_DIR}/sdk/conformance
+        -B ${THERMOX_SDK_CONFORMANCE_BUILD_DIR}
+        -DCMAKE_PREFIX_PATH=${THERMOX_SDK_STAGE_DIR}
+        -DCMAKE_BUILD_TYPE=Release
+    COMMAND
+        ${CMAKE_COMMAND} --build
+        ${THERMOX_SDK_CONFORMANCE_BUILD_DIR}
+        --parallel 1
+    COMMAND
+        ${THERMOX_SDK_CONFORMANCE_BUILD_DIR}/thermox_native_extension_conformance
+    DEPENDS ${THERMOX_SDK_TARGETS}
+    USES_TERMINAL
+    COMMENT
+        "Building the native extension fixture against staged Thermox SDK"
+)

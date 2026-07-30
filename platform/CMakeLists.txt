@@ -16,6 +16,8 @@ add_library(thermox_platform
     src/transport_models.cpp
 )
 add_library(thermox::platform ALIAS thermox_platform)
+set_target_properties(
+    thermox_platform PROPERTIES EXPORT_NAME platform)
 target_include_directories(thermox_platform
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

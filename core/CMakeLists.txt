@@ -23,6 +23,8 @@ add_library(thermox_core
     src/transient_solver.cpp
     src/variable_registry.cpp
 )
+add_library(thermox::core ALIAS thermox_core)
+set_target_properties(thermox_core PROPERTIES EXPORT_NAME core)
 
 target_include_directories(thermox_core
     PUBLIC
@@ -50,7 +52,9 @@ if(THERMOX_ENABLE_UMFPACK)
         thermox_core PRIVATE ${THERMOX_UMFPACK_INCLUDE_DIR}
     )
     target_link_libraries(
-        thermox_core PRIVATE ${THERMOX_UMFPACK_LIBRARY}
+        thermox_core PRIVATE
+            $<BUILD_INTERFACE:${THERMOX_UMFPACK_LIBRARY}>
+            $<INSTALL_INTERFACE:thermox::umfpack_runtime>
     )
     target_compile_definitions(
         thermox_core PRIVATE THERMOX_HAS_UMFPACK=1

@@ -34,6 +34,11 @@ struct ConnectorDomainDescriptor {
     std::vector<ConnectorVariableDescriptor> variables;
 };
 
+struct RuntimeExtensionDescriptor {
+    std::string package_id;
+    std::string package_version;
+};
+
 struct PortModelDescriptor {
     std::string name;
     std::string domain;
@@ -148,6 +153,10 @@ public:
         const std::string& domain) const;
     std::vector<ConnectorDomainDescriptor>
     connector_domain_descriptors() const;
+    void register_runtime_extension(
+        RuntimeExtensionDescriptor descriptor);
+    std::vector<RuntimeExtensionDescriptor>
+    runtime_extension_descriptors() const;
 
     void register_model(std::shared_ptr<const ComponentModel> model);
     const ComponentModel& require_model(const std::string& kind) const;
@@ -158,6 +167,8 @@ public:
 private:
     std::map<std::string, ConnectorDomainDescriptor>
         connector_domains_;
+    std::map<std::string, RuntimeExtensionDescriptor>
+        runtime_extensions_;
     std::map<std::string, std::shared_ptr<const ComponentModel>> models_;
 };
 

@@ -8,6 +8,8 @@ add_library(thermox_physics
     src/thermochemistry.cpp
 )
 add_library(thermox::physics ALIAS thermox_physics)
+set_target_properties(
+    thermox_physics PROPERTIES EXPORT_NAME physics)
 target_include_directories(thermox_physics PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
@@ -15,7 +17,10 @@ target_include_directories(thermox_physics PUBLIC
 target_include_directories(thermox_physics SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/modules/properties/coolprop/include
 )
-target_link_libraries(thermox_physics PRIVATE thermox_coolprop)
+target_link_libraries(thermox_physics PRIVATE
+    $<BUILD_INTERFACE:thermox_coolprop>
+    $<INSTALL_INTERFACE:thermox::coolprop_runtime>
+)
 target_compile_features(thermox_physics PUBLIC cxx_std_20)
 target_compile_options(thermox_physics PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
@@ -42,6 +47,9 @@ if(THERMOX_ENABLE_CANTERA)
         thermox::cantera_backend
         ALIAS thermox_cantera_backend
     )
+    set_target_properties(
+        thermox_cantera_backend
+        PROPERTIES EXPORT_NAME cantera_backend)
     target_include_directories(
         thermox_cantera_backend
         PUBLIC

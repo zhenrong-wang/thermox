@@ -390,7 +390,7 @@ Work items:
 1. Provide validated injectable connector-domain registration and prove a custom domain/component
    through catalog, compilation, solve, and graph-native results. ✅
 2. Package the existing native component/property composition boundaries as a documented extension
-   SDK and out-of-tree conformance kit.
+   SDK and out-of-tree conformance kit. ✅
 3. Analytic or automatic differentiation Jacobians for core components.
 4. Homotopy/continuation initialization strategies.
 5. Tearing/decomposition and better structural diagnostics.

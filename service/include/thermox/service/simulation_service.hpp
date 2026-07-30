@@ -129,6 +129,11 @@ struct ConnectorDomainType {
     std::vector<ConnectorVariableType> variables;
 };
 
+struct NativeExtensionType {
+    std::string package_id;
+    std::string package_version;
+};
+
 struct CatalogRequest {
     std::string schema_version{command_schema_v1};
 };
@@ -138,6 +143,7 @@ struct CatalogResponse {
     ServiceError error;
     std::string schema_version{catalog_schema_v3};
     std::string fingerprint;
+    std::vector<NativeExtensionType> native_extensions;
     std::vector<ComponentType> components;
     std::vector<PropertyBackendType> property_backends;
     std::vector<ThermochemistryBackendType>

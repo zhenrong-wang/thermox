@@ -761,6 +761,36 @@ ComponentRegistry::connector_domain_descriptors() const {
     return descriptors;
 }
 
+void ComponentRegistry::register_runtime_extension(
+    RuntimeExtensionDescriptor descriptor) {
+    if (descriptor.package_id.empty() ||
+        descriptor.package_version.empty()) {
+        throw std::invalid_argument(
+            "runtime extension registration requires a "
+            "non-empty package ID and version");
+    }
+    const auto package_id = descriptor.package_id;
+    if (!runtime_extensions_
+             .emplace(package_id, std::move(descriptor))
+             .second) {
+        throw std::invalid_argument(
+            "duplicate runtime extension package: " +
+            package_id);
+    }
+}
+
+std::vector<RuntimeExtensionDescriptor>
+ComponentRegistry::runtime_extension_descriptors() const {
+    std::vector<RuntimeExtensionDescriptor> descriptors;
+    descriptors.reserve(runtime_extensions_.size());
+    for (const auto& [unused, descriptor] :
+         runtime_extensions_) {
+        (void)unused;
+        descriptors.push_back(descriptor);
+    }
+    return descriptors;
+}
+
 void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> model) {
     if (!model) {
         throw std::invalid_argument("component model registration must not be null");
