@@ -498,15 +498,11 @@ ExecutionMetadata execution_metadata(
             std::string(package->version()),
         });
     }
-    metadata.connector_domains = {
-        {"fluid", "thermox.connector.fluid/v1"},
-        {"material", "thermox.connector.material/v1"},
-        {"heat", "thermox.connector.heat/v1"},
-        {"shaft", "thermox.connector.shaft/v1"},
-        {"electrical", "thermox.connector.electrical/v1"},
-        {"signal", "thermox.connector.signal/v1"},
-        {"control", "thermox.connector.control/v1"},
-    };
+    for (const auto& connector :
+         components.connector_domain_descriptors()) {
+        metadata.connector_domains.push_back(
+            {connector.domain, connector.contract_version});
+    }
     return metadata;
 }
 
@@ -1224,26 +1220,28 @@ CatalogResponse SimulationService::get_catalog(
         response.thermochemistry_backends.push_back(
             std::move(backend));
     }
-    response.connector_domains = {
-        {"fluid", "thermox.connector.fluid/v1",
-         {{"m_dot", "mass_flow"},
-          {"p", "pressure"},
-          {"h", "specific_enthalpy"}}},
-        {"material", "thermox.connector.material/v1",
-         {{"p", "pressure"},
-          {"h", "specific_enthalpy"},
-          {"m_dot[species]", "mass_flow"}}},
-        {"heat", "thermox.connector.heat/v1",
-         {{"Q_dot", "power"}, {"T", "temperature"}}},
-        {"shaft", "thermox.connector.shaft/v1",
-         {{"W_dot", "power"}, {"omega", "angular_speed"}}},
-        {"electrical", "thermox.connector.electrical/v1",
-         {{"P", "power"}, {"frequency", "frequency"}}},
-        {"signal", "thermox.connector.signal/v1",
-         {{"value", "dimensionless"}}},
-        {"control", "thermox.connector.control/v1",
-         {{"value", "dimensionless"}}},
-    };
+    for (const auto& connector :
+         impl_->runtime->impl_->components
+             .connector_domain_descriptors()) {
+        ConnectorDomainType domain;
+        domain.domain = connector.domain;
+        domain.contract_version =
+            connector.contract_version;
+        domain.connection_kind =
+            connector.connection_kind;
+        for (const auto& variable : connector.variables) {
+            domain.variables.push_back(
+                {
+                    variable.name,
+                    variable.dimension,
+                    variable.initial_value,
+                    variable.scale,
+                    variable.expand_species,
+                });
+        }
+        response.connector_domains.push_back(
+            std::move(domain));
+    }
     response.status = OperationStatus::succeeded;
     return response;
 }

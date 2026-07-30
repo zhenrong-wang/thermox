@@ -19,6 +19,21 @@
 
 namespace thermox::platform {
 
+struct ConnectorVariableDescriptor {
+    std::string name;
+    double initial_value{0.0};
+    double scale{1.0};
+    std::string dimension{"dimensionless"};
+    bool expand_species{false};
+};
+
+struct ConnectorDomainDescriptor {
+    std::string domain;
+    std::string contract_version;
+    std::string connection_kind;
+    std::vector<ConnectorVariableDescriptor> variables;
+};
+
 struct PortModelDescriptor {
     std::string name;
     std::string domain;
@@ -124,6 +139,16 @@ private:
 
 class ComponentRegistry {
 public:
+    ComponentRegistry();
+
+    void register_connector_domain(
+        ConnectorDomainDescriptor descriptor);
+    const ConnectorDomainDescriptor&
+    require_connector_domain(
+        const std::string& domain) const;
+    std::vector<ConnectorDomainDescriptor>
+    connector_domain_descriptors() const;
+
     void register_model(std::shared_ptr<const ComponentModel> model);
     const ComponentModel& require_model(const std::string& kind) const;
     bool contains(const std::string& kind) const;
@@ -131,6 +156,8 @@ public:
     std::vector<ComponentModelDescriptor> descriptors() const;
 
 private:
+    std::map<std::string, ConnectorDomainDescriptor>
+        connector_domains_;
     std::map<std::string, std::shared_ptr<const ComponentModel>> models_;
 };
 

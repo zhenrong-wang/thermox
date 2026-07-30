@@ -387,14 +387,18 @@ Goal: robustness, extensibility, and safe user customization.
 
 Work items:
 
-1. Analytic or automatic differentiation Jacobians for core components.
-2. Homotopy/continuation initialization strategies.
-3. Tearing/decomposition and better structural diagnostics.
-4. Safe custom equation DSL; no arbitrary user Python in API process.
-5. Map validation and interpolation quality controls.
-6. Multi-user auth, authorization, project isolation, audit logs.
-7. Scalable job workers and deployment automation.
-8. Extended benchmark suite against published/reference examples.
+1. Provide validated injectable connector-domain registration and prove a custom domain/component
+   through catalog, compilation, solve, and graph-native results. ✅
+2. Package the existing native component/property composition boundaries as a documented extension
+   SDK and out-of-tree conformance kit.
+3. Analytic or automatic differentiation Jacobians for core components.
+4. Homotopy/continuation initialization strategies.
+5. Tearing/decomposition and better structural diagnostics.
+6. Safe custom equation DSL; no arbitrary user Python in API process.
+7. Map validation and interpolation quality controls.
+8. Multi-user auth, authorization, project isolation, audit logs.
+9. Scalable job workers and deployment automation.
+10. Extended benchmark suite against published/reference examples.
 
 Exit criteria:
 

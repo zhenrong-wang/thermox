@@ -13,7 +13,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v2[] = "thermox.catalog/v2";
+inline constexpr char catalog_schema_v3[] = "thermox.catalog/v3";
 
 enum class OperationStatus {
     succeeded,
@@ -117,11 +117,15 @@ struct ThermochemistryBackendType {
 struct ConnectorVariableType {
     std::string name;
     std::string dimension;
+    double initial_value_si{0.0};
+    double scale_si{1.0};
+    bool expand_species{false};
 };
 
 struct ConnectorDomainType {
     std::string domain;
     std::string contract_version;
+    std::string connection_kind;
     std::vector<ConnectorVariableType> variables;
 };
 
@@ -132,7 +136,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v2};
+    std::string schema_version{catalog_schema_v3};
     std::string fingerprint;
     std::vector<ComponentType> components;
     std::vector<PropertyBackendType> property_backends;

@@ -12,51 +12,66 @@ namespace thermox::platform {
 
 namespace {
 
-struct CanonicalVariableSpec {
-    std::string name;
-    double initial_value{0.0};
-    double scale{1.0};
-    std::string dimension{"dimensionless"};
-};
+std::vector<ConnectorDomainDescriptor>
+standard_connector_domains() {
+    return {
+        {"fluid", "thermox.connector.fluid/v1", "fluid_link",
+         {{"m_dot", 1.0, 100.0, "mass_flow", false},
+          {"p", 101325.0, 100000.0, "pressure", false},
+          {"h", 300000.0, 100000.0,
+           "specific_enthalpy", false}}},
+        {"material", "thermox.connector.material/v1",
+         "material_link",
+         {{"p", 101325.0, 100000.0, "pressure", false},
+          {"h", 300000.0, 100000.0,
+           "specific_enthalpy", false},
+          {"m_dot[species]", 0.01, 100.0, "mass_flow",
+           true}}},
+        {"heat", "thermox.connector.heat/v1", "heat_link",
+         {{"Q_dot", 0.0, 1000000.0, "power", false},
+          {"T", 300.0, 100.0, "temperature", false}}},
+        {"shaft", "thermox.connector.shaft/v1", "shaft_link",
+         {{"W_dot", 0.0, 1000000.0, "power", false},
+          {"omega", 314.1592653589793, 100.0,
+           "angular_speed", false}}},
+        {"electrical", "thermox.connector.electrical/v1",
+         "electrical_link",
+         {{"P", 0.0, 1000000.0, "power", false},
+          {"frequency", 50.0, 50.0, "frequency", false}}},
+        {"signal", "thermox.connector.signal/v1",
+         "signal_link",
+         {{"value", 0.0, 1.0, "dimensionless", false}}},
+        {"control", "thermox.connector.control/v1",
+         "signal_link",
+         {{"value", 0.0, 1.0, "dimensionless", false}}},
+    };
+}
 
-std::vector<CanonicalVariableSpec> canonical_variables_for_domain(
+std::vector<ConnectorVariableDescriptor>
+canonical_variables_for_domain(
+    const ComponentRegistry& registry,
     const std::string& domain,
     const std::vector<std::string>& species = {}) {
-    if (domain == "fluid") {
-        return {{"m_dot", 1.0, 100.0, "mass_flow"},
-                {"p", 101325.0, 100000.0, "pressure"},
-                {"h", 300000.0, 100000.0,
-                 "specific_enthalpy"}};
-    }
-    if (domain == "heat") {
-        return {{"Q_dot", 0.0, 1000000.0, "power"},
-                {"T", 300.0, 100.0, "temperature"}};
-    }
-    if (domain == "shaft") {
-        return {{"W_dot", 0.0, 1000000.0, "power"},
-                {"omega", 314.1592653589793, 100.0,
-                 "angular_speed"}};
-    }
-    if (domain == "electrical") {
-        return {{"P", 0.0, 1000000.0, "power"},
-                {"frequency", 50.0, 50.0, "frequency"}};
-    }
-    if (domain == "material") {
-        std::vector<CanonicalVariableSpec> variables{
-            {"p", 101325.0, 100000.0, "pressure"},
-            {"h", 300000.0, 100000.0,
-             "specific_enthalpy"}};
-        for (const auto& name : species) {
-            variables.push_back(
-                {"m_dot[" + name + "]", 0.01, 100.0,
-                 "mass_flow"});
+    std::vector<ConnectorVariableDescriptor> variables;
+    for (const auto& descriptor :
+         registry.require_connector_domain(domain).variables) {
+        if (!descriptor.expand_species) {
+            variables.push_back(descriptor);
+            continue;
         }
-        return variables;
+        for (const auto& species_name : species) {
+            auto expanded = descriptor;
+            const auto marker =
+                expanded.name.find("species");
+            expanded.name.replace(
+                marker,
+                std::string_view{"species"}.size(),
+                species_name);
+            expanded.expand_species = false;
+            variables.push_back(std::move(expanded));
+        }
     }
-    if (domain == "signal" || domain == "control") {
-        return {{"value", 0.0, 1.0, "dimensionless"}};
-    }
-    throw std::invalid_argument("unsupported port domain during graph compilation: " + domain);
+    return variables;
 }
 
 std::string endpoint_component(const std::string& endpoint) {
@@ -219,38 +234,6 @@ MediumPropertyMap create_medium_properties(
     return properties;
 }
 
-std::string required_connection_kind(const std::string& domain) {
-    if (domain == "fluid") return "fluid_link";
-    if (domain == "material") return "material_link";
-    if (domain == "heat") return "heat_link";
-    if (domain == "shaft") return "shaft_link";
-    if (domain == "electrical") return "electrical_link";
-    if (domain == "signal" || domain == "control") {
-        return "signal_link";
-    }
-    throw std::invalid_argument(
-        "unsupported port domain during connection validation: " +
-        domain);
-}
-
-std::string required_connection_contract(
-    const std::string& domain) {
-    if (domain == "fluid") return "thermox.connector.fluid/v1";
-    if (domain == "material") {
-        return "thermox.connector.material/v1";
-    }
-    if (domain == "heat") return "thermox.connector.heat/v1";
-    if (domain == "shaft") return "thermox.connector.shaft/v1";
-    if (domain == "electrical") {
-        return "thermox.connector.electrical/v1";
-    }
-    if (domain == "signal") return "thermox.connector.signal/v1";
-    if (domain == "control") return "thermox.connector.control/v1";
-    throw std::invalid_argument(
-        "unsupported port domain during connection validation: " +
-        domain);
-}
-
 struct ValidatedConnection {
     std::string from_component;
     std::string from_port;
@@ -301,24 +284,25 @@ ValidatedConnection validate_connection(
             "connection '" + connection.id +
             "' target port cannot have direction 'out'");
     }
+    const auto& connector =
+        registry.require_connector_domain(from_port.domain);
     if (connection.kind !=
-        required_connection_kind(from_port.domain)) {
+        connector.connection_kind) {
         throw std::invalid_argument(
             "connection '" + connection.id +
             "' kind '" + connection.kind +
             "' is incompatible with domain '" +
             from_port.domain + "'");
     }
-    const auto resolved_contract =
-        required_connection_contract(from_port.domain);
     if (!connection.contract_version.empty() &&
-        connection.contract_version != resolved_contract) {
+        connection.contract_version !=
+            connector.contract_version) {
         throw std::invalid_argument(
             "connection '" + connection.id +
             "' requests connector contract version '" +
             connection.contract_version + "' but domain '" +
             from_port.domain + "' provides version '" +
-            resolved_contract + "'");
+            connector.contract_version + "'");
     }
     if (from_port.domain == "fluid" &&
         require_medium_binding(
@@ -702,6 +686,81 @@ void MetadataComponentModel::add_transient_equations(
     // Boundary components contribute variables and topology but no intrinsic equations.
 }
 
+ComponentRegistry::ComponentRegistry() {
+    for (auto descriptor : standard_connector_domains()) {
+        register_connector_domain(std::move(descriptor));
+    }
+}
+
+void ComponentRegistry::register_connector_domain(
+    ConnectorDomainDescriptor descriptor) {
+    if (descriptor.domain.empty() ||
+        descriptor.contract_version.empty() ||
+        descriptor.connection_kind.empty() ||
+        descriptor.variables.empty()) {
+        throw std::invalid_argument(
+            "connector domain registration requires domain, "
+            "contract version, connection kind, and variables");
+    }
+    std::set<std::string> variable_names;
+    for (const auto& variable : descriptor.variables) {
+        if (variable.name.empty() ||
+            variable.dimension.empty() ||
+            !std::isfinite(variable.initial_value) ||
+            !std::isfinite(variable.scale) ||
+            variable.scale <= 0.0) {
+            throw std::invalid_argument(
+                "connector variable descriptors require a "
+                "name, dimension, finite initial value, and "
+                "positive finite scale");
+        }
+        if (!variable_names.insert(variable.name).second) {
+            throw std::invalid_argument(
+                "duplicate connector variable for domain '" +
+                descriptor.domain + "': " + variable.name);
+        }
+        if (variable.expand_species &&
+            variable.name.find("species") ==
+                std::string::npos) {
+            throw std::invalid_argument(
+                "species-expanded connector variable must "
+                "contain the species placeholder");
+        }
+    }
+    const auto domain = descriptor.domain;
+    if (!connector_domains_
+             .emplace(domain, std::move(descriptor))
+             .second) {
+        throw std::invalid_argument(
+            "duplicate connector domain registration: " +
+            domain);
+    }
+}
+
+const ConnectorDomainDescriptor&
+ComponentRegistry::require_connector_domain(
+    const std::string& domain) const {
+    const auto found = connector_domains_.find(domain);
+    if (found == connector_domains_.end()) {
+        throw std::invalid_argument(
+            "unsupported port domain during graph "
+            "compilation: " + domain);
+    }
+    return found->second;
+}
+
+std::vector<ConnectorDomainDescriptor>
+ComponentRegistry::connector_domain_descriptors() const {
+    std::vector<ConnectorDomainDescriptor> descriptors;
+    descriptors.reserve(connector_domains_.size());
+    for (const auto& [unused, descriptor] :
+         connector_domains_) {
+        (void)unused;
+        descriptors.push_back(descriptor);
+    }
+    return descriptors;
+}
+
 void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> model) {
     if (!model) {
         throw std::invalid_argument("component model registration must not be null");
@@ -711,6 +770,9 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
         throw std::invalid_argument("component model kind must not be empty");
     }
     validate_component_descriptor(model->descriptor());
+    for (const auto& port : model->descriptor().ports) {
+        (void)require_connector_domain(port.domain);
+    }
     std::set<std::string> transient_names;
     for (const auto& variable : model->descriptor().transient_variables) {
         if (variable.port_name.empty() || variable.variable_name.empty()) {
@@ -740,8 +802,8 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
                 "transient variable references unknown descriptor port: " +
                 kind + "." + variable.port_name);
         }
-        const auto canonical =
-            canonical_variables_for_domain(port->domain);
+        const auto& canonical =
+            require_connector_domain(port->domain).variables;
         if (std::none_of(
                 canonical.begin(), canonical.end(),
                 [&](const auto& candidate) {
@@ -970,7 +1032,7 @@ CompiledModelGraph compile_model_graph(
             const auto species = context.port_species.find(
                 port.name);
             for (const auto& spec : canonical_variables_for_domain(
-                     port.domain,
+                     registry, port.domain,
                      species == context.port_species.end()
                          ? std::vector<std::string>{}
                          : species->second)) {
@@ -1009,6 +1071,7 @@ CompiledModelGraph compile_model_graph(
             document, registry, connection, connection_counts);
         for (const auto& spec :
              canonical_variables_for_domain(
+                 registry,
                  endpoints.domain, endpoints.species)) {
             const std::string from_key = variable_key(
                 endpoints.from_component, endpoints.from_port, spec.name);
@@ -1277,7 +1340,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
                 port.name);
             for (const auto& spec :
                  canonical_variables_for_domain(
-                     port.domain,
+                     registry, port.domain,
                      species == context.port_species.end()
                          ? std::vector<std::string>{}
                          : species->second)) {
@@ -1357,6 +1420,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
             document, registry, connection, connection_counts);
         for (const auto& spec :
              canonical_variables_for_domain(
+                 registry,
                  endpoints.domain, endpoints.species)) {
             const auto from_it = variable_indices.find(variable_key(
                 endpoints.from_component, endpoints.from_port,

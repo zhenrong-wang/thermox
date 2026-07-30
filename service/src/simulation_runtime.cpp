@@ -167,15 +167,23 @@ std::string catalog_fingerprint(
                 std::to_string(static_cast<int>(capability)));
         }
     }
-    hash_text(hash, "thermox.connector.fluid/v1:m_dot,p,h");
-    hash_text(
-        hash,
-        "thermox.connector.material/v1:p,h,m_dot[species]");
-    hash_text(hash, "thermox.connector.heat/v1:Q_dot,T");
-    hash_text(hash, "thermox.connector.shaft/v1:W_dot,omega");
-    hash_text(hash, "thermox.connector.electrical/v1:P,frequency");
-    hash_text(hash, "thermox.connector.signal/v1:value");
-    hash_text(hash, "thermox.connector.control/v1:value");
+    for (const auto& descriptor :
+         components.connector_domain_descriptors()) {
+        hash_text(hash, descriptor.domain);
+        hash_text(hash, descriptor.contract_version);
+        hash_text(hash, descriptor.connection_kind);
+        for (const auto& variable : descriptor.variables) {
+            hash_text(hash, variable.name);
+            hash_number(hash, variable.initial_value);
+            hash_number(hash, variable.scale);
+            hash_text(hash, variable.dimension);
+            hash_text(
+                hash,
+                variable.expand_species
+                    ? "expand_species"
+                    : "fixed_variable");
+        }
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;

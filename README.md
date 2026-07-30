@@ -20,6 +20,7 @@ isolated example models.
 - [Service Architecture](docs/service-architecture.md)
 - [Graph Platform Architecture Review](docs/graph-platform-review.md)
 - [Graph Authoring Architecture](docs/graph-authoring-architecture.md)
+- [Native Extension Architecture](docs/extension-architecture.md)
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
 - [Calibration Architecture](docs/calibration-architecture.md)

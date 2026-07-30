@@ -77,7 +77,7 @@ void test_catalog_and_validation() {
         api.handle({"GET", "/api/v1/catalog", {}, {}});
     require(catalog.status == 200, "catalog endpoint must succeed");
     require(
-        catalog.body.find("thermox.catalog/v2") != std::string::npos,
+        catalog.body.find("thermox.catalog/v3") != std::string::npos,
         "catalog endpoint must preserve the service schema");
 
     const std::string model = read_file(

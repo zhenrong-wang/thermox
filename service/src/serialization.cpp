@@ -862,6 +862,8 @@ std::string serialize_catalog_response_json(
         json_string(out, domain.domain);
         out << ", \"contract_version\": ";
         json_string(out, domain.contract_version);
+        out << ", \"connection_kind\": ";
+        json_string(out, domain.connection_kind);
         out << ", \"variables\": [";
         for (std::size_t j = 0; j < domain.variables.size(); ++j) {
             if (j != 0) out << ", ";
@@ -869,7 +871,15 @@ std::string serialize_catalog_response_json(
             json_string(out, domain.variables[j].name);
             out << ", \"dimension\": ";
             json_string(out, domain.variables[j].dimension);
-            out << "}";
+            out << ", \"initial_value_si\": "
+                << domain.variables[j].initial_value_si
+                << ", \"scale_si\": "
+                << domain.variables[j].scale_si
+                << ", \"expand_species\": "
+                << (domain.variables[j].expand_species
+                        ? "true"
+                        : "false")
+                << "}";
         }
         out << "]}";
     }

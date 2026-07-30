@@ -279,7 +279,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v2,
+            thermox::service::catalog_schema_v3,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -454,7 +454,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v2\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v3\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
 }
@@ -1044,6 +1044,15 @@ void test_connection_contract_diagnostic() {
 void test_injectable_native_runtime() {
     auto components =
         thermox::platform::make_default_component_registry();
+    components.register_connector_domain({
+        "thermal_bus",
+        "example.connector.thermal_bus/v1",
+        "thermal_bus_link",
+        {
+            {"potential", 300.0, 100.0, "temperature", false},
+            {"flow", 0.0, 1000000.0, "power", false},
+        },
+    });
     thermox::platform::ComponentModelDescriptor descriptor;
     descriptor.kind = "sensor.signal.custom";
     descriptor.version = "0.1.0";
@@ -1055,6 +1064,17 @@ void test_injectable_native_runtime() {
         std::make_shared<
             thermox::platform::MetadataComponentModel>(
             descriptor));
+    thermox::platform::ComponentModelDescriptor bridge;
+    bridge.kind = "bridge.thermal_bus.custom";
+    bridge.version = "0.1.0";
+    bridge.ports = {
+        {"emit", "thermal_bus", "out"},
+        {"receive", "thermal_bus", "in"},
+    };
+    components.register_model(
+        std::make_shared<
+            thermox::platform::MetadataComponentModel>(
+            bridge));
     thermox::physics::ThermochemistryPackageRegistry chemistry;
     chemistry.register_backend(
         {"catalog_test", "catalog-test", "1.0.0",
@@ -1081,6 +1101,20 @@ void test_injectable_native_runtime() {
                     "sensor.signal.custom";
             }),
         "custom runtime component must reach service catalog");
+    const auto connector = std::find_if(
+        catalog.connector_domains.begin(),
+        catalog.connector_domains.end(),
+        [](const auto& domain) {
+            return domain.domain == "thermal_bus";
+        });
+    require(
+        connector != catalog.connector_domains.end() &&
+            connector->contract_version ==
+                "example.connector.thermal_bus/v1" &&
+            connector->connection_kind ==
+                "thermal_bus_link" &&
+            connector->variables.size() == 2U,
+        "custom connector domain must reach service catalog");
     require(
         catalog.thermochemistry_backends.size() == 1 &&
             catalog.thermochemistry_backends.front().backend ==
@@ -1100,9 +1134,21 @@ void test_injectable_native_runtime() {
       {
         "id": "sensor",
         "kind": "sensor.signal.custom"
+      },
+      {
+        "id": "bridge",
+        "kind": "bridge.thermal_bus.custom"
       }
     ],
-    "connections": []
+    "connections": [
+      {
+        "id": "thermal_bus_loop",
+        "from": "bridge.emit",
+        "to": "bridge.receive",
+        "kind": "thermal_bus_link",
+        "contract_version": "example.connector.thermal_bus/v1"
+      }
+    ]
   },
   "cases": [
     {
@@ -1110,7 +1156,15 @@ void test_injectable_native_runtime() {
       "mode": "steady_state_design",
       "fixed_values": {
         "sensor.signal.value": 42.0,
-        "sensor.command.value": 0.5
+        "sensor.command.value": 0.5,
+        "bridge.emit.potential": {
+          "value": 350.0,
+          "unit": "K"
+        },
+        "bridge.emit.flow": {
+          "value": 2.0,
+          "unit": "MW"
+        }
       }
     }
   ]
@@ -1138,8 +1192,17 @@ void test_injectable_native_runtime() {
                 .domain == "signal" &&
             require_port_result(
                 solved.graph, "sensor", "command")
-                .domain == "control",
-        "custom runtime graph must expose signal and control results");
+                .domain == "control" &&
+            require_port_result(
+                solved.graph, "bridge", "emit")
+                .domain == "thermal_bus" &&
+            require_result_value(
+                require_port_result(
+                    solved.graph, "bridge", "receive")
+                    .primary_values,
+                "flow").value_si == 2.0e6,
+        "custom runtime graph must compile and solve injected "
+        "connector semantics");
 }
 
 void test_steady_service() {

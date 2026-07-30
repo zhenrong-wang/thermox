@@ -75,8 +75,9 @@ domain. Port cardinality is not represented.
 Versioned connector-domain descriptors now expose canonical variables. Connection kinds must match
 their endpoint domain, port directions are compiler-validated, and registry descriptors declare
 maximum connection counts. Direct fan-out is rejected; junctions, pressure loss, heat transfer,
-and other physical behavior remain explicit components. Moving canonical domain definitions out of
-the compiler into an injectable domain registry remains a later extensibility step.
+and other physical behavior remain explicit components. Canonical variables, numerical scales,
+dimensions, link kinds, and contract versions are supplied by the injectable component runtime
+registry and participate in its catalog fingerprint.
 
 ### Diagnostics
 
