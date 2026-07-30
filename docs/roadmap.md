@@ -132,7 +132,7 @@ Delivered:
 3. Platform result evaluation reconstructs temperature, density, entropy, phase, and quality for
    every solved fluid port. ✅
 4. Compile-time degree-of-freedom diagnostics reject under- and over-specified graphs before
-   Newton. ✅
+   Newton and report incidence-matched variable/equation candidates. ✅
 5. Physical IF97 pump plus generic two-inlet mixer and two-outlet splitter establish the first
    reusable fluid-network component set. ✅
 
@@ -451,7 +451,11 @@ Work items:
      continuation-only reactant-domain staging with strict target chemistry enforcement; ✅
    - composition-coupled material-map initialization and future finite-rate/multi-zone reactor
      policies remain follow-ons.
-6. Tearing/decomposition and better structural diagnostics.
+6. Structural diagnostics and graph decomposition.
+   - rectangular compile-time incidence matching with bounded unmatched variable/equation
+     candidate diagnostics; ✅
+   - square singular-block localization, Dulmage-Mendelsohn regions, and solver tearing remain
+     follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.
 9. Multi-user auth, authorization, project isolation, audit logs.

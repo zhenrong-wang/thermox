@@ -4251,7 +4251,10 @@ void test_compiler_reports_under_and_over_specification() {
             (void)thermox::platform::compile_model_graph(
                 under_specified, registry, "design");
         },
-        "under-specified: 3 variables and 0 equations");
+        "under-specified: 3 variables and 0 equations; "
+        "3 additional independent equation(s) or specification(s) "
+        "required; unmatched variable candidate(s): "
+        "source.outlet.m_dot, source.outlet.p, source.outlet.h");
 
     const auto over_specified =
         thermox::platform::parse_model_document_text(R"json({
@@ -4313,6 +4316,13 @@ void test_compiler_reports_under_and_over_specification() {
                 over_specified, registry, "design");
         },
         "over-specified: 8 variables and 9 equations");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                over_specified, registry, "design");
+        },
+        "unmatched equation candidate(s): "
+        "fixed.design.compressor.outlet.p");
 }
 
 void test_component_property_capabilities_are_validated() {

@@ -333,8 +333,11 @@ closures. Its `volume` parameter accepts `m3`, `m^3`, or `L`; initial mass and t
 `kg` and `J`/`kJ`/`MJ`.
 
 Before producing a solver problem, each compiler compares the number of unknowns and residual
-equations. Under- and over-specified graphs are rejected with model-level counts. Fixed sparse
-patterns additionally enable structural matching in the numerical core.
+equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched
+variable or equation candidates from bipartite incidence matching. Equations without declared
+sparsity are treated conservatively as potentially depending on every variable, and candidates
+are therefore guidance rather than a claim that one unique specification is wrong. Fixed sparse
+patterns additionally enable strict structural matching in the numerical core.
 
 For steady closed loops, the compiler classifies linear equations incrementally. A generated
 connection equation is omitted only when its coefficients and right-hand side are a consistent
