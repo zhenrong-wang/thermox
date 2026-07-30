@@ -422,8 +422,8 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Add result-table filtering/export and richer transient plotting over the graph-native result
-   contract.
+1. Add multi-signal transient comparison, event/window reductions, and server-side export for
+   result sets too large for browser materialization.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

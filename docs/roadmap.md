@@ -397,6 +397,9 @@ Work items:
    - result-summary overlay on the graph; ✅
 10. Graph-native steady/transient result inspection with system balance, KPI, component,
     internal-state, and port/stream tables. ✅
+    - unified identity/scope filtering; ✅
+    - canonical-SI visible-sample and complete-trajectory CSV export; ✅
+    - selectable catalog-unit-aware transient signal plotting; ✅
 
 Exit criteria:
 

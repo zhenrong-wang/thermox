@@ -31,7 +31,12 @@ The workspace currently provides:
 - on-demand retrieval of successful `thermox.result/v3` artifacts through the service;
 - read-only projected-result overlays on the bound system topology;
 - system balance, KPI, component, internal-state, and port/stream result tables;
-- transient trajectory sample selection and event inspection using the same graph-native contract;
+- searchable scope-filtered graph-value inspection across system, component, internal, and port
+  identities;
+- canonical-SI CSV export for the visible filtered sample or complete long-form trajectory,
+  including catalog-declared canonical unit symbols;
+- selectable transient signal plotting, timeline sample markers, and event inspection using the
+  same graph-native contract;
 - persistent SI/engineering display profiles shared across authoring, inspection, run summaries,
   graph overlays, and result tables;
 - reversible catalog-driven dimension conversion with SI publication, extension-defined unit

@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayDeltaValue, displayValue } from './displayUnits'
+import {
+  filterResultRows,
+  flattenGraphResult,
+  resultRowsCsv,
+  simulationResultCsv,
+  transientSeries,
+  transientSeriesOptions,
+  type ResultScopeFilter,
+  type TransientSeriesPoint,
+} from './resultExploration'
 import { TopologyCanvas } from './TopologyCanvas'
 import {
   formatResultValue,
@@ -12,7 +22,6 @@ import {
 } from './resultPresentation'
 import type {
   CatalogComponent,
-  GraphResultValue,
   SimulationJob,
   SimulationResult,
   TopologyDocument,
@@ -28,64 +37,170 @@ interface ResultsWorkspaceProps {
   onRetry: () => void
 }
 
-function ResultValueTable({
-  title,
-  values,
+const scopeLabels: Record<ResultScopeFilter, string> = {
+  all: 'All scopes',
+  system_balance: 'System balances',
+  kpi: 'KPIs',
+  component_metric: 'Component metrics',
+  component_internal: 'Internal values',
+  port_primary: 'Port primary values',
+  port_derived: 'Port derived values',
+}
+
+function safeFilePart(value: string): string {
+  return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function downloadCsv(content: string, filename: string) {
+  const url = URL.createObjectURL(
+    new Blob([content], { type: 'text/csv;charset=utf-8' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function TransientPlot({
+  points,
+  dimension,
+  selectedTime,
 }: {
-  title: string
-  values: GraphResultValue[]
+  points: TransientSeriesPoint[]
+  dimension: string
+  selectedTime: number | null
 }) {
   const { profile, unitDimensions } = useDisplayUnits()
-  if (!values.length) return null
+  if (!points.length) {
+    return <p className="result-plot-empty">This signal has no finite samples.</p>
+  }
+
+  const displayed = points.map((point) => ({
+    time: point.time,
+    value: displayValue(
+      point.valueSi,
+      dimension,
+      profile,
+      unitDimensions,
+    ).value,
+  }))
+  const unit = displayValue(
+    points[0].valueSi,
+    dimension,
+    profile,
+    unitDimensions,
+  ).unit
+  const width = 900
+  const height = 250
+  const left = 72
+  const right = 20
+  const top = 18
+  const bottom = 38
+  const rawTimeMin = Math.min(...displayed.map((point) => point.time))
+  const rawTimeMax = Math.max(...displayed.map((point) => point.time))
+  const rawValueMin = Math.min(...displayed.map((point) => point.value))
+  const rawValueMax = Math.max(...displayed.map((point) => point.value))
+  const timePadding = rawTimeMin === rawTimeMax ? 0.5 : 0
+  const valuePadding =
+    rawValueMin === rawValueMax
+      ? Math.max(Math.abs(rawValueMin) * 0.05, 0.5)
+      : 0
+  const timeMin = rawTimeMin - timePadding
+  const timeMax = rawTimeMax + timePadding
+  const valueMin = rawValueMin - valuePadding
+  const valueMax = rawValueMax + valuePadding
+  const x = (time: number) =>
+    left +
+    ((time - timeMin) / (timeMax - timeMin)) *
+      (width - left - right)
+  const y = (value: number) =>
+    top +
+    ((valueMax - value) / (valueMax - valueMin)) *
+      (height - top - bottom)
+  const polyline = displayed
+    .map((point) => `${x(point.time)},${y(point.value)}`)
+    .join(' ')
+  const selected =
+    selectedTime === null
+      ? undefined
+      : displayed.reduce((closest, point) =>
+          Math.abs(point.time - selectedTime) <
+          Math.abs(closest.time - selectedTime)
+            ? point
+            : closest,
+        )
+
   return (
-    <section className="result-value-section">
-      <h3>{title}</h3>
-      <div className="result-table-scroll">
-        <table className="result-table">
-          <thead>
-            <tr>
-              <th>Value</th>
-              <th>Displayed value</th>
-              <th>Unit</th>
-              <th>Displayed derivative</th>
-            </tr>
-          </thead>
-          <tbody>
-            {values.map((value) => (
-              (() => {
-                const displayed = displayValue(
-                  value.value_si,
-                  value.dimension,
-                  profile,
-                  unitDimensions,
-                )
-                const derivative =
-                  value.derivative_si_s === undefined
-                    ? undefined
-                    : displayDeltaValue(
-                        value.derivative_si_s,
-                        value.dimension,
-                        profile,
-                        unitDimensions,
-                      )
-                return (
-                  <tr key={`${title}-${value.name}`}>
-                    <th>{value.name}</th>
-                    <td>{formatResultValue(displayed.value)}</td>
-                    <td>{displayed.unit}</td>
-                    <td>
-                      {derivative
-                        ? `${formatResultValue(derivative.value)} ${derivative.unit}`
-                        : '—'}
-                    </td>
-                  </tr>
-                )
-              })()
-            ))}
-          </tbody>
-        </table>
+    <div className="result-plot">
+      <svg
+        role="img"
+        aria-label={`Transient ${dimension} signal over time`}
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <line
+          className="result-plot-axis"
+          x1={left}
+          y1={top}
+          x2={left}
+          y2={height - bottom}
+        />
+        <line
+          className="result-plot-axis"
+          x1={left}
+          y1={height - bottom}
+          x2={width - right}
+          y2={height - bottom}
+        />
+        <line
+          className="result-plot-grid"
+          x1={left}
+          y1={top}
+          x2={width - right}
+          y2={top}
+        />
+        <polyline className="result-plot-line" points={polyline} />
+        {selected && (
+          <circle
+            className="result-plot-marker"
+            cx={x(selected.time)}
+            cy={y(selected.value)}
+            r="5"
+          />
+        )}
+        <text className="result-plot-label" x={left - 9} y={top + 4}>
+          {formatResultValue(valueMax)}
+        </text>
+        <text
+          className="result-plot-label"
+          x={left - 9}
+          y={height - bottom + 4}
+        >
+          {formatResultValue(valueMin)}
+        </text>
+        <text
+          className="result-plot-label result-plot-time-label"
+          x={left}
+          y={height - 13}
+        >
+          {formatResultValue(timeMin)} s
+        </text>
+        <text
+          className="result-plot-label result-plot-time-label"
+          x={width - right}
+          y={height - 13}
+        >
+          {formatResultValue(timeMax)} s
+        </text>
+      </svg>
+      <div className="result-plot-range">
+        <span>
+          Range {formatResultValue(valueMin)}–{formatResultValue(valueMax)}{' '}
+          {unit}
+        </span>
+        <span>{points.length} finite samples</span>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -100,10 +215,15 @@ export function ResultsWorkspace({
 }: ResultsWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
   const [sampleIndex, setSampleIndex] = useState(0)
+  const [query, setQuery] = useState('')
+  const [scope, setScope] = useState<ResultScopeFilter>('all')
+  const [seriesKey, setSeriesKey] = useState('')
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
     setSampleIndex(Math.max(0, sampleCount - 1))
+    setQuery('')
+    setScope('all')
   }, [job?.job_id, sampleCount])
 
   const graph = result ? resultGraph(result, sampleIndex) : undefined
@@ -112,6 +232,40 @@ export function ResultsWorkspace({
     [graph, job],
   )
   const sampleTime = result ? resultSampleTime(result, sampleIndex) : null
+  const rows = useMemo(
+    () => (graph ? flattenGraphResult(graph) : []),
+    [graph],
+  )
+  const filteredRows = useMemo(
+    () => filterResultRows(rows, query, scope),
+    [query, rows, scope],
+  )
+  const seriesOptions = useMemo(
+    () =>
+      result && isTransientResult(result)
+        ? transientSeriesOptions(result)
+        : [],
+    [result],
+  )
+
+  useEffect(() => {
+    setSeriesKey((current) =>
+      seriesOptions.some((option) => option.key === current)
+        ? current
+        : (seriesOptions[0]?.key ?? ''),
+    )
+  }, [seriesOptions])
+
+  const selectedSeries = seriesOptions.find(
+    (option) => option.key === seriesKey,
+  )
+  const seriesPoints = useMemo(
+    () =>
+      result && isTransientResult(result) && seriesKey
+        ? transientSeries(result, seriesKey)
+        : [],
+    [result, seriesKey],
+  )
 
   if (!job) {
     return (
@@ -125,6 +279,8 @@ export function ResultsWorkspace({
       </section>
     )
   }
+
+  const resultFilename = safeFilePart(job.job_id)
 
   return (
     <section className="results-workspace">
@@ -163,46 +319,80 @@ export function ResultsWorkspace({
       {!loading && result && graph && (
         <div className="results-content">
           <div className="result-summary-strip">
-            {(job.result_summary?.values ?? []).map((value) => (
-              (() => {
-                const displayed = displayValue(
-                  value.value_si,
-                  value.dimension,
-                  profile,
-                  unitDimensions,
-                )
-                return (
-                  <div key={value.id}>
-                    <span>{value.id}</span>
-                    <strong>{formatResultValue(displayed.value)}</strong>
-                    <small>{displayed.unit}</small>
-                  </div>
-                )
-              })()
-            ))}
+            {(job.result_summary?.values ?? []).map((value) => {
+              const displayed = displayValue(
+                value.value_si,
+                value.dimension,
+                profile,
+                unitDimensions,
+              )
+              return (
+                <div key={value.id}>
+                  <span>{value.id}</span>
+                  <strong>{formatResultValue(displayed.value)}</strong>
+                  <small>{displayed.unit}</small>
+                </div>
+              )
+            })}
             {!job.result_summary?.values.length && (
               <p>No projected summary values were configured for this run.</p>
             )}
           </div>
 
           {isTransientResult(result) && sampleCount > 0 && (
-            <section className="result-timeline">
-              <div>
-                <strong>Transient sample</strong>
-                <span>
-                  {sampleIndex + 1} / {sampleCount} · t ={' '}
-                  {sampleTime === null ? '—' : formatResultValue(sampleTime)} s
-                </span>
-              </div>
-              <input
-                aria-label="Transient result sample"
-                type="range"
-                min="0"
-                max={Math.max(0, sampleCount - 1)}
-                value={sampleIndex}
-                onChange={(event) => setSampleIndex(Number(event.target.value))}
-              />
-            </section>
+            <>
+              <section className="result-timeline">
+                <div>
+                  <strong>Transient sample</strong>
+                  <span>
+                    {sampleIndex + 1} / {sampleCount} · t ={' '}
+                    {sampleTime === null
+                      ? '—'
+                      : formatResultValue(sampleTime)}{' '}
+                    s
+                  </span>
+                </div>
+                <input
+                  aria-label="Transient result sample"
+                  type="range"
+                  min="0"
+                  max={Math.max(0, sampleCount - 1)}
+                  value={sampleIndex}
+                  onChange={(event) =>
+                    setSampleIndex(Number(event.target.value))
+                  }
+                />
+              </section>
+              <section className="result-plot-section">
+                <header>
+                  <div>
+                    <span className="section-kicker">Trajectory explorer</span>
+                    <h2>Transient signal</h2>
+                  </div>
+                  <label>
+                    <span>Signal</span>
+                    <select
+                      aria-label="Transient signal"
+                      value={seriesKey}
+                      onChange={(event) => setSeriesKey(event.target.value)}
+                    >
+                      {seriesOptions.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </header>
+                {selectedSeries && (
+                  <TransientPlot
+                    points={seriesPoints}
+                    dimension={selectedSeries.dimension}
+                    selectedTime={sampleTime}
+                  />
+                )}
+              </section>
+            </>
           )}
 
           <section className="result-graph-section">
@@ -234,22 +424,75 @@ export function ResultsWorkspace({
             <code>{result.metadata.catalog_fingerprint || '—'}</code>
           </div>
 
-          <ResultValueTable
-            title="System balances"
-            values={graph.system_balances}
-          />
-          <ResultValueTable title="KPIs" values={graph.kpis} />
-
           <section className="result-value-section">
-            <h3>Component and stream results</h3>
+            <header className="result-explorer-header">
+              <div>
+                <h3>Graph values</h3>
+                <span>
+                  {filteredRows.length} of {rows.length} values in sample
+                </span>
+              </div>
+              <div className="result-explorer-controls">
+                <input
+                  aria-label="Filter result values"
+                  type="search"
+                  placeholder="Filter identity, medium, value, or dimension"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <select
+                  aria-label="Result value scope"
+                  value={scope}
+                  onChange={(event) =>
+                    setScope(event.target.value as ResultScopeFilter)
+                  }
+                >
+                  {Object.entries(scopeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!filteredRows.length}
+                  onClick={() =>
+                    downloadCsv(
+                      resultRowsCsv(
+                        filteredRows,
+                        isTransientResult(result) ? sampleIndex : 0,
+                        sampleTime ?? undefined,
+                        unitDimensions,
+                      ),
+                      `${resultFilename}-sample-${sampleIndex}.csv`,
+                    )
+                  }
+                >
+                  Export visible
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    downloadCsv(
+                      simulationResultCsv(result, unitDimensions),
+                      `${resultFilename}-complete.csv`,
+                    )
+                  }
+                >
+                  Export complete
+                </button>
+              </div>
+            </header>
             <div className="result-table-scroll">
               <table className="result-table stream-result-table">
                 <thead>
                   <tr>
+                    <th>Scope</th>
                     <th>Component</th>
-                    <th>Port / scope</th>
-                    <th>Domain</th>
-                    <th>Medium / phase</th>
+                    <th>Port</th>
+                    <th>Domain / context</th>
                     <th>Value</th>
                     <th>Displayed value</th>
                     <th>Unit</th>
@@ -257,158 +500,56 @@ export function ResultsWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {graph.components.flatMap((component) => [
-                    ...component.metrics.map((value) => (
-                      <tr key={`${component.component_id}-metric-${value.name}`}>
-                        <th>{component.component_id}</th>
-                        <td>metric</td>
-                        <td>{component.kind}</td>
-                        <td>—</td>
-                        <td>{value.name}</td>
-                        <td>
-                          {formatResultValue(
-                            displayValue(
-                              value.value_si,
-                              value.dimension,
-                              profile,
-                              unitDimensions,
-                            ).value,
-                          )}
-                        </td>
-                        <td>
-                          {displayValue(
-                            value.value_si,
+                  {filteredRows.map((value) => {
+                    const displayed = displayValue(
+                      value.valueSi,
+                      value.dimension,
+                      profile,
+                      unitDimensions,
+                    )
+                    const derivative =
+                      value.derivativeSiS === undefined
+                        ? undefined
+                        : displayDeltaValue(
+                            value.derivativeSiS,
                             value.dimension,
                             profile,
                             unitDimensions,
-                          ).unit}
-                        </td>
+                          )
+                    const context =
+                      [value.mediumId, value.phase]
+                        .filter(Boolean)
+                        .join(' · ') || value.componentKind
+                    return (
+                      <tr key={value.key}>
+                        <td>{scopeLabels[value.scope]}</td>
+                        <th>{value.componentId || 'system'}</th>
+                        <td>{value.portName || '—'}</td>
                         <td>
-                          {value.derivative_si_s === undefined
-                            ? '—'
-                            : `${formatResultValue(
-                                displayDeltaValue(
-                                  value.derivative_si_s,
-                                  value.dimension,
-                                  profile,
-                                  unitDimensions,
-                                ).value,
-                              )} ${
-                                displayDeltaValue(
-                                  value.derivative_si_s,
-                                  value.dimension,
-                                  profile,
-                                  unitDimensions,
-                                ).unit
-                              }`}
+                          {[value.domain, context]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
                         </td>
-                      </tr>
-                    )),
-                    ...component.internal_values.map((value) => (
-                      <tr
-                        key={`${component.component_id}-internal-${value.name}`}
-                      >
-                        <th>{component.component_id}</th>
-                        <td>internal</td>
-                        <td>{component.kind}</td>
-                        <td>—</td>
                         <td>{value.name}</td>
+                        <td>{formatResultValue(displayed.value)}</td>
+                        <td>{displayed.unit}</td>
                         <td>
-                          {formatResultValue(
-                            displayValue(
-                              value.value_si,
-                              value.dimension,
-                              profile,
-                              unitDimensions,
-                            ).value,
-                          )}
-                        </td>
-                        <td>
-                          {displayValue(
-                            value.value_si,
-                            value.dimension,
-                            profile,
-                            unitDimensions,
-                          ).unit}
-                        </td>
-                        <td>
-                          {value.derivative_si_s === undefined
-                            ? '—'
-                            : `${formatResultValue(
-                                displayDeltaValue(
-                                  value.derivative_si_s,
-                                  value.dimension,
-                                  profile,
-                                  unitDimensions,
-                                ).value,
-                              )} ${
-                                displayDeltaValue(
-                                  value.derivative_si_s,
-                                  value.dimension,
-                                  profile,
-                                  unitDimensions,
-                                ).unit
-                              }`}
+                          {derivative
+                            ? `${formatResultValue(derivative.value)} ${
+                                derivative.unit
+                              }`
+                            : '—'}
                         </td>
                       </tr>
-                    )),
-                    ...component.ports.flatMap((port) =>
-                      [...port.primary_values, ...port.derived_values].map(
-                        (value) => (
-                          <tr
-                            key={`${component.component_id}-${port.port_name}-${value.name}`}
-                          >
-                            <th>{component.component_id}</th>
-                            <td>{port.port_name}</td>
-                            <td>{port.domain}</td>
-                            <td>
-                              {[port.medium_id, port.phase]
-                                .filter(Boolean)
-                                .join(' · ') || '—'}
-                            </td>
-                            <td>{value.name}</td>
-                            <td>
-                              {formatResultValue(
-                                displayValue(
-                                  value.value_si,
-                                  value.dimension,
-                                  profile,
-                                  unitDimensions,
-                                ).value,
-                              )}
-                            </td>
-                            <td>
-                              {displayValue(
-                                value.value_si,
-                                value.dimension,
-                                profile,
-                                unitDimensions,
-                              ).unit}
-                            </td>
-                            <td>
-                              {value.derivative_si_s === undefined
-                                ? '—'
-                                : `${formatResultValue(
-                                    displayDeltaValue(
-                                      value.derivative_si_s,
-                                      value.dimension,
-                                      profile,
-                                      unitDimensions,
-                                    ).value,
-                                  )} ${
-                                    displayDeltaValue(
-                                      value.derivative_si_s,
-                                      value.dimension,
-                                      profile,
-                                      unitDimensions,
-                                    ).unit
-                                  }`}
-                            </td>
-                          </tr>
-                        ),
-                      ),
-                    ),
-                  ])}
+                    )
+                  })}
+                  {!filteredRows.length && (
+                    <tr>
+                      <td colSpan={8} className="result-table-empty">
+                        No graph values match the current filter.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

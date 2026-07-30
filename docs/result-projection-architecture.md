@@ -37,6 +37,14 @@ port/stream tables. The browser does not derive thermal-cycle semantics: custom 
 connector domains, and result dimensions remain first-class because the presentation follows
 stable graph identities.
 
+The Results workspace flattens those namespaces into a stable identity index for text and scope
+filtering. It can export the visible sample or every transient sample as long-form CSV. Exported
+values remain canonical SI and include the catalog-declared canonical unit symbol; display-profile
+conversion is deliberately not applied to the audit artifact. Transient plotting selects any
+finite indexed signal, retains its physical dimension for catalog-driven display, and marks the
+sample currently projected onto the topology. The browser does not interpolate missing samples or
+invent values.
+
 Result artifacts and summaries remain canonical SI. The runtime unit registry publishes SI and
 engineering display descriptors through `thermox.catalog/v4`. A browser-local display profile
 applies those reversible dimension-keyed conversions to summaries, overlays, tables, and
