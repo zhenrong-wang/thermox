@@ -328,6 +328,13 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.code = "over_specified_model";
         diagnostic.suggestions = {
             "Remove conflicting or redundant user specifications."};
+    } else if (message.find("structurally singular") !=
+               std::string::npos) {
+        diagnostic.code = "structurally_singular_model";
+        diagnostic.suggestions = {
+            "Inspect the unmatched equation and variable candidates; "
+            "remove a dependent constraint and add an independent "
+            "specification."};
     } else if (message.find("property capability") !=
                std::string::npos) {
         diagnostic.code = "unsupported_property_capability";

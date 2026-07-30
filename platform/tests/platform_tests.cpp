@@ -277,6 +277,42 @@ private:
     thermox::platform::ComponentModelDescriptor descriptor_;
 };
 
+class StructurallySingularSignalModel final
+    : public thermox::platform::ComponentModel {
+public:
+    StructurallySingularSignalModel() {
+        descriptor_.kind = "test.structurally_singular";
+        descriptor_.version = "1.0.0";
+        descriptor_.ports = {
+            {"left", "signal", "out"},
+            {"right", "signal", "out"},
+        };
+    }
+
+    const thermox::platform::ComponentModelDescriptor&
+    descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const thermox::platform::ComponentCompileContext& context,
+        thermox::EquationSystemBuilder& system) const override {
+        const auto left =
+            context.port_variables.at("left.value");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "left_target_a",
+            {{left, 1.0}}, 1.0, 1.0);
+        system.add_linear_equation(
+            prefix + "left_target_b",
+            {{left, 1.0}}, 2.0, 1.0);
+    }
+
+private:
+    thermox::platform::ComponentModelDescriptor descriptor_;
+};
+
 thermox::platform::PerformanceMapArtifact
 make_test_map_artifact() {
     return {
@@ -4325,6 +4361,36 @@ void test_compiler_reports_under_and_over_specification() {
         "fixed.design.compressor.outlet.p");
 }
 
+void test_compiler_reports_square_structural_singularity() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "square_singular",
+    "media": [],
+    "components": [{
+      "id": "bad",
+      "kind": "test.structurally_singular"
+    }],
+    "connections": []
+  },
+  "cases": []
+})json");
+    thermox::platform::ComponentRegistry registry;
+    registry.register_model(
+        std::make_shared<
+            const StructurallySingularSignalModel>());
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, registry);
+        },
+        "square but structurally singular: 2 variables and "
+        "2 equations; unmatched variable candidate(s): "
+        "bad.right.value; unmatched equation candidate(s): "
+        "component.bad.left_target_b");
+}
+
 void test_component_property_capabilities_are_validated() {
     const auto document = thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v2",
@@ -5020,6 +5086,7 @@ int main() {
         test_generic_model_compiler_rejects_bad_port_contract();
         test_generic_model_compiler_rejects_unknown_case_variable();
         test_compiler_reports_under_and_over_specification();
+        test_compiler_reports_square_structural_singularity();
         test_component_property_capabilities_are_validated();
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();

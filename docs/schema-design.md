@@ -336,8 +336,10 @@ Before producing a solver problem, each compiler compares the number of unknowns
 equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched
 variable or equation candidates from bipartite incidence matching. Equations without declared
 sparsity are treated conservatively as potentially depending on every variable, and candidates
-are therefore guidance rather than a claim that one unique specification is wrong. Fixed sparse
-patterns additionally enable strict structural matching in the numerical core.
+are therefore guidance rather than a claim that one unique specification is wrong. Equal-count
+graphs are also rejected before solver construction when matching leaves both equation and
+variable candidates unmatched. Fixed sparse patterns additionally enable strict structural
+matching in the numerical core.
 
 For steady closed loops, the compiler classifies linear equations incrementally. A generated
 connection equation is omitted only when its coefficients and right-hand side are a consistent

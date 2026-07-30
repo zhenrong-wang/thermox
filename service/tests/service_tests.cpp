@@ -574,6 +574,62 @@ void test_compile_aware_validation_diagnostics() {
         "validation must return a stable catalog diagnostic");
 }
 
+void test_structurally_singular_validation_diagnostic() {
+    thermox::service::SimulationService service;
+    thermox::service::ValidateModelRequest request;
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "singular_heat_exchanger",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.fluid.fixed_duty",
+      "parameters": {
+        "heat_duty": {"value": 1.0, "unit": "MW"}
+      },
+      "media": {
+        "hot_in": "air",
+        "hot_out": "air",
+        "cold_in": "air",
+        "cold_out": "air"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "hx.hot_out.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "hx.hot_out.p": {"value": 2.0, "unit": "bar"},
+      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
+      "hx.cold_out.p": {"value": 1.0, "unit": "bar"}
+    }
+  }]
+})json";
+    const auto response = service.validate_model(request);
+    require(
+        !response.succeeded() &&
+            !response.diagnostics.empty() &&
+            response.diagnostics.front().code ==
+                "structurally_singular_model" &&
+            response.diagnostics.front().message.find(
+                "unmatched variable candidate(s)") !=
+                std::string::npos &&
+            response.diagnostics.front().message.find(
+                "unmatched equation candidate(s)") !=
+                std::string::npos,
+        "square singular validation must expose stable structural "
+        "candidates");
+}
+
 void test_calibration_observation_contract_validation() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -1719,6 +1775,7 @@ int main() {
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_compile_aware_validation_diagnostics();
+        test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
         test_engineering_study_freezes_before_prediction();

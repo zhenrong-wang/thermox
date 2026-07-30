@@ -78,7 +78,9 @@ Validation parses, canonicalizes, resolves the active runtime catalog, and compi
 steady or transient case without invoking a solver. It returns variable/equation counts, reduced
 closed-loop equations, the catalog fingerprint, and structured diagnostics. Diagnostic entity
 paths and compiler-specific codes will become progressively more precise as compiler internals
-move from exceptions to diagnostic records.
+move from exceptions to diagnostic records. Degree-of-freedom failures include bounded unmatched
+equation/variable candidates, and equal-count incidence failures use the stable
+`structurally_singular_model` diagnostic code.
 
 Solver settings on the service command are the sole execution authority. Case-level
 `solver_options` remain model metadata and are never merged implicitly into a run. Result-v3

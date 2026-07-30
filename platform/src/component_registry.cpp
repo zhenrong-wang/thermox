@@ -727,15 +727,33 @@ void validate_degree_of_freedom(
     const Builder& system) {
     const std::size_t variables = system.variables().size();
     const std::size_t equations = system.residuals().size();
+    const auto [unmatched_variables, unmatched_equations] =
+        unmatched_degree_of_freedom_candidates(system);
     if (variables == equations) {
-        return;
+        if (unmatched_variables.empty() &&
+            unmatched_equations.empty()) {
+            return;
+        }
+        throw std::invalid_argument(
+            "model '" + model_id +
+            "' is square but structurally singular: " +
+            std::to_string(variables) + " variables and " +
+            std::to_string(equations) + " equations" +
+            (unmatched_variables.empty()
+                 ? std::string{}
+                 : "; unmatched variable candidate(s): " +
+                       summarize_candidates(
+                           unmatched_variables)) +
+            (unmatched_equations.empty()
+                 ? std::string{}
+                 : "; unmatched equation candidate(s): " +
+                       summarize_candidates(
+                           unmatched_equations)));
     }
     const bool under_specified = variables > equations;
     const std::size_t difference = under_specified
                                        ? variables - equations
                                        : equations - variables;
-    const auto [unmatched_variables, unmatched_equations] =
-        unmatched_degree_of_freedom_candidates(system);
     const auto& candidates = under_specified
         ? unmatched_variables
         : unmatched_equations;

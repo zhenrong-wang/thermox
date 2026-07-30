@@ -454,8 +454,9 @@ Work items:
 6. Structural diagnostics and graph decomposition.
    - rectangular compile-time incidence matching with bounded unmatched variable/equation
      candidate diagnostics; ✅
-   - square singular-block localization, Dulmage-Mendelsohn regions, and solver tearing remain
-     follow-ons.
+   - equal-count structural-singularity rejection with unmatched equation/variable candidates
+     and a stable service diagnostic; ✅
+   - Dulmage-Mendelsohn region localization and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.
 9. Multi-user auth, authorization, project isolation, audit logs.
