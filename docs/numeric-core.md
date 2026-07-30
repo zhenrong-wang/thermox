@@ -49,7 +49,9 @@ warm-starting each stage and preserving dense, sparse, and hybrid derivative pat
 problems may provide anchor-aware parameterized residual and Jacobian callbacks, allowing
 components to introduce their own difficult physics without adding domain knowledge to the
 driver. Fixed fluid and material turbomachinery currently stage pressure ratio from the case
-initialization to the declared target. See
+initialization to the declared target. Fluid performance-map machinery additionally stages
+corrected coordinates from an in-domain seed while preserving the strict source-map policy at the
+target stage. See
 [Continuation Architecture](continuation-architecture.md).
 
 ## Transient DAE contract

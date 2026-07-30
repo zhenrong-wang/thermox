@@ -59,6 +59,19 @@ Their staged pressure ratio begins at the ratio implied by the case initial stat
 declared component ratio. This is deliberately anchor-aware: a good user or OEM initial guess is
 never moved back to an arbitrary unity-ratio state.
 
+Fluid performance-map compressors and turbines also provide an informed path for ordinary and
+conditioned maps. Compilation finds a corrected-flow/speed seed that is evaluable across adjacent
+map curves (and adjacent geometry layers when present). Intermediate stages blend from that seed
+to the actual corrected coordinates and from the anchor-implied pressure ratio to the selected
+map output. The analytic pressure-ratio row includes both continuation chain-rule factors.
+
+For maps whose declared extrapolation policy is `reject`, intermediate stages use a temporary
+piecewise-linear extension of the immutable source surface. This removes the domain barrier while
+the operating variables move toward the map. The extension exists only inside the informed path:
+the original map and its original reject/clamp/linear policy are always evaluated at `lambda = 1`.
+Consequently continuation cannot turn an out-of-domain final operating point into a successful
+solution.
+
 ## Derivative preservation
 
 The wrapper preserves the target derivative path:
@@ -95,6 +108,6 @@ The generic fallback remains residual homotopy, and a component hook does not gu
 nonlinear branch connects smoothly from the anchor to the desired physical solution. Components
 without a hook must still be evaluable at the first positive continuation stage.
 
-Performance-map coordinate seeding, heat-duty staging, and reaction/equilibrium introduction are
-the next component policies. They belong behind this same extension contract; they must not become
-cycle-specific solver logic.
+Composition-coupled material-map initialization, heat-duty staging, and reaction/equilibrium
+introduction are the next component policies. They belong behind this same extension contract;
+they must not become cycle-specific solver logic.

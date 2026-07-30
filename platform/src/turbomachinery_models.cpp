@@ -1,5 +1,6 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
+#include "performance_map_continuation.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -87,6 +88,7 @@ struct TurbomachineryMapPoint {
     double corrected_speed{0.0};
     double pressure_ratio_flow_derivative{0.0};
     double pressure_ratio_speed_derivative{0.0};
+    double coordinate_derivative_scale{1.0};
 };
 
 struct TurbomachineryMapContract {
@@ -174,7 +176,10 @@ EvaluationStatus evaluate_turbomachinery_map(
     double efficiency_scale,
     bool variable_geometry,
     double geometry_setting,
-    TurbomachineryMapPoint& point) {
+    TurbomachineryMapPoint& point,
+    const performance_map_continuation::Seed*
+        continuation_seed = nullptr,
+    double continuation_parameter = 1.0) {
     const auto inlet = properties.state_ph(
         pressure, enthalpy);
     if (!inlet.ok()) {
@@ -196,15 +201,36 @@ EvaluationStatus evaluate_turbomachinery_map(
         angular_speed / root_theta;
     const double map_mass_flow =
         corrected_mass_flow / flow_capacity_scale;
+    const double evaluation_mass_flow =
+        continuation_seed == nullptr
+        ? map_mass_flow
+        : continuation_seed->primary_coordinate +
+              continuation_parameter *
+                  (map_mass_flow -
+                   continuation_seed->primary_coordinate);
+    const double evaluation_speed =
+        continuation_seed == nullptr
+        ? corrected_speed
+        : continuation_seed->family_coordinate +
+              continuation_parameter *
+                  (corrected_speed -
+                   continuation_seed->family_coordinate);
+    const double evaluation_geometry =
+        continuation_seed == nullptr
+        ? geometry_setting
+        : continuation_seed->condition_coordinate +
+              continuation_parameter *
+                  (geometry_setting -
+                   continuation_seed->condition_coordinate);
     try {
         const auto evaluated = variable_geometry
             ? artifact.conditioned_map
                   ->evaluate(
-                      map_mass_flow, corrected_speed,
-                      geometry_setting)
+                      evaluation_mass_flow, evaluation_speed,
+                      evaluation_geometry)
                   .map
             : artifact.map->evaluate(
-                  map_mass_flow, corrected_speed);
+                  evaluation_mass_flow, evaluation_speed);
         point.pressure_ratio =
             1.0 + pressure_ratio_scale *
                 (evaluated.outputs.at(
@@ -241,6 +267,10 @@ EvaluationStatus evaluate_turbomachinery_map(
     point.inlet_temperature = inlet.state.temperature_k;
     point.corrected_mass_flow = corrected_mass_flow;
     point.corrected_speed = corrected_speed;
+    point.coordinate_derivative_scale =
+        continuation_seed == nullptr
+        ? 1.0
+        : continuation_parameter;
     return EvaluationStatus::success();
 }
 
@@ -443,6 +473,13 @@ public:
         const auto contract =
             validate_turbomachinery_map(
                 *artifact, variable_geometry_);
+        const auto continuation_seed =
+            performance_map_continuation::seed(
+                *artifact, variable_geometry_);
+        const auto continuation_artifact =
+            std::make_shared<const PerformanceMapArtifact>(
+                performance_map_continuation::linear_extension(
+                    *artifact, variable_geometry_));
         const auto properties =
             require_property_package(context, "inlet");
         if (properties !=
@@ -490,56 +527,98 @@ public:
             {{outlet_m, 1.0}, {inlet_m, -1.0}},
             0.0, 100.0);
 
-        const auto map_point =
-            [artifact, contract, properties, inlet_m, inlet_p,
+        const auto continued_map_point =
+            [artifact, continuation_artifact, contract,
+             properties, inlet_m, inlet_p,
              inlet_h, shaft_omega, reference_pressure,
              reference_temperature, flow_capacity_scale,
              pressure_ratio_scale, efficiency_scale,
              variable_geometry = variable_geometry_,
-             geometry_setting](
+             geometry_setting, continuation_seed](
                 const std::vector<double>& x,
+                double continuation_parameter,
                 TurbomachineryMapPoint& point) {
+                const auto& selected_artifact =
+                    continuation_parameter < 1.0
+                    ? *continuation_artifact
+                    : *artifact;
                 return evaluate_turbomachinery_map(
-                    *artifact, contract, *properties,
+                    selected_artifact, contract, *properties,
                     x.at(inlet_m), x.at(inlet_p),
                     x.at(inlet_h), x.at(shaft_omega),
                     reference_pressure, reference_temperature,
                     flow_capacity_scale, pressure_ratio_scale,
                     efficiency_scale,
                     variable_geometry, geometry_setting,
-                    point);
+                    point, &continuation_seed,
+                    continuation_parameter);
             };
 
-        system.add_checked_sparse_equation(
+        system.add_continuation_checked_sparse_equation(
             prefix + "map_pressure_ratio",
-            [map_point, inlet_p, outlet_p,
+            [continued_map_point, inlet_p, outlet_p,
              compressor = compressor_](
                 const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
                 double& residual) {
                 TurbomachineryMapPoint point;
-                const auto status = map_point(x, point);
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
                 if (!status.ok()) return status;
+                double anchor_pressure_ratio = compressor
+                    ? anchor.at(outlet_p) /
+                          anchor.at(inlet_p)
+                    : anchor.at(inlet_p) /
+                          anchor.at(outlet_p);
+                if (!std::isfinite(anchor_pressure_ratio) ||
+                    anchor_pressure_ratio <= 0.0) {
+                    anchor_pressure_ratio = 1.0;
+                }
+                const double staged_pressure_ratio =
+                    anchor_pressure_ratio +
+                    continuation_parameter *
+                        (point.pressure_ratio -
+                         anchor_pressure_ratio);
                 residual = compressor
                     ? x.at(outlet_p) -
                           x.at(inlet_p) *
-                              point.pressure_ratio
+                              staged_pressure_ratio
                     : x.at(inlet_p) -
                           x.at(outlet_p) *
-                              point.pressure_ratio;
+                              staged_pressure_ratio;
                 return EvaluationStatus::success();
             },
             {inlet_m, inlet_p, inlet_h, outlet_p, shaft_omega},
-            [map_point, properties, inlet_m, inlet_p, inlet_h,
+            [continued_map_point, properties, inlet_m, inlet_p,
+             inlet_h,
              outlet_p, shaft_omega, reference_pressure,
              reference_temperature,
              compressor = compressor_](
                 const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
                 std::vector<EquationPartial>& jacobian) {
                 TurbomachineryMapPoint point;
-                const auto status = map_point(x, point);
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
                 if (!status.ok()) {
                     throw std::runtime_error(status.message);
                 }
+                double anchor_pressure_ratio = compressor
+                    ? anchor.at(outlet_p) /
+                          anchor.at(inlet_p)
+                    : anchor.at(inlet_p) /
+                          anchor.at(outlet_p);
+                if (!std::isfinite(anchor_pressure_ratio) ||
+                    anchor_pressure_ratio <= 0.0) {
+                    anchor_pressure_ratio = 1.0;
+                }
+                const double staged_pressure_ratio =
+                    anchor_pressure_ratio +
+                    continuation_parameter *
+                        (point.pressure_ratio -
+                         anchor_pressure_ratio);
                 const auto [temperature_pressure_derivative,
                             temperature_enthalpy_derivative] =
                     inlet_temperature_derivatives(
@@ -577,10 +656,13 @@ public:
                 const auto pressure_ratio_derivative =
                     [&](double flow_derivative,
                         double speed_derivative) {
-                        return
+                        return continuation_parameter *
+                            point.coordinate_derivative_scale *
                             point
                                 .pressure_ratio_flow_derivative *
                                 flow_derivative +
+                            continuation_parameter *
+                            point.coordinate_derivative_scale *
                             point
                                 .pressure_ratio_speed_derivative *
                                 speed_derivative;
@@ -596,7 +678,9 @@ public:
                             flow_mass_derivative, 0.0)});
                 jacobian.push_back({
                     inlet_p,
-                    (compressor ? -point.pressure_ratio : 1.0) -
+                    (compressor
+                         ? -staged_pressure_ratio
+                         : 1.0) -
                         pressure_multiplier *
                             pressure_ratio_derivative(
                                 flow_pressure_derivative,
@@ -609,7 +693,9 @@ public:
                             speed_enthalpy_derivative)});
                 jacobian.push_back({
                     outlet_p,
-                    compressor ? 1.0 : -point.pressure_ratio});
+                    compressor
+                        ? 1.0
+                        : -staged_pressure_ratio});
                 jacobian.push_back({
                     shaft_omega,
                     -pressure_multiplier *
@@ -617,20 +703,25 @@ public:
                             0.0, speed_omega_derivative)});
                 return compressor
                     ? x.at(outlet_p) -
-                          inlet_pressure * point.pressure_ratio
+                          inlet_pressure *
+                              staged_pressure_ratio
                     : inlet_pressure -
                           x.at(outlet_p) *
-                              point.pressure_ratio;
+                              staged_pressure_ratio;
             },
             1.0e6);
-        system.add_checked_equation(
+        system.add_continuation_checked_equation(
             prefix + "map_isentropic_efficiency",
-            [map_point, properties, inlet_p, inlet_h, outlet_p,
+            [continued_map_point, properties, inlet_p, inlet_h,
+             outlet_p,
              outlet_h, compressor = compressor_](
                 const std::vector<double>& x,
+                const std::vector<double>&,
+                double continuation_parameter,
                        double& residual) {
                 TurbomachineryMapPoint point;
-                const auto status = map_point(x, point);
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
                 if (!status.ok()) return status;
                 const auto inlet = properties->state_ph(
                     x.at(inlet_p), x.at(inlet_h));

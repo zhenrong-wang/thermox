@@ -134,6 +134,21 @@ to radians and may be overridden per operating case. This supports IGV angle, gu
 or blade pitch without changing graph topology or treating measured mass flow as a hidden map
 input.
 
+## Continuation initialization
+
+Fluid map-driven compressors and turbines expose an anchor-aware continuation path. The compiler
+selects a corrected-flow/speed coordinate inside the common domain of neighboring curves; for
+conditioned maps it also selects a common adjacent-layer geometry coordinate. Intermediate solves
+blend from this seed to the actual corrected component coordinates and preserve the analytic
+pressure-ratio derivative chain.
+
+A source map with `reject` boundaries receives a continuation-only piecewise-linear extension so
+an out-of-domain initial guess can acquire a useful direction back toward the map. This does not
+change the artifact or component's final extrapolation contract. At the exact target stage the
+original map is evaluated, and an out-of-domain final operating point still fails. Composition-
+coupled material map continuation remains separate work because species-flow constraints require
+a composition-aware path rather than blindly reusing the fluid policy.
+
 ## Next integration slice
 
 1. Define a versioned map-artifact schema and checksum identity. ✅

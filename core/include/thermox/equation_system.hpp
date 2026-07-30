@@ -87,6 +87,12 @@ public:
         std::vector<std::size_t> sparsity_variables,
         SparseEquationCallback assemble,
         double scale = 1.0);
+    std::size_t add_continuation_checked_sparse_equation(
+        std::string name,
+        ContinuationCheckedEquationCallback evaluate,
+        std::vector<std::size_t> sparsity_variables,
+        ContinuationSparseEquationCallback assemble,
+        double scale = 1.0);
     std::size_t add_sparse_equation(std::string name,
                                     SparseEquationCallback assemble,
                                     double scale = 1.0);

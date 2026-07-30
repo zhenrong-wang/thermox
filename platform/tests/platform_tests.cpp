@@ -1,3 +1,4 @@
+#include "thermox/continuation_solver.hpp"
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/results.hpp"
@@ -1727,6 +1728,168 @@ void test_map_driven_compressor_solves_bound_operating_point() {
                 "operating_point");
         },
         "primary axis must be 'corrected_mass_flow'");
+}
+
+void test_map_continuation_recovers_out_of_domain_flow_guess() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "map_continuation_seed",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [
+      {
+        "id": "source",
+        "kind": "source.fluid.boundary",
+        "media": {"outlet": "air"}
+      },
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.performance_map",
+        "artifacts": {"performance_map": "flow-map"},
+        "parameters": {
+          "reference_pressure": {"value": 101.325, "unit": "kPa"},
+          "reference_temperature": {"value": 300.0, "unit": "K"}
+        },
+        "media": {"inlet": "air", "outlet": "air"}
+      },
+      {
+        "id": "sink",
+        "kind": "sink.fluid.boundary",
+        "media": {"inlet": "air"}
+      }
+    ],
+    "connections": [
+      {
+        "id": "source_to_compressor",
+        "from": "source.outlet",
+        "to": "compressor.inlet",
+        "kind": "fluid_link"
+      },
+      {
+        "id": "compressor_to_sink",
+        "from": "compressor.outlet",
+        "to": "sink.inlet",
+        "kind": "fluid_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "off_design",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "source.outlet.p": {"value": 101.325, "unit": "kPa"},
+      "source.outlet.T": {"value": 300.0, "unit": "K"},
+      "compressor.shaft.omega": 300.0,
+      "sink.inlet.p": {"value": 202.65, "unit": "kPa"}
+    },
+    "initial_guesses": {
+      "source.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "compressor.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "compressor.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "compressor.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "compressor.outlet.p": {"value": 202.65, "unit": "kPa"},
+      "compressor.outlet.h": {"value": 370.0, "unit": "kJ/kg"},
+      "compressor.shaft.W_dot": {"value": 0.7, "unit": "MW"},
+      "sink.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "sink.inlet.h": {"value": 370.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+
+    thermox::platform::PerformanceMapRegistry maps;
+    maps.register_artifact({
+        "flow-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "out-of-domain-seed-map",
+        std::string(64, '9'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{8.0, {1.6, 0.8}},
+                  {12.0, {2.4, 0.8}}}},
+                {350.0,
+                 {{8.0, {1.6, 0.8}},
+                  {12.0, {2.4, 0.8}}}},
+            }),
+    });
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::
+            make_default_property_package_registry(),
+        maps, "off_design");
+
+    const auto direct = thermox::solve_newton(graph.problem);
+    require(
+        !direct.diagnostics.converged &&
+            direct.diagnostics.message.find(
+                "primary coordinate") !=
+                std::string::npos &&
+            direct.diagnostics.message.find(
+                "outside [8, 12]") !=
+                std::string::npos,
+        "direct map solve must expose out-of-domain initial flow: " +
+            direct.diagnostics.message);
+
+    thermox::ContinuationOptions options;
+    options.initial_step = 0.25;
+    options.minimum_step = 1.0 / 1024.0;
+    const auto continued =
+        thermox::solve_continuation(
+            graph.problem, {}, options);
+    require(
+        continued.continuation.converged,
+        continued.continuation.message);
+    require(
+        continued.continuation.used_informed_path,
+        "map solve reports informed coordinate path");
+    require(
+        continued.continuation.accepted_stages > 1,
+        "map continuation advances through staged coordinates");
+    const auto flow = continued.x.at(
+        require_variable_index(
+            graph.problem.variable_names,
+            "compressor.inlet.m_dot"));
+    require_near(
+        flow, 10.0, 1.0e-7,
+        "map continuation solves the in-domain operating flow");
+
+    auto impossible = document;
+    impossible.cases.front()
+        .fixed_values.at("sink.inlet.p")
+        .value_si = 303975.0;
+    const auto impossible_graph =
+        thermox::platform::compile_model_graph(
+            impossible,
+            thermox::platform::
+                make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, "off_design");
+    const auto impossible_result =
+        thermox::solve_continuation(
+            impossible_graph.problem, {}, options);
+    require(
+        !impossible_result.continuation.converged &&
+            impossible_result.continuation
+                    .reached_parameter < 1.0,
+        "continuation-only map extension must not admit an "
+        "out-of-domain target operating point");
 }
 
 void test_map_driven_turbine_solves_bound_operating_point() {
@@ -4686,6 +4849,7 @@ int main() {
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
         test_map_driven_compressor_solves_bound_operating_point();
+        test_map_continuation_recovers_out_of_domain_flow_guess();
         test_map_driven_turbine_solves_bound_operating_point();
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();

@@ -162,6 +162,74 @@ std::size_t EquationSystemBuilder::add_checked_sparse_equation(
     return index;
 }
 
+std::size_t
+EquationSystemBuilder::add_continuation_checked_sparse_equation(
+    std::string name,
+    ContinuationCheckedEquationCallback evaluate,
+    std::vector<std::size_t> sparsity_variables,
+    ContinuationSparseEquationCallback assemble,
+    double scale) {
+    if (!evaluate || !assemble) {
+        throw std::invalid_argument(
+            "continuation checked sparse equation callbacks "
+            "must not be empty");
+    }
+    const std::size_t variable_count =
+        registry_.variables().size();
+    std::sort(
+        sparsity_variables.begin(),
+        sparsity_variables.end());
+    sparsity_variables.erase(
+        std::unique(
+            sparsity_variables.begin(),
+            sparsity_variables.end()),
+        sparsity_variables.end());
+    for (const std::size_t variable : sparsity_variables) {
+        if (variable >= variable_count) {
+            throw std::invalid_argument(
+                "continuation checked sparse equation variable "
+                "index out of range");
+        }
+    }
+    if (sparsity_variables.empty()) {
+        throw std::invalid_argument(
+            "continuation checked sparse equation pattern must "
+            "not be empty");
+    }
+
+    const auto continuation_evaluate =
+        std::move(evaluate);
+    const auto continuation_assemble =
+        std::move(assemble);
+    CheckedEquationCallback target_evaluate =
+        [continuation_evaluate](
+            const std::vector<double>& x,
+            double& residual) {
+            return continuation_evaluate(
+                x, x, 1.0, residual);
+        };
+    SparseEquationCallback target_assemble =
+        [continuation_assemble](
+            const std::vector<double>& x,
+            std::vector<EquationPartial>& jacobian_row) {
+            return continuation_assemble(
+                x, x, 1.0, jacobian_row);
+        };
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    Equation equation{
+        index, std::move(name), scale, {},
+        std::move(target_evaluate),
+        std::move(target_assemble),
+        std::move(sparsity_variables), {}, {}};
+    equation.evaluate_continuation_checked =
+        continuation_evaluate;
+    equation.assemble_continuation_sparse =
+        continuation_assemble;
+    equations_.push_back(std::move(equation));
+    return index;
+}
+
 std::size_t EquationSystemBuilder::add_sparse_equation(std::string name,
                                                        SparseEquationCallback assemble,
                                                        double scale) {

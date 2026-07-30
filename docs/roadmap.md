@@ -443,8 +443,10 @@ Work items:
    - service, durable configuration, HTTP, CLI, and web settings plus stage diagnostics; ✅
    - anchor-aware component extension contract plus fixed fluid/material turbomachinery
      pressure-ratio staging; ✅
-   - performance-map coordinate seeding, heat-duty staging, and reaction/equilibrium policies
-     remain follow-ons.
+   - fluid performance-map coordinate/geometry seeding with continuation-only linear extension
+     and strict target-domain enforcement; ✅
+   - composition-coupled material-map initialization, heat-duty staging, and
+     reaction/equilibrium policies remain follow-ons.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.
