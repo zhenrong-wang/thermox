@@ -378,6 +378,7 @@ Work items:
 7. Parameter forms with units and validation.
    - catalog-driven SI component creation forms with service-authoritative validation; ✅
    - catalog-driven instance editing; ✅
+   - property-registry fluid creation and typed project-artifact binding; ✅
    - display-unit conversion.
 8. Case editor using the revision-backed authoring service.
 9. Run monitor and result overlay on graph.

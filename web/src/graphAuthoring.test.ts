@@ -28,6 +28,7 @@ const catalog: Catalog = {
   schema_version: 'thermox.catalog/v3',
   status: 'succeeded',
   fingerprint: 'test',
+  property_backends: [],
   components: [
     {
       kind: 'source.test',

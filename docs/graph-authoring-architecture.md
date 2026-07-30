@@ -21,6 +21,29 @@ This gives clients an explicit optimistic-concurrency boundary:
 Canvas layout and other presentation metadata do not belong in the physical topology and will use
 a separate document boundary.
 
+## Canvas responsibility
+
+The canvas is a typed topology editor, not a general-purpose drawing document. React Flow supplies
+selection, viewport, node, edge, and typed-handle interaction. Thermox does not embed draw.io or
+adopt its diagram schema because the authoritative entities are registered components, connector
+contracts, media/material definitions, engineering artifacts, and immutable revisions—not
+arbitrary shapes and lines. A future layout document may add groups, labels, and annotations
+without changing the physical model.
+
+The intended instance workflow is:
+
+1. select a component type from the runtime component registry;
+2. bind its fluid/material ports to topology resources created from the property and
+   thermochemistry registries;
+3. enter catalog-declared scalar parameters;
+4. bind typed, immutable project engineering artifacts such as performance maps or correlations;
+5. connect compatible registered ports and ask the service to publish and validate the child
+   revision.
+
+An empirical formula is treated as a versioned correlation artifact only when a registered
+component declares that artifact role and implements its semantics. The browser does not evaluate
+arbitrary engineering expressions or infer equations from canvas annotations.
+
 ## Typed edit contract
 
 The first HTTP mapping is:
@@ -73,6 +96,14 @@ revision. Editing sends an `upsert` with the existing entity ID, so labels, bind
 and connection endpoints can change without changing instance identity. Removal is a separate,
 guarded action. Component removal explicitly requests `cascade: true` only after confirmation, so
 attached connection removal is visible user intent rather than an implicit canvas mutation.
+
+The workspace also consumes project artifact-revision metadata and property-backend metadata from
+the service. Artifact selectors filter immutable logical artifacts by the type declared for each
+component role and show the latest project revision; the topology stores the logical artifact ID,
+while run configuration later pins the exact artifact revision used for execution. Fluid creation
+selects a registered backend and one of its advertised substances, then publishes the resulting
+medium definition in the same immutable graph-edit path. Backend and artifact compatibility remain
+service-authoritative.
 
 ## Case authoring
 

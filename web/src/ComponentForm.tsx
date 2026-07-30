@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { latestArtifactRevisions } from './resourceBindings'
 import type {
+  ArtifactRevision,
   CatalogComponent,
   ComponentDefinition,
   TopologyDocument,
@@ -8,6 +10,7 @@ import type {
 interface ComponentFormProps {
   componentType: CatalogComponent
   topology: TopologyDocument
+  artifactRevisions: ArtifactRevision[]
   component?: ComponentDefinition
   onCancel: () => void
   onSubmit: (component: ComponentDefinition) => Promise<void>
@@ -52,6 +55,7 @@ function suggestedId(
 export function ComponentForm({
   componentType,
   topology,
+  artifactRevisions,
   component,
   onCancel,
   onSubmit,
@@ -88,6 +92,9 @@ export function ComponentForm({
       ),
     [componentType],
   )
+  const latestArtifacts = useMemo(() => {
+    return latestArtifactRevisions(artifactRevisions)
+  }, [artifactRevisions])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -278,23 +285,20 @@ export function ComponentForm({
             <legend>Engineering artifact bindings</legend>
             <div className="form-grid">
               {componentType.artifacts.map((artifact) => (
-                <label key={artifact.role}>
-                  <span>
-                    {artifact.role}
-                    <small>{artifact.artifact_type}</small>
-                  </span>
-                  <input
-                    value={artifacts[artifact.role] ?? ''}
-                    required={artifact.required}
-                    placeholder="Artifact binding ID"
-                    onChange={(event) =>
-                      setArtifacts((current) => ({
-                        ...current,
-                        [artifact.role]: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                <ArtifactBindingField
+                  key={artifact.role}
+                  role={artifact.role}
+                  artifactType={artifact.artifact_type}
+                  required={artifact.required}
+                  value={artifacts[artifact.role] ?? ''}
+                  revisions={latestArtifacts}
+                  onChange={(value) =>
+                    setArtifacts((current) => ({
+                      ...current,
+                      [artifact.role]: value,
+                    }))
+                  }
+                />
               ))}
             </div>
           </fieldset>
@@ -316,5 +320,57 @@ export function ComponentForm({
         </footer>
       </form>
     </div>
+  )
+}
+
+function ArtifactBindingField({
+  role,
+  artifactType,
+  required,
+  value,
+  revisions,
+  onChange,
+}: {
+  role: string
+  artifactType: string
+  required: boolean
+  value: string
+  revisions: ArtifactRevision[]
+  onChange: (value: string) => void
+}) {
+  const compatible = revisions.filter(
+    (revision) => revision.artifact_type === artifactType,
+  )
+  const preservesExternalBinding =
+    value && !compatible.some((revision) => revision.artifact_id === value)
+  return (
+    <label>
+      <span>
+        {role}
+        <small>{artifactType}</small>
+      </span>
+      <select
+        value={value}
+        required={required}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {compatible.length
+            ? 'Select project artifact'
+            : 'No compatible project artifacts'}
+        </option>
+        {preservesExternalBinding && (
+          <option value={value}>{value} · external binding</option>
+        )}
+        {compatible.map((revision) => (
+          <option
+            key={revision.artifact_revision_id}
+            value={revision.artifact_id}
+          >
+            {revision.artifact_id} · r{revision.revision_number}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }

@@ -318,6 +318,46 @@ button {
   font-weight: 700;
 }
 
+.palette-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resource-button {
+  flex: none;
+  padding: 7px 9px;
+  border: 1px solid #b8ccd6;
+  border-radius: 4px;
+  background: #f4f8f9;
+  color: #246c89;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.resource-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.resource-summary {
+  display: flex;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.resource-summary span {
+  padding: 3px 6px;
+  border: 1px solid #d7e2e6;
+  border-radius: 3px;
+  background: #f7f9fa;
+  color: #71838f;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
 .revision-chip {
   display: flex;
   align-items: center;
@@ -834,6 +874,25 @@ code {
   font-size: 10px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+.registry-note {
+  display: grid;
+  gap: 4px;
+  margin: 16px 20px 0;
+  padding: 10px 11px;
+  border-left: 3px solid #4b9a82;
+  background: #eff7f4;
+  color: #567168;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.registry-note strong {
+  color: #356858;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .component-dialog > footer {

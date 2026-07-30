@@ -11,13 +11,16 @@ import {
   InspectorPanel,
   type GraphSelection,
 } from './InspectorPanel'
+import { MediumForm } from './MediumForm'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
+  ArtifactRevision,
   Catalog,
   CatalogComponent,
   ComponentDefinition,
   ConnectionDefinition,
   GraphEditOperation,
+  MediumDefinition,
   ModelRevision,
   Project,
   TopologyDocument,
@@ -33,6 +36,9 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [revisions, setRevisions] = useState<ModelRevision[]>([])
+  const [artifactRevisions, setArtifactRevisions] = useState<
+    ArtifactRevision[]
+  >([])
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
   const [filter, setFilter] = useState('')
@@ -48,6 +54,7 @@ function App() {
   const [editingConnection, setEditingConnection] =
     useState<ConnectionDefinition>()
   const [selection, setSelection] = useState<GraphSelection>()
+  const [addingMedium, setAddingMedium] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,18 +77,22 @@ function App() {
 
   useEffect(() => {
     setRevisions([])
+    setArtifactRevisions([])
     setSelectedRevisionId('')
     setTopology(undefined)
     if (!selectedProjectId) return
     const controller = new AbortController()
-    api
-      .modelRevisions(selectedProjectId, controller.signal)
-      .then((response) => {
+    Promise.all([
+      api.modelRevisions(selectedProjectId, controller.signal),
+      api.artifactRevisions(selectedProjectId, controller.signal),
+    ])
+      .then(([response, artifacts]) => {
         setError('')
         const ordered = [...response.model_revisions].sort(
           (left, right) => right.revision_number - left.revision_number,
         )
         setRevisions(ordered)
+        setArtifactRevisions(artifacts.artifact_revisions)
         setSelectedRevisionId(ordered[0]?.model_revision_id ?? '')
       })
       .catch((reason: unknown) => {
@@ -178,6 +189,21 @@ function App() {
       `Added ${component.id}.`,
     )
     setNewComponentType(undefined)
+  }
+
+  async function addMedium(medium: MediumDefinition) {
+    await publishEdits(
+      [
+        {
+          action: 'upsert',
+          entity_type: 'medium',
+          entity_id: medium.id,
+          entity: { ...medium },
+        },
+      ],
+      `Added fluid ${medium.id}.`,
+    )
+    setAddingMedium(false)
   }
 
   async function updateComponent(component: ComponentDefinition) {
@@ -451,8 +477,26 @@ function App() {
             <>
               <div className="palette-heading">
                 <span className="eyebrow">Runtime catalog</span>
-                <h2>Components</h2>
-                <p>{catalog?.components.length ?? 0} registered types</p>
+                <div className="palette-title-row">
+                  <div>
+                    <h2>Components</h2>
+                    <p>
+                      {catalog?.components.length ?? 0} registered types
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="resource-button"
+                    disabled={!topology || publishing}
+                    onClick={() => setAddingMedium(true)}
+                  >
+                    + Fluid
+                  </button>
+                </div>
+                <div className="resource-summary">
+                  <span>{topology?.model.media.length ?? 0} fluids</span>
+                  <span>{artifactRevisions.length} artifact revisions</span>
+                </div>
               </div>
               <label className="search">
                 <span>⌕</span>
@@ -506,6 +550,7 @@ function App() {
           key={`new-${newComponentType.kind}`}
           componentType={newComponentType}
           topology={topology}
+          artifactRevisions={artifactRevisions}
           onCancel={() => setNewComponentType(undefined)}
           onSubmit={addComponent}
         />
@@ -519,6 +564,7 @@ function App() {
             )!
           }
           topology={topology}
+          artifactRevisions={artifactRevisions}
           component={editingComponent}
           onCancel={() => setEditingComponent(undefined)}
           onSubmit={updateComponent}
@@ -534,6 +580,14 @@ function App() {
           onSubmit={(intent) =>
             updateConnection(intent, editingConnection)
           }
+        />
+      )}
+      {addingMedium && topology && catalog && (
+        <MediumForm
+          backends={catalog.property_backends}
+          topology={topology}
+          onCancel={() => setAddingMedium(false)}
+          onSubmit={addMedium}
         />
       )}
     </main>

@@ -1,4 +1,5 @@
 import type {
+  ArtifactRevisionList,
   Catalog,
   GraphEditOperation,
   ModelRevision,
@@ -72,6 +73,11 @@ export const api = {
   ) =>
     getJson<ModelRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  artifactRevisions: (projectId: string, signal?: AbortSignal) =>
+    getJson<ArtifactRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions`,
       signal,
     ),
   applyGraphEdits: (

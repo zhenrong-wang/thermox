@@ -11,6 +11,8 @@ The workspace currently provides:
 - a graph canvas whose nodes and typed ports come from persisted topology plus the runtime catalog;
 - a searchable component palette generated from `thermox.catalog/v3`;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
+- property-registry-driven fluid creation with backend, substance, version, and capability metadata;
+- typed project-artifact selectors for performance maps and other declared component resources;
 - typed port-to-port connection authoring using registered connector contracts;
 - selection-driven component and connection inspection;
 - component and connection updates that preserve instance identity;

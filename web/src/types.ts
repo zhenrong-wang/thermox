@@ -63,6 +63,30 @@ export interface MaterialDefinition {
   package_version?: string
 }
 
+export interface ArtifactRevision {
+  schema_version: 'thermox.artifact_revision/v1'
+  artifact_revision_id: string
+  project_id: string
+  team_id: string
+  artifact_id: string
+  revision_number: number
+  parent_artifact_revision_id: string
+  artifact_type: string
+  artifact_schema_version: string
+  content: {
+    media_type: string
+    byte_size: number
+    checksum: string
+  }
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface ArtifactRevisionList {
+  schema_version: 'thermox.artifact_revision_list/v1'
+  artifact_revisions: ArtifactRevision[]
+}
+
 export interface ComponentDefinition {
   id: string
   label?: string
@@ -115,6 +139,14 @@ export interface CatalogComponent {
   }>
 }
 
+export interface PropertyBackend {
+  backend: string
+  implementation_name: string
+  implementation_version: string
+  supported_substances: string[]
+  capabilities: string[]
+}
+
 export interface ConnectorDomain {
   domain: string
   contract_version: string
@@ -133,6 +165,7 @@ export interface Catalog {
   status: string
   fingerprint: string
   components: CatalogComponent[]
+  property_backends: PropertyBackend[]
   connector_domains: ConnectorDomain[]
 }
 
