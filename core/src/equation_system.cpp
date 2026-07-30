@@ -67,7 +67,8 @@ std::size_t EquationSystemBuilder::add_equation(std::string name,
     }
     const std::size_t index = registry_.add_residual(name, scale);
     equations_.push_back(
-        Equation{index, std::move(name), scale, std::move(evaluate), {}, {}, {}});
+        Equation{index, std::move(name), scale,
+                 std::move(evaluate), {}, {}, {}, {}, {}});
     return index;
 }
 
@@ -77,7 +78,32 @@ std::size_t EquationSystemBuilder::add_checked_equation(
         throw std::invalid_argument("checked equation callback must not be empty");
     const std::size_t index = registry_.add_residual(name, scale);
     equations_.push_back(
-        Equation{index, std::move(name), scale, {}, std::move(evaluate), {}, {}});
+        Equation{index, std::move(name), scale, {},
+                 std::move(evaluate), {}, {}, {}, {}});
+    return index;
+}
+
+std::size_t EquationSystemBuilder::add_continuation_checked_equation(
+    std::string name,
+    ContinuationCheckedEquationCallback evaluate,
+    double scale) {
+    if (!evaluate) {
+        throw std::invalid_argument(
+            "continuation checked equation callback must not be empty");
+    }
+    const auto continuation = std::move(evaluate);
+    CheckedEquationCallback target =
+        [continuation](const std::vector<double>& x,
+                       double& residual) {
+            return continuation(x, x, 1.0, residual);
+        };
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    Equation equation{
+        index, std::move(name), scale, {}, std::move(target),
+        {}, {}, {}, {}};
+    equation.evaluate_continuation_checked = continuation;
+    equations_.push_back(std::move(equation));
     return index;
 }
 
@@ -94,7 +120,7 @@ std::size_t EquationSystemBuilder::add_checked_sparse_equation(
         registry_.add_residual(name, scale);
     equations_.push_back(Equation{
         index, std::move(name), scale, {}, std::move(evaluate),
-        std::move(assemble), {}});
+        std::move(assemble), {}, {}, {}});
     return index;
 }
 
@@ -131,7 +157,8 @@ std::size_t EquationSystemBuilder::add_checked_sparse_equation(
         registry_.add_residual(name, scale);
     equations_.push_back(Equation{
         index, std::move(name), scale, {}, std::move(evaluate),
-        std::move(assemble), std::move(sparsity_variables)});
+        std::move(assemble), std::move(sparsity_variables),
+        {}, {}});
     return index;
 }
 
@@ -147,8 +174,9 @@ std::size_t EquationSystemBuilder::add_sparse_equation(std::string name,
         return sparse(x, ignored);
     };
     const std::size_t index = registry_.add_residual(name, scale);
-    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate), {},
-                                  std::move(sparse), {}});
+    equations_.push_back(Equation{
+        index, std::move(name), scale, std::move(evaluate),
+        {}, std::move(sparse), {}, {}, {}});
     return index;
 }
 
@@ -180,8 +208,95 @@ std::size_t EquationSystemBuilder::add_sparse_equation(
         return sparse(x, ignored);
     };
     const std::size_t index = registry_.add_residual(name, scale);
-    equations_.push_back(Equation{index, std::move(name), scale, std::move(evaluate), {},
-                                  std::move(sparse), std::move(sparsity_variables)});
+    equations_.push_back(Equation{
+        index, std::move(name), scale, std::move(evaluate),
+        {}, std::move(sparse), std::move(sparsity_variables),
+        {}, {}});
+    return index;
+}
+
+std::size_t EquationSystemBuilder::add_continuation_sparse_equation(
+    std::string name,
+    ContinuationSparseEquationCallback assemble,
+    double scale) {
+    if (!assemble) {
+        throw std::invalid_argument(
+            "continuation sparse equation callback must not be empty");
+    }
+    const auto continuation = std::move(assemble);
+    SparseEquationCallback target =
+        [continuation](
+            const std::vector<double>& x,
+            std::vector<EquationPartial>& jacobian_row) {
+            return continuation(
+                x, x, 1.0, jacobian_row);
+        };
+    EquationCallback evaluate =
+        [target](const std::vector<double>& x) {
+            std::vector<EquationPartial> ignored;
+            return target(x, ignored);
+        };
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    Equation equation{
+        index, std::move(name), scale, std::move(evaluate),
+        {}, std::move(target), {}, {}, {}};
+    equation.assemble_continuation_sparse = continuation;
+    equations_.push_back(std::move(equation));
+    return index;
+}
+
+std::size_t EquationSystemBuilder::add_continuation_sparse_equation(
+    std::string name,
+    std::vector<std::size_t> sparsity_variables,
+    ContinuationSparseEquationCallback assemble,
+    double scale) {
+    if (!assemble) {
+        throw std::invalid_argument(
+            "continuation sparse equation callback must not be empty");
+    }
+    const std::size_t variable_count =
+        registry_.variables().size();
+    std::sort(
+        sparsity_variables.begin(),
+        sparsity_variables.end());
+    sparsity_variables.erase(
+        std::unique(
+            sparsity_variables.begin(),
+            sparsity_variables.end()),
+        sparsity_variables.end());
+    for (const std::size_t variable : sparsity_variables) {
+        if (variable >= variable_count) {
+            throw std::invalid_argument(
+                "continuation sparse equation variable index out of range");
+        }
+    }
+    if (sparsity_variables.empty()) {
+        throw std::invalid_argument(
+            "continuation sparse equation pattern must not be empty");
+    }
+
+    const auto continuation = std::move(assemble);
+    SparseEquationCallback target =
+        [continuation](
+            const std::vector<double>& x,
+            std::vector<EquationPartial>& jacobian_row) {
+            return continuation(
+                x, x, 1.0, jacobian_row);
+        };
+    EquationCallback evaluate =
+        [target](const std::vector<double>& x) {
+            std::vector<EquationPartial> ignored;
+            return target(x, ignored);
+        };
+    const std::size_t index =
+        registry_.add_residual(name, scale);
+    Equation equation{
+        index, std::move(name), scale, std::move(evaluate),
+        {}, std::move(target), std::move(sparsity_variables),
+        {}, {}};
+    equation.assemble_continuation_sparse = continuation;
+    equations_.push_back(std::move(equation));
     return index;
 }
 
@@ -212,6 +327,28 @@ std::size_t EquationSystemBuilder::add_linear_equation(std::string name,
             return residual;
         },
         scale);
+}
+
+std::size_t EquationSystemBuilder::add_continuation_linear_equation(
+    std::string name,
+    std::vector<LinearTerm> target_terms,
+    double target_rhs,
+    ContinuationSparseEquationCallback assemble,
+    double scale) {
+    if (!is_finite(target_rhs)) {
+        throw std::invalid_argument(
+            "continuation target rhs must be finite");
+    }
+    record_linear_equation_if_independent(
+        target_terms, target_rhs);
+    std::vector<std::size_t> sparsity_variables;
+    sparsity_variables.reserve(target_terms.size());
+    for (const auto& term : target_terms) {
+        sparsity_variables.push_back(term.variable);
+    }
+    return add_continuation_sparse_equation(
+        std::move(name), std::move(sparsity_variables),
+        std::move(assemble), scale);
 }
 
 LinearEquationRelation EquationSystemBuilder::classify_linear_equation(
@@ -397,6 +534,81 @@ NonlinearProblem EquationSystemBuilder::build() const {
             };
     }
 
+    const bool has_continuation_equations =
+        std::any_of(
+            equations.begin(), equations.end(),
+            [](const auto& equation) {
+                return static_cast<bool>(
+                           equation
+                               .evaluate_continuation_checked) ||
+                       static_cast<bool>(
+                           equation
+                               .assemble_continuation_sparse);
+            });
+    if (has_continuation_equations) {
+        problem.continuation_checked_residual =
+            [equations, variable_count](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double parameter,
+                std::vector<double>& residual) {
+                if (x.size() != variable_count) {
+                    return EvaluationStatus::fatal(
+                        "variable vector size does not match equation system");
+                }
+                if (anchor.size() != variable_count) {
+                    return EvaluationStatus::fatal(
+                        "anchor vector size does not match equation system");
+                }
+                if (residual.size() != equations.size()) {
+                    return EvaluationStatus::fatal(
+                        "residual vector size does not match equation count");
+                }
+                for (const auto& equation : equations) {
+                    if (equation
+                            .evaluate_continuation_checked) {
+                        auto status =
+                            equation
+                                .evaluate_continuation_checked(
+                                    x, anchor, parameter,
+                                    residual.at(
+                                        equation.index));
+                        if (!status.ok()) {
+                            status.message =
+                                equation.name + ": " +
+                                status.message;
+                            return status;
+                        }
+                    } else if (
+                        equation
+                            .assemble_continuation_sparse) {
+                        std::vector<EquationPartial> ignored;
+                        residual.at(equation.index) =
+                            equation
+                                .assemble_continuation_sparse(
+                                    x, anchor, parameter,
+                                    ignored);
+                    } else if (equation.evaluate_checked) {
+                        auto status =
+                            equation.evaluate_checked(
+                                x,
+                                residual.at(
+                                    equation.index));
+                        if (!status.ok()) {
+                            status.message =
+                                equation.name + ": " +
+                                status.message;
+                            return status;
+                        }
+                    } else {
+                        residual.at(equation.index) =
+                            equation.evaluate(x);
+                    }
+                }
+                return EvaluationStatus::success();
+            };
+    }
+
     const bool can_assemble_sparse = std::all_of(equations.begin(), equations.end(), [](const auto& equation) {
         return static_cast<bool>(equation.assemble_sparse);
     });
@@ -444,6 +656,60 @@ NonlinearProblem EquationSystemBuilder::build() const {
                     }
                 }
             };
+        if (has_continuation_equations) {
+            problem.continuation_sparse_jacobian_values =
+                [equations, pattern](
+                    const std::vector<double>& x,
+                    const std::vector<double>& anchor,
+                    double parameter,
+                    std::vector<double>& values) {
+                    std::fill(
+                        values.begin(), values.end(), 0.0);
+                    for (const auto& equation : equations) {
+                        std::vector<EquationPartial>
+                            row_partials;
+                        if (equation
+                                .assemble_continuation_sparse) {
+                            (void)equation
+                                .assemble_continuation_sparse(
+                                    x, anchor, parameter,
+                                    row_partials);
+                        } else {
+                            (void)equation.assemble_sparse(
+                                x, row_partials);
+                        }
+                        for (const auto& partial :
+                             row_partials) {
+                            const auto begin =
+                                pattern.column_indices()
+                                    .begin() +
+                                static_cast<std::ptrdiff_t>(
+                                    pattern.row_offsets()
+                                        [equation.index]);
+                            const auto end =
+                                pattern.column_indices()
+                                    .begin() +
+                                static_cast<std::ptrdiff_t>(
+                                    pattern.row_offsets()
+                                        [equation.index + 1]);
+                            const auto it = std::lower_bound(
+                                begin, end,
+                                partial.variable);
+                            if (it == end ||
+                                *it != partial.variable) {
+                                throw std::runtime_error(
+                                    "continuation equation emitted derivative outside declared sparse pattern");
+                            }
+                            values[static_cast<std::size_t>(
+                                std::distance(
+                                    pattern.column_indices()
+                                        .begin(),
+                                    it))] +=
+                                partial.derivative;
+                        }
+                    }
+                };
+        }
     } else if (can_assemble_sparse) {
         problem.sparse_jacobian = [equations, variable_count](const std::vector<double>& x,
                                                               std::vector<SparseTriplet>& jacobian) {
@@ -458,6 +724,40 @@ NonlinearProblem EquationSystemBuilder::build() const {
                 }
             }
         };
+        if (has_continuation_equations) {
+            problem.continuation_sparse_jacobian =
+                [equations, variable_count](
+                    const std::vector<double>& x,
+                    const std::vector<double>& anchor,
+                    double parameter,
+                    std::vector<SparseTriplet>& jacobian) {
+                    if (x.size() != variable_count) {
+                        throw std::invalid_argument(
+                            "variable vector size does not match equation system");
+                    }
+                    for (const auto& equation : equations) {
+                        std::vector<EquationPartial>
+                            row_partials;
+                        if (equation
+                                .assemble_continuation_sparse) {
+                            (void)equation
+                                .assemble_continuation_sparse(
+                                    x, anchor, parameter,
+                                    row_partials);
+                        } else {
+                            (void)equation.assemble_sparse(
+                                x, row_partials);
+                        }
+                        for (const auto& partial :
+                             row_partials) {
+                            jacobian.push_back({
+                                equation.index,
+                                partial.variable,
+                                partial.derivative});
+                        }
+                    }
+                };
+        }
     } else {
         const bool has_any_analytic =
             std::any_of(equations.begin(), equations.end(), [](const auto& equation) {
@@ -488,6 +788,45 @@ NonlinearProblem EquationSystemBuilder::build() const {
                         }
                     }
                 };
+            if (has_continuation_equations) {
+                problem.continuation_partial_sparse_jacobian =
+                    [equations, variable_count](
+                        const std::vector<double>& x,
+                        const std::vector<double>& anchor,
+                        double parameter,
+                        std::vector<SparseTriplet>& jacobian) {
+                        if (x.size() != variable_count) {
+                            throw std::invalid_argument(
+                                "variable vector size does not match equation system");
+                        }
+                        for (const auto& equation :
+                             equations) {
+                            if (!equation.assemble_sparse) {
+                                continue;
+                            }
+                            std::vector<EquationPartial>
+                                row_partials;
+                            if (equation
+                                    .assemble_continuation_sparse) {
+                                (void)equation
+                                    .assemble_continuation_sparse(
+                                        x, anchor, parameter,
+                                        row_partials);
+                            } else {
+                                (void)equation
+                                    .assemble_sparse(
+                                        x, row_partials);
+                            }
+                            for (const auto& partial :
+                                 row_partials) {
+                                jacobian.push_back({
+                                    equation.index,
+                                    partial.variable,
+                                    partial.derivative});
+                            }
+                        }
+                    };
+            }
         }
     }
 

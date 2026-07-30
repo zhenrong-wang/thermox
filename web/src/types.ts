@@ -392,6 +392,7 @@ export interface SteadySimulationResult {
   continuation: {
     enabled: boolean
     converged: boolean
+    used_informed_path: boolean
     reached_parameter: number
     accepted_stages: number
     rejected_stages: number

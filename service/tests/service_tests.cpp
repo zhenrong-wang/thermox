@@ -1363,6 +1363,7 @@ void test_steady_continuation_service() {
     require(
         response.continuation.enabled &&
             response.continuation.converged &&
+            response.continuation.used_informed_path &&
             response.continuation.reached_parameter == 1.0 &&
             response.continuation.accepted_stages > 1 &&
             !response.continuation.stages.empty(),
@@ -1387,6 +1388,8 @@ void test_steady_continuation_service() {
             response);
     require(
         json.find("\"continuation\": {\"enabled\": true") !=
+                std::string::npos &&
+            json.find("\"used_informed_path\": true") !=
                 std::string::npos &&
             json.find("\"target_parameter\": 1") !=
                 std::string::npos,

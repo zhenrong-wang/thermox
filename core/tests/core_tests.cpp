@@ -251,6 +251,110 @@ void test_continuation_recovers_difficult_initial_guess() {
     }
 }
 
+void test_equation_builder_exposes_component_continuation_path() {
+    thermox::EquationSystemBuilder system;
+    const auto x =
+        system.add_variable("x", 1.0, 10.0);
+    system.add_continuation_sparse_equation(
+        "staged_target",
+        {x},
+        [x](const std::vector<double>& values,
+            const std::vector<double>& anchor,
+            double parameter,
+            std::vector<thermox::EquationPartial>&
+                jacobian) {
+            jacobian.push_back({x, 1.0});
+            return values.at(x) -
+                   (anchor.at(x) +
+                    (10.0 - anchor.at(x)) * parameter);
+        },
+        10.0);
+
+    const auto problem = system.build();
+    require(
+        static_cast<bool>(
+            problem.continuation_checked_residual),
+        "builder exposes parameterized residual");
+    require(
+        static_cast<bool>(
+            problem.continuation_sparse_jacobian_values),
+        "builder exposes parameterized fixed-pattern Jacobian");
+
+    std::vector<double> residual(1, 0.0);
+    const auto status =
+        problem.continuation_checked_residual(
+            {1.0}, {1.0}, 0.5, residual);
+    require(status.ok(), status.message);
+    require_near(
+        residual.at(0), -4.5, 0.0,
+        "continuation equation receives stage parameter");
+    problem.residual({1.0}, residual);
+    require_near(
+        residual.at(0), -9.0, 0.0,
+        "ordinary residual remains exact target");
+
+    thermox::ContinuationOptions continuation;
+    continuation.initial_step = 0.2;
+    const auto solved =
+        thermox::solve_continuation(
+            problem, {}, continuation);
+    require(
+        solved.continuation.converged,
+        solved.continuation.message);
+    require(
+        solved.continuation.used_informed_path,
+        "continuation reports component-informed path usage");
+    require_near(
+        solved.x.at(x), 10.0, 1.0e-10,
+        "component-informed path reaches target");
+}
+
+void test_informed_residual_without_derivative_uses_finite_difference() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"target"};
+    problem.initial_guess = {1.0};
+    problem.variable_scales = {1.0};
+    problem.residual_scales = {1.0};
+    problem.residual = [](
+                           const std::vector<double>& x,
+                           std::vector<double>& residual) {
+        residual[0] = x[0] - 2.0;
+    };
+    bool target_jacobian_called = false;
+    problem.jacobian =
+        [&target_jacobian_called](
+            const std::vector<double>&,
+            thermox::Matrix& jacobian) {
+            target_jacobian_called = true;
+            jacobian = {{1.0}};
+        };
+    problem.continuation_checked_residual = [](
+        const std::vector<double>& x,
+        const std::vector<double>& anchor,
+        double parameter,
+        std::vector<double>& residual) {
+        residual[0] =
+            x[0] -
+            (anchor[0] +
+             parameter * (2.0 - anchor[0]));
+        return thermox::EvaluationStatus::success();
+    };
+
+    const auto solved =
+        thermox::solve_continuation(problem);
+    require(
+        solved.continuation.converged,
+        solved.continuation.message);
+    require_near(
+        solved.x[0], 2.0, 1.0e-9,
+        "finite-difference informed path reaches target");
+    require(
+        !target_jacobian_called,
+        "target Jacobian is not applied to an informed residual "
+        "without matching derivatives");
+}
+
 void test_sparse_matrix_conversion_and_scaling() {
     const thermox::Matrix dense{{1.0, 0.0, 2.0}, {0.0, -3.0, 0.0}};
     auto sparse = thermox::sparse_from_dense(dense);
@@ -990,6 +1094,8 @@ int main() {
         test_reusable_sparse_factorization();
         test_newton_reuses_sparse_symbolic_factorization();
         test_continuation_recovers_difficult_initial_guess();
+        test_equation_builder_exposes_component_continuation_path();
+        test_informed_residual_without_derivative_uses_finite_difference();
         test_sparse_matrix_conversion_and_scaling();
         test_sparse_matrix_validates_shape();
         test_variable_registry();

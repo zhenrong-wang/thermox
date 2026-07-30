@@ -1313,6 +1313,54 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
     const auto graph = thermox::platform::compile_model_graph(document, registry, "design");
     require(graph.problem.variable_names.size() == graph.problem.residual_names.size(),
             "compressor physical residual problem should be square");
+    require(
+        static_cast<bool>(
+            graph.problem.continuation_checked_residual),
+        "compressor graph exposes a physical continuation path");
+    require(
+        static_cast<bool>(
+            graph.problem
+                .continuation_partial_sparse_jacobian),
+        "compressor continuation preserves hybrid derivatives");
+
+    auto equal_pressure_state = graph.problem.initial_guess;
+    std::size_t inlet_p_index = 0;
+    std::size_t outlet_p_index = 0;
+    for (std::size_t index = 0;
+         index < graph.problem.variable_names.size(); ++index) {
+        if (graph.problem.variable_names[index] ==
+            "compressor.inlet.p") {
+            inlet_p_index = index;
+        } else if (graph.problem.variable_names[index] ==
+                   "compressor.outlet.p") {
+            outlet_p_index = index;
+        }
+    }
+    equal_pressure_state[inlet_p_index] = 101325.0;
+    equal_pressure_state[outlet_p_index] = 101325.0;
+    std::vector<double> easy_residual(
+        graph.problem.residual_names.size(), 0.0);
+    const auto easy_status =
+        graph.problem.continuation_checked_residual(
+            equal_pressure_state, equal_pressure_state,
+            0.0, easy_residual);
+    require(easy_status.ok(), easy_status.message);
+    const auto pressure_equation = std::find(
+        graph.problem.residual_names.begin(),
+        graph.problem.residual_names.end(),
+        "component.compressor.pressure_ratio");
+    require(
+        pressure_equation !=
+            graph.problem.residual_names.end(),
+        "compiled compressor carries pressure-ratio equation");
+    const auto pressure_equation_index =
+        static_cast<std::size_t>(std::distance(
+            graph.problem.residual_names.begin(),
+            pressure_equation));
+    require_near(
+        easy_residual.at(pressure_equation_index),
+        0.0, 0.0,
+        "compressor continuation begins at unity pressure ratio");
 
     const auto result = thermox::solve_newton(graph.problem);
     require(result.diagnostics.converged, result.diagnostics.message);

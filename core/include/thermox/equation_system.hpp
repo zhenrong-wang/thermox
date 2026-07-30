@@ -14,6 +14,12 @@ namespace thermox {
 using EquationCallback = std::function<double(const std::vector<double>& x)>;
 using CheckedEquationCallback =
     std::function<EvaluationStatus(const std::vector<double>& x, double& residual)>;
+using ContinuationCheckedEquationCallback =
+    std::function<EvaluationStatus(
+        const std::vector<double>& x,
+        const std::vector<double>& anchor,
+        double parameter,
+        double& residual)>;
 
 struct EquationPartial {
     std::size_t variable{0};
@@ -22,6 +28,12 @@ struct EquationPartial {
 
 using SparseEquationCallback =
     std::function<double(const std::vector<double>& x, std::vector<EquationPartial>& jacobian_row)>;
+using ContinuationSparseEquationCallback =
+    std::function<double(
+        const std::vector<double>& x,
+        const std::vector<double>& anchor,
+        double parameter,
+        std::vector<EquationPartial>& jacobian_row)>;
 
 struct LinearTerm {
     std::size_t variable{0};
@@ -36,6 +48,10 @@ struct Equation {
     CheckedEquationCallback evaluate_checked;
     SparseEquationCallback assemble_sparse;
     std::vector<std::size_t> sparsity_variables;
+    ContinuationCheckedEquationCallback
+        evaluate_continuation_checked;
+    ContinuationSparseEquationCallback
+        assemble_continuation_sparse;
 };
 
 enum class LinearEquationRelation {
@@ -56,6 +72,10 @@ public:
     std::size_t add_checked_equation(std::string name,
                                      CheckedEquationCallback evaluate,
                                      double scale = 1.0);
+    std::size_t add_continuation_checked_equation(
+        std::string name,
+        ContinuationCheckedEquationCallback evaluate,
+        double scale = 1.0);
     std::size_t add_checked_sparse_equation(
         std::string name,
         CheckedEquationCallback evaluate,
@@ -74,10 +94,25 @@ public:
                                     std::vector<std::size_t> sparsity_variables,
                                     SparseEquationCallback assemble,
                                     double scale = 1.0);
+    std::size_t add_continuation_sparse_equation(
+        std::string name,
+        ContinuationSparseEquationCallback assemble,
+        double scale = 1.0);
+    std::size_t add_continuation_sparse_equation(
+        std::string name,
+        std::vector<std::size_t> sparsity_variables,
+        ContinuationSparseEquationCallback assemble,
+        double scale = 1.0);
     std::size_t add_linear_equation(std::string name,
                                     std::vector<LinearTerm> terms,
                                     double rhs,
                                     double scale = 1.0);
+    std::size_t add_continuation_linear_equation(
+        std::string name,
+        std::vector<LinearTerm> target_terms,
+        double target_rhs,
+        ContinuationSparseEquationCallback assemble,
+        double scale = 1.0);
     [[nodiscard]] LinearEquationRelation classify_linear_equation(
         const std::vector<LinearTerm>& terms,
         double rhs,

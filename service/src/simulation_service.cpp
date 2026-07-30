@@ -661,6 +661,7 @@ ContinuationRunDiagnostics copy_diagnostics(
     ContinuationRunDiagnostics result;
     result.enabled = true;
     result.converged = source.converged;
+    result.used_informed_path = source.used_informed_path;
     result.reached_parameter = source.reached_parameter;
     result.accepted_stages = source.accepted_stages;
     result.rejected_stages = source.rejected_stages;

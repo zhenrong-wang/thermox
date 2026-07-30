@@ -368,6 +368,7 @@ struct ContinuationStageDiagnostics {
 struct ContinuationRunDiagnostics {
     bool enabled{false};
     bool converged{false};
+    bool used_informed_path{false};
     double reached_parameter{0.0};
     int accepted_stages{0};
     int rejected_stages{0};

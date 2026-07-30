@@ -1023,6 +1023,10 @@ std::string serialize_steady_response_json(
         << (response.continuation.enabled ? "true" : "false")
         << ", \"converged\": "
         << (response.continuation.converged ? "true" : "false")
+        << ", \"used_informed_path\": "
+        << (response.continuation.used_informed_path
+                ? "true"
+                : "false")
         << ", \"reached_parameter\": ";
     json_number(out, response.continuation.reached_parameter);
     out << ", \"accepted_stages\": "

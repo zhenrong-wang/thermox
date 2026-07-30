@@ -16,6 +16,21 @@ using SparseJacobianFunction =
     std::function<void(const std::vector<double>& x, std::vector<SparseTriplet>& jacobian)>;
 using SparseJacobianValuesFunction =
     std::function<void(const std::vector<double>& x, std::vector<double>& values)>;
+using ContinuationJacobianFunction =
+    std::function<void(const std::vector<double>& x,
+                       const std::vector<double>& anchor,
+                       double parameter,
+                       Matrix& jacobian)>;
+using ContinuationSparseJacobianFunction =
+    std::function<void(const std::vector<double>& x,
+                       const std::vector<double>& anchor,
+                       double parameter,
+                       std::vector<SparseTriplet>& jacobian)>;
+using ContinuationSparseJacobianValuesFunction =
+    std::function<void(const std::vector<double>& x,
+                       const std::vector<double>& anchor,
+                       double parameter,
+                       std::vector<double>& values)>;
 
 enum class EvaluationStatusCode {
     success,
@@ -35,6 +50,11 @@ struct EvaluationStatus {
 
 using CheckedResidualFunction =
     std::function<EvaluationStatus(const std::vector<double>& x, std::vector<double>& residual)>;
+using ContinuationCheckedResidualFunction =
+    std::function<EvaluationStatus(const std::vector<double>& x,
+                                   const std::vector<double>& anchor,
+                                   double parameter,
+                                   std::vector<double>& residual)>;
 
 struct SolverOptions {
     int max_iterations{50};
@@ -93,6 +113,15 @@ struct NonlinearProblem {
     SparseJacobianValuesFunction sparse_jacobian_values;
     SparseJacobianFunction partial_sparse_jacobian;
     std::vector<bool> analytic_jacobian_rows;
+    // Optional component- or model-informed path. At parameter 1
+    // these callbacks must represent the ordinary target problem.
+    ContinuationCheckedResidualFunction continuation_checked_residual;
+    ContinuationJacobianFunction continuation_jacobian;
+    ContinuationSparseJacobianFunction continuation_sparse_jacobian;
+    ContinuationSparseJacobianValuesFunction
+        continuation_sparse_jacobian_values;
+    ContinuationSparseJacobianFunction
+        continuation_partial_sparse_jacobian;
 };
 
 struct NonlinearSolveResult {

@@ -90,7 +90,13 @@ FixedPatternMapping make_fixed_pattern_mapping(
 EvaluationStatus evaluate_target_residual(
     const NonlinearProblem& target,
     const std::vector<double>& x,
+    const std::vector<double>& anchor,
+    double parameter,
     std::vector<double>& residual) {
+    if (target.continuation_checked_residual) {
+        return target.continuation_checked_residual(
+            x, anchor, parameter, residual);
+    }
     if (target.checked_residual) {
         return target.checked_residual(x, residual);
     }
@@ -108,6 +114,9 @@ NonlinearProblem make_stage_problem(
         scales_or_one(target.variable_scales, size);
     const auto residual_scales =
         scales_or_one(target.residual_scales, size);
+    const bool uses_informed_residual =
+        static_cast<bool>(
+            target.continuation_checked_residual);
     NonlinearProblem stage = target;
     stage.initial_guess = warm_start;
     stage.residual = {};
@@ -119,7 +128,8 @@ NonlinearProblem make_stage_problem(
             std::vector<double> target_residual(
                 residual.size(), 0.0);
             const auto status = evaluate_target_residual(
-                target, x, target_residual);
+                target, x, anchor, parameter,
+                target_residual);
             if (!status.ok()) return status;
             for (std::size_t row = 0;
                  row < residual.size(); ++row) {
@@ -134,20 +144,32 @@ NonlinearProblem make_stage_problem(
             return EvaluationStatus::success();
         };
 
-    if (target.sparse_jacobian_pattern.has_value()) {
+    if (target.sparse_jacobian_pattern.has_value() &&
+        (!uses_informed_residual ||
+         target.continuation_sparse_jacobian_values)) {
         const auto mapping = make_fixed_pattern_mapping(
             *target.sparse_jacobian_pattern);
         stage.sparse_jacobian_pattern = mapping.pattern;
         stage.sparse_jacobian_values =
-            [&target, mapping, variable_scales,
-             residual_scales, parameter](
+            [&target, anchor, mapping, variable_scales,
+             residual_scales, parameter,
+             uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<double>& values) {
                 std::vector<double> target_values(
                     target.sparse_jacobian_pattern->nonzeros(),
                     0.0);
-                target.sparse_jacobian_values(
-                    x, target_values);
+                if (uses_informed_residual &&
+                    target
+                        .continuation_sparse_jacobian_values) {
+                    target
+                        .continuation_sparse_jacobian_values(
+                            x, anchor, parameter,
+                            target_values);
+                } else {
+                    target.sparse_jacobian_values(
+                        x, target_values);
+                }
                 std::fill(values.begin(), values.end(), 0.0);
                 for (std::size_t offset = 0;
                      offset < target_values.size(); ++offset) {
@@ -166,13 +188,21 @@ NonlinearProblem make_stage_problem(
         stage.sparse_jacobian = {};
         stage.partial_sparse_jacobian = {};
         stage.jacobian = {};
-    } else if (target.sparse_jacobian) {
+    } else if (target.sparse_jacobian &&
+               (!uses_informed_residual ||
+                target.continuation_sparse_jacobian)) {
         stage.sparse_jacobian =
-            [&target, variable_scales, residual_scales,
-             parameter](
+            [&target, anchor, variable_scales, residual_scales,
+             parameter, uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<SparseTriplet>& jacobian) {
-                target.sparse_jacobian(x, jacobian);
+                if (uses_informed_residual &&
+                    target.continuation_sparse_jacobian) {
+                    target.continuation_sparse_jacobian(
+                        x, anchor, parameter, jacobian);
+                } else {
+                    target.sparse_jacobian(x, jacobian);
+                }
                 for (auto& entry : jacobian) {
                     entry.value *= parameter;
                 }
@@ -189,13 +219,25 @@ NonlinearProblem make_stage_problem(
         stage.sparse_jacobian_values = {};
         stage.partial_sparse_jacobian = {};
         stage.jacobian = {};
-    } else if (target.partial_sparse_jacobian) {
+    } else if (
+        target.partial_sparse_jacobian &&
+        (!uses_informed_residual ||
+         target.continuation_partial_sparse_jacobian)) {
         stage.partial_sparse_jacobian =
-            [&target, variable_scales, residual_scales,
-             parameter](
+            [&target, anchor, variable_scales, residual_scales,
+             parameter, uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<SparseTriplet>& jacobian) {
-                target.partial_sparse_jacobian(x, jacobian);
+                if (uses_informed_residual &&
+                    target
+                        .continuation_partial_sparse_jacobian) {
+                    target
+                        .continuation_partial_sparse_jacobian(
+                            x, anchor, parameter, jacobian);
+                } else {
+                    target.partial_sparse_jacobian(
+                        x, jacobian);
+                }
                 for (auto& entry : jacobian) {
                     entry.value *= parameter;
                 }
@@ -214,13 +256,22 @@ NonlinearProblem make_stage_problem(
         stage.sparse_jacobian_values = {};
         stage.sparse_jacobian = {};
         stage.jacobian = {};
-    } else if (target.jacobian) {
+    } else if (
+        target.jacobian &&
+        (!uses_informed_residual ||
+         target.continuation_jacobian)) {
         stage.jacobian =
-            [&target, variable_scales, residual_scales,
-             parameter](
+            [&target, anchor, variable_scales, residual_scales,
+             parameter, uses_informed_residual](
                 const std::vector<double>& x,
                 Matrix& jacobian) {
-                target.jacobian(x, jacobian);
+                if (uses_informed_residual &&
+                    target.continuation_jacobian) {
+                    target.continuation_jacobian(
+                        x, anchor, parameter, jacobian);
+                } else {
+                    target.jacobian(x, jacobian);
+                }
                 for (auto& row : jacobian) {
                     for (double& value : row) {
                         value *= parameter;
@@ -234,6 +285,13 @@ NonlinearProblem make_stage_problem(
                         variable_scales[row];
                 }
             };
+    } else {
+        stage.sparse_jacobian_pattern.reset();
+        stage.sparse_jacobian_values = {};
+        stage.sparse_jacobian = {};
+        stage.partial_sparse_jacobian = {};
+        stage.analytic_jacobian_rows.clear();
+        stage.jacobian = {};
     }
     return stage;
 }
@@ -290,6 +348,9 @@ ContinuationSolveResult solve_continuation(
     }
 
     ContinuationSolveResult result;
+    result.continuation.used_informed_path =
+        static_cast<bool>(
+            problem.continuation_checked_residual);
     result.x = problem.initial_guess;
     double reached = 0.0;
     double step = continuation_options.initial_step;

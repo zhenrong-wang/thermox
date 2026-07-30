@@ -441,7 +441,10 @@ Work items:
 5. Homotopy/continuation initialization strategies.
    - adaptive, scale-aware residual homotopy with sparse derivative preservation and warm starts; ✅
    - service, durable configuration, HTTP, CLI, and web settings plus stage diagnostics; ✅
-   - component-informed physical homotopy paths remain a follow-on.
+   - anchor-aware component extension contract plus fixed fluid/material turbomachinery
+     pressure-ratio staging; ✅
+   - performance-map coordinate seeding, heat-duty staging, and reaction/equilibrium policies
+     remain follow-ons.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.

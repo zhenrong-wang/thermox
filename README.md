@@ -440,5 +440,5 @@ is intentionally deferred until gateway identity and a public API endpoint exist
    derivatives, while IF97 uses the shared provenance-marked bounded fallback.
 3. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.
-4. Add component-informed homotopy hooks for pressure ratio, heat duty, reaction, and map coupling
-   on top of the generic adaptive continuation driver.
+4. Extend the delivered anchor-aware component homotopy hooks from fixed turbomachinery pressure
+   ratio to performance-map coordinate seeding, heat duty, and reaction/equilibrium coupling.

@@ -89,8 +89,9 @@ Steady commands may opt into `thermox.newton-continuation/v1`, which wraps the s
 system and Newton solver in an adaptive scaled-residual homotopy. Continuation settings, accepted
 and rejected stages, stage-level solver diagnostics, and the reached continuation parameter are
 part of the service result and provenance. This is a numerical globalization mechanism, not a
-gas-turbine- or cycle-specific workflow; component-informed physical continuation can be added
-later without moving solver policy into a transport or UI.
+gas-turbine- or cycle-specific workflow. Compiled components may supply anchor-aware physical
+paths behind the same contract, and the result reports whether one was used; solver policy does
+not move into a transport or UI.
 
 Calibration is also service orchestration: the service applies bounded candidate parameters to
 model copies, invokes ordinary steady simulations sequentially across the observation cases, and

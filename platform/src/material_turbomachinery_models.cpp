@@ -550,7 +550,7 @@ public:
         const double efficiency = required_parameter(
             context.component, "eta_is");
 
-        system.add_linear_equation(
+        system.add_continuation_linear_equation(
             prefix + "pressure_ratio",
             compressor_
                 ? std::vector<LinearTerm>{
@@ -559,7 +559,44 @@ public:
                 : std::vector<LinearTerm>{
                       {inlet_p, 1.0},
                       {outlet_p, -pressure_ratio}},
-            0.0, 100000.0 * pressure_ratio);
+            0.0,
+            [compressor = compressor_, inlet_p, outlet_p,
+             pressure_ratio](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                double anchor_pressure_ratio = compressor
+                    ? anchor.at(outlet_p) /
+                          anchor.at(inlet_p)
+                    : anchor.at(inlet_p) /
+                          anchor.at(outlet_p);
+                if (!std::isfinite(
+                        anchor_pressure_ratio) ||
+                    anchor_pressure_ratio <= 0.0) {
+                    anchor_pressure_ratio = 1.0;
+                }
+                const double staged_pressure_ratio =
+                    anchor_pressure_ratio +
+                    continuation_parameter *
+                        (pressure_ratio -
+                         anchor_pressure_ratio);
+                if (compressor) {
+                    jacobian.push_back({outlet_p, 1.0});
+                    jacobian.push_back(
+                        {inlet_p, -staged_pressure_ratio});
+                    return x.at(outlet_p) -
+                           staged_pressure_ratio *
+                               x.at(inlet_p);
+                }
+                jacobian.push_back({inlet_p, 1.0});
+                jacobian.push_back(
+                    {outlet_p, -staged_pressure_ratio});
+                return x.at(inlet_p) -
+                       staged_pressure_ratio *
+                           x.at(outlet_p);
+            },
+            100000.0 * pressure_ratio);
         const auto isentropic_cache =
             std::make_shared<IsentropicEvaluationCache>(
                 properties, species, inlet_flows, inlet_p,

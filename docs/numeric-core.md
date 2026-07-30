@@ -45,7 +45,11 @@ matching when a fixed Jacobian pattern is available.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,
-warm-starting each stage and preserving dense, sparse, and hybrid derivative paths. See
+warm-starting each stage and preserving dense, sparse, and hybrid derivative paths. Compiled
+problems may provide anchor-aware parameterized residual and Jacobian callbacks, allowing
+components to introduce their own difficult physics without adding domain knowledge to the
+driver. Fixed fluid and material turbomachinery currently stage pressure ratio from the case
+initialization to the declared target. See
 [Continuation Architecture](continuation-architecture.md).
 
 ## Transient DAE contract
