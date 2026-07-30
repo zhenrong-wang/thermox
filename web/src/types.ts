@@ -34,6 +34,75 @@ export interface ModelRevisionList {
   model_revisions: ModelRevision[]
 }
 
+export type ScalarValue =
+  | number
+  | {
+      value: number
+      unit: string
+    }
+
+export interface CaseDocument {
+  schema_version: 'thermox.case/v1'
+  case: {
+    id: string
+    label?: string
+    mode: string
+    parameter_overrides?: Record<string, ScalarValue>
+    fixed_values?: Record<string, ScalarValue>
+    initial_guesses?: Record<string, ScalarValue>
+    solver_options?: Record<string, ScalarValue>
+  }
+}
+
+export interface CaseRevision {
+  schema_version: 'thermox.case_revision/v1'
+  case_revision_id: string
+  model_revision_id: string
+  project_id: string
+  team_id: string
+  case_id: string
+  revision_number: number
+  parent_case_revision_id: string
+  mode: string
+  checksum: string
+  created_by_user_id: string
+  created_at_epoch_ms: number
+  case_document?: CaseDocument
+}
+
+export interface CaseRevisionList {
+  schema_version: 'thermox.case_revision_list/v1'
+  case_revisions: CaseRevision[]
+}
+
+export type CaseScalarField =
+  | 'parameter_override'
+  | 'fixed_value'
+  | 'initial_guess'
+  | 'solver_option'
+
+export type CaseEditOperation =
+  | {
+      action: 'upsert'
+      field: 'label' | 'mode'
+      value: string
+    }
+  | {
+      action: 'remove'
+      field: 'label'
+    }
+  | {
+      action: 'upsert'
+      field: CaseScalarField
+      key: string
+      value: ScalarValue
+    }
+  | {
+      action: 'remove'
+      field: CaseScalarField
+      key: string
+    }
+
 export interface TopologyDocument {
   schema_version: 'thermox.topology/v1'
   model: {

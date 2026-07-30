@@ -1,6 +1,10 @@
 import type {
   ArtifactRevisionList,
   Catalog,
+  CaseDocument,
+  CaseEditOperation,
+  CaseRevision,
+  CaseRevisionList,
   GraphEditOperation,
   ModelRevision,
   ModelRevisionList,
@@ -78,6 +82,51 @@ export const api = {
   artifactRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<ArtifactRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions`,
+      signal,
+    ),
+  caseRevisions: (
+    projectId: string,
+    modelRevisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<CaseRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions`,
+      signal,
+    ),
+  caseRevision: (
+    projectId: string,
+    modelRevisionId: string,
+    caseRevisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<CaseRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions/${encodeURIComponent(caseRevisionId)}`,
+      signal,
+    ),
+  createCaseRevision: (
+    projectId: string,
+    modelRevisionId: string,
+    document: CaseDocument,
+    signal?: AbortSignal,
+  ) =>
+    postJson<CaseRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions`,
+      document,
+      signal,
+    ),
+  applyCaseEdits: (
+    projectId: string,
+    modelRevisionId: string,
+    caseRevisionId: string,
+    operations: CaseEditOperation[],
+    signal?: AbortSignal,
+  ) =>
+    postJson<CaseRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions/${encodeURIComponent(caseRevisionId)}/edits`,
+      {
+        schema_version: 'thermox.case_edit_batch/v1',
+        operations,
+      },
       signal,
     ),
   applyGraphEdits: (

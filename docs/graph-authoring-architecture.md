@@ -137,6 +137,13 @@ a missing scalar, removing the required mode, supplying an invalid unit, or any 
 operation rejects the entire batch without publishing a partial revision. A successful request
 publishes one child case revision linked to the exact base.
 
+The React workspace exposes cases as a separate view while retaining the selected topology
+revision in the global context. It creates a minimal base case, browses every immutable revision,
+and edits label, mode, parameter overrides, fixed values, initial guesses, and solver options
+through the typed batch contract. Values may be entered with engineering units; the selected child
+revision is reloaded from the service and displays the canonical SI result. The browser does not
+perform unit conversion or mutate the topology document.
+
 ## Validation boundary
 
 Fragment parsing uses the same strict platform parser as complete topology documents. It preserves

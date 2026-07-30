@@ -381,6 +381,10 @@ Work items:
    - property-registry fluid creation and typed project-artifact binding; ✅
    - display-unit conversion.
 8. Case editor using the revision-backed authoring service.
+   - topology-scoped creation and exact immutable revision browsing; ✅
+   - metadata, parameter override, fixed value, initial guess, and solver option editing with
+     service-authoritative SI normalization; ✅
+   - compile-aware validation and diagnostics.
 9. Run monitor and result overlay on graph.
 10. Stream/result table views.
 

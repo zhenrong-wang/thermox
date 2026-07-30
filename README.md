@@ -422,13 +422,14 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Add an operating-case editor over the immutable, SI-normalized case-authoring service.
-2. Add display-unit conversion to the catalog-driven component forms.
-3. Add wall thermal mass, rotating inertia, and control components using the established
+1. Add compile-aware validation and structured diagnostics to the operating-case workspace.
+2. Add a run-configuration editor that pins exact topology, case, and artifact revisions.
+3. Add display-unit conversion to the catalog-driven component and case forms.
+4. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-4. Add analytic property-derivative APIs; the rigid volume currently
+5. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+6. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+7. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
+import { CaseCreateForm } from './CaseCreateForm'
+import { CaseRevisionPanel } from './CaseRevisionPanel'
+import { CaseWorkspace } from './CaseWorkspace'
 import { ComponentForm } from './ComponentForm'
 import { ConnectionForm } from './ConnectionForm'
 import {
@@ -17,6 +20,9 @@ import type {
   ArtifactRevision,
   Catalog,
   CatalogComponent,
+  CaseDocument,
+  CaseEditOperation,
+  CaseRevision,
   ComponentDefinition,
   ConnectionDefinition,
   GraphEditOperation,
@@ -32,6 +38,8 @@ function shortKind(kind: string): string {
 }
 
 function App() {
+  const [workspaceView, setWorkspaceView] =
+    useState<'topology' | 'cases'>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -39,6 +47,10 @@ function App() {
   const [artifactRevisions, setArtifactRevisions] = useState<
     ArtifactRevision[]
   >([])
+  const [caseRevisions, setCaseRevisions] = useState<CaseRevision[]>([])
+  const [selectedCaseRevisionId, setSelectedCaseRevisionId] = useState('')
+  const [selectedCaseRevision, setSelectedCaseRevision] =
+    useState<CaseRevision>()
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
   const [filter, setFilter] = useState('')
@@ -55,6 +67,10 @@ function App() {
     useState<ConnectionDefinition>()
   const [selection, setSelection] = useState<GraphSelection>()
   const [addingMedium, setAddingMedium] = useState(false)
+  const [addingCase, setAddingCase] = useState(false)
+  const [casePublishing, setCasePublishing] = useState(false)
+  const [caseOperationError, setCaseOperationError] = useState('')
+  const [caseOperationStatus, setCaseOperationStatus] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -121,6 +137,60 @@ function App() {
       })
     return () => controller.abort()
   }, [selectedProjectId, selectedRevisionId])
+
+  useEffect(() => {
+    setCaseRevisions([])
+    setSelectedCaseRevisionId('')
+    setSelectedCaseRevision(undefined)
+    if (!selectedProjectId || !selectedRevisionId) return
+    const controller = new AbortController()
+    api
+      .caseRevisions(
+        selectedProjectId,
+        selectedRevisionId,
+        controller.signal,
+      )
+      .then((response) => {
+        setCaseOperationError('')
+        const ordered = [...response.case_revisions].sort(
+          (left, right) =>
+            right.created_at_epoch_ms - left.created_at_epoch_ms,
+        )
+        setCaseRevisions(ordered)
+        setSelectedCaseRevisionId(ordered[0]?.case_revision_id ?? '')
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setCaseOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId, selectedRevisionId])
+
+  useEffect(() => {
+    setSelectedCaseRevision(undefined)
+    if (
+      !selectedProjectId ||
+      !selectedRevisionId ||
+      !selectedCaseRevisionId
+    ) {
+      return
+    }
+    const controller = new AbortController()
+    api
+      .caseRevision(
+        selectedProjectId,
+        selectedRevisionId,
+        selectedCaseRevisionId,
+        controller.signal,
+      )
+      .then((revision) => {
+        setCaseOperationError('')
+        setSelectedCaseRevision(revision)
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setCaseOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId, selectedRevisionId, selectedCaseRevisionId])
 
   const selectedProject = projects.find(
     (project) => project.project_id === selectedProjectId,
@@ -204,6 +274,81 @@ function App() {
       `Added fluid ${medium.id}.`,
     )
     setAddingMedium(false)
+  }
+
+  async function createCase(document: CaseDocument) {
+    if (!selectedProjectId || !selectedRevisionId) {
+      throw new Error('Select a topology revision before creating a case.')
+    }
+    setCasePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const revision = await api.createCaseRevision(
+        selectedProjectId,
+        selectedRevisionId,
+        document,
+      )
+      setCaseRevisions((current) => [
+        revision,
+        ...current.filter(
+          (item) => item.case_revision_id !== revision.case_revision_id,
+        ),
+      ])
+      setSelectedCaseRevision(revision)
+      setSelectedCaseRevisionId(revision.case_revision_id)
+      setCaseOperationStatus(
+        `Created ${revision.case_id} r${revision.revision_number}.`,
+      )
+      setAddingCase(false)
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      throw new Error(message)
+    } finally {
+      setCasePublishing(false)
+    }
+  }
+
+  async function editCase(
+    operations: CaseEditOperation[],
+    successMessage: string,
+  ) {
+    if (
+      !selectedProjectId ||
+      !selectedRevisionId ||
+      !selectedCaseRevisionId
+    ) {
+      throw new Error('Select a case revision before editing.')
+    }
+    setCasePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const child = await api.applyCaseEdits(
+        selectedProjectId,
+        selectedRevisionId,
+        selectedCaseRevisionId,
+        operations,
+      )
+      setCaseRevisions((current) => [
+        child,
+        ...current.filter(
+          (item) => item.case_revision_id !== child.case_revision_id,
+        ),
+      ])
+      setSelectedCaseRevision(child)
+      setSelectedCaseRevisionId(child.case_revision_id)
+      setCaseOperationStatus(
+        `${successMessage} Published case r${child.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      throw new Error(message)
+    } finally {
+      setCasePublishing(false)
+    }
   }
 
   async function updateComponent(component: ComponentDefinition) {
@@ -374,11 +519,21 @@ function App() {
             </button>
           </div>
           <nav>
-            <button className="nav-item active">
+            <button
+              className={
+                workspaceView === 'topology' ? 'nav-item active' : 'nav-item'
+              }
+              onClick={() => setWorkspaceView('topology')}
+            >
               <span className="nav-icon">⌘</span>
               Topology
             </button>
-            <button className="nav-item" disabled>
+            <button
+              className={
+                workspaceView === 'cases' ? 'nav-item active' : 'nav-item'
+              }
+              onClick={() => setWorkspaceView('cases')}
+            >
               <span className="nav-icon">◇</span>
               Cases
             </button>
@@ -408,7 +563,8 @@ function App() {
           </div>
         </aside>
 
-        <section className="canvas-panel">
+        {workspaceView === 'topology' ? (
+          <section className="canvas-panel">
           <div className="canvas-toolbar">
             <div>
               <span className="eyebrow">Immutable topology</span>
@@ -454,10 +610,33 @@ function App() {
               onSelect={setSelection}
             />
           )}
-        </section>
+          </section>
+        ) : (
+          <CaseWorkspace
+            key={selectedCaseRevisionId || 'empty-case'}
+            revision={selectedCaseRevision}
+            publishing={casePublishing}
+            operationError={caseOperationError}
+            operationStatus={caseOperationStatus}
+            onDismissOperation={() => {
+              setCaseOperationError('')
+              setCaseOperationStatus('')
+            }}
+            onEdit={editCase}
+            onCreate={() => setAddingCase(true)}
+          />
+        )}
 
         <aside className="palette">
-          {selection && topology && catalog ? (
+          {workspaceView === 'cases' ? (
+            <CaseRevisionPanel
+              revisions={caseRevisions}
+              selectedId={selectedCaseRevisionId}
+              publishing={casePublishing}
+              onSelect={setSelectedCaseRevisionId}
+              onCreate={() => setAddingCase(true)}
+            />
+          ) : selection && topology && catalog ? (
             <InspectorPanel
               selection={selection}
               topology={topology}
@@ -545,7 +724,7 @@ function App() {
           )}
         </aside>
       </section>
-      {newComponentType && topology && (
+      {workspaceView === 'topology' && newComponentType && topology && (
         <ComponentForm
           key={`new-${newComponentType.kind}`}
           componentType={newComponentType}
@@ -555,7 +734,10 @@ function App() {
           onSubmit={addComponent}
         />
       )}
-      {editingComponent && topology && catalog && (
+      {workspaceView === 'topology' &&
+        editingComponent &&
+        topology &&
+        catalog && (
         <ComponentForm
           key={`edit-${editingComponent.id}`}
           componentType={
@@ -570,7 +752,10 @@ function App() {
           onSubmit={updateComponent}
         />
       )}
-      {editingConnection && topology && catalog && (
+      {workspaceView === 'topology' &&
+        editingConnection &&
+        topology &&
+        catalog && (
         <ConnectionForm
           key={`edit-${editingConnection.id}`}
           connection={editingConnection}
@@ -582,12 +767,19 @@ function App() {
           }
         />
       )}
-      {addingMedium && topology && catalog && (
+      {workspaceView === 'topology' && addingMedium && topology && catalog && (
         <MediumForm
           backends={catalog.property_backends}
           topology={topology}
           onCancel={() => setAddingMedium(false)}
           onSubmit={addMedium}
+        />
+      )}
+      {addingCase && (
+        <CaseCreateForm
+          revisions={caseRevisions}
+          onCancel={() => setAddingCase(false)}
+          onSubmit={createCase}
         />
       )}
     </main>

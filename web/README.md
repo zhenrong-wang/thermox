@@ -18,6 +18,8 @@ The workspace currently provides:
 - component and connection updates that preserve instance identity;
 - guarded component and connection removal, including explicit component cascade confirmation;
 - atomic publication of every accepted edit as a new immutable child revision;
+- topology-scoped operating-case creation and exact case-revision browsing;
+- immutable case metadata and scalar-map edits with service-normalized engineering units;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:
