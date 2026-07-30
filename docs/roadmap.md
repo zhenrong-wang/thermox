@@ -364,13 +364,15 @@ Work items:
 
 1. Provide a transport-neutral, Team-scoped graph authoring service with typed atomic edit batches
    against immutable base revisions. ✅
-2. Create React/TypeScript web app.
-3. Implement graph canvas with typed ports.
-4. Component palette generated from backend component registry.
-5. Parameter forms with units and validation.
-6. Case editor for fixed values and initial guesses.
-7. Run monitor and result overlay on graph.
-8. Stream/result table views.
+2. Provide revision-backed, compile-aware validation for an exact topology, case, and engineering
+   artifact set. ✅
+3. Create React/TypeScript web app.
+4. Implement graph canvas with typed ports.
+5. Component palette generated from backend component registry.
+6. Parameter forms with units and validation.
+7. Case editor for fixed values and initial guesses.
+8. Run monitor and result overlay on graph.
+9. Stream/result table views.
 
 Exit criteria:
 

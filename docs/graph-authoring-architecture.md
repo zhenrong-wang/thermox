@@ -69,8 +69,17 @@ parsed again to enforce cross-entity structural integrity.
 
 Compile-time checks that require a simulation case—port compatibility, equation/unknown balance,
 registry resolution, and component-specific case data—remain in model validation and run
-configuration execution. A later authoring command can expose compile-aware validation without
-moving those rules into the frontend.
+configuration execution. The revision-backed validation command exposes those checks at:
+
+```text
+POST /api/v1/projects/{project_id}/model-revisions/{model_revision_id}/case-revisions/{case_revision_id}/validate
+```
+
+Its `thermox.project_model_validation_request/v1` body optionally selects immutable engineering
+artifact revision IDs. The application service resolves and verifies the topology, case, and
+artifact content, composes the executable model, and invokes the production compiler. Its response
+includes compilation diagnostics plus every selected revision ID and checksum. The frontend does
+not assemble model documents, fetch object content, or reproduce compiler rules.
 
 ## Security and persistence
 

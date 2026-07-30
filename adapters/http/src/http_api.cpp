@@ -604,24 +604,24 @@ service::CreateProjectRequest parse_create_project_request(
     return command;
 }
 
-const boost::json::value& require_graph_edit_field(
+const boost::json::value& require_json_field(
     const boost::json::object& object,
     std::string_view name) {
     const auto* value = object.if_contains(name);
     if (value == nullptr) {
         throw std::invalid_argument(
-            "missing graph edit field: " + std::string(name));
+            "missing JSON field: " + std::string(name));
     }
     return *value;
 }
 
-std::string require_graph_edit_string(
+std::string require_json_string(
     const boost::json::object& object,
     std::string_view name) {
-    const auto& value = require_graph_edit_field(object, name);
+    const auto& value = require_json_field(object, name);
     if (!value.is_string()) {
         throw std::invalid_argument(
-            "graph edit field must be a string: " +
+            "JSON field must be a string: " +
             std::string(name));
     }
     return std::string(value.as_string());
@@ -650,13 +650,13 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
                 std::string(field.key()));
         }
     }
-    if (require_graph_edit_string(root, "schema_version") !=
+    if (require_json_string(root, "schema_version") !=
         "thermox.graph_edit_batch/v1") {
         throw std::invalid_argument(
             "unsupported graph edit schema_version");
     }
     const auto& operations_value =
-        require_graph_edit_field(root, "operations");
+        require_json_field(root, "operations");
     if (!operations_value.is_array()) {
         throw std::invalid_argument(
             "graph edit operations must be an array");
@@ -683,7 +683,7 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
 
         service::GraphEditOperation operation;
         const auto action =
-            require_graph_edit_string(object, "action");
+            require_json_string(object, "action");
         if (action == "upsert") {
             operation.action =
                 service::GraphEditAction::upsert;
@@ -696,7 +696,7 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
         }
 
         const auto entity_type =
-            require_graph_edit_string(object, "entity_type");
+            require_json_string(object, "entity_type");
         std::string fragment_key;
         std::string fragment_schema;
         if (entity_type == "medium") {
@@ -728,7 +728,7 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
                 entity_type);
         }
         operation.entity_id =
-            require_graph_edit_string(object, "entity_id");
+            require_json_string(object, "entity_id");
 
         if (const auto* cascade =
                 object.if_contains("cascade")) {
@@ -768,6 +768,60 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
             }
         }
         command.operations.push_back(std::move(operation));
+    }
+    return command;
+}
+
+service::ValidateProjectModelRequest
+parse_project_model_validation_request(
+    const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string(
+                "invalid project model validation JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "project model validation request must be a JSON "
+            "object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "artifact_revision_ids") {
+            throw std::invalid_argument(
+                "unknown project model validation field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_json_string(root, "schema_version") !=
+        "thermox.project_model_validation_request/v1") {
+        throw std::invalid_argument(
+            "unsupported project model validation "
+            "schema_version");
+    }
+
+    service::ValidateProjectModelRequest command;
+    const auto* artifacts =
+        root.if_contains("artifact_revision_ids");
+    if (artifacts == nullptr) {
+        return command;
+    }
+    if (!artifacts->is_array()) {
+        throw std::invalid_argument(
+            "artifact_revision_ids must be an array");
+    }
+    for (const auto& artifact : artifacts->as_array()) {
+        if (!artifact.is_string()) {
+            throw std::invalid_argument(
+                "artifact revision IDs must be strings");
+        }
+        command.artifact_revision_ids.emplace_back(
+            artifact.as_string());
     }
     return command;
 }
@@ -1069,9 +1123,10 @@ struct Api::Impl {
         std::shared_ptr<service::SimulationJobService> job_service,
         std::shared_ptr<service::ProjectService> project_service,
         ApiOptions api_options)
-        : simulation(std::move(runtime)),
+        : simulation(runtime),
           jobs(std::move(job_service)),
           projects(std::move(project_service)),
+          project_validation(projects, std::move(runtime)),
           options(api_options) {
         if (options.maximum_body_bytes == 0U) {
             throw std::invalid_argument(
@@ -1090,6 +1145,7 @@ struct Api::Impl {
     service::SimulationService simulation;
     std::shared_ptr<service::SimulationJobService> jobs;
     std::shared_ptr<service::ProjectService> projects;
+    service::ProjectModelValidationService project_validation;
     ApiOptions options;
 };
 
@@ -1561,6 +1617,57 @@ Response Api::handle(const Request& request) const {
                     std::string(cases_segment) + "/";
                 if (case_path.starts_with(case_detail_prefix)) {
                     reject_unknown_query(target.query, {});
+                    const auto case_suffix =
+                        case_path.substr(
+                            case_detail_prefix.size());
+                    constexpr std::string_view
+                        validation_suffix{"/validate"};
+                    if (case_suffix.ends_with(
+                            validation_suffix)) {
+                        const auto case_revision_id =
+                            case_suffix.substr(
+                                0,
+                                case_suffix.size() -
+                                    validation_suffix.size());
+                        if (case_revision_id.empty() ||
+                            case_revision_id.find('/') !=
+                                std::string::npos) {
+                            return error_response(
+                                404,
+                                "route_not_found",
+                                "no route matches the request "
+                                "target");
+                        }
+                        if (method != "post") {
+                            auto response = error_response(
+                                405,
+                                "method_not_allowed",
+                                "project model validation only "
+                                "supports POST");
+                            response.headers["Allow"] = "POST";
+                            return response;
+                        }
+                        require_json_request(
+                            request,
+                            impl_->options.maximum_body_bytes);
+                        auto command =
+                            parse_project_model_validation_request(
+                                request);
+                        command.identity = identity;
+                        command.project_id = project_id;
+                        command.model_revision_id = revision_id;
+                        command.case_revision_id =
+                            case_revision_id;
+                        const auto result =
+                            impl_->project_validation.validate(
+                                command);
+                        return json_response(
+                            operation_status(
+                                result.validation.status),
+                            service::
+                                serialize_project_model_validation_json(
+                                    result));
+                    }
                     if (method != "get") {
                         auto response = error_response(
                             405,
@@ -1570,9 +1677,7 @@ Response Api::handle(const Request& request) const {
                         response.headers["Allow"] = "GET";
                         return response;
                     }
-                    const auto case_revision_id =
-                        case_path.substr(
-                            case_detail_prefix.size());
+                    const auto case_revision_id = case_suffix;
                     if (case_revision_id.empty() ||
                         case_revision_id.find('/') !=
                             std::string::npos) {

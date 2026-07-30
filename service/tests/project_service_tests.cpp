@@ -1,5 +1,6 @@
 #include "thermox/service/in_memory_projects.hpp"
 #include "thermox/service/projects.hpp"
+#include "thermox/service/simulation_runtime.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <fstream>
@@ -594,6 +595,87 @@ void test_graph_edits_publish_valid_child_revisions() {
         "base revision");
 }
 
+void test_revision_backed_validation_resolves_exact_inputs() {
+    auto projects = std::make_shared<
+        thermox::service::ProjectService>(
+        thermox::service::
+            make_in_memory_project_repository());
+    const auto project = projects->create_project(
+        {team_a, "Validation", {}});
+    const auto model = projects->create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case =
+        projects->create_case_revision({
+            team_a,
+            project.project_id,
+            model.model_revision_id,
+            {},
+            read_source_file(
+                "core/examples/"
+                "air_compressor.design.case.json"),
+        });
+    thermox::service::ProjectModelValidationService validator{
+        projects,
+        thermox::service::make_default_simulation_runtime(),
+    };
+    const auto response = validator.validate({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        simulation_case.case_revision_id,
+        {},
+    });
+    require(
+        response.validation.succeeded() &&
+            response.validation.compilation.compiled &&
+            response.project_id == project.project_id &&
+            response.model_revision_id ==
+                model.model_revision_id &&
+            response.model_checksum == model.checksum &&
+            response.case_revision_id ==
+                simulation_case.case_revision_id &&
+            response.case_checksum == simulation_case.checksum,
+        "revision-backed validation must compile the exact "
+        "persisted model/case pair and publish provenance");
+
+    bool hidden = false;
+    try {
+        (void)validator.validate({
+            team_b,
+            project.project_id,
+            model.model_revision_id,
+            simulation_case.case_revision_id,
+            {},
+        });
+    } catch (const thermox::service::ProjectStateError&) {
+        hidden = true;
+    }
+    require(
+        hidden,
+        "revision-backed validation must hide cross-Team "
+        "revision existence");
+
+    const auto serialized =
+        thermox::service::
+            serialize_project_model_validation_json(response);
+    require(
+        serialized.find(
+            "\"schema_version\": "
+            "\"thermox.project_model_validation/v1\"") !=
+                std::string::npos &&
+            serialized.find("\"compiled\": true") !=
+                std::string::npos &&
+            serialized.find(model.checksum) !=
+                std::string::npos,
+        "revision validation serialization must carry result "
+        "and immutable provenance");
+}
+
 }  // namespace
 
 int main() {
@@ -606,6 +688,7 @@ int main() {
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_graph_edits_publish_valid_child_revisions();
+        test_revision_backed_validation_resolves_exact_inputs();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

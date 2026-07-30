@@ -24,6 +24,8 @@ inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
 inline constexpr char run_configuration_revision_schema_v2[] =
     "thermox.run_configuration_revision/v2";
+inline constexpr char project_model_validation_schema_v1[] =
+    "thermox.project_model_validation/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};
@@ -332,6 +334,26 @@ struct ResolvedRunConfiguration {
     ResolvedEngineeringArtifacts artifacts;
 };
 
+struct ValidateProjectModelRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string model_revision_id;
+    std::string case_revision_id;
+    std::vector<std::string> artifact_revision_ids;
+};
+
+struct ProjectModelValidationResponse {
+    std::string schema_version{
+        project_model_validation_schema_v1};
+    std::string project_id;
+    std::string model_revision_id;
+    std::string model_checksum;
+    std::string case_revision_id;
+    std::string case_checksum;
+    std::vector<ArtifactRevisionRecord> artifact_revisions;
+    ValidateModelResponse validation;
+};
+
 class ProjectService {
 public:
     explicit ProjectService(
@@ -427,6 +449,20 @@ private:
         artifact_content_;
 };
 
+class ProjectModelValidationService {
+public:
+    ProjectModelValidationService(
+        std::shared_ptr<ProjectService> projects,
+        std::shared_ptr<const SimulationRuntime> runtime);
+
+    [[nodiscard]] ProjectModelValidationResponse validate(
+        const ValidateProjectModelRequest& request) const;
+
+private:
+    std::shared_ptr<ProjectService> projects_;
+    SimulationService simulation_;
+};
+
 std::string serialize_project_json(
     const ProjectRecord& project);
 std::string serialize_projects_json(
@@ -449,5 +485,7 @@ std::string serialize_run_configuration_revision_json(
     const RunConfigurationRevisionRecord& revision);
 std::string serialize_run_configuration_revisions_json(
     const std::vector<RunConfigurationRevisionRecord>& revisions);
+std::string serialize_project_model_validation_json(
+    const ProjectModelValidationResponse& response);
 
 }  // namespace thermox::service

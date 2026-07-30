@@ -709,6 +709,57 @@ void test_team_scoped_projects_and_model_revisions() {
         "case revision creation must bind canonical operating "
         "data to the exact model revision");
 
+    auto validation_request = authenticated(json_post(
+        simulation_case.headers.at("Location") + "/validate",
+        R"json({
+          "schema_version":
+            "thermox.project_model_validation_request/v1",
+          "artifact_revision_ids": []
+        })json"));
+    const auto validation = api.handle(validation_request);
+    require(
+        validation.status == 200 &&
+            validation.body.find(
+                "\"schema_version\": "
+                "\"thermox.project_model_validation/v1\"") !=
+                std::string::npos &&
+            validation.body.find("\"compiled\": true") !=
+                std::string::npos &&
+            validation.body.find(project_id) !=
+                std::string::npos &&
+            validation.body.find(
+                "\"case_revision_id\": \"") !=
+                std::string::npos,
+        "revision-backed validation must compile an exact "
+        "Team-scoped topology/case pair and return provenance");
+
+    auto invalid_validation = authenticated(json_post(
+        simulation_case.headers.at("Location") + "/validate",
+        R"json({
+          "schema_version":
+            "thermox.project_model_validation_request/v1",
+          "artifact_revision_ids": [42]
+        })json"));
+    require(
+        api.handle(invalid_validation).status == 400,
+        "revision validation must retain artifact ID JSON "
+        "types");
+
+    auto foreign_validation = authenticated(
+        json_post(
+            simulation_case.headers.at("Location") +
+                "/validate",
+            R"json({
+              "schema_version":
+                "thermox.project_model_validation_request/v1"
+            })json"),
+        "user-b",
+        "team-b");
+    require(
+        api.handle(foreign_validation).status == 404,
+        "revision validation must hide cross-Team model "
+        "existence");
+
     auto case_history_request = authenticated({
         "GET",
         revision.headers.at("Location") + "/case-revisions",

@@ -206,6 +206,7 @@ The initial routes are:
 | `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/edits` | Apply a typed atomic edit batch and publish a child revision |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |
+| `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}/validate` | Compile exact model/case/artifact revisions and return diagnostics with provenance |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/artifact-revisions` | List/publish immutable engineering artifacts |
 | `GET` | `/api/v1/projects/{project_id}/artifact-revisions/{artifact_revision_id}` | Read artifact revision metadata |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/run-configuration-revisions` | List/publish reusable execution intents |

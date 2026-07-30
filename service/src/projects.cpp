@@ -990,4 +990,69 @@ ProjectService::resolve_run_configuration(
     };
 }
 
+ProjectModelValidationService::ProjectModelValidationService(
+    std::shared_ptr<ProjectService> projects,
+    std::shared_ptr<const SimulationRuntime> runtime)
+    : projects_(std::move(projects)),
+      simulation_(std::move(runtime)) {
+    if (!projects_) {
+        throw std::invalid_argument(
+            "project validation service requires a project "
+            "service");
+    }
+}
+
+ProjectModelValidationResponse
+ProjectModelValidationService::validate(
+    const ValidateProjectModelRequest& request) const {
+    if (request.project_id.empty() ||
+        request.model_revision_id.empty() ||
+        request.case_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project, model revision, and case revision IDs "
+            "must not be empty");
+    }
+    auto artifact_ids = request.artifact_revision_ids;
+    std::sort(artifact_ids.begin(), artifact_ids.end());
+    if (std::adjacent_find(
+            artifact_ids.begin(), artifact_ids.end()) !=
+        artifact_ids.end()) {
+        throw ProjectRequestError(
+            "artifact revision IDs must be unique");
+    }
+    const auto model_case = projects_->resolve_model_case(
+        request.identity,
+        request.project_id,
+        request.model_revision_id,
+        request.case_revision_id);
+    if (!model_case) {
+        throw ProjectStateError(
+            "model/case revision pair was not found");
+    }
+    const auto artifacts = projects_->resolve_artifact_revisions(
+        request.identity,
+        request.project_id,
+        artifact_ids);
+    if (!artifacts) {
+        throw ProjectStateError(
+            "artifact revision was not found");
+    }
+
+    ValidateModelRequest validation_request;
+    validation_request.model_json =
+        model_case->executable_model_json;
+    validation_request.case_id = model_case->case_id;
+    validation_request.artifacts = artifacts->snapshot;
+    return {
+        project_model_validation_schema_v1,
+        model_case->project_id,
+        model_case->model_revision_id,
+        model_case->model_checksum,
+        model_case->case_revision_id,
+        model_case->case_checksum,
+        artifacts->revisions,
+        simulation_.validate_model(validation_request),
+    };
+}
+
 }  // namespace thermox::service
