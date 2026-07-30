@@ -368,9 +368,11 @@ Work items:
    artifact set. ✅
 3. Provide typed, SI-normalized case authoring for metadata, parameter overrides, fixed values,
    initial guesses, and solver options against immutable base revisions. ✅
-4. Create React/TypeScript web app.
+4. Create React/TypeScript web app. ✅
 5. Implement graph canvas with typed ports.
-6. Component palette generated from backend component registry.
+   - immutable topology visualization and revision selection; ✅
+   - connection/component authoring through typed edit batches.
+6. Component palette generated from backend component registry. ✅
 7. Parameter forms with units and validation.
 8. Case editor using the revision-backed authoring service.
 9. Run monitor and result overlay on graph.

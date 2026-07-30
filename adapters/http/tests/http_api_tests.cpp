@@ -2,6 +2,8 @@
 #include "thermox/service/in_memory_jobs.hpp"
 #include "thermox/service/in_memory_projects.hpp"
 
+#include <boost/json.hpp>
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -79,6 +81,16 @@ void test_catalog_and_validation() {
     require(
         catalog.body.find("thermox.catalog/v3") != std::string::npos,
         "catalog endpoint must preserve the service schema");
+    const auto parsed_catalog = boost::json::parse(catalog.body);
+    require(
+        parsed_catalog.is_object() &&
+            parsed_catalog.as_object()
+                .at("native_extensions")
+                .is_array() &&
+            parsed_catalog.as_object()
+                .at("components")
+                .is_array(),
+        "catalog endpoint must return valid JSON arrays");
 
     const std::string model = read_file(
         std::string(THERMOX_SOURCE_DIR) +

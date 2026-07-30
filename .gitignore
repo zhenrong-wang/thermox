@@ -1,5 +1,7 @@
 /build*/
 /tmp/
+/web/node_modules/
+/web/dist/
 
 # Local compiler and editor output
 *.o

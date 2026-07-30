@@ -714,7 +714,7 @@ std::string serialize_catalog_response_json(
         json_string(out, extension.package_version);
         out << "}";
     }
-    out << ",\n  \"components\": [";
+    out << "],\n  \"components\": [";
     for (std::size_t i = 0; i < response.components.size(); ++i) {
         if (i != 0) out << ", ";
         const auto& component = response.components[i];
