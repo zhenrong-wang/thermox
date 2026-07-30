@@ -75,6 +75,54 @@ export interface CaseRevisionList {
   case_revisions: CaseRevision[]
 }
 
+export interface ValidationDiagnostic {
+  code: string
+  severity: 'information' | 'warning' | 'error'
+  stage: string
+  json_path: string
+  component_id: string
+  port_name: string
+  connection_id: string
+  message: string
+  suggestions: string[]
+}
+
+export interface ProjectModelValidation {
+  schema_version: 'thermox.project_model_validation/v1'
+  project_id: string
+  model_revision_id: string
+  model_checksum: string
+  case_revision_id: string
+  case_checksum: string
+  artifact_revisions: ArtifactRevision[]
+  validation: {
+    schema_version: 'thermox.result/v3'
+    status: string
+    error: {
+      schema_version: string
+      code: string
+      stage: string
+      message: string
+    }
+    model: {
+      schema_version: string
+      model_id: string
+      model_revision: string
+      case_id: string
+    }
+    canonical_model_json: string
+    compilation: {
+      compiled: boolean
+      mode: string
+      variable_count: number
+      equation_count: number
+      catalog_fingerprint: string
+      reduced_connection_equations: string[]
+    }
+    diagnostics: ValidationDiagnostic[]
+  }
+}
+
 export type CaseScalarField =
   | 'parameter_override'
   | 'fixed_value'

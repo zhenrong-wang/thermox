@@ -165,6 +165,14 @@ artifact content, composes the executable model, and invokes the production comp
 includes compilation diagnostics plus every selected revision ID and checksum. The frontend does
 not assemble model documents, fetch object content, or reproduce compiler rules.
 
+The case workspace derives logical artifact requirements from component-instance bindings, asks the
+user to select one exact immutable project revision for each, and submits that revision set to the
+validation command. It presents equation/variable counts, catalog fingerprint, revision checksums,
+and structured diagnostics with component, port, connection, JSON-path, and suggestion fields.
+Compilation failures intentionally use HTTP 422 while retaining the complete
+`thermox.project_model_validation/v1` response; clients treat that document as an engineering
+result rather than a transport exception.
+
 ## Security and persistence
 
 The identity context supplies the acting user and Team. The base revision must belong to the

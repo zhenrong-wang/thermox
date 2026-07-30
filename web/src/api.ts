@@ -8,6 +8,7 @@ import type {
   GraphEditOperation,
   ModelRevision,
   ModelRevisionList,
+  ProjectModelValidation,
   ProjectList,
 } from './types'
 
@@ -58,6 +59,33 @@ async function postJson<T>(
     )
   }
   return (await response.json()) as T
+}
+
+async function postValidation(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<ProjectModelValidation> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
+  const document = (await response.json()) as
+    | ProjectModelValidation
+    | { schema_version?: string; message?: string }
+  if (document.schema_version === 'thermox.project_model_validation/v1') {
+    return document as ProjectModelValidation
+  }
+  throw new ApiError(
+    response.status,
+    ('message' in document && document.message) ||
+      `${response.status} ${response.statusText}`,
+  )
 }
 
 export const api = {
@@ -126,6 +154,21 @@ export const api = {
       {
         schema_version: 'thermox.case_edit_batch/v1',
         operations,
+      },
+      signal,
+    ),
+  validateCaseRevision: (
+    projectId: string,
+    modelRevisionId: string,
+    caseRevisionId: string,
+    artifactRevisionIds: string[],
+    signal?: AbortSignal,
+  ) =>
+    postValidation(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions/${encodeURIComponent(caseRevisionId)}/validate`,
+      {
+        schema_version: 'thermox.project_model_validation_request/v1',
+        artifact_revision_ids: artifactRevisionIds,
       },
       signal,
     ),

@@ -1,11 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { buildMetadataEdits, buildScalarEdit } from './caseAuthoring'
 import { caseModes } from './CaseCreateForm'
+import { ValidationPanel } from './ValidationPanel'
 import type {
+  ArtifactRevision,
   CaseDocument,
   CaseEditOperation,
   CaseRevision,
   CaseScalarField,
+  ProjectModelValidation,
   ScalarValue,
 } from './types'
 
@@ -14,8 +17,13 @@ interface CaseWorkspaceProps {
   publishing: boolean
   operationError: string
   operationStatus: string
+  artifactRevisions: ArtifactRevision[]
+  requiredArtifactIds: string[]
+  validationResult?: ProjectModelValidation
+  validating: boolean
   onDismissOperation: () => void
   onEdit: (operations: CaseEditOperation[], message: string) => Promise<void>
+  onValidate: (artifactRevisionIds: string[]) => Promise<void>
   onCreate: () => void
 }
 
@@ -61,8 +69,13 @@ export function CaseWorkspace({
   publishing,
   operationError,
   operationStatus,
+  artifactRevisions,
+  requiredArtifactIds,
+  validationResult,
+  validating,
   onDismissOperation,
   onEdit,
+  onValidate,
   onCreate,
 }: CaseWorkspaceProps) {
   const document = revision?.case_document
@@ -198,6 +211,14 @@ export function CaseWorkspace({
             Publish metadata
           </button>
         </form>
+
+        <ValidationPanel
+          artifactRevisions={artifactRevisions}
+          requiredArtifactIds={requiredArtifactIds}
+          result={validationResult}
+          validating={validating}
+          onValidate={onValidate}
+        />
 
         {scalarSections.map((section) => {
           const entries = Object.entries(

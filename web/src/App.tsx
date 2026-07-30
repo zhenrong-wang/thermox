@@ -28,6 +28,7 @@ import type {
   GraphEditOperation,
   MediumDefinition,
   ModelRevision,
+  ProjectModelValidation,
   Project,
   TopologyDocument,
 } from './types'
@@ -71,6 +72,9 @@ function App() {
   const [casePublishing, setCasePublishing] = useState(false)
   const [caseOperationError, setCaseOperationError] = useState('')
   const [caseOperationStatus, setCaseOperationStatus] = useState('')
+  const [validationResult, setValidationResult] =
+    useState<ProjectModelValidation>()
+  const [validating, setValidating] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -167,6 +171,7 @@ function App() {
 
   useEffect(() => {
     setSelectedCaseRevision(undefined)
+    setValidationResult(undefined)
     if (
       !selectedProjectId ||
       !selectedRevisionId ||
@@ -209,6 +214,17 @@ function App() {
         ),
     )
   }, [catalog, filter])
+  const requiredArtifactIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          (topology?.model.components ?? []).flatMap((component) =>
+            Object.values(component.artifacts ?? {}),
+          ),
+        ),
+      ].sort(),
+    [topology],
+  )
 
   async function publishEdits(
     operations: GraphEditOperation[],
@@ -348,6 +364,39 @@ function App() {
       throw new Error(message)
     } finally {
       setCasePublishing(false)
+    }
+  }
+
+  async function validateCase(artifactRevisionIds: string[]) {
+    if (
+      !selectedProjectId ||
+      !selectedRevisionId ||
+      !selectedCaseRevisionId
+    ) {
+      throw new Error('Select a case revision before validation.')
+    }
+    setValidating(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const result = await api.validateCaseRevision(
+        selectedProjectId,
+        selectedRevisionId,
+        selectedCaseRevisionId,
+        artifactRevisionIds,
+      )
+      setValidationResult(result)
+      setCaseOperationStatus(
+        result.validation.compilation.compiled
+          ? 'Exact revision set compiled successfully.'
+          : 'Validation completed with compiler diagnostics.',
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      throw new Error(message)
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -618,11 +667,16 @@ function App() {
             publishing={casePublishing}
             operationError={caseOperationError}
             operationStatus={caseOperationStatus}
+            artifactRevisions={artifactRevisions}
+            requiredArtifactIds={requiredArtifactIds}
+            validationResult={validationResult}
+            validating={validating}
             onDismissOperation={() => {
               setCaseOperationError('')
               setCaseOperationStatus('')
             }}
             onEdit={editCase}
+            onValidate={validateCase}
             onCreate={() => setAddingCase(true)}
           />
         )}

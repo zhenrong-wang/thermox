@@ -20,6 +20,7 @@ The workspace currently provides:
 - atomic publication of every accepted edit as a new immutable child revision;
 - topology-scoped operating-case creation and exact case-revision browsing;
 - immutable case metadata and scalar-map edits with service-normalized engineering units;
+- exact artifact-revision selection and compile-aware validation with structured diagnostics;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

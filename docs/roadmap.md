@@ -384,7 +384,8 @@ Work items:
    - topology-scoped creation and exact immutable revision browsing; ✅
    - metadata, parameter override, fixed value, initial guess, and solver option editing with
      service-authoritative SI normalization; ✅
-   - compile-aware validation and diagnostics.
+   - exact artifact-revision selection, compile-aware validation, provenance, and structured
+     diagnostics. ✅
 9. Run monitor and result overlay on graph.
 10. Stream/result table views.
 
