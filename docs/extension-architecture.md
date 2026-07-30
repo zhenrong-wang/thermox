@@ -75,3 +75,14 @@ containing:
 The test requires the extension to appear in catalog discovery, compile through standard
 validation, solve through the ordinary numerical service, and publish graph-native results. This
 is the minimum native-extension conformance path.
+
+## Derivative conformance
+
+Component extensions may provide sparse equation derivatives through `EquationSystemBuilder`.
+Thermox uses those rows directly and fills only unprovided rows by finite differences. Extension
+tests should call `verify_problem_jacobian` on a compiled problem at representative operating
+points before relying on those derivatives in production. The verifier compares every entry of
+each provider-owned row—including expected zeros—against bounded, scale-aware finite differences
+and reports equation/variable names for mismatches. Rows intentionally owned by the numerical
+fallback are excluded, so failures identify the extension's derivative contract rather than the
+solver's fallback implementation.

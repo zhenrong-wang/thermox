@@ -2,6 +2,7 @@
 
 #include "thermox/linear_solver.hpp"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -110,7 +111,41 @@ struct ProblemStructureReport {
     [[nodiscard]] bool valid_for_newton() const;
 };
 
+struct JacobianVerificationOptions {
+    double finite_difference_epsilon{1.0e-6};
+    double absolute_tolerance{1.0e-6};
+    double relative_tolerance{1.0e-4};
+    std::size_t maximum_reported_mismatches{32};
+};
+
+struct JacobianMismatch {
+    std::size_t residual{0};
+    std::size_t variable{0};
+    std::string residual_name;
+    std::string variable_name;
+    double provided_derivative{0.0};
+    double numerical_derivative{0.0};
+    double absolute_error{0.0};
+    double relative_error{0.0};
+};
+
+struct JacobianVerificationReport {
+    bool analytic_derivatives_available{false};
+    bool passed{false};
+    std::size_t compared_rows{0};
+    std::size_t compared_entries{0};
+    std::size_t mismatch_count{0};
+    double maximum_absolute_error{0.0};
+    double maximum_relative_error{0.0};
+    std::vector<JacobianMismatch> mismatches;
+    std::string message;
+};
+
 ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem);
+JacobianVerificationReport verify_problem_jacobian(
+    const NonlinearProblem& problem,
+    const std::vector<double>& point = {},
+    const JacobianVerificationOptions& options = {});
 NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverOptions& options = {});
 
 double l2_norm(const std::vector<double>& values);

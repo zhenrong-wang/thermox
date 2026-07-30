@@ -567,6 +567,141 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
     return report;
 }
 
+JacobianVerificationReport verify_problem_jacobian(
+    const NonlinearProblem& problem,
+    const std::vector<double>& point,
+    const JacobianVerificationOptions& options) {
+    if (!is_positive_finite(options.finite_difference_epsilon) ||
+        !std::isfinite(options.absolute_tolerance) ||
+        options.absolute_tolerance < 0.0 ||
+        !std::isfinite(options.relative_tolerance) ||
+        options.relative_tolerance < 0.0) {
+        throw std::invalid_argument(
+            "Jacobian verification tolerances must be finite and "
+            "non-negative, with a positive finite-difference epsilon");
+    }
+
+    const auto lower_bounds = defaulted_lower_bounds(problem);
+    const auto upper_bounds = defaulted_upper_bounds(problem);
+    validate_problem(problem, lower_bounds, upper_bounds);
+    const auto variable_scales = defaulted_variable_scales(problem);
+    const auto& x = point.empty() ? problem.initial_guess : point;
+    if (x.size() != problem.initial_guess.size()) {
+        throw std::invalid_argument(
+            "Jacobian verification point size must match the problem");
+    }
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        if (!std::isfinite(x[i]) || x[i] < lower_bounds[i] ||
+            x[i] > upper_bounds[i]) {
+            throw std::invalid_argument(
+                "Jacobian verification point is outside the variable domain");
+        }
+    }
+
+    Matrix provided(
+        problem.residual_names.size(),
+        std::vector<double>(x.size(), 0.0));
+    std::vector<bool> compared_rows(
+        problem.residual_names.size(), false);
+    if (problem.sparse_jacobian_pattern.has_value()) {
+        std::vector<double> values(
+            problem.sparse_jacobian_pattern->nonzeros(), 0.0);
+        problem.sparse_jacobian_values(x, values);
+        provided =
+            SparseMatrix(
+                *problem.sparse_jacobian_pattern,
+                std::move(values))
+                .to_dense();
+        std::fill(compared_rows.begin(), compared_rows.end(), true);
+    } else if (problem.sparse_jacobian) {
+        std::vector<SparseTriplet> triplets;
+        problem.sparse_jacobian(x, triplets);
+        provided = sparse_from_triplets(
+                       problem.residual_names.size(),
+                       x.size(),
+                       std::move(triplets))
+                       .to_dense();
+        std::fill(compared_rows.begin(), compared_rows.end(), true);
+    } else if (problem.partial_sparse_jacobian) {
+        std::vector<SparseTriplet> triplets;
+        problem.partial_sparse_jacobian(x, triplets);
+        provided = sparse_from_triplets(
+                       problem.residual_names.size(),
+                       x.size(),
+                       std::move(triplets))
+                       .to_dense();
+        compared_rows = problem.analytic_jacobian_rows;
+    } else if (problem.jacobian) {
+        problem.jacobian(x, provided);
+        std::fill(compared_rows.begin(), compared_rows.end(), true);
+    }
+
+    JacobianVerificationReport report;
+    report.compared_rows = static_cast<std::size_t>(
+        std::count(compared_rows.begin(), compared_rows.end(), true));
+    report.analytic_derivatives_available = report.compared_rows != 0;
+    if (!report.analytic_derivatives_available) {
+        report.message = "problem provides no analytic Jacobian rows";
+        return report;
+    }
+    validate_jacobian_shape(
+        provided, problem.residual_names.size(), x.size());
+
+    SolverDiagnostics diagnostics;
+    const auto residual = evaluate_residual(problem, x, diagnostics);
+    const Matrix numerical = finite_difference_jacobian(
+        problem,
+        x,
+        residual,
+        variable_scales,
+        lower_bounds,
+        upper_bounds,
+        options.finite_difference_epsilon,
+        diagnostics);
+    for (std::size_t row = 0; row < numerical.size(); ++row) {
+        if (!compared_rows[row]) continue;
+        for (std::size_t column = 0; column < x.size(); ++column) {
+            ++report.compared_entries;
+            const double absolute_error =
+                std::abs(provided[row][column] -
+                         numerical[row][column]);
+            const double reference = std::max(
+                std::abs(provided[row][column]),
+                std::abs(numerical[row][column]));
+            const double relative_error =
+                reference == 0.0 ? 0.0 : absolute_error / reference;
+            report.maximum_absolute_error =
+                std::max(report.maximum_absolute_error, absolute_error);
+            report.maximum_relative_error =
+                std::max(report.maximum_relative_error, relative_error);
+            const double allowed =
+                options.absolute_tolerance +
+                options.relative_tolerance * reference;
+            if (absolute_error <= allowed) continue;
+            ++report.mismatch_count;
+            if (report.mismatches.size() >=
+                options.maximum_reported_mismatches) {
+                continue;
+            }
+            report.mismatches.push_back({
+                row,
+                column,
+                problem.residual_names[row],
+                problem.variable_names[column],
+                provided[row][column],
+                numerical[row][column],
+                absolute_error,
+                relative_error,
+            });
+        }
+    }
+    report.passed = report.mismatch_count == 0;
+    report.message = report.passed
+        ? "provided Jacobian agrees with finite differences"
+        : "provided Jacobian differs from finite differences";
+    return report;
+}
+
 double l2_norm(const std::vector<double>& values) {
     long double sum = 0.0;
     for (const double value : values) {

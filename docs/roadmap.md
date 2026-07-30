@@ -391,12 +391,14 @@ Work items:
    through catalog, compilation, solve, and graph-native results. ✅
 2. Package the existing native component/property composition boundaries as a documented extension
    SDK and out-of-tree conformance kit. ✅
-3. Analytic or automatic differentiation Jacobians for core components.
-4. Homotopy/continuation initialization strategies.
-5. Tearing/decomposition and better structural diagnostics.
-6. Safe custom equation DSL; no arbitrary user Python in API process.
-7. Map validation and interpolation quality controls.
-8. Multi-user auth, authorization, project isolation, audit logs.
+3. Verify provider-owned Jacobian rows against bounded finite differences with named mismatch
+   diagnostics. ✅
+4. Expand analytic or automatic differentiation Jacobians across property-heavy core components.
+5. Homotopy/continuation initialization strategies.
+6. Tearing/decomposition and better structural diagnostics.
+7. Safe custom equation DSL; no arbitrary user Python in API process.
+8. Map validation and interpolation quality controls.
+9. Multi-user auth, authorization, project isolation, audit logs.
 9. Scalable job workers and deployment automation.
 10. Extended benchmark suite against published/reference examples.
 

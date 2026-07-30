@@ -583,6 +583,61 @@ void test_mixed_derivative_equation_system_stays_sparse() {
     require_near(result.x[y], 3.0, 1.0e-8, "mixed derivative solve y");
 }
 
+void test_jacobian_verification_checks_only_provided_rows() {
+    thermox::EquationSystemBuilder system;
+    const auto x = system.add_variable("x", 2.0);
+    const auto y = system.add_variable("y", 3.0);
+    system.add_sparse_equation(
+        "x_squared",
+        [x](const std::vector<double>& values,
+            std::vector<thermox::EquationPartial>& partials) {
+            partials.push_back({x, 2.0 * values[x]});
+            return values[x] * values[x] - 4.0;
+        });
+    system.add_equation(
+        "y_target",
+        [y](const std::vector<double>& values) {
+            return values[y] - 3.0;
+        });
+
+    const auto report =
+        thermox::verify_problem_jacobian(system.build());
+    require(report.analytic_derivatives_available,
+            "mixed problem exposes derivatives for verification");
+    require(report.passed,
+            "correct provided derivative passes verification");
+    require(report.compared_rows == 1,
+            "finite-difference-only rows are not attributed to provider");
+    require(report.compared_entries == 2,
+            "provided row is checked across every variable");
+}
+
+void test_jacobian_verification_reports_bad_derivative() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"x_squared"};
+    problem.initial_guess = {2.0};
+    problem.residual =
+        [](const std::vector<double>& x,
+           std::vector<double>& residual) {
+            residual[0] = x[0] * x[0] - 4.0;
+        };
+    problem.jacobian =
+        [](const std::vector<double>&,
+           thermox::Matrix& jacobian) {
+            jacobian[0][0] = 3.0;
+        };
+
+    const auto report =
+        thermox::verify_problem_jacobian(problem);
+    require(!report.passed && report.mismatch_count == 1,
+            "incorrect derivative fails verification");
+    require(report.mismatches.at(0).residual_name ==
+                "x_squared" &&
+            report.mismatches.at(0).variable_name == "x",
+            "mismatch identifies its equation and variable");
+}
+
 void test_fixed_sparse_pattern_and_structure_analysis() {
     thermox::EquationSystemBuilder system;
     const auto x = system.add_variable("x", 0.0);
@@ -791,6 +846,8 @@ int main() {
         test_newton_solver_scales_columns_and_returns_physical_step();
         test_newton_solver_recovers_from_invalid_trial_state();
         test_mixed_derivative_equation_system_stays_sparse();
+        test_jacobian_verification_checks_only_provided_rows();
+        test_jacobian_verification_reports_bad_derivative();
         test_fixed_sparse_pattern_and_structure_analysis();
         test_fixed_bound_finite_difference_fails_cleanly();
         test_equation_system_builder();
