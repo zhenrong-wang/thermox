@@ -21,6 +21,8 @@ The workspace currently provides:
 - topology-scoped operating-case creation and exact case-revision browsing;
 - immutable case metadata and scalar-map edits with service-normalized engineering units;
 - exact artifact-revision selection and compile-aware validation with structured diagnostics;
+- immutable run-configuration creation and revision history;
+- complete steady/transient solver policy and generic result-projection authoring;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

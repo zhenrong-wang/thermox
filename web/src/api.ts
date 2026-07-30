@@ -5,11 +5,14 @@ import type {
   CaseEditOperation,
   CaseRevision,
   CaseRevisionList,
+  CreateRunConfiguration,
   GraphEditOperation,
   ModelRevision,
   ModelRevisionList,
   ProjectModelValidation,
   ProjectList,
+  RunConfigurationRevision,
+  RunConfigurationRevisionList,
 } from './types'
 
 class ApiError extends Error {
@@ -170,6 +173,33 @@ export const api = {
         schema_version: 'thermox.project_model_validation_request/v1',
         artifact_revision_ids: artifactRevisionIds,
       },
+      signal,
+    ),
+  runConfigurationRevisions: (
+    projectId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<RunConfigurationRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/run-configuration-revisions`,
+      signal,
+    ),
+  runConfigurationRevision: (
+    projectId: string,
+    revisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<RunConfigurationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/run-configuration-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  createRunConfigurationRevision: (
+    projectId: string,
+    request: CreateRunConfiguration,
+    signal?: AbortSignal,
+  ) =>
+    postJson<RunConfigurationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/run-configuration-revisions`,
+      request,
       signal,
     ),
   applyGraphEdits: (

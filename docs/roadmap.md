@@ -386,7 +386,11 @@ Work items:
      service-authoritative SI normalization; ✅
    - exact artifact-revision selection, compile-aware validation, provenance, and structured
      diagnostics. ✅
-9. Run monitor and result overlay on graph.
+9. Run configuration and execution workspace.
+   - exact topology/case/artifact bindings, complete solver policies, generic result projections,
+     and immutable configuration history; ✅
+   - durable job submission and bounded execution-history monitor;
+   - result-summary overlay on the graph.
 10. Stream/result table views.
 
 Exit criteria:

@@ -151,6 +151,15 @@ revision. The application resolves its dependencies, verifies artifact content, 
 composed model, typed artifacts, and solver settings into the durable job. Job and result
 provenance retain the run-configuration revision/checksum alongside topology and case identities.
 
+The React workspace exposes these records as reusable execution intents rather than immediately
+starting calculations. Creation pins the currently selected topology and case plus one exact
+revision for every required engineering artifact. It submits complete steady and transient solver
+policies and generic result projections. Revising a configuration preserves its logical ID,
+records the selected immutable parent, and republishes the entire intent; the browser never patches
+solver settings or bindings in place. Project-wide records are presented in the context of their
+bound topology revision so an interface cannot accidentally revise a configuration against a
+different graph.
+
 Migration `007_simulation_job_history.sql` promotes jobs into the queryable execution history used
 by product interfaces. It backfills and persists indexed Project and run-configuration identities,
 while the application exposes bounded, newest-first cursor pagination with optional state,

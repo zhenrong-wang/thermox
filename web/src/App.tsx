@@ -15,6 +15,9 @@ import {
   type GraphSelection,
 } from './InspectorPanel'
 import { MediumForm } from './MediumForm'
+import { RunConfigurationForm } from './RunConfigurationForm'
+import { RunConfigurationPanel } from './RunConfigurationPanel'
+import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
   ArtifactRevision,
@@ -25,11 +28,13 @@ import type {
   CaseRevision,
   ComponentDefinition,
   ConnectionDefinition,
+  CreateRunConfiguration,
   GraphEditOperation,
   MediumDefinition,
   ModelRevision,
   ProjectModelValidation,
   Project,
+  RunConfigurationRevision,
   TopologyDocument,
 } from './types'
 
@@ -40,7 +45,7 @@ function shortKind(kind: string): string {
 
 function App() {
   const [workspaceView, setWorkspaceView] =
-    useState<'topology' | 'cases'>('topology')
+    useState<'topology' | 'cases' | 'runs'>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -75,6 +80,21 @@ function App() {
   const [validationResult, setValidationResult] =
     useState<ProjectModelValidation>()
   const [validating, setValidating] = useState(false)
+  const [runConfigurationRevisions, setRunConfigurationRevisions] = useState<
+    RunConfigurationRevision[]
+  >([])
+  const [
+    selectedRunConfigurationRevisionId,
+    setSelectedRunConfigurationRevisionId,
+  ] = useState('')
+  const [selectedRunConfiguration, setSelectedRunConfiguration] =
+    useState<RunConfigurationRevision>()
+  const [runPublishing, setRunPublishing] = useState(false)
+  const [runOperationError, setRunOperationError] = useState('')
+  const [runOperationStatus, setRunOperationStatus] = useState('')
+  const [addingRunConfiguration, setAddingRunConfiguration] = useState(false)
+  const [revisingRunConfiguration, setRevisingRunConfiguration] =
+    useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -94,6 +114,29 @@ function App() {
       .finally(() => setLoading(false))
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    setRunConfigurationRevisions([])
+    setSelectedRunConfigurationRevisionId('')
+    setSelectedRunConfiguration(undefined)
+    if (!selectedProjectId) return
+    const controller = new AbortController()
+    api
+      .runConfigurationRevisions(selectedProjectId, controller.signal)
+      .then((response) => {
+        setRunOperationError('')
+        setRunConfigurationRevisions(
+          [...response.run_configuration_revisions].sort(
+            (left, right) =>
+              right.created_at_epoch_ms - left.created_at_epoch_ms,
+          ),
+        )
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setRunOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId])
 
   useEffect(() => {
     setRevisions([])
@@ -225,6 +268,64 @@ function App() {
       ].sort(),
     [topology],
   )
+  const visibleRunConfigurations = useMemo(
+    () =>
+      runConfigurationRevisions.filter(
+        (revision) => revision.model_revision_id === selectedRevisionId,
+      ),
+    [runConfigurationRevisions, selectedRevisionId],
+  )
+  const selectedArtifactRevisionIds = useMemo(
+    () =>
+      requiredArtifactIds
+        .map((artifactId) => {
+          const validated = validationResult?.artifact_revisions.find(
+            (revision) => revision.artifact_id === artifactId,
+          )
+          if (validated) return validated.artifact_revision_id
+          return artifactRevisions
+            .filter((revision) => revision.artifact_id === artifactId)
+            .sort(
+              (left, right) =>
+                right.revision_number - left.revision_number,
+            )[0]?.artifact_revision_id
+        })
+        .filter((id): id is string => Boolean(id)),
+    [artifactRevisions, requiredArtifactIds, validationResult],
+  )
+
+  useEffect(() => {
+    const selectedStillVisible = visibleRunConfigurations.some(
+      (revision) =>
+        revision.run_configuration_revision_id ===
+        selectedRunConfigurationRevisionId,
+    )
+    if (!selectedStillVisible) {
+      setSelectedRunConfigurationRevisionId(
+        visibleRunConfigurations[0]?.run_configuration_revision_id ?? '',
+      )
+    }
+  }, [selectedRunConfigurationRevisionId, visibleRunConfigurations])
+
+  useEffect(() => {
+    setSelectedRunConfiguration(undefined)
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    const controller = new AbortController()
+    api
+      .runConfigurationRevision(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        controller.signal,
+      )
+      .then((revision) => {
+        setRunOperationError('')
+        setSelectedRunConfiguration(revision)
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setRunOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId, selectedRunConfigurationRevisionId])
 
   async function publishEdits(
     operations: GraphEditOperation[],
@@ -397,6 +498,61 @@ function App() {
       throw new Error(message)
     } finally {
       setValidating(false)
+    }
+  }
+
+  function beginCreateRunConfiguration() {
+    if (!selectedCaseRevision) {
+      setRunOperationError(
+        'Select or create an operating case for this topology revision first.',
+      )
+      return
+    }
+    if (selectedArtifactRevisionIds.length !== requiredArtifactIds.length) {
+      setRunOperationError(
+        'Resolve every component artifact to an immutable project revision first.',
+      )
+      return
+    }
+    setRunOperationError('')
+    setAddingRunConfiguration(true)
+  }
+
+  async function createRunConfiguration(request: CreateRunConfiguration) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before creating a run configuration.')
+    }
+    setRunPublishing(true)
+    setRunOperationError('')
+    setRunOperationStatus('')
+    try {
+      const revision = await api.createRunConfigurationRevision(
+        selectedProjectId,
+        request,
+      )
+      setRunConfigurationRevisions((current) => [
+        revision,
+        ...current.filter(
+          (item) =>
+            item.run_configuration_revision_id !==
+            revision.run_configuration_revision_id,
+        ),
+      ])
+      setSelectedRunConfiguration(revision)
+      setSelectedRunConfigurationRevisionId(
+        revision.run_configuration_revision_id,
+      )
+      setRunOperationStatus(
+        `Published ${revision.run_configuration_id} r${revision.revision_number}.`,
+      )
+      setAddingRunConfiguration(false)
+      setRevisingRunConfiguration(false)
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setRunOperationError(message)
+      throw new Error(message)
+    } finally {
+      setRunPublishing(false)
     }
   }
 
@@ -586,7 +742,12 @@ function App() {
               <span className="nav-icon">◇</span>
               Cases
             </button>
-            <button className="nav-item" disabled>
+            <button
+              className={
+                workspaceView === 'runs' ? 'nav-item active' : 'nav-item'
+              }
+              onClick={() => setWorkspaceView('runs')}
+            >
               <span className="nav-icon">▶</span>
               Runs
             </button>
@@ -660,7 +821,7 @@ function App() {
             />
           )}
           </section>
-        ) : (
+        ) : workspaceView === 'cases' ? (
           <CaseWorkspace
             key={selectedCaseRevisionId || 'empty-case'}
             revision={selectedCaseRevision}
@@ -679,10 +840,32 @@ function App() {
             onValidate={validateCase}
             onCreate={() => setAddingCase(true)}
           />
+        ) : (
+          <RunConfigurationWorkspace
+            revision={selectedRunConfiguration}
+            publishing={runPublishing}
+            operationError={runOperationError}
+            operationStatus={runOperationStatus}
+            onDismissOperation={() => {
+              setRunOperationError('')
+              setRunOperationStatus('')
+            }}
+            onCreate={beginCreateRunConfiguration}
+            onRevise={() => setRevisingRunConfiguration(true)}
+          />
         )}
 
         <aside className="palette">
-          {workspaceView === 'cases' ? (
+          {workspaceView === 'runs' ? (
+            <RunConfigurationPanel
+              revisions={visibleRunConfigurations}
+              selectedId={selectedRunConfigurationRevisionId}
+              publishing={runPublishing}
+              onSelect={setSelectedRunConfigurationRevisionId}
+              onCreate={beginCreateRunConfiguration}
+              onRevise={() => setRevisingRunConfiguration(true)}
+            />
+          ) : workspaceView === 'cases' ? (
             <CaseRevisionPanel
               revisions={caseRevisions}
               selectedId={selectedCaseRevisionId}
@@ -836,6 +1019,34 @@ function App() {
           onSubmit={createCase}
         />
       )}
+      {(addingRunConfiguration || revisingRunConfiguration) &&
+        topology &&
+        catalog &&
+        selectedCaseRevision && (
+          <RunConfigurationForm
+            key={
+              revisingRunConfiguration
+                ? `revise-${selectedRunConfigurationRevisionId}`
+                : `create-${selectedCaseRevision.case_revision_id}`
+            }
+            topology={topology}
+            catalog={catalog}
+            modelRevisionId={selectedRevisionId}
+            caseRevision={selectedCaseRevision}
+            artifactRevisionIds={selectedArtifactRevisionIds}
+            revisions={visibleRunConfigurations}
+            base={
+              revisingRunConfiguration
+                ? selectedRunConfiguration
+                : undefined
+            }
+            onCancel={() => {
+              setAddingRunConfiguration(false)
+              setRevisingRunConfiguration(false)
+            }}
+            onSubmit={createRunConfiguration}
+          />
+        )}
     </main>
   )
 }

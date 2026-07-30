@@ -123,6 +123,88 @@ export interface ProjectModelValidation {
   }
 }
 
+export interface SteadySolverSettings {
+  max_iterations: number
+  residual_tolerance: number
+  step_tolerance: number
+  finite_difference_epsilon: number
+  min_damping: number
+  damping_reduction: number
+  sufficient_decrease: number
+  max_line_search_steps: number
+}
+
+export interface TransientSolverSettings {
+  start_time: number
+  end_time: number
+  initial_step: number
+  min_step: number
+  max_step: number
+  absolute_tolerance: number
+  relative_tolerance: number
+  max_steps: number
+  max_consecutive_rejections: number
+  compute_consistent_initial_conditions: boolean
+  nonlinear_solver: SteadySolverSettings
+}
+
+export type ResultValueScope =
+  | 'system_balance'
+  | 'kpi'
+  | 'component_metric'
+  | 'component_internal'
+  | 'port_primary'
+  | 'port_derived'
+
+export type ResultAggregation = 'final' | 'minimum' | 'maximum'
+
+export interface ResultProjection {
+  id: string
+  scope: ResultValueScope
+  component_id: string
+  port_name: string
+  value_name: string
+  dimension: string
+  aggregation: ResultAggregation
+}
+
+export interface RunConfigurationRevision {
+  schema_version: 'thermox.run_configuration_revision/v2'
+  run_configuration_revision_id: string
+  run_configuration_id: string
+  project_id: string
+  team_id: string
+  revision_number: number
+  parent_run_configuration_revision_id: string
+  model_revision_id: string
+  case_revision_id: string
+  artifact_revision_ids: string[]
+  mode: 'steady' | 'transient'
+  steady_solver: SteadySolverSettings
+  transient_solver: TransientSolverSettings
+  result_projections: ResultProjection[]
+  checksum: string
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface RunConfigurationRevisionList {
+  schema_version: 'thermox.run_configuration_revision_list/v1'
+  run_configuration_revisions: RunConfigurationRevision[]
+}
+
+export interface CreateRunConfiguration {
+  schema_version: 'thermox.run_configuration.create/v2'
+  run_configuration_id: string
+  parent_run_configuration_revision_id: string
+  model_revision_id: string
+  case_revision_id: string
+  artifact_revision_ids: string[]
+  steady_solver: SteadySolverSettings
+  transient_solver: TransientSolverSettings
+  result_projections: ResultProjection[]
+}
+
 export type CaseScalarField =
   | 'parameter_override'
   | 'fixed_value'
