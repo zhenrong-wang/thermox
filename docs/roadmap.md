@@ -85,7 +85,7 @@ Delivered:
 Production follow-ons:
 
 - higher-order BDF/IDA-style integration backend;
-- graph/block tearing, continuation, and richer rank/conditioning diagnostics.
+- graph/block tearing and richer rank/conditioning diagnostics.
 
 ## System-agnostic transient platform milestone
 
@@ -439,6 +439,9 @@ Work items:
    - analytic ideal-gas and HEOS CO2 derivatives plus centralized bounded IF97 fallback; ✅
    - rigid-volume and performance-map component migration to the shared contract; ✅
 5. Homotopy/continuation initialization strategies.
+   - adaptive, scale-aware residual homotopy with sparse derivative preservation and warm starts; ✅
+   - service, durable configuration, HTTP, CLI, and web settings plus stage diagnostics; ✅
+   - component-informed physical homotopy paths remain a follow-on.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.

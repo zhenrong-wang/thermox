@@ -30,8 +30,13 @@ interface RunConfigurationFormProps {
   onSubmit: (request: CreateRunConfiguration) => Promise<void>
 }
 
+type SteadyNumericKey = Exclude<
+  keyof SteadySolverSettings,
+  'continuation_enabled'
+>
+
 const steadyFields: Array<{
-  key: keyof SteadySolverSettings
+  key: SteadyNumericKey
   label: string
   integer?: boolean
 }> = [
@@ -45,6 +50,15 @@ const steadyFields: Array<{
   {
     key: 'max_line_search_steps',
     label: 'Line-search steps',
+    integer: true,
+  },
+  { key: 'continuation_initial_step', label: 'Continuation initial step' },
+  { key: 'continuation_minimum_step', label: 'Continuation minimum step' },
+  { key: 'continuation_step_growth', label: 'Continuation growth' },
+  { key: 'continuation_step_reduction', label: 'Continuation reduction' },
+  {
+    key: 'continuation_maximum_stages',
+    label: 'Continuation stages',
     integer: true,
   },
 ]
@@ -481,6 +495,19 @@ function SolverFields({
   return (
     <fieldset>
       <legend>{title}</legend>
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={value.continuation_enabled}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              continuation_enabled: event.target.checked,
+            })
+          }
+        />
+        <span>Use adaptive continuation</span>
+      </label>
       <div className="form-grid">
         {steadyFields.map((field) => (
           <label key={field.key}>

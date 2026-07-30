@@ -39,7 +39,13 @@ void append_steady_settings(
            << settings.min_damping << '|'
            << settings.damping_reduction << '|'
            << settings.sufficient_decrease << '|'
-           << settings.max_line_search_steps;
+           << settings.max_line_search_steps << '|'
+           << settings.continuation_enabled << '|'
+           << settings.continuation_initial_step << '|'
+           << settings.continuation_minimum_step << '|'
+           << settings.continuation_step_growth << '|'
+           << settings.continuation_step_reduction << '|'
+           << settings.continuation_maximum_stages;
 }
 
 void append_string(

@@ -1019,7 +1019,39 @@ std::string serialize_steady_response_json(
     out
         << ", \"message\": ";
     json_string(out, response.diagnostics.message);
-    out << "},\n  \"graph\": ";
+    out << "},\n  \"continuation\": {\"enabled\": "
+        << (response.continuation.enabled ? "true" : "false")
+        << ", \"converged\": "
+        << (response.continuation.converged ? "true" : "false")
+        << ", \"reached_parameter\": ";
+    json_number(out, response.continuation.reached_parameter);
+    out << ", \"accepted_stages\": "
+        << response.continuation.accepted_stages
+        << ", \"rejected_stages\": "
+        << response.continuation.rejected_stages
+        << ", \"message\": ";
+    json_string(out, response.continuation.message);
+    out << ", \"stages\": [";
+    for (std::size_t index = 0;
+         index < response.continuation.stages.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& stage =
+            response.continuation.stages[index];
+        out << "{\"start_parameter\": ";
+        json_number(out, stage.start_parameter);
+        out << ", \"target_parameter\": ";
+        json_number(out, stage.target_parameter);
+        out << ", \"accepted\": "
+            << (stage.accepted ? "true" : "false")
+            << ", \"nonlinear_iterations\": "
+            << stage.nonlinear_iterations
+            << ", \"final_residual_norm\": ";
+        json_number(out, stage.final_residual_norm);
+        out << ", \"message\": ";
+        json_string(out, stage.message);
+        out << '}';
+    }
+    out << "]},\n  \"graph\": ";
     graph_result_json(out, response.graph);
     out << ",\n  \"reduced_connection_equations\": [";
     for (std::size_t i = 0;

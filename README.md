@@ -247,6 +247,16 @@ JSON output:
 ./build/thermox_cli solve --model core/examples/air_compressor.json --format json
 ```
 
+For a difficult initial guess, opt into adaptive residual continuation:
+
+```sh
+./build/thermox_cli solve \
+  --model core/examples/air_compressor.json \
+  --case design \
+  --continuation \
+  --format json
+```
+
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,
 derived-property evaluation, provenance, and JSON result construction belong to the service.
@@ -430,3 +440,5 @@ is intentionally deferred until gateway identity and a public API endpoint exist
    derivatives, while IF97 uses the shared provenance-marked bounded fallback.
 3. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.
+4. Add component-informed homotopy hooks for pressure ratio, heat duty, reaction, and map coupling
+   on top of the generic adaptive continuation driver.

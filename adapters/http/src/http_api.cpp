@@ -976,6 +976,12 @@ void parse_steady_solver(
         "damping_reduction",
         "sufficient_decrease",
         "max_line_search_steps",
+        "continuation_enabled",
+        "continuation_initial_step",
+        "continuation_minimum_step",
+        "continuation_step_growth",
+        "continuation_step_reduction",
+        "continuation_maximum_stages",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1002,6 +1008,24 @@ void parse_steady_solver(
     solver.max_line_search_steps = tree.get(
         "max_line_search_steps",
         solver.max_line_search_steps);
+    solver.continuation_enabled = tree.get(
+        "continuation_enabled",
+        solver.continuation_enabled);
+    solver.continuation_initial_step = tree.get(
+        "continuation_initial_step",
+        solver.continuation_initial_step);
+    solver.continuation_minimum_step = tree.get(
+        "continuation_minimum_step",
+        solver.continuation_minimum_step);
+    solver.continuation_step_growth = tree.get(
+        "continuation_step_growth",
+        solver.continuation_step_growth);
+    solver.continuation_step_reduction = tree.get(
+        "continuation_step_reduction",
+        solver.continuation_step_reduction);
+    solver.continuation_maximum_stages = tree.get(
+        "continuation_maximum_stages",
+        solver.continuation_maximum_stages);
 }
 
 void parse_transient_solver(

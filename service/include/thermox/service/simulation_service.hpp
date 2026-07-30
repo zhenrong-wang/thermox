@@ -356,6 +356,25 @@ struct NonlinearDiagnostics {
     std::string message;
 };
 
+struct ContinuationStageDiagnostics {
+    double start_parameter{0.0};
+    double target_parameter{0.0};
+    bool accepted{false};
+    int nonlinear_iterations{0};
+    double final_residual_norm{0.0};
+    std::string message;
+};
+
+struct ContinuationRunDiagnostics {
+    bool enabled{false};
+    bool converged{false};
+    double reached_parameter{0.0};
+    int accepted_stages{0};
+    int rejected_stages{0};
+    std::string message;
+    std::vector<ContinuationStageDiagnostics> stages;
+};
+
 struct TimeIntegrationDiagnostics {
     bool success{false};
     int accepted_steps{0};
@@ -420,6 +439,12 @@ struct SteadySolverSettings {
     double damping_reduction{0.5};
     double sufficient_decrease{1.0e-4};
     int max_line_search_steps{50};
+    bool continuation_enabled{false};
+    double continuation_initial_step{0.25};
+    double continuation_minimum_step{1.0 / 64.0};
+    double continuation_step_growth{1.5};
+    double continuation_step_reduction{0.5};
+    int continuation_maximum_stages{100};
 };
 
 struct SteadySimulationRequest {
@@ -435,6 +460,7 @@ struct SteadySimulationResponse {
     ServiceError error;
     ExecutionMetadata metadata;
     NonlinearDiagnostics diagnostics;
+    ContinuationRunDiagnostics continuation;
     GraphResult graph;
     std::vector<std::string> reduced_connection_equations;
 

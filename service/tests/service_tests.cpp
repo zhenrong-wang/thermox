@@ -1347,6 +1347,52 @@ void test_steady_service() {
         "steady JSON must serialize complete execution provenance");
 }
 
+void test_steady_continuation_service() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json =
+        read_source_file("core/examples/air_compressor.json");
+    request.case_id = "design";
+    request.solver.continuation_enabled = true;
+    request.solver.continuation_initial_step = 0.2;
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "continued steady execution failed: " +
+            response.error.message);
+    require(
+        response.continuation.enabled &&
+            response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0 &&
+            response.continuation.accepted_stages > 1 &&
+            !response.continuation.stages.empty(),
+        "steady service must expose successful continuation "
+        "stages");
+    require(
+        std::any_of(
+            response.metadata.solver.settings.begin(),
+            response.metadata.solver.settings.end(),
+            [](const auto& setting) {
+                return setting.name ==
+                           "continuation_enabled" &&
+                       setting.value == 1.0;
+            }),
+        "steady provenance must record continuation settings");
+    require(
+        response.metadata.solver.contract_version ==
+            "thermox.newton-continuation/v1",
+        "continued solve must identify its solver contract");
+    const auto json =
+        thermox::service::serialize_steady_response_json(
+            response);
+    require(
+        json.find("\"continuation\": {\"enabled\": true") !=
+                std::string::npos &&
+            json.find("\"target_parameter\": 1") !=
+                std::string::npos,
+        "steady JSON must expose continuation diagnostics");
+}
+
 void test_explicit_system_boundary_balance() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -1679,6 +1725,7 @@ int main() {
         test_connection_contract_diagnostic();
         test_injectable_native_runtime();
         test_steady_service();
+        test_steady_continuation_service();
         test_explicit_system_boundary_balance();
         test_transient_service();
         test_structured_compilation_failure();

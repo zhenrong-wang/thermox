@@ -13,6 +13,12 @@ export const defaultSteadySolver: SteadySolverSettings = {
   damping_reduction: 0.5,
   sufficient_decrease: 1e-4,
   max_line_search_steps: 50,
+  continuation_enabled: false,
+  continuation_initial_step: 0.25,
+  continuation_minimum_step: 1 / 64,
+  continuation_step_growth: 1.5,
+  continuation_step_reduction: 0.5,
+  continuation_maximum_stages: 100,
 }
 
 export const defaultTransientSolver: TransientSolverSettings = {

@@ -180,7 +180,20 @@ void validate_steady_solver(
         value.damping_reduction <= 0.0 ||
         value.damping_reduction >= 1.0 ||
         !std::isfinite(value.sufficient_decrease) ||
-        value.sufficient_decrease <= 0.0) {
+        value.sufficient_decrease <= 0.0 ||
+        !std::isfinite(value.continuation_initial_step) ||
+        value.continuation_initial_step <= 0.0 ||
+        value.continuation_initial_step > 1.0 ||
+        !std::isfinite(value.continuation_minimum_step) ||
+        value.continuation_minimum_step <= 0.0 ||
+        value.continuation_minimum_step >
+            value.continuation_initial_step ||
+        !std::isfinite(value.continuation_step_growth) ||
+        value.continuation_step_growth <= 1.0 ||
+        !std::isfinite(value.continuation_step_reduction) ||
+        value.continuation_step_reduction <= 0.0 ||
+        value.continuation_step_reduction >= 1.0 ||
+        value.continuation_maximum_stages <= 0) {
         throw ProjectRequestError(
             "invalid steady solver settings");
     }
@@ -219,7 +232,13 @@ void append_steady(
         << value.min_damping << '|'
         << value.damping_reduction << '|'
         << value.sufficient_decrease << '|'
-        << value.max_line_search_steps;
+        << value.max_line_search_steps << '|'
+        << value.continuation_enabled << '|'
+        << value.continuation_initial_step << '|'
+        << value.continuation_minimum_step << '|'
+        << value.continuation_step_growth << '|'
+        << value.continuation_step_reduction << '|'
+        << value.continuation_maximum_stages;
 }
 
 std::string run_configuration_identity(

@@ -314,6 +314,24 @@ Tree steady_settings(
     tree.put(
         "max_line_search_steps",
         value.max_line_search_steps);
+    tree.put(
+        "continuation_enabled",
+        value.continuation_enabled);
+    tree.put(
+        "continuation_initial_step",
+        value.continuation_initial_step);
+    tree.put(
+        "continuation_minimum_step",
+        value.continuation_minimum_step);
+    tree.put(
+        "continuation_step_growth",
+        value.continuation_step_growth);
+    tree.put(
+        "continuation_step_reduction",
+        value.continuation_step_reduction);
+    tree.put(
+        "continuation_maximum_stages",
+        value.continuation_maximum_stages);
     return tree;
 }
 
@@ -334,6 +352,24 @@ service::SteadySolverSettings decode_steady_settings(
         tree.get<double>("sufficient_decrease");
     value.max_line_search_steps =
         tree.get<int>("max_line_search_steps");
+    value.continuation_enabled = tree.get(
+        "continuation_enabled",
+        value.continuation_enabled);
+    value.continuation_initial_step = tree.get(
+        "continuation_initial_step",
+        value.continuation_initial_step);
+    value.continuation_minimum_step = tree.get(
+        "continuation_minimum_step",
+        value.continuation_minimum_step);
+    value.continuation_step_growth = tree.get(
+        "continuation_step_growth",
+        value.continuation_step_growth);
+    value.continuation_step_reduction = tree.get(
+        "continuation_step_reduction",
+        value.continuation_step_reduction);
+    value.continuation_maximum_stages = tree.get(
+        "continuation_maximum_stages",
+        value.continuation_maximum_stages);
     return value;
 }
 

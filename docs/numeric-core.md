@@ -43,6 +43,11 @@ the intended path for property-domain and map-boundary failures.
 `analyze_problem_structure` validates names and dimensions and performs bipartite structural
 matching when a fixed Jacobian pattern is available.
 
+`solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
+It adaptively advances from an anchored initial-state problem to the exact target residual,
+warm-starting each stage and preserving dense, sparse, and hybrid derivative paths. See
+[Continuation Architecture](continuation-architecture.md).
+
 ## Transient DAE contract
 
 `DaeProblem` identifies differential and algebraic variables and supplies:
@@ -132,5 +137,5 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - The native transient backend is first-order and intended for index-1 DAEs.
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
-- A higher-order transient backend and broader sparse-backend performance/conditioning diagnostics
-  remain future integrations.
+- Component-informed homotopy paths, a higher-order transient backend, and broader
+  sparse-backend performance/conditioning diagnostics remain future integrations.

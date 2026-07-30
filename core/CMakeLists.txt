@@ -14,6 +14,7 @@ option(
     OFF
 )
 add_library(thermox_core
+    src/continuation_solver.cpp
     src/dae_equation_system.cpp
     src/dense_linear_solver.cpp
     src/equation_system.cpp

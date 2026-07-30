@@ -4,6 +4,7 @@
 #include "runtime_internal.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/continuation_solver.hpp"
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/model_document.hpp"
@@ -397,9 +398,43 @@ void validate_settings(const SteadySolverSettings& settings) {
         settings.damping_reduction <= 0.0 ||
         settings.damping_reduction >= 1.0 ||
         !std::isfinite(settings.sufficient_decrease) ||
-        settings.sufficient_decrease <= 0.0) {
+        settings.sufficient_decrease <= 0.0 ||
+        !std::isfinite(
+            settings.continuation_initial_step) ||
+        settings.continuation_initial_step <= 0.0 ||
+        settings.continuation_initial_step > 1.0 ||
+        !std::isfinite(
+            settings.continuation_minimum_step) ||
+        settings.continuation_minimum_step <= 0.0 ||
+        settings.continuation_minimum_step >
+            settings.continuation_initial_step ||
+        !std::isfinite(
+            settings.continuation_step_growth) ||
+        settings.continuation_step_growth <= 1.0 ||
+        !std::isfinite(
+            settings.continuation_step_reduction) ||
+        settings.continuation_step_reduction <= 0.0 ||
+        settings.continuation_step_reduction >= 1.0 ||
+        settings.continuation_maximum_stages <= 0) {
         throw std::invalid_argument("invalid steady solver settings");
     }
+}
+
+ContinuationOptions to_core_continuation(
+    const SteadySolverSettings& settings) {
+    validate_settings(settings);
+    ContinuationOptions options;
+    options.initial_step =
+        settings.continuation_initial_step;
+    options.minimum_step =
+        settings.continuation_minimum_step;
+    options.step_growth =
+        settings.continuation_step_growth;
+    options.step_reduction =
+        settings.continuation_step_reduction;
+    options.maximum_stages =
+        settings.continuation_maximum_stages;
+    return options;
 }
 
 SolverOptions to_core(const SteadySolverSettings& settings) {
@@ -511,7 +546,9 @@ ExecutionMetadata execution_metadata(
 SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
-        "thermox.newton/v1",
+        settings.continuation_enabled
+            ? "thermox.newton-continuation/v1"
+            : "thermox.newton/v1",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -525,6 +562,19 @@ SolverProvenance solver_provenance(
             {"max_line_search_steps",
              static_cast<double>(
                  settings.max_line_search_steps)},
+            {"continuation_enabled",
+             settings.continuation_enabled ? 1.0 : 0.0},
+            {"continuation_initial_step",
+             settings.continuation_initial_step},
+            {"continuation_minimum_step",
+             settings.continuation_minimum_step},
+            {"continuation_step_growth",
+             settings.continuation_step_growth},
+            {"continuation_step_reduction",
+             settings.continuation_step_reduction},
+            {"continuation_maximum_stages",
+             static_cast<double>(
+                 settings.continuation_maximum_stages)},
         },
     };
 }
@@ -604,6 +654,29 @@ NonlinearDiagnostics copy_diagnostics(
         source.linear_solver_backend,
         source.message,
     };
+}
+
+ContinuationRunDiagnostics copy_diagnostics(
+    const thermox::ContinuationDiagnostics& source) {
+    ContinuationRunDiagnostics result;
+    result.enabled = true;
+    result.converged = source.converged;
+    result.reached_parameter = source.reached_parameter;
+    result.accepted_stages = source.accepted_stages;
+    result.rejected_stages = source.rejected_stages;
+    result.message = source.message;
+    result.stages.reserve(source.stages.size());
+    for (const auto& stage : source.stages) {
+        result.stages.push_back({
+            stage.start_parameter,
+            stage.target_parameter,
+            stage.accepted,
+            stage.nonlinear.iterations,
+            stage.nonlinear.final_residual_norm,
+            stage.nonlinear.message,
+        });
+    }
+    return result;
 }
 
 TimeIntegrationDiagnostics copy_diagnostics(
@@ -1372,7 +1445,18 @@ SteadySimulationResponse SimulationService::run_steady(
 
     NonlinearSolveResult result;
     try {
-        result = solve_newton(graph.problem, options);
+        if (request.solver.continuation_enabled) {
+            auto continued = solve_continuation(
+                graph.problem, options,
+                to_core_continuation(request.solver));
+            result.x = std::move(continued.x);
+            result.diagnostics =
+                std::move(continued.diagnostics);
+            response.continuation = copy_diagnostics(
+                continued.continuation);
+        } else {
+            result = solve_newton(graph.problem, options);
+        }
     } catch (const std::exception& ex) {
         response.status = OperationStatus::solver_failed;
         response.error = make_error(

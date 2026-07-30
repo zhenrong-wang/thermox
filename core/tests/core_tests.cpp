@@ -1,4 +1,5 @@
 #include "thermox/dense_linear_solver.hpp"
+#include "thermox/continuation_solver.hpp"
 #include "thermox/equation_system.hpp"
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/sparse_linear_solver.hpp"
@@ -188,6 +189,66 @@ void test_newton_reuses_sparse_symbolic_factorization() {
         result.diagnostics.linear_solver_backend ==
             options.sparse_factorization->backend_name(),
         "Newton reports selected sparse backend");
+}
+
+void test_continuation_recovers_difficult_initial_guess() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"quadratic_target"};
+    problem.initial_guess = {1.0};
+    problem.variable_scales = {10.0};
+    problem.residual_scales = {100.0};
+    problem.lower_bounds = {0.0};
+    problem.upper_bounds = {100.0};
+    problem.residual = [](
+                           const std::vector<double>& x,
+                           std::vector<double>& residual) {
+        residual[0] = x[0] * x[0] - 100.0;
+    };
+    problem.sparse_jacobian_pattern =
+        thermox::sparse_from_triplets(
+            1, 1, {{0, 0, 1.0}})
+            .pattern();
+    problem.sparse_jacobian_values = [](
+                                           const std::vector<double>& x,
+                                           std::vector<double>& values) {
+        values[0] = 2.0 * x[0];
+    };
+
+    thermox::SolverOptions solver;
+    solver.max_iterations = 4;
+    solver.residual_tolerance = 1.0e-10;
+    const auto direct = thermox::solve_newton(problem, solver);
+    require(
+        !direct.diagnostics.converged,
+        "bounded direct solve should expose difficult start");
+
+    thermox::ContinuationOptions continuation;
+    continuation.initial_step = 0.05;
+    continuation.minimum_step = 1.0 / 1024.0;
+    continuation.step_growth = 1.5;
+    const auto result = thermox::solve_continuation(
+        problem, solver, continuation);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require(result.continuation.converged,
+            result.continuation.message);
+    require_near(
+        result.continuation.reached_parameter, 1.0, 0.0,
+        "continuation reaches target parameter");
+    require_near(result.x[0], 10.0, 1.0e-8,
+                 "continuation solves difficult target");
+    require(result.continuation.accepted_stages > 1,
+            "continuation uses staged warm starts");
+    require(
+        result.diagnostics.numeric_factorizations ==
+            result.diagnostics.linear_solver_evaluations,
+        "continuation aggregates numeric factorization work");
+    if (result.diagnostics.linear_solver_backend == "umfpack") {
+        require(
+            result.diagnostics.symbolic_factorizations == 1,
+            "fixed-pattern continuation reuses symbolic analysis");
+    }
 }
 
 void test_sparse_matrix_conversion_and_scaling() {
@@ -928,6 +989,7 @@ int main() {
         test_sparse_linear_solver();
         test_reusable_sparse_factorization();
         test_newton_reuses_sparse_symbolic_factorization();
+        test_continuation_recovers_difficult_initial_guess();
         test_sparse_matrix_conversion_and_scaling();
         test_sparse_matrix_validates_shape();
         test_variable_registry();

@@ -132,6 +132,12 @@ export interface SteadySolverSettings {
   damping_reduction: number
   sufficient_decrease: number
   max_line_search_steps: number
+  continuation_enabled: boolean
+  continuation_initial_step: number
+  continuation_minimum_step: number
+  continuation_step_growth: number
+  continuation_step_reduction: number
+  continuation_maximum_stages: number
 }
 
 export interface TransientSolverSettings {
@@ -382,6 +388,22 @@ export interface SteadySimulationResult {
     numeric_factorizations: number
     linear_solver_backend: string
     message: string
+  }
+  continuation: {
+    enabled: boolean
+    converged: boolean
+    reached_parameter: number
+    accepted_stages: number
+    rejected_stages: number
+    message: string
+    stages: Array<{
+      start_parameter: number
+      target_parameter: number
+      accepted: boolean
+      nonlinear_iterations: number
+      final_residual_norm: number
+      message: string
+    }>
   }
   graph: GraphResult
   reduced_connection_equations: string[]

@@ -197,7 +197,19 @@ void steady_solver_json(
         << ", \"sufficient_decrease\": "
         << solver.sufficient_decrease
         << ", \"max_line_search_steps\": "
-        << solver.max_line_search_steps << '}';
+        << solver.max_line_search_steps
+        << ", \"continuation_enabled\": "
+        << (solver.continuation_enabled ? "true" : "false")
+        << ", \"continuation_initial_step\": "
+        << solver.continuation_initial_step
+        << ", \"continuation_minimum_step\": "
+        << solver.continuation_minimum_step
+        << ", \"continuation_step_growth\": "
+        << solver.continuation_step_growth
+        << ", \"continuation_step_reduction\": "
+        << solver.continuation_step_reduction
+        << ", \"continuation_maximum_stages\": "
+        << solver.continuation_maximum_stages << '}';
 }
 
 void transient_solver_json(

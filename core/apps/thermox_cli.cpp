@@ -13,7 +13,7 @@ namespace {
 void print_usage(std::ostream& out) {
     out << "Usage:\n"
         << "  thermox_cli solve --model <path> [--case <id>]"
-           " [--format text|json]\n"
+           " [--continuation] [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
            " --end-time <seconds> [--format text|json]\n";
 }
@@ -71,6 +71,14 @@ void print_steady_text(
               << "converged: "
               << (response.diagnostics.converged ? "yes" : "no") << "\n"
               << "iterations: " << response.diagnostics.iterations << "\n";
+    if (response.continuation.enabled) {
+        std::cout << "continuation_parameter: "
+                  << response.continuation.reached_parameter
+                  << "\n"
+                  << "continuation_stages: "
+                  << response.continuation.accepted_stages
+                  << "\n";
+    }
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";
     }
@@ -107,6 +115,7 @@ int main(int argc, char** argv) {
     std::string case_id;
     std::string end_time_text;
     std::string format = "text";
+    bool continuation = false;
 
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -118,6 +127,8 @@ int main(int argc, char** argv) {
             end_time_text = argv[++i];
         } else if (arg == "--format" && i + 1 < argc) {
             format = argv[++i];
+        } else if (arg == "--continuation") {
+            continuation = true;
         } else if (arg == "--help" || arg == "-h") {
             print_usage(std::cout);
             return 0;
@@ -146,6 +157,10 @@ int main(int argc, char** argv) {
         std::cerr << "--end-time is only valid for simulate\n";
         return 2;
     }
+    if (command == "simulate" && continuation) {
+        std::cerr << "--continuation is only valid for solve\n";
+        return 2;
+    }
     if (command == "simulate" && end_time_text.empty()) {
         std::cerr << "Missing required --end-time for simulate\n";
         return 2;
@@ -158,6 +173,8 @@ int main(int argc, char** argv) {
             thermox::service::SteadySimulationRequest request;
             request.model_json = model_json;
             request.case_id = case_id;
+            request.solver.continuation_enabled =
+                continuation;
             const auto response = service.run_steady(request);
             if (format == "json") {
                 std::cout <<
