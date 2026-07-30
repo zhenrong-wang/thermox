@@ -422,7 +422,7 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Connect graph-canvas authoring to the existing typed immutable edit-batch service.
+1. Add selection-driven component/connection inspection, update, and removal to the graph workspace.
 2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 3. Add analytic property-derivative APIs; the rigid volume currently

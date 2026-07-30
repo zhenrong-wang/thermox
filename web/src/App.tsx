@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
+import { ComponentForm } from './ComponentForm'
+import { buildConnectionOperation } from './graphAuthoring'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
   Catalog,
+  CatalogComponent,
+  ComponentDefinition,
+  GraphEditOperation,
   ModelRevision,
   Project,
   TopologyDocument,
@@ -23,6 +29,11 @@ function App() {
   const [filter, setFilter] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [publishing, setPublishing] = useState(false)
+  const [operationError, setOperationError] = useState('')
+  const [operationStatus, setOperationStatus] = useState('')
+  const [newComponentType, setNewComponentType] =
+    useState<CatalogComponent>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -102,6 +113,87 @@ function App() {
         ),
     )
   }, [catalog, filter])
+
+  async function publishEdits(
+    operations: GraphEditOperation[],
+    successMessage: string,
+  ) {
+    if (!selectedProjectId || !selectedRevisionId) {
+      throw new Error('Select a topology revision before editing.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const child = await api.applyGraphEdits(
+        selectedProjectId,
+        selectedRevisionId,
+        operations,
+      )
+      setRevisions((current) => [
+        child,
+        ...current.filter(
+          (item) => item.model_revision_id !== child.model_revision_id,
+        ),
+      ])
+      setSelectedRevisionId(child.model_revision_id)
+      setOperationStatus(
+        `${successMessage} Published revision r${child.revision_number}.`,
+      )
+      return child
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function addComponent(component: ComponentDefinition) {
+    await publishEdits(
+      [
+        {
+          action: 'upsert',
+          entity_type: 'component',
+          entity_id: component.id,
+          entity: { ...component },
+        },
+      ],
+      `Added ${component.id}.`,
+    )
+    setNewComponentType(undefined)
+  }
+
+  async function connectPorts(connection: Connection) {
+    if (
+      !topology ||
+      !connection.source ||
+      !connection.target ||
+      !connection.sourceHandle ||
+      !connection.targetHandle
+    ) {
+      setOperationError('A connection requires two concrete component ports.')
+      return
+    }
+    if (!catalog) {
+      setOperationError('The runtime catalog is not loaded.')
+      return
+    }
+    try {
+      const operation = buildConnectionOperation(
+        connection,
+        topology,
+        catalog,
+      )
+      await publishEdits(
+        [operation],
+        `Connected ${connection.source}.${connection.sourceHandle} to ${connection.target}.${connection.targetHandle}.`,
+      )
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -208,6 +300,24 @@ function App() {
               <code>{selectedRevision?.checksum.slice(7, 19) ?? '—'}</code>
             </div>
           </div>
+          {(operationError || operationStatus || publishing) && (
+            <div
+              className={`operation-banner${operationError ? ' is-error' : ''}`}
+            >
+              {publishing
+                ? 'Publishing immutable child revision…'
+                : operationError || operationStatus}
+              <button
+                type="button"
+                onClick={() => {
+                  setOperationError('')
+                  setOperationStatus('')
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
           {error ? (
             <div className="error-state">
               <strong>Could not load the Thermox API</strong>
@@ -219,6 +329,9 @@ function App() {
             <TopologyCanvas
               topology={topology}
               catalog={catalog?.components ?? []}
+              revisionId={selectedRevisionId}
+              publishing={publishing}
+              onConnect={connectPorts}
             />
           )}
         </section>
@@ -239,7 +352,13 @@ function App() {
           </label>
           <div className="component-list">
             {palette.map((component) => (
-              <article className="component-card" key={component.kind}>
+              <button
+                type="button"
+                className="component-card"
+                key={component.kind}
+                disabled={!topology || publishing}
+                onClick={() => setNewComponentType(component)}
+              >
                 <div>
                   <span className="kind-family">{shortKind(component.kind)}</span>
                   {component.supports_transient && (
@@ -255,7 +374,7 @@ function App() {
                     </span>
                   ))}
                 </div>
-              </article>
+              </button>
             ))}
           </div>
           <footer>
@@ -264,6 +383,14 @@ function App() {
           </footer>
         </aside>
       </section>
+      {newComponentType && topology && (
+        <ComponentForm
+          componentType={newComponentType}
+          topology={topology}
+          onCancel={() => setNewComponentType(undefined)}
+          onSubmit={addComponent}
+        />
+      )}
     </main>
   )
 }

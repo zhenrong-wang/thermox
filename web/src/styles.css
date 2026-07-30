@@ -444,12 +444,17 @@ code {
 }
 
 .component-card {
+  width: 100%;
+  display: block;
   margin-bottom: 7px;
   padding: 10px;
   border: 1px solid #dee6ea;
   border-left: 3px solid #4f9cba;
   border-radius: 4px;
   background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   transition:
     border-color 120ms ease,
     transform 120ms ease;
@@ -458,6 +463,12 @@ code {
 .component-card:hover {
   border-color: #9fc4d4;
   transform: translateX(-2px);
+}
+
+.component-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
 }
 
 .component-card > div:first-child {
@@ -640,6 +651,224 @@ code {
   background: #f8fafb;
 }
 
+.operation-banner {
+  position: absolute;
+  z-index: 4;
+  top: 78px;
+  left: 50%;
+  max-width: calc(100% - 40px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 9px 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid #9bc5b0;
+  border-radius: 4px;
+  background: #edf9f2;
+  box-shadow: 0 5px 15px rgba(31, 68, 55, 0.12);
+  color: #2d6750;
+  font-size: 10px;
+}
+
+.operation-banner.is-error {
+  border-color: #dfaaa6;
+  background: #fff1f0;
+  color: #8e3f39;
+}
+
+.operation-banner button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 31, 47, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.component-dialog {
+  width: min(720px, 100%);
+  max-height: min(850px, calc(100vh - 48px));
+  overflow-y: auto;
+  border: 1px solid #b8c9d3;
+  border-radius: 7px;
+  background: #fbfcfc;
+  box-shadow: 0 24px 70px rgba(10, 32, 49, 0.28);
+}
+
+.component-dialog > header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 20px;
+  border-bottom: 1px solid #dce4e8;
+  background: rgba(251, 252, 252, 0.97);
+}
+
+.component-dialog h2 {
+  margin: 3px 0 0;
+  font-size: 17px;
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #d5e0e5;
+  border-radius: 4px;
+  background: #f1f5f6;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.dialog-kind {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 20px 0;
+  padding: 9px 11px;
+  border-left: 3px solid #3b96b6;
+  background: #eef5f7;
+  color: #45697d;
+  font-size: 10px;
+}
+
+.dialog-kind span {
+  color: #82929c;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 20px 0;
+}
+
+.component-dialog fieldset {
+  margin: 18px 20px 0;
+  padding: 0 0 16px;
+  border: 1px solid #dce5e9;
+  border-radius: 5px;
+}
+
+.component-dialog fieldset .form-grid {
+  padding-top: 10px;
+}
+
+.component-dialog legend {
+  margin-left: 10px;
+  padding: 0 7px;
+  color: #637886;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.component-dialog label {
+  display: grid;
+  gap: 5px;
+  color: #4d6575;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.component-dialog label > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.component-dialog label small {
+  color: #91a0aa;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.component-dialog input,
+.component-dialog select {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid #ccd9df;
+  border-radius: 4px;
+  outline: none;
+  background: #fff;
+  color: #263f51;
+  font-size: 11px;
+}
+
+.component-dialog input:focus,
+.component-dialog select:focus {
+  border-color: #4f9cba;
+  box-shadow: 0 0 0 2px rgba(79, 156, 186, 0.12);
+}
+
+.form-error {
+  margin: 16px 20px 0;
+  padding: 9px 11px;
+  border: 1px solid #e1b5b1;
+  border-radius: 4px;
+  background: #fff2f1;
+  color: #913d37;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.component-dialog > footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+  padding: 13px 20px;
+  border-top: 1px solid #dce4e8;
+  background: rgba(251, 252, 252, 0.97);
+}
+
+.primary-button,
+.secondary-button {
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.primary-button {
+  border: 1px solid #176d93;
+  background: #176d93;
+  color: #fff;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.secondary-button {
+  border: 1px solid #ccd9df;
+  background: #fff;
+  color: #526877;
+}
+
 @media (max-width: 1050px) {
   .workspace {
     grid-template-columns: 180px minmax(430px, 1fr) 245px;
@@ -656,5 +885,11 @@ code {
 
   .context select {
     min-width: 130px;
+  }
+}
+
+@media (max-width: 700px) {
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }

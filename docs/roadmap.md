@@ -371,9 +371,13 @@ Work items:
 4. Create React/TypeScript web app. ✅
 5. Implement graph canvas with typed ports.
    - immutable topology visualization and revision selection; ✅
-   - connection/component authoring through typed edit batches.
+   - catalog-driven component creation and typed connection authoring through immutable edit
+     batches; ✅
+   - selection-driven update and removal.
 6. Component palette generated from backend component registry. ✅
 7. Parameter forms with units and validation.
+   - catalog-driven SI component creation forms with service-authoritative validation; ✅
+   - display-unit conversion and instance editing.
 8. Case editor using the revision-backed authoring service.
 9. Run monitor and result overlay on graph.
 10. Stream/result table views.

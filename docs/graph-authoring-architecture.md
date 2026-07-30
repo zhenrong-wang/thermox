@@ -60,6 +60,14 @@ The HTTP adapter only validates and maps the wire document. It wraps each entity
 platform fragment schema and invokes the transport-neutral `ProjectService` command. Consequently,
 future RPC and local bindings do not need to reproduce graph rules.
 
+The React workspace consumes this contract directly. Its component-creation form is generated from
+the runtime catalog: registered ports select existing medium/material IDs, parameters are entered
+as explicit SI values against catalog bounds and defaults, and artifact roles remain instance
+bindings. Canvas connections use the two selected catalog ports to choose a registered connector
+domain, connection kind, and exact contract version. A successful command selects the returned
+child revision; the browser never mutates the loaded parent document in place. Client checks are
+interaction guidance only—the service remains authoritative and may reject the whole batch.
+
 ## Case authoring
 
 Operating cases use the same immutable-parent pattern:

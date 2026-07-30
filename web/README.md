@@ -5,11 +5,14 @@ client does not parse or compile physical models, infer ports, validate connecti
 edits, or run simulations. Those responsibilities remain behind the versioned HTTP application
 contract.
 
-The first slice provides:
+The workspace currently provides:
 
 - Team-scoped project and immutable topology-revision browsing;
 - a graph canvas whose nodes and typed ports come from persisted topology plus the runtime catalog;
 - a searchable component palette generated from `thermox.catalog/v3`;
+- catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
+- typed port-to-port connection authoring using registered connector contracts;
+- atomic publication of every accepted edit as a new immutable child revision;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:
@@ -31,6 +34,7 @@ Verification is intentionally bounded:
 
 ```sh
 npm run typecheck
+npm test
 npm run build
 ```
 

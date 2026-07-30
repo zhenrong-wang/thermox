@@ -1,5 +1,6 @@
 import type {
   Catalog,
+  GraphEditOperation,
   ModelRevision,
   ModelRevisionList,
   ProjectList,
@@ -30,6 +31,30 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T
 }
 
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!response.ok) {
+    const responseBody = await response.text()
+    throw new ApiError(
+      response.status,
+      responseBody || `${response.status} ${response.statusText}`,
+    )
+  }
+  return (await response.json()) as T
+}
+
 export const api = {
   catalog: (signal?: AbortSignal) =>
     getJson<Catalog>('/api/v1/catalog', signal),
@@ -47,6 +72,20 @@ export const api = {
   ) =>
     getJson<ModelRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  applyGraphEdits: (
+    projectId: string,
+    revisionId: string,
+    operations: GraphEditOperation[],
+    signal?: AbortSignal,
+  ) =>
+    postJson<ModelRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(revisionId)}/edits`,
+      {
+        schema_version: 'thermox.graph_edit_batch/v1',
+        operations,
+      },
       signal,
     ),
 }

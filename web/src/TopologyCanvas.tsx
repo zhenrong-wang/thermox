@@ -4,6 +4,7 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
+  type Connection,
   type Edge,
   type Node,
 } from '@xyflow/react'
@@ -14,6 +15,9 @@ import type { CatalogComponent, TopologyDocument } from './types'
 interface TopologyCanvasProps {
   topology?: TopologyDocument
   catalog: CatalogComponent[]
+  revisionId: string
+  publishing: boolean
+  onConnect: (connection: Connection) => Promise<void>
 }
 
 function endpoint(value: string): [string, string] {
@@ -65,6 +69,9 @@ const nodeTypes = { topology: TopologyNode }
 export function TopologyCanvas({
   topology,
   catalog,
+  revisionId,
+  publishing,
+  onConnect,
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
@@ -79,16 +86,53 @@ export function TopologyCanvas({
   const catalogByKind = new Map(catalog.map((item) => [item.kind, item]))
   const nodes = layoutNodes(topology, catalogByKind)
   const edges = layoutEdges(topology)
+  const componentsById = new Map(
+    topology.model.components.map((component) => [component.id, component]),
+  )
+  const connectionDomain = (
+    componentId: string | null,
+    handleId: string | null,
+  ) => {
+    if (!componentId || !handleId) return undefined
+    const component = componentsById.get(componentId)
+    if (!component) return undefined
+    return catalogByKind
+      .get(component.kind)
+      ?.ports.find((port) => port.name === handleId)?.domain
+  }
+  const validConnection = (connection: Connection | Edge) => {
+    if (
+      connection.source === connection.target ||
+      !connection.sourceHandle ||
+      !connection.targetHandle
+    ) {
+      return false
+    }
+    const sourceDomain = connectionDomain(
+      connection.source,
+      connection.sourceHandle,
+    )
+    return (
+      sourceDomain !== undefined &&
+      sourceDomain ===
+        connectionDomain(connection.target, connection.targetHandle)
+    )
+  }
 
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      key={revisionId}
+      defaultNodes={nodes}
+      defaultEdges={edges}
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.22 }}
       nodesDraggable
-      nodesConnectable={false}
+      nodesConnectable={!publishing}
+      isValidConnection={validConnection}
+      onConnect={(connection) => {
+        void onConnect(connection)
+      }}
       elementsSelectable
       minZoom={0.2}
       maxZoom={2}

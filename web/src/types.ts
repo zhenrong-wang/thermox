@@ -115,9 +115,47 @@ export interface CatalogComponent {
   }>
 }
 
+export interface ConnectorDomain {
+  domain: string
+  contract_version: string
+  connection_kind: string
+  variables: Array<{
+    name: string
+    dimension: string
+    initial_value_si: number
+    scale_si: number
+    expand_species: boolean
+  }>
+}
+
 export interface Catalog {
   schema_version: 'thermox.catalog/v3'
   status: string
   fingerprint: string
   components: CatalogComponent[]
+  connector_domains: ConnectorDomain[]
 }
+
+export type GraphEntityType =
+  | 'medium'
+  | 'material'
+  | 'component'
+  | 'connection'
+
+export interface GraphUpsertOperation {
+  action: 'upsert'
+  entity_type: GraphEntityType
+  entity_id: string
+  entity: Record<string, unknown>
+}
+
+export interface GraphRemoveOperation {
+  action: 'remove'
+  entity_type: GraphEntityType
+  entity_id: string
+  cascade?: boolean
+}
+
+export type GraphEditOperation =
+  | GraphUpsertOperation
+  | GraphRemoveOperation
