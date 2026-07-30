@@ -447,8 +447,10 @@ Work items:
      and strict target-domain enforcement; ✅
    - fixed-duty and counterflow-UA heat-exchanger staging, including recovery from reversed
      terminal-temperature initial guesses with strict target LMTD enforcement; ✅
-   - composition-coupled material-map initialization and reaction/equilibrium policies remain
-     follow-ons.
+   - adiabatic-equilibrium combustor pressure, enthalpy, product-composition, and
+     continuation-only reactant-domain staging with strict target chemistry enforcement; ✅
+   - composition-coupled material-map initialization and future finite-rate/multi-zone reactor
+     policies remain follow-ons.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.

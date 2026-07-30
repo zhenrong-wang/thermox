@@ -2730,6 +2730,76 @@ void test_adiabatic_equilibrium_combustor() {
             combustor.metrics, "net_energy_flow"),
         0.0, 1.0e-4,
         "combustor component metric exposes energy closure");
+
+    auto difficult = document;
+    difficult.cases.front().initial_guesses = {
+        {"combustor.air_inlet.m_dot[N2]",
+         {-8.0, "kg/s", "mass_flow"}},
+        {"combustor.air_inlet.m_dot[O2]",
+         {-2.0, "kg/s", "mass_flow"}},
+        {"combustor.fuel_inlet.m_dot[N2]",
+         {-1.0, "kg/s", "mass_flow"}},
+        {"combustor.fuel_inlet.m_dot[O2]",
+         {-1.0, "kg/s", "mass_flow"}},
+        {"combustor.outlet.p",
+         {-100000.0, "Pa", "pressure"}},
+        {"combustor.outlet.h",
+         {-100000.0, "J/kg", "specific_enthalpy"}},
+        {"combustor.outlet.m_dot[N2]",
+         {-1.0, "kg/s", "mass_flow"}},
+        {"combustor.outlet.m_dot[O2]",
+         {-1.0, "kg/s", "mass_flow"}},
+    };
+    const auto difficult_graph =
+        thermox::platform::compile_model_graph(
+            difficult,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            thermox::platform::PerformanceMapRegistry{},
+            chemistry, "design");
+    const auto difficult_direct =
+        thermox::solve_newton(difficult_graph.problem);
+    require(
+        !difficult_direct.diagnostics.converged &&
+            difficult_direct.diagnostics.message.find(
+                "species mass flows must be nonnegative") !=
+                std::string::npos,
+        "direct equilibrium solve must reject invalid reactant "
+        "guesses: " +
+            difficult_direct.diagnostics.message);
+
+    thermox::ContinuationOptions continuation_options;
+    continuation_options.minimum_step = 1.0 / 1024.0;
+    const auto difficult_continued =
+        thermox::solve_continuation(
+            difficult_graph.problem, {},
+            continuation_options);
+    require(
+        difficult_continued.continuation.converged,
+        difficult_continued.continuation.message);
+    require(
+        difficult_continued.continuation.used_informed_path,
+        "equilibrium combustor reports its informed chemistry path");
+    const auto continued_value =
+        [&](const std::string& name) {
+            return difficult_continued.x.at(
+                require_variable_index(
+                    difficult_graph.problem.variable_names,
+                    name));
+        };
+    require_near(
+        continued_value("combustor.outlet.p"),
+        value("combustor.outlet.p"), 1.0e-6,
+        "combustor continuation preserves target pressure");
+    require_near(
+        continued_value("combustor.outlet.h"),
+        value("combustor.outlet.h"), 1.0e-4,
+        "combustor continuation preserves target enthalpy");
+    require_near(
+        continued_value("combustor.outlet.m_dot[N2]"),
+        value("combustor.outlet.m_dot[N2]"), 1.0e-8,
+        "combustor continuation preserves target composition");
 }
 
 void test_material_compressor_and_turbine() {

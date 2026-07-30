@@ -80,6 +80,14 @@ the evaluated differences. This permits recovery from reversed outlet-temperatur
 weakening the target: `lambda = 1` still evaluates the original strict positive-terminal-difference
 LMTD equation.
 
+The adiabatic-equilibrium material combustor stages its pressure ratio from the anchor-implied
+ratio, and stages outlet enthalpy and each product-species flow from the anchor values to the
+thermochemistry backend result. Intermediate equilibrium calls project finite negative reactant
+flow guesses to a vanishing positive floor and protect pressure with a positive floor while the
+compiled boundary and connection equations move the operating state into its physical domain.
+These projections are continuation-only: `lambda = 1` passes the actual pressure, enthalpy, and
+reactant composition to the unmodified equilibrium backend.
+
 ## Derivative preservation
 
 The wrapper preserves the target derivative path:
@@ -116,6 +124,6 @@ The generic fallback remains residual homotopy, and a component hook does not gu
 nonlinear branch connects smoothly from the anchor to the desired physical solution. Components
 without a hook must still be evaluable at the first positive continuation stage.
 
-Composition-coupled material-map initialization and reaction/equilibrium introduction are the next
-component policies. They belong behind this same extension contract; they must not become
-cycle-specific solver logic.
+Composition-coupled material-map initialization and continuation for future finite-rate or
+multi-zone reactor models remain component policies. They belong behind this same extension
+contract; they must not become cycle-specific solver logic.

@@ -2,6 +2,7 @@
 #include "component_model_support.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -46,11 +47,12 @@ public:
           outlet_pressure_(outlet_pressure) {}
 
     EquilibriumEvaluation evaluate(
-        const std::vector<double>& x) const {
+        const std::vector<double>& x,
+        double continuation_parameter = 1.0) const {
         std::scoped_lock lock(mutex_);
         std::vector<double> key;
         key.reserve(
-            air_flow_.size() + fuel_flow_.size() + 3);
+            air_flow_.size() + fuel_flow_.size() + 4);
         for (const auto variable : air_flow_) {
             key.push_back(x.at(variable));
         }
@@ -60,6 +62,7 @@ public:
         key.push_back(x.at(air_enthalpy_));
         key.push_back(x.at(fuel_enthalpy_));
         key.push_back(x.at(outlet_pressure_));
+        key.push_back(continuation_parameter);
         if (key == last_key_) {
             return last_;
         }
@@ -67,10 +70,35 @@ public:
         std::vector<double> mass_fractions(species_.size(), 0.0);
         double air_mass = 0.0;
         double fuel_mass = 0.0;
+        const bool target_problem =
+            continuation_parameter >= 1.0;
+        const double intermediate_flow_floor =
+            std::max(
+                (1.0 - continuation_parameter) * 1.0e-12,
+                std::numeric_limits<double>::min());
         for (std::size_t index = 0; index < species_.size();
              ++index) {
-            const double air = x.at(air_flow_.at(index));
-            const double fuel = x.at(fuel_flow_.at(index));
+            const double raw_air =
+                x.at(air_flow_.at(index));
+            const double raw_fuel =
+                x.at(fuel_flow_.at(index));
+            if (!std::isfinite(raw_air) ||
+                !std::isfinite(raw_fuel)) {
+                last_ = {
+                    EvaluationStatus::recoverable(
+                        "combustor inlet species mass flows must "
+                        "be finite"),
+                    {}, 0.0};
+                return last_;
+            }
+            const double air = target_problem
+                ? raw_air
+                : std::max(
+                      raw_air, intermediate_flow_floor);
+            const double fuel = target_problem
+                ? raw_fuel
+                : std::max(
+                      raw_fuel, intermediate_flow_floor);
             if (air < 0.0 || fuel < 0.0) {
                 last_ = {
                     EvaluationStatus::recoverable(
@@ -99,8 +127,11 @@ public:
             (air_mass * x.at(air_enthalpy_) +
              fuel_mass * x.at(fuel_enthalpy_)) /
             total_mass;
+        const double outlet_pressure = target_problem
+            ? x.at(outlet_pressure_)
+            : std::max(x.at(outlet_pressure_), 1.0);
         const auto result = package_->equilibrate_hp(
-            x.at(outlet_pressure_), mixed_enthalpy,
+            outlet_pressure, mixed_enthalpy,
             physics::SpeciesComposition{
                 physics::CompositionBasis::mass_fraction,
                 species_, std::move(mass_fractions)});
@@ -208,6 +239,9 @@ public:
             require_port_variable(context, "outlet.p");
         const auto outlet_h =
             require_port_variable(context, "outlet.h");
+        const double pressure_ratio =
+            required_parameter(
+                context.component, "pressure_ratio");
         const auto cache = std::make_shared<EquilibriumCache>(
             package, species, air_flow, fuel_flow,
             require_port_variable(context, "air_inlet.h"),
@@ -218,43 +252,85 @@ public:
         system.add_linear_equation(
             prefix + "fuel_inlet_pressure",
             {{fuel_p, 1.0}, {air_p, -1.0}}, 0.0, 100000.0);
-        system.add_linear_equation(
+        system.add_continuation_linear_equation(
             prefix + "pressure_ratio",
             {{outlet_p, 1.0},
-             {air_p, -required_parameter(
-                         context.component, "pressure_ratio")}},
-            0.0, 100000.0);
-        system.add_checked_equation(
+             {air_p, -pressure_ratio}},
+            0.0,
+            [air_p, outlet_p, pressure_ratio](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                double anchor_pressure_ratio =
+                    anchor.at(outlet_p) /
+                    anchor.at(air_p);
+                if (!std::isfinite(anchor_pressure_ratio) ||
+                    anchor_pressure_ratio <= 0.0) {
+                    anchor_pressure_ratio = 1.0;
+                }
+                const double staged_pressure_ratio =
+                    anchor_pressure_ratio +
+                    continuation_parameter *
+                        (pressure_ratio -
+                         anchor_pressure_ratio);
+                jacobian.push_back({outlet_p, 1.0});
+                jacobian.push_back(
+                    {air_p, -staged_pressure_ratio});
+                return x.at(outlet_p) -
+                    staged_pressure_ratio * x.at(air_p);
+            },
+            100000.0);
+        system.add_continuation_checked_equation(
             prefix + "adiabatic_enthalpy",
             [cache, outlet_h](
-                const std::vector<double>& x, double& residual) {
-                const auto equilibrium = cache->evaluate(x);
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                double& residual) {
+                const auto equilibrium = cache->evaluate(
+                    x, continuation_parameter);
                 if (!equilibrium.status.ok()) {
                     return equilibrium.status;
                 }
-                residual = x.at(outlet_h) -
-                    equilibrium.state.thermodynamic
-                        .enthalpy_j_kg;
+                const double staged_enthalpy =
+                    anchor.at(outlet_h) +
+                    continuation_parameter *
+                        (equilibrium.state.thermodynamic
+                             .enthalpy_j_kg -
+                         anchor.at(outlet_h));
+                residual =
+                    x.at(outlet_h) - staged_enthalpy;
                 return EvaluationStatus::success();
             },
             1000000.0);
         for (std::size_t index = 0; index < species.size();
              ++index) {
-            system.add_checked_equation(
+            system.add_continuation_checked_equation(
                 prefix + "equilibrium_species." +
                     species.at(index),
                 [cache, outlet = outlet_flow.at(index), index](
                     const std::vector<double>& x,
+                    const std::vector<double>& anchor,
+                    double continuation_parameter,
                     double& residual) {
-                    const auto equilibrium = cache->evaluate(x);
+                    const auto equilibrium = cache->evaluate(
+                        x, continuation_parameter);
                     if (!equilibrium.status.ok()) {
                         return equilibrium.status;
                     }
-                    residual = x.at(outlet) -
+                    const double equilibrium_flow =
                         equilibrium.inlet_mass_flow *
                             equilibrium.state.composition
                                 .fractions()
                                 .at(index);
+                    const double staged_flow =
+                        anchor.at(outlet) +
+                        continuation_parameter *
+                            (equilibrium_flow -
+                             anchor.at(outlet));
+                    residual =
+                        x.at(outlet) - staged_flow;
                     return EvaluationStatus::success();
                 },
                 100.0);

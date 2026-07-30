@@ -441,5 +441,5 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 3. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.
 4. Extend the delivered anchor-aware component homotopy hooks from fixed/fluid-map
-   turbomachinery and heat exchangers to composition-coupled material maps and
-   reaction/equilibrium coupling.
+   turbomachinery, heat exchangers, and the equilibrium combustor to
+   composition-coupled material maps and future finite-rate reactor models.
