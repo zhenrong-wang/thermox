@@ -32,6 +32,10 @@ The workspace currently provides:
 - read-only projected-result overlays on the bound system topology;
 - system balance, KPI, component, internal-state, and port/stream result tables;
 - transient trajectory sample selection and event inspection using the same graph-native contract;
+- persistent SI/engineering display profiles shared across authoring, inspection, run summaries,
+  graph overlays, and result tables;
+- reversible dimension-aware component-parameter conversion with SI publication and unchanged
+  fallback for extension-defined dimensions;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

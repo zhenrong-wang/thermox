@@ -1,4 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayValue } from './displayUnits'
 import { formatResultValue, type ResultNodeValue } from './resultPresentation'
 import type { CatalogPort, ComponentDefinition } from './types'
 
@@ -23,6 +25,7 @@ function portColor(domain: string): string {
 }
 
 export function TopologyNode({ data, selected }: NodeProps) {
+  const { profile } = useDisplayUnits()
   const nodeData = data as TopologyNodeData
   const inputs = nodeData.ports.filter(
     (port) => port.direction === 'in' || port.direction === 'bidirectional',
@@ -85,11 +88,20 @@ export function TopologyNode({ data, selected }: NodeProps) {
       {nodeData.resultValues && nodeData.resultValues.length > 0 && (
         <div className="node-results">
           {nodeData.resultValues.slice(0, 3).map((value) => (
-            <div key={`${value.label}-${value.dimension}`}>
-              <span>{value.label}</span>
-              <code>{formatResultValue(value.valueSi)}</code>
-              <small>{value.dimension}</small>
-            </div>
+            (() => {
+              const displayed = displayValue(
+                value.valueSi,
+                value.dimension,
+                profile,
+              )
+              return (
+                <div key={`${value.label}-${value.dimension}`}>
+                  <span>{value.label}</span>
+                  <code>{formatResultValue(displayed.value)}</code>
+                  <small>{displayed.unit}</small>
+                </div>
+              )
+            })()
           ))}
           {nodeData.resultValues.length > 3 && (
             <small>+{nodeData.resultValues.length - 3} more</small>

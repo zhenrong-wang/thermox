@@ -47,6 +47,7 @@ export function InspectorPanel({
   onRemoveConnection,
   onClose,
 }: InspectorPanelProps) {
+  const { profile } = useDisplayUnits()
   const component =
     selection.type === 'component'
       ? topology.model.components.find((item) => item.id === selection.id)
@@ -101,15 +102,44 @@ export function InspectorPanel({
         <section>
           <h3>Parameters</h3>
           {Object.entries(component.parameters ?? {}).map(([name, value]) => (
-            <DetailRow
-              key={name}
-              label={name}
-              value={
+            (() => {
+              const parameter = descriptor?.parameters.find(
+                (item) => item.name === name,
+              )
+              const record =
+                value && typeof value === 'object'
+                  ? (value as Record<string, unknown>)
+                  : undefined
+              const valueSi =
                 typeof value === 'number'
-                  ? String(value)
-                  : JSON.stringify(value)
+                  ? value
+                  : typeof record?.value_si === 'number'
+                    ? record.value_si
+                    : typeof record?.value === 'number'
+                      ? record.value
+                      : undefined
+              if (!parameter || valueSi === undefined) {
+                return (
+                  <DetailRow
+                    key={name}
+                    label={name}
+                    value={JSON.stringify(value)}
+                  />
+                )
               }
-            />
+              const displayed = displayValue(
+                valueSi,
+                parameter.dimension,
+                profile,
+              )
+              return (
+                <DetailRow
+                  key={name}
+                  label={name}
+                  value={`${formatResultValue(displayed.value)} ${displayed.unit}`}
+                />
+              )
+            })()
           ))}
         </section>
         <footer>
@@ -179,3 +209,6 @@ export function InspectorPanel({
 
   return null
 }
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayValue } from './displayUnits'
+import { formatResultValue } from './resultPresentation'

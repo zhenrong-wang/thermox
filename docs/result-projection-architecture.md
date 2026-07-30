@@ -36,3 +36,10 @@ the node overlay. The same graph feeds system-balance, KPI, component, internal-
 port/stream tables. The browser does not derive thermal-cycle semantics: custom components,
 connector domains, and result dimensions remain first-class because the presentation follows
 stable graph identities.
+
+Result artifacts and summaries remain canonical SI. A browser-local display profile applies
+reversible dimension-keyed conversion to summaries, overlays, tables, and transient derivatives;
+offset units apply their offset only to absolute values. Unknown extension-defined dimensions are
+shown unchanged rather than assigned a guessed unit. The built-in presentation registry is an
+adapter concern and can later be augmented by display descriptors in the service catalog without
+changing result persistence.

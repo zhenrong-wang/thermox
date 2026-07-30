@@ -422,9 +422,10 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Add display-unit conversion to the catalog-driven component, case, and result views.
-2. Add result-table filtering/export and richer transient plotting over the graph-native result
+1. Add result-table filtering/export and richer transient plotting over the graph-native result
    contract.
+2. Publish display-unit descriptors through the service catalog so deployments and extensions can
+   augment the browser's conservative built-in presentation registry.
 3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
 4. Add analytic property-derivative APIs; the rigid volume currently

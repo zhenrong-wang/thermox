@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayDeltaValue, displayValue } from './displayUnits'
 import { TopologyCanvas } from './TopologyCanvas'
 import {
   formatResultValue,
@@ -33,6 +35,7 @@ function ResultValueTable({
   title: string
   values: GraphResultValue[]
 }) {
+  const { profile } = useDisplayUnits()
   if (!values.length) return null
   return (
     <section className="result-value-section">
@@ -42,23 +45,40 @@ function ResultValueTable({
           <thead>
             <tr>
               <th>Value</th>
-              <th>SI value</th>
-              <th>Dimension</th>
-              <th>Derivative / s</th>
+              <th>Displayed value</th>
+              <th>Unit</th>
+              <th>Displayed derivative</th>
             </tr>
           </thead>
           <tbody>
             {values.map((value) => (
-              <tr key={`${title}-${value.name}`}>
-                <th>{value.name}</th>
-                <td>{formatResultValue(value.value_si)}</td>
-                <td>{value.dimension}</td>
-                <td>
-                  {value.derivative_si_s === undefined
-                    ? '—'
-                    : formatResultValue(value.derivative_si_s)}
-                </td>
-              </tr>
+              (() => {
+                const displayed = displayValue(
+                  value.value_si,
+                  value.dimension,
+                  profile,
+                )
+                const derivative =
+                  value.derivative_si_s === undefined
+                    ? undefined
+                    : displayDeltaValue(
+                        value.derivative_si_s,
+                        value.dimension,
+                        profile,
+                      )
+                return (
+                  <tr key={`${title}-${value.name}`}>
+                    <th>{value.name}</th>
+                    <td>{formatResultValue(displayed.value)}</td>
+                    <td>{displayed.unit}</td>
+                    <td>
+                      {derivative
+                        ? `${formatResultValue(derivative.value)} ${derivative.unit}`
+                        : '—'}
+                    </td>
+                  </tr>
+                )
+              })()
             ))}
           </tbody>
         </table>
@@ -76,6 +96,7 @@ export function ResultsWorkspace({
   error,
   onRetry,
 }: ResultsWorkspaceProps) {
+  const { profile } = useDisplayUnits()
   const [sampleIndex, setSampleIndex] = useState(0)
   const sampleCount = result ? resultSampleCount(result) : 0
 
@@ -141,11 +162,20 @@ export function ResultsWorkspace({
         <div className="results-content">
           <div className="result-summary-strip">
             {(job.result_summary?.values ?? []).map((value) => (
-              <div key={value.id}>
-                <span>{value.id}</span>
-                <strong>{formatResultValue(value.value_si)}</strong>
-                <small>{value.dimension}</small>
-              </div>
+              (() => {
+                const displayed = displayValue(
+                  value.value_si,
+                  value.dimension,
+                  profile,
+                )
+                return (
+                  <div key={value.id}>
+                    <span>{value.id}</span>
+                    <strong>{formatResultValue(displayed.value)}</strong>
+                    <small>{displayed.unit}</small>
+                  </div>
+                )
+              })()
             ))}
             {!job.result_summary?.values.length && (
               <p>No projected summary values were configured for this run.</p>
@@ -178,7 +208,7 @@ export function ResultsWorkspace({
                 <span className="section-kicker">Projected graph overlay</span>
                 <h2>System topology</h2>
               </div>
-              <small>Values shown in SI units</small>
+              <small>Values shown in {profile} display units</small>
             </header>
             <div className="result-canvas">
               <TopologyCanvas
@@ -218,9 +248,9 @@ export function ResultsWorkspace({
                     <th>Domain</th>
                     <th>Medium / phase</th>
                     <th>Value</th>
-                    <th>SI value</th>
-                    <th>Dimension</th>
-                    <th>Derivative / s</th>
+                    <th>Displayed value</th>
+                    <th>Unit</th>
+                    <th>Displayed derivative</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -232,12 +262,38 @@ export function ResultsWorkspace({
                         <td>{component.kind}</td>
                         <td>—</td>
                         <td>{value.name}</td>
-                        <td>{formatResultValue(value.value_si)}</td>
-                        <td>{value.dimension}</td>
+                        <td>
+                          {formatResultValue(
+                            displayValue(
+                              value.value_si,
+                              value.dimension,
+                              profile,
+                            ).value,
+                          )}
+                        </td>
+                        <td>
+                          {displayValue(
+                            value.value_si,
+                            value.dimension,
+                            profile,
+                          ).unit}
+                        </td>
                         <td>
                           {value.derivative_si_s === undefined
                             ? '—'
-                            : formatResultValue(value.derivative_si_s)}
+                            : `${formatResultValue(
+                                displayDeltaValue(
+                                  value.derivative_si_s,
+                                  value.dimension,
+                                  profile,
+                                ).value,
+                              )} ${
+                                displayDeltaValue(
+                                  value.derivative_si_s,
+                                  value.dimension,
+                                  profile,
+                                ).unit
+                              }`}
                         </td>
                       </tr>
                     )),
@@ -250,12 +306,38 @@ export function ResultsWorkspace({
                         <td>{component.kind}</td>
                         <td>—</td>
                         <td>{value.name}</td>
-                        <td>{formatResultValue(value.value_si)}</td>
-                        <td>{value.dimension}</td>
+                        <td>
+                          {formatResultValue(
+                            displayValue(
+                              value.value_si,
+                              value.dimension,
+                              profile,
+                            ).value,
+                          )}
+                        </td>
+                        <td>
+                          {displayValue(
+                            value.value_si,
+                            value.dimension,
+                            profile,
+                          ).unit}
+                        </td>
                         <td>
                           {value.derivative_si_s === undefined
                             ? '—'
-                            : formatResultValue(value.derivative_si_s)}
+                            : `${formatResultValue(
+                                displayDeltaValue(
+                                  value.derivative_si_s,
+                                  value.dimension,
+                                  profile,
+                                ).value,
+                              )} ${
+                                displayDeltaValue(
+                                  value.derivative_si_s,
+                                  value.dimension,
+                                  profile,
+                                ).unit
+                              }`}
                         </td>
                       </tr>
                     )),
@@ -274,12 +356,38 @@ export function ResultsWorkspace({
                                 .join(' · ') || '—'}
                             </td>
                             <td>{value.name}</td>
-                            <td>{formatResultValue(value.value_si)}</td>
-                            <td>{value.dimension}</td>
+                            <td>
+                              {formatResultValue(
+                                displayValue(
+                                  value.value_si,
+                                  value.dimension,
+                                  profile,
+                                ).value,
+                              )}
+                            </td>
+                            <td>
+                              {displayValue(
+                                value.value_si,
+                                value.dimension,
+                                profile,
+                              ).unit}
+                            </td>
                             <td>
                               {value.derivative_si_s === undefined
                                 ? '—'
-                                : formatResultValue(value.derivative_si_s)}
+                                : `${formatResultValue(
+                                    displayDeltaValue(
+                                      value.derivative_si_s,
+                                      value.dimension,
+                                      profile,
+                                    ).value,
+                                  )} ${
+                                    displayDeltaValue(
+                                      value.derivative_si_s,
+                                      value.dimension,
+                                      profile,
+                                    ).unit
+                                  }`}
                             </td>
                           </tr>
                         ),

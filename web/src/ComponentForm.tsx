@@ -1,4 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { useDisplayUnits } from './DisplayUnitsContext'
+import {
+  displayUnit,
+  displayValue,
+  valueToSi,
+  type DisplayUnitProfile,
+} from './displayUnits'
 import { latestArtifactRevisions } from './resourceBindings'
 import type {
   ArtifactRevision,
@@ -19,18 +26,23 @@ interface ComponentFormProps {
 function parameterValue(
   value: unknown,
   fallback: number | null,
+  dimension: string,
+  profile: DisplayUnitProfile,
 ): string {
-  if (typeof value === 'number') return String(value)
+  let valueSi: number | null = typeof value === 'number' ? value : null
   if (value && typeof value === 'object') {
     const scalar = value as Record<string, unknown>
     if (typeof scalar.value_si === 'number') {
-      return String(scalar.value_si)
+      valueSi = scalar.value_si
     }
-    if (typeof scalar.value === 'number') {
-      return String(scalar.value)
+    if (valueSi === null && typeof scalar.value === 'number') {
+      valueSi = scalar.value
     }
   }
-  return fallback === null ? '' : String(fallback)
+  if (valueSi === null) valueSi = fallback
+  return valueSi === null
+    ? ''
+    : String(displayValue(valueSi, dimension, profile).value)
 }
 
 function suggestedId(
@@ -60,6 +72,7 @@ export function ComponentForm({
   onCancel,
   onSubmit,
 }: ComponentFormProps) {
+  const { profile } = useDisplayUnits()
   const [componentId, setComponentId] = useState(() =>
     component?.id ?? suggestedId(componentType, topology),
   )
@@ -78,6 +91,8 @@ export function ComponentForm({
         parameterValue(
           component?.parameters?.[parameter.name],
           parameter.default_value_si,
+          parameter.dimension,
+          profile,
         ),
       ]),
     ),
@@ -130,7 +145,11 @@ export function ComponentForm({
         setFormError(`${descriptor.name} must be a finite number.`)
         return
       }
-      numericParameters[descriptor.name] = value
+      numericParameters[descriptor.name] = valueToSi(
+        value,
+        descriptor.dimension,
+        profile,
+      )
     }
     for (const descriptor of componentType.artifacts) {
       if (descriptor.required && !artifacts[descriptor.role]?.trim()) {
@@ -249,20 +268,39 @@ export function ComponentForm({
 
         {componentType.parameters.length > 0 && (
           <fieldset>
-            <legend>Parameters · SI values</legend>
+            <legend>Parameters · displayed in {profile} units</legend>
             <div className="form-grid">
               {componentType.parameters.map((parameter) => (
                 <label key={parameter.name}>
                   <span>
                     {parameter.name}
-                    <small>{parameter.dimension}</small>
+                    <small>
+                      {displayUnit(parameter.dimension, profile)} ·{' '}
+                      {parameter.dimension}
+                    </small>
                   </span>
                   <input
                     type="number"
                     step="any"
                     value={parameters[parameter.name] ?? ''}
-                    min={parameter.lower_bound ?? undefined}
-                    max={parameter.upper_bound ?? undefined}
+                    min={
+                      parameter.lower_bound === null
+                        ? undefined
+                        : displayValue(
+                            parameter.lower_bound,
+                            parameter.dimension,
+                            profile,
+                          ).value
+                    }
+                    max={
+                      parameter.upper_bound === null
+                        ? undefined
+                        : displayValue(
+                            parameter.upper_bound,
+                            parameter.dimension,
+                            profile,
+                          ).value
+                    }
                     required={
                       parameter.required &&
                       parameter.default_value_si === null

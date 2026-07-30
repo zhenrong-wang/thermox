@@ -6,6 +6,7 @@ import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
 import { ComponentForm } from './ComponentForm'
 import { ConnectionForm } from './ConnectionForm'
+import { useDisplayUnits } from './DisplayUnitsContext'
 import {
   buildConnectionOperation,
   type ConnectionIntent,
@@ -49,6 +50,8 @@ function shortKind(kind: string): string {
 }
 
 function App() {
+  const { profile: displayUnitProfile, setProfile: setDisplayUnitProfile } =
+    useDisplayUnits()
   const [workspaceView, setWorkspaceView] =
     useState<'topology' | 'cases' | 'runs' | 'results'>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
@@ -1010,9 +1013,30 @@ function App() {
             ))}
           </select>
         </div>
-        <div className="runtime-status">
-          <span className={error ? 'status-dot error' : 'status-dot'} />
-          {error ? 'API unavailable' : loading ? 'Connecting' : 'Local runtime'}
+        <div className="runtime-tools">
+          <label className="unit-profile">
+            <span>Units</span>
+            <select
+              aria-label="Display unit profile"
+              value={displayUnitProfile}
+              onChange={(event) =>
+                setDisplayUnitProfile(
+                  event.target.value as 'si' | 'engineering',
+                )
+              }
+            >
+              <option value="si">SI</option>
+              <option value="engineering">Engineering</option>
+            </select>
+          </label>
+          <div className="runtime-status">
+            <span className={error ? 'status-dot error' : 'status-dot'} />
+            {error
+              ? 'API unavailable'
+              : loading
+                ? 'Connecting'
+                : 'Local runtime'}
+          </div>
         </div>
       </header>
 

@@ -379,7 +379,8 @@ Work items:
    - catalog-driven SI component creation forms with service-authoritative validation; ✅
    - catalog-driven instance editing; ✅
    - property-registry fluid creation and typed project-artifact binding; ✅
-   - display-unit conversion.
+   - persistent SI/engineering display profiles with reversible component input conversion,
+     normalized case display, and graph/result presentation; ✅
 8. Case editor using the revision-backed authoring service.
    - topology-scoped creation and exact immutable revision browsing; ✅
    - metadata, parameter override, fixed value, initial guess, and solver option editing with

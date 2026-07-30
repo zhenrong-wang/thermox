@@ -44,6 +44,7 @@ export function ExecutionHistory({
   onLoadMore,
   onCancel,
 }: ExecutionHistoryProps) {
+  const { profile } = useDisplayUnits()
   const selected = jobs.find((job) => job.job_id === selectedJobId) ?? jobs[0]
   const active = selected?.state === 'queued' || selected?.state === 'running'
 
@@ -208,12 +209,21 @@ export function ExecutionHistory({
                     <span>{selected.result_summary.mode}</span>
                   </header>
                   {selected.result_summary.values.map((value) => (
-                    <div key={value.id}>
-                      <strong>{value.id}</strong>
-                      <code>{value.value_si}</code>
-                      <span>{value.dimension}</span>
-                      <small>{value.aggregation}</small>
-                    </div>
+                    (() => {
+                      const displayed = displayValue(
+                        value.value_si,
+                        value.dimension,
+                        profile,
+                      )
+                      return (
+                        <div key={value.id}>
+                          <strong>{value.id}</strong>
+                          <code>{formatResultValue(displayed.value)}</code>
+                          <span>{displayed.unit}</span>
+                          <small>{value.aggregation}</small>
+                        </div>
+                      )
+                    })()
                   ))}
                 </div>
               )}
@@ -231,3 +241,6 @@ export function ExecutionHistory({
     </section>
   )
 }
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayValue } from './displayUnits'
+import { formatResultValue } from './resultPresentation'

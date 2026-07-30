@@ -1,6 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { buildMetadataEdits, buildScalarEdit } from './caseAuthoring'
 import { caseModes } from './CaseCreateForm'
+import { useDisplayUnits } from './DisplayUnitsContext'
+import {
+  dimensionForUnit,
+  displayValue,
+  supportedCaseUnits,
+  type DisplayUnitProfile,
+} from './displayUnits'
+import { formatResultValue } from './resultPresentation'
 import { ValidationPanel } from './ValidationPanel'
 import type {
   ArtifactRevision,
@@ -59,9 +67,18 @@ const scalarSections: Array<{
   },
 ]
 
-function scalarParts(value: ScalarValue): { value: string; unit: string } {
+function scalarParts(
+  value: ScalarValue,
+  profile: DisplayUnitProfile,
+): { value: string; unit: string } {
   if (typeof value === 'number') return { value: String(value), unit: '' }
-  return { value: String(value.value), unit: value.unit }
+  const dimension = dimensionForUnit(value.unit)
+  if (!dimension) return { value: String(value.value), unit: value.unit }
+  const displayed = displayValue(value.value, dimension, profile)
+  return {
+    value: formatResultValue(displayed.value),
+    unit: displayed.unit,
+  }
 }
 
 export function CaseWorkspace({
@@ -78,6 +95,7 @@ export function CaseWorkspace({
   onValidate,
   onCreate,
 }: CaseWorkspaceProps) {
+  const { profile } = useDisplayUnits()
   const document = revision?.case_document
   const simulationCase = document?.case
   const [label, setLabel] = useState(simulationCase?.label ?? '')
@@ -239,7 +257,7 @@ export function CaseWorkspace({
               <div className="scalar-table">
                 {!entries.length && <p className="scalar-empty">No values.</p>}
                 {entries.map(([scalarKey, scalar]) => {
-                  const parts = scalarParts(scalar)
+                  const parts = scalarParts(scalar, profile)
                   return (
                     <div className="scalar-row" key={scalarKey}>
                       <code>{scalarKey}</code>
@@ -305,9 +323,15 @@ export function CaseWorkspace({
             <span>Unit</span>
             <input
               value={unit}
+              list="thermox-supported-case-units"
               placeholder="Pa, kPa, K, kg/s…"
               onChange={(event) => setUnit(event.target.value)}
             />
+            <datalist id="thermox-supported-case-units">
+              {supportedCaseUnits.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
           </label>
           <button type="submit" className="primary-button" disabled={publishing}>
             Publish scalar revision
