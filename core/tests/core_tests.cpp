@@ -90,6 +90,106 @@ void test_sparse_linear_solver() {
     require_near(tiny.x[0], 2.0, 1.0e-12, "tiny scaled sparse solve");
 }
 
+void test_reusable_sparse_factorization() {
+    auto factorization =
+        thermox::make_default_sparse_factorization();
+    require(
+        factorization != nullptr,
+        "default sparse factorization factory");
+    auto matrix = thermox::sparse_from_triplets(
+        2, 2,
+        {
+            {0, 0, 3.0}, {0, 1, 1.0},
+            {1, 0, 1.0}, {1, 1, 2.0},
+        });
+    const auto first = factorization->solve(
+        matrix, {7.0, 5.0});
+    require(first.success, first.message);
+    require_near(first.x[0], 1.8, 1.0e-12,
+                 "reusable sparse first x0");
+    require_near(first.x[1], 1.6, 1.0e-12,
+                 "reusable sparse first x1");
+    require(first.numeric_factorizations == 1,
+            "first sparse solve performs numeric factorization");
+
+    matrix = thermox::SparseMatrix(
+        matrix.pattern(), {4.0, 1.0, 1.0, 3.0});
+    const auto second = factorization->solve(
+        matrix, {9.0, 7.0});
+    require(second.success, second.message);
+    require_near(second.x[0], 20.0 / 11.0, 1.0e-12,
+                 "reusable sparse second x0");
+    require_near(second.x[1], 19.0 / 11.0, 1.0e-12,
+                 "reusable sparse second x1");
+    require(second.numeric_factorizations == 1,
+            "changed values refresh numeric factorization");
+
+    const bool umfpack =
+        factorization->backend_name() == "umfpack";
+    require(first.symbolic_factorizations ==
+                (umfpack ? 1 : 0),
+            "first solve reports backend symbolic analysis");
+    require(second.symbolic_factorizations == 0,
+            "same pattern reuses symbolic analysis");
+
+    const auto changed_pattern =
+        thermox::sparse_from_triplets(
+            2, 2, {{0, 0, 2.0}, {1, 1, 4.0}});
+    const auto third = factorization->solve(
+        changed_pattern, {6.0, 8.0});
+    require(third.success, third.message);
+    require_near(third.x[0], 3.0, 1.0e-12,
+                 "changed-pattern sparse x0");
+    require_near(third.x[1], 2.0, 1.0e-12,
+                 "changed-pattern sparse x1");
+    require(third.symbolic_factorizations ==
+                (umfpack ? 1 : 0),
+            "changed pattern invalidates symbolic analysis");
+}
+
+void test_newton_reuses_sparse_symbolic_factorization() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"square_root"};
+    problem.initial_guess = {1.0};
+    problem.sparse_jacobian_pattern =
+        thermox::sparse_from_triplets(
+            1, 1, {{0, 0, 1.0}})
+            .pattern();
+    problem.residual = [](
+                           const std::vector<double>& x,
+                           std::vector<double>& residual) {
+        residual[0] = x[0] * x[0] - 2.0;
+    };
+    problem.sparse_jacobian_values = [](
+                                           const std::vector<double>& x,
+                                           std::vector<double>& values) {
+        values[0] = 2.0 * x[0];
+    };
+    thermox::SolverOptions options;
+    options.sparse_factorization =
+        thermox::make_default_sparse_factorization();
+    const bool umfpack =
+        options.sparse_factorization->backend_name() == "umfpack";
+    const auto result = thermox::solve_newton(problem, options);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require(result.diagnostics.linear_solver_evaluations > 1,
+            "nonlinear regression exercises repeated factorization");
+    require(
+        result.diagnostics.numeric_factorizations ==
+            result.diagnostics.linear_solver_evaluations,
+        "every Newton matrix receives numeric factorization");
+    require(
+        result.diagnostics.symbolic_factorizations ==
+            (umfpack ? 1 : 0),
+        "Newton reuses one symbolic analysis for fixed pattern");
+    require(
+        result.diagnostics.linear_solver_backend ==
+            options.sparse_factorization->backend_name(),
+        "Newton reports selected sparse backend");
+}
+
 void test_sparse_matrix_conversion_and_scaling() {
     const thermox::Matrix dense{{1.0, 0.0, 2.0}, {0.0, -3.0, 0.0}};
     auto sparse = thermox::sparse_from_dense(dense);
@@ -826,6 +926,8 @@ int main() {
     try {
         test_dense_linear_solver();
         test_sparse_linear_solver();
+        test_reusable_sparse_factorization();
+        test_newton_reuses_sparse_symbolic_factorization();
         test_sparse_matrix_conversion_and_scaling();
         test_sparse_matrix_validates_shape();
         test_variable_registry();

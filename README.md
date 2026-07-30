@@ -154,10 +154,11 @@ Implemented in this sprint:
   use PH/PS flashes for isentropic efficiency, propagate recoverable property-domain failures to
   Newton, and support ideal gas and real fluids without changing component equations.
 
-The built-in direct solvers and first-order transient integrator intentionally remain
-dependency-free reference backends. Larger production models should use an external sparse
-factorization backend, and higher-order/stiff transient work can be added behind the established
-DAE contract. Cycle examples do not define or constrain the platform API.
+The dependency-free direct solvers remain reference backends. Builds configured with
+`-DTHERMOX_ENABLE_UMFPACK=ON` use reusable SuiteSparse symbolic analysis across fixed-pattern
+Newton iterations and DAE stages, with fresh numeric factors for each Jacobian. Higher-order/stiff
+transient work can be added behind the established DAE contract. Cycle examples do not define or
+constrain the platform API.
 
 ## Repository layout
 
@@ -427,7 +428,5 @@ is intentionally deferred until gateway identity and a public API endpoint exist
    result sets too large for browser materialization.
 2. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic
    derivatives, while IF97 uses the shared provenance-marked bounded fallback.
-3. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
-   contract.
-4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+3. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

@@ -378,6 +378,9 @@ export interface SteadySimulationResult {
     function_evaluations: number
     jacobian_evaluations: number
     linear_solver_evaluations: number
+    symbolic_factorizations: number
+    numeric_factorizations: number
+    linear_solver_backend: string
     message: string
   }
   graph: GraphResult
@@ -405,6 +408,9 @@ export interface TransientSimulationResult {
     rejected_steps: number
     nonlinear_solves: number
     nonlinear_iterations: number
+    symbolic_factorizations: number
+    numeric_factorizations: number
+    linear_solver_backend: string
     final_time: number
     last_step: number
     message: string

@@ -1,4 +1,5 @@
 #include "thermox/dae_equation_system.hpp"
+#include "thermox/sparse_linear_solver.hpp"
 
 #include <cmath>
 #include <exception>
@@ -79,6 +80,33 @@ void test_dae_equation_system_builder() {
                  "builder solves algebraic initial state");
     require_near(initialized.derivative[0], 0.6, 1.0e-8,
                  "builder solves differential initial derivative");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.2;
+    options.initial_step = 0.1;
+    options.max_step = 0.1;
+    options.nonlinear_options.sparse_factorization =
+        thermox::make_default_sparse_factorization();
+    const bool umfpack =
+        options.nonlinear_options.sparse_factorization
+            ->backend_name() == "umfpack";
+    const auto integrated =
+        thermox::integrate_dae(problem, options);
+    require(integrated.diagnostics.success,
+            integrated.diagnostics.message);
+    require(integrated.diagnostics.numeric_factorizations > 1,
+            "DAE stages perform repeated numeric factorization");
+    require(
+        integrated.diagnostics.symbolic_factorizations ==
+            (umfpack ? 1 : 0),
+        "DAE stages reuse fixed-pattern symbolic analysis: actual=" +
+            std::to_string(
+                integrated.diagnostics.symbolic_factorizations));
+    require(
+        integrated.diagnostics.linear_solver_backend ==
+            options.nonlinear_options.sparse_factorization
+                ->backend_name(),
+        "DAE diagnostics report selected sparse backend");
 }
 
 void test_dae_equation_system_builder_rejects_non_square_system() {

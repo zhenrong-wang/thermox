@@ -434,6 +434,7 @@ LinearSolveResult validate_linear_result(LinearSolveResult result, std::size_t e
 }
 
 LinearSolveResult solve_linear_system(const SolverOptions& options,
+                                      const SparseFactorizationPtr& factorization,
                                       EvaluatedJacobian jacobian,
                                       std::vector<double> rhs,
                                       std::size_t expected_size,
@@ -442,16 +443,37 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
 
     LinearSolveResult result;
     if (options.sparse_linear_solver) {
+        diagnostics.linear_solver_backend =
+            "custom-sparse-hook";
         auto sparse = jacobian.is_sparse ? std::move(jacobian.sparse)
                                          : sparse_from_dense(jacobian.dense);
         result = options.sparse_linear_solver(std::move(sparse), std::move(rhs));
     } else if (jacobian.is_sparse && !options.linear_solver) {
-        result = solve_sparse_linear_system(std::move(jacobian.sparse), std::move(rhs));
+        diagnostics.linear_solver_backend =
+            std::string(factorization->backend_name());
+        result = factorization->solve(
+            jacobian.sparse, std::move(rhs));
+    } else if (options.sparse_factorization &&
+               !options.linear_solver) {
+        diagnostics.linear_solver_backend =
+            std::string(factorization->backend_name());
+        auto sparse = jacobian.is_sparse
+            ? std::move(jacobian.sparse)
+            : sparse_from_dense(jacobian.dense);
+        result = factorization->solve(sparse, std::move(rhs));
     } else {
+        diagnostics.linear_solver_backend =
+            options.linear_solver
+            ? "custom-dense-hook"
+            : "reference-dense";
         auto dense = jacobian.is_sparse ? jacobian.sparse.to_dense() : std::move(jacobian.dense);
         result = options.linear_solver ? options.linear_solver(std::move(dense), std::move(rhs))
                                        : solve_dense_linear_system(std::move(dense), std::move(rhs));
     }
+    diagnostics.symbolic_factorizations +=
+        result.symbolic_factorizations;
+    diagnostics.numeric_factorizations +=
+        result.numeric_factorizations;
     return validate_linear_result(std::move(result), expected_size);
 }
 
@@ -730,6 +752,12 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
 
     std::vector<double> x = problem.initial_guess;
     SolverDiagnostics diagnostics;
+    SparseFactorizationPtr factorization =
+        options.sparse_factorization;
+    if (!factorization && !options.sparse_linear_solver &&
+        !options.linear_solver) {
+        factorization = make_default_sparse_factorization();
+    }
 
     for (int iteration = 0; iteration <= options.max_iterations; ++iteration) {
         std::vector<double> residual;
@@ -790,8 +818,9 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
             rhs[i] = -scaled_residual[i];
         }
 
-        const auto linear = solve_linear_system(options, std::move(jacobian), std::move(rhs),
-                                                x.size(), diagnostics);
+        const auto linear = solve_linear_system(
+            options, factorization, std::move(jacobian),
+            std::move(rhs), x.size(), diagnostics);
         if (!linear.success) {
             diagnostics.converged = false;
             diagnostics.iterations = iteration;

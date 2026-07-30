@@ -110,6 +110,9 @@ struct TimeIntegrationDiagnostics {
     int rejected_steps{0};
     int nonlinear_solves{0};
     int nonlinear_iterations{0};
+    int symbolic_factorizations{0};
+    int numeric_factorizations{0};
+    std::string linear_solver_backend{"not-used"};
     double final_time{0.0};
     double last_step{0.0};
     std::string message;

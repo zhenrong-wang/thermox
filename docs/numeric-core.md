@@ -1,6 +1,6 @@
 # Thermox Numeric Core Contracts
 
-_Status: implemented foundation, 2026-07-27_
+_Status: implemented foundation, 2026-07-30_
 
 ## Scope
 
@@ -95,9 +95,23 @@ UMFPACK with column-oriented sparse LU factorization. This backend is optional: 
 dependency-minimal builds retain the reference CSR solver. The nonlinear and physics contracts do
 not change with the selected factorization backend.
 
-Compiled models should declare fixed Jacobian patterns wherever possible. A production sparse
-backend should reuse symbolic analysis/factorization metadata across Newton iterations and time
-steps.
+`SparseFactorization` is the stateful factorization boundary. The UMFPACK implementation converts
+the declared CSR structure to CSC once, retains the CSR-to-CSC value mapping, and caches symbolic
+analysis while the pattern is unchanged. Each new Jacobian refreshes values and numeric LU factors.
+Changing dimensions or sparsity invalidates the symbolic cache. The object serializes access, so a
+shared instance cannot corrupt its cache if called concurrently.
+
+`solve_newton` creates one default factorization per nonlinear solve. A caller may inject a shared
+factorization through `SolverOptions`; the DAE integrator does this automatically for sparse
+problems so consistent initialization and every full/half implicit stage share the same symbolic
+analysis. Fixed-pattern DAE initialization now derives its mixed Jacobian directly from the DAE
+callback: differential columns use `dF/d(y_dot)` and algebraic columns use `dF/dy`.
+
+Diagnostics identify the selected linear backend and distinguish symbolic and numeric
+factorization counts in native and service results.
+For a fixed-pattern UMFPACK solve, one symbolic factorization and one numeric factorization per
+Newton matrix are expected. The one-shot `solve_sparse_linear_system` and custom dense/sparse
+hooks remain available for isolated calls and backend testing.
 
 ## Physics-layer responsibilities
 
@@ -118,5 +132,5 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - The native transient backend is first-order and intended for index-1 DAEs.
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
-- Reusing symbolic sparse-factorization analysis across Newton iterations and adding a higher-order
-  transient backend remain future integrations.
+- A higher-order transient backend and broader sparse-backend performance/conditioning diagnostics
+  remain future integrations.

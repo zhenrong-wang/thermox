@@ -1,4 +1,5 @@
 #include "thermox/transient_solver.hpp"
+#include "thermox/sparse_linear_solver.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -333,6 +334,126 @@ DaeInitializationResult make_consistent_initial_conditions(
             }
             return problem.residual(initial_time, state, derivative, residual);
         };
+    if (problem.sparse_jacobian_pattern.has_value()) {
+        initialization.sparse_jacobian_pattern =
+            problem.sparse_jacobian_pattern;
+        initialization.sparse_jacobian_values =
+            [&problem, &kinds, initial_time, initial_derivative](
+                const std::vector<double>& unknowns,
+                std::vector<double>& values) {
+                std::vector<double> state = problem.initial_state;
+                std::vector<double> derivative =
+                    initial_derivative;
+                for (std::size_t i = 0;
+                     i < unknowns.size(); ++i) {
+                    if (kinds[i] ==
+                        DaeVariableKind::differential) {
+                        derivative[i] = unknowns[i];
+                    } else {
+                        state[i] = unknowns[i];
+                    }
+                }
+                std::vector<double> state_partials(
+                    values.size(), 0.0);
+                std::vector<double> combined_partials(
+                    values.size(), 0.0);
+                auto status = problem.sparse_jacobian_values(
+                    initial_time, state, derivative, 0.0,
+                    state_partials);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                        ? "DAE initialization state Jacobian "
+                          "evaluation failed"
+                        : status.message);
+                }
+                status = problem.sparse_jacobian_values(
+                    initial_time, state, derivative, 1.0,
+                    combined_partials);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                        ? "DAE initialization derivative Jacobian "
+                          "evaluation failed"
+                        : status.message);
+                }
+                const auto& pattern =
+                    *problem.sparse_jacobian_pattern;
+                for (std::size_t row = 0;
+                     row < pattern.rows(); ++row) {
+                    for (std::size_t offset =
+                             pattern.row_offsets()[row];
+                         offset <
+                             pattern.row_offsets()[row + 1];
+                         ++offset) {
+                        const std::size_t column =
+                            pattern.column_indices()[offset];
+                        values[offset] =
+                            kinds[column] ==
+                                DaeVariableKind::differential
+                            ? combined_partials[offset] -
+                                  state_partials[offset]
+                            : state_partials[offset];
+                    }
+                }
+            };
+    } else if (problem.jacobian) {
+        initialization.jacobian =
+            [&problem, &kinds, initial_time, initial_derivative](
+                const std::vector<double>& unknowns,
+                Matrix& jacobian) {
+                std::vector<double> state = problem.initial_state;
+                std::vector<double> derivative =
+                    initial_derivative;
+                for (std::size_t i = 0;
+                     i < unknowns.size(); ++i) {
+                    if (kinds[i] ==
+                        DaeVariableKind::differential) {
+                        derivative[i] = unknowns[i];
+                    } else {
+                        state[i] = unknowns[i];
+                    }
+                }
+                Matrix state_partials(
+                    jacobian.size(),
+                    std::vector<double>(unknowns.size(), 0.0));
+                Matrix combined_partials(
+                    jacobian.size(),
+                    std::vector<double>(unknowns.size(), 0.0));
+                auto status = problem.jacobian(
+                    initial_time, state, derivative, 0.0,
+                    state_partials);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                        ? "DAE initialization state Jacobian "
+                          "evaluation failed"
+                        : status.message);
+                }
+                status = problem.jacobian(
+                    initial_time, state, derivative, 1.0,
+                    combined_partials);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                        ? "DAE initialization derivative Jacobian "
+                          "evaluation failed"
+                        : status.message);
+                }
+                for (std::size_t row = 0;
+                     row < jacobian.size(); ++row) {
+                    for (std::size_t column = 0;
+                         column < unknowns.size(); ++column) {
+                        jacobian[row][column] =
+                            kinds[column] ==
+                                DaeVariableKind::differential
+                            ? combined_partials[row][column] -
+                                  state_partials[row][column]
+                            : state_partials[row][column];
+                    }
+                }
+            };
+    }
 
     NonlinearSolveResult solve = solve_newton(initialization, options);
     DaeInitializationResult result;
@@ -367,15 +488,38 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                        std::numeric_limits<double>::infinity(), "upper_bounds");
 
     DaeSolveResult result;
+    SolverOptions nonlinear_options = options.nonlinear_options;
+    if ((problem.sparse_jacobian_pattern.has_value() ||
+         problem.sparse_jacobian) &&
+        !nonlinear_options.sparse_factorization &&
+        !nonlinear_options.sparse_linear_solver &&
+        !nonlinear_options.linear_solver) {
+        nonlinear_options.sparse_factorization =
+            make_default_sparse_factorization();
+    }
+    const auto accumulate_nonlinear_diagnostics =
+        [&result](const SolverDiagnostics& diagnostics) {
+            ++result.diagnostics.nonlinear_solves;
+            result.diagnostics.nonlinear_iterations +=
+                diagnostics.iterations;
+            result.diagnostics.symbolic_factorizations +=
+                diagnostics.symbolic_factorizations;
+            result.diagnostics.numeric_factorizations +=
+                diagnostics.numeric_factorizations;
+            if (diagnostics.linear_solver_backend !=
+                "not-used") {
+                result.diagnostics.linear_solver_backend =
+                    diagnostics.linear_solver_backend;
+            }
+        };
     std::vector<double> state = problem.initial_state;
     std::vector<double> derivative =
         default_values(problem.initial_derivative, size, 0.0, "initial_derivative");
     if (options.compute_consistent_initial_conditions) {
         auto initialized =
             make_consistent_initial_conditions(problem, options.start_time,
-                                               options.nonlinear_options);
-        ++result.diagnostics.nonlinear_solves;
-        result.diagnostics.nonlinear_iterations += initialized.diagnostics.iterations;
+                                               nonlinear_options);
+        accumulate_nonlinear_diagnostics(initialized.diagnostics);
         if (!initialized.diagnostics.converged) {
             result.diagnostics.message =
                 "consistent initial-condition solve failed: " +
@@ -408,9 +552,9 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
 
         auto full = solve_backward_euler_step(
             problem, time + step, step, state, derivative, variable_scales,
-            residual_scales, lower_bounds, upper_bounds, options.nonlinear_options);
-        ++result.diagnostics.nonlinear_solves;
-        result.diagnostics.nonlinear_iterations += full.diagnostics.iterations;
+            residual_scales, lower_bounds, upper_bounds,
+            nonlinear_options);
+        accumulate_nonlinear_diagnostics(full.diagnostics);
 
         ImplicitStepResult first_half;
         ImplicitStepResult second_half;
@@ -418,17 +562,17 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             first_half = solve_backward_euler_step(
                 problem, time + 0.5 * step, 0.5 * step, state, derivative,
                 variable_scales, residual_scales, lower_bounds, upper_bounds,
-                options.nonlinear_options);
-            ++result.diagnostics.nonlinear_solves;
-            result.diagnostics.nonlinear_iterations += first_half.diagnostics.iterations;
+                nonlinear_options);
+            accumulate_nonlinear_diagnostics(
+                first_half.diagnostics);
         }
         if (full.success && first_half.success) {
             second_half = solve_backward_euler_step(
                 problem, time + step, 0.5 * step, first_half.state,
                 first_half.derivative, variable_scales, residual_scales,
-                lower_bounds, upper_bounds, options.nonlinear_options);
-            ++result.diagnostics.nonlinear_solves;
-            result.diagnostics.nonlinear_iterations += second_half.diagnostics.iterations;
+                lower_bounds, upper_bounds, nonlinear_options);
+            accumulate_nonlinear_diagnostics(
+                second_half.diagnostics);
         }
 
         double error = std::numeric_limits<double>::infinity();

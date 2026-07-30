@@ -49,6 +49,9 @@ struct SolverOptions {
     // a step in scaled variable coordinates.
     LinearSolverFunction linear_solver;
     SparseLinearSolverFunction sparse_linear_solver;
+    // Reused across Newton iterations and, when supplied by an integrator,
+    // across transient stages. Custom one-shot hooks take precedence.
+    SparseFactorizationPtr sparse_factorization;
 };
 
 struct IterationDiagnostic {
@@ -67,6 +70,9 @@ struct SolverDiagnostics {
     int function_evaluations{0};
     int jacobian_evaluations{0};
     int linear_solver_evaluations{0};
+    int symbolic_factorizations{0};
+    int numeric_factorizations{0};
+    std::string linear_solver_backend{"not-used"};
     std::string message;
     std::vector<IterationDiagnostic> history;
 };

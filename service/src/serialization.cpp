@@ -1009,6 +1009,14 @@ std::string serialize_steady_response_json(
         << response.diagnostics.jacobian_evaluations
         << ", \"linear_solver_evaluations\": "
         << response.diagnostics.linear_solver_evaluations
+        << ", \"symbolic_factorizations\": "
+        << response.diagnostics.symbolic_factorizations
+        << ", \"numeric_factorizations\": "
+        << response.diagnostics.numeric_factorizations
+        << ", \"linear_solver_backend\": ";
+    json_string(
+        out, response.diagnostics.linear_solver_backend);
+    out
         << ", \"message\": ";
     json_string(out, response.diagnostics.message);
     out << "},\n  \"graph\": ";
@@ -1203,6 +1211,14 @@ std::string serialize_transient_response_json(
         << response.diagnostics.nonlinear_solves
         << ", \"nonlinear_iterations\": "
         << response.diagnostics.nonlinear_iterations
+        << ", \"symbolic_factorizations\": "
+        << response.diagnostics.symbolic_factorizations
+        << ", \"numeric_factorizations\": "
+        << response.diagnostics.numeric_factorizations
+        << ", \"linear_solver_backend\": ";
+    json_string(
+        out, response.diagnostics.linear_solver_backend);
+    out
         << ", \"final_time\": ";
     json_number(out, response.diagnostics.final_time);
     out << ", \"last_step\": ";

@@ -599,6 +599,9 @@ NonlinearDiagnostics copy_diagnostics(
         source.function_evaluations,
         source.jacobian_evaluations,
         source.linear_solver_evaluations,
+        source.symbolic_factorizations,
+        source.numeric_factorizations,
+        source.linear_solver_backend,
         source.message,
     };
 }
@@ -611,6 +614,9 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.rejected_steps,
         source.nonlinear_solves,
         source.nonlinear_iterations,
+        source.symbolic_factorizations,
+        source.numeric_factorizations,
+        source.linear_solver_backend,
         source.final_time,
         source.last_step,
         source.message,

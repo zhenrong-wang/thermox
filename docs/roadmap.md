@@ -79,10 +79,11 @@ Delivered:
 5. Duplicate-name validation and fixed-pattern structural matching. ✅
 6. Index-1 DAE contract, consistent initial conditions, implicit adaptive integration, and events. ✅
 7. Steady, transient, sanitizer, platform, and isolated example regression coverage. ✅
+8. Reusable UMFPACK factorization lifecycle with fixed-pattern symbolic reuse across steady Newton
+   iterations, consistent DAE initialization, and transient stages. ✅
 
 Production follow-ons:
 
-- external sparse factorization with symbolic reuse;
 - higher-order BDF/IDA-style integration backend;
 - graph/block tearing, continuation, and richer rank/conditioning diagnostics.
 
