@@ -14,6 +14,7 @@ add_library(thermox_platform
     src/storage_models.cpp
     src/turbomachinery_models.cpp
     src/transport_models.cpp
+    src/unit_registry.cpp
 )
 add_library(thermox::platform ALIAS thermox_platform)
 set_target_properties(

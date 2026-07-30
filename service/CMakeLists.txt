@@ -22,9 +22,9 @@ target_include_directories(thermox_service
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(thermox_service PRIVATE
-    thermox_platform
-    OpenSSL::Crypto
+target_link_libraries(thermox_service
+    PUBLIC thermox_platform
+    PRIVATE OpenSSL::Crypto
 )
 if(TARGET thermox_cantera_backend)
     target_link_libraries(

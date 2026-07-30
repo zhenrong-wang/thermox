@@ -1,4 +1,5 @@
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/unit_registry.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -16,6 +17,24 @@
 namespace thermox::platform {
 
 namespace {
+
+thread_local const UnitRegistry* active_unit_registry = nullptr;
+
+class UnitRegistryScope {
+public:
+    explicit UnitRegistryScope(const UnitRegistry& units)
+        : previous_(active_unit_registry) {
+        active_unit_registry = &units;
+    }
+    ~UnitRegistryScope() {
+        active_unit_registry = previous_;
+    }
+    UnitRegistryScope(const UnitRegistryScope&) = delete;
+    UnitRegistryScope& operator=(const UnitRegistryScope&) = delete;
+
+private:
+    const UnitRegistry* previous_;
+};
 
 struct JsonValue {
     enum class Type { Null, Bool, Number, String, Object, Array };
@@ -387,98 +406,6 @@ std::string require_unit(const JsonValue& value, const std::string& field_name) 
     return unit.string;
 }
 
-double convert_pressure_to_pa(double value, const std::string& unit) {
-    if (unit == "Pa") {
-        return value;
-    }
-    if (unit == "kPa") {
-        return value * 1000.0;
-    }
-    if (unit == "MPa") {
-        return value * 1.0e6;
-    }
-    if (unit == "bar") {
-        return value * 100000.0;
-    }
-    throw std::invalid_argument("unsupported pressure unit: " + unit);
-}
-
-double convert_temperature_to_k(double value, const std::string& unit) {
-    if (unit == "K") {
-        return value;
-    }
-    if (unit == "C" || unit == "degC") {
-        return value + 273.15;
-    }
-    throw std::invalid_argument("unsupported temperature unit: " + unit);
-}
-
-double convert_mass_flow_to_kg_s(double value, const std::string& unit) {
-    if (unit == "kg/s") {
-        return value;
-    }
-    if (unit == "kg/h") {
-        return value / 3600.0;
-    }
-    throw std::invalid_argument("unsupported mass-flow unit: " + unit);
-}
-
-double convert_cp_to_j_kg_k(double value, const std::string& unit) {
-    if (unit == "J/kg/K" || unit == "J/(kg*K)") {
-        return value;
-    }
-    if (unit == "kJ/kg/K" || unit == "kJ/(kg*K)") {
-        return value * 1000.0;
-    }
-    throw std::invalid_argument("unsupported specific-heat unit: " + unit);
-}
-
-double convert_dimensionless(double value, const std::string& unit) {
-    if (unit == "dimensionless" || unit == "1" || unit.empty()) {
-        return value;
-    }
-    if (unit == "%") {
-        return value / 100.0;
-    }
-    throw std::invalid_argument("unsupported dimensionless unit: " + unit);
-}
-
-double convert_power_to_w(double value, const std::string& unit) {
-    if (unit == "W") {
-        return value;
-    }
-    if (unit == "kW") {
-        return value * 1000.0;
-    }
-    if (unit == "MW") {
-        return value * 1.0e6;
-    }
-    throw std::invalid_argument("unsupported power unit: " + unit);
-}
-
-double convert_thermal_capacity_to_j_k(double value, const std::string& unit) {
-    if (unit == "J/K") {
-        return value;
-    }
-    if (unit == "kJ/K") {
-        return value * 1000.0;
-    }
-    if (unit == "MJ/K") {
-        return value * 1.0e6;
-    }
-    throw std::invalid_argument("unsupported thermal-capacity unit: " + unit);
-}
-
-double convert_specific_enthalpy_to_j_kg(double value, const std::string& unit) {
-    if (unit == "J/kg") {
-        return value;
-    }
-    if (unit == "kJ/kg") {
-        return value * 1000.0;
-    }
-    throw std::invalid_argument("unsupported specific-enthalpy unit: " + unit);
-}
-
 ScalarValue make_scalar(double value_si, const std::string& unit, const std::string& dimension) {
     ScalarValue scalar;
     scalar.value_si = value_si;
@@ -488,67 +415,12 @@ ScalarValue make_scalar(double value_si, const std::string& unit, const std::str
 }
 
 ScalarValue convert_scalar(double value, const std::string& unit, const std::string& field_name) {
-    if (unit == "Pa" || unit == "kPa" || unit == "MPa" || unit == "bar") {
-        return make_scalar(convert_pressure_to_pa(value, unit), "Pa", "pressure");
-    }
-    if (unit == "K" || unit == "C" || unit == "degC") {
-        return make_scalar(convert_temperature_to_k(value, unit), "K", "temperature");
-    }
-    if (unit == "rad") {
-        return make_scalar(value, "rad", "angle");
-    }
-    if (unit == "deg") {
-        return make_scalar(
-            value * std::acos(-1.0) / 180.0, "rad", "angle");
-    }
-    if (unit == "kg/s" || unit == "kg/h") {
-        return make_scalar(convert_mass_flow_to_kg_s(value, unit), "kg/s", "mass_flow");
-    }
-    if (unit == "J/kg/K" || unit == "J/(kg*K)" || unit == "kJ/kg/K" || unit == "kJ/(kg*K)") {
-        return make_scalar(convert_cp_to_j_kg_k(value, unit), "J/kg/K", "specific_heat");
-    }
-    if (unit == "J/kg" || unit == "kJ/kg") {
-        return make_scalar(convert_specific_enthalpy_to_j_kg(value, unit), "J/kg", "specific_enthalpy");
-    }
-    if (unit == "W" || unit == "kW" || unit == "MW") {
-        return make_scalar(convert_power_to_w(value, unit), "W", "power");
-    }
-    if (unit == "J/K" || unit == "kJ/K" || unit == "MJ/K") {
-        return make_scalar(convert_thermal_capacity_to_j_k(value, unit),
-                           "J/K", "thermal_capacity");
-    }
-    if (unit == "W/K" || unit == "kW/K" || unit == "MW/K") {
-        const double multiplier =
-            unit == "W/K" ? 1.0 :
-            (unit == "kW/K" ? 1.0e3 : 1.0e6);
-        return make_scalar(value * multiplier, "W/K",
-                           "thermal_conductance");
-    }
-    if (unit == "m3" || unit == "m^3") {
-        return make_scalar(value, "m3", "volume");
-    }
-    if (unit == "L") {
-        return make_scalar(value * 1.0e-3, "m3", "volume");
-    }
-    if (unit == "kg") {
-        return make_scalar(value, "kg", "mass");
-    }
-    if (unit == "kg/mol") {
-        return make_scalar(value, "kg/mol", "molar_mass");
-    }
-    if (unit == "g/mol") {
-        return make_scalar(
-            value * 1.0e-3, "kg/mol", "molar_mass");
-    }
-    if (unit == "J" || unit == "kJ" || unit == "MJ") {
-        const double multiplier =
-            unit == "J" ? 1.0 : (unit == "kJ" ? 1.0e3 : 1.0e6);
-        return make_scalar(value * multiplier, "J", "energy");
-    }
-    if (unit == "dimensionless" || unit == "1" || unit == "%" || unit.empty()) {
-        return make_scalar(convert_dimensionless(value, unit), "dimensionless", "dimensionless");
-    }
-    throw std::invalid_argument("unsupported unit for field '" + field_name + "': " + unit);
+    static const UnitRegistry units =
+        make_default_unit_registry();
+    return (active_unit_registry == nullptr
+                ? units
+                : *active_unit_registry)
+        .convert(value, unit, field_name);
 }
 
 ScalarValue parse_scalar_value(const JsonValue& value, const std::string& field_name) {
@@ -1339,6 +1211,13 @@ ModelDocument parse_model_document_text(const std::string& text) {
     return parse_model_document_root(root_value);
 }
 
+ModelDocument parse_model_document_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_model_document_text(text);
+}
+
 ModelDocument parse_topology_document_text(
     const std::string& text) {
     const JsonValue root_value =
@@ -1346,11 +1225,25 @@ ModelDocument parse_topology_document_text(
     return parse_topology_document_root(root_value);
 }
 
+ModelDocument parse_topology_document_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_topology_document_text(text);
+}
+
 CaseDefinition parse_case_document_text(
     const std::string& text) {
     const JsonValue root_value =
         JsonParser{text}.parse_document();
     return parse_case_document_root(root_value);
+}
+
+CaseDefinition parse_case_document_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_case_document_text(text);
 }
 
 ScalarValue parse_scalar_value_document_text(
@@ -1371,6 +1264,13 @@ ScalarValue parse_scalar_value_document_text(
             scalar, {"value", "unit"}, "scalar");
     }
     return parse_scalar_value(scalar, "scalar");
+}
+
+ScalarValue parse_scalar_value_document_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_scalar_value_document_text(text);
 }
 
 MediumDefinition parse_medium_definition_text(
@@ -1450,6 +1350,14 @@ ComponentDefinition parse_component_definition_text(
     return parse_component(component, medium_ids, material_ids);
 }
 
+ComponentDefinition parse_component_definition_text(
+    const std::string& text,
+    const ModelDocument& context,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_component_definition_text(text, context);
+}
+
 ConnectionDefinition parse_connection_definition_text(
     const std::string& text) {
     const auto root =
@@ -1471,6 +1379,13 @@ ConnectionDefinition parse_connection_definition_text(
          "parameters"},
         "connection");
     return parse_connection(connection);
+}
+
+ConnectionDefinition parse_connection_definition_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_connection_definition_text(text);
 }
 
 ModelDocument load_model_document(const std::string& path) {

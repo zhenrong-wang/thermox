@@ -46,6 +46,15 @@ target_compile_definitions(thermox_platform_tests PRIVATE
 )
 add_test(NAME thermox_platform_tests COMMAND thermox_platform_tests)
 
+add_executable(
+    thermox_unit_registry_tests
+    platform/tests/unit_registry_tests.cpp)
+target_link_libraries(
+    thermox_unit_registry_tests PRIVATE thermox_platform)
+add_test(
+    NAME thermox_unit_registry_tests
+    COMMAND thermox_unit_registry_tests)
+
 add_executable(thermox_performance_map_tests
     platform/tests/performance_map_tests.cpp
 )

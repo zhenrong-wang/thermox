@@ -47,7 +47,8 @@ std::string catalog_fingerprint(
     const physics::PropertyPackageRegistry& properties,
     const platform::PerformanceMapRegistry& performance_maps,
     const physics::ThermochemistryPackageRegistry&
-        thermochemistry) {
+        thermochemistry,
+    const platform::UnitRegistry& units) {
     std::uint64_t hash = 14695981039346656037ULL;
     for (const auto& descriptor : components.descriptors()) {
         hash_text(hash, descriptor.kind);
@@ -190,6 +191,26 @@ std::string catalog_fingerprint(
         hash_text(hash, extension.package_id);
         hash_text(hash, extension.package_version);
     }
+    for (const auto& descriptor : units.descriptors()) {
+        hash_text(hash, descriptor.dimension);
+        hash_text(hash, descriptor.canonical_unit);
+        hash_text(hash, descriptor.si_display.symbol);
+        hash_number(hash, descriptor.si_display.scale_from_si);
+        hash_number(hash, descriptor.si_display.offset_from_si);
+        hash_text(hash, descriptor.engineering_display.symbol);
+        hash_number(
+            hash, descriptor.engineering_display.scale_from_si);
+        hash_number(
+            hash, descriptor.engineering_display.offset_from_si);
+        for (const auto& unit : descriptor.accepted_units) {
+            hash_text(hash, unit.symbol);
+            hash_number(hash, unit.scale_to_si);
+            hash_number(hash, unit.offset_to_si);
+            for (const auto& alias : unit.aliases) {
+                hash_text(hash, alias);
+            }
+        }
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;
@@ -208,7 +229,8 @@ void apply_native_extension(
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
     platform::PerformanceMapRegistry& performance_maps,
-    physics::ThermochemistryPackageRegistry& thermochemistry) {
+    physics::ThermochemistryPackageRegistry& thermochemistry,
+    platform::UnitRegistry& units) {
     if (extension.package_id.empty() ||
         extension.package_version.empty()) {
         throw std::invalid_argument(
@@ -218,7 +240,8 @@ void apply_native_extension(
     if (!extension.register_components &&
         !extension.register_properties &&
         !extension.register_performance_maps &&
-        !extension.register_thermochemistry) {
+        !extension.register_thermochemistry &&
+        !extension.register_units) {
         throw std::invalid_argument(
             "native extension package must register at least "
             "one capability");
@@ -235,6 +258,9 @@ void apply_native_extension(
     if (extension.register_thermochemistry) {
         extension.register_thermochemistry(thermochemistry);
     }
+    if (extension.register_units) {
+        extension.register_units(units);
+    }
     components.register_runtime_extension(
         {
             extension.package_id,
@@ -246,11 +272,12 @@ std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::PerformanceMapRegistry performance_maps,
-    physics::ThermochemistryPackageRegistry thermochemistry) {
+    physics::ThermochemistryPackageRegistry thermochemistry,
+    platform::UnitRegistry units) {
     return detail::NativeRuntimeFactory::create(
         std::move(components), std::move(properties),
         std::move(performance_maps),
-        std::move(thermochemistry));
+        std::move(thermochemistry), std::move(units));
 }
 
 std::shared_ptr<const SimulationRuntime>
@@ -258,16 +285,18 @@ detail::NativeRuntimeFactory::create(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::PerformanceMapRegistry performance_maps,
-    physics::ThermochemistryPackageRegistry thermochemistry) {
+    physics::ThermochemistryPackageRegistry thermochemistry,
+    platform::UnitRegistry units) {
     auto impl = std::make_unique<SimulationRuntime::Impl>();
     impl->fingerprint =
         catalog_fingerprint(
             components, properties, performance_maps,
-            thermochemistry);
+            thermochemistry, units);
     impl->components = std::move(components);
     impl->properties = std::move(properties);
     impl->performance_maps = std::move(performance_maps);
     impl->thermochemistry = std::move(thermochemistry);
+    impl->units = std::move(units);
     return std::shared_ptr<const SimulationRuntime>(
         new SimulationRuntime(std::move(impl)));
 }
@@ -277,7 +306,8 @@ make_default_simulation_runtime() {
     return make_simulation_runtime(
         platform::make_default_component_registry(),
         physics::make_default_property_package_registry(),
-        {}, make_default_thermochemistry_registry());
+        {}, make_default_thermochemistry_registry(),
+        platform::make_default_unit_registry());
 }
 
 }  // namespace thermox::service

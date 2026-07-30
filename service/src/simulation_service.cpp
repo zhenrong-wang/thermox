@@ -1038,7 +1038,8 @@ ValidateModelResponse SimulationService::validate_model(
     }
     try {
         const auto document =
-            platform::parse_model_document_text(request.model_json);
+            platform::parse_model_document_text(
+                request.model_json, impl_->runtime->impl_->units);
         response.model = model_metadata(document);
         response.canonical_model_json =
             detail::serialize_model_document_json(document);
@@ -1139,6 +1140,32 @@ CatalogResponse SimulationService::get_catalog(
                 extension.package_id,
                 extension.package_version,
             });
+    }
+    for (const auto& descriptor :
+         impl_->runtime->impl_->units.descriptors()) {
+        CatalogDimensionUnitType dimension;
+        dimension.dimension = descriptor.dimension;
+        dimension.canonical_unit = descriptor.canonical_unit;
+        dimension.si_display = {
+            descriptor.si_display.symbol,
+            descriptor.si_display.scale_from_si,
+            descriptor.si_display.offset_from_si,
+        };
+        dimension.engineering_display = {
+            descriptor.engineering_display.symbol,
+            descriptor.engineering_display.scale_from_si,
+            descriptor.engineering_display.offset_from_si,
+        };
+        for (const auto& unit : descriptor.accepted_units) {
+            dimension.accepted_units.push_back({
+                unit.symbol,
+                unit.aliases,
+                unit.scale_to_si,
+                unit.offset_to_si,
+            });
+        }
+        response.unit_dimensions.push_back(
+            std::move(dimension));
     }
     for (const auto& descriptor :
          impl_->runtime->impl_->components.descriptors()) {
@@ -1299,7 +1326,8 @@ SteadySimulationResponse SimulationService::run_steady(
     }
     try {
         document =
-            platform::parse_model_document_text(request.model_json);
+            platform::parse_model_document_text(
+                request.model_json, impl_->runtime->impl_->units);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -1435,7 +1463,8 @@ CalibrationResponse SimulationService::run_calibration(
     platform::ModelDocument document;
     try {
         document =
-            platform::parse_model_document_text(request.model_json);
+            platform::parse_model_document_text(
+                request.model_json, impl_->runtime->impl_->units);
         platform::validate_calibration_observation_contracts(
             document, impl_->runtime->impl_->components,
             impl_->runtime->impl_->thermochemistry);
@@ -1685,7 +1714,7 @@ SimulationService::run_engineering_study(
     try {
         const auto document =
             platform::parse_model_document_text(
-                request.model_json);
+                request.model_json, impl_->runtime->impl_->units);
         const auto& calibration = require_calibration(
             document, request.calibration_id);
         std::set<std::string> calibration_cases;
@@ -1879,7 +1908,8 @@ TransientSimulationResponse SimulationService::run_transient(
     }
     try {
         document =
-            platform::parse_model_document_text(request.model_json);
+            platform::parse_model_document_text(
+                request.model_json, impl_->runtime->impl_->units);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(

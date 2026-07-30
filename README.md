@@ -424,13 +424,11 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 1. Add result-table filtering/export and richer transient plotting over the graph-native result
    contract.
-2. Publish display-unit descriptors through the service catalog so deployments and extensions can
-   augment the browser's conservative built-in presentation registry.
-3. Add wall thermal mass, rotating inertia, and control components using the established
+2. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-4. Add analytic property-derivative APIs; the rigid volume currently
+3. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+4. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+5. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

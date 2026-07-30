@@ -1,3 +1,6 @@
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayValue } from './displayUnits'
+import { formatResultValue } from './resultPresentation'
 import type {
   Catalog,
   ComponentDefinition,
@@ -47,7 +50,7 @@ export function InspectorPanel({
   onRemoveConnection,
   onClose,
 }: InspectorPanelProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   const component =
     selection.type === 'component'
       ? topology.model.components.find((item) => item.id === selection.id)
@@ -131,6 +134,7 @@ export function InspectorPanel({
                 valueSi,
                 parameter.dimension,
                 profile,
+                unitDimensions,
               )
               return (
                 <DetailRow
@@ -209,6 +213,3 @@ export function InspectorPanel({
 
   return null
 }
-import { useDisplayUnits } from './DisplayUnitsContext'
-import { displayValue } from './displayUnits'
-import { formatResultValue } from './resultPresentation'

@@ -574,11 +574,31 @@ export interface ConnectorDomain {
   }>
 }
 
+export interface CatalogDisplayUnit {
+  symbol: string
+  scale_from_si: number
+  offset_from_si: number
+}
+
+export interface CatalogUnitDimension {
+  dimension: string
+  canonical_unit: string
+  si_display: CatalogDisplayUnit
+  engineering_display: CatalogDisplayUnit
+  accepted_units: Array<{
+    symbol: string
+    aliases: string[]
+    scale_to_si: number
+    offset_to_si: number
+  }>
+}
+
 export interface Catalog {
-  schema_version: 'thermox.catalog/v3'
+  schema_version: 'thermox.catalog/v4'
   status: string
   fingerprint: string
   components: CatalogComponent[]
+  unit_dimensions: CatalogUnitDimension[]
   property_backends: PropertyBackend[]
   connector_domains: ConnectorDomain[]
 }

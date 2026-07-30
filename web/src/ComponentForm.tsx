@@ -10,6 +10,7 @@ import { latestArtifactRevisions } from './resourceBindings'
 import type {
   ArtifactRevision,
   CatalogComponent,
+  CatalogUnitDimension,
   ComponentDefinition,
   TopologyDocument,
 } from './types'
@@ -28,6 +29,7 @@ function parameterValue(
   fallback: number | null,
   dimension: string,
   profile: DisplayUnitProfile,
+  unitDimensions: readonly CatalogUnitDimension[],
 ): string {
   let valueSi: number | null = typeof value === 'number' ? value : null
   if (value && typeof value === 'object') {
@@ -42,7 +44,14 @@ function parameterValue(
   if (valueSi === null) valueSi = fallback
   return valueSi === null
     ? ''
-    : String(displayValue(valueSi, dimension, profile).value)
+    : String(
+        displayValue(
+          valueSi,
+          dimension,
+          profile,
+          unitDimensions,
+        ).value,
+      )
 }
 
 function suggestedId(
@@ -72,7 +81,7 @@ export function ComponentForm({
   onCancel,
   onSubmit,
 }: ComponentFormProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   const [componentId, setComponentId] = useState(() =>
     component?.id ?? suggestedId(componentType, topology),
   )
@@ -93,6 +102,7 @@ export function ComponentForm({
           parameter.default_value_si,
           parameter.dimension,
           profile,
+          unitDimensions,
         ),
       ]),
     ),
@@ -149,6 +159,7 @@ export function ComponentForm({
         value,
         descriptor.dimension,
         profile,
+        unitDimensions,
       )
     }
     for (const descriptor of componentType.artifacts) {
@@ -275,7 +286,12 @@ export function ComponentForm({
                   <span>
                     {parameter.name}
                     <small>
-                      {displayUnit(parameter.dimension, profile)} ·{' '}
+                      {displayUnit(
+                        parameter.dimension,
+                        profile,
+                        unitDimensions,
+                      )}{' '}
+                      ·{' '}
                       {parameter.dimension}
                     </small>
                   </span>
@@ -290,6 +306,7 @@ export function ComponentForm({
                             parameter.lower_bound,
                             parameter.dimension,
                             profile,
+                            unitDimensions,
                           ).value
                     }
                     max={
@@ -299,6 +316,7 @@ export function ComponentForm({
                             parameter.upper_bound,
                             parameter.dimension,
                             profile,
+                            unitDimensions,
                           ).value
                     }
                     required={

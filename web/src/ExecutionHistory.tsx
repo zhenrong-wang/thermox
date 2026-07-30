@@ -1,3 +1,6 @@
+import { useDisplayUnits } from './DisplayUnitsContext'
+import { displayValue } from './displayUnits'
+import { formatResultValue } from './resultPresentation'
 import type {
   SimulationJob,
   SimulationJobState,
@@ -44,7 +47,7 @@ export function ExecutionHistory({
   onLoadMore,
   onCancel,
 }: ExecutionHistoryProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   const selected = jobs.find((job) => job.job_id === selectedJobId) ?? jobs[0]
   const active = selected?.state === 'queued' || selected?.state === 'running'
 
@@ -214,6 +217,7 @@ export function ExecutionHistory({
                         value.value_si,
                         value.dimension,
                         profile,
+                        unitDimensions,
                       )
                       return (
                         <div key={value.id}>
@@ -241,6 +245,3 @@ export function ExecutionHistory({
     </section>
   )
 }
-import { useDisplayUnits } from './DisplayUnitsContext'
-import { displayValue } from './displayUnits'
-import { formatResultValue } from './resultPresentation'

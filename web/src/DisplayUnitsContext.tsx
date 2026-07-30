@@ -6,10 +6,13 @@ import {
   type ReactNode,
 } from 'react'
 import type { DisplayUnitProfile } from './displayUnits'
+import type { CatalogUnitDimension } from './types'
 
 interface DisplayUnitsContextValue {
   profile: DisplayUnitProfile
   setProfile: (profile: DisplayUnitProfile) => void
+  unitDimensions: CatalogUnitDimension[]
+  setUnitDimensions: (dimensions: CatalogUnitDimension[]) => void
 }
 
 const DisplayUnitsContext = createContext<DisplayUnitsContextValue | undefined>(
@@ -29,6 +32,9 @@ function initialProfile(): DisplayUnitProfile {
 
 export function DisplayUnitsProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<DisplayUnitProfile>(initialProfile)
+  const [unitDimensions, setUnitDimensions] = useState<
+    CatalogUnitDimension[]
+  >([])
 
   useEffect(() => {
     try {
@@ -39,7 +45,14 @@ export function DisplayUnitsProvider({ children }: { children: ReactNode }) {
   }, [profile])
 
   return (
-    <DisplayUnitsContext.Provider value={{ profile, setProfile }}>
+    <DisplayUnitsContext.Provider
+      value={{
+        profile,
+        setProfile,
+        unitDimensions,
+        setUnitDimensions,
+      }}
+    >
       {children}
     </DisplayUnitsContext.Provider>
   )

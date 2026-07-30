@@ -35,7 +35,7 @@ function ResultValueTable({
   title: string
   values: GraphResultValue[]
 }) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   if (!values.length) return null
   return (
     <section className="result-value-section">
@@ -57,6 +57,7 @@ function ResultValueTable({
                   value.value_si,
                   value.dimension,
                   profile,
+                  unitDimensions,
                 )
                 const derivative =
                   value.derivative_si_s === undefined
@@ -65,6 +66,7 @@ function ResultValueTable({
                         value.derivative_si_s,
                         value.dimension,
                         profile,
+                        unitDimensions,
                       )
                 return (
                   <tr key={`${title}-${value.name}`}>
@@ -96,7 +98,7 @@ export function ResultsWorkspace({
   error,
   onRetry,
 }: ResultsWorkspaceProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   const [sampleIndex, setSampleIndex] = useState(0)
   const sampleCount = result ? resultSampleCount(result) : 0
 
@@ -167,6 +169,7 @@ export function ResultsWorkspace({
                   value.value_si,
                   value.dimension,
                   profile,
+                  unitDimensions,
                 )
                 return (
                   <div key={value.id}>
@@ -268,6 +271,7 @@ export function ResultsWorkspace({
                               value.value_si,
                               value.dimension,
                               profile,
+                              unitDimensions,
                             ).value,
                           )}
                         </td>
@@ -276,6 +280,7 @@ export function ResultsWorkspace({
                             value.value_si,
                             value.dimension,
                             profile,
+                            unitDimensions,
                           ).unit}
                         </td>
                         <td>
@@ -286,12 +291,14 @@ export function ResultsWorkspace({
                                   value.derivative_si_s,
                                   value.dimension,
                                   profile,
+                                  unitDimensions,
                                 ).value,
                               )} ${
                                 displayDeltaValue(
                                   value.derivative_si_s,
                                   value.dimension,
                                   profile,
+                                  unitDimensions,
                                 ).unit
                               }`}
                         </td>
@@ -312,6 +319,7 @@ export function ResultsWorkspace({
                               value.value_si,
                               value.dimension,
                               profile,
+                              unitDimensions,
                             ).value,
                           )}
                         </td>
@@ -320,6 +328,7 @@ export function ResultsWorkspace({
                             value.value_si,
                             value.dimension,
                             profile,
+                            unitDimensions,
                           ).unit}
                         </td>
                         <td>
@@ -330,12 +339,14 @@ export function ResultsWorkspace({
                                   value.derivative_si_s,
                                   value.dimension,
                                   profile,
+                                  unitDimensions,
                                 ).value,
                               )} ${
                                 displayDeltaValue(
                                   value.derivative_si_s,
                                   value.dimension,
                                   profile,
+                                  unitDimensions,
                                 ).unit
                               }`}
                         </td>
@@ -362,6 +373,7 @@ export function ResultsWorkspace({
                                   value.value_si,
                                   value.dimension,
                                   profile,
+                                  unitDimensions,
                                 ).value,
                               )}
                             </td>
@@ -370,6 +382,7 @@ export function ResultsWorkspace({
                                 value.value_si,
                                 value.dimension,
                                 profile,
+                                unitDimensions,
                               ).unit}
                             </td>
                             <td>
@@ -380,12 +393,14 @@ export function ResultsWorkspace({
                                       value.derivative_si_s,
                                       value.dimension,
                                       profile,
+                                      unitDimensions,
                                     ).value,
                                   )} ${
                                     displayDeltaValue(
                                       value.derivative_si_s,
                                       value.dimension,
                                       profile,
+                                      unitDimensions,
                                     ).unit
                                   }`}
                             </td>

@@ -7,6 +7,8 @@
 
 namespace thermox::platform {
 
+class UnitRegistry;
+
 struct ScalarValue {
     double value_si{0.0};
     std::string unit{"dimensionless"};
@@ -102,16 +104,28 @@ struct ModelDocument {
 
 ModelDocument load_model_document(const std::string& path);
 ModelDocument parse_model_document_text(const std::string& text);
+ModelDocument parse_model_document_text(
+    const std::string& text,
+    const UnitRegistry& units);
 // Persistence-facing topology documents deliberately contain no operating
 // cases or calibration campaigns. The returned ModelDocument therefore has
 // empty cases/calibrations and can be composed into the existing compiler
 // input without changing numerical or component contracts.
 ModelDocument parse_topology_document_text(
     const std::string& text);
+ModelDocument parse_topology_document_text(
+    const std::string& text,
+    const UnitRegistry& units);
 CaseDefinition parse_case_document_text(
     const std::string& text);
+CaseDefinition parse_case_document_text(
+    const std::string& text,
+    const UnitRegistry& units);
 ScalarValue parse_scalar_value_document_text(
     const std::string& text);
+ScalarValue parse_scalar_value_document_text(
+    const std::string& text,
+    const UnitRegistry& units);
 MediumDefinition parse_medium_definition_text(
     const std::string& text);
 MaterialDefinition parse_material_definition_text(
@@ -119,7 +133,14 @@ MaterialDefinition parse_material_definition_text(
 ComponentDefinition parse_component_definition_text(
     const std::string& text,
     const ModelDocument& context);
+ComponentDefinition parse_component_definition_text(
+    const std::string& text,
+    const ModelDocument& context,
+    const UnitRegistry& units);
 ConnectionDefinition parse_connection_definition_text(
     const std::string& text);
+ConnectionDefinition parse_connection_definition_text(
+    const std::string& text,
+    const UnitRegistry& units);
 
 }  // namespace thermox::platform

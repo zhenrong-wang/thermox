@@ -50,8 +50,11 @@ function shortKind(kind: string): string {
 }
 
 function App() {
-  const { profile: displayUnitProfile, setProfile: setDisplayUnitProfile } =
-    useDisplayUnits()
+  const {
+    profile: displayUnitProfile,
+    setProfile: setDisplayUnitProfile,
+    setUnitDimensions,
+  } = useDisplayUnits()
   const [workspaceView, setWorkspaceView] =
     useState<'topology' | 'cases' | 'runs' | 'results'>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
@@ -131,6 +134,7 @@ function App() {
       .then(([catalogResponse, projectResponse]) => {
         setError('')
         setCatalog(catalogResponse)
+        setUnitDimensions(catalogResponse.unit_dimensions)
         setProjects(projectResponse.projects)
         setSelectedProjectId(projectResponse.projects[0]?.project_id ?? '')
       })

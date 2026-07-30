@@ -33,6 +33,42 @@ describe('display units', () => {
     expect(valueToSi(42, 'custom_flux', 'engineering')).toBe(42)
   })
 
+  it('prefers catalog-published extension dimensions', () => {
+    const catalog = [
+      {
+        dimension: 'custom_flux',
+        canonical_unit: 'flux_si',
+        si_display: {
+          symbol: 'flux_si',
+          scale_from_si: 1,
+          offset_from_si: 0,
+        },
+        engineering_display: {
+          symbol: 'kflux',
+          scale_from_si: 0.001,
+          offset_from_si: 0,
+        },
+        accepted_units: [
+          {
+            symbol: 'kflux',
+            aliases: ['custom-kflux'],
+            scale_to_si: 1000,
+            offset_to_si: 0,
+          },
+        ],
+      },
+    ]
+    expect(
+      displayValue(42000, 'custom_flux', 'engineering', catalog),
+    ).toEqual({ value: 42, unit: 'kflux' })
+    expect(
+      valueToSi(42, 'custom_flux', 'engineering', catalog),
+    ).toBe(42000)
+    expect(dimensionForUnit('custom-kflux', catalog)).toBe(
+      'custom_flux',
+    )
+  })
+
   it('recognizes canonical case units', () => {
     expect(dimensionForUnit('bar')).toBe('pressure')
     expect(dimensionForUnit('degC')).toBe('temperature')

@@ -714,6 +714,50 @@ std::string serialize_catalog_response_json(
         json_string(out, extension.package_version);
         out << "}";
     }
+    out << "],\n  \"unit_dimensions\": [";
+    for (std::size_t i = 0;
+         i < response.unit_dimensions.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& dimension = response.unit_dimensions[i];
+        const auto display_unit =
+            [&](const CatalogDisplayUnitType& unit) {
+                out << "{\"symbol\": ";
+                json_string(out, unit.symbol);
+                out << ", \"scale_from_si\": ";
+                json_number(out, unit.scale_from_si);
+                out << ", \"offset_from_si\": ";
+                json_number(out, unit.offset_from_si);
+                out << "}";
+            };
+        out << "{\"dimension\": ";
+        json_string(out, dimension.dimension);
+        out << ", \"canonical_unit\": ";
+        json_string(out, dimension.canonical_unit);
+        out << ", \"si_display\": ";
+        display_unit(dimension.si_display);
+        out << ", \"engineering_display\": ";
+        display_unit(dimension.engineering_display);
+        out << ", \"accepted_units\": [";
+        for (std::size_t j = 0;
+             j < dimension.accepted_units.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& unit = dimension.accepted_units[j];
+            out << "{\"symbol\": ";
+            json_string(out, unit.symbol);
+            out << ", \"aliases\": [";
+            for (std::size_t k = 0;
+                 k < unit.aliases.size(); ++k) {
+                if (k != 0) out << ", ";
+                json_string(out, unit.aliases[k]);
+            }
+            out << "], \"scale_to_si\": ";
+            json_number(out, unit.scale_to_si);
+            out << ", \"offset_to_si\": ";
+            json_number(out, unit.offset_to_si);
+            out << "}";
+        }
+        out << "]}";
+    }
     out << "],\n  \"components\": [";
     for (std::size_t i = 0; i < response.components.size(); ++i) {
         if (i != 0) out << ", ";

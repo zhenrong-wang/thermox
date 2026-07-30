@@ -2,8 +2,9 @@
 
 Thermox supports deployment-owned native extensions at the application composition root. An
 extension may register component models, connector domains, property packages, thermochemistry
-packages, and immutable performance-map defaults before constructing `SimulationRuntime`. HTTP,
-RPC, CLI, and UI adapters see only the resulting immutable catalog and fingerprint.
+packages, unit dimensions, and immutable performance-map defaults before constructing
+`SimulationRuntime`. HTTP, RPC, CLI, and UI adapters see only the resulting immutable catalog and
+fingerprint.
 
 This is a C++ integration boundary, not a binary plugin ABI. Dynamic library discovery, untrusted
 code loading, and a safe user equation language remain separate future capabilities.
@@ -20,10 +21,11 @@ An installed Thermox SDK provides these CMake targets:
 
 Native extensions normally include `thermox/service/native_extension_sdk.hpp` and link
 `thermox::service_native`. `NativeExtensionPackage` gives each source-level package an ID, version,
-and optional registration callbacks for components/connectors, properties, performance maps, and
-thermochemistry. `apply_native_extension` validates the package envelope and applies its callbacks
-before `make_simulation_runtime` freezes the composed registries. A successfully applied package
-retains its ID and version in catalog discovery; duplicate package IDs are rejected.
+and optional registration callbacks for components/connectors, properties, units, performance
+maps, and thermochemistry. `apply_native_extension` validates the package envelope and applies
+its callbacks before `make_simulation_runtime` freezes the composed registries. A successfully
+applied package retains its ID and version in catalog discovery; duplicate package IDs are
+rejected.
 
 CoolProp remains a private runtime archive in the installed package; its build-tree headers and
 third-party implementation details are not exported through the SDK. Optional Cantera-enabled SDK
@@ -53,11 +55,11 @@ added independently.
 
 ## Runtime identity
 
-Connector descriptors and native-extension package identities participate in the runtime catalog
-fingerprint alongside components, properties, thermochemistry packages, and deployment-default
-artifacts. Catalog discovery and execution provenance enumerate the same registered connector
-contracts. A change to an extension version, connector variable, scale, dimension, connection
-kind, or contract version therefore changes runtime identity.
+Connector and unit descriptors plus native-extension package identities participate in the
+runtime catalog fingerprint alongside components, properties, thermochemistry packages, and
+deployment-default artifacts. Catalog discovery and execution provenance enumerate the same
+registered contracts. A change to an extension version, connector variable, unit transform or
+alias, scale, dimension, connection kind, or contract version therefore changes runtime identity.
 
 ## Conformance path
 
@@ -69,8 +71,9 @@ containing:
 - a custom `thermal_bus` connector domain;
 - a custom component with ports in that domain;
 - a custom property backend;
+- a custom unit dimension and accepted alias;
 - a connected graph using the injected link kind and contract;
-- fixed case values expressed with ordinary Thermox units.
+- fixed case values expressed with built-in and extension-defined units.
 
 The test requires the extension to appear in catalog discovery, compile through standard
 validation, solve through the ordinary numerical service, and publish graph-native results. This

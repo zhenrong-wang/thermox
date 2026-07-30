@@ -37,9 +37,10 @@ port/stream tables. The browser does not derive thermal-cycle semantics: custom 
 connector domains, and result dimensions remain first-class because the presentation follows
 stable graph identities.
 
-Result artifacts and summaries remain canonical SI. A browser-local display profile applies
-reversible dimension-keyed conversion to summaries, overlays, tables, and transient derivatives;
-offset units apply their offset only to absolute values. Unknown extension-defined dimensions are
-shown unchanged rather than assigned a guessed unit. The built-in presentation registry is an
-adapter concern and can later be augmented by display descriptors in the service catalog without
-changing result persistence.
+Result artifacts and summaries remain canonical SI. The runtime unit registry publishes SI and
+engineering display descriptors through `thermox.catalog/v4`. A browser-local display profile
+applies those reversible dimension-keyed conversions to summaries, overlays, tables, and
+transient derivatives; offset units apply their offset only to absolute values. Unknown
+dimensions are shown unchanged rather than assigned a guessed unit. The browser's built-in table
+is only an unavailable-catalog fallback and does not change result persistence or platform unit
+semantics.

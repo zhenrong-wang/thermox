@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/unit_registry.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/physics/thermochemistry.hpp"
 #include "thermox/service/simulation_runtime.hpp"
@@ -23,6 +24,8 @@ struct NativeExtensionPackage {
     std::function<void(
         physics::ThermochemistryPackageRegistry&)>
         register_thermochemistry;
+    std::function<void(platform::UnitRegistry&)>
+        register_units;
 };
 
 void apply_native_extension(
@@ -30,7 +33,8 @@ void apply_native_extension(
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
     platform::PerformanceMapRegistry& performance_maps,
-    physics::ThermochemistryPackageRegistry& thermochemistry);
+    physics::ThermochemistryPackageRegistry& thermochemistry,
+    platform::UnitRegistry& units);
 
 // Native application composition boundary. RPC and UI adapters should use
 // simulation_runtime.hpp and service DTOs without including this header.
@@ -38,6 +42,8 @@ std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::PerformanceMapRegistry performance_maps = {},
-    physics::ThermochemistryPackageRegistry thermochemistry = {});
+    physics::ThermochemistryPackageRegistry thermochemistry = {},
+    platform::UnitRegistry units =
+        platform::make_default_unit_registry());
 
 }  // namespace thermox::service

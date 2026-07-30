@@ -25,7 +25,7 @@ function portColor(domain: string): string {
 }
 
 export function TopologyNode({ data, selected }: NodeProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
   const nodeData = data as TopologyNodeData
   const inputs = nodeData.ports.filter(
     (port) => port.direction === 'in' || port.direction === 'bidirectional',
@@ -93,6 +93,7 @@ export function TopologyNode({ data, selected }: NodeProps) {
                 value.valueSi,
                 value.dimension,
                 profile,
+                unitDimensions,
               )
               return (
                 <div key={`${value.label}-${value.dimension}`}>

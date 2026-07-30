@@ -381,6 +381,8 @@ Work items:
    - property-registry fluid creation and typed project-artifact binding; ✅
    - persistent SI/engineering display profiles with reversible component input conversion,
      normalized case display, and graph/result presentation; ✅
+   - platform-owned extensible unit registry, service catalog descriptors, and catalog-driven
+     browser conversions and authoring hints; ✅
 8. Case editor using the revision-backed authoring service.
    - topology-scoped creation and exact immutable revision browsing; ✅
    - metadata, parameter override, fixed value, initial guess, and solver option editing with

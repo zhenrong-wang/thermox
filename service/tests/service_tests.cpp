@@ -279,7 +279,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v3,
+            thermox::service::catalog_schema_v4,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -451,12 +451,29 @@ void test_catalog_discovery() {
     require(
         response.connector_domains.size() == 7,
         "catalog must expose connector contracts");
+    const auto pressure_units = std::find_if(
+        response.unit_dimensions.begin(),
+        response.unit_dimensions.end(),
+        [](const auto& dimension) {
+            return dimension.dimension == "pressure";
+        });
+    require(
+        pressure_units != response.unit_dimensions.end() &&
+            pressure_units->canonical_unit == "Pa" &&
+            pressure_units->engineering_display.symbol == "bar" &&
+            pressure_units->engineering_display.scale_from_si ==
+                1.0e-5,
+        "catalog must expose authoritative unit display metadata");
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v3\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v4\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
+    require(
+        json.find("\"unit_dimensions\": [") !=
+            std::string::npos,
+        "catalog JSON must serialize unit dimensions");
 }
 
 void test_validation_and_canonicalization() {

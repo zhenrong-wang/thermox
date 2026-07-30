@@ -9,7 +9,7 @@ The workspace currently provides:
 
 - Team-scoped project and immutable topology-revision browsing;
 - a graph canvas whose nodes and typed ports come from persisted topology plus the runtime catalog;
-- a searchable component palette generated from `thermox.catalog/v3`;
+- a searchable component palette generated from `thermox.catalog/v4`;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;
 - typed project-artifact selectors for performance maps and other declared component resources;
@@ -34,8 +34,8 @@ The workspace currently provides:
 - transient trajectory sample selection and event inspection using the same graph-native contract;
 - persistent SI/engineering display profiles shared across authoring, inspection, run summaries,
   graph overlays, and result tables;
-- reversible dimension-aware component-parameter conversion with SI publication and unchanged
-  fallback for extension-defined dimensions;
+- reversible catalog-driven dimension conversion with SI publication, extension-defined unit
+  support, and a conservative unavailable-catalog fallback;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

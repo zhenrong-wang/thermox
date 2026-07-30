@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { buildMetadataEdits, buildScalarEdit } from './caseAuthoring'
 import { caseModes } from './CaseCreateForm'
 import { useDisplayUnits } from './DisplayUnitsContext'
@@ -18,6 +18,7 @@ import type {
   CaseScalarField,
   ProjectModelValidation,
   ScalarValue,
+  CatalogUnitDimension,
 } from './types'
 
 interface CaseWorkspaceProps {
@@ -70,11 +71,17 @@ const scalarSections: Array<{
 function scalarParts(
   value: ScalarValue,
   profile: DisplayUnitProfile,
+  unitDimensions: readonly CatalogUnitDimension[],
 ): { value: string; unit: string } {
   if (typeof value === 'number') return { value: String(value), unit: '' }
-  const dimension = dimensionForUnit(value.unit)
+  const dimension = dimensionForUnit(value.unit, unitDimensions)
   if (!dimension) return { value: String(value.value), unit: value.unit }
-  const displayed = displayValue(value.value, dimension, profile)
+  const displayed = displayValue(
+    value.value,
+    dimension,
+    profile,
+    unitDimensions,
+  )
   return {
     value: formatResultValue(displayed.value),
     unit: displayed.unit,
@@ -95,7 +102,22 @@ export function CaseWorkspace({
   onValidate,
   onCreate,
 }: CaseWorkspaceProps) {
-  const { profile } = useDisplayUnits()
+  const { profile, unitDimensions } = useDisplayUnits()
+  const caseUnits = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...supportedCaseUnits,
+          ...unitDimensions.flatMap((dimension) =>
+            dimension.accepted_units.flatMap((accepted) => [
+              accepted.symbol,
+              ...accepted.aliases,
+            ]),
+          ),
+        ]),
+      ].sort(),
+    [unitDimensions],
+  )
   const document = revision?.case_document
   const simulationCase = document?.case
   const [label, setLabel] = useState(simulationCase?.label ?? '')
@@ -257,7 +279,11 @@ export function CaseWorkspace({
               <div className="scalar-table">
                 {!entries.length && <p className="scalar-empty">No values.</p>}
                 {entries.map(([scalarKey, scalar]) => {
-                  const parts = scalarParts(scalar, profile)
+                  const parts = scalarParts(
+                    scalar,
+                    profile,
+                    unitDimensions,
+                  )
                   return (
                     <div className="scalar-row" key={scalarKey}>
                       <code>{scalarKey}</code>
@@ -328,7 +354,7 @@ export function CaseWorkspace({
               onChange={(event) => setUnit(event.target.value)}
             />
             <datalist id="thermox-supported-case-units">
-              {supportedCaseUnits.map((item) => (
+              {caseUnits.map((item) => (
                 <option key={item} value={item} />
               ))}
             </datalist>

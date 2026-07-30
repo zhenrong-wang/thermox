@@ -79,6 +79,7 @@ int main() {
         physics::make_default_property_package_registry();
     platform::PerformanceMapRegistry performance_maps;
     physics::ThermochemistryPackageRegistry thermochemistry;
+    auto units = platform::make_default_unit_registry();
 
     service::NativeExtensionPackage extension;
     extension.package_id = "example.thermal_bus";
@@ -92,7 +93,8 @@ int main() {
                 {
                     {"potential", 300.0, 100.0,
                      "temperature", false},
-                    {"flow", 0.0, 1.0e6, "power", false},
+                    {"flow", 0.0, 1.0e6,
+                     "thermal_bus_flux", false},
                 },
             });
             platform::ComponentModelDescriptor descriptor;
@@ -122,21 +124,47 @@ int main() {
                         const ConformancePropertyPackage>();
                 });
         };
+    extension.register_units =
+        [](platform::UnitRegistry& registry) {
+            registry.register_dimension({
+                "thermal_bus_flux",
+                "bus_W",
+                {"bus_W", 1.0, 0.0},
+                {"bus_MW", 1.0e-6, 0.0},
+                {
+                    {"bus_W", {}, 1.0, 0.0},
+                    {"bus_MW", {}, 1.0e6, 0.0},
+                },
+            });
+        };
     service::apply_native_extension(
         extension,
         components,
         properties,
         performance_maps,
-        thermochemistry);
+        thermochemistry,
+        units);
 
     auto runtime = service::make_simulation_runtime(
         std::move(components),
         std::move(properties),
         std::move(performance_maps),
-        std::move(thermochemistry));
+        std::move(thermochemistry),
+        std::move(units));
     service::SimulationService simulation{runtime};
     const auto catalog = simulation.get_catalog();
     require(catalog.succeeded(), "catalog discovery failed");
+    require(
+        std::any_of(
+            catalog.unit_dimensions.begin(),
+            catalog.unit_dimensions.end(),
+            [](const auto& dimension) {
+                return dimension.dimension ==
+                        "thermal_bus_flux" &&
+                    dimension.engineering_display.symbol ==
+                        "bus_MW";
+            }),
+        "extension unit dimension missing from catalog");
     require(
         std::any_of(
             catalog.native_extensions.begin(),
@@ -195,7 +223,7 @@ int main() {
           },
           "bridge.emit.flow": {
             "value": 2.0,
-            "unit": "MW"
+            "unit": "bus_MW"
           }
         }
       }]

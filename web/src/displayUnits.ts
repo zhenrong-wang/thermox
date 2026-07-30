@@ -1,3 +1,5 @@
+import type { CatalogUnitDimension } from './types'
+
 export type DisplayUnitProfile = 'si' | 'engineering'
 
 export interface DisplayValue {
@@ -121,7 +123,23 @@ export function displayValue(
   valueSi: number,
   dimension: string,
   profile: DisplayUnitProfile,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
 ): DisplayValue {
+  const catalog = catalogDimensions.find(
+    (item) => item.dimension === dimension,
+  )
+  if (catalog) {
+    const definition =
+      profile === 'si'
+        ? catalog.si_display
+        : catalog.engineering_display
+    return {
+      value:
+        valueSi * definition.scale_from_si +
+        definition.offset_from_si,
+      unit: definition.symbol,
+    }
+  }
   const definition = units[dimension]?.[profile]
   if (!definition) return { value: valueSi, unit: dimension }
   return {
@@ -134,7 +152,21 @@ export function valueToSi(
   value: number,
   dimension: string,
   profile: DisplayUnitProfile,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
 ): number {
+  const catalog = catalogDimensions.find(
+    (item) => item.dimension === dimension,
+  )
+  if (catalog) {
+    const definition =
+      profile === 'si'
+        ? catalog.si_display
+        : catalog.engineering_display
+    return (
+      (value - definition.offset_from_si) /
+      definition.scale_from_si
+    )
+  }
   const definition = units[dimension]?.[profile]
   if (!definition) return value
   return (value - (definition.offset ?? 0)) / definition.scale
@@ -144,7 +176,21 @@ export function displayDeltaValue(
   valueSi: number,
   dimension: string,
   profile: DisplayUnitProfile,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
 ): DisplayValue {
+  const catalog = catalogDimensions.find(
+    (item) => item.dimension === dimension,
+  )
+  if (catalog) {
+    const definition =
+      profile === 'si'
+        ? catalog.si_display
+        : catalog.engineering_display
+    return {
+      value: valueSi * definition.scale_from_si,
+      unit: `${definition.symbol}/s`,
+    }
+  }
   const definition = units[dimension]?.[profile]
   if (!definition) return { value: valueSi, unit: `${dimension}/s` }
   return {
@@ -156,12 +202,32 @@ export function displayDeltaValue(
 export function displayUnit(
   dimension: string,
   profile: DisplayUnitProfile,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
 ): string {
-  return displayValue(0, dimension, profile).unit
+  return displayValue(
+    0,
+    dimension,
+    profile,
+    catalogDimensions,
+  ).unit
 }
 
-export function dimensionForUnit(unit: string): string | undefined {
+export function dimensionForUnit(
+  unit: string,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
+): string | undefined {
   const normalized = unit.trim()
+  for (const dimension of catalogDimensions) {
+    if (
+      dimension.accepted_units.some(
+        (accepted) =>
+          accepted.symbol === normalized ||
+          accepted.aliases.includes(normalized),
+      )
+    ) {
+      return dimension.dimension
+    }
+  }
   for (const [dimension, profiles] of Object.entries(units)) {
     if (
       profiles.si.unit === normalized ||

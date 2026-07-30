@@ -278,8 +278,19 @@ ProjectService::ProjectService(
     std::shared_ptr<ProjectRepository> repository,
     std::shared_ptr<EngineeringArtifactContentStore>
         artifact_content)
+    : ProjectService(
+          std::move(repository),
+          std::move(artifact_content),
+          platform::make_default_unit_registry()) {}
+
+ProjectService::ProjectService(
+    std::shared_ptr<ProjectRepository> repository,
+    std::shared_ptr<EngineeringArtifactContentStore>
+        artifact_content,
+    platform::UnitRegistry units)
     : repository_(std::move(repository)),
-      artifact_content_(std::move(artifact_content)) {
+      artifact_content_(std::move(artifact_content)),
+      units_(std::move(units)) {
     if (!repository_) {
         throw std::invalid_argument(
             "project repository must not be null");
@@ -345,7 +356,7 @@ ModelRevisionRecord ProjectService::create_model_revision(
     std::string canonical;
     try {
         document = platform::parse_topology_document_text(
-            request.model_json);
+            request.model_json, units_);
         canonical =
             detail::serialize_topology_document_json(document);
     } catch (const std::exception& error) {
@@ -420,7 +431,7 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
     platform::ModelDocument document;
     try {
         document = platform::parse_topology_document_text(
-            base->canonical_model_json);
+            base->canonical_model_json, units_);
         for (const auto& operation : request.operations) {
             if (operation.entity_id.empty()) {
                 throw ProjectRequestError(
@@ -462,7 +473,8 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                             platform::
                                 parse_component_definition_text(
                                     operation.entity_json,
-                                    document),
+                                    document,
+                                    units_),
                             operation.entity_id);
                         break;
                     case GraphEntityType::connection:
@@ -470,7 +482,8 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                             document.connections,
                             platform::
                                 parse_connection_definition_text(
-                                    operation.entity_json),
+                                    operation.entity_json,
+                                    units_),
                             operation.entity_id);
                         break;
                 }
@@ -573,7 +586,7 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
         const auto canonical =
             detail::serialize_topology_document_json(document);
         document = platform::parse_topology_document_text(
-            canonical);
+            canonical, units_);
         return repository_->create_model_revision(
             request.identity.team_id,
             request.identity.user_id,
@@ -610,7 +623,8 @@ CaseRevisionRecord ProjectService::create_case_revision(
     std::string canonical;
     try {
         simulation_case =
-            platform::parse_case_document_text(request.case_json);
+            platform::parse_case_document_text(
+                request.case_json, units_);
         canonical =
             detail::serialize_case_document_json(
                 simulation_case);
@@ -659,7 +673,7 @@ CaseRevisionRecord ProjectService::apply_case_edits(
     try {
         auto simulation_case =
             platform::parse_case_document_text(
-                base->canonical_case_json);
+                base->canonical_case_json, units_);
         for (const auto& operation : request.operations) {
             const bool metadata =
                 operation.field == CaseEditField::label ||
@@ -723,7 +737,7 @@ CaseRevisionRecord ProjectService::apply_case_edits(
             }
             const auto scalar =
                 platform::parse_scalar_value_document_text(
-                    operation.scalar_json);
+                    operation.scalar_json, units_);
             case_scalar_values(
                 simulation_case,
                 operation.field)[operation.key] = scalar;
@@ -733,7 +747,8 @@ CaseRevisionRecord ProjectService::apply_case_edits(
             detail::serialize_case_document_json(
                 simulation_case);
         simulation_case =
-            platform::parse_case_document_text(canonical);
+            platform::parse_case_document_text(
+                canonical, units_);
         return repository_->create_case_revision(
             request.identity.team_id,
             request.identity.user_id,
@@ -813,11 +828,12 @@ ProjectService::resolve_model_case(
     }
     try {
         auto document = platform::parse_topology_document_text(
-            model->canonical_model_json);
+            model->canonical_model_json, units_);
         document.schema_version = "thermox.model/v2";
         document.cases = {
             platform::parse_case_document_text(
-                simulation_case->canonical_case_json),
+                simulation_case->canonical_case_json,
+                units_),
         };
         return ResolvedModelCase{
             project_id,

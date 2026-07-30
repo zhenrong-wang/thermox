@@ -3,6 +3,7 @@
 #include "thermox/service/identity.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/platform/unit_registry.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -392,6 +393,11 @@ public:
         std::shared_ptr<ProjectRepository> repository,
         std::shared_ptr<EngineeringArtifactContentStore>
             artifact_content);
+    ProjectService(
+        std::shared_ptr<ProjectRepository> repository,
+        std::shared_ptr<EngineeringArtifactContentStore>
+            artifact_content,
+        platform::UnitRegistry units);
 
     [[nodiscard]] ProjectRecord create_project(
         const CreateProjectRequest& request) const;
@@ -479,6 +485,7 @@ private:
     std::shared_ptr<ProjectRepository> repository_;
     std::shared_ptr<EngineeringArtifactContentStore>
         artifact_content_;
+    platform::UnitRegistry units_;
 };
 
 class ProjectModelValidationService {

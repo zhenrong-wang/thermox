@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/unit_registry.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/physics/thermochemistry.hpp"
 #include "thermox/service/simulation_runtime.hpp"
@@ -14,6 +15,7 @@ struct SimulationRuntime::Impl {
     physics::PropertyPackageRegistry properties;
     platform::PerformanceMapRegistry performance_maps;
     physics::ThermochemistryPackageRegistry thermochemistry;
+    platform::UnitRegistry units;
     std::string fingerprint;
 };
 
@@ -24,7 +26,8 @@ struct NativeRuntimeFactory {
         platform::ComponentRegistry components,
         physics::PropertyPackageRegistry properties,
         platform::PerformanceMapRegistry performance_maps,
-        physics::ThermochemistryPackageRegistry thermochemistry);
+        physics::ThermochemistryPackageRegistry thermochemistry,
+        platform::UnitRegistry units);
 };
 
 }  // namespace detail

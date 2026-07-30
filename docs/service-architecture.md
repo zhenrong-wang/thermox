@@ -42,7 +42,7 @@ The current synchronous service exposes:
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
 - `EngineeringStudyRequest` / `EngineeringStudyResponse`;
-- `thermox.command/v1`, `thermox.catalog/v3`, `thermox.result/v3`, and `thermox.error/v1`
+- `thermox.command/v1`, `thermox.catalog/v4`, `thermox.result/v3`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
@@ -141,7 +141,7 @@ The application boundary needed by a thin network adapter is now complete:
 
 | Intended operation | Application call | Wire representation |
 | --- | --- | --- |
-| Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v3` JSON |
+| Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v4` JSON |
 | Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
 | Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
