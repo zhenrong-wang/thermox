@@ -23,6 +23,11 @@ The workspace currently provides:
 - exact artifact-revision selection and compile-aware validation with structured diagnostics;
 - immutable run-configuration creation and revision history;
 - complete steady/transient solver policy and generic result-projection authoring;
+- idempotent durable job submission for an exact run-configuration revision;
+- Team-scoped, cursor-paginated execution history with state filtering;
+- optimistic queued/running-job cancellation, structured worker errors, result summaries, and
+  result-artifact manifests;
+- bounded four-second refresh only while the Runs workspace contains an active job;
 - API, loading, empty, and revision-integrity states.
 
 Start the durable API on `127.0.0.1:8080`, then:

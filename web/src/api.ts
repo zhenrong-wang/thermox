@@ -13,6 +13,9 @@ import type {
   ProjectList,
   RunConfigurationRevision,
   RunConfigurationRevisionList,
+  SimulationJob,
+  SimulationJobPage,
+  SimulationJobState,
 } from './types'
 
 class ApiError extends Error {
@@ -89,6 +92,46 @@ async function postValidation(
     ('message' in document && document.message) ||
       `${response.status} ${response.statusText}`,
   )
+}
+
+async function postEmptyJson<T>(
+  path: string,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...headers },
+    signal,
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new ApiError(
+      response.status,
+      body || `${response.status} ${response.statusText}`,
+    )
+  }
+  return (await response.json()) as T
+}
+
+async function deleteJson<T>(
+  path: string,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(path, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...headers },
+    signal,
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new ApiError(
+      response.status,
+      body || `${response.status} ${response.statusText}`,
+    )
+  }
+  return (await response.json()) as T
 }
 
 export const api = {
@@ -200,6 +243,56 @@ export const api = {
     postJson<RunConfigurationRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/run-configuration-revisions`,
       request,
+      signal,
+    ),
+  simulationJobs: (
+    projectId: string,
+    runConfigurationRevisionId: string,
+    state?: SimulationJobState,
+    cursor?: string,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      run_configuration_revision_id: runConfigurationRevisionId,
+      limit: '50',
+    })
+    if (state) query.set('state', state)
+    if (cursor) query.set('cursor', cursor)
+    return getJson<SimulationJobPage>(
+      `/api/v1/simulations?${query.toString()}`,
+      signal,
+    )
+  },
+  simulationJob: (jobId: string, signal?: AbortSignal) =>
+    getJson<SimulationJob>(
+      `/api/v1/simulations/${encodeURIComponent(jobId)}`,
+      signal,
+    ),
+  submitSimulation: (
+    projectId: string,
+    runConfigurationRevisionId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      run_configuration_revision_id: runConfigurationRevisionId,
+    })
+    return postEmptyJson<SimulationJob>(
+      `/api/v1/simulations?${query.toString()}`,
+      { 'Idempotency-Key': idempotencyKey },
+      signal,
+    )
+  },
+  cancelSimulation: (
+    jobId: string,
+    revision: number,
+    signal?: AbortSignal,
+  ) =>
+    deleteJson<SimulationJob>(
+      `/api/v1/simulations/${encodeURIComponent(jobId)}`,
+      { 'If-Match': `"revision-${revision}"` },
       signal,
     ),
   applyGraphEdits: (

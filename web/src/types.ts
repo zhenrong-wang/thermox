@@ -205,6 +205,131 @@ export interface CreateRunConfiguration {
   result_projections: ResultProjection[]
 }
 
+export type SimulationJobState =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+
+export interface RevisionProvenance {
+  project_id: string
+  run_configuration_revision_id: string
+  run_configuration_checksum: string
+  model_revision_id: string
+  model_checksum: string
+  case_revision_id: string
+  case_checksum: string
+}
+
+export interface ResultSummaryValue {
+  id: string
+  dimension: string
+  value_si: number
+  aggregation: ResultAggregation
+  sample_time: number | null
+}
+
+export interface SimulationJob {
+  schema_version: 'thermox.job/v5'
+  job_id: string
+  owner: {
+    team_id: string
+    submitted_by_user_id: string
+  }
+  revision: number
+  created_at_unix_ms: number
+  state: SimulationJobState
+  request: {
+    schema_version: 'thermox.job/v5'
+    mode: 'steady' | 'transient'
+    case_id: string
+    source_revisions: RevisionProvenance | null
+    engineering_artifacts: Array<{
+      id: string
+      artifact_type: string
+      schema_version: string
+      revision: string
+      checksum_sha256: string
+    }>
+    result_projections: ResultProjection[]
+    fingerprint: string
+  }
+  worker_id: string | null
+  attempt: number
+  lease_expires_at_unix_ms: number | null
+  execution: {
+    result_schema_version: string
+    command_schema_version: string
+    platform_version: string
+    operation: string
+    solver: {
+      contract_version: string
+      settings: Array<{
+        name: string
+        value: number
+      }>
+    }
+    catalog_fingerprint: string
+    source_revisions: RevisionProvenance | null
+    model: {
+      schema_version: string
+      model_id: string
+      model_revision: string
+      case_id: string
+    }
+    components: Array<{
+      component_id: string
+      kind: string
+      requested_version: string
+      resolved_version: string
+    }>
+    media: Array<{
+      medium_id: string
+      backend: string
+      substance: string
+      package: string
+      requested_package_version: string
+      resolved_package_version: string
+    }>
+    artifacts: Array<{
+      id: string
+      artifact_type: string
+      schema_version: string
+      revision: string
+      checksum_sha256: string
+    }>
+    connector_domains: Array<{
+      domain: string
+      contract_version: string
+    }>
+  } | null
+  error: {
+    schema_version: string
+    code: string
+    stage: string
+    message: string
+  } | null
+  result_artifact: {
+    artifact_id: string
+    media_type: string
+    schema_version: string
+    byte_size: number
+    checksum: string
+  } | null
+  result_summary: {
+    schema_version: 'thermox.result_summary/v1'
+    mode: 'steady' | 'transient'
+    values: ResultSummaryValue[]
+  } | null
+}
+
+export interface SimulationJobPage {
+  schema_version: 'thermox.job_list/v1'
+  jobs: SimulationJob[]
+  next_cursor: string | null
+}
+
 export type CaseScalarField =
   | 'parameter_override'
   | 'fixed_value'

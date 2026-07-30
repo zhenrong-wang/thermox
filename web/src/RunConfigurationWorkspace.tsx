@@ -1,5 +1,8 @@
+import { ExecutionHistory } from './ExecutionHistory'
 import type {
   RunConfigurationRevision,
+  SimulationJob,
+  SimulationJobState,
   SteadySolverSettings,
 } from './types'
 
@@ -8,9 +11,21 @@ interface RunConfigurationWorkspaceProps {
   publishing: boolean
   operationError: string
   operationStatus: string
+  jobs: SimulationJob[]
+  selectedJobId: string
+  jobsLoading: boolean
+  jobSubmitting: boolean
+  jobStateFilter: '' | SimulationJobState
+  jobsNextCursor: string | null
   onDismissOperation: () => void
   onCreate: () => void
   onRevise: () => void
+  onSelectJob: (jobId: string) => void
+  onJobStateFilter: (state: '' | SimulationJobState) => void
+  onSubmitJob: () => void
+  onRefreshJobs: () => void
+  onLoadMoreJobs: () => void
+  onCancelJob: (job: SimulationJob) => void
 }
 
 function SteadySolverSummary({ value }: { value: SteadySolverSettings }) {
@@ -31,9 +46,21 @@ export function RunConfigurationWorkspace({
   publishing,
   operationError,
   operationStatus,
+  jobs,
+  selectedJobId,
+  jobsLoading,
+  jobSubmitting,
+  jobStateFilter,
+  jobsNextCursor,
   onDismissOperation,
   onCreate,
   onRevise,
+  onSelectJob,
+  onJobStateFilter,
+  onSubmitJob,
+  onRefreshJobs,
+  onLoadMoreJobs,
+  onCancelJob,
 }: RunConfigurationWorkspaceProps) {
   if (!revision) {
     return (
@@ -180,6 +207,21 @@ export function RunConfigurationWorkspace({
             ))}
           </div>
         </section>
+
+        <ExecutionHistory
+          jobs={jobs}
+          selectedJobId={selectedJobId}
+          loading={jobsLoading}
+          submitting={jobSubmitting}
+          stateFilter={jobStateFilter}
+          nextCursor={jobsNextCursor}
+          onSelect={onSelectJob}
+          onStateFilter={onJobStateFilter}
+          onSubmit={onSubmitJob}
+          onRefresh={onRefreshJobs}
+          onLoadMore={onLoadMoreJobs}
+          onCancel={onCancelJob}
+        />
       </div>
     </section>
   )

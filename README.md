@@ -422,14 +422,13 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 ## Next steps
 
-1. Add durable job submission and an execution-history monitor over immutable run configurations.
-2. Add result-summary overlays and stream/result tables.
-3. Add display-unit conversion to the catalog-driven component and case forms.
-4. Add wall thermal mass, rotating inertia, and control components using the established
+1. Add full-result retrieval, result-summary graph overlays, and stream/result tables.
+2. Add display-unit conversion to the catalog-driven component, case, and result views.
+3. Add wall thermal mass, rotating inertia, and control components using the established
    transient component contract.
-5. Add analytic property-derivative APIs; the rigid volume currently
+4. Add analytic property-derivative APIs; the rigid volume currently
    computes local PH closure derivatives through bounded property calls.
-6. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
+5. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
-7. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+6. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.

@@ -178,6 +178,15 @@ workers atomically publish the projected `thermox.result_summary/v1` in PostgreS
 full result-artifact manifest, allowing history and status views to render selected engineering
 outputs without reading large object-store results.
 
+The thin React Runs workspace consumes this contract directly. Submission uses a caller-stable
+idempotency key so an uncertain browser retry cannot create a duplicate calculation. History is
+limited to the selected immutable run-configuration revision, supports the service's state filter
+and cursor, and retains the selected job while refreshing. It polls at a bounded interval only
+while the Runs workspace is visible and at least one loaded job is queued or running. Cancellation
+uses the selected job revision as its `If-Match` precondition. Terminal views expose revision
+provenance, structured worker failures, projected summaries, and the full-result manifest without
+moving orchestration or physics into the browser.
+
 ## Object storage
 
 Durable result content now follows a two-level adapter design:

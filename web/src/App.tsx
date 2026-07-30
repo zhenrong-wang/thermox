@@ -35,6 +35,8 @@ import type {
   ProjectModelValidation,
   Project,
   RunConfigurationRevision,
+  SimulationJob,
+  SimulationJobState,
   TopologyDocument,
 } from './types'
 
@@ -95,6 +97,18 @@ function App() {
   const [addingRunConfiguration, setAddingRunConfiguration] = useState(false)
   const [revisingRunConfiguration, setRevisingRunConfiguration] =
     useState(false)
+  const [simulationJobs, setSimulationJobs] = useState<SimulationJob[]>([])
+  const [selectedSimulationJobId, setSelectedSimulationJobId] = useState('')
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobSubmitting, setJobSubmitting] = useState(false)
+  const [jobStateFilter, setJobStateFilter] =
+    useState<'' | SimulationJobState>('')
+  const [jobsNextCursor, setJobsNextCursor] = useState<string | null>(null)
+  const [submissionIdempotencyKey, setSubmissionIdempotencyKey] = useState('')
+
+  useEffect(() => {
+    setSubmissionIdempotencyKey('')
+  }, [selectedProjectId, selectedRunConfigurationRevisionId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -327,6 +341,75 @@ function App() {
     return () => controller.abort()
   }, [selectedProjectId, selectedRunConfigurationRevisionId])
 
+  useEffect(() => {
+    setSimulationJobs([])
+    setSelectedSimulationJobId('')
+    setJobsNextCursor(null)
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    const controller = new AbortController()
+    setJobsLoading(true)
+    api
+      .simulationJobs(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        jobStateFilter || undefined,
+        undefined,
+        controller.signal,
+      )
+      .then((page) => {
+        setRunOperationError('')
+        setSimulationJobs(page.jobs)
+        setSelectedSimulationJobId(page.jobs[0]?.job_id ?? '')
+        setJobsNextCursor(page.next_cursor)
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setRunOperationError(errorMessage(reason))
+      })
+      .finally(() => setJobsLoading(false))
+    return () => controller.abort()
+  }, [
+    jobStateFilter,
+    selectedProjectId,
+    selectedRunConfigurationRevisionId,
+  ])
+
+  const activeJobCount = simulationJobs.filter(
+    (job) => job.state === 'queued' || job.state === 'running',
+  ).length
+
+  useEffect(() => {
+    if (
+      workspaceView !== 'runs' ||
+      !selectedProjectId ||
+      !selectedRunConfigurationRevisionId ||
+      activeJobCount === 0
+    ) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      void api
+        .simulationJobs(
+          selectedProjectId,
+          selectedRunConfigurationRevisionId,
+          jobStateFilter || undefined,
+        )
+        .then((page) => {
+          setSimulationJobs(page.jobs)
+          setJobsNextCursor(page.next_cursor)
+        })
+        .catch((reason: unknown) => {
+          setRunOperationError(errorMessage(reason))
+        })
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [
+    activeJobCount,
+    jobStateFilter,
+    selectedProjectId,
+    selectedRunConfigurationRevisionId,
+    workspaceView,
+  ])
+
   async function publishEdits(
     operations: GraphEditOperation[],
     successMessage: string,
@@ -553,6 +636,116 @@ function App() {
       throw new Error(message)
     } finally {
       setRunPublishing(false)
+    }
+  }
+
+  async function refreshSimulationJobs() {
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    setJobsLoading(true)
+    try {
+      const page = await api.simulationJobs(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        jobStateFilter || undefined,
+      )
+      setRunOperationError('')
+      setSimulationJobs(page.jobs)
+      setJobsNextCursor(page.next_cursor)
+      setSelectedSimulationJobId((current) =>
+        page.jobs.some((job) => job.job_id === current)
+          ? current
+          : page.jobs[0]?.job_id ?? '',
+      )
+    } catch (reason) {
+      setRunOperationError(errorMessage(reason))
+    } finally {
+      setJobsLoading(false)
+    }
+  }
+
+  async function loadMoreSimulationJobs() {
+    if (
+      !selectedProjectId ||
+      !selectedRunConfigurationRevisionId ||
+      !jobsNextCursor
+    ) {
+      return
+    }
+    setJobsLoading(true)
+    try {
+      const page = await api.simulationJobs(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        jobStateFilter || undefined,
+        jobsNextCursor,
+      )
+      setSimulationJobs((current) => [
+        ...current,
+        ...page.jobs.filter(
+          (job) => !current.some((item) => item.job_id === job.job_id),
+        ),
+      ])
+      setJobsNextCursor(page.next_cursor)
+    } catch (reason) {
+      setRunOperationError(errorMessage(reason))
+    } finally {
+      setJobsLoading(false)
+    }
+  }
+
+  async function submitSimulationJob() {
+    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    const idempotencyKey =
+      submissionIdempotencyKey ||
+      `web-${selectedRunConfigurationRevisionId}-${crypto.randomUUID()}`
+    setSubmissionIdempotencyKey(idempotencyKey)
+    setJobSubmitting(true)
+    setRunOperationError('')
+    try {
+      const job = await api.submitSimulation(
+        selectedProjectId,
+        selectedRunConfigurationRevisionId,
+        idempotencyKey,
+      )
+      setSubmissionIdempotencyKey('')
+      setJobStateFilter('')
+      setSimulationJobs((current) => [
+        job,
+        ...current.filter((item) => item.job_id !== job.job_id),
+      ])
+      setSelectedSimulationJobId(job.job_id)
+      setRunOperationStatus(`Queued execution ${job.job_id}.`)
+    } catch (reason) {
+      setRunOperationError(errorMessage(reason))
+    } finally {
+      setJobSubmitting(false)
+    }
+  }
+
+  async function cancelSimulationJob(job: SimulationJob) {
+    if (
+      !window.confirm(
+        `Cancel ${job.job_id} at job revision ${job.revision}?`,
+      )
+    ) {
+      return
+    }
+    setRunOperationError('')
+    try {
+      const cancelled = await api.cancelSimulation(job.job_id, job.revision)
+      setSimulationJobs((current) =>
+        jobStateFilter && jobStateFilter !== cancelled.state
+          ? current.filter((item) => item.job_id !== cancelled.job_id)
+          : current.map((item) =>
+              item.job_id === cancelled.job_id ? cancelled : item,
+            ),
+      )
+      if (jobStateFilter && jobStateFilter !== cancelled.state) {
+        setSelectedSimulationJobId('')
+      }
+      setRunOperationStatus(`Cancelled ${cancelled.job_id}.`)
+    } catch (reason) {
+      setRunOperationError(errorMessage(reason))
     }
   }
 
@@ -846,12 +1039,32 @@ function App() {
             publishing={runPublishing}
             operationError={runOperationError}
             operationStatus={runOperationStatus}
+            jobs={simulationJobs}
+            selectedJobId={selectedSimulationJobId}
+            jobsLoading={jobsLoading}
+            jobSubmitting={jobSubmitting}
+            jobStateFilter={jobStateFilter}
+            jobsNextCursor={jobsNextCursor}
             onDismissOperation={() => {
               setRunOperationError('')
               setRunOperationStatus('')
             }}
             onCreate={beginCreateRunConfiguration}
             onRevise={() => setRevisingRunConfiguration(true)}
+            onSelectJob={setSelectedSimulationJobId}
+            onJobStateFilter={setJobStateFilter}
+            onSubmitJob={() => {
+              void submitSimulationJob()
+            }}
+            onRefreshJobs={() => {
+              void refreshSimulationJobs()
+            }}
+            onLoadMoreJobs={() => {
+              void loadMoreSimulationJobs()
+            }}
+            onCancelJob={(job) => {
+              void cancelSimulationJob(job)
+            }}
           />
         )}
 

@@ -389,7 +389,8 @@ Work items:
 9. Run configuration and execution workspace.
    - exact topology/case/artifact bindings, complete solver policies, generic result projections,
      and immutable configuration history; ✅
-   - durable job submission and bounded execution-history monitor;
+   - idempotent durable job submission, state-filtered cursor history, active-job-only polling,
+     optimistic cancellation, structured errors, and projected-result summaries; ✅
    - result-summary overlay on the graph.
 10. Stream/result table views.
 
