@@ -445,8 +445,10 @@ Work items:
      pressure-ratio staging; ✅
    - fluid performance-map coordinate/geometry seeding with continuation-only linear extension
      and strict target-domain enforcement; ✅
-   - composition-coupled material-map initialization, heat-duty staging, and
-     reaction/equilibrium policies remain follow-ons.
+   - fixed-duty and counterflow-UA heat-exchanger staging, including recovery from reversed
+     terminal-temperature initial guesses with strict target LMTD enforcement; ✅
+   - composition-coupled material-map initialization and reaction/equilibrium policies remain
+     follow-ons.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.

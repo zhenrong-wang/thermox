@@ -76,6 +76,52 @@ EvaluationStatus log_mean_temperature_difference(
     return EvaluationStatus::success();
 }
 
+EvaluationStatus continued_log_mean_temperature_difference(
+    double difference_a,
+    double difference_b,
+    double anchor_difference_a,
+    double anchor_difference_b,
+    double anchor_inlet_span,
+    double continuation_parameter,
+    double& value) {
+    if (continuation_parameter >= 1.0) {
+        return log_mean_temperature_difference(
+            difference_a, difference_b, value);
+    }
+    if (!std::isfinite(difference_a) ||
+        !std::isfinite(difference_b)) {
+        return EvaluationStatus::recoverable(
+            "heat exchanger terminal temperature differences "
+            "must be finite");
+    }
+
+    const double fallback =
+        std::max(std::abs(anchor_inlet_span), 1.0);
+    const auto positive_seed =
+        [fallback](double difference) {
+            if (!std::isfinite(difference)) return fallback;
+            return std::max(std::abs(difference), 1.0);
+        };
+    const double seed_a = positive_seed(anchor_difference_a);
+    const double seed_b = positive_seed(anchor_difference_b);
+    const double positive_floor =
+        std::max(
+            (1.0 - continuation_parameter) * 1.0e-3,
+            1.0e-12);
+    const double staged_a = std::max(
+        seed_a +
+            continuation_parameter *
+                (difference_a - seed_a),
+        positive_floor);
+    const double staged_b = std::max(
+        seed_b +
+            continuation_parameter *
+                (difference_b - seed_b),
+        positive_floor);
+    return log_mean_temperature_difference(
+        staged_a, staged_b, value);
+}
+
 class FixedDutyHeatExchangerModel final : public ComponentModel {
 public:
     FixedDutyHeatExchangerModel()
@@ -158,32 +204,52 @@ public:
             prefix + "cold_pressure_loss",
             {{cold_out_p, 1.0}, {cold_in_p, -(1.0 - cold_loss)}},
             0.0, 100000.0);
-        system.add_sparse_equation(
+        system.add_continuation_sparse_equation(
             prefix + "hot_energy",
             {hot_in_m, hot_in_h, hot_out_h},
             [hot_in_m, hot_in_h, hot_out_h, duty](
                 const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
                 std::vector<EquationPartial>& jacobian) {
                 const double delta_h =
                     x.at(hot_in_h) - x.at(hot_out_h);
+                const double anchor_duty =
+                    anchor.at(hot_in_m) *
+                    (anchor.at(hot_in_h) -
+                     anchor.at(hot_out_h));
+                const double staged_duty =
+                    anchor_duty +
+                    continuation_parameter *
+                        (duty - anchor_duty);
                 jacobian.push_back({hot_in_m, delta_h});
                 jacobian.push_back({hot_in_h, x.at(hot_in_m)});
                 jacobian.push_back({hot_out_h, -x.at(hot_in_m)});
-                return x.at(hot_in_m) * delta_h - duty;
+                return x.at(hot_in_m) * delta_h - staged_duty;
             },
             std::max(duty, 1.0));
-        system.add_sparse_equation(
+        system.add_continuation_sparse_equation(
             prefix + "cold_energy",
             {cold_in_m, cold_in_h, cold_out_h},
             [cold_in_m, cold_in_h, cold_out_h, duty](
                 const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
                 std::vector<EquationPartial>& jacobian) {
                 const double delta_h =
                     x.at(cold_out_h) - x.at(cold_in_h);
+                const double anchor_duty =
+                    anchor.at(cold_in_m) *
+                    (anchor.at(cold_out_h) -
+                     anchor.at(cold_in_h));
+                const double staged_duty =
+                    anchor_duty +
+                    continuation_parameter *
+                        (duty - anchor_duty);
                 jacobian.push_back({cold_in_m, delta_h});
                 jacobian.push_back({cold_in_h, -x.at(cold_in_m)});
                 jacobian.push_back({cold_out_h, x.at(cold_in_m)});
-                return x.at(cold_in_m) * delta_h - duty;
+                return x.at(cold_in_m) * delta_h - staged_duty;
             },
             std::max(duty, 1.0));
     }
@@ -280,18 +346,27 @@ public:
             prefix + "cold_pressure_loss",
             {{cold_out_p, 1.0}, {cold_in_p, -(1.0 - cold_loss)}},
             0.0, 100000.0);
-        system.add_sparse_equation(
+        system.add_continuation_sparse_equation(
             prefix + "energy_balance",
             {hot_in_m, hot_in_h, hot_out_h,
              cold_in_m, cold_in_h, cold_out_h},
             [hot_in_m, hot_in_h, hot_out_h,
              cold_in_m, cold_in_h, cold_out_h](
                 const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
                 std::vector<EquationPartial>& jacobian) {
                 const double hot_delta =
                     x.at(hot_in_h) - x.at(hot_out_h);
                 const double cold_delta =
                     x.at(cold_out_h) - x.at(cold_in_h);
+                const double anchor_imbalance =
+                    anchor.at(hot_in_m) *
+                        (anchor.at(hot_in_h) -
+                         anchor.at(hot_out_h)) -
+                    anchor.at(cold_in_m) *
+                        (anchor.at(cold_out_h) -
+                         anchor.at(cold_in_h));
                 jacobian.push_back({hot_in_m, hot_delta});
                 jacobian.push_back({hot_in_h, x.at(hot_in_m)});
                 jacobian.push_back({hot_out_h, -x.at(hot_in_m)});
@@ -299,15 +374,20 @@ public:
                 jacobian.push_back({cold_in_h, x.at(cold_in_m)});
                 jacobian.push_back({cold_out_h, -x.at(cold_in_m)});
                 return x.at(hot_in_m) * hot_delta -
-                       x.at(cold_in_m) * cold_delta;
+                       x.at(cold_in_m) * cold_delta -
+                       (1.0 - continuation_parameter) *
+                           anchor_imbalance;
             },
             1.0e7);
-        system.add_checked_equation(
+        system.add_continuation_checked_equation(
             prefix + "counterflow_heat_transfer",
             [hot_properties, cold_properties, conductance,
              hot_in_m, hot_in_p, hot_in_h, hot_out_p, hot_out_h,
              cold_in_p, cold_in_h, cold_out_p, cold_out_h](
-                const std::vector<double>& x, double& residual) {
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                double& residual) {
                 const auto hot_in = hot_properties->state_ph(
                     x.at(hot_in_p), x.at(hot_in_h));
                 if (!hot_in.ok()) return property_failure(hot_in);
@@ -320,18 +400,58 @@ public:
                 const auto cold_out = cold_properties->state_ph(
                     x.at(cold_out_p), x.at(cold_out_h));
                 if (!cold_out.ok()) return property_failure(cold_out);
+                const auto anchor_hot_in =
+                    hot_properties->state_ph(
+                        anchor.at(hot_in_p),
+                        anchor.at(hot_in_h));
+                if (!anchor_hot_in.ok())
+                    return property_failure(anchor_hot_in);
+                const auto anchor_hot_out =
+                    hot_properties->state_ph(
+                        anchor.at(hot_out_p),
+                        anchor.at(hot_out_h));
+                if (!anchor_hot_out.ok())
+                    return property_failure(anchor_hot_out);
+                const auto anchor_cold_in =
+                    cold_properties->state_ph(
+                        anchor.at(cold_in_p),
+                        anchor.at(cold_in_h));
+                if (!anchor_cold_in.ok())
+                    return property_failure(anchor_cold_in);
+                const auto anchor_cold_out =
+                    cold_properties->state_ph(
+                        anchor.at(cold_out_p),
+                        anchor.at(cold_out_h));
+                if (!anchor_cold_out.ok())
+                    return property_failure(anchor_cold_out);
                 double lmtd = 0.0;
-                const auto status = log_mean_temperature_difference(
+                const auto status =
+                    continued_log_mean_temperature_difference(
                     hot_in.state.temperature_k -
                         cold_out.state.temperature_k,
                     hot_out.state.temperature_k -
                         cold_in.state.temperature_k,
+                    anchor_hot_in.state.temperature_k -
+                        anchor_cold_out.state.temperature_k,
+                    anchor_hot_out.state.temperature_k -
+                        anchor_cold_in.state.temperature_k,
+                    anchor_hot_in.state.temperature_k -
+                        anchor_cold_in.state.temperature_k,
+                    continuation_parameter,
                     lmtd);
                 if (!status.ok()) return status;
+                const double anchor_duty =
+                    anchor.at(hot_in_m) *
+                    (anchor.at(hot_in_h) -
+                     anchor.at(hot_out_h));
+                const double staged_heat_transfer =
+                    anchor_duty +
+                    continuation_parameter *
+                        (conductance * lmtd - anchor_duty);
                 residual =
                     x.at(hot_in_m) *
                         (x.at(hot_in_h) - x.at(hot_out_h)) -
-                    conductance * lmtd;
+                    staged_heat_transfer;
                 return EvaluationStatus::success();
             },
             1.0e7);

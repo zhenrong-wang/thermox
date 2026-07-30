@@ -72,6 +72,14 @@ the original map and its original reject/clamp/linear policy are always evaluate
 Consequently continuation cannot turn an out-of-domain final operating point into a successful
 solution.
 
+Fixed-duty heat exchangers stage each side from the duty implied by its initial mass flow and
+enthalpy difference to the declared duty. Counterflow-UA exchangers stage the initial hot/cold
+energy imbalance to conservation and the anchor-implied hot-side duty to `UA * LMTD`. During
+intermediate stages, terminal temperature differences move from positive anchor-derived seeds to
+the evaluated differences. This permits recovery from reversed outlet-temperature guesses without
+weakening the target: `lambda = 1` still evaluates the original strict positive-terminal-difference
+LMTD equation.
+
 ## Derivative preservation
 
 The wrapper preserves the target derivative path:
@@ -108,6 +116,6 @@ The generic fallback remains residual homotopy, and a component hook does not gu
 nonlinear branch connects smoothly from the anchor to the desired physical solution. Components
 without a hook must still be evaluable at the first positive continuation stage.
 
-Composition-coupled material-map initialization, heat-duty staging, and reaction/equilibrium
-introduction are the next component policies. They belong behind this same extension contract;
-they must not become cycle-specific solver logic.
+Composition-coupled material-map initialization and reaction/equilibrium introduction are the next
+component policies. They belong behind this same extension contract; they must not become
+cycle-specific solver logic.

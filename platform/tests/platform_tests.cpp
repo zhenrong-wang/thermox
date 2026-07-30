@@ -3421,6 +3421,25 @@ void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
                  "hot pressure loss is applied");
     require_near(value("hx.cold_out.p"), 4.9e5, 1.0e-7,
                  "cold pressure loss is applied");
+
+    const auto continued =
+        thermox::solve_continuation(graph.problem);
+    require(
+        continued.continuation.converged,
+        continued.continuation.message);
+    require(
+        continued.continuation.used_informed_path,
+        "fixed-duty exchanger exposes an informed duty path");
+    require_near(
+        continued.x.at(require_variable_index(
+            graph.problem.variable_names, "hx.hot_out.h")),
+        value("hx.hot_out.h"), 1.0e-7,
+        "fixed-duty continuation preserves the target hot state");
+    require_near(
+        continued.x.at(require_variable_index(
+            graph.problem.variable_names, "hx.cold_out.h")),
+        value("hx.cold_out.h"), 1.0e-7,
+        "fixed-duty continuation preserves the target cold state");
 }
 
 void test_generic_model_solves_counterflow_ua_heat_exchanger() {
@@ -3561,6 +3580,55 @@ void test_generic_model_solves_counterflow_ua_heat_exchanger() {
         (value("hx.cold_out.h") - value("hx.cold_in.h"));
     require_near(hot_duty, cold_duty, 1.0e-5,
                  "UA exchanger conserves energy");
+
+    auto reversed = document;
+    reversed.cases.front()
+        .initial_guesses.at("hx.hot_out.h")
+        .value_si = 2.5e5;
+    reversed.cases.front()
+        .initial_guesses.at("hx.cold_out.h")
+        .value_si = 5.5e5;
+    const auto reversed_graph =
+        thermox::platform::compile_model_graph(
+            reversed, registry, "design");
+    const auto reversed_direct =
+        thermox::solve_newton(reversed_graph.problem);
+    require(
+        !reversed_direct.diagnostics.converged &&
+            reversed_direct.diagnostics.message.find(
+                "temperature differences must be positive") !=
+                std::string::npos,
+        "direct UA solve must reject reversed terminal "
+        "temperature guesses: " +
+            reversed_direct.diagnostics.message);
+
+    thermox::ContinuationOptions continuation_options;
+    continuation_options.minimum_step = 1.0 / 1024.0;
+    const auto reversed_continued =
+        thermox::solve_continuation(
+            reversed_graph.problem, {},
+            continuation_options);
+    require(
+        reversed_continued.continuation.converged,
+        reversed_continued.continuation.message);
+    require(
+        reversed_continued.continuation.used_informed_path,
+        "UA exchanger reports its informed thermal path");
+    const auto continued_value =
+        [&](const std::string& name) {
+            return reversed_continued.x.at(
+                require_variable_index(
+                    reversed_graph.problem.variable_names,
+                    name));
+        };
+    require_near(
+        continued_value("hx.hot_out.h"),
+        value("hx.hot_out.h"), 1.0e-3,
+        "UA continuation reaches the unchanged target hot state");
+    require_near(
+        continued_value("hx.cold_out.h"),
+        value("hx.cold_out.h"), 1.0e-3,
+        "UA continuation reaches the unchanged target cold state");
 }
 
 void test_if97_fixed_quality_evaporator_and_condenser() {
