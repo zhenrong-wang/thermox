@@ -218,6 +218,8 @@ std::string_view capability_name(
             return "state_pt";
         case physics::PropertyCapability::state_ph:
             return "state_ph";
+        case physics::PropertyCapability::state_ph_derivatives:
+            return "state_ph_derivatives";
         case physics::PropertyCapability::state_ps:
             return "state_ps";
         case physics::PropertyCapability::saturation_p:

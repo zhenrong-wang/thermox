@@ -80,6 +80,8 @@ The public C++ interface is
 
 - pressure-temperature (`state_pt`), pressure-enthalpy (`state_ph`), and
   pressure-entropy (`state_ps`) flashes;
+- a backend-neutral `state_ph_derivatives` result containing the state and
+  temperature, density, and internal-energy partials with respect to pressure and enthalpy;
 - explicit capability discovery for PT, PH, PS, and transport operations, allowing the platform
   compiler to reject an incompatible component/backend pairing before solving;
 - SI-unit density, energy, enthalpy, entropy, heat capacities, speed of sound,
@@ -118,6 +120,27 @@ PH/PS equations, allowing range and
 convergence failures during line search to be treated as recoverable solver
 evaluations rather than process-level exceptions.
 
+## Solver-facing PH derivatives
+
+`state_ph_derivatives` is an explicit capability rather than an assumption attached to every
+property backend. The built-in ideal-gas package evaluates the six partials from its closed-form
+equations. The HEOS CO2 adapter obtains them from CoolProp's analytic first-partial interface
+after one PH update. Both report `PropertyDerivativeSource::analytic`.
+
+CoolProp's IF97 backend does not implement the generic derivative primitives required by that
+interface. Thermox therefore does not advertise analytic PH derivatives for IF97. The shared
+`state_ph_derivatives_with_fallback` utility evaluates a bounded central difference, with
+one-sided behavior at a property-domain boundary, and reports
+`PropertyDerivativeSource::finite_difference`. It evaluates the four neighboring PH states once
+and derives all six partials from them.
+
+Components consume this shared contract. The rigid fluid volume uses density and internal-energy
+partials in its DAE closure, while map-based turbomachinery uses temperature partials in its
+corrected-coordinate chain rule. A third-party backend can replace the fallback simply by
+advertising and implementing the analytic capability; no component changes are required. An
+advertised analytic implementation that fails is surfaced directly and is never silently hidden
+by numerical differencing.
+
 ## Saturation contract and next extensions
 
 The property interface and both real-fluid adapters expose an explicit
@@ -129,6 +152,6 @@ call rejects an exactly saturated state as ambiguous, while PH and PS can
 represent a two-phase mixture with vapor quality.
 
 Each worker thread owns its CoolProp state objects, avoiding shared mutable
-backend state while amortizing factory cost. Solver-facing analytic
-derivatives, broader independent reference vectors, and performance profiling
+backend state while amortizing factory cost. Broader independent reference
+vectors, an analytic IF97 derivative implementation, and performance profiling
 remain useful promotion work for production-scale simulations.

@@ -120,4 +120,12 @@ inline EvaluationStatus property_failure(
     return EvaluationStatus::recoverable(result.message);
 }
 
+inline EvaluationStatus property_failure(
+    const physics::PhDerivativesResult& result) {
+    if (result.status == physics::PropertyStatus::backend_error) {
+        return EvaluationStatus::fatal(result.message);
+    }
+    return EvaluationStatus::recoverable(result.message);
+}
+
 }  // namespace thermox::platform::component_model_support

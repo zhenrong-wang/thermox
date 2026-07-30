@@ -124,8 +124,9 @@ off-design cases. The immutable source map is never rewritten by calibration.
 The selected map pressure ratio and efficiency close outlet pressure, isentropic enthalpy change,
 and shaft power using the appropriate compressor or turbine convention. Map-domain failures are
 recoverable model evaluations, allowing the nonlinear solver to reject invalid trial states. The
-pressure-ratio row uses map derivatives and local numerically evaluated property-transformation
-derivatives in sparse Jacobian assembly.
+pressure-ratio row uses map derivatives and the property package's shared PH-derivative contract
+in sparse Jacobian assembly. Analytic-capable packages stay analytic through the full correction
+chain; explicitly non-analytic packages use the centralized bounded fallback.
 
 The registered `*.variable_geometry_map` variants bind a v2 artifact whose condition variable is
 `geometry_setting` with dimension `angle`. The component parameter of the same name is normalized

@@ -34,6 +34,12 @@ PropertyResult Co2PropertyPackage::state_ph(
         pressure, enthalpy);
 }
 
+PhDerivativesResult Co2PropertyPackage::state_ph_derivatives(
+    double pressure, double enthalpy) const {
+    return detail::coolprop_state_ph_derivatives(
+        detail::CoolPropFluid::co2, pressure, enthalpy);
+}
+
 PropertyResult Co2PropertyPackage::state_ps(
     double pressure, double entropy) const {
     return detail::coolprop_state(

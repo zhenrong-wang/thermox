@@ -1,8 +1,6 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 
-#include <algorithm>
-#include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -16,35 +14,6 @@ using component_model_support::require_internal_variable;
 using component_model_support::require_port_variable;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
-
-EvaluationStatus property_partial(
-    const physics::PropertyPackage& properties,
-    double pressure,
-    double enthalpy,
-    double base_value,
-    bool with_respect_to_pressure,
-    double (*extract)(const physics::ThermodynamicState&),
-    double& derivative) {
-    const double coordinate =
-        with_respect_to_pressure ? pressure : enthalpy;
-    const double step =
-        std::max(std::abs(coordinate) * 1.0e-6, 1.0e-3);
-    const auto plus = properties.state_ph(
-        with_respect_to_pressure ? pressure + step : pressure,
-        with_respect_to_pressure ? enthalpy : enthalpy + step);
-    if (plus.ok()) {
-        derivative = (extract(plus.state) - base_value) / step;
-        return EvaluationStatus::success();
-    }
-    const auto minus = properties.state_ph(
-        with_respect_to_pressure ? pressure - step : pressure,
-        with_respect_to_pressure ? enthalpy : enthalpy - step);
-    if (minus.ok()) {
-        derivative = (base_value - extract(minus.state)) / step;
-        return EvaluationStatus::success();
-    }
-    return property_failure(plus);
-}
 
 class RigidAdiabaticFluidVolumeModel final
     : public ComponentModel {
@@ -166,35 +135,27 @@ public:
                 double, const std::vector<double>& x,
                 const std::vector<double>&, double& residual,
                 std::vector<DaeEquationPartial>& jacobian) {
-                const auto state = properties->state_ph(
-                    x.at(pressure), x.at(enthalpy));
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(pressure),
+                        x.at(enthalpy));
                 if (!state.ok()) return property_failure(state);
-                double drho_dp = 0.0;
-                double drho_dh = 0.0;
-                auto status = property_partial(
-                    *properties, x.at(pressure), x.at(enthalpy),
-                    state.state.density_kg_m3, true,
-                    [](const physics::ThermodynamicState& value) {
-                        return value.density_kg_m3;
-                    },
-                    drho_dp);
-                if (!status.ok()) return status;
-                status = property_partial(
-                    *properties, x.at(pressure), x.at(enthalpy),
-                    state.state.density_kg_m3, false,
-                    [](const physics::ThermodynamicState& value) {
-                        return value.density_kg_m3;
-                    },
-                    drho_dh);
-                if (!status.ok()) return status;
                 residual =
                     x.at(mass) -
                     volume * state.state.density_kg_m3;
                 jacobian.push_back({mass, 1.0, 0.0});
                 jacobian.push_back(
-                    {pressure, -volume * drho_dp, 0.0});
+                    {pressure,
+                     -volume *
+                         state.derivatives
+                             .density_wrt_pressure_at_enthalpy,
+                     0.0});
                 jacobian.push_back(
-                    {enthalpy, -volume * drho_dh, 0.0});
+                    {enthalpy,
+                     -volume *
+                         state.derivatives
+                             .density_wrt_enthalpy_at_pressure,
+                     0.0});
                 return EvaluationStatus::success();
             },
             10.0);
@@ -205,27 +166,11 @@ public:
                 double, const std::vector<double>& x,
                 const std::vector<double>&, double& residual,
                 std::vector<DaeEquationPartial>& jacobian) {
-                const auto state = properties->state_ph(
-                    x.at(pressure), x.at(enthalpy));
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(pressure),
+                        x.at(enthalpy));
                 if (!state.ok()) return property_failure(state);
-                double du_dp = 0.0;
-                double du_dh = 0.0;
-                auto status = property_partial(
-                    *properties, x.at(pressure), x.at(enthalpy),
-                    state.state.internal_energy_j_kg, true,
-                    [](const physics::ThermodynamicState& value) {
-                        return value.internal_energy_j_kg;
-                    },
-                    du_dp);
-                if (!status.ok()) return status;
-                status = property_partial(
-                    *properties, x.at(pressure), x.at(enthalpy),
-                    state.state.internal_energy_j_kg, false,
-                    [](const physics::ThermodynamicState& value) {
-                        return value.internal_energy_j_kg;
-                    },
-                    du_dh);
-                if (!status.ok()) return status;
                 residual =
                     x.at(energy) -
                     x.at(mass) *
@@ -234,9 +179,17 @@ public:
                 jacobian.push_back(
                     {mass, -state.state.internal_energy_j_kg, 0.0});
                 jacobian.push_back(
-                    {pressure, -x.at(mass) * du_dp, 0.0});
+                    {pressure,
+                     -x.at(mass) *
+                         state.derivatives
+                             .internal_energy_wrt_pressure_at_enthalpy,
+                     0.0});
                 jacobian.push_back(
-                    {enthalpy, -x.at(mass) * du_dh, 0.0});
+                    {enthalpy,
+                     -x.at(mass) *
+                         state.derivatives
+                             .internal_energy_wrt_enthalpy_at_pressure,
+                     0.0});
                 return EvaluationStatus::success();
             },
             1.0e6);

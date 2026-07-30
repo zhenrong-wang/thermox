@@ -247,44 +247,18 @@ EvaluationStatus evaluate_turbomachinery_map(
 std::pair<double, double> inlet_temperature_derivatives(
     const physics::PropertyPackage& properties,
     double pressure,
-    double enthalpy,
-    double base_temperature) {
-    const auto derivative =
-        [&](double coordinate, bool perturb_pressure) {
-            const double step =
-                std::max(std::abs(coordinate) * 1.0e-6, 1.0);
-            const auto lower = perturb_pressure
-                ? properties.state_ph(
-                      pressure - step, enthalpy)
-                : properties.state_ph(
-                      pressure, enthalpy - step);
-            const auto upper = perturb_pressure
-                ? properties.state_ph(
-                      pressure + step, enthalpy)
-                : properties.state_ph(
-                      pressure, enthalpy + step);
-            if (lower.ok() && upper.ok()) {
-                return (upper.state.temperature_k -
-                        lower.state.temperature_k) /
-                    (2.0 * step);
-            }
-            if (upper.ok()) {
-                return (upper.state.temperature_k -
-                        base_temperature) /
-                    step;
-            }
-            if (lower.ok()) {
-                return (base_temperature -
-                        lower.state.temperature_k) /
-                    step;
-            }
-            throw std::runtime_error(
-                "unable to evaluate turbomachinery inlet "
-                "temperature derivatives");
-        };
+    double enthalpy) {
+    const auto result =
+        physics::state_ph_derivatives_with_fallback(
+            properties, pressure, enthalpy);
+    if (!result.ok()) {
+        throw std::runtime_error(result.message);
+    }
     return {
-        derivative(pressure, true),
-        derivative(enthalpy, false),
+        result.derivatives
+            .temperature_wrt_pressure_at_enthalpy,
+        result.derivatives
+            .temperature_wrt_enthalpy_at_pressure,
     };
 }
 
@@ -535,8 +509,7 @@ public:
                             temperature_enthalpy_derivative] =
                     inlet_temperature_derivatives(
                         *properties, x.at(inlet_p),
-                        x.at(inlet_h),
-                        point.inlet_temperature);
+                        x.at(inlet_h));
                 const double flow_mass_derivative =
                     std::sqrt(
                         point.inlet_temperature /

@@ -434,6 +434,9 @@ Work items:
 3. Verify provider-owned Jacobian rows against bounded finite differences with named mismatch
    diagnostics. ✅
 4. Expand analytic or automatic differentiation Jacobians across property-heavy core components.
+   - backend-neutral PH derivative contract with explicit analytic/fallback provenance; ✅
+   - analytic ideal-gas and HEOS CO2 derivatives plus centralized bounded IF97 fallback; ✅
+   - rigid-volume and performance-map component migration to the shared contract; ✅
 5. Homotopy/continuation initialization strategies.
 6. Tearing/decomposition and better structural diagnostics.
 7. Safe custom equation DSL; no arbitrary user Python in API process.

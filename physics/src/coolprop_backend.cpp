@@ -172,6 +172,91 @@ PropertyResult coolprop_state(
     }
 }
 
+PhDerivativesResult coolprop_state_ph_derivatives(
+    CoolPropFluid fluid, double pressure, double enthalpy) {
+    if (!valid_input(pressure, enthalpy)) {
+        return {
+            {}, {}, PropertyDerivativeSource::analytic,
+            PropertyStatus::invalid_input,
+            "property inputs must be finite and pressure must be positive"};
+    }
+    if (outside_limits(
+            fluid, CoolPropFlash::ph, pressure, enthalpy)) {
+        return {
+            {}, {}, PropertyDerivativeSource::analytic,
+            PropertyStatus::out_of_range,
+            "property inputs are outside the backend validity limits"};
+    }
+    try {
+        auto& state = backend_state(fluid);
+        update(
+            state, CoolPropFlash::ph, pressure, enthalpy);
+        const auto thermodynamic_state = read_state(state);
+        if (thermodynamic_state.phase == Phase::two_phase) {
+            return {
+                thermodynamic_state, {},
+                PropertyDerivativeSource::analytic,
+                PropertyStatus::saturation_boundary,
+                "single-phase p-h derivatives are undefined in the "
+                "two-phase region"};
+        }
+        PhStateDerivatives derivatives;
+        derivatives.temperature_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::iT, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.temperature_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::iT, CoolProp::iHmass,
+                CoolProp::iP);
+        derivatives.density_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::iDmass, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.density_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::iDmass, CoolProp::iHmass,
+                CoolProp::iP);
+        derivatives.internal_energy_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::iUmass, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.internal_energy_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::iUmass, CoolProp::iHmass,
+                CoolProp::iP);
+        const double values[]{
+            derivatives.temperature_wrt_pressure_at_enthalpy,
+            derivatives.temperature_wrt_enthalpy_at_pressure,
+            derivatives.density_wrt_pressure_at_enthalpy,
+            derivatives.density_wrt_enthalpy_at_pressure,
+            derivatives.internal_energy_wrt_pressure_at_enthalpy,
+            derivatives.internal_energy_wrt_enthalpy_at_pressure};
+        if (!std::all_of(
+                std::begin(values), std::end(values),
+                [](double value) { return std::isfinite(value); })) {
+            return {
+                thermodynamic_state, {},
+                PropertyDerivativeSource::analytic,
+                PropertyStatus::backend_error,
+                "property backend returned non-finite p-h derivatives"};
+        }
+        return {
+            thermodynamic_state, derivatives,
+            PropertyDerivativeSource::analytic,
+            PropertyStatus::success, {}};
+    } catch (CoolProp::CoolPropBaseError& error) {
+        const auto mapped = map_exception(error);
+        return {
+            {}, {}, PropertyDerivativeSource::analytic,
+            mapped.status, mapped.message};
+    } catch (const std::exception& error) {
+        return {
+            {}, {}, PropertyDerivativeSource::analytic,
+            PropertyStatus::backend_error, error.what()};
+    }
+}
+
 SaturationResult coolprop_saturation_p(
     CoolPropFluid fluid, double pressure_pa) {
     if (!std::isfinite(pressure_pa) || pressure_pa <= 0.0) {

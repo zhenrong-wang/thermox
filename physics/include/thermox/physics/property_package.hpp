@@ -20,6 +20,7 @@ enum class Phase { unknown, liquid, vapor, supercritical, two_phase };
 enum class PropertyCapability {
     state_pt,
     state_ph,
+    state_ph_derivatives,
     state_ps,
     saturation_p,
     transport,
@@ -49,6 +50,32 @@ struct PropertyResult {
     [[nodiscard]] bool ok() const { return status == PropertyStatus::success; }
 };
 
+enum class PropertyDerivativeSource {
+    analytic,
+    finite_difference,
+};
+
+struct PhStateDerivatives {
+    double temperature_wrt_pressure_at_enthalpy{0.0};
+    double temperature_wrt_enthalpy_at_pressure{0.0};
+    double density_wrt_pressure_at_enthalpy{0.0};
+    double density_wrt_enthalpy_at_pressure{0.0};
+    double internal_energy_wrt_pressure_at_enthalpy{0.0};
+    double internal_energy_wrt_enthalpy_at_pressure{0.0};
+};
+
+struct PhDerivativesResult {
+    ThermodynamicState state;
+    PhStateDerivatives derivatives;
+    PropertyDerivativeSource source{PropertyDerivativeSource::analytic};
+    PropertyStatus status{PropertyStatus::backend_error};
+    std::string message;
+
+    [[nodiscard]] bool ok() const {
+        return status == PropertyStatus::success;
+    }
+};
+
 struct SaturationResult {
     ThermodynamicState liquid;
     ThermodynamicState vapor;
@@ -76,10 +103,17 @@ public:
         double pressure_pa, double temperature_k) const = 0;
     [[nodiscard]] virtual PropertyResult state_ph(
         double pressure_pa, double enthalpy_j_kg) const = 0;
+    [[nodiscard]] virtual PhDerivativesResult state_ph_derivatives(
+        double pressure_pa, double enthalpy_j_kg) const;
     [[nodiscard]] virtual PropertyResult state_ps(
         double pressure_pa, double entropy_j_kg_k) const = 0;
     [[nodiscard]] virtual SaturationResult saturation_p(
         double pressure_pa) const = 0;
 };
+
+[[nodiscard]] PhDerivativesResult state_ph_derivatives_with_fallback(
+    const PropertyPackage& properties,
+    double pressure_pa,
+    double enthalpy_j_kg);
 
 }  // namespace thermox::physics

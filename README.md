@@ -267,7 +267,8 @@ adaptive integration.
 The transient component path also supports a property-backed rigid fluid volume. Its mass and
 total internal energy are differential states, while pressure and enthalpy are algebraic states
 closed by the selected fluid package. The same component therefore works with any registered
-backend that supplies a PH flash.
+backend that supplies a PH flash. Its closure Jacobian consumes the shared PH-derivative contract:
+analytic where the backend advertises it and an explicit bounded fallback otherwise.
 
 Run the IF97 Rankine regression:
 
@@ -424,8 +425,8 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 
 1. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
-2. Add analytic property-derivative APIs; the rigid volume currently
-   computes local PH closure derivatives through bounded property calls.
+2. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic
+   derivatives, while IF97 uses the shared provenance-marked bounded fallback.
 3. Integrate a production sparse factorization backend with symbolic reuse behind the current CSR
    contract.
 4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when

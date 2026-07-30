@@ -11,6 +11,8 @@ enum class CoolPropFlash { pt, ph, ps };
 
 [[nodiscard]] PropertyResult coolprop_state(
     CoolPropFluid fluid, CoolPropFlash flash, double first, double second);
+[[nodiscard]] PhDerivativesResult coolprop_state_ph_derivatives(
+    CoolPropFluid fluid, double pressure_pa, double enthalpy_j_kg);
 [[nodiscard]] SaturationResult coolprop_saturation_p(
     CoolPropFluid fluid, double pressure_pa);
 [[nodiscard]] std::string_view coolprop_version() noexcept;

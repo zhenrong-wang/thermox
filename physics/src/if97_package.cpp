@@ -16,8 +16,10 @@ PropertyLimits If97PropertyPackage::limits() const noexcept {
     return {611.657, 100e6, 273.15, 2273.15};
 }
 
-bool If97PropertyPackage::supports(PropertyCapability) const noexcept {
-    return true;
+bool If97PropertyPackage::supports(
+    PropertyCapability capability) const noexcept {
+    return capability !=
+        PropertyCapability::state_ph_derivatives;
 }
 
 PropertyResult If97PropertyPackage::state_pt(

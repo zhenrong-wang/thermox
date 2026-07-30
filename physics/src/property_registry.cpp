@@ -64,6 +64,7 @@ std::shared_ptr<const PropertyPackage> PropertyPackageRegistry::create(
     constexpr std::array capabilities{
         PropertyCapability::state_pt,
         PropertyCapability::state_ph,
+        PropertyCapability::state_ph_derivatives,
         PropertyCapability::state_ps,
         PropertyCapability::saturation_p,
         PropertyCapability::transport,
@@ -119,6 +120,7 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const std::vector all_flashes{
         PropertyCapability::state_pt,
         PropertyCapability::state_ph,
+        PropertyCapability::state_ph_derivatives,
         PropertyCapability::state_ps,
         PropertyCapability::saturation_p,
         PropertyCapability::transport,
@@ -126,7 +128,15 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const std::vector ideal_capabilities{
         PropertyCapability::state_pt,
         PropertyCapability::state_ph,
+        PropertyCapability::state_ph_derivatives,
         PropertyCapability::state_ps,
+    };
+    const std::vector if97_capabilities{
+        PropertyCapability::state_pt,
+        PropertyCapability::state_ph,
+        PropertyCapability::state_ps,
+        PropertyCapability::saturation_p,
+        PropertyCapability::transport,
     };
     const auto ideal_identity = ideal_gas("Air");
     const auto co2_identity = co2("CO2");
@@ -155,15 +165,15 @@ PropertyPackageRegistry make_default_property_package_registry() {
         co2);
     registry.register_backend(
         {"if97", if97_name, if97_version,
-         {"Water", "Steam"}, all_flashes},
+         {"Water", "Steam"}, if97_capabilities},
         if97);
     registry.register_backend(
         {"water_steam_if97", if97_name, if97_version,
-         {"Water", "Steam"}, all_flashes},
+         {"Water", "Steam"}, if97_capabilities},
         if97);
     registry.register_backend(
         {"coolprop_if97", if97_name, if97_version,
-         {"Water", "Steam"}, all_flashes},
+         {"Water", "Steam"}, if97_capabilities},
         if97);
     return registry;
 }

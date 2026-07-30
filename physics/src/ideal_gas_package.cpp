@@ -63,6 +63,33 @@ PropertyResult IdealGasPropertyPackage::state_ph(double pressure, double enthalp
     return state_pt(pressure, enthalpy / cp_);
 }
 
+PhDerivativesResult
+IdealGasPropertyPackage::state_ph_derivatives(
+    double pressure, double enthalpy) const {
+    const auto state = state_ph(pressure, enthalpy);
+    if (!state.ok()) {
+        return {{}, {}, PropertyDerivativeSource::analytic,
+                state.status, state.message};
+    }
+    const double cv = cp_ - gas_constant_;
+    PhStateDerivatives derivatives;
+    derivatives.temperature_wrt_pressure_at_enthalpy = 0.0;
+    derivatives.temperature_wrt_enthalpy_at_pressure =
+        1.0 / cp_;
+    derivatives.density_wrt_pressure_at_enthalpy =
+        state.state.density_kg_m3 / pressure;
+    derivatives.density_wrt_enthalpy_at_pressure =
+        -state.state.density_kg_m3 / enthalpy;
+    derivatives.internal_energy_wrt_pressure_at_enthalpy =
+        0.0;
+    derivatives.internal_energy_wrt_enthalpy_at_pressure =
+        cv / cp_;
+    return {
+        state.state, derivatives,
+        PropertyDerivativeSource::analytic,
+        PropertyStatus::success, {}};
+}
+
 PropertyResult IdealGasPropertyPackage::state_ps(double pressure, double entropy) const {
     if (!std::isfinite(pressure) || !std::isfinite(entropy) || pressure <= 0.0) {
         return {{}, PropertyStatus::invalid_input,

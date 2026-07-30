@@ -108,6 +108,116 @@ void verify_round_trip(const thermox::physics::PropertyPackage& package,
     require(pt.state.cp_j_kg_k > 0.0, "cp must be positive");
 }
 
+void require_relative_near(
+    double actual, double expected, double relative_tolerance,
+    double absolute_tolerance, const std::string& message) {
+    const double tolerance = std::max(
+        absolute_tolerance,
+        relative_tolerance * std::abs(expected));
+    require_near(actual, expected, tolerance, message);
+}
+
+void verify_ph_derivatives(
+    const thermox::physics::PropertyPackage& package,
+    double pressure, double temperature,
+    double relative_tolerance,
+    thermox::physics::PropertyDerivativeSource expected_source) {
+    require(
+        package.supports(
+            thermox::physics::PropertyCapability::
+                state_ph_derivatives) ==
+            (expected_source ==
+             thermox::physics::PropertyDerivativeSource::analytic),
+        std::string(package.name()) +
+            " derivative capability declaration");
+    const auto pt = package.state_pt(pressure, temperature);
+    require(pt.ok(), "derivative reference PT state");
+    const double enthalpy = pt.state.enthalpy_j_kg;
+    const auto result =
+        thermox::physics::state_ph_derivatives_with_fallback(
+            package, pressure, enthalpy);
+    require(
+        result.ok(),
+        std::string(package.name()) +
+            " analytic p-h derivatives: " + result.message);
+    require(
+        result.source == expected_source,
+        "property derivatives must report correct provenance");
+
+    const double pressure_step =
+        std::max(pressure * 1.0e-5, 1.0);
+    const double enthalpy_step =
+        std::max(std::abs(enthalpy) * 1.0e-5, 1.0e-2);
+    const auto pressure_lower =
+        package.state_ph(pressure - pressure_step, enthalpy);
+    const auto pressure_upper =
+        package.state_ph(pressure + pressure_step, enthalpy);
+    const auto enthalpy_lower =
+        package.state_ph(pressure, enthalpy - enthalpy_step);
+    const auto enthalpy_upper =
+        package.state_ph(pressure, enthalpy + enthalpy_step);
+    require(
+        pressure_lower.ok() && pressure_upper.ok() &&
+            enthalpy_lower.ok() && enthalpy_upper.ok(),
+        "finite-difference derivative reference states");
+    const auto pressure_partial =
+        [&](auto extract) {
+            return (
+                extract(pressure_upper.state) -
+                extract(pressure_lower.state)) /
+                (2.0 * pressure_step);
+        };
+    const auto enthalpy_partial =
+        [&](auto extract) {
+            return (
+                extract(enthalpy_upper.state) -
+                extract(enthalpy_lower.state)) /
+                (2.0 * enthalpy_step);
+        };
+    const auto extract_temperature =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.temperature_k;
+        };
+    const auto density =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.density_kg_m3;
+        };
+    const auto internal_energy =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.internal_energy_j_kg;
+        };
+    require_relative_near(
+        result.derivatives
+            .temperature_wrt_pressure_at_enthalpy,
+        pressure_partial(extract_temperature), relative_tolerance,
+        1.0e-12, "dT/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .temperature_wrt_enthalpy_at_pressure,
+        enthalpy_partial(extract_temperature), relative_tolerance,
+        1.0e-12, "dT/dh at constant p");
+    require_relative_near(
+        result.derivatives
+            .density_wrt_pressure_at_enthalpy,
+        pressure_partial(density), relative_tolerance,
+        1.0e-12, "drho/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .density_wrt_enthalpy_at_pressure,
+        enthalpy_partial(density), relative_tolerance,
+        1.0e-12, "drho/dh at constant p");
+    require_relative_near(
+        result.derivatives
+            .internal_energy_wrt_pressure_at_enthalpy,
+        pressure_partial(internal_energy), relative_tolerance,
+        1.0e-10, "du/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .internal_energy_wrt_enthalpy_at_pressure,
+        enthalpy_partial(internal_energy), relative_tolerance,
+        1.0e-10, "du/dh at constant p");
+}
+
 void verify_solver_bridge(const thermox::physics::PropertyPackage& package,
                           double pressure, double target_temperature,
                           double initial_temperature, double tolerance) {
@@ -410,6 +520,16 @@ int main() {
     verify_round_trip(ideal_gas, 2e5, 600.0, 1e-10);
     verify_round_trip(co2, 1e5, 320.0, 0.1);
     verify_round_trip(if97, 25e6, 873.0, 0.2);
+    verify_ph_derivatives(
+        ideal_gas, 2e5, 600.0, 1.0e-8,
+        thermox::physics::PropertyDerivativeSource::analytic);
+    verify_ph_derivatives(
+        co2, 20e6, 700.0, 2.0e-4,
+        thermox::physics::PropertyDerivativeSource::analytic);
+    verify_ph_derivatives(
+        if97, 6e6, 700.0, 2.0e-3,
+        thermox::physics::PropertyDerivativeSource::
+            finite_difference);
     verify_co2_cycle_points(co2);
     verify_thermochemistry_contracts();
     verify_humid_air_ambient_state();
