@@ -31,6 +31,7 @@ import {
   resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import { TopologyCanvas } from './TopologyCanvas'
+import { initialTopologyDocument } from './topologyAuthoring'
 import { WorkflowNavigator } from './WorkflowNavigator'
 import {
   buildWorkflowStages,
@@ -610,6 +611,36 @@ function App() {
       const message = errorMessage(reason)
       setOperationError(message)
       throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function createInitialTopology() {
+    const project = projects.find(
+      (candidate) => candidate.project_id === selectedProjectId,
+    )
+    if (!project || selectedRevisionId) return
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createModelRevision(
+        project.project_id,
+        initialTopologyDocument(project),
+      )
+      setRevisions((current) => [
+        revision,
+        ...current.filter(
+          (item) => item.model_revision_id !== revision.model_revision_id,
+        ),
+      ])
+      setSelectedRevisionId(revision.model_revision_id)
+      setOperationStatus(
+        `Created ${project.name} topology revision r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
     } finally {
       setPublishing(false)
     }
@@ -1303,6 +1334,13 @@ function App() {
               catalog={topologyCatalog?.components ?? []}
               revisionId={selectedRevisionId}
               publishing={publishing}
+              onCreateTopology={
+                selectedProjectId && !selectedRevisionId
+                  ? () => {
+                      void createInitialTopology()
+                    }
+                  : undefined
+              }
               onConnect={connectPorts}
               onSelect={(nextSelection) => {
                 setSelection(nextSelection)
@@ -1459,6 +1497,13 @@ function App() {
                     onChoose={setNewComponentType}
                     onAddFluid={() => setAddingMedium(true)}
                     onAddMaterial={() => setAddingMaterial(true)}
+                    onCreateTopology={
+                      selectedProjectId && !selectedRevisionId
+                        ? () => {
+                            void createInitialTopology()
+                          }
+                        : undefined
+                    }
                     onDefine={() => setDefiningComponent(true)}
                     onRevise={(component) => {
                       const sourceRevisionId =

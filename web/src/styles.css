@@ -585,6 +585,11 @@ code {
   font-size: 11px;
 }
 
+.empty-canvas .primary-button {
+  justify-self: center;
+  margin-top: 16px;
+}
+
 .empty-orbit {
   width: 54px;
   height: 54px;
@@ -709,6 +714,23 @@ code {
   background: #eef6f8;
   color: #4d7183;
   line-height: 1.45;
+}
+
+.library-start-button {
+  width: 100%;
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid #4d9ab2;
+  border-radius: 4px;
+  background: #367f98;
+  color: #fff;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.library-start-button:hover {
+  background: #2f7188;
 }
 
 .search {

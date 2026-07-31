@@ -17,6 +17,7 @@ interface ComponentLibraryProps {
   onChoose: (component: CatalogComponent) => void
   onAddFluid: () => void
   onAddMaterial: () => void
+  onCreateTopology?: () => void
   onDefine: () => void
   onRevise: (component: CatalogComponent) => void
 }
@@ -31,6 +32,7 @@ export function ComponentLibrary({
   onChoose,
   onAddFluid,
   onAddMaterial,
+  onCreateTopology,
   onDefine,
   onRevise,
 }: ComponentLibraryProps) {
@@ -89,8 +91,19 @@ export function ComponentLibrary({
           </div>
         </div>
         <p className="library-instruction">
-          Drag a type onto the canvas, or click it, to configure an instance.
+          {onCreateTopology
+            ? 'Create the first topology revision to activate this library.'
+            : 'Drag a type onto the canvas, or click it, to configure an instance.'}
         </p>
+        {onCreateTopology && (
+          <button
+            type="button"
+            className="library-start-button"
+            onClick={onCreateTopology}
+          >
+            Create topology
+          </button>
+        )}
         <div className="resource-summary">
           <span>{fluidCount} fluids</span>
           <span>{materialCount} materials</span>

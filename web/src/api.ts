@@ -20,6 +20,7 @@ import type {
   SimulationResult,
   SimulationJobState,
   ExpressionComponentDefinition,
+  TopologyDocument,
 } from './types'
 
 class ApiError extends Error {
@@ -157,6 +158,21 @@ export const api = {
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(revisionId)}`,
       signal,
     ),
+  createModelRevision: (
+    projectId: string,
+    document: TopologyDocument,
+    parentRevisionId = '',
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams()
+    if (parentRevisionId) query.set('parent_revision_id', parentRevisionId)
+    const suffix = query.size ? `?${query.toString()}` : ''
+    return postJson<ModelRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions${suffix}`,
+      document,
+      signal,
+    )
+  },
   artifactRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<ArtifactRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions`,

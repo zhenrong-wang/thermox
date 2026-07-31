@@ -27,6 +27,7 @@ interface TopologyCanvasProps {
   readOnly?: boolean
   resultValues?: Record<string, ResultNodeValue[]>
   selection?: GraphSelection
+  onCreateTopology?: () => void
 }
 
 function endpoint(value: string): [string, string] {
@@ -97,13 +98,28 @@ export function TopologyCanvas({
   readOnly = false,
   resultValues = {},
   selection,
+  onCreateTopology,
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
       <div className="empty-canvas">
         <div className="empty-orbit" />
         <h2>Select a topology revision</h2>
-        <p>The immutable system graph will appear here.</p>
+        <p>
+          {onCreateTopology
+            ? 'Create the first immutable revision, then build with registered components.'
+            : 'The immutable system graph will appear here.'}
+        </p>
+        {onCreateTopology && (
+          <button
+            type="button"
+            className="primary-button"
+            disabled={publishing}
+            onClick={onCreateTopology}
+          >
+            {publishing ? 'Creating…' : 'Create topology'}
+          </button>
+        )}
       </div>
     )
   }
