@@ -5,6 +5,7 @@ import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
 import { ComponentForm } from './ComponentForm'
+import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import {
@@ -44,11 +45,6 @@ import type {
   TopologyDocument,
 } from './types'
 
-function shortKind(kind: string): string {
-  const parts = kind.split('.')
-  return parts.length > 2 ? `${parts[0]}.${parts[1]}` : kind
-}
-
 function App() {
   const {
     profile: displayUnitProfile,
@@ -70,7 +66,8 @@ function App() {
     useState<CaseRevision>()
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
-  const [filter, setFilter] = useState('')
+  const [topologySidebar, setTopologySidebar] =
+    useState<'library' | 'inspector'>('library')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [publishing, setPublishing] = useState(false)
@@ -279,17 +276,6 @@ function App() {
   const selectedResultJob = resultJobs.find(
     (job) => job.job_id === selectedResultJobId,
   )
-  const palette = useMemo(() => {
-    const query = filter.trim().toLowerCase()
-    return (catalog?.components ?? []).filter(
-      (component) =>
-        !query ||
-        component.kind.toLowerCase().includes(query) ||
-        component.ports.some((port) =>
-          port.domain.toLowerCase().includes(query),
-        ),
-    )
-  }, [catalog, filter])
   const requiredArtifactIds = useMemo(
     () =>
       [
@@ -1151,7 +1137,17 @@ function App() {
               revisionId={selectedRevisionId}
               publishing={publishing}
               onConnect={connectPorts}
-              onSelect={setSelection}
+              onSelect={(nextSelection) => {
+                setSelection(nextSelection)
+                setTopologySidebar(
+                  nextSelection ? 'inspector' : 'library',
+                )
+              }}
+              onAddComponent={(component) => {
+                setSelection(undefined)
+                setTopologySidebar('library')
+                setNewComponentType(component)
+              }}
             />
           )}
           </section>
@@ -1221,8 +1217,68 @@ function App() {
           />
         )}
 
-        <aside className="palette">
-          {workspaceView === 'runs' ? (
+        <aside
+          className={`palette${
+            workspaceView === 'topology' ? ' topology-sidebar' : ''
+          }`}
+        >
+          {workspaceView === 'topology' ? (
+            <>
+              <div className="topology-sidebar-tabs">
+                <button
+                  type="button"
+                  className={topologySidebar === 'library' ? 'active' : ''}
+                  onClick={() => setTopologySidebar('library')}
+                >
+                  Library
+                  <span>{catalog?.components.length ?? 0}</span>
+                </button>
+                <button
+                  type="button"
+                  className={topologySidebar === 'inspector' ? 'active' : ''}
+                  disabled={!selection}
+                  onClick={() => setTopologySidebar('inspector')}
+                >
+                  Inspector
+                </button>
+              </div>
+              <div className="topology-sidebar-content">
+                {topologySidebar === 'inspector' &&
+                selection &&
+                topology &&
+                catalog ? (
+                  <InspectorPanel
+                    selection={selection}
+                    topology={topology}
+                    catalog={catalog}
+                    publishing={publishing}
+                    onEditComponent={setEditingComponent}
+                    onEditConnection={setEditingConnection}
+                    onRemoveComponent={(component) => {
+                      void removeComponent(component)
+                    }}
+                    onRemoveConnection={(connection) => {
+                      void removeConnection(connection)
+                    }}
+                    onClose={() => {
+                      setSelection(undefined)
+                      setTopologySidebar('library')
+                    }}
+                  />
+                ) : (
+                  <ComponentLibrary
+                    components={catalog?.components ?? []}
+                    disabled={!topology || publishing}
+                    fluidCount={topology?.model.media.length ?? 0}
+                    artifactRevisionCount={artifactRevisions.length}
+                    catalogFingerprint={catalog?.fingerprint ?? ''}
+                    onChoose={setNewComponentType}
+                    onAddFluid={() => setAddingMedium(true)}
+                  />
+                )}
+              </div>
+            </>
+          ) : workspaceView === 'runs' ? (
             <RunConfigurationPanel
               revisions={visibleRunConfigurations}
               selectedId={selectedRunConfigurationRevisionId}
@@ -1252,92 +1308,7 @@ function App() {
               onSelect={setSelectedCaseRevisionId}
               onCreate={() => setAddingCase(true)}
             />
-          ) : selection && topology && catalog ? (
-            <InspectorPanel
-              selection={selection}
-              topology={topology}
-              catalog={catalog}
-              publishing={publishing}
-              onEditComponent={setEditingComponent}
-              onEditConnection={setEditingConnection}
-              onRemoveComponent={(component) => {
-                void removeComponent(component)
-              }}
-              onRemoveConnection={(connection) => {
-                void removeConnection(connection)
-              }}
-              onClose={() => setSelection(undefined)}
-            />
-          ) : (
-            <>
-              <div className="palette-heading">
-                <span className="eyebrow">Runtime catalog</span>
-                <div className="palette-title-row">
-                  <div>
-                    <h2>Components</h2>
-                    <p>
-                      {catalog?.components.length ?? 0} registered types
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="resource-button"
-                    disabled={!topology || publishing}
-                    onClick={() => setAddingMedium(true)}
-                  >
-                    + Fluid
-                  </button>
-                </div>
-                <div className="resource-summary">
-                  <span>{topology?.model.media.length ?? 0} fluids</span>
-                  <span>{artifactRevisions.length} artifact revisions</span>
-                </div>
-              </div>
-              <label className="search">
-                <span>⌕</span>
-                <input
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Filter type or domain"
-                />
-              </label>
-              <div className="component-list">
-                {palette.map((component) => (
-                  <button
-                    type="button"
-                    className="component-card"
-                    key={component.kind}
-                    disabled={!topology || publishing}
-                    onClick={() => setNewComponentType(component)}
-                  >
-                    <div>
-                      <span className="kind-family">
-                        {shortKind(component.kind)}
-                      </span>
-                      {component.supports_transient && (
-                        <span className="transient-badge">transient</span>
-                      )}
-                    </div>
-                    <strong>{component.kind.split('.').at(-1)}</strong>
-                    <div className="port-summary">
-                      {component.ports.map((port) => (
-                        <span key={`${port.name}-${port.domain}`}>
-                          <i className={`port-${port.domain}`} />
-                          {port.name}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <footer>
-                <span>Catalog</span>
-                <code>
-                  {catalog?.fingerprint.slice(0, 18) ?? 'loading…'}
-                </code>
-              </footer>
-            </>
-          )}
+          ) : null}
         </aside>
       </section>
       {workspaceView === 'topology' && newComponentType && topology && (

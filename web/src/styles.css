@@ -476,6 +476,67 @@ code {
   box-shadow: -4px 0 14px rgba(35, 62, 82, 0.04);
 }
 
+.topology-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.topology-sidebar-tabs {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 8px 9px 0;
+  border-bottom: 1px solid #dfe7eb;
+  background: #f4f7f8;
+}
+
+.topology-sidebar-tabs button {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #7b8c97;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.topology-sidebar-tabs button.active {
+  border-bottom-color: #2b89a8;
+  color: #276d88;
+}
+
+.topology-sidebar-tabs button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.topology-sidebar-tabs span {
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: #dfecef;
+  font-size: 7px;
+}
+
+.topology-sidebar-content {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+}
+
+.component-library {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) 43px;
+}
+
 .palette-heading {
   padding: 17px 16px 12px;
 }
@@ -484,6 +545,15 @@ code {
   margin: 4px 0 0;
   color: #82919c;
   font-size: 10px;
+}
+
+.palette-heading .library-instruction {
+  margin-top: 10px;
+  padding: 8px 9px;
+  border-left: 3px solid #3b96b6;
+  background: #eef6f8;
+  color: #4d7183;
+  line-height: 1.45;
 }
 
 .search {
@@ -523,10 +593,14 @@ code {
   background: #fff;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
   transition:
     border-color 120ms ease,
     transform 120ms ease;
+}
+
+.component-card:active {
+  cursor: grabbing;
 }
 
 .component-card:hover {
@@ -538,6 +612,13 @@ code {
   cursor: not-allowed;
   opacity: 0.56;
   transform: none;
+}
+
+.library-empty {
+  margin: 8px 5px;
+  color: #7b8c97;
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .component-card > div:first-child {
@@ -613,7 +694,7 @@ code {
   background: #d2a62c !important;
 }
 
-.palette footer {
+.component-library footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -624,10 +705,20 @@ code {
   text-transform: uppercase;
 }
 
-.palette footer code {
+.component-library footer code {
   color: #4e768c;
   font-size: 8px;
   text-transform: none;
+}
+
+.canvas-authoring-hint {
+  padding: 7px 10px !important;
+  border: 1px dashed #76aab9 !important;
+  border-radius: 4px;
+  background: rgba(247, 251, 252, 0.92) !important;
+  color: #47758a !important;
+  font-size: 9px;
+  pointer-events: none;
 }
 
 .topology-node {
@@ -1016,6 +1107,11 @@ code {
   grid-row: 1 / -1;
   display: flex;
   flex-direction: column;
+}
+
+.topology-sidebar-content .inspector-panel {
+  grid-row: auto;
+  overflow-y: auto;
 }
 
 .inspector-panel > header {

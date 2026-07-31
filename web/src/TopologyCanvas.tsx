@@ -3,12 +3,14 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  Panel,
   ReactFlow,
   type Connection,
   type Edge,
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { COMPONENT_DRAG_TYPE } from './componentLibrary'
 import { TopologyNode, type TopologyNodeData } from './TopologyNode'
 import type { GraphSelection } from './InspectorPanel'
 import type { ResultNodeValue } from './resultPresentation'
@@ -21,6 +23,7 @@ interface TopologyCanvasProps {
   publishing: boolean
   onConnect: (connection: Connection) => Promise<void>
   onSelect: (selection?: GraphSelection) => void
+  onAddComponent?: (component: CatalogComponent) => void
   readOnly?: boolean
   resultValues?: Record<string, ResultNodeValue[]>
 }
@@ -81,6 +84,7 @@ export function TopologyCanvas({
   publishing,
   onConnect,
   onSelect,
+  onAddComponent,
   readOnly = false,
   resultValues = {},
 }: TopologyCanvasProps) {
@@ -151,11 +155,35 @@ export function TopologyCanvas({
         onSelect({ type: 'connection', id: edge.id })
       }
       onPaneClick={() => onSelect(undefined)}
+      onDragOver={(event) => {
+        if (
+          onAddComponent &&
+          !readOnly &&
+          !publishing &&
+          event.dataTransfer.types.includes(COMPONENT_DRAG_TYPE)
+        ) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+        }
+      }}
+      onDrop={(event) => {
+        if (!onAddComponent || readOnly || publishing) return
+        const kind = event.dataTransfer.getData(COMPONENT_DRAG_TYPE)
+        const component = catalogByKind.get(kind)
+        if (!component) return
+        event.preventDefault()
+        onAddComponent(component)
+      }}
       elementsSelectable
       minZoom={0.2}
       maxZoom={2}
       proOptions={{ hideAttribution: true }}
     >
+      {onAddComponent && !readOnly && (
+        <Panel position="top-left" className="canvas-authoring-hint">
+          Drag a registered component here to add it
+        </Panel>
+      )}
       <Background
         color="#cbd4dd"
         gap={22}
