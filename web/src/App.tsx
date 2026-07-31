@@ -1382,6 +1382,7 @@ function App() {
         ) : (
           <ResultsWorkspace
             topology={topology}
+            topologyRevisionId={selectedRevisionId}
             catalog={topologyCatalog?.components ?? []}
             job={selectedResultJob}
             result={simulationResult}

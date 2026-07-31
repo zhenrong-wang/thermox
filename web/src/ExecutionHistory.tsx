@@ -1,6 +1,7 @@
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
+import { jobLifecycle } from './jobLifecycle'
 import type {
   SimulationJob,
   SimulationJobState,
@@ -50,6 +51,12 @@ export function ExecutionHistory({
   const { profile, unitDimensions } = useDisplayUnits()
   const selected = jobs.find((job) => job.job_id === selectedJobId) ?? jobs[0]
   const active = selected?.state === 'queued' || selected?.state === 'running'
+  const progressNote =
+    selected?.state === 'queued'
+      ? 'Waiting for a worker claim. This view refreshes automatically.'
+      : selected?.state === 'running'
+        ? 'The worker is solving this job. Numerical progress is not estimated by the queue.'
+        : ''
 
   return (
     <section className="execution-history">
@@ -173,6 +180,21 @@ export function ExecutionHistory({
                   <code>{selected.owner.submitted_by_user_id}</code>
                 </label>
               </div>
+              <div className="job-lifecycle" aria-label="Execution lifecycle">
+                {jobLifecycle(
+                  selected.state,
+                  Boolean(selected.worker_id || selected.attempt > 0),
+                ).map((stage) => (
+                  <div className={stage.status} key={stage.id}>
+                    <i />
+                    <span>{stage.label}</span>
+                  </div>
+                ))}
+              </div>
+              {progressNote &&
+                <p className="job-progress-note">
+                  {progressNote}
+                </p>}
               {selected.request.source_revisions && (
                 <div className="job-provenance">
                   <span>

@@ -26,6 +26,7 @@ interface TopologyCanvasProps {
   onAddComponent?: (component: CatalogComponent) => void
   readOnly?: boolean
   resultValues?: Record<string, ResultNodeValue[]>
+  selection?: GraphSelection
 }
 
 function endpoint(value: string): [string, string] {
@@ -39,11 +40,14 @@ function layoutNodes(
   topology: TopologyDocument,
   catalog: Map<string, CatalogComponent>,
   resultValues: Record<string, ResultNodeValue[]>,
+  selection?: GraphSelection,
 ): Node<TopologyNodeData>[] {
   const columns = Math.max(1, Math.ceil(Math.sqrt(topology.model.components.length)))
   const rowHeight = Object.keys(resultValues).length > 0 ? 310 : 230
   return topology.model.components.map((component, index) => ({
     id: component.id,
+    selected:
+      selection?.type === 'component' && selection.id === component.id,
     type: 'topology',
     position: {
       x: (index % columns) * 330,
@@ -57,12 +61,17 @@ function layoutNodes(
   }))
 }
 
-function layoutEdges(topology: TopologyDocument): Edge[] {
+function layoutEdges(
+  topology: TopologyDocument,
+  selection?: GraphSelection,
+): Edge[] {
   return topology.model.connections.map((connection) => {
     const [source, sourceHandle] = endpoint(connection.from)
     const [target, targetHandle] = endpoint(connection.to)
     return {
       id: connection.id,
+      selected:
+        selection?.type === 'connection' && selection.id === connection.id,
       source,
       sourceHandle,
       target,
@@ -87,6 +96,7 @@ export function TopologyCanvas({
   onAddComponent,
   readOnly = false,
   resultValues = {},
+  selection,
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
@@ -99,8 +109,11 @@ export function TopologyCanvas({
   }
 
   const catalogByKind = new Map(catalog.map((item) => [item.kind, item]))
-  const nodes = layoutNodes(topology, catalogByKind, resultValues)
-  const edges = layoutEdges(topology)
+  const nodes = layoutNodes(topology, catalogByKind, resultValues, selection)
+  const edges = layoutEdges(topology, selection)
+  const elementProps = readOnly
+    ? { nodes, edges }
+    : { defaultNodes: nodes, defaultEdges: edges }
   const componentsById = new Map(
     topology.model.components.map((component) => [component.id, component]),
   )
@@ -137,8 +150,7 @@ export function TopologyCanvas({
   return (
     <ReactFlow
       key={revisionId}
-      defaultNodes={nodes}
-      defaultEdges={edges}
+      {...elementProps}
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.22 }}

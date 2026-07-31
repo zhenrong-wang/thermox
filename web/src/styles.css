@@ -2626,6 +2626,84 @@ code {
   text-overflow: ellipsis;
 }
 
+.job-lifecycle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 10px;
+}
+
+.job-lifecycle > div {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: #929ea5;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.job-lifecycle > div::before {
+  position: absolute;
+  top: 4px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: #dce3e6;
+  content: '';
+}
+
+.job-lifecycle > div:first-child::before {
+  display: none;
+}
+
+.job-lifecycle i {
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #d5dde1;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.job-lifecycle .complete,
+.job-lifecycle .current {
+  color: #39745e;
+}
+
+.job-lifecycle .complete::before,
+.job-lifecycle .current::before {
+  background: #70a994;
+}
+
+.job-lifecycle .complete i {
+  border-color: #70a994;
+  background: #70a994;
+}
+
+.job-lifecycle .current i {
+  border-color: #37876a;
+  box-shadow: 0 0 0 3px rgba(55, 135, 106, 0.13);
+}
+
+.job-lifecycle .error {
+  color: #9b4b44;
+}
+
+.job-lifecycle .error::before,
+.job-lifecycle .error i {
+  border-color: #c86d65;
+  background: #c86d65;
+}
+
+.job-progress-note {
+  margin: 8px 0 0;
+  color: #788992;
+  font-size: 7px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .job-provenance {
   display: grid;
   gap: 5px;
@@ -2812,6 +2890,16 @@ code {
   font-size: 8px;
 }
 
+.result-provenance-chip.exact {
+  border-color: #a9d3c2;
+  background: #f3faf7;
+}
+
+.result-provenance-chip.exact span,
+.result-provenance-chip.exact code {
+  color: #39745e;
+}
+
 .results-workspace > .operation-banner {
   position: static;
   max-width: none;
@@ -2857,6 +2945,80 @@ code {
   color: #2e624d;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 13px;
+}
+
+.solver-diagnostic-card {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid #d7e1e5;
+  border-radius: 5px;
+  background: #fbfcfc;
+}
+
+.solver-diagnostic-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e7ea;
+}
+
+.solver-diagnostic-card h2 {
+  margin: 2px 0 0;
+  color: #385363;
+  font-size: 11px;
+}
+
+.solver-outcome {
+  padding: 3px 7px;
+  border-radius: 10px;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.solver-outcome.successful {
+  background: #dff2e8;
+  color: #247454;
+}
+
+.solver-outcome.unsuccessful {
+  background: #f8e2e0;
+  color: #a0473f;
+}
+
+.solver-diagnostic-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px;
+  background: #e1e7ea;
+}
+
+.solver-diagnostic-facts > div {
+  display: grid;
+  gap: 5px;
+  padding: 9px 11px;
+  background: #f8fafb;
+}
+
+.solver-diagnostic-facts span {
+  color: #83929b;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.solver-diagnostic-facts code {
+  color: #415f70;
+  font-size: 9px;
+}
+
+.solver-diagnostic-card > p {
+  margin: 0;
+  padding: 8px 11px;
+  color: #71838e;
+  font-size: 8px;
+  line-height: 1.5;
 }
 
 .result-timeline {
@@ -3027,9 +3189,53 @@ code {
   font-size: 7px;
 }
 
+.result-graph-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-graph-context button {
+  padding: 3px 6px;
+  border: 1px solid #aacbd6;
+  border-radius: 9px;
+  background: #edf7fa;
+  color: #3f7588;
+  cursor: pointer;
+  font-size: 7px;
+}
+
 .result-canvas {
   height: 440px;
   background: #eff4f6;
+}
+
+.result-provenance-block {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px;
+  color: #7d695e;
+  text-align: center;
+}
+
+.result-provenance-block strong {
+  color: #805647;
+  font-size: 11px;
+}
+
+.result-provenance-block p {
+  max-width: 480px;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.result-provenance-block code {
+  color: #8b7165;
+  font-size: 8px;
 }
 
 .result-diagnostics {
@@ -3148,6 +3354,24 @@ code {
 .result-table tbody tr:last-child th,
 .result-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.result-table tbody tr.selected-entity-row th,
+.result-table tbody tr.selected-entity-row td {
+  background: #eef7fa;
+}
+
+.result-entity-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #32758f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: #aeced9;
+  text-underline-offset: 2px;
 }
 
 .stream-result-table {

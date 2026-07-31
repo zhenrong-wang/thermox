@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest'
+import {
+  exactRevisionProvenance,
+  resultDiagnosticSummary,
+} from './resultDiagnostics'
+import type { RevisionProvenance, SimulationResult } from './types'
+
+function steadyResult(): SimulationResult {
+  return {
+    schema_version: 'thermox.result/v3',
+    status: 'succeeded',
+    error: { schema_version: '', code: '', stage: '', message: '' },
+    metadata: {} as SimulationResult['metadata'],
+    diagnostics: {
+      converged: true,
+      iterations: 7,
+      final_residual_norm: 2.5e-8,
+      final_step_norm: 1e-9,
+      function_evaluations: 11,
+      jacobian_evaluations: 4,
+      linear_solver_evaluations: 4,
+      symbolic_factorizations: 1,
+      numeric_factorizations: 4,
+      linear_solver_backend: 'klu',
+      message: 'converged',
+    },
+    continuation: {
+      enabled: false,
+      converged: true,
+      used_informed_path: false,
+      reached_parameter: 1,
+      accepted_stages: 0,
+      rejected_stages: 0,
+      message: '',
+      stages: [],
+    },
+    graph: { components: [], system_balances: [], kpis: [] },
+    reduced_connection_equations: [],
+  }
+}
+
+describe('resultDiagnosticSummary', () => {
+  it('surfaces steady convergence evidence', () => {
+    const summary = resultDiagnosticSummary(steadyResult())
+    expect(summary).toMatchObject({ successful: true, mode: 'steady' })
+    expect(summary.facts).toContainEqual({
+      label: 'Residual norm',
+      value: '2.500e-8',
+    })
+  })
+
+  it('surfaces transient integration evidence', () => {
+    const result = {
+      schema_version: 'thermox.result/v3',
+      status: 'succeeded',
+      error: { schema_version: '', code: '', stage: '', message: '' },
+      metadata: {} as SimulationResult['metadata'],
+      trajectory: [],
+      events: [],
+      diagnostics: {
+        success: true,
+        accepted_steps: 12,
+        rejected_steps: 1,
+        nonlinear_solves: 12,
+        nonlinear_iterations: 20,
+        symbolic_factorizations: 1,
+        numeric_factorizations: 12,
+        linear_solver_backend: 'klu',
+        final_time: 5,
+        last_step: 0.25,
+        message: 'integration complete',
+      },
+    } satisfies SimulationResult
+    const summary = resultDiagnosticSummary(result)
+    expect(summary).toMatchObject({ successful: true, mode: 'transient' })
+    expect(summary.facts).toContainEqual({
+      label: 'Accepted steps',
+      value: '12',
+    })
+  })
+
+  it('requires request, execution, and loaded model revisions to agree', () => {
+    const provenance: RevisionProvenance = {
+      project_id: 'project-1',
+      run_configuration_revision_id: 'run-r1',
+      run_configuration_checksum: 'sha256:run',
+      model_revision_id: 'model-r1',
+      model_checksum: 'sha256:model',
+      case_revision_id: 'case-r1',
+      case_checksum: 'sha256:case',
+    }
+    expect(
+      exactRevisionProvenance(provenance, provenance, 'model-r1', true),
+    ).toBe(true)
+    expect(
+      exactRevisionProvenance(provenance, provenance, 'model-r2', true),
+    ).toBe(false)
+    expect(
+      exactRevisionProvenance(
+        provenance,
+        { ...provenance, case_checksum: 'sha256:different' },
+        'model-r1',
+        true,
+      ),
+    ).toBe(false)
+  })
+})

@@ -12,6 +12,11 @@ import {
   type TransientSeriesPoint,
 } from './resultExploration'
 import { TopologyCanvas } from './TopologyCanvas'
+import type { GraphSelection } from './InspectorPanel'
+import {
+  exactRevisionProvenance,
+  resultDiagnosticSummary,
+} from './resultDiagnostics'
 import {
   formatResultValue,
   isTransientResult,
@@ -29,6 +34,7 @@ import type {
 
 interface ResultsWorkspaceProps {
   topology?: TopologyDocument
+  topologyRevisionId: string
   catalog: CatalogComponent[]
   job?: SimulationJob
   result?: SimulationResult
@@ -206,6 +212,7 @@ function TransientPlot({
 
 export function ResultsWorkspace({
   topology,
+  topologyRevisionId,
   catalog,
   job,
   result,
@@ -218,12 +225,14 @@ export function ResultsWorkspace({
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<ResultScopeFilter>('all')
   const [seriesKey, setSeriesKey] = useState('')
+  const [selection, setSelection] = useState<GraphSelection>()
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
     setSampleIndex(Math.max(0, sampleCount - 1))
     setQuery('')
     setScope('all')
+    setSelection(undefined)
   }, [job?.job_id, sampleCount])
 
   const graph = result ? resultGraph(result, sampleIndex) : undefined
@@ -267,6 +276,9 @@ export function ResultsWorkspace({
     [result, seriesKey],
   )
 
+  const selectedComponentId =
+    selection?.type === 'component' ? selection.id : ''
+
   if (!job) {
     return (
       <section className="results-workspace empty-results">
@@ -281,6 +293,17 @@ export function ResultsWorkspace({
   }
 
   const resultFilename = safeFilePart(job.job_id)
+  const diagnosticSummary = result
+    ? resultDiagnosticSummary(result)
+    : undefined
+  const requestedSource = job.request.source_revisions
+  const executedSource = result?.metadata.source_revisions
+  const exactProvenance = exactRevisionProvenance(
+    requestedSource,
+    executedSource,
+    topologyRevisionId,
+    Boolean(topology),
+  )
 
   return (
     <section className="results-workspace">
@@ -293,8 +316,10 @@ export function ResultsWorkspace({
             {job.attempt}
           </p>
         </div>
-        <div className="result-provenance-chip">
-          <span>Topology</span>
+        <div
+          className={`result-provenance-chip${exactProvenance ? ' exact' : ''}`}
+        >
+          <span>{exactProvenance ? 'Exact revision' : 'Topology source'}</span>
           <code>
             {job.request.source_revisions?.model_revision_id ?? 'snapshot'}
           </code>
@@ -338,6 +363,39 @@ export function ResultsWorkspace({
               <p>No projected summary values were configured for this run.</p>
             )}
           </div>
+
+          {diagnosticSummary && (
+            <section className="solver-diagnostic-card">
+              <header>
+                <div>
+                  <span className="section-kicker">Numerical evidence</span>
+                  <h2>
+                    {diagnosticSummary.mode === 'steady'
+                      ? 'Steady convergence'
+                      : 'Transient integration'}
+                  </h2>
+                </div>
+                <span
+                  className={
+                    diagnosticSummary.successful
+                      ? 'solver-outcome successful'
+                      : 'solver-outcome unsuccessful'
+                  }
+                >
+                  {diagnosticSummary.successful ? 'Successful' : 'Review'}
+                </span>
+              </header>
+              <div className="solver-diagnostic-facts">
+                {diagnosticSummary.facts.map((fact) => (
+                  <div key={fact.label}>
+                    <span>{fact.label}</span>
+                    <code>{fact.value}</code>
+                  </div>
+                ))}
+              </div>
+              <p>{diagnosticSummary.message || 'No solver message reported.'}</p>
+            </section>
+          )}
 
           {isTransientResult(result) && sampleCount > 0 && (
             <>
@@ -401,19 +459,45 @@ export function ResultsWorkspace({
                 <span className="section-kicker">Projected graph overlay</span>
                 <h2>System topology</h2>
               </div>
-              <small>Values shown in {profile} display units</small>
+              <div className="result-graph-context">
+                {selectedComponentId && (
+                  <button
+                    type="button"
+                    onClick={() => setSelection(undefined)}
+                  >
+                    {selectedComponentId} ×
+                  </button>
+                )}
+                <small>Values shown in {profile} display units</small>
+              </div>
             </header>
             <div className="result-canvas">
-              <TopologyCanvas
-                topology={topology}
-                catalog={catalog}
-                revisionId={`${job.job_id}-${sampleIndex}`}
-                publishing={false}
-                readOnly
-                resultValues={overlays}
-                onConnect={async () => undefined}
-                onSelect={() => undefined}
-              />
+              {exactProvenance ? (
+                <TopologyCanvas
+                  topology={topology}
+                  catalog={catalog}
+                  revisionId={`${job.job_id}-${sampleIndex}`}
+                  publishing={false}
+                  readOnly
+                  resultValues={overlays}
+                  selection={selection}
+                  onConnect={async () => undefined}
+                  onSelect={setSelection}
+                />
+              ) : (
+                <div className="result-provenance-block">
+                  <strong>Canvas overlay withheld</strong>
+                  <p>
+                    Load the exact topology revision recorded by both the job
+                    request and worker execution before projecting values onto
+                    equipment.
+                  </p>
+                  <code>
+                    expected {executedSource?.model_revision_id ?? 'unknown'} ·
+                    loaded {topologyRevisionId || 'none'}
+                  </code>
+                </div>
+              )}
             </div>
           </section>
 
@@ -422,6 +506,12 @@ export function ResultsWorkspace({
             <code>{result.metadata.solver.contract_version || '—'}</code>
             <span>Catalog</span>
             <code>{result.metadata.catalog_fingerprint || '—'}</code>
+            <span>Provenance</span>
+            <code>
+              {exactProvenance
+                ? 'revision provenance exact'
+                : 'review revision bindings'}
+            </code>
           </div>
 
           <section className="result-value-section">
@@ -520,10 +610,33 @@ export function ResultsWorkspace({
                       [value.mediumId, value.phase]
                         .filter(Boolean)
                         .join(' · ') || value.componentKind
+                    const selected =
+                      Boolean(value.componentId) &&
+                      value.componentId === selectedComponentId
                     return (
-                      <tr key={value.key}>
+                      <tr
+                        key={value.key}
+                        className={selected ? 'selected-entity-row' : ''}
+                      >
                         <td>{scopeLabels[value.scope]}</td>
-                        <th>{value.componentId || 'system'}</th>
+                        <th>
+                          {value.componentId ? (
+                            <button
+                              type="button"
+                              className="result-entity-link"
+                              onClick={() =>
+                                setSelection({
+                                  type: 'component',
+                                  id: value.componentId,
+                                })
+                              }
+                            >
+                              {value.componentId}
+                            </button>
+                          ) : (
+                            'system'
+                          )}
+                        </th>
                         <td>{value.portName || '—'}</td>
                         <td>
                           {[value.domain, context]
