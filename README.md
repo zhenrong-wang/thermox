@@ -444,6 +444,11 @@ npm run dev
 See `web/README.md` for alternate API ports and bounded verification commands. Production hosting
 is intentionally deferred until gateway identity and a public API endpoint exist.
 
+Trusted deployments can also compose safe steady algebraic component definitions through
+`thermox.expression_component/v1`. Expressions use registered connector variables and dimensioned
+SI parameters, produce analytic sparse Jacobian rows, and cannot execute arbitrary code. See
+[Safe expression components](docs/custom-expression-components.md).
+
 ## Next steps
 
 1. Add multi-signal transient comparison, event/window reductions, and server-side export for

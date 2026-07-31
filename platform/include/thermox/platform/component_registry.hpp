@@ -122,6 +122,12 @@ class ComponentModel {
 public:
     virtual ~ComponentModel() = default;
     virtual const ComponentModelDescriptor& descriptor() const = 0;
+    // Stable identity for implementation content not represented by the
+    // public descriptor. The returned view must remain valid for the
+    // lifetime of the model.
+    virtual std::string_view implementation_fingerprint() const {
+        return {};
+    }
     virtual void add_equations(const ComponentCompileContext& context,
                                EquationSystemBuilder& system) const = 0;
     virtual void add_transient_equations(const ComponentCompileContext& context,

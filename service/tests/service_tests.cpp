@@ -1,7 +1,8 @@
-#include "thermox/service/serialization.hpp"
+#include "thermox/platform/expression_component.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/native_runtime.hpp"
 #include "thermox/service/result_projection.hpp"
+#include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <algorithm>
@@ -1378,6 +1379,88 @@ void test_injectable_native_runtime() {
         "connector semantics");
 }
 
+void test_expression_component_flows_through_service_runtime() {
+    auto components =
+        thermox::platform::make_default_component_registry();
+    thermox::platform::ExpressionComponentDefinition definition;
+    definition.descriptor.kind = "custom.signal.gain";
+    definition.descriptor.version = "1.0.0";
+    definition.descriptor.ports = {
+        {"input", "signal", "in"},
+        {"output", "signal", "out"},
+    };
+    definition.descriptor.parameters = {
+        {
+            "gain", "dimensionless", true, std::nullopt,
+            0.0, 100.0, true, true,
+        },
+    };
+    definition.equations = {
+        {
+            "gain_law",
+            "output.value - parameter.gain * input.value",
+            1.0,
+        },
+    };
+    thermox::platform::register_expression_component(
+        components, std::move(definition));
+    auto runtime = thermox::service::make_simulation_runtime(
+        std::move(components),
+        thermox::physics::
+            make_default_property_package_registry());
+    thermox::service::SimulationService service(runtime);
+
+    const auto catalog = service.get_catalog();
+    require(
+        std::any_of(
+            catalog.components.begin(),
+            catalog.components.end(),
+            [](const auto& component) {
+                return component.kind == "custom.signal.gain";
+            }),
+        "safe expression component must appear in runtime catalog");
+
+    thermox::service::SteadySimulationRequest request;
+    request.case_id = "design";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "safe_expression_service",
+    "media": [],
+    "components": [{
+      "id": "gain",
+      "kind": "custom.signal.gain",
+      "parameters": {"gain": 2.5}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {"gain.input.value": 4.0}
+  }]
+})json";
+    const auto solved = service.run_steady(request);
+    require(
+        solved.succeeded(),
+        "safe expression component must solve through service: " +
+            solved.error.message);
+    require(
+        std::abs(
+            require_result_value(
+                require_port_result(
+                    solved.graph, "gain", "output")
+                    .primary_values,
+                "value").value_si -
+            10.0) < 1.0e-12,
+        "safe expression result must retain graph identity");
+    require(
+        solved.metadata.catalog_fingerprint ==
+            catalog.fingerprint,
+        "safe expression implementation identity must participate "
+        "in execution provenance");
+}
+
 void test_steady_service() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -1875,6 +1958,7 @@ int main() {
         test_property_and_connector_versions_are_enforced();
         test_connection_contract_diagnostic();
         test_injectable_native_runtime();
+        test_expression_component_flows_through_service_runtime();
         test_steady_service();
         test_steady_continuation_service();
         test_explicit_system_boundary_balance();

@@ -75,6 +75,15 @@ add_test(
     COMMAND thermox_performance_map_tests
 )
 
+add_executable(
+    thermox_expression_component_tests
+    platform/tests/expression_component_tests.cpp)
+target_link_libraries(
+    thermox_expression_component_tests PRIVATE thermox_platform)
+add_test(
+    NAME thermox_expression_component_tests
+    COMMAND thermox_expression_component_tests)
+
 add_executable(thermox_service_tests service/tests/service_tests.cpp)
 target_link_libraries(thermox_service_tests PRIVATE
     thermox_service_native

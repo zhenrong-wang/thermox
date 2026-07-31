@@ -9,6 +9,12 @@ fingerprint.
 This is a C++ integration boundary, not a binary plugin ABI. Dynamic library discovery, untrusted
 code loading, and a safe user equation language remain separate future capabilities.
 
+The first safe equation-language slice is now available for trusted deployment composition through
+`thermox.expression_component/v1`. It registers declarative steady algebraic components, derives
+sparse analytic rows, and executes through the ordinary component registry without loading code.
+Persisted user authoring and approval remain separate from the native extension boundary. See
+`docs/custom-expression-components.md`.
+
 ## SDK package
 
 An installed Thermox SDK provides these CMake targets:

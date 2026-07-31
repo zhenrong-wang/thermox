@@ -462,6 +462,10 @@ Work items:
      service diagnostics; ✅
    - block ordering and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
+   - bounded steady algebraic expression grammar, symbol validation, analytic sparse
+     differentiation, implementation fingerprints, and trusted composition-root registration; ✅
+   - Team-owned persistence, approval, HTTP authoring, compound dimension analysis, property
+     functions, and transient-state contracts remain follow-ons.
 8. Map validation and interpolation quality controls.
 9. Multi-user auth, authorization, project isolation, audit logs.
 9. Scalable job workers and deployment automation.
