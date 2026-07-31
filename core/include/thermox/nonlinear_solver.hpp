@@ -129,6 +129,18 @@ struct NonlinearSolveResult {
     SolverDiagnostics diagnostics;
 };
 
+enum class StructuralRegionKind {
+    underdetermined,
+    overdetermined,
+    well_determined,
+};
+
+struct StructuralRegion {
+    StructuralRegionKind kind{StructuralRegionKind::well_determined};
+    std::vector<std::string> variable_names;
+    std::vector<std::string> residual_names;
+};
+
 struct ProblemStructureReport {
     std::size_t variable_count{0};
     std::size_t residual_count{0};
@@ -141,10 +153,17 @@ struct ProblemStructureReport {
     std::vector<std::string> duplicate_residual_names;
     std::vector<std::string> unmatched_variable_names;
     std::vector<std::string> unmatched_residual_names;
+    std::vector<StructuralRegion> structural_regions;
     std::vector<std::string> messages;
 
     [[nodiscard]] bool valid_for_newton() const;
 };
+
+ProblemStructureReport analyze_incidence_structure(
+    const std::vector<std::string>& variable_names,
+    const std::vector<std::string>& residual_names,
+    const std::vector<std::vector<std::size_t>>&
+        residual_variable_incidence);
 
 struct JacobianVerificationOptions {
     double finite_difference_epsilon{1.0e-6};

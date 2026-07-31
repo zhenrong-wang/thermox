@@ -332,9 +332,9 @@ Diagnostic compilation_diagnostic(const std::string& message) {
                std::string::npos) {
         diagnostic.code = "structurally_singular_model";
         diagnostic.suggestions = {
-            "Inspect the unmatched equation and variable candidates; "
-            "remove a dependent constraint and add an independent "
-            "specification."};
+            "Inspect the localized underdetermined and overdetermined "
+            "regions; remove a dependent constraint and add an "
+            "independent specification in the affected neighborhood."};
     } else if (message.find("property capability") !=
                std::string::npos) {
         diagnostic.code = "unsupported_property_capability";

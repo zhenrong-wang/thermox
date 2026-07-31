@@ -343,8 +343,10 @@ variable or equation candidates from bipartite incidence matching. Equations wit
 sparsity are treated conservatively as potentially depending on every variable, and candidates
 are therefore guidance rather than a claim that one unique specification is wrong. Equal-count
 graphs are also rejected before solver construction when matching leaves both equation and
-variable candidates unmatched. Fixed sparse patterns additionally enable strict structural
-matching in the numerical core.
+variable candidates unmatched. The same shared incidence analysis localizes connected
+underdetermined and overdetermined equation/variable regions, so diagnostics identify the affected
+subgraph rather than only one matching-dependent candidate. Fixed sparse patterns additionally
+enable strict structural matching in the numerical core.
 
 For steady closed loops, the compiler classifies linear equations incrementally. A generated
 connection equation is omitted only when its coefficients and right-hand side are a consistent

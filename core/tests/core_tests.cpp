@@ -968,6 +968,49 @@ void test_fixed_sparse_pattern_and_structure_analysis() {
     require(structure.structurally_nonsingular, "structural matching covers all rows and columns");
 }
 
+void test_structural_analysis_localizes_singular_regions() {
+    const auto structure = thermox::analyze_incidence_structure(
+        {"left", "right"},
+        {"left_target_a", "left_target_b"},
+        {{0}, {0}});
+    require(
+        structure.square && !structure.structurally_nonsingular,
+        "singular square incidence is rejected");
+    require(
+        structure.unmatched_variable_names ==
+            std::vector<std::string>{"right"} &&
+            structure.unmatched_residual_names.size() == 1,
+        "maximum matching reports unmatched candidates");
+
+    const auto under = std::find_if(
+        structure.structural_regions.begin(),
+        structure.structural_regions.end(),
+        [](const auto& region) {
+            return region.kind ==
+                thermox::StructuralRegionKind::underdetermined;
+        });
+    require(
+        under != structure.structural_regions.end() &&
+            under->variable_names ==
+                std::vector<std::string>{"right"} &&
+            under->residual_names.empty(),
+        "DM analysis localizes the unconstrained variable");
+
+    const auto over = std::find_if(
+        structure.structural_regions.begin(),
+        structure.structural_regions.end(),
+        [](const auto& region) {
+            return region.kind ==
+                thermox::StructuralRegionKind::overdetermined;
+        });
+    require(
+        over != structure.structural_regions.end() &&
+            over->variable_names ==
+                std::vector<std::string>{"left"} &&
+            over->residual_names.size() == 2,
+        "DM analysis localizes dependent equations and their variable");
+}
+
 void test_fixed_bound_finite_difference_fails_cleanly() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"fixed"};
@@ -1221,6 +1264,7 @@ int main() {
         test_jacobian_verification_checks_only_provided_rows();
         test_jacobian_verification_reports_bad_derivative();
         test_fixed_sparse_pattern_and_structure_analysis();
+        test_structural_analysis_localizes_singular_regions();
         test_fixed_bound_finite_difference_fails_cleanly();
         test_equation_system_builder();
         test_compiled_sparse_equation_system_builder();

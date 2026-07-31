@@ -4406,6 +4406,13 @@ void test_compiler_reports_under_and_over_specification() {
         "3 additional independent equation(s) or specification(s) "
         "required; unmatched variable candidate(s): "
         "source.outlet.m_dot, source.outlet.p, source.outlet.h");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                under_specified, registry, "design");
+        },
+        "underdetermined structural region(s): "
+        "{variables: source.outlet.m_dot; equations: none}");
 
     const auto over_specified =
         thermox::platform::parse_model_document_text(R"json({
@@ -4504,6 +4511,17 @@ void test_compiler_reports_square_structural_singularity() {
         "2 equations; unmatched variable candidate(s): "
         "bad.right.value; unmatched equation candidate(s): "
         "component.bad.left_target_b");
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                document, registry);
+        },
+        "underdetermined structural region(s): "
+        "{variables: bad.right.value; equations: none}; "
+        "overdetermined structural region(s): "
+        "{variables: bad.left.value; equations: "
+        "component.bad.left_target_a, "
+        "component.bad.left_target_b}");
 }
 
 void test_component_property_capabilities_are_validated() {

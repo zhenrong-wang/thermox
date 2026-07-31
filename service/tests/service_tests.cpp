@@ -707,9 +707,15 @@ void test_structurally_singular_validation_diagnostic() {
                 std::string::npos &&
             response.diagnostics.front().message.find(
                 "unmatched equation candidate(s)") !=
+                std::string::npos &&
+            response.diagnostics.front().message.find(
+                "underdetermined structural region(s)") !=
+                std::string::npos &&
+            response.diagnostics.front().message.find(
+                "overdetermined structural region(s)") !=
                 std::string::npos,
         "square singular validation must expose stable structural "
-        "candidates");
+        "candidates and localized regions");
 }
 
 void test_calibration_observation_contract_validation() {

@@ -492,10 +492,14 @@ bool ProblemStructureReport::valid_for_newton() const {
            (!has_complete_sparse_pattern || structurally_nonsingular);
 }
 
-ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem) {
+ProblemStructureReport analyze_incidence_structure(
+    const std::vector<std::string>& variable_names,
+    const std::vector<std::string>& residual_names,
+    const std::vector<std::vector<std::size_t>>&
+        residual_variable_incidence) {
     ProblemStructureReport report;
-    report.variable_count = problem.initial_guess.size();
-    report.residual_count = problem.residual_names.size();
+    report.variable_count = variable_names.size();
+    report.residual_count = residual_names.size();
     report.square = report.variable_count == report.residual_count;
     if (!report.square) {
         report.messages.push_back("Newton solve requires equal variable and residual counts");
@@ -511,8 +515,8 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
         }
         return std::vector<std::string>(duplicates.begin(), duplicates.end());
     };
-    report.duplicate_variable_names = find_duplicates(problem.variable_names);
-    report.duplicate_residual_names = find_duplicates(problem.residual_names);
+    report.duplicate_variable_names = find_duplicates(variable_names);
+    report.duplicate_residual_names = find_duplicates(residual_names);
     report.has_duplicate_variable_names = !report.duplicate_variable_names.empty();
     report.has_duplicate_residual_names = !report.duplicate_residual_names.empty();
     if (report.has_duplicate_variable_names) {
@@ -522,25 +526,31 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
         report.messages.push_back("residual names must be unique");
     }
 
-    if (!problem.sparse_jacobian_pattern.has_value()) {
-        report.messages.push_back(
-            "no fixed Jacobian pattern is available for structural matching");
-        return report;
+    if (residual_variable_incidence.size() != report.residual_count) {
+        throw std::invalid_argument(
+            "incidence row count does not match residual name count");
     }
-
     report.has_complete_sparse_pattern = true;
-    const SparsePattern& pattern = *problem.sparse_jacobian_pattern;
-    if (pattern.rows() != report.residual_count || pattern.columns() != report.variable_count) {
-        report.messages.push_back("fixed Jacobian pattern shape does not match problem dimensions");
-        return report;
+    std::vector<std::vector<std::size_t>> variable_residual_incidence(
+        report.variable_count);
+    for (std::size_t row = 0; row < report.residual_count; ++row) {
+        std::set<std::size_t> unique_columns;
+        for (const std::size_t column :
+             residual_variable_incidence.at(row)) {
+            if (column >= report.variable_count) {
+                throw std::invalid_argument(
+                    "incidence variable index is out of range");
+            }
+            if (unique_columns.insert(column).second) {
+                variable_residual_incidence.at(column).push_back(row);
+            }
+        }
     }
 
     std::vector<int> column_match(report.variable_count, -1);
     auto augment = [&](auto&& self, std::size_t row, std::vector<bool>& visited) -> bool {
-        for (std::size_t offset = pattern.row_offsets()[row];
-             offset < pattern.row_offsets()[row + 1];
-             ++offset) {
-            const std::size_t column = pattern.column_indices()[offset];
+        for (const std::size_t column :
+             residual_variable_incidence.at(row)) {
             if (visited[column]) {
                 continue;
             }
@@ -567,19 +577,176 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
     for (std::size_t row = 0; row < row_matched.size(); ++row) {
         if (!row_matched[row]) {
             report.unmatched_residual_names.push_back(
-                row < problem.residual_names.size()
-                    ? problem.residual_names[row]
+                row < residual_names.size()
+                    ? residual_names[row]
                     : "residual[" + std::to_string(row) + "]");
         }
     }
     for (std::size_t column = 0; column < column_match.size(); ++column) {
         if (column_match[column] < 0) {
             report.unmatched_variable_names.push_back(
-                column < problem.variable_names.size()
-                    ? problem.variable_names[column]
+                column < variable_names.size()
+                    ? variable_names[column]
                     : "variable[" + std::to_string(column) + "]");
         }
     }
+
+    std::vector<int> row_match(report.residual_count, -1);
+    for (std::size_t column = 0; column < column_match.size(); ++column) {
+        if (column_match[column] >= 0) {
+            row_match.at(
+                static_cast<std::size_t>(column_match[column])) =
+                static_cast<int>(column);
+        }
+    }
+
+    std::vector<bool> under_variables(report.variable_count, false);
+    std::vector<bool> under_residuals(report.residual_count, false);
+    std::vector<std::pair<bool, std::size_t>> queue;
+    for (std::size_t column = 0; column < column_match.size(); ++column) {
+        if (column_match[column] < 0) {
+            under_variables[column] = true;
+            queue.emplace_back(true, column);
+        }
+    }
+    for (std::size_t cursor = 0; cursor < queue.size(); ++cursor) {
+        const auto [is_variable, index] = queue[cursor];
+        if (is_variable) {
+            for (const std::size_t row :
+                 variable_residual_incidence.at(index)) {
+                if (row_match[row] == static_cast<int>(index) ||
+                    under_residuals[row]) {
+                    continue;
+                }
+                under_residuals[row] = true;
+                queue.emplace_back(false, row);
+            }
+        } else if (row_match[index] >= 0) {
+            const auto column =
+                static_cast<std::size_t>(row_match[index]);
+            if (!under_variables[column]) {
+                under_variables[column] = true;
+                queue.emplace_back(true, column);
+            }
+        }
+    }
+
+    std::vector<bool> over_variables(report.variable_count, false);
+    std::vector<bool> over_residuals(report.residual_count, false);
+    queue.clear();
+    for (std::size_t row = 0; row < row_match.size(); ++row) {
+        if (row_match[row] < 0) {
+            over_residuals[row] = true;
+            queue.emplace_back(false, row);
+        }
+    }
+    for (std::size_t cursor = 0; cursor < queue.size(); ++cursor) {
+        const auto [is_variable, index] = queue[cursor];
+        if (!is_variable) {
+            for (const std::size_t column :
+                 residual_variable_incidence.at(index)) {
+                if (row_match[index] == static_cast<int>(column) ||
+                    over_variables[column]) {
+                    continue;
+                }
+                over_variables[column] = true;
+                queue.emplace_back(true, column);
+            }
+        } else if (column_match[index] >= 0) {
+            const auto row =
+                static_cast<std::size_t>(column_match[index]);
+            if (!over_residuals[row]) {
+                over_residuals[row] = true;
+                queue.emplace_back(false, row);
+            }
+        }
+    }
+
+    const auto append_regions =
+        [&](StructuralRegionKind kind,
+            const std::vector<bool>& selected_variables,
+            const std::vector<bool>& selected_residuals) {
+            std::vector<bool> seen_variables(report.variable_count, false);
+            std::vector<bool> seen_residuals(report.residual_count, false);
+            const auto append_component =
+                [&](bool seed_is_variable, std::size_t seed_index) {
+                    StructuralRegion region;
+                    region.kind = kind;
+                    std::vector<std::pair<bool, std::size_t>> pending{
+                        {seed_is_variable, seed_index}};
+                    if (seed_is_variable) {
+                        seen_variables[seed_index] = true;
+                    } else {
+                        seen_residuals[seed_index] = true;
+                    }
+                    for (std::size_t cursor = 0;
+                         cursor < pending.size(); ++cursor) {
+                        const auto [is_variable, index] =
+                            pending[cursor];
+                        if (is_variable) {
+                            region.variable_names.push_back(
+                                variable_names.at(index));
+                            for (const std::size_t row :
+                                 variable_residual_incidence.at(index)) {
+                                if (selected_residuals[row] &&
+                                    !seen_residuals[row]) {
+                                    seen_residuals[row] = true;
+                                    pending.emplace_back(false, row);
+                                }
+                            }
+                        } else {
+                            region.residual_names.push_back(
+                                residual_names.at(index));
+                            for (const std::size_t column :
+                                 residual_variable_incidence.at(index)) {
+                                if (selected_variables[column] &&
+                                    !seen_variables[column]) {
+                                    seen_variables[column] = true;
+                                    pending.emplace_back(true, column);
+                                }
+                            }
+                        }
+                    }
+                    report.structural_regions.push_back(
+                        std::move(region));
+                };
+            for (std::size_t row = 0;
+                 row < report.residual_count; ++row) {
+                if (selected_residuals[row] &&
+                    !seen_residuals[row]) {
+                    append_component(false, row);
+                }
+            }
+            for (std::size_t column = 0;
+                 column < report.variable_count; ++column) {
+                if (selected_variables[column] &&
+                    !seen_variables[column]) {
+                    append_component(true, column);
+                }
+            }
+        };
+    append_regions(
+        StructuralRegionKind::underdetermined,
+        under_variables, under_residuals);
+    append_regions(
+        StructuralRegionKind::overdetermined,
+        over_variables, over_residuals);
+    std::vector<bool> well_variables(report.variable_count, false);
+    std::vector<bool> well_residuals(report.residual_count, false);
+    for (std::size_t column = 0;
+         column < report.variable_count; ++column) {
+        well_variables[column] =
+            !under_variables[column] && !over_variables[column];
+    }
+    for (std::size_t row = 0;
+         row < report.residual_count; ++row) {
+        well_residuals[row] =
+            !under_residuals[row] && !over_residuals[row];
+    }
+    append_regions(
+        StructuralRegionKind::well_determined,
+        well_variables, well_residuals);
+
     report.structurally_nonsingular =
         report.square && report.unmatched_residual_names.empty() &&
         report.unmatched_variable_names.empty();
@@ -587,6 +754,77 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
         report.messages.push_back("fixed Jacobian pattern is structurally singular");
     }
     return report;
+}
+
+ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem) {
+    if (!problem.sparse_jacobian_pattern.has_value()) {
+        ProblemStructureReport report;
+        report.variable_count = problem.initial_guess.size();
+        report.residual_count = problem.residual_names.size();
+        report.square =
+            report.variable_count == report.residual_count;
+        if (!report.square) {
+            report.messages.push_back(
+                "Newton solve requires equal variable and residual counts");
+        }
+        const auto find_duplicates =
+            [](const std::vector<std::string>& names) {
+                std::set<std::string> seen;
+                std::set<std::string> duplicates;
+                for (const auto& name : names) {
+                    if (!seen.insert(name).second) {
+                        duplicates.insert(name);
+                    }
+                }
+                return std::vector<std::string>(
+                    duplicates.begin(), duplicates.end());
+            };
+        report.duplicate_variable_names =
+            find_duplicates(problem.variable_names);
+        report.duplicate_residual_names =
+            find_duplicates(problem.residual_names);
+        report.has_duplicate_variable_names =
+            !report.duplicate_variable_names.empty();
+        report.has_duplicate_residual_names =
+            !report.duplicate_residual_names.empty();
+        if (report.has_duplicate_variable_names) {
+            report.messages.push_back(
+                "variable names must be unique");
+        }
+        if (report.has_duplicate_residual_names) {
+            report.messages.push_back(
+                "residual names must be unique");
+        }
+        report.messages.push_back(
+            "no fixed Jacobian pattern is available for structural matching");
+        return report;
+    }
+    const SparsePattern& pattern =
+        *problem.sparse_jacobian_pattern;
+    if (pattern.rows() != problem.residual_names.size() ||
+        pattern.columns() != problem.initial_guess.size()) {
+        ProblemStructureReport report;
+        report.variable_count = problem.initial_guess.size();
+        report.residual_count = problem.residual_names.size();
+        report.square =
+            report.variable_count == report.residual_count;
+        report.has_complete_sparse_pattern = true;
+        report.messages.push_back(
+            "fixed Jacobian pattern shape does not match problem dimensions");
+        return report;
+    }
+    std::vector<std::vector<std::size_t>> incidence(pattern.rows());
+    for (std::size_t row = 0; row < pattern.rows(); ++row) {
+        incidence[row].assign(
+            pattern.column_indices().begin() +
+                static_cast<std::ptrdiff_t>(
+                    pattern.row_offsets()[row]),
+            pattern.column_indices().begin() +
+                static_cast<std::ptrdiff_t>(
+                    pattern.row_offsets()[row + 1]));
+    }
+    return analyze_incidence_structure(
+        problem.variable_names, problem.residual_names, incidence);
 }
 
 JacobianVerificationReport verify_problem_jacobian(

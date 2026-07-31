@@ -153,5 +153,7 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - The native transient backend is first-order and intended for index-1 DAEs.
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
+- Structural incidence analysis classifies connected underdetermined, overdetermined, and
+  well-determined regions; block ordering and solver tearing are not yet enabled.
 - Component-informed homotopy paths, a higher-order transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.

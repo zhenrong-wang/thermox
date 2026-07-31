@@ -81,6 +81,10 @@ paths and compiler-specific codes will become progressively more precise as comp
 move from exceptions to diagnostic records. Degree-of-freedom failures include bounded unmatched
 equation/variable candidates, and equal-count incidence failures use the stable
 `structurally_singular_model` diagnostic code.
+Compiler degree-of-freedom diagnostics also include connected underdetermined and overdetermined
+structural regions from the numerical core's shared incidence analyzer. These regions localize
+affected equation and variable neighborhoods without claiming that any one candidate is uniquely
+at fault.
 
 Solver settings on the service command are the sole execution authority. Case-level
 `solver_options` remain model metadata and are never merged implicitly into a run. Result-v3

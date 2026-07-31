@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -621,86 +622,31 @@ void validate_property_capabilities(const ComponentCompileContext& context,
 }
 
 template <typename Builder>
-std::pair<std::vector<std::string>, std::vector<std::string>>
-unmatched_degree_of_freedom_candidates(
+ProblemStructureReport structural_degree_of_freedom_report(
     const Builder& system) {
     const std::size_t variable_count =
         system.variables().size();
-    const std::size_t equation_count =
-        system.equations().size();
-    std::vector<int> variable_match(
-        variable_count, -1);
-    const auto augment =
-        [&](auto&& self, std::size_t equation,
-            std::vector<bool>& visited) -> bool {
-            const auto& declared =
-                system.equations()
-                    .at(equation)
-                    .sparsity_variables;
-            const auto try_variable =
-                [&](std::size_t variable) {
-                    if (visited.at(variable)) {
-                        return false;
-                    }
-                    visited.at(variable) = true;
-                    if (variable_match.at(variable) < 0 ||
-                        self(
-                            self,
-                            static_cast<std::size_t>(
-                                variable_match.at(variable)),
-                            visited)) {
-                        variable_match.at(variable) =
-                            static_cast<int>(equation);
-                        return true;
-                    }
-                    return false;
-                };
-            if (!declared.empty()) {
-                for (const auto variable : declared) {
-                    if (try_variable(variable)) return true;
-                }
-                return false;
-            }
-            for (std::size_t variable = 0;
-                 variable < variable_count; ++variable) {
-                if (try_variable(variable)) return true;
-            }
-            return false;
-        };
-
-    for (std::size_t equation = 0;
-         equation < equation_count; ++equation) {
-        std::vector<bool> visited(
-            variable_count, false);
-        (void)augment(
-            augment, equation, visited);
+    std::vector<std::string> variable_names;
+    variable_names.reserve(variable_count);
+    for (const auto& variable : system.variables()) {
+        variable_names.push_back(variable.name);
     }
-
-    std::vector<bool> equation_matched(
-        equation_count, false);
-    std::vector<std::string> unmatched_variables;
-    for (std::size_t variable = 0;
-         variable < variable_count; ++variable) {
-        const int equation = variable_match.at(variable);
-        if (equation < 0) {
-            unmatched_variables.push_back(
-                system.variables().at(variable).name);
+    std::vector<std::string> equation_names;
+    std::vector<std::vector<std::size_t>> incidence;
+    equation_names.reserve(system.equations().size());
+    incidence.reserve(system.equations().size());
+    for (const auto& equation : system.equations()) {
+        equation_names.push_back(equation.name);
+        if (equation.sparsity_variables.empty()) {
+            std::vector<std::size_t> dense(variable_count);
+            std::iota(dense.begin(), dense.end(), 0);
+            incidence.push_back(std::move(dense));
         } else {
-            equation_matched.at(
-                static_cast<std::size_t>(equation)) = true;
+            incidence.push_back(equation.sparsity_variables);
         }
     }
-    std::vector<std::string> unmatched_equations;
-    for (std::size_t equation = 0;
-         equation < equation_count; ++equation) {
-        if (!equation_matched.at(equation)) {
-            unmatched_equations.push_back(
-                system.equations().at(equation).name);
-        }
-    }
-    return {
-        std::move(unmatched_variables),
-        std::move(unmatched_equations)};
+    return analyze_incidence_structure(
+        variable_names, equation_names, incidence);
 }
 
 std::string summarize_candidates(
@@ -721,14 +667,53 @@ std::string summarize_candidates(
     return summary;
 }
 
+std::string summarize_structural_regions(
+    const ProblemStructureReport& report,
+    StructuralRegionKind kind) {
+    constexpr std::size_t maximum_regions = 4;
+    std::string summary;
+    std::size_t shown = 0;
+    for (const auto& region : report.structural_regions) {
+        if (region.kind != kind) continue;
+        if (shown == maximum_regions) {
+            summary += "; ...";
+            break;
+        }
+        if (!summary.empty()) summary += "; ";
+        summary += "{variables: " +
+            (region.variable_names.empty()
+                 ? std::string{"none"}
+                 : summarize_candidates(region.variable_names)) +
+            "; equations: " +
+            (region.residual_names.empty()
+                 ? std::string{"none"}
+                 : summarize_candidates(region.residual_names)) +
+            "}";
+        ++shown;
+    }
+    return summary;
+}
+
 template <typename Builder>
 void validate_degree_of_freedom(
     const std::string& model_id,
     const Builder& system) {
     const std::size_t variables = system.variables().size();
     const std::size_t equations = system.residuals().size();
-    const auto [unmatched_variables, unmatched_equations] =
-        unmatched_degree_of_freedom_candidates(system);
+    const auto structure =
+        structural_degree_of_freedom_report(system);
+    const auto& unmatched_variables =
+        structure.unmatched_variable_names;
+    const auto& unmatched_equations =
+        structure.unmatched_residual_names;
+    const auto underdetermined_regions =
+        summarize_structural_regions(
+            structure,
+            StructuralRegionKind::underdetermined);
+    const auto overdetermined_regions =
+        summarize_structural_regions(
+            structure,
+            StructuralRegionKind::overdetermined);
     if (variables == equations) {
         if (unmatched_variables.empty() &&
             unmatched_equations.empty()) {
@@ -748,7 +733,15 @@ void validate_degree_of_freedom(
                  ? std::string{}
                  : "; unmatched equation candidate(s): " +
                        summarize_candidates(
-                           unmatched_equations)));
+                           unmatched_equations)) +
+            (underdetermined_regions.empty()
+                 ? std::string{}
+                 : "; underdetermined structural region(s): " +
+                       underdetermined_regions) +
+            (overdetermined_regions.empty()
+                 ? std::string{}
+                 : "; overdetermined structural region(s): " +
+                       overdetermined_regions));
     }
     const bool under_specified = variables > equations;
     const std::size_t difference = under_specified
@@ -765,6 +758,17 @@ void validate_degree_of_freedom(
                   ? "; unmatched variable candidate(s): "
                   : "; unmatched equation candidate(s): "} +
               summarize_candidates(candidates);
+    const auto& regions = under_specified
+        ? underdetermined_regions
+        : overdetermined_regions;
+    const std::string region_diagnostic =
+        regions.empty()
+        ? std::string{}
+        : std::string{
+              under_specified
+                  ? "; underdetermined structural region(s): "
+                  : "; overdetermined structural region(s): "} +
+              regions;
     throw std::invalid_argument(
         "model '" + model_id + "' is " +
         (under_specified ? "under-specified" : "over-specified") +
@@ -774,7 +778,8 @@ void validate_degree_of_freedom(
         (under_specified
              ? " additional independent equation(s) or specification(s) required"
              : " equation(s) or specification(s) must be removed") +
-        candidate_diagnostic);
+        candidate_diagnostic +
+        region_diagnostic);
 }
 
 EvaluationStatus property_failure(const physics::PropertyResult& result) {

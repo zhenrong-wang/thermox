@@ -458,7 +458,9 @@ Work items:
      candidate diagnostics; ✅
    - equal-count structural-singularity rejection with unmatched equation/variable candidates
      and a stable service diagnostic; ✅
-   - Dulmage-Mendelsohn region localization and solver tearing remain follow-ons.
+   - shared Dulmage-Mendelsohn under/over/well-determined region localization with compiler and
+     service diagnostics; ✅
+   - block ordering and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
 8. Map validation and interpolation quality controls.
 9. Multi-user auth, authorization, project isolation, audit logs.
