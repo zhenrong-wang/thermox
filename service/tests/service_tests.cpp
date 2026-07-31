@@ -1461,6 +1461,97 @@ void test_expression_component_flows_through_service_runtime() {
         "in execution provenance");
 }
 
+void test_expression_component_is_request_scoped() {
+    thermox::service::SimulationService service;
+    const auto base_catalog = service.get_catalog();
+
+    thermox::service::SteadySimulationRequest request;
+    request.case_id = "design";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "request_scoped_expression",
+    "media": [],
+    "components": [{
+      "id": "gain",
+      "kind": "custom.signal.request_gain",
+      "parameters": {"gain": 3.0}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {"gain.input.value": 4.0}
+  }]
+})json";
+    thermox::service::ExpressionComponentInput component;
+    component.kind = "custom.signal.request_gain";
+    component.version = "1.0.0";
+    component.ports = {
+        {"input", "signal", "in", 1},
+        {"output", "signal", "out", 1},
+    };
+    component.parameters = {
+        {
+            "gain", "dimensionless", true, std::nullopt,
+            0.0, 100.0, true, true,
+        },
+    };
+    component.equations = {
+        {
+            "gain_law",
+            "output.value - parameter.gain * input.value",
+            1.0,
+        },
+    };
+    request.components.expression_components.push_back(component);
+
+    const auto solved = service.run_steady(request);
+    require(
+        solved.succeeded(),
+        "request-scoped expression component must solve: " +
+            solved.error.message);
+    require(
+        std::abs(
+            require_result_value(
+                require_port_result(
+                    solved.graph, "gain", "output")
+                    .primary_values,
+                "value").value_si -
+            12.0) < 1.0e-12,
+        "request-scoped component must contribute its equation");
+    require(
+        solved.metadata.catalog_fingerprint !=
+            base_catalog.fingerprint,
+        "request-scoped component identity must change execution "
+        "provenance");
+
+    const auto catalog_after = service.get_catalog();
+    require(
+        catalog_after.fingerprint == base_catalog.fingerprint &&
+            std::none_of(
+                catalog_after.components.begin(),
+                catalog_after.components.end(),
+                [](const auto& entry) {
+                    return entry.kind ==
+                        "custom.signal.request_gain";
+                }),
+        "request-scoped definitions must not mutate the shared "
+        "runtime catalog");
+
+    request.components.expression_components.front()
+        .equations.front().expression = "system(\"unsafe\")";
+    const auto rejected = service.run_steady(request);
+    require(
+        rejected.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            rejected.error.code == "invalid_components" &&
+            rejected.error.stage == "components",
+        "unsafe request-scoped expressions must fail before model "
+        "compilation");
+}
+
 void test_steady_service() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -1959,6 +2050,7 @@ int main() {
         test_connection_contract_diagnostic();
         test_injectable_native_runtime();
         test_expression_component_flows_through_service_runtime();
+        test_expression_component_is_request_scoped();
         test_steady_service();
         test_steady_continuation_service();
         test_explicit_system_boundary_balance();

@@ -237,7 +237,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v5'
+  schema_version: 'thermox.job/v6'
   job_id: string
   owner: {
     team_id: string
@@ -247,7 +247,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v5'
+    schema_version: 'thermox.job/v6'
     mode: 'steady' | 'transient'
     case_id: string
     source_revisions: RevisionProvenance | null

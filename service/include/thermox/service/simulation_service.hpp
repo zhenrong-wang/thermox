@@ -3,6 +3,7 @@
 #include "thermox/service/simulation_runtime.hpp"
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -301,6 +302,45 @@ struct SimulationArtifactBundle {
     std::vector<EngineeringArtifactReference> references;
 };
 
+struct ExpressionComponentPortInput {
+    std::string name;
+    std::string domain;
+    std::string direction;
+    std::size_t maximum_connections{1};
+};
+
+struct ExpressionComponentParameterInput {
+    std::string name;
+    std::string dimension{"dimensionless"};
+    bool required{true};
+    std::optional<double> default_value_si;
+    double lower_bound{-std::numeric_limits<double>::infinity()};
+    double upper_bound{std::numeric_limits<double>::infinity()};
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
+struct ExpressionComponentEquationInput {
+    std::string name;
+    std::string expression;
+    double residual_scale{1.0};
+};
+
+struct ExpressionComponentInput {
+    std::string schema_version{
+        "thermox.expression_component/v1"};
+    std::string kind;
+    std::string version;
+    std::string system_boundary_role;
+    std::vector<ExpressionComponentPortInput> ports;
+    std::vector<ExpressionComponentParameterInput> parameters;
+    std::vector<ExpressionComponentEquationInput> equations;
+};
+
+struct SimulationComponentBundle {
+    std::vector<ExpressionComponentInput> expression_components;
+};
+
 class EngineeringArtifactResolver {
 public:
     virtual ~EngineeringArtifactResolver() = default;
@@ -407,6 +447,7 @@ struct ValidateModelRequest {
     std::string model_json;
     std::string case_id;
     SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
 };
 
 struct CompilationSummary {
@@ -454,6 +495,7 @@ struct SteadySimulationRequest {
     std::string case_id;
     SteadySolverSettings solver;
     SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
 };
 
 struct SteadySimulationResponse {
@@ -486,6 +528,7 @@ struct CalibrationRequest {
     std::string calibration_id;
     CalibrationSolverSettings solver;
     SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
 };
 
 struct CalibrationParameterEstimate {
@@ -556,6 +599,7 @@ struct EngineeringStudyRequest {
     SteadySolverSettings prediction_solver;
     std::vector<StudyPredictionCase> prediction_cases;
     SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
 };
 
 struct StudyCaseResult {
@@ -605,6 +649,7 @@ struct TransientSimulationRequest {
     std::string case_id;
     TransientSolverSettings solver;
     SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
 };
 
 struct TransientSimulationResponse {

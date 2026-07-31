@@ -306,6 +306,29 @@ detail::NativeRuntimeFactory::create(
 }
 
 std::shared_ptr<const SimulationRuntime>
+detail::NativeRuntimeFactory::overlay(
+    const std::shared_ptr<const SimulationRuntime>& base,
+    std::vector<platform::ExpressionComponentDefinition>
+        expression_components) {
+    if (!base) {
+        throw std::invalid_argument(
+            "runtime overlay requires a base runtime");
+    }
+    if (expression_components.empty()) return base;
+    auto components = base->impl_->components;
+    for (auto& definition : expression_components) {
+        platform::register_expression_component(
+            components, std::move(definition));
+    }
+    return create(
+        std::move(components),
+        base->impl_->properties,
+        base->impl_->performance_maps,
+        base->impl_->thermochemistry,
+        base->impl_->units);
+}
+
+std::shared_ptr<const SimulationRuntime>
 make_default_simulation_runtime() {
     return make_simulation_runtime(
         platform::make_default_component_registry(),

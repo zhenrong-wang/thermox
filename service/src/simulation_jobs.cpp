@@ -118,6 +118,47 @@ void append_artifacts(
     }
 }
 
+void append_components(
+    std::ostringstream& stream,
+    const SimulationComponentBundle& components) {
+    stream << components.expression_components.size() << '|';
+    for (const auto& component :
+         components.expression_components) {
+        append_string(stream, component.schema_version);
+        append_string(stream, component.kind);
+        append_string(stream, component.version);
+        append_string(stream, component.system_boundary_role);
+        stream << component.ports.size() << '|';
+        for (const auto& port : component.ports) {
+            append_string(stream, port.name);
+            append_string(stream, port.domain);
+            append_string(stream, port.direction);
+            stream << port.maximum_connections << '|';
+        }
+        stream << component.parameters.size() << '|';
+        for (const auto& parameter : component.parameters) {
+            append_string(stream, parameter.name);
+            append_string(stream, parameter.dimension);
+            stream << parameter.required << '|'
+                   << parameter.default_value_si.has_value()
+                   << '|';
+            if (parameter.default_value_si) {
+                stream << *parameter.default_value_si << '|';
+            }
+            stream << parameter.lower_bound << '|'
+                   << parameter.upper_bound << '|'
+                   << parameter.lower_inclusive << '|'
+                   << parameter.upper_inclusive << '|';
+        }
+        stream << component.equations.size() << '|';
+        for (const auto& equation : component.equations) {
+            append_string(stream, equation.name);
+            append_string(stream, equation.expression);
+            stream << equation.residual_scale << '|';
+        }
+    }
+}
+
 std::string request_fingerprint(
     const SimulationJobRequest& request) {
     std::ostringstream stream;
@@ -168,6 +209,8 @@ std::string request_fingerprint(
         stream, request.transient_solver.nonlinear_solver);
     stream << '|';
     append_artifacts(stream, request.artifacts);
+    stream << '|';
+    append_components(stream, request.components);
     stream << '|' << request.result_projections.size() << '|';
     for (const auto& projection : request.result_projections) {
         append_string(stream, projection.id);
@@ -182,7 +225,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v5) {
+    if (request.schema_version != job_schema_v6) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -499,6 +542,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             request.case_id = claimed->request.case_id;
             request.solver = claimed->request.steady_solver;
             request.artifacts = claimed->request.artifacts;
+            request.components = claimed->request.components;
             auto response = impl_->simulation.run_steady(request);
             response.metadata.source_revisions =
                 claimed->request.source_revisions;
@@ -537,6 +581,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
         request.case_id = claimed->request.case_id;
         request.solver = claimed->request.transient_solver;
         request.artifacts = claimed->request.artifacts;
+        request.components = claimed->request.components;
         auto response =
             impl_->simulation.run_transient(request);
         response.metadata.source_revisions =

@@ -5,6 +5,8 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
+#include <cmath>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -296,6 +298,202 @@ service::SimulationArtifactBundle decode_artifact_bundle(
     return value;
 }
 
+Tree component_bundle(
+    const service::SimulationComponentBundle& value) {
+    Tree tree;
+    tree.add_child(
+        "expression_components",
+        array(
+            value.expression_components,
+            [](const service::ExpressionComponentInput& component) {
+                Tree encoded;
+                encoded.put(
+                    "schema_version", component.schema_version);
+                encoded.put("kind", component.kind);
+                encoded.put("version", component.version);
+                encoded.put(
+                    "system_boundary_role",
+                    component.system_boundary_role);
+                encoded.add_child(
+                    "ports",
+                    array(
+                        component.ports,
+                        [](const auto& port) {
+                            Tree value;
+                            value.put("name", port.name);
+                            value.put("domain", port.domain);
+                            value.put(
+                                "direction", port.direction);
+                            value.put(
+                                "maximum_connections",
+                                port.maximum_connections);
+                            return value;
+                        }));
+                encoded.add_child(
+                    "parameters",
+                    array(
+                        component.parameters,
+                        [](const auto& parameter) {
+                            Tree value;
+                            value.put("name", parameter.name);
+                            value.put(
+                                "dimension", parameter.dimension);
+                            value.put(
+                                "required", parameter.required);
+                            value.put(
+                                "has_default",
+                                parameter.default_value_si
+                                    .has_value());
+                            if (parameter.default_value_si) {
+                                value.put(
+                                    "default_value_si",
+                                    *parameter.default_value_si);
+                            }
+                            const bool has_lower =
+                                std::isfinite(
+                                    parameter.lower_bound);
+                            const bool has_upper =
+                                std::isfinite(
+                                    parameter.upper_bound);
+                            value.put(
+                                "has_lower_bound", has_lower);
+                            value.put(
+                                "has_upper_bound", has_upper);
+                            if (has_lower) {
+                                value.put(
+                                    "lower_bound",
+                                    parameter.lower_bound);
+                            }
+                            if (has_upper) {
+                                value.put(
+                                    "upper_bound",
+                                    parameter.upper_bound);
+                            }
+                            value.put(
+                                "lower_inclusive",
+                                parameter.lower_inclusive);
+                            value.put(
+                                "upper_inclusive",
+                                parameter.upper_inclusive);
+                            return value;
+                        }));
+                encoded.add_child(
+                    "equations",
+                    array(
+                        component.equations,
+                        [](const auto& equation) {
+                            Tree value;
+                            value.put("name", equation.name);
+                            value.put(
+                                "expression",
+                                equation.expression);
+                            value.put(
+                                "residual_scale",
+                                equation.residual_scale);
+                            return value;
+                        }));
+                return encoded;
+            }));
+    return tree;
+}
+
+service::SimulationComponentBundle decode_component_bundle(
+    const Tree& tree) {
+    service::SimulationComponentBundle value;
+    value.expression_components =
+        decode_array<service::ExpressionComponentInput>(
+            tree.get_child("expression_components"),
+            [](const Tree& encoded) {
+                service::ExpressionComponentInput component;
+                component.schema_version =
+                    encoded.get<std::string>("schema_version");
+                component.kind =
+                    encoded.get<std::string>("kind");
+                component.version =
+                    encoded.get<std::string>("version");
+                component.system_boundary_role =
+                    encoded.get<std::string>(
+                        "system_boundary_role");
+                component.ports =
+                    decode_array<
+                        service::ExpressionComponentPortInput>(
+                        encoded.get_child("ports"),
+                        [](const Tree& port) {
+                            return service::
+                                ExpressionComponentPortInput{
+                                    port.get<std::string>("name"),
+                                    port.get<std::string>("domain"),
+                                    port.get<std::string>(
+                                        "direction"),
+                                    port.get<std::size_t>(
+                                        "maximum_connections"),
+                                };
+                        });
+                component.parameters =
+                    decode_array<
+                        service::
+                            ExpressionComponentParameterInput>(
+                        encoded.get_child("parameters"),
+                        [](const Tree& parameter) {
+                            service::
+                                ExpressionComponentParameterInput
+                                    value;
+                            value.name =
+                                parameter.get<std::string>(
+                                    "name");
+                            value.dimension =
+                                parameter.get<std::string>(
+                                    "dimension");
+                            value.required =
+                                parameter.get<bool>("required");
+                            if (parameter.get<bool>(
+                                    "has_default")) {
+                                value.default_value_si =
+                                    parameter.get<double>(
+                                        "default_value_si");
+                            }
+                            value.lower_bound =
+                                parameter.get<bool>(
+                                    "has_lower_bound")
+                                ? parameter.get<double>(
+                                      "lower_bound")
+                                : -std::numeric_limits<
+                                      double>::infinity();
+                            value.upper_bound =
+                                parameter.get<bool>(
+                                    "has_upper_bound")
+                                ? parameter.get<double>(
+                                      "upper_bound")
+                                : std::numeric_limits<
+                                      double>::infinity();
+                            value.lower_inclusive =
+                                parameter.get<bool>(
+                                    "lower_inclusive");
+                            value.upper_inclusive =
+                                parameter.get<bool>(
+                                    "upper_inclusive");
+                            return value;
+                        });
+                component.equations =
+                    decode_array<
+                        service::ExpressionComponentEquationInput>(
+                        encoded.get_child("equations"),
+                        [](const Tree& equation) {
+                            return service::
+                                ExpressionComponentEquationInput{
+                                    equation.get<std::string>(
+                                        "name"),
+                                    equation.get<std::string>(
+                                        "expression"),
+                                    equation.get<double>(
+                                        "residual_scale"),
+                                };
+                        });
+                return component;
+            });
+    return value;
+}
+
 Tree steady_settings(
     const service::SteadySolverSettings& value) {
     Tree tree;
@@ -547,6 +745,8 @@ std::string encode_request(
         transient_settings(request.transient_solver));
     tree.add_child("artifacts", artifact_bundle(request.artifacts));
     tree.add_child(
+        "components", component_bundle(request.components));
+    tree.add_child(
         "result_projections",
         array(
             request.result_projections,
@@ -597,6 +797,8 @@ service::SimulationJobRequest decode_request(
         tree.get_child("transient_solver"));
     request.artifacts =
         decode_artifact_bundle(tree.get_child("artifacts"));
+    request.components =
+        decode_component_bundle(tree.get_child("components"));
     request.result_projections =
         decode_array<service::ResultProjection>(
             tree.get_child("result_projections"),

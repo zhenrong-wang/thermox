@@ -218,7 +218,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v5` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v6` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -463,7 +463,8 @@ Work items:
    - block ordering and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
-     differentiation, implementation fingerprints, and trusted composition-root registration; ✅
+     differentiation, implementation fingerprints, trusted composition-root registration,
+     immutable request overlays, and restart-safe job snapshots; ✅
    - Team-owned persistence, approval, HTTP authoring, compound dimension analysis, property
      functions, and transient-state contracts remain follow-ons.
 8. Map validation and interpolation quality controls.

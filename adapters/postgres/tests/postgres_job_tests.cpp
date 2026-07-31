@@ -5,11 +5,13 @@
 
 #include <libpq-fe.h>
 
+#include <cmath>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -92,6 +94,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "006_run_configuration_revisions.sql",
              "007_simulation_job_history.sql",
              "008_run_result_projections.sql",
+             "009_request_component_bundles.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -177,6 +180,29 @@ SimulationJobRequest request(
         "lab-3",
         std::string(64, 'b'),
     });
+    thermox::service::ExpressionComponentInput component;
+    component.kind = "custom.signal.persisted_gain";
+    component.version = "1.0.0";
+    component.ports = {
+        {"input", "signal", "in", 1},
+        {"output", "signal", "out", 1},
+    };
+    component.parameters = {
+        {
+            "gain", "dimensionless", true, std::nullopt,
+            -std::numeric_limits<double>::infinity(),
+            100.0, true, true,
+        },
+    };
+    component.equations = {
+        {
+            "gain_law",
+            "output.value - parameter.gain * input.value",
+            1.0,
+        },
+    };
+    value.components.expression_components.push_back(
+        std::move(component));
     return value;
 }
 
@@ -225,6 +251,14 @@ void test_idempotency_and_tenant_scope(
         first.job_id == repeated.job_id &&
             repeated.request.steady_solver.max_iterations == 17 &&
             repeated.request.artifacts.performance_maps.size() == 1 &&
+            repeated.request.components.expression_components
+                    .size() == 1 &&
+            repeated.request.components.expression_components
+                    .front().equations.front().expression ==
+                "output.value - parameter.gain * input.value" &&
+            std::isinf(
+                repeated.request.components.expression_components
+                    .front().parameters.front().lower_bound) &&
             repeated.request.source_revisions &&
             repeated.request.source_revisions
                     ->case_revision_id ==

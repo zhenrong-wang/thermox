@@ -43,6 +43,67 @@ bool valid_schema(const std::string& schema) {
     return schema == command_schema_v1;
 }
 
+std::vector<platform::ExpressionComponentDefinition>
+expression_component_definitions(
+    const SimulationComponentBundle& bundle) {
+    constexpr std::size_t maximum_components = 128;
+    if (bundle.expression_components.size() >
+        maximum_components) {
+        throw std::invalid_argument(
+            "simulation component bundle exceeds the "
+            "128-definition limit");
+    }
+    std::vector<platform::ExpressionComponentDefinition>
+        definitions;
+    definitions.reserve(bundle.expression_components.size());
+    for (const auto& input : bundle.expression_components) {
+        platform::ExpressionComponentDefinition definition;
+        definition.schema_version = input.schema_version;
+        definition.descriptor.kind = input.kind;
+        definition.descriptor.version = input.version;
+        definition.descriptor.system_boundary_role =
+            input.system_boundary_role;
+        definition.descriptor.supports_steady = true;
+        definition.descriptor.supports_transient = false;
+        for (const auto& port : input.ports) {
+            definition.descriptor.ports.push_back({
+                port.name,
+                port.domain,
+                port.direction,
+                port.maximum_connections,
+            });
+        }
+        for (const auto& parameter : input.parameters) {
+            definition.descriptor.parameters.push_back({
+                parameter.name,
+                parameter.dimension,
+                parameter.required,
+                parameter.default_value_si,
+                parameter.lower_bound,
+                parameter.upper_bound,
+                parameter.lower_inclusive,
+                parameter.upper_inclusive,
+            });
+        }
+        for (const auto& equation : input.equations) {
+            definition.equations.push_back({
+                equation.name,
+                equation.expression,
+                equation.residual_scale,
+            });
+        }
+        definitions.push_back(std::move(definition));
+    }
+    return definitions;
+}
+
+std::shared_ptr<const SimulationRuntime> request_runtime(
+    const std::shared_ptr<const SimulationRuntime>& base,
+    const SimulationComponentBundle& components) {
+    return detail::NativeRuntimeFactory::overlay(
+        base, expression_component_definitions(components));
+}
+
 platform::MapExtrapolationPolicy extrapolation_policy(
     const std::string& value) {
     if (value == "reject") {
@@ -1110,6 +1171,16 @@ ValidateModelResponse SimulationService::validate_model(
             "missing_model", "request", "model_json must not be empty");
         return response;
     }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
     SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
     try {
@@ -1117,7 +1188,7 @@ ValidateModelResponse SimulationService::validate_model(
             request.artifacts,
             impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
-            impl_->runtime->impl_->performance_maps,
+            runtime->impl_->performance_maps,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1128,13 +1199,13 @@ ValidateModelResponse SimulationService::validate_model(
     try {
         const auto document =
             platform::parse_model_document_text(
-                request.model_json, impl_->runtime->impl_->units);
+                request.model_json, runtime->impl_->units);
         response.model = model_metadata(document);
         response.canonical_model_json =
             detail::serialize_model_document_json(document);
         platform::validate_calibration_observation_contracts(
-            document, impl_->runtime->impl_->components,
-            impl_->runtime->impl_->thermochemistry);
+            document, runtime->impl_->components,
+            runtime->impl_->thermochemistry);
         const auto* simulation_case =
             selected_case(document, request.case_id);
         if (!request.case_id.empty() && simulation_case == nullptr) {
@@ -1145,14 +1216,14 @@ ValidateModelResponse SimulationService::validate_model(
         response.model.case_id =
             simulation_case == nullptr ? "" : simulation_case->id;
         response.compilation.catalog_fingerprint =
-            impl_->runtime->impl_->fingerprint;
+            runtime->impl_->fingerprint;
         const std::string mode = validation_mode(simulation_case);
         if (mode == "transient") {
             const auto graph =
                 platform::compile_transient_model_graph(
                     document,
-                    impl_->runtime->impl_->components,
-                    impl_->runtime->impl_->properties,
+                    runtime->impl_->components,
+                    runtime->impl_->properties,
                     performance_maps,
                     request.case_id);
             response.compilation.compiled = true;
@@ -1164,10 +1235,10 @@ ValidateModelResponse SimulationService::validate_model(
         } else {
             const auto graph = platform::compile_model_graph(
                 document,
-                impl_->runtime->impl_->components,
-                impl_->runtime->impl_->properties,
+                runtime->impl_->components,
+                runtime->impl_->properties,
                 performance_maps,
-                impl_->runtime->impl_->thermochemistry,
+                runtime->impl_->thermochemistry,
                 request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "steady";
@@ -1387,6 +1458,16 @@ SteadySimulationResponse SimulationService::run_steady(
             "missing_model", "request", "model_json must not be empty");
         return response;
     }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
 
     platform::ModelDocument document;
     SolverOptions options;
@@ -1405,7 +1486,7 @@ SteadySimulationResponse SimulationService::run_steady(
             request.artifacts,
             impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
-            impl_->runtime->impl_->performance_maps,
+            runtime->impl_->performance_maps,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1416,7 +1497,7 @@ SteadySimulationResponse SimulationService::run_steady(
     try {
         document =
             platform::parse_model_document_text(
-                request.model_json, impl_->runtime->impl_->units);
+                request.model_json, runtime->impl_->units);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -1428,10 +1509,10 @@ SteadySimulationResponse SimulationService::run_steady(
     try {
         graph = platform::compile_model_graph(
             document,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties,
+            runtime->impl_->components,
+            runtime->impl_->properties,
             performance_maps,
-            impl_->runtime->impl_->thermochemistry,
+            runtime->impl_->thermochemistry,
             request.case_id);
         response.metadata = execution_metadata(
             document,
@@ -1439,9 +1520,9 @@ SteadySimulationResponse SimulationService::run_steady(
             graph.case_id.value_or(""),
             "steady",
             solver_provenance(request.solver),
-            impl_->runtime->impl_->fingerprint,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties);
+            runtime->impl_->fingerprint,
+            runtime->impl_->components,
+            runtime->impl_->properties);
         response.metadata.artifacts =
             artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
@@ -1487,8 +1568,8 @@ SteadySimulationResponse SimulationService::run_steady(
     try {
         const platform::GraphResultEvaluator evaluator(
             document, graph,
-            impl_->runtime->impl_->properties,
-            impl_->runtime->impl_->thermochemistry);
+            runtime->impl_->properties,
+            runtime->impl_->thermochemistry);
         response.graph =
             copy_graph_result(evaluator.evaluate(result.x));
     } catch (const std::exception& ex) {
@@ -1543,6 +1624,16 @@ CalibrationResponse SimulationService::run_calibration(
             "invalid_solver_settings", "request", ex.what());
         return response;
     }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
 
     SimulationArtifactBundle artifacts;
     platform::PerformanceMapRegistry performance_maps;
@@ -1551,7 +1642,7 @@ CalibrationResponse SimulationService::run_calibration(
             request.artifacts,
             impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
-            impl_->runtime->impl_->performance_maps,
+            runtime->impl_->performance_maps,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1564,17 +1655,17 @@ CalibrationResponse SimulationService::run_calibration(
     try {
         document =
             platform::parse_model_document_text(
-                request.model_json, impl_->runtime->impl_->units);
+                request.model_json, runtime->impl_->units);
         platform::validate_calibration_observation_contracts(
-            document, impl_->runtime->impl_->components,
-            impl_->runtime->impl_->thermochemistry);
+            document, runtime->impl_->components,
+            runtime->impl_->thermochemistry);
         response.calibration_id = request.calibration_id;
         response.metadata = execution_metadata(
             document, request.schema_version, "", "calibration",
             solver_provenance(settings),
-            impl_->runtime->impl_->fingerprint,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties);
+            runtime->impl_->fingerprint,
+            runtime->impl_->components,
+            runtime->impl_->properties);
         response.metadata.artifacts =
             artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
@@ -1649,10 +1740,10 @@ CalibrationResponse SimulationService::run_calibration(
         return evaluate_calibration_objective(
             document, *calibration,
             settings.simulation_solver,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties,
+            runtime->impl_->components,
+            runtime->impl_->properties,
             performance_maps,
-            impl_->runtime->impl_->thermochemistry,
+            runtime->impl_->thermochemistry,
             warm_starts);
     };
     const auto continue_to =
@@ -1869,6 +1960,7 @@ SimulationService::run_engineering_study(
     calibration.calibration_id = request.calibration_id;
     calibration.solver = request.calibration_solver;
     calibration.artifacts = request.artifacts;
+    calibration.components = request.components;
     response.calibration = run_calibration(calibration);
     if (!response.calibration.succeeded()) {
         response.status = response.calibration.status;
@@ -1886,6 +1978,7 @@ SimulationService::run_engineering_study(
         simulation.case_id = prediction.case_id;
         simulation.solver = request.prediction_solver;
         simulation.artifacts = request.artifacts;
+        simulation.components = request.components;
         result.simulation = run_steady(simulation);
         if (!result.simulation.succeeded()) {
             response.predictions.push_back(std::move(result));
@@ -1980,6 +2073,16 @@ TransientSimulationResponse SimulationService::run_transient(
             "missing_model", "request", "model_json must not be empty");
         return response;
     }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
 
     platform::ModelDocument document;
     TimeIntegrationOptions options;
@@ -1998,7 +2101,7 @@ TransientSimulationResponse SimulationService::run_transient(
             request.artifacts,
             impl_->artifact_resolver.get());
         performance_maps = execution_performance_maps(
-            impl_->runtime->impl_->performance_maps,
+            runtime->impl_->performance_maps,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -2009,7 +2112,7 @@ TransientSimulationResponse SimulationService::run_transient(
     try {
         document =
             platform::parse_model_document_text(
-                request.model_json, impl_->runtime->impl_->units);
+                request.model_json, runtime->impl_->units);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -2021,8 +2124,8 @@ TransientSimulationResponse SimulationService::run_transient(
     try {
         graph = platform::compile_transient_model_graph(
             document,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties,
+            runtime->impl_->components,
+            runtime->impl_->properties,
             performance_maps,
             request.case_id);
         response.metadata = execution_metadata(
@@ -2031,9 +2134,9 @@ TransientSimulationResponse SimulationService::run_transient(
             graph.case_id.value_or(""),
             "transient",
             solver_provenance(request.solver),
-            impl_->runtime->impl_->fingerprint,
-            impl_->runtime->impl_->components,
-            impl_->runtime->impl_->properties);
+            runtime->impl_->fingerprint,
+            runtime->impl_->components,
+            runtime->impl_->properties);
         response.metadata.artifacts =
             artifact_provenance(artifacts);
     } catch (const std::exception& ex) {
@@ -2065,7 +2168,7 @@ TransientSimulationResponse SimulationService::run_transient(
     try {
         const platform::GraphResultEvaluator evaluator(
             document, graph,
-            impl_->runtime->impl_->properties);
+            runtime->impl_->properties);
         response.trajectory.reserve(result.trajectory.size());
         for (const auto& sample : result.trajectory) {
             response.trajectory.push_back({

@@ -54,6 +54,53 @@ thermox::service::SimulationJobRequest steady_request(
     return request;
 }
 
+thermox::service::SimulationJobRequest expression_request(
+    std::string idempotency_key) {
+    auto request = steady_request(std::move(idempotency_key));
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "job_expression",
+    "media": [],
+    "components": [{
+      "id": "gain",
+      "kind": "custom.signal.job_gain",
+      "parameters": {"gain": 2.0}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {"gain.input.value": 5.0}
+  }]
+})json";
+    request.case_id = "design";
+    thermox::service::ExpressionComponentInput component;
+    component.kind = "custom.signal.job_gain";
+    component.version = "1.0.0";
+    component.ports = {
+        {"input", "signal", "in", 1},
+        {"output", "signal", "out", 1},
+    };
+    component.parameters = {
+        {
+            "gain", "dimensionless", true, std::nullopt,
+            0.0, 100.0, true, true,
+        },
+    };
+    component.equations = {
+        {
+            "gain_law",
+            "output.value - parameter.gain * input.value",
+            1.0,
+        },
+    };
+    request.components.expression_components.push_back(
+        std::move(component));
+    return request;
+}
+
 thermox::service::PerformanceMapArtifactInput unused_test_map() {
     thermox::service::PerformanceMapArtifactInput artifact;
     artifact.id = "job-map";
@@ -137,6 +184,51 @@ void test_submission_is_idempotent_and_conflict_safe() {
         conflict,
         "artifact references must participate in the job "
         "idempotency fingerprint");
+
+    auto custom = expression_request("component-submission");
+    (void)service.submit(custom);
+    custom.components.expression_components.front()
+        .equations.front().expression =
+        "output.value - 3.0 * input.value";
+    conflict = false;
+    try {
+        (void)service.submit(custom);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "request-scoped component definitions must participate "
+        "in the idempotency fingerprint");
+}
+
+void test_worker_executes_request_scoped_component() {
+    auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    const auto queued =
+        service.submit(expression_request("component-run"));
+    const auto completed = service.run_next("component-worker");
+    require(
+        completed &&
+            completed->job_id == queued.job_id &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->execution &&
+            !completed->execution->catalog_fingerprint.empty(),
+        "worker must reconstruct and execute the request-scoped "
+        "component runtime");
+    const auto result =
+        service.get_result(team_a, queued.job_id);
+    require(
+        result &&
+            result->content.find(
+                "\"value_si\": 10") != std::string::npos,
+        "request-scoped component job must publish its calculated "
+        "result");
 }
 
 void test_success_publishes_a_readable_artifact() {
@@ -244,7 +336,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v5\"") != std::string::npos &&
+                  "\"thermox.job/v6\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -632,6 +724,7 @@ void test_team_scoped_history_filters_and_paginates() {
 int main() {
     try {
         test_submission_is_idempotent_and_conflict_safe();
+        test_worker_executes_request_scoped_component();
         test_success_publishes_a_readable_artifact();
         test_solver_failure_is_a_terminal_job_failure();
         test_projection_failure_is_structured();
