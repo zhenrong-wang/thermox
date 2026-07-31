@@ -137,8 +137,8 @@ components can conserve each species without redundant fraction-normalization eq
 
 `source.material.fixed_composition` supplies a material boundary whose total mass flow remains an
 unknown available to the connected graph. Its species-keyed parameters use the catalog template
-`mass_fraction[{species}]`; an instance supplies one bounded value for every species in its bound
-material:
+`mass_fraction[{species}]`; an instance supplies only the nonzero bounded values in its bound
+material. Omitted mechanism species have a mass fraction of zero:
 
 ```yaml
 kind: source.material.fixed_composition
@@ -148,11 +148,16 @@ parameters:
   mass_fraction[H2O]: 0.0134
 ```
 
-Fractions must sum to one and cannot reference species outside the material basis. The component
-adds `N-1` independent, sparse linear ratio equations using the largest fraction as the numerical
-reference. Pressure and enthalpy remain ordinary boundary specifications, while one downstream
-physical closure—such as a sloped performance map against a fixed discharge pressure—can determine
-total flow. This avoids fixing every species flow merely to state inlet composition.
+Supplied fractions must sum to one and cannot reference species outside the material basis. The
+component adds `N-1` independent, sparse linear ratio equations using the largest fraction as the
+numerical reference. Pressure and enthalpy remain ordinary boundary specifications, while one
+downstream physical closure—such as a sloped performance map against a fixed discharge
+pressure—can determine total flow. This avoids fixing every species flow merely to state inlet
+composition.
+
+Cases may fix `T` on either fluid or material ports. A material temperature specification uses
+the port pressure, enthalpy, normalized species flows, and the bound thermochemistry package's PH
+capability; temperature remains a derived state rather than an additional connector variable.
 
 ### 5.3 Heat domain
 

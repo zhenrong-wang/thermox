@@ -38,8 +38,8 @@ public:
         descriptor_.parameters = {{
             "mass_fraction[{species}]",
             "dimensionless",
-            true,
-            std::nullopt,
+            false,
+            0.0,
             0.0,
             1.0,
             true,
@@ -56,7 +56,6 @@ public:
         EquationSystemBuilder& system) const override {
         using component_model_support::require_port_species;
         using component_model_support::require_port_variable;
-        using component_model_support::required_parameter;
 
         const auto species =
             require_port_species(context, "outlet");
@@ -76,8 +75,9 @@ public:
             const auto parameter =
                 "mass_fraction[" + name + "]";
             expected_parameters.insert(parameter);
-            const double fraction = required_parameter(
-                context.component, parameter);
+            const double fraction =
+                component_model_support::parameter_or(
+                    context.component, parameter, 0.0);
             fractions.push_back(fraction);
             sum += fraction;
             flows.push_back(require_port_variable(

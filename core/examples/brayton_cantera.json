@@ -1,0 +1,529 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "brayton_cantera",
+    "name": "Cantera methane-air Brayton integration benchmark",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "reacting_gas",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": [
+          "H2",
+          "H",
+          "O",
+          "O2",
+          "OH",
+          "H2O",
+          "HO2",
+          "H2O2",
+          "C",
+          "CH",
+          "CH2",
+          "CH2(S)",
+          "CH3",
+          "CH4",
+          "CO",
+          "CO2",
+          "HCO",
+          "CH2O",
+          "CH2OH",
+          "CH3O",
+          "CH3OH",
+          "C2H",
+          "C2H2",
+          "C2H3",
+          "C2H4",
+          "C2H5",
+          "C2H6",
+          "HCCO",
+          "CH2CO",
+          "HCCOH",
+          "N",
+          "NH",
+          "NH2",
+          "NH3",
+          "NNH",
+          "NO",
+          "NO2",
+          "N2O",
+          "HNO",
+          "CN",
+          "HCN",
+          "H2CN",
+          "HCNN",
+          "HCNO",
+          "HOCN",
+          "HNCO",
+          "NCO",
+          "N2",
+          "AR",
+          "C3H7",
+          "C3H8",
+          "CH2CHO",
+          "CH3CHO"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "ambient_air",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[N2]": 0.768,
+          "mass_fraction[O2]": 0.232
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "compressor",
+        "kind": "compressor.material.isentropic_efficiency",
+        "version": "2.0.0",
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.86
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "fuel",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[CH4]": 1.0
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "combustor",
+        "kind": "combustor.material.adiabatic_equilibrium",
+        "version": "1.0.0",
+        "parameters": {
+          "pressure_ratio": 0.95
+        },
+        "materials": {
+          "air_inlet": "reacting_gas",
+          "fuel_inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "turbine",
+        "kind": "turbine.material.isentropic_efficiency",
+        "version": "2.0.0",
+        "parameters": {
+          "pressure_ratio": 11.4,
+          "eta_is": 0.89
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "exhaust",
+        "kind": "sink.material.boundary",
+        "version": "1.0.0",
+        "materials": {
+          "inlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "shaft_train",
+        "kind": "shaft.train.two_load",
+        "version": "1.0.0",
+        "parameters": {
+          "mechanical_efficiency": 0.99,
+          "fixed_loss": {
+            "value": 0.0,
+            "unit": "MW"
+          }
+        }
+      },
+      {
+        "id": "generator",
+        "kind": "generator.electrical.efficiency",
+        "version": "1.0.0",
+        "parameters": {
+          "generator_efficiency": 0.985,
+          "pole_pairs": 1.0
+        }
+      },
+      {
+        "id": "grid",
+        "kind": "sink.electrical.boundary",
+        "version": "1.0.0"
+      }
+    ],
+    "connections": [
+      {
+        "id": "air_to_compressor",
+        "from": "ambient_air.outlet",
+        "to": "compressor.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "compressor_to_combustor",
+        "from": "compressor.outlet",
+        "to": "combustor.air_inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "fuel_to_combustor",
+        "from": "fuel.outlet",
+        "to": "combustor.fuel_inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "combustor_to_turbine",
+        "from": "combustor.outlet",
+        "to": "turbine.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "turbine_to_exhaust",
+        "from": "turbine.outlet",
+        "to": "exhaust.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "turbine_to_train",
+        "from": "turbine.shaft",
+        "to": "shaft_train.driver",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "train_to_compressor",
+        "from": "shaft_train.load_1",
+        "to": "compressor.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "train_to_generator",
+        "from": "shaft_train.load_2",
+        "to": "generator.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "generator_to_grid",
+        "from": "generator.electrical",
+        "to": "grid.inlet",
+        "kind": "electrical_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "ambient_air.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "ambient_air.outlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "ambient_air.outlet.T": {
+          "value": 288.15,
+          "unit": "K"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "grid.inlet.frequency": {
+          "value": 50.0,
+          "unit": "Hz"
+        }
+      },
+      "initial_guesses": {
+        "ambient_air.outlet.h": {
+          "value": -10.0554446615843,
+          "unit": "kJ/kg"
+        },
+        "ambient_air.outlet.m_dot[O2]": {
+          "value": 23.2,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.m_dot[O2]": {
+          "value": 23.2,
+          "unit": "kg/s"
+        },
+        "compressor.inlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "compressor.inlet.h": {
+          "value": -10.0554446615843,
+          "unit": "kJ/kg"
+        },
+        "compressor.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "compressor.outlet.m_dot[O2]": {
+          "value": 23.2,
+          "unit": "kg/s"
+        },
+        "compressor.outlet.p": {
+          "value": 1.2159,
+          "unit": "MPa"
+        },
+        "compressor.outlet.h": {
+          "value": 300.0,
+          "unit": "kJ/kg"
+        },
+        "compressor.shaft.W_dot": {
+          "value": 35.0,
+          "unit": "MW"
+        },
+        "compressor.shaft.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "fuel.outlet.h": {
+          "value": -4645.8568818907,
+          "unit": "kJ/kg"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.p": {
+          "value": 1.2159,
+          "unit": "MPa"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 23.2,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.p": {
+          "value": 1.2159,
+          "unit": "MPa"
+        },
+        "combustor.air_inlet.h": {
+          "value": 300.0,
+          "unit": "kJ/kg"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 2.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 1.2159,
+          "unit": "MPa"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4645.8568818907,
+          "unit": "kJ/kg"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 15.2,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 5.5,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 4.5,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[NO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[NO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.p": {
+          "value": 1.155105,
+          "unit": "MPa"
+        },
+        "combustor.outlet.h": {
+          "value": 200.0,
+          "unit": "kJ/kg"
+        },
+        "turbine.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.m_dot[O2]": {
+          "value": 15.2,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.m_dot[CO2]": {
+          "value": 5.5,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.m_dot[H2O]": {
+          "value": 4.5,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.m_dot[NO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.m_dot[NO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "turbine.inlet.p": {
+          "value": 1.155105,
+          "unit": "MPa"
+        },
+        "turbine.inlet.h": {
+          "value": 200.0,
+          "unit": "kJ/kg"
+        },
+        "turbine.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.m_dot[O2]": {
+          "value": 15.2,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.m_dot[CO2]": {
+          "value": 5.5,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.m_dot[H2O]": {
+          "value": 4.5,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.m_dot[NO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.m_dot[NO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "turbine.outlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "turbine.outlet.h": {
+          "value": -400.0,
+          "unit": "kJ/kg"
+        },
+        "turbine.shaft.W_dot": {
+          "value": 70.0,
+          "unit": "MW"
+        },
+        "turbine.shaft.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "exhaust.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.m_dot[O2]": {
+          "value": 15.2,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.m_dot[CO2]": {
+          "value": 5.5,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.m_dot[H2O]": {
+          "value": 4.5,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.m_dot[NO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.m_dot[NO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "exhaust.inlet.p": {
+          "value": 101.325,
+          "unit": "kPa"
+        },
+        "exhaust.inlet.h": {
+          "value": -400.0,
+          "unit": "kJ/kg"
+        },
+        "shaft_train.driver.W_dot": {
+          "value": 70.0,
+          "unit": "MW"
+        },
+        "shaft_train.driver.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "shaft_train.load_1.W_dot": {
+          "value": 35.0,
+          "unit": "MW"
+        },
+        "shaft_train.load_1.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "shaft_train.load_2.W_dot": {
+          "value": 34.0,
+          "unit": "MW"
+        },
+        "shaft_train.load_2.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "generator.shaft.W_dot": {
+          "value": 34.0,
+          "unit": "MW"
+        },
+        "generator.shaft.omega": {
+          "value": 314.159265358979,
+          "unit": "rad/s"
+        },
+        "generator.electrical.P": {
+          "value": 33.5,
+          "unit": "MW"
+        },
+        "generator.electrical.frequency": {
+          "value": 50.0,
+          "unit": "Hz"
+        },
+        "grid.inlet.P": {
+          "value": 33.5,
+          "unit": "MW"
+        }
+      }
+    }
+  ]
+}

@@ -251,6 +251,56 @@ void test_continuation_recovers_difficult_initial_guess() {
     }
 }
 
+void test_continuation_falls_back_to_solvable_target() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x", "y"};
+    problem.residual_names = {"y_target", "x_target"};
+    problem.initial_guess = {1.0, 2.0};
+    problem.variable_scales = {1.0, 1.0};
+    problem.residual_scales = {1.0, 1.0};
+    problem.lower_bounds = {0.0, 0.0};
+    problem.upper_bounds = {
+        std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity()};
+    problem.residual = [](
+                           const std::vector<double>& x,
+                           std::vector<double>& residual) {
+        residual[0] = x[1] - 4.0;
+        residual[1] = x[0] - 3.0;
+    };
+    problem.jacobian = [](
+                           const std::vector<double>&,
+                           thermox::Matrix& jacobian) {
+        jacobian[0][1] = 1.0;
+        jacobian[1][0] = 1.0;
+    };
+
+    thermox::ContinuationOptions continuation;
+    continuation.initial_step = 0.5;
+    continuation.minimum_step = 0.5;
+    const auto result = thermox::solve_continuation(
+        problem, {}, continuation);
+
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require(result.continuation.converged,
+            result.continuation.message);
+    require_near(result.x[0], 3.0, 1.0e-12,
+                 "target fallback solves x");
+    require_near(result.x[1], 4.0, 1.0e-12,
+                 "target fallback solves y");
+    require(
+        result.continuation.rejected_stages == 1 &&
+            result.continuation.accepted_stages == 1,
+        "fallback diagnostics expose the rejected homotopy "
+        "stage and accepted target solve");
+    require(
+        result.continuation.message.find(
+            "direct target fallback converged") !=
+            std::string::npos,
+        "fallback convergence is explicit in diagnostics");
+}
+
 void test_equation_builder_exposes_component_continuation_path() {
     thermox::EquationSystemBuilder system;
     const auto x =
@@ -1094,6 +1144,7 @@ int main() {
         test_reusable_sparse_factorization();
         test_newton_reuses_sparse_symbolic_factorization();
         test_continuation_recovers_difficult_initial_guess();
+        test_continuation_falls_back_to_solvable_target();
         test_equation_builder_exposes_component_continuation_path();
         test_informed_residual_without_derivative_uses_finite_difference();
         test_sparse_matrix_conversion_and_scaling();

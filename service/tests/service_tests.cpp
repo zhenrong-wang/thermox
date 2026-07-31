@@ -536,6 +536,88 @@ void test_validation_and_canonicalization() {
             solved.error.message);
 }
 
+#ifdef THERMOX_TEST_HAS_CANTERA
+void test_cantera_brayton_integration_benchmark() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json =
+        read_source_file("core/examples/brayton_cantera.json");
+    request.case_id = "design";
+    request.solver.continuation_enabled = true;
+    const auto response = service.run_steady(request);
+
+    require(
+        response.succeeded(),
+        "Cantera Brayton benchmark must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-10,
+        "Cantera Brayton benchmark must close its normalized "
+        "equations");
+    require(
+        response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0,
+        "Cantera Brayton benchmark must reach the target problem");
+
+    const auto& compressor_shaft =
+        require_port_result(
+            response.graph, "compressor", "shaft");
+    const auto& turbine_shaft =
+        require_port_result(
+            response.graph, "turbine", "shaft");
+    const auto& generator_electrical =
+        require_port_result(
+            response.graph, "generator", "electrical");
+    const auto& combustor_outlet =
+        require_port_result(
+            response.graph, "combustor", "outlet");
+    const auto& turbine_outlet =
+        require_port_result(
+            response.graph, "turbine", "outlet");
+
+    require(
+        std::abs(
+            require_result_value(
+                compressor_shaft.primary_values, "W_dot")
+                    .value_si -
+            34.80152099e6) < 100.0,
+        "Brayton compressor power must match the independent "
+        "Cantera reference");
+    require(
+        std::abs(
+            require_result_value(
+                turbine_shaft.primary_values, "W_dot")
+                    .value_si -
+            69.86066885e6) < 100.0,
+        "Brayton turbine power must match the independent "
+        "Cantera reference");
+    require(
+        std::abs(
+            require_result_value(
+                generator_electrical.primary_values, "P")
+                    .value_si -
+            33.84513305e6) < 100.0,
+        "Brayton net electric power must close the shaft train");
+    require(
+        std::abs(
+            require_result_value(
+                combustor_outlet.derived_values, "T")
+                    .value_si -
+            1418.696978) < 1.0e-3,
+        "Brayton equilibrium firing temperature must match the "
+        "independent Cantera reference");
+    require(
+        std::abs(
+            require_result_value(
+                turbine_outlet.derived_values, "T")
+                    .value_si -
+            864.300347) < 1.0e-3,
+        "Brayton exhaust temperature must match the independent "
+        "Cantera reference");
+}
+#endif
+
 void test_compile_aware_validation_diagnostics() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -1774,6 +1856,9 @@ int main() {
         test_resolved_performance_map_artifacts();
         test_catalog_discovery();
         test_validation_and_canonicalization();
+#ifdef THERMOX_TEST_HAS_CANTERA
+        test_cantera_brayton_integration_benchmark();
+#endif
         test_compile_aware_validation_diagnostics();
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();

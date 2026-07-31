@@ -44,6 +44,12 @@ isentropic outlet through the PS contract, apply isentropic efficiency, and clos
 They use the same component graph semantics as fixed-fluid turbomachinery and contain no
 gas-turbine-specific assumptions.
 
+`core/examples/brayton_cantera.json` is the public reacting-cycle integration benchmark. It
+assembles generic registry components into a methane-air Brayton graph and checks independently
+reproducible Cantera reference values: approximately 34.80 MW compressor power, 69.86 MW turbine
+power, 33.85 MW net electric power, 1418.70 K turbine inlet, and 864.30 K exhaust. The benchmark
+is a platform graph and regression test, not a hard-coded gas-turbine solver.
+
 `humid_air_state_ptrh` is an always-available CoolProp-backed ambient service. It converts measured
 pressure, dry-bulb temperature, and relative humidity into humidity ratio, water mass fraction,
 and thermodynamic/transport properties on a humid-air mass basis. Its humidity ratio is intended

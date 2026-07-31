@@ -2656,6 +2656,82 @@ void test_material_thermochemistry_resolves_on_demand() {
         "under-specified");
 }
 
+void test_material_boundary_temperature_specification() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_temperature_boundary",
+    "media": [],
+    "materials": [{
+      "id": "air",
+      "backend": "test_backend",
+      "mechanism": "test.yaml",
+      "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "source",
+      "kind": "source.material.fixed_composition",
+      "parameters": {
+        "mass_fraction[N2]": 0.8,
+        "mass_fraction[O2]": 0.2
+      },
+      "materials": {"outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "ambient",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "source.outlet.m_dot[N2]": {
+        "value": 8.0,
+        "unit": "kg/s"
+      },
+      "source.outlet.p": {
+        "value": 101.325,
+        "unit": "kPa"
+      },
+      "source.outlet.T": {
+        "value": 300.0,
+        "unit": "K"
+      }
+    }
+  }]
+})json");
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto graph =
+        thermox::platform::compile_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            thermox::platform::PerformanceMapRegistry{},
+            chemistry, "ambient");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(
+        result.diagnostics.converged,
+        result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(
+        value("source.outlet.h"), 300000.0, 1.0e-7,
+        "material temperature boundary closes PH enthalpy");
+    require_near(
+        value("source.outlet.m_dot[O2]"), 2.0, 1.0e-10,
+        "material temperature boundary preserves composition");
+}
+
 void test_adiabatic_equilibrium_combustor() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -3418,13 +3494,28 @@ void test_fixed_composition_source_allows_map_solved_flow() {
         2.5, 1.0e-8,
         "case composition override must retain map-solved total flow");
 
-    auto incomplete = document;
-    incomplete.components.front().parameters.erase(
+    auto sparse = document;
+    sparse.components.front().parameters.erase(
         "mass_fraction[O2]");
-    incomplete.cases.front().parameter_overrides.clear();
+    sparse.components.front()
+        .parameters.at("mass_fraction[N2]")
+        .value_si = 1.0;
+    sparse.cases.front().parameter_overrides.clear();
+    const auto [sparse_graph, sparse_result] = solve(sparse);
+    require_near(
+        sparse_result.x.at(require_variable_index(
+            sparse_graph.problem.variable_names,
+            "source.outlet.m_dot[O2]")),
+        0.0, 1.0e-8,
+        "omitted source species defaults to zero fraction");
+
+    auto invalid_sum = document;
+    invalid_sum.components.front().parameters.erase(
+        "mass_fraction[O2]");
+    invalid_sum.cases.front().parameter_overrides.clear();
     require_throws(
-        [&]() { (void)solve(incomplete); },
-        "missing required parameter: mass_fraction[O2]");
+        [&]() { (void)solve(invalid_sum); },
+        "mass fractions must sum to one");
 
     auto unknown_species = document;
     unknown_species.components.front().parameters[
@@ -5072,6 +5163,7 @@ int main() {
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
         test_material_thermochemistry_resolves_on_demand();
+        test_material_boundary_temperature_specification();
         test_adiabatic_equilibrium_combustor();
         test_material_compressor_and_turbine();
         test_map_driven_material_turbomachinery();

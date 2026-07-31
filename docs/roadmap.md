@@ -57,7 +57,7 @@ Work items:
    - mixer/splitter ✅ *(two-inlet enthalpy-flow mixer and two-outlet splitter)*
 11. Add examples:
    - simple Rankine cycle
-   - simple Brayton cycle ✅ *(kept isolated from the platform API)*
+   - simple Brayton cycle ✅ *(public Cantera-backed material/shaft/electrical platform graph)*
 
 Exit criteria:
 

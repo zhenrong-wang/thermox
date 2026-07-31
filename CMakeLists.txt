@@ -82,6 +82,11 @@ target_link_libraries(thermox_service_tests PRIVATE
 target_compile_definitions(thermox_service_tests PRIVATE
     THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
+if(TARGET thermox_cantera_backend)
+    target_compile_definitions(
+        thermox_service_tests PRIVATE
+        THERMOX_TEST_HAS_CANTERA=1)
+endif()
 add_test(NAME thermox_service_tests COMMAND thermox_service_tests)
 
 add_executable(thermox_job_service_tests

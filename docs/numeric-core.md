@@ -51,7 +51,8 @@ components to introduce their own difficult physics without adding domain knowle
 driver. Fixed fluid and material turbomachinery currently stage pressure ratio from the case
 initialization to the declared target. Fluid performance-map machinery additionally stages
 corrected coordinates from an in-domain seed while preserving the strict source-map policy at the
-target stage. See
+target stage. If an intermediate homotopy path exhausts its adaptive step, the driver attempts the
+unchanged target once from the last accepted state and reports the fallback explicitly. See
 [Continuation Architecture](continuation-architecture.md).
 
 ## Transient DAE contract

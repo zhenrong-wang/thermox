@@ -1,6 +1,7 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -414,54 +415,87 @@ public:
             require_port_variable(context, "outlet.h");
         std::vector<std::size_t> energy_variables;
         energy_variables.reserve(
-            inlet_a_flows.size() + inlet_b_flows.size() +
-            outlet_flows.size() + 3);
+            inlet_a_flows.size() + inlet_b_flows.size() + 3);
         energy_variables.insert(
             energy_variables.end(),
             inlet_a_flows.begin(), inlet_a_flows.end());
         energy_variables.insert(
             energy_variables.end(),
             inlet_b_flows.begin(), inlet_b_flows.end());
-        energy_variables.insert(
-            energy_variables.end(),
-            outlet_flows.begin(), outlet_flows.end());
         energy_variables.push_back(enthalpy_a);
         energy_variables.push_back(enthalpy_b);
         energy_variables.push_back(enthalpy_out);
-        system.add_sparse_equation(
+        system.add_checked_sparse_equation(
             prefix + "energy_balance",
+            [inlet_a_flows, inlet_b_flows, enthalpy_a,
+             enthalpy_b, enthalpy_out](
+                const std::vector<double>& x,
+                double& residual) {
+                double mass_a = 0.0;
+                double mass_b = 0.0;
+                for (const auto variable : inlet_a_flows) {
+                    mass_a += x.at(variable);
+                }
+                for (const auto variable : inlet_b_flows) {
+                    mass_b += x.at(variable);
+                }
+                const double total_mass = mass_a + mass_b;
+                if (!std::isfinite(total_mass) ||
+                    total_mass <= 0.0) {
+                    return EvaluationStatus::recoverable(
+                        "material mixer requires positive finite "
+                        "inlet mass flow");
+                }
+                const double mixed_enthalpy =
+                    (mass_a * x.at(enthalpy_a) +
+                     mass_b * x.at(enthalpy_b)) /
+                    total_mass;
+                residual =
+                    x.at(enthalpy_out) - mixed_enthalpy;
+                return EvaluationStatus::success();
+            },
             std::move(energy_variables),
-            [inlet_a_flows, inlet_b_flows, outlet_flows,
-             enthalpy_a, enthalpy_b, enthalpy_out](
+            [inlet_a_flows, inlet_b_flows, enthalpy_a,
+             enthalpy_b, enthalpy_out](
                 const std::vector<double>& x,
                 std::vector<EquationPartial>& jacobian) {
                 double mass_a = 0.0;
                 double mass_b = 0.0;
-                double mass_out = 0.0;
                 for (const auto variable : inlet_a_flows) {
                     mass_a += x.at(variable);
-                    jacobian.push_back(
-                        {variable, -x.at(enthalpy_a)});
                 }
                 for (const auto variable : inlet_b_flows) {
                     mass_b += x.at(variable);
-                    jacobian.push_back(
-                        {variable, -x.at(enthalpy_b)});
                 }
-                for (const auto variable : outlet_flows) {
-                    mass_out += x.at(variable);
+                const double total_mass = mass_a + mass_b;
+                const double mixed_enthalpy =
+                    (mass_a * x.at(enthalpy_a) +
+                     mass_b * x.at(enthalpy_b)) /
+                    total_mass;
+                for (const auto variable : inlet_a_flows) {
                     jacobian.push_back(
-                        {variable, x.at(enthalpy_out)});
+                        {variable,
+                         -(x.at(enthalpy_a) -
+                           mixed_enthalpy) /
+                             total_mass});
                 }
-                jacobian.push_back({enthalpy_a, -mass_a});
-                jacobian.push_back({enthalpy_b, -mass_b});
+                for (const auto variable : inlet_b_flows) {
+                    jacobian.push_back(
+                        {variable,
+                         -(x.at(enthalpy_b) -
+                           mixed_enthalpy) /
+                             total_mass});
+                }
                 jacobian.push_back(
-                    {enthalpy_out, mass_out});
-                return mass_out * x.at(enthalpy_out) -
-                    mass_a * x.at(enthalpy_a) -
-                    mass_b * x.at(enthalpy_b);
+                    {enthalpy_a, -mass_a / total_mass});
+                jacobian.push_back(
+                    {enthalpy_b, -mass_b / total_mass});
+                jacobian.push_back(
+                    {enthalpy_out, 1.0});
+                return x.at(enthalpy_out) -
+                    mixed_enthalpy;
             },
-            1.0e8);
+            100000.0);
     }
 
 private:

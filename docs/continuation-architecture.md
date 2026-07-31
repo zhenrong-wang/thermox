@@ -24,8 +24,10 @@ homotopy. Intermediate solutions warm-start the next stage.
 
 `solve_continuation` starts with a configured step in `lambda`. A converged stage advances the
 path and grows the next step. A failed stage retains the last accepted state and reduces the step.
-The solve fails explicitly if the reduced step falls below its minimum or the maximum stage count
-is reached.
+If staging exhausts the minimum step or maximum stage count, the driver makes one explicit target
+solve from the last accepted state. This protects callers from a homotopy-path failure when the
+target equations are nevertheless directly solvable. Diagnostics label that fallback and retain
+every rejected stage; the solve still fails if the target fallback also fails.
 
 Every attempt records:
 

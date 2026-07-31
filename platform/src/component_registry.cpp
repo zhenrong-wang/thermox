@@ -25,7 +25,7 @@ standard_connector_domains() {
          {{"p", 101325.0, 100000.0, "pressure", false},
           {"h", 300000.0, 100000.0,
            "specific_enthalpy", false},
-          {"m_dot[species]", 0.01, 100.0, "mass_flow",
+          {"m_dot[species]", 0.0, 100.0, "mass_flow",
            true}}},
         {"heat", "thermox.connector.heat/v1", "heat_link",
          {{"Q_dot", 0.0, 1000000.0, "power", false},
@@ -1376,6 +1376,187 @@ CompiledModelGraph compile_model_graph(
                                         }
                                         residual =
                                             state.state
+                                                .temperature_k -
+                                            target;
+                                        return EvaluationStatus::
+                                            success();
+                                    },
+                                    std::max(
+                                        std::abs(
+                                            scalar.value_si),
+                                        1.0));
+                            graph.fixed_value_equations.push_back(
+                                system.residuals()
+                                    .at(residual_index)
+                                    .name);
+                            continue;
+                        }
+                        if (port !=
+                                component_model.descriptor().ports.end() &&
+                            port->domain == "material") {
+                            const std::string& material_id =
+                                require_material_binding(
+                                    *component, port_name);
+                            const auto& material =
+                                find_material(
+                                    document, material_id);
+                            const auto package =
+                                thermochemistry_registry.create(
+                                    material.backend,
+                                    material.mechanism,
+                                    material.phase);
+                            if (!material.package_version.empty() &&
+                                material.package_version !=
+                                    package->version()) {
+                                throw std::invalid_argument(
+                                    "material '" + material.id +
+                                    "' requests thermochemistry package "
+                                    "version '" +
+                                    material.package_version +
+                                    "' but backend '" +
+                                    material.backend +
+                                    "' provides version '" +
+                                    std::string(package->version()) +
+                                    "'");
+                            }
+                            if (!package->supports(
+                                    physics::
+                                        ThermochemistryCapability::
+                                            state_ph)) {
+                                throw std::invalid_argument(
+                                    "temperature specification '" +
+                                    key +
+                                    "' requires thermochemistry "
+                                    "capability 'state_ph'");
+                            }
+                            const auto pressure =
+                                variable_indices.find(
+                                    variable_key(
+                                        component_id, port_name,
+                                        "p"));
+                            const auto enthalpy =
+                                variable_indices.find(
+                                    variable_key(
+                                        component_id, port_name,
+                                        "h"));
+                            if (pressure ==
+                                    variable_indices.end() ||
+                                enthalpy ==
+                                    variable_indices.end()) {
+                                throw std::logic_error(
+                                    "material temperature specification "
+                                    "is missing primary variables: " +
+                                    key);
+                            }
+                            std::vector<std::size_t> flows;
+                            flows.reserve(
+                                material.species.size());
+                            for (const auto& species :
+                                 material.species) {
+                                const auto flow =
+                                    variable_indices.find(
+                                        variable_key(
+                                            component_id,
+                                            port_name,
+                                            "m_dot[" + species +
+                                                "]"));
+                                if (flow ==
+                                    variable_indices.end()) {
+                                    throw std::logic_error(
+                                        "material temperature "
+                                        "specification is missing "
+                                        "species flow: " +
+                                        species);
+                                }
+                                flows.push_back(flow->second);
+                            }
+                            const std::string residual_name =
+                                "fixed." + active_case->id +
+                                "." + key;
+                            const std::size_t residual_index =
+                                system.add_checked_equation(
+                                    residual_name,
+                                    [properties = package,
+                                     species = material.species,
+                                     flows = std::move(flows),
+                                     pressure =
+                                         pressure->second,
+                                     enthalpy =
+                                         enthalpy->second,
+                                     target =
+                                         scalar.value_si](
+                                        const std::vector<double>&
+                                            x,
+                                        double& residual) {
+                                        std::vector<double>
+                                            mass_fractions(
+                                                flows.size(),
+                                                0.0);
+                                        double total_flow = 0.0;
+                                        for (std::size_t index = 0;
+                                             index < flows.size();
+                                             ++index) {
+                                            const double flow =
+                                                x.at(
+                                                    flows.at(
+                                                        index));
+                                            if (!std::isfinite(flow) ||
+                                                flow < 0.0) {
+                                                return EvaluationStatus::
+                                                    recoverable(
+                                                        "material "
+                                                        "temperature "
+                                                        "specification "
+                                                        "requires finite "
+                                                        "nonnegative "
+                                                        "species flows");
+                                            }
+                                            mass_fractions.at(
+                                                index) = flow;
+                                            total_flow += flow;
+                                        }
+                                        if (!std::isfinite(
+                                                total_flow) ||
+                                            total_flow <= 0.0) {
+                                            return EvaluationStatus::
+                                                recoverable(
+                                                    "material "
+                                                    "temperature "
+                                                    "specification "
+                                                    "requires positive "
+                                                    "total mass flow");
+                                        }
+                                        for (auto& fraction :
+                                             mass_fractions) {
+                                            fraction /= total_flow;
+                                        }
+                                        const auto state =
+                                            properties->state_ph(
+                                                x.at(pressure),
+                                                x.at(enthalpy),
+                                                physics::
+                                                    SpeciesComposition{
+                                                        physics::
+                                                            CompositionBasis::
+                                                                mass_fraction,
+                                                        species,
+                                                        std::move(
+                                                            mass_fractions)});
+                                        if (!state.ok()) {
+                                            return state.status ==
+                                                physics::
+                                                    PropertyStatus::
+                                                        backend_error
+                                                ? EvaluationStatus::
+                                                      fatal(
+                                                          state.message)
+                                                : EvaluationStatus::
+                                                      recoverable(
+                                                          state.message);
+                                        }
+                                        residual =
+                                            state.state
+                                                .thermodynamic
                                                 .temperature_k -
                                             target;
                                         return EvaluationStatus::

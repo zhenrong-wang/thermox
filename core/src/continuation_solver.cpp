@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <stdexcept>
 #include <utility>
 
@@ -355,6 +356,49 @@ ContinuationSolveResult solve_continuation(
     double reached = 0.0;
     double step = continuation_options.initial_step;
     int attempts = 0;
+    const auto try_target_fallback =
+        [&](std::string staged_failure) {
+            NonlinearProblem target = problem;
+            target.initial_guess = result.x;
+            NonlinearSolveResult solved;
+            try {
+                solved = solve_newton(target, staged_solver);
+            } catch (const std::exception& error) {
+                solved.x = result.x;
+                solved.diagnostics.message = error.what();
+            }
+            const bool converged =
+                solved.diagnostics.converged;
+            result.continuation.stages.push_back(
+                {reached, 1.0, converged,
+                 solved.diagnostics});
+            accumulate_diagnostics(
+                result.diagnostics, solved.diagnostics);
+            if (!converged) {
+                ++result.continuation.rejected_stages;
+                result.diagnostics.converged = false;
+                result.diagnostics.message =
+                    std::move(staged_failure) +
+                    "; direct target fallback failed: " +
+                    solved.diagnostics.message;
+                result.continuation.reached_parameter =
+                    reached;
+                result.continuation.message =
+                    result.diagnostics.message;
+                return false;
+            }
+            result.x = std::move(solved.x);
+            ++result.continuation.accepted_stages;
+            result.continuation.reached_parameter = 1.0;
+            result.continuation.converged = true;
+            result.diagnostics.converged = true;
+            result.diagnostics.message =
+                std::move(staged_failure) +
+                "; direct target fallback converged";
+            result.continuation.message =
+                result.diagnostics.message;
+            return true;
+        };
     while (reached < 1.0 &&
            attempts < continuation_options.maximum_stages) {
         ++attempts;
@@ -386,13 +430,9 @@ ContinuationSolveResult solve_continuation(
         ++result.continuation.rejected_stages;
         step *= continuation_options.step_reduction;
         if (step < continuation_options.minimum_step) {
-            result.diagnostics.converged = false;
-            result.diagnostics.message =
+            (void)try_target_fallback(
                 "continuation step fell below minimum: " +
-                solved.diagnostics.message;
-            result.continuation.reached_parameter = reached;
-            result.continuation.message =
-                result.diagnostics.message;
+                solved.diagnostics.message);
             return result;
         }
     }
@@ -407,10 +447,8 @@ ContinuationSolveResult solve_continuation(
         result.continuation.message =
             result.diagnostics.message;
     } else {
-        result.diagnostics.message =
-            "continuation maximum stage count reached";
-        result.continuation.message =
-            result.diagnostics.message;
+        (void)try_target_fallback(
+            "continuation maximum stage count reached");
     }
     return result;
 }
