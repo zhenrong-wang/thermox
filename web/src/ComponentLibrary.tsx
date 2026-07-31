@@ -11,10 +11,12 @@ interface ComponentLibraryProps {
   components: CatalogComponent[]
   disabled: boolean
   fluidCount: number
+  materialCount: number
   artifactRevisionCount: number
   catalogFingerprint: string
   onChoose: (component: CatalogComponent) => void
   onAddFluid: () => void
+  onAddMaterial: () => void
   onDefine: () => void
   onRevise: (component: CatalogComponent) => void
 }
@@ -23,10 +25,12 @@ export function ComponentLibrary({
   components,
   disabled,
   fluidCount,
+  materialCount,
   artifactRevisionCount,
   catalogFingerprint,
   onChoose,
   onAddFluid,
+  onAddMaterial,
   onDefine,
   onRevise,
 }: ComponentLibraryProps) {
@@ -74,6 +78,14 @@ export function ComponentLibrary({
             >
               + Fluid
             </button>
+            <button
+              type="button"
+              className="resource-button"
+              disabled={disabled}
+              onClick={onAddMaterial}
+            >
+              + Material
+            </button>
           </div>
         </div>
         <p className="library-instruction">
@@ -81,6 +93,7 @@ export function ComponentLibrary({
         </p>
         <div className="resource-summary">
           <span>{fluidCount} fluids</span>
+          <span>{materialCount} materials</span>
           <span>{artifactRevisionCount} artifact revisions</span>
         </div>
       </div>

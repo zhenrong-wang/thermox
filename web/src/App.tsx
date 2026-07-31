@@ -18,6 +18,7 @@ import {
   type GraphSelection,
 } from './InspectorPanel'
 import { MediumForm } from './MediumForm'
+import { MaterialForm } from './MaterialForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
@@ -47,6 +48,7 @@ import type {
   CreateRunConfiguration,
   GraphEditOperation,
   MediumDefinition,
+  MaterialDefinition,
   ModelRevision,
   ProjectModelValidation,
   ProjectComponentCatalogEntry,
@@ -56,6 +58,7 @@ import type {
   SimulationResult,
   SimulationJobState,
   TopologyDocument,
+  ValidationDiagnostic,
 } from './types'
 
 function App() {
@@ -97,6 +100,7 @@ function App() {
     useState<ConnectionDefinition>()
   const [selection, setSelection] = useState<GraphSelection>()
   const [addingMedium, setAddingMedium] = useState(false)
+  const [addingMaterial, setAddingMaterial] = useState(false)
   const [definingComponent, setDefiningComponent] = useState(false)
   const [revisingComponent, setRevisingComponent] =
     useState<ProjectComponentCatalogEntry>()
@@ -641,6 +645,21 @@ function App() {
     setAddingMedium(false)
   }
 
+  async function addMaterial(material: MaterialDefinition) {
+    await publishEdits(
+      [
+        {
+          action: 'upsert',
+          entity_type: 'material',
+          entity_id: material.id,
+          entity: { ...material },
+        },
+      ],
+      `Added material ${material.id}.`,
+    )
+    setAddingMaterial(false)
+  }
+
   async function publishExpressionComponent(
     artifactId: string,
     parentArtifactRevisionId: string,
@@ -1109,6 +1128,35 @@ function App() {
     }
   }
 
+  function inspectComponentOnCanvas(componentId: string) {
+    if (!topology?.model.components.some((item) => item.id === componentId)) {
+      setCaseOperationError(
+        `Component ${componentId} is not present in this topology revision.`,
+      )
+      return
+    }
+    setSelection({ type: 'component', id: componentId })
+    setTopologySidebar('inspector')
+    setWorkspaceView('topology')
+  }
+
+  function inspectDiagnosticOnCanvas(diagnostic: ValidationDiagnostic) {
+    if (diagnostic.component_id) {
+      inspectComponentOnCanvas(diagnostic.component_id)
+      return
+    }
+    if (
+      diagnostic.connection_id &&
+      topology?.model.connections.some(
+        (item) => item.id === diagnostic.connection_id,
+      )
+    ) {
+      setSelection({ type: 'connection', id: diagnostic.connection_id })
+      setTopologySidebar('inspector')
+      setWorkspaceView('topology')
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -1282,6 +1330,10 @@ function App() {
             preferredArtifactRevisionIds={
               preferredArtifactRevisionIds
             }
+            topology={topology}
+            catalog={topologyCatalog}
+            unresolvedArtifactCount={unresolvedArtifactCount}
+            exactRevisionCompiled={exactRevisionCompiled}
             validationResult={validationResult}
             validating={validating}
             onDismissOperation={() => {
@@ -1290,6 +1342,8 @@ function App() {
             }}
             onEdit={editCase}
             onValidate={validateCase}
+            onInspectComponent={inspectComponentOnCanvas}
+            onInspectDiagnostic={inspectDiagnosticOnCanvas}
             onCreate={() => setAddingCase(true)}
           />
         ) : workspaceView === 'runs' ? (
@@ -1396,12 +1450,14 @@ function App() {
                     }
                     disabled={!topology || publishing}
                     fluidCount={topology?.model.media.length ?? 0}
+                    materialCount={topology?.model.materials?.length ?? 0}
                     artifactRevisionCount={artifactRevisions.length}
                     catalogFingerprint={
                       effectiveCatalog?.fingerprint ?? ''
                     }
                     onChoose={setNewComponentType}
                     onAddFluid={() => setAddingMedium(true)}
+                    onAddMaterial={() => setAddingMaterial(true)}
                     onDefine={() => setDefiningComponent(true)}
                     onRevise={(component) => {
                       const sourceRevisionId =
@@ -1499,6 +1555,14 @@ function App() {
           topology={topology}
           onCancel={() => setAddingMedium(false)}
           onSubmit={addMedium}
+        />
+      )}
+      {workspaceView === 'topology' && addingMaterial && topology && catalog && (
+        <MaterialForm
+          backends={catalog.thermochemistry_backends}
+          topology={topology}
+          onCancel={() => setAddingMaterial(false)}
+          onSubmit={addMaterial}
         />
       )}
       {workspaceView === 'topology' &&

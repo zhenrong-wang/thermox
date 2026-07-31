@@ -104,6 +104,7 @@ const catalog: Catalog = {
   components: [native],
   unit_dimensions: [],
   property_backends: [],
+  thermochemistry_backends: [],
   connector_domains: [],
 }
 

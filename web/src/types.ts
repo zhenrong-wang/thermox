@@ -633,6 +633,13 @@ export interface PropertyBackend {
   capabilities: string[]
 }
 
+export interface ThermochemistryBackend {
+  backend: string
+  implementation_name: string
+  implementation_version: string
+  capabilities: string[]
+}
+
 export interface ConnectorDomain {
   domain: string
   contract_version: string
@@ -672,6 +679,7 @@ export interface Catalog {
   components: CatalogComponent[]
   unit_dimensions: CatalogUnitDimension[]
   property_backends: PropertyBackend[]
+  thermochemistry_backends: ThermochemistryBackend[]
   connector_domains: ConnectorDomain[]
 }
 

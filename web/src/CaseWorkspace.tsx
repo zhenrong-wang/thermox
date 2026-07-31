@@ -9,9 +9,11 @@ import {
   type DisplayUnitProfile,
 } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
+import { DefinitionOverview } from './DefinitionOverview'
 import { ValidationPanel } from './ValidationPanel'
 import type {
   ArtifactRevision,
+  Catalog,
   CaseDocument,
   CaseEditOperation,
   CaseRevision,
@@ -19,6 +21,8 @@ import type {
   ProjectModelValidation,
   ScalarValue,
   CatalogUnitDimension,
+  TopologyDocument,
+  ValidationDiagnostic,
 } from './types'
 
 interface CaseWorkspaceProps {
@@ -29,11 +33,17 @@ interface CaseWorkspaceProps {
   artifactRevisions: ArtifactRevision[]
   requiredArtifactIds: string[]
   preferredArtifactRevisionIds: Record<string, string>
+  topology?: TopologyDocument
+  catalog?: Catalog
+  unresolvedArtifactCount: number
+  exactRevisionCompiled: boolean
   validationResult?: ProjectModelValidation
   validating: boolean
   onDismissOperation: () => void
   onEdit: (operations: CaseEditOperation[], message: string) => Promise<void>
   onValidate: (artifactRevisionIds: string[]) => Promise<void>
+  onInspectComponent: (componentId: string) => void
+  onInspectDiagnostic: (diagnostic: ValidationDiagnostic) => void
   onCreate: () => void
 }
 
@@ -97,11 +107,17 @@ export function CaseWorkspace({
   artifactRevisions,
   requiredArtifactIds,
   preferredArtifactRevisionIds,
+  topology,
+  catalog,
+  unresolvedArtifactCount,
+  exactRevisionCompiled,
   validationResult,
   validating,
   onDismissOperation,
   onEdit,
   onValidate,
+  onInspectComponent,
+  onInspectDiagnostic,
   onCreate,
 }: CaseWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
@@ -254,6 +270,16 @@ export function CaseWorkspace({
           </button>
         </form>
 
+        <DefinitionOverview
+          topology={topology}
+          catalog={catalog}
+          caseRevision={revision}
+          requiredArtifactCount={requiredArtifactIds.length}
+          unresolvedArtifactCount={unresolvedArtifactCount}
+          compiled={exactRevisionCompiled}
+          onInspectComponent={onInspectComponent}
+        />
+
         <ValidationPanel
           artifactRevisions={artifactRevisions}
           requiredArtifactIds={requiredArtifactIds}
@@ -263,6 +289,7 @@ export function CaseWorkspace({
           result={validationResult}
           validating={validating}
           onValidate={onValidate}
+          onInspectDiagnostic={onInspectDiagnostic}
         />
 
         {scalarSections.map((section) => {

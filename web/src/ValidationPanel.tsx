@@ -12,6 +12,7 @@ interface ValidationPanelProps {
   result?: ProjectModelValidation
   validating: boolean
   onValidate: (artifactRevisionIds: string[]) => Promise<void>
+  onInspectDiagnostic: (diagnostic: ValidationDiagnostic) => void
 }
 
 function diagnosticLocation(diagnostic: ValidationDiagnostic) {
@@ -32,6 +33,7 @@ export function ValidationPanel({
   result,
   validating,
   onValidate,
+  onInspectDiagnostic,
 }: ValidationPanelProps) {
   const revisionsByArtifact = useMemo(() => {
     const grouped = new Map<string, ArtifactRevision[]>()
@@ -215,6 +217,15 @@ export function ValidationPanel({
                       <li key={suggestion}>{suggestion}</li>
                     ))}
                   </ul>
+                )}
+                {(diagnostic.component_id || diagnostic.connection_id) && (
+                  <button
+                    type="button"
+                    className="diagnostic-inspect"
+                    onClick={() => onInspectDiagnostic(diagnostic)}
+                  >
+                    Inspect on canvas →
+                  </button>
                 )}
               </article>
             ))}

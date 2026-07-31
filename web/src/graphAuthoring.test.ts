@@ -30,6 +30,7 @@ const catalog: Catalog = {
   fingerprint: 'test',
   unit_dimensions: [],
   property_backends: [],
+  thermochemistry_backends: [],
   components: [
     {
       kind: 'source.test',
