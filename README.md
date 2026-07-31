@@ -24,6 +24,7 @@ isolated example models.
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
 - [Calibration Architecture](docs/calibration-architecture.md)
+- [Local Compose Stack](docs/local-compose.md)
 
 ## Current C++ numeric core
 
@@ -319,6 +320,19 @@ development host. A machine with more available capacity can opt in explicitly, 
 THERMOX_BUILD_JOBS=4 ./scripts/verify.sh
 ```
 
+## Run the complete local platform
+
+The root Compose stack builds and starts PostgreSQL, the checksum-aware database runner, MinIO,
+the API, the calculation worker, and the web client:
+
+```sh
+docker compose up -d --build --wait
+```
+
+Open `http://127.0.0.1:5173`. See the
+[local Compose guide](docs/local-compose.md) for lifecycle commands, configuration, endpoints,
+and volume behavior.
+
 ## Local PostgreSQL job metadata
 
 PostgreSQL is an optional outer adapter; the numerical, physics, graph, and service libraries do
@@ -338,31 +352,13 @@ THERMOX_TEST_POSTGRES_URL='postgresql://thermox:thermox-local@127.0.0.1:55432/th
   ctest --test-dir build -R thermox_postgres_job_tests --output-on-failure -j1
 ```
 
-Compose applies every SQL migration when it initializes a new volume. Apply later migrations
-explicitly to an existing volume, for example:
+The complete root stack runs the checksum-aware migration runner before the API and worker start.
+For the dependency-only database stack, apply migrations with the same runner:
 
 ```sh
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/002_worker_leases.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/003_projects_and_model_revisions.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/004_case_revisions.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/005_artifact_revisions.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/006_run_configuration_revisions.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/007_simulation_job_history.sql
-psql 'postgresql://thermox:thermox-local@127.0.0.1:55432/thermox' \
-  -v ON_ERROR_STOP=1 \
-  -f adapters/postgres/migrations/008_run_result_projections.sql
+PGHOST=127.0.0.1 PGPORT=55432 PGDATABASE=thermox PGUSER=thermox \
+PGPASSWORD=thermox-local THERMOX_MIGRATION_DIR=adapters/postgres/migrations \
+  ./deploy/migrate.sh
 ```
 
 ## Local MinIO result and engineering-artifact storage

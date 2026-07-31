@@ -1,0 +1,165 @@
+name: thermox
+
+x-thermox-persistence: &thermox-persistence
+  THERMOX_POSTGRES_URL: postgresql://thermox:${THERMOX_POSTGRES_PASSWORD:-thermox-local}@postgres:5432/thermox
+  THERMOX_OBJECT_STORE_DRIVER: s3-compatible
+  THERMOX_OBJECT_KEY_PREFIX: results
+  THERMOX_ARTIFACT_KEY_PREFIX: engineering-artifacts
+  THERMOX_S3_ENDPOINT: http://minio:9000
+  THERMOX_S3_REGION: us-east-1
+  THERMOX_S3_BUCKET: thermox-results
+  THERMOX_S3_ACCESS_KEY: ${THERMOX_MINIO_USER:-thermox-minio}
+  THERMOX_S3_SECRET_KEY: ${THERMOX_MINIO_PASSWORD:-thermox-minio-local}
+  THERMOX_S3_ADDRESSING_STYLE: path
+
+x-thermox-dependencies: &thermox-dependencies
+  postgres:
+    condition: service_healthy
+  db-migrate:
+    condition: service_completed_successfully
+  minio:
+    condition: service_healthy
+  minio-init:
+    condition: service_completed_successfully
+
+x-thermox-build: &thermox-build
+  context: .
+  dockerfile: deploy/Dockerfile
+  target: thermox-runtime
+  args:
+    THERMOX_ENABLE_CANTERA: ${THERMOX_ENABLE_CANTERA:-ON}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: thermox
+      POSTGRES_USER: thermox
+      POSTGRES_PASSWORD: ${THERMOX_POSTGRES_PASSWORD:-thermox-local}
+    ports:
+      - "127.0.0.1:${THERMOX_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thermox -d thermox"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - thermox-postgres-data:/var/lib/postgresql/data
+
+  db-migrate:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: thermox
+      PGUSER: thermox
+      PGPASSWORD: ${THERMOX_POSTGRES_PASSWORD:-thermox-local}
+    entrypoint: ["/bin/sh", "/opt/thermox/migrate.sh"]
+    volumes:
+      - ./deploy/migrate.sh:/opt/thermox/migrate.sh:ro
+      - ./adapters/postgres/migrations:/migrations:ro
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${THERMOX_MINIO_USER:-thermox-minio}
+      MINIO_ROOT_PASSWORD: ${THERMOX_MINIO_PASSWORD:-thermox-minio-local}
+    ports:
+      - "127.0.0.1:${THERMOX_MINIO_PORT:-59000}:9000"
+      - "127.0.0.1:${THERMOX_MINIO_CONSOLE_PORT:-59001}:9001"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - http://localhost:9000/minio/health/live
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - thermox-minio-data:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${THERMOX_MINIO_USER:-thermox-minio}
+      MINIO_ROOT_PASSWORD: ${THERMOX_MINIO_PASSWORD:-thermox-minio-local}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/thermox-results
+        mc anonymous set none local/thermox-results
+
+  api:
+    build: *thermox-build
+    image: thermox-platform:${THERMOX_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on: *thermox-dependencies
+    environment:
+      <<: *thermox-persistence
+    command:
+      - thermox_api_server
+      - --listen
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --local-user-id
+      - ${THERMOX_LOCAL_USER_ID:-local-user}
+      - --local-team-id
+      - ${THERMOX_LOCAL_TEAM_ID:-local-team}
+      - --allow-insecure-remote
+    ports:
+      - "127.0.0.1:${THERMOX_API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  worker:
+    build: *thermox-build
+    image: thermox-platform:${THERMOX_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on: *thermox-dependencies
+    environment:
+      <<: *thermox-persistence
+      THERMOX_WORKER_ID: ${THERMOX_WORKER_ID:-local-worker-1}
+      THERMOX_LIBRARY_THREADS: ${THERMOX_LIBRARY_THREADS:-1}
+      THERMOX_WORKER_POLL_MS: ${THERMOX_WORKER_POLL_MS:-250}
+    command: ["thermox_worker"]
+    stop_grace_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    image: thermox-web:${THERMOX_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${THERMOX_WEB_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  thermox-postgres-data:
+  thermox-minio-data:

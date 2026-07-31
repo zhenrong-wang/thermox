@@ -1,0 +1,16 @@
+.git
+**/.git
+.github
+.openai
+build
+build-*
+**/build
+**/build-*
+tmp
+web/dist
+web/node_modules
+**/.sconf_temp
+**/.sconsign.dblite
+**/.cache
+**/__pycache__
+**/*.pyc

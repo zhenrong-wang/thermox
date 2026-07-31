@@ -1,23 +1,51 @@
 BEGIN;
 
-ALTER TABLE thermox_case_revisions
-    ADD CONSTRAINT
-        thermox_case_revisions_model_id_unique
-    UNIQUE (
-        team_id,
-        project_id,
-        model_revision_id,
-        case_revision_id
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE
+            conname =
+                'thermox_case_revisions_model_id_unique'
+            AND conrelid =
+                'thermox_case_revisions'::regclass
+    ) THEN
+        ALTER TABLE thermox_case_revisions
+            ADD CONSTRAINT
+                thermox_case_revisions_model_id_unique
+            UNIQUE (
+                team_id,
+                project_id,
+                model_revision_id,
+                case_revision_id
+            );
+    END IF;
+END
+$$;
 
-ALTER TABLE thermox_artifact_revisions
-    ADD CONSTRAINT
-        thermox_artifact_revisions_project_id_unique
-    UNIQUE (
-        team_id,
-        project_id,
-        artifact_revision_id
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE
+            conname =
+                'thermox_artifact_revisions_project_id_unique'
+            AND conrelid =
+                'thermox_artifact_revisions'::regclass
+    ) THEN
+        ALTER TABLE thermox_artifact_revisions
+            ADD CONSTRAINT
+                thermox_artifact_revisions_project_id_unique
+            UNIQUE (
+                team_id,
+                project_id,
+                artifact_revision_id
+            );
+    END IF;
+END
+$$;
 
 CREATE SEQUENCE IF NOT EXISTS
     thermox_run_configuration_revision_id_seq;
