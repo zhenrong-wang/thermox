@@ -131,13 +131,15 @@ Migration `005_artifact_revisions.sql` adds independent project engineering-arti
 Each logical artifact has an ordered, parent-linked revision chain inside one Team and Project.
 PostgreSQL stores type/schema identity plus the object manifest; canonical payload bytes live in
 provider-neutral object storage. The service verifies checksum and byte size before decoding a
-supported payload.
+supported payload. Supported types currently include performance maps and safe steady algebraic
+component definitions. Both use the same ownership, parent-history, object-storage, and
+run-configuration binding rules.
 
 Simulation submission may select exact artifact revision IDs from the same Team and Project. The
-API resolves and verifies those revisions once and stores complete typed payloads in the immutable
-job snapshot. Consequently workers do not need project or object-store metadata reads during
-calculation, and job/result provenance records the logical artifact ID, persisted revision ID,
-schema, and SHA-256 identity.
+API resolves and verifies those revisions once and stores complete typed map and component
+payloads in the immutable job snapshot. Consequently workers do not need project or object-store
+metadata reads during calculation, and job/result provenance records the logical artifact ID,
+persisted revision ID, schema, and SHA-256 identity.
 
 Migration `006_run_configuration_revisions.sql` adds reusable execution-intent history. Each
 run-configuration revision binds one exact topology/case pair, a canonical set of exact artifact

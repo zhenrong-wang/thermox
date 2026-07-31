@@ -10,6 +10,8 @@ namespace thermox::platform {
 
 inline constexpr char expression_component_schema_v1[] =
     "thermox.expression_component/v1";
+inline constexpr char expression_component_artifact_type[] =
+    "thermox.expression_component";
 
 struct AlgebraicExpressionEquation {
     std::string name;

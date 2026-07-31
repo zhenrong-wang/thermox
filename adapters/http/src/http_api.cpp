@@ -2093,6 +2093,8 @@ Response Api::handle(const Request& request) const {
                 };
             command.artifacts =
                 resolved->artifacts.snapshot;
+            command.components =
+                resolved->artifacts.components;
             command.steady_solver =
                 resolved->configuration.steady_solver;
             command.transient_solver =

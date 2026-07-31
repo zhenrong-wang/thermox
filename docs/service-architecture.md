@@ -71,9 +71,10 @@ immutable references. An injected `EngineeringArtifactResolver` resolves referen
 service requires an exact type/schema/revision/checksum match before constructing an
 execution-local performance-map registry over any immutable deployment defaults. The overlay is
 destroyed after the call, duplicate identities are rejected, queued jobs preserve references, and
-result-v3 records resolved artifact provenance. The provided in-memory resolver is a contract
-adapter; a later database/object-store implementation can replace it without changing platform
-compilation or component equations.
+result-v3 records resolved artifact provenance. Project-owned expression-component artifacts use
+the same revision and content-storage boundary, then resolve into an immutable
+`SimulationComponentBundle` overlay. Production PostgreSQL/object-storage adapters and in-memory
+test adapters implement the same application ports.
 
 Validation parses, canonicalizes, resolves the active runtime catalog, and compiles the selected
 steady or transient case without invoking a solver. It returns variable/equation counts, reduced
@@ -236,6 +237,7 @@ The deployed API disables synchronous steady/transient routes so expensive work 
 request process. An explicitly configured embedded adapter may enable those routes for tests or
 trusted local use. Production asynchronous submission has an empty body and names an exact
 Team-scoped Project and run-configuration revision. That immutable revision selects topology,
-case, artifact revisions, steady/transient mode, and complete solver policy. The API verifies and
-snapshots the executable model and typed artifacts before enqueueing. Authentication and
-authorization policy follow without changing the simulation application boundary.
+case, performance-map/component-definition artifact revisions, steady/transient mode, and complete
+solver policy. The API verifies and snapshots the executable model and typed artifacts before
+enqueueing. Authentication and authorization policy follow without changing the simulation
+application boundary.

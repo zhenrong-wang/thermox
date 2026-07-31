@@ -90,9 +90,9 @@ Implemented in this sprint:
   source revision IDs and checksums in job and result provenance.
 - Project engineering artifacts have independent immutable revision history. PostgreSQL owns
   Team/project-scoped metadata and parent relationships; provider-neutral object storage owns
-  content-addressed payloads. Revision-backed jobs resolve selected map revisions once, embed the
-  verified payload snapshot, and expose each artifact revision/checksum in job and result
-  provenance.
+  content-addressed payloads. Revision-backed jobs resolve selected performance-map and safe
+  expression-component revisions once, embed the verified payload snapshot, and expose each
+  artifact revision/checksum in job and result provenance.
 - Immutable run-configuration revisions bind one topology revision, one case revision, selected
   artifact revisions, and complete steady/transient solver settings. Production submission names
   only the Project and run-configuration revision; the API resolves a self-contained job snapshot

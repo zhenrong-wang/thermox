@@ -320,6 +320,192 @@ std::string performance_map_payload() {
 })json";
 }
 
+std::string expression_component_payload() {
+    return R"json({
+  "kind": "custom.signal.persisted_gain",
+  "version": "1.0.0",
+  "ports": [
+    {"name": "input", "domain": "signal", "direction": "in"},
+    {"name": "output", "domain": "signal", "direction": "out"}
+  ],
+  "parameters": [
+    {
+      "name": "gain",
+      "dimension": "dimensionless",
+      "required": true,
+      "lower_bound": 0.0,
+      "upper_bound": 100.0
+    }
+  ],
+  "equations": [
+    {
+      "name": "gain_law",
+      "expression":
+        "output.value - parameter.gain * input.value",
+      "residual_scale": 1.0
+    }
+  ]
+})json";
+}
+
+void test_expression_component_artifact_is_executable() {
+    auto projects =
+        std::make_shared<thermox::service::ProjectService>(
+            thermox::service::
+                make_in_memory_project_repository());
+    const auto project = projects->create_project({
+        team_a, "Custom component", {},
+    });
+    const auto revision = projects->create_artifact_revision({
+        team_a,
+        project.project_id,
+        "persisted-gain",
+        {},
+        "thermox.expression_component",
+        "thermox.expression_component/v1",
+        expression_component_payload(),
+    });
+    const auto resolved = projects->resolve_artifact_revisions(
+        team_a,
+        project.project_id,
+        {revision.artifact_revision_id});
+    require(
+        resolved &&
+            resolved->components.expression_components.size() ==
+                1U &&
+            resolved->components.expression_components.front()
+                    .kind ==
+                "custom.signal.persisted_gain" &&
+            resolved->snapshot.references.size() == 1U &&
+            resolved->snapshot.references.front().revision ==
+                revision.artifact_revision_id,
+        "expression-component revisions must resolve into an "
+        "immutable executable bundle with artifact provenance");
+
+    const auto model = projects->create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        R"json({
+  "schema_version": "thermox.topology/v1",
+  "model": {
+    "id": "persisted_component",
+    "media": [],
+    "components": [{
+      "id": "gain",
+      "kind": "custom.signal.persisted_gain",
+      "parameters": {"gain": 2.0}
+    }],
+    "connections": []
+  }
+})json",
+    });
+    const auto simulation_case =
+        projects->create_case_revision({
+            team_a,
+            project.project_id,
+            model.model_revision_id,
+            {},
+            R"json({
+  "schema_version": "thermox.case/v1",
+  "case": {
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {"gain.input.value": 5.0}
+  }
+})json",
+        });
+    thermox::service::CreateRunConfigurationRevisionRequest
+        configuration;
+    configuration.identity = team_a;
+    configuration.project_id = project.project_id;
+    configuration.run_configuration_id = "custom-run";
+    configuration.model_revision_id = model.model_revision_id;
+    configuration.case_revision_id =
+        simulation_case.case_revision_id;
+    configuration.artifact_revision_ids = {
+        revision.artifact_revision_id,
+    };
+    const auto run =
+        projects->create_run_configuration_revision(
+            configuration);
+    const auto resolved_run =
+        projects->resolve_run_configuration(
+            team_a,
+            project.project_id,
+            run.run_configuration_revision_id);
+    require(
+        resolved_run &&
+            resolved_run->artifacts.components
+                    .expression_components.size() == 1U,
+        "run configurations must pin and resolve component "
+        "definition revisions");
+
+    thermox::service::ProjectModelValidationService validator{
+        projects,
+        thermox::service::make_default_simulation_runtime()};
+    const auto validation = validator.validate({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        simulation_case.case_revision_id,
+        {revision.artifact_revision_id},
+    });
+    require(
+        validation.validation.succeeded(),
+        "revision-backed validation must compile persisted "
+        "models against selected component definitions");
+
+    thermox::service::SteadySimulationRequest request;
+    request.model_json =
+        resolved_run->model_case.executable_model_json;
+    request.case_id = resolved_run->model_case.case_id;
+    request.artifacts = resolved_run->artifacts.snapshot;
+    request.components = resolved_run->artifacts.components;
+    const auto solved =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        solved.succeeded() &&
+            solved.metadata.artifacts.size() == 1U &&
+            solved.metadata.artifacts.front().revision ==
+                revision.artifact_revision_id &&
+            solved.metadata.artifacts.front().artifact_type ==
+                "thermox.expression_component",
+        "a persisted expression component must execute through "
+        "the standard solver and retain revision provenance");
+
+    bool rejected = false;
+    auto unsafe = expression_component_payload();
+    const auto location = unsafe.find(
+        "output.value - parameter.gain * input.value");
+    unsafe.replace(
+        location,
+        std::string(
+            "output.value - parameter.gain * input.value").size(),
+        "system(\"unsafe\")");
+    try {
+        (void)projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "unsafe-component",
+            {},
+            "thermox.expression_component",
+            "thermox.expression_component/v1",
+            unsafe,
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected &&
+            projects
+                    ->list_artifact_revisions(
+                        team_a, project.project_id)
+                    .size() == 1U,
+        "unsafe component definitions must be rejected before "
+        "an immutable revision is published");
+}
+
 void test_artifact_revisions_are_snapshotted_and_scoped() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -795,6 +981,7 @@ int main() {
         test_invalid_input_is_rejected_before_persistence();
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
+        test_expression_component_artifact_is_executable();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_graph_edits_publish_valid_child_revisions();

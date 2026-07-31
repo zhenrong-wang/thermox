@@ -7,6 +7,7 @@
 #include "thermox/continuation_solver.hpp"
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/results.hpp"
 #include "thermox/physics/property_registry.hpp"
@@ -213,7 +214,9 @@ platform::PerformanceMapRegistry execution_performance_maps(
 std::vector<ArtifactProvenance> artifact_provenance(
     const SimulationArtifactBundle& inputs) {
     std::vector<ArtifactProvenance> provenance;
-    provenance.reserve(inputs.performance_maps.size());
+    provenance.reserve(
+        inputs.performance_maps.size() +
+        inputs.references.size());
     for (const auto& artifact : inputs.performance_maps) {
         provenance.push_back({
             artifact.id,
@@ -221,6 +224,15 @@ std::vector<ArtifactProvenance> artifact_provenance(
             artifact.schema_version,
             artifact.revision,
             artifact.checksum_sha256,
+        });
+    }
+    for (const auto& reference : inputs.references) {
+        provenance.push_back({
+            reference.id,
+            reference.artifact_type,
+            reference.schema_version,
+            reference.revision,
+            reference.checksum_sha256,
         });
     }
     return provenance;
@@ -240,6 +252,11 @@ SimulationArtifactBundle resolve_artifacts(
             throw std::invalid_argument(
                 "engineering artifact references require id, type, "
                 "schema version, revision, and checksum");
+        }
+        if (reference.artifact_type ==
+            platform::expression_component_artifact_type) {
+            resolved.references.push_back(reference);
+            continue;
         }
         if (reference.artifact_type !=
             platform::performance_map_artifact_type) {

@@ -4,6 +4,7 @@
 #include "serialization_internal.hpp"
 
 #include "thermox/service/in_memory_projects.hpp"
+#include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
 
@@ -882,7 +883,9 @@ ProjectService::create_artifact_revision(
             "project and artifact IDs must not be empty");
     }
     if (request.artifact_type !=
-        platform::performance_map_artifact_type) {
+            platform::performance_map_artifact_type &&
+        request.artifact_type !=
+            platform::expression_component_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
             request.artifact_type);
@@ -898,9 +901,14 @@ ProjectService::create_artifact_revision(
     std::string canonical;
     try {
         canonical =
-            detail::canonicalize_performance_map_payload(
-                request.artifact_schema_version,
-                request.artifact_json);
+            request.artifact_type ==
+                platform::performance_map_artifact_type
+            ? detail::canonicalize_performance_map_payload(
+                  request.artifact_schema_version,
+                  request.artifact_json)
+            : detail::canonicalize_expression_component_payload(
+                  request.artifact_schema_version,
+                  request.artifact_json);
     } catch (const std::exception& error) {
         throw ProjectRequestError(
             std::string("invalid engineering artifact: ") +
@@ -1012,19 +1020,34 @@ ProjectService::resolve_artifact_revisions(
                 "persisted engineering artifact content "
                 "failed integrity verification");
         }
-        if (revision->artifact_type !=
+        if (revision->artifact_type ==
             platform::performance_map_artifact_type) {
+            result.snapshot.performance_maps.push_back(
+                detail::performance_map_from_payload(
+                    revision->artifact_id,
+                    revision->artifact_schema_version,
+                    revision->artifact_revision_id,
+                    revision->content.checksum.substr(7),
+                    *payload));
+        } else if (
+            revision->artifact_type ==
+            platform::expression_component_artifact_type) {
+            result.components.expression_components.push_back(
+                detail::expression_component_from_payload(
+                    revision->artifact_schema_version,
+                    *payload));
+            result.snapshot.references.push_back({
+                revision->artifact_id,
+                revision->artifact_type,
+                revision->artifact_schema_version,
+                revision->artifact_revision_id,
+                revision->content.checksum.substr(7),
+            });
+        } else {
             throw ProjectStateError(
                 "persisted engineering artifact type is not "
                 "supported");
         }
-        result.snapshot.performance_maps.push_back(
-            detail::performance_map_from_payload(
-                revision->artifact_id,
-                revision->artifact_schema_version,
-                revision->artifact_revision_id,
-                revision->content.checksum.substr(7),
-                *payload));
         result.revisions.push_back(*revision);
     }
     return result;
@@ -1223,6 +1246,7 @@ ProjectModelValidationService::validate(
         model_case->executable_model_json;
     validation_request.case_id = model_case->case_id;
     validation_request.artifacts = artifacts->snapshot;
+    validation_request.components = artifacts->components;
     return {
         project_model_validation_schema_v1,
         model_case->project_id,

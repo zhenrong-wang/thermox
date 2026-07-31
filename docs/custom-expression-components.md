@@ -47,6 +47,23 @@ domains. It does not expose property-package calls, thermochemistry calls, artif
 internal/transient states, parameter templates, or species-expanded material variables.
 Deployment code can register definitions at the trusted composition root through
 `register_expression_component`; application code can supply the same safe definition through a
-request bundle. Persisted Team-owned definition revisions and their HTTP authoring/approval
-workflow, dimension algebra across compound expressions, transient equations, and constrained
-property functions require later versioned contracts. Arbitrary Python is not part of this path.
+request bundle.
+
+## Team-owned revisions
+
+The generic engineering-artifact revision API accepts
+`artifact_type=thermox.expression_component` with
+`artifact_schema_version=thermox.expression_component/v1`. The JSON payload contains `kind`,
+`version`, `ports`, `parameters`, and `equations`; schema identity remains revision metadata.
+Creation canonicalizes the payload, validates the descriptor and safe grammar, stores it through
+the provider-neutral artifact-content store, and publishes an immutable Team/project-owned
+revision with a SHA-256 checksum.
+
+Run-configuration `artifact_revision_ids` can pin component definitions and performance maps
+together. Resolution verifies content integrity, reconstructs the component bundle, and records
+the component artifact revision in job and execution provenance. The worker receives both the
+exact definition and its immutable identity.
+
+Approval policy, dimension algebra across compound expressions, transient equations, constrained
+property functions, and a dedicated visual equation editor require later versioned contracts.
+Arbitrary Python is not part of this path.

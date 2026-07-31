@@ -345,6 +345,7 @@ struct CreateRunConfigurationRevisionRequest {
 
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
+    SimulationComponentBundle components;
     std::vector<ArtifactRevisionRecord> revisions;
 };
 

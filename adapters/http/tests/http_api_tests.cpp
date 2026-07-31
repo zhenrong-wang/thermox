@@ -302,6 +302,48 @@ void test_tenant_scoped_asynchronous_jobs() {
         uploaded.headers.at("Location").substr(
             uploaded.headers.at("Location").find_last_of('/') +
             1U);
+    auto component_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions"
+            "?artifact_id=http-test-gain"
+            "&artifact_type=thermox.expression_component"
+            "&artifact_schema_version="
+            "thermox.expression_component%2Fv1",
+        R"json({
+          "kind": "custom.signal.http_gain",
+          "version": "1.0.0",
+          "ports": [
+            {"name": "input", "domain": "signal",
+             "direction": "in"},
+            {"name": "output", "domain": "signal",
+             "direction": "out"}
+          ],
+          "parameters": [{
+            "name": "gain",
+            "dimension": "dimensionless",
+            "required": true,
+            "lower_bound": 0.0,
+            "upper_bound": 100.0
+          }],
+          "equations": [{
+            "name": "gain_law",
+            "expression":
+              "output.value - parameter.gain * input.value",
+            "residual_scale": 1.0
+          }]
+        })json");
+    const auto component_uploaded = api.handle(
+        authenticated(std::move(component_upload)));
+    require(
+        component_uploaded.status == 201 &&
+            component_uploaded.headers.contains("Location"),
+        "HTTP artifact authoring must accept safe expression "
+        "component definitions");
+    const auto component_revision_id =
+        component_uploaded.headers.at("Location").substr(
+            component_uploaded.headers.at("Location")
+                .find_last_of('/') +
+            1U);
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",
@@ -315,6 +357,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             simulation_case.case_revision_id +
             R"(","artifact_revision_ids":[")" +
             artifact_revision_id +
+            "\",\"" +
+            component_revision_id +
             R"("],"steady_solver":{"max_iterations":37},)"
             R"("result_projections":[{)"
             R"("id":"compressor_outlet_temperature",)"
@@ -379,6 +423,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             queued.body.find(simulation_case.checksum) !=
                 std::string::npos &&
             queued.body.find(artifact_revision_id) !=
+                std::string::npos &&
+            queued.body.find(component_revision_id) !=
                 std::string::npos &&
             queued.body.find(
                 run_configuration_revision_id) !=
@@ -521,6 +567,8 @@ void test_tenant_scoped_asynchronous_jobs() {
         completed.has_value() &&
             completed->state ==
                 thermox::service::SimulationJobState::succeeded &&
+            completed->execution.has_value() &&
+            completed->execution->artifacts.size() == 2U &&
             completed->result_summary.has_value() &&
             completed->result_summary->values.size() == 1U &&
             completed->result_summary->values.front().id ==
@@ -544,6 +592,8 @@ void test_tenant_scoped_asynchronous_jobs() {
                 simulation_case.case_revision_id) !=
                 std::string::npos &&
             result.body.find(artifact_revision_id) !=
+                std::string::npos &&
+            result.body.find(component_revision_id) !=
                 std::string::npos &&
             result.body.find(
                 run_configuration_revision_id) !=

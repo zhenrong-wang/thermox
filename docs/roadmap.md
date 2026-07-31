@@ -465,8 +465,11 @@ Work items:
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,
      immutable request overlays, and restart-safe job snapshots; ✅
-   - Team-owned persistence, approval, HTTP authoring, compound dimension analysis, property
-     functions, and transient-state contracts remain follow-ons.
+   - Team/project-owned content-addressed revisions, generic HTTP artifact authoring,
+     run-configuration binding, integrity-checked resolution, job reconstruction, and execution
+     provenance; ✅
+   - approval policy, compound dimension analysis, property functions, and transient-state
+     contracts remain follow-ons.
 8. Map validation and interpolation quality controls.
 9. Multi-user auth, authorization, project isolation, audit logs.
 9. Scalable job workers and deployment automation.

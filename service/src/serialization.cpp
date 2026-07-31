@@ -1379,6 +1379,27 @@ std::string serialize_job_record_json(
         json_string(out, artifact.checksum_sha256);
         out << '}';
     }
+    for (std::size_t index = 0;
+         index < record.request.artifacts.references.size();
+         ++index) {
+        if (!record.request.artifacts.performance_maps.empty() ||
+            index != 0U) {
+            out << ", ";
+        }
+        const auto& reference =
+            record.request.artifacts.references[index];
+        out << "{\"id\": ";
+        json_string(out, reference.id);
+        out << ", \"artifact_type\": ";
+        json_string(out, reference.artifact_type);
+        out << ", \"schema_version\": ";
+        json_string(out, reference.schema_version);
+        out << ", \"revision\": ";
+        json_string(out, reference.revision);
+        out << ", \"checksum_sha256\": ";
+        json_string(out, reference.checksum_sha256);
+        out << '}';
+    }
     out << ']';
     out << ", \"result_projections\": [";
     for (std::size_t index = 0;

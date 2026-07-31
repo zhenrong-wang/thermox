@@ -17,4 +17,12 @@ PerformanceMapArtifactInput performance_map_from_payload(
     const std::string& checksum,
     const std::string& payload_json);
 
+std::string canonicalize_expression_component_payload(
+    const std::string& schema_version,
+    const std::string& payload_json);
+
+ExpressionComponentInput expression_component_from_payload(
+    const std::string& schema_version,
+    const std::string& payload_json);
+
 }  // namespace thermox::service::detail

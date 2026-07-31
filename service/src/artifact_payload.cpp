@@ -2,11 +2,14 @@
 
 #include "artifact_payload.hpp"
 
+#include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/performance_map.hpp"
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
+#include <cmath>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -119,7 +122,7 @@ Tree read(const std::string& payload) {
         return tree;
     } catch (const std::exception& error) {
         throw std::invalid_argument(
-            "invalid performance-map payload: " +
+            "invalid engineering-artifact payload: " +
             std::string(error.what()));
     }
 }
@@ -308,6 +311,192 @@ Tree encode(const PerformanceMapArtifactInput& artifact) {
     return tree;
 }
 
+ExpressionComponentInput decode_expression_component(
+    const std::string& schema_version,
+    const Tree& tree) {
+    if (schema_version !=
+        platform::expression_component_schema_v1) {
+        throw std::invalid_argument(
+            "unsupported expression-component schema: " +
+            schema_version);
+    }
+    ExpressionComponentInput component;
+    component.schema_version = schema_version;
+    component.kind = tree.get<std::string>("kind");
+    component.version = tree.get<std::string>("version");
+    component.system_boundary_role =
+        tree.get<std::string>("system_boundary_role", "");
+    component.ports =
+        decode_array<ExpressionComponentPortInput>(
+            tree.get_child("ports"),
+            [](const Tree& encoded) {
+                return ExpressionComponentPortInput{
+                    encoded.get<std::string>("name"),
+                    encoded.get<std::string>("domain"),
+                    encoded.get<std::string>("direction"),
+                    encoded.get<std::size_t>(
+                        "maximum_connections", 1),
+                };
+            });
+    component.parameters =
+        decode_array<ExpressionComponentParameterInput>(
+            tree.get_child("parameters"),
+            [](const Tree& encoded) {
+                ExpressionComponentParameterInput parameter;
+                parameter.name =
+                    encoded.get<std::string>("name");
+                parameter.dimension =
+                    encoded.get<std::string>(
+                        "dimension", "dimensionless");
+                parameter.required =
+                    encoded.get<bool>("required", true);
+                if (const auto value =
+                        encoded.get_optional<double>(
+                            "default_value_si")) {
+                    parameter.default_value_si = *value;
+                }
+                parameter.lower_bound =
+                    encoded.get<double>(
+                        "lower_bound",
+                        -std::numeric_limits<double>::infinity());
+                parameter.upper_bound =
+                    encoded.get<double>(
+                        "upper_bound",
+                        std::numeric_limits<double>::infinity());
+                parameter.lower_inclusive =
+                    encoded.get<bool>(
+                        "lower_inclusive", true);
+                parameter.upper_inclusive =
+                    encoded.get<bool>(
+                        "upper_inclusive", true);
+                return parameter;
+            });
+    component.equations =
+        decode_array<ExpressionComponentEquationInput>(
+            tree.get_child("equations"),
+            [](const Tree& encoded) {
+                return ExpressionComponentEquationInput{
+                    encoded.get<std::string>("name"),
+                    encoded.get<std::string>("expression"),
+                    encoded.get<double>(
+                        "residual_scale", 1.0),
+                };
+            });
+    return component;
+}
+
+Tree encode_expression_component(
+    const ExpressionComponentInput& component) {
+    Tree tree;
+    tree.put("kind", component.kind);
+    tree.put("version", component.version);
+    tree.put(
+        "system_boundary_role",
+        component.system_boundary_role);
+    tree.add_child(
+        "ports",
+        array(
+            component.ports,
+            [](const auto& port) {
+                Tree encoded;
+                encoded.put("name", port.name);
+                encoded.put("domain", port.domain);
+                encoded.put("direction", port.direction);
+                encoded.put(
+                    "maximum_connections",
+                    port.maximum_connections);
+                return encoded;
+            }));
+    tree.add_child(
+        "parameters",
+        array(
+            component.parameters,
+            [](const auto& parameter) {
+                Tree encoded;
+                encoded.put("name", parameter.name);
+                encoded.put(
+                    "dimension", parameter.dimension);
+                encoded.put("required", parameter.required);
+                if (parameter.default_value_si) {
+                    encoded.put(
+                        "default_value_si",
+                        *parameter.default_value_si);
+                }
+                if (std::isfinite(parameter.lower_bound)) {
+                    encoded.put(
+                        "lower_bound",
+                        parameter.lower_bound);
+                }
+                if (std::isfinite(parameter.upper_bound)) {
+                    encoded.put(
+                        "upper_bound",
+                        parameter.upper_bound);
+                }
+                encoded.put(
+                    "lower_inclusive",
+                    parameter.lower_inclusive);
+                encoded.put(
+                    "upper_inclusive",
+                    parameter.upper_inclusive);
+                return encoded;
+            }));
+    tree.add_child(
+        "equations",
+        array(
+            component.equations,
+            [](const auto& equation) {
+                Tree encoded;
+                encoded.put("name", equation.name);
+                encoded.put(
+                    "expression", equation.expression);
+                encoded.put(
+                    "residual_scale",
+                    equation.residual_scale);
+                return encoded;
+            }));
+    return tree;
+}
+
+platform::ExpressionComponentDefinition definition(
+    const ExpressionComponentInput& input) {
+    platform::ExpressionComponentDefinition value;
+    value.schema_version = input.schema_version;
+    value.descriptor.kind = input.kind;
+    value.descriptor.version = input.version;
+    value.descriptor.system_boundary_role =
+        input.system_boundary_role;
+    value.descriptor.supports_steady = true;
+    value.descriptor.supports_transient = false;
+    for (const auto& port : input.ports) {
+        value.descriptor.ports.push_back({
+            port.name,
+            port.domain,
+            port.direction,
+            port.maximum_connections,
+        });
+    }
+    for (const auto& parameter : input.parameters) {
+        value.descriptor.parameters.push_back({
+            parameter.name,
+            parameter.dimension,
+            parameter.required,
+            parameter.default_value_si,
+            parameter.lower_bound,
+            parameter.upper_bound,
+            parameter.lower_inclusive,
+            parameter.upper_inclusive,
+        });
+    }
+    for (const auto& equation : input.equations) {
+        value.equations.push_back({
+            equation.name,
+            equation.expression,
+            equation.residual_scale,
+        });
+    }
+    return value;
+}
+
 }  // namespace
 
 std::string canonicalize_performance_map_payload(
@@ -335,6 +524,26 @@ PerformanceMapArtifactInput performance_map_from_payload(
         revision,
         checksum,
         read(payload_json));
+}
+
+std::string canonicalize_expression_component_payload(
+    const std::string& schema_version,
+    const std::string& payload_json) {
+    const auto component =
+        decode_expression_component(
+            schema_version, read(payload_json));
+    auto registry =
+        platform::make_default_component_registry();
+    platform::register_expression_component(
+        registry, definition(component));
+    return write(encode_expression_component(component));
+}
+
+ExpressionComponentInput expression_component_from_payload(
+    const std::string& schema_version,
+    const std::string& payload_json) {
+    return decode_expression_component(
+        schema_version, read(payload_json));
 }
 
 }  // namespace thermox::service::detail
