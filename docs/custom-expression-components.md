@@ -75,6 +75,10 @@ The canvas library can publish a safe definition or revise a project-owned defin
 this same service contract. Revisions preserve the logical artifact and component kind, and must
 publish a new component version. The service rejects duplicate project kinds and reused
 kind/version pairs so an older topology cannot silently resolve to changed equations.
+Canvas rendering, instance editing, validation, and run authoring resolve the descriptor matching
+the topology instance's exact kind/version rather than substituting the newest project revision.
+The browser only enables new run authoring after the service compiler has validated that exact
+topology, case, and artifact-revision set.
 
 Approval policy, dimension algebra across compound expressions, transient equations, constrained
 property functions, and richer equation syntax assistance require later versioned contracts.

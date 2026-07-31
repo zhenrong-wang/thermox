@@ -23,9 +23,11 @@ import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { ResultsWorkspace } from './ResultsWorkspace'
+import { validationMatchesExecutionSelection } from './runAuthoring'
 import {
   mergeProjectComponentCatalog,
   requiredProjectComponentSources,
+  resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
@@ -298,6 +300,14 @@ function App() {
       projectComponents,
     )
   }, [catalog, projectComponents])
+  const topologyCatalog = useMemo<Catalog | undefined>(() => {
+    if (!catalog) return undefined
+    return resolveTopologyComponentCatalog(
+      catalog,
+      projectComponents,
+      topology,
+    )
+  }, [catalog, projectComponents, topology])
   const requiredComponentSources = useMemo(
     () =>
       requiredProjectComponentSources(
@@ -754,6 +764,19 @@ function App() {
       )
       return
     }
+    if (
+      !validationMatchesExecutionSelection(
+        validationResult,
+        selectedRevisionId,
+        selectedCaseRevision.case_revision_id,
+        selectedArtifactRevisionIds,
+      )
+    ) {
+      setRunOperationError(
+        'Compile and validate this exact topology, case, and artifact revision set in Cases before creating a run.',
+      )
+      return
+    }
     setRunOperationError('')
     setAddingRunConfiguration(true)
   }
@@ -961,13 +984,13 @@ function App() {
     connection: ConnectionIntent,
     existing: ConnectionDefinition,
   ) {
-    if (!topology || !effectiveCatalog) {
+    if (!topology || !topologyCatalog) {
       throw new Error('Topology and runtime catalog are required.')
     }
     const operation = buildConnectionOperation(
       connection,
       topology,
-      effectiveCatalog,
+      topologyCatalog,
       existing.id,
     )
     await publishEdits(
@@ -1031,7 +1054,7 @@ function App() {
       setOperationError('A connection requires two concrete component ports.')
       return
     }
-    if (!effectiveCatalog) {
+    if (!topologyCatalog) {
       setOperationError('The runtime catalog is not loaded.')
       return
     }
@@ -1039,7 +1062,7 @@ function App() {
       const operation = buildConnectionOperation(
         connection,
         topology,
-        effectiveCatalog,
+        topologyCatalog,
       )
       await publishEdits(
         [operation],
@@ -1225,7 +1248,7 @@ function App() {
           ) : (
             <TopologyCanvas
               topology={topology}
-              catalog={effectiveCatalog?.components ?? []}
+              catalog={topologyCatalog?.components ?? []}
               revisionId={selectedRevisionId}
               publishing={publishing}
               onConnect={connectPorts}
@@ -1301,7 +1324,7 @@ function App() {
         ) : (
           <ResultsWorkspace
             topology={topology}
-            catalog={effectiveCatalog?.components ?? []}
+            catalog={topologyCatalog?.components ?? []}
             job={selectedResultJob}
             result={simulationResult}
             loading={resultLoading}
@@ -1343,11 +1366,11 @@ function App() {
                 {topologySidebar === 'inspector' &&
                 selection &&
                 topology &&
-                effectiveCatalog ? (
+                topologyCatalog ? (
                   <InspectorPanel
                     selection={selection}
                     topology={topology}
-                    catalog={effectiveCatalog}
+                    catalog={topologyCatalog}
                     publishing={publishing}
                     onEditComponent={setEditingComponent}
                     onEditConnection={setEditingConnection}
@@ -1436,11 +1459,11 @@ function App() {
       {workspaceView === 'topology' &&
         editingComponent &&
         topology &&
-        effectiveCatalog && (
+        topologyCatalog && (
         <ComponentForm
           key={`edit-${editingComponent.id}`}
           componentType={
-            effectiveCatalog.components.find(
+            topologyCatalog.components.find(
               (item) => item.kind === editingComponent.kind,
             )!
           }
@@ -1454,12 +1477,12 @@ function App() {
       {workspaceView === 'topology' &&
         editingConnection &&
         topology &&
-        effectiveCatalog && (
+        topologyCatalog && (
         <ConnectionForm
           key={`edit-${editingConnection.id}`}
           connection={editingConnection}
           topology={topology}
-          catalog={effectiveCatalog}
+          catalog={topologyCatalog}
           onCancel={() => setEditingConnection(undefined)}
           onSubmit={(intent) =>
             updateConnection(intent, editingConnection)
@@ -1502,7 +1525,7 @@ function App() {
       )}
       {(addingRunConfiguration || revisingRunConfiguration) &&
         topology &&
-        effectiveCatalog &&
+        topologyCatalog &&
         selectedCaseRevision && (
           <RunConfigurationForm
             key={
@@ -1511,7 +1534,7 @@ function App() {
                 : `create-${selectedCaseRevision.case_revision_id}`
             }
             topology={topology}
-            catalog={effectiveCatalog}
+            catalog={topologyCatalog}
             modelRevisionId={selectedRevisionId}
             caseRevision={selectedCaseRevision}
             artifactRevisionIds={selectedArtifactRevisionIds}

@@ -4,6 +4,7 @@
 
 #include <boost/json.hpp>
 
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -646,6 +647,226 @@ void test_tenant_scoped_asynchronous_jobs() {
         "job result must publish stored revision provenance");
 }
 
+void test_authored_component_job_workflow() {
+    const auto runtime =
+        thermox::service::make_default_simulation_runtime();
+    const auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    const auto results =
+        thermox::service::make_in_memory_result_artifact_store();
+    const auto job_service = std::make_shared<
+        thermox::service::SimulationJobService>(
+            runtime, jobs, results);
+    const auto projects = std::make_shared<
+        thermox::service::ProjectService>(
+            thermox::service::
+                make_in_memory_project_repository());
+    const thermox::service::IdentityContext identity{
+        "author-user", "author-team", "http-authoring"};
+    thermox::http::Api api{
+        runtime,
+        job_service,
+        projects};
+    const auto project = projects->create_project({
+        identity, "Authored component workflow", {},
+    });
+
+    const auto uploaded = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/artifact-revisions"
+                "?artifact_id=authored-gain"
+                "&artifact_type=thermox.expression_component"
+                "&artifact_schema_version="
+                "thermox.expression_component%2Fv1",
+            R"json({
+              "kind": "custom.signal.authored_gain",
+              "version": "1.0.0",
+              "ports": [
+                {"name": "input", "domain": "signal",
+                 "direction": "in"},
+                {"name": "output", "domain": "signal",
+                 "direction": "out"}
+              ],
+              "parameters": [{
+                "name": "gain",
+                "dimension": "dimensionless",
+                "required": true,
+                "lower_bound": 0.0
+              }],
+              "equations": [{
+                "name": "gain_law",
+                "expression":
+                  "output.value - parameter.gain * input.value",
+                "residual_scale": 1.0
+              }]
+            })json"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        uploaded.status == 201 &&
+            uploaded.headers.contains("Location"),
+        "the authored workflow must publish a safe component "
+        "artifact");
+    const auto component_revision_id =
+        uploaded.headers.at("Location").substr(
+            uploaded.headers.at("Location").find_last_of('/') +
+            1U);
+
+    const auto model = projects->create_model_revision({
+        identity,
+        project.project_id,
+        {},
+        R"json({
+          "schema_version": "thermox.topology/v1",
+          "model": {
+            "id": "authored_gain_system",
+            "media": [],
+            "components": [{
+              "id": "gain",
+              "kind": "custom.signal.authored_gain",
+              "version": "1.0.0",
+              "parameters": {"gain": 2.0}
+            }],
+            "connections": []
+          }
+        })json",
+    });
+    const auto simulation_case =
+        projects->create_case_revision({
+            identity,
+            project.project_id,
+            model.model_revision_id,
+            {},
+            R"json({
+              "schema_version": "thermox.case/v1",
+              "case": {
+                "id": "design",
+                "mode": "steady_state_design",
+                "fixed_values": {"gain.input.value": 5.0}
+              }
+            })json",
+        });
+
+    const auto case_location =
+        "/api/v1/projects/" + project.project_id +
+        "/model-revisions/" + model.model_revision_id +
+        "/case-revisions/" +
+        simulation_case.case_revision_id;
+    const auto validation = api.handle(authenticated(
+        json_post(
+            case_location + "/validate",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.project_model_validation_request/v1",)"
+                R"("artifact_revision_ids":[")"} +
+                component_revision_id + R"("]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        validation.status == 200 &&
+            validation.body.find("\"compiled\": true") !=
+                std::string::npos &&
+            validation.body.find(component_revision_id) !=
+                std::string::npos,
+        "the authored component must compile through exact "
+        "revision-backed validation");
+
+    const auto run_created = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/run-configuration-revisions",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.run_configuration.create/v2",)"
+                R"("run_configuration_id":"authored-gain-run",)"
+                R"("model_revision_id":")"} +
+                model.model_revision_id +
+                R"(","case_revision_id":")" +
+                simulation_case.case_revision_id +
+                R"(","artifact_revision_ids":[")" +
+                component_revision_id +
+                R"("],"result_projections":[{)"
+                R"("id":"gain_output",)"
+                R"("scope":"port_primary",)"
+                R"("component_id":"gain",)"
+                R"("port_name":"output",)"
+                R"("value_name":"value",)"
+                R"("dimension":"dimensionless",)"
+                R"("aggregation":"final"}]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        run_created.status == 201 &&
+            run_created.headers.contains("Location"),
+        "the authored workflow must persist an executable run "
+        "configuration");
+    const auto run_revision_id =
+        run_created.headers.at("Location").substr(
+            run_created.headers.at("Location").find_last_of('/') +
+            1U);
+
+    auto submission = authenticated(
+        {
+            "POST",
+            "/api/v1/simulations?project_id=" +
+                project.project_id +
+                "&run_configuration_revision_id=" +
+                run_revision_id,
+            {},
+            {},
+        },
+        identity.user_id,
+        identity.team_id);
+    submission.headers["Idempotency-Key"] =
+        "authored-component-job";
+    const auto queued = api.handle(submission);
+    require(
+        queued.status == 202 &&
+            queued.headers.contains("Location") &&
+            queued.body.find(component_revision_id) !=
+                std::string::npos,
+        "the authored workflow must queue a job with exact "
+        "component provenance");
+    const auto job_id =
+        queued.headers.at("Location").substr(
+            std::string("/api/v1/simulations/").size());
+    const auto completed =
+        job_service->run_next("authored-component-worker");
+    require(
+        completed &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->result_summary &&
+            completed->result_summary->values.size() == 1U &&
+            std::abs(
+                completed->result_summary->values.front()
+                    .value_si -
+                10.0) < 1.0e-12,
+        "the worker must execute authored equations and "
+        "project the expected output");
+
+    const auto result = api.handle(authenticated(
+        {
+            "GET",
+            "/api/v1/simulations/" + job_id + "/result",
+            {},
+            {},
+        },
+        identity.user_id,
+        identity.team_id));
+    require(
+        result.status == 200 &&
+            result.body.find("\"port_name\": \"output\"") !=
+                std::string::npos &&
+            result.body.find("\"value_si\": 10") !=
+                std::string::npos &&
+            result.body.find(component_revision_id) !=
+                std::string::npos,
+        "the authored workflow must expose calculated output "
+        "and immutable component provenance");
+}
+
 void test_team_scoped_projects_and_model_revisions() {
     thermox::http::Api api;
     auto invalid_create = authenticated(json_post(
@@ -952,6 +1173,7 @@ int main() {
         test_production_api_disables_synchronous_execution();
         test_transport_guards();
         test_tenant_scoped_asynchronous_jobs();
+        test_authored_component_job_workflow();
         test_team_scoped_projects_and_model_revisions();
         std::cout << "http api tests passed\n";
         return 0;

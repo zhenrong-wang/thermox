@@ -43,6 +43,43 @@ export function mergeProjectComponentCatalog(
   }
 }
 
+export function resolveTopologyComponentCatalog(
+  catalog: Catalog,
+  projectComponents: ProjectComponentCatalogEntry[],
+  topology: TopologyDocument | undefined,
+): Catalog {
+  const merged = mergeProjectComponentCatalog(catalog, projectComponents)
+  if (!topology) return merged
+
+  const components = new Map(
+    merged.components.map((component) => [component.kind, component]),
+  )
+  let fingerprint = merged.fingerprint
+  for (const instance of topology.model.components) {
+    const exact = projectComponents.find(
+      (entry) =>
+        entry.component.kind === instance.kind &&
+        (!instance.version ||
+          entry.component.version === instance.version),
+    )
+    if (!exact) continue
+    components.set(exact.component.kind, {
+      ...exact.component,
+      source_artifact_id: exact.source.artifact_id,
+      source_artifact_revision_id:
+        exact.source.artifact_revision_id,
+    })
+    fingerprint = exact.catalog_fingerprint
+  }
+  return {
+    ...merged,
+    fingerprint,
+    components: [...components.values()].sort((left, right) =>
+      left.kind.localeCompare(right.kind),
+    ),
+  }
+}
+
 export function requiredProjectComponentSources(
   topology: TopologyDocument | undefined,
   projectComponents: ProjectComponentCatalogEntry[],

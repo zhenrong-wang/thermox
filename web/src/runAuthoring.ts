@@ -1,8 +1,35 @@
 import type {
+  ProjectModelValidation,
   ResultValueScope,
   SteadySolverSettings,
   TransientSolverSettings,
 } from './types'
+
+export function validationMatchesExecutionSelection(
+  validation: ProjectModelValidation | undefined,
+  modelRevisionId: string,
+  caseRevisionId: string,
+  artifactRevisionIds: string[],
+) {
+  if (
+    !validation?.validation.compilation.compiled ||
+    validation.model_revision_id !== modelRevisionId ||
+    validation.case_revision_id !== caseRevisionId
+  ) {
+    return false
+  }
+  const validated = validation.artifact_revisions
+    .map((revision) => revision.artifact_revision_id)
+    .sort()
+  const selected = [...artifactRevisionIds].sort()
+  return (
+    validated.length === selected.length &&
+    validated.every(
+      (revisionId, index) =>
+        revisionId === selected[index],
+    )
+  )
+}
 
 export const defaultSteadySolver: SteadySolverSettings = {
   max_iterations: 50,

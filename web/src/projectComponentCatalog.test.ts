@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   mergeProjectComponentCatalog,
   requiredProjectComponentSources,
+  resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import type {
   Catalog,
@@ -150,6 +151,38 @@ describe('project component catalog', () => {
         [projectEntry],
       ).map((entry) => entry.source.artifact_revision_id),
     ).toEqual(['artifact-revision-7'])
+  })
+
+  it('resolves a topology against its historical component descriptor', () => {
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'historical-system',
+        name: 'Historical system',
+        revision: '1',
+        media: [],
+        components: [
+          {
+            id: 'gain',
+            kind: 'custom.signal.gain',
+            version: '0.9.0',
+          },
+        ],
+        connections: [],
+      },
+    }
+    const resolved = resolveTopologyComponentCatalog(
+      catalog,
+      [projectEntry, historicalEntry],
+      topology,
+    )
+    const descriptor = resolved.components.find(
+      (component) => component.kind === 'custom.signal.gain',
+    )
+    expect(descriptor?.version).toBe('0.9.0')
+    expect(descriptor?.source_artifact_revision_id).toBe(
+      'artifact-revision-6',
+    )
   })
 
   it('retains historical descriptors for older topology versions', () => {
