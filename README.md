@@ -447,7 +447,9 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 Trusted deployments and request-scoped simulations can compose safe steady algebraic component
 definitions through `thermox.expression_component/v1`. Expressions use registered connector
 variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
-arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v6`. See
+arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v6`. Project-owned
+definitions are discovered from the project component catalog and appear directly in the canvas
+library with automatic source-revision binding. See
 [Safe expression components](docs/custom-expression-components.md).
 
 ## Next steps

@@ -1,5 +1,6 @@
 import type {
   ArtifactRevisionList,
+  ProjectComponentCatalog,
   Catalog,
   CaseDocument,
   CaseEditOperation,
@@ -157,6 +158,14 @@ export const api = {
   artifactRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<ArtifactRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions`,
+      signal,
+    ),
+  projectComponentCatalog: (
+    projectId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<ProjectComponentCatalog>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/component-catalog`,
       signal,
     ),
   caseRevisions: (

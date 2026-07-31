@@ -1299,6 +1299,12 @@ ValidateModelResponse SimulationService::validate_model(
 
 CatalogResponse SimulationService::get_catalog(
     const CatalogRequest& request) const {
+    return get_catalog(SimulationComponentBundle{}, request);
+}
+
+CatalogResponse SimulationService::get_catalog(
+    const SimulationComponentBundle& components,
+    const CatalogRequest& request) const {
     CatalogResponse response;
     if (!valid_schema(request.schema_version)) {
         response.error = make_error(
@@ -1308,9 +1314,18 @@ CatalogResponse SimulationService::get_catalog(
                 request.schema_version);
         return response;
     }
-    response.fingerprint = impl_->runtime->impl_->fingerprint;
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(impl_->runtime, components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
+    response.fingerprint = runtime->impl_->fingerprint;
     for (const auto& extension :
-         impl_->runtime->impl_->components
+         runtime->impl_->components
              .runtime_extension_descriptors()) {
         response.native_extensions.push_back(
             {
@@ -1319,7 +1334,7 @@ CatalogResponse SimulationService::get_catalog(
             });
     }
     for (const auto& descriptor :
-         impl_->runtime->impl_->units.descriptors()) {
+         runtime->impl_->units.descriptors()) {
         CatalogDimensionUnitType dimension;
         dimension.dimension = descriptor.dimension;
         dimension.canonical_unit = descriptor.canonical_unit;
@@ -1345,7 +1360,7 @@ CatalogResponse SimulationService::get_catalog(
             std::move(dimension));
     }
     for (const auto& descriptor :
-         impl_->runtime->impl_->components.descriptors()) {
+         runtime->impl_->components.descriptors()) {
         ComponentType component;
         component.kind = descriptor.kind;
         component.version = descriptor.version;
@@ -1403,7 +1418,7 @@ CatalogResponse SimulationService::get_catalog(
         response.components.push_back(std::move(component));
     }
     for (const auto& descriptor :
-         impl_->runtime->impl_->properties.descriptors()) {
+         runtime->impl_->properties.descriptors()) {
         PropertyBackendType backend;
         backend.backend = descriptor.backend;
         backend.implementation_name =
@@ -1419,7 +1434,7 @@ CatalogResponse SimulationService::get_catalog(
         response.property_backends.push_back(std::move(backend));
     }
     for (const auto& descriptor :
-         impl_->runtime->impl_->thermochemistry.descriptors()) {
+         runtime->impl_->thermochemistry.descriptors()) {
         ThermochemistryBackendType backend;
         backend.backend = descriptor.backend;
         backend.implementation_name =
@@ -1434,7 +1449,7 @@ CatalogResponse SimulationService::get_catalog(
             std::move(backend));
     }
     for (const auto& connector :
-         impl_->runtime->impl_->components
+         runtime->impl_->components
              .connector_domain_descriptors()) {
         ConnectorDomainType domain;
         domain.domain = connector.domain;

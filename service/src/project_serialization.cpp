@@ -2,6 +2,7 @@
 #include "thermox/service/serialization.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 
@@ -236,6 +237,113 @@ void transient_solver_json(
     out << '}';
 }
 
+void json_number(std::ostringstream& out, double value) {
+    if (std::isfinite(value)) {
+        out << value;
+    } else {
+        out << "null";
+    }
+}
+
+void component_type_json(
+    std::ostringstream& out,
+    const ComponentType& component) {
+    out << "{\"kind\": ";
+    json_string(out, component.kind);
+    out << ", \"version\": ";
+    json_string(out, component.version);
+    out << ", \"system_boundary_role\": ";
+    json_string(out, component.system_boundary_role);
+    out << ", \"supports_steady\": "
+        << (component.supports_steady ? "true" : "false")
+        << ", \"supports_transient\": "
+        << (component.supports_transient ? "true" : "false")
+        << ", \"ports\": [";
+    for (std::size_t index = 0;
+         index < component.ports.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& port = component.ports[index];
+        out << "{\"name\": ";
+        json_string(out, port.name);
+        out << ", \"domain\": ";
+        json_string(out, port.domain);
+        out << ", \"direction\": ";
+        json_string(out, port.direction);
+        out << ", \"maximum_connections\": "
+            << port.maximum_connections << '}';
+    }
+    out << "], \"parameters\": [";
+    for (std::size_t index = 0;
+         index < component.parameters.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& parameter = component.parameters[index];
+        out << "{\"name\": ";
+        json_string(out, parameter.name);
+        out << ", \"dimension\": ";
+        json_string(out, parameter.dimension);
+        out << ", \"required\": "
+            << (parameter.required ? "true" : "false")
+            << ", \"default_value_si\": ";
+        if (parameter.has_default) {
+            json_number(out, parameter.default_value_si);
+        } else {
+            out << "null";
+        }
+        out << ", \"lower_bound\": ";
+        json_number(out, parameter.lower_bound);
+        out << ", \"upper_bound\": ";
+        json_number(out, parameter.upper_bound);
+        out << ", \"lower_inclusive\": "
+            << (parameter.lower_inclusive ? "true" : "false")
+            << ", \"upper_inclusive\": "
+            << (parameter.upper_inclusive ? "true" : "false")
+            << '}';
+    }
+    out << "], \"artifacts\": [";
+    for (std::size_t index = 0;
+         index < component.artifacts.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& artifact = component.artifacts[index];
+        out << "{\"role\": ";
+        json_string(out, artifact.role);
+        out << ", \"artifact_type\": ";
+        json_string(out, artifact.artifact_type);
+        out << ", \"required\": "
+            << (artifact.required ? "true" : "false") << '}';
+    }
+    out << "], \"internal_variables\": [";
+    for (std::size_t index = 0;
+         index < component.internal_variables.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& variable =
+            component.internal_variables[index];
+        out << "{\"name\": ";
+        json_string(out, variable.name);
+        out << ", \"dimension\": ";
+        json_string(out, variable.dimension);
+        out << ", \"kind\": ";
+        json_string(out, variable.kind);
+        out << '}';
+    }
+    const auto strings =
+        [&](const char* name,
+            const std::vector<std::string>& values) {
+            out << "], \"" << name << "\": [";
+            for (std::size_t index = 0;
+                 index < values.size(); ++index) {
+                if (index != 0U) out << ", ";
+                json_string(out, values[index]);
+            }
+        };
+    strings(
+        "required_property_capabilities",
+        component.required_property_capabilities);
+    strings(
+        "required_thermochemistry_capabilities",
+        component.required_thermochemistry_capabilities);
+    out << "]}";
+}
+
 void run_configuration_revision_json(
     std::ostringstream& out,
     const RunConfigurationRevisionRecord& revision) {
@@ -466,6 +574,31 @@ std::string serialize_project_model_validation_json(
     out << "],\n  \"validation\": "
         << serialize_validate_response_json(response.validation)
         << "}\n";
+    return out.str();
+}
+
+std::string serialize_project_component_catalog_json(
+    const ProjectComponentCatalogResponse& response) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    out << "{\"schema_version\": ";
+    json_string(out, response.schema_version);
+    out << ", \"project_id\": ";
+    json_string(out, response.project_id);
+    out << ", \"components\": [";
+    for (std::size_t index = 0;
+         index < response.components.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& entry = response.components[index];
+        out << "{\"source\": ";
+        artifact_revision_json(out, entry.source);
+        out << ", \"catalog_fingerprint\": ";
+        json_string(out, entry.catalog_fingerprint);
+        out << ", \"component\": ";
+        component_type_json(out, entry.component);
+        out << '}';
+    }
+    out << "]}\n";
     return out.str();
 }
 

@@ -381,6 +381,45 @@ void test_expression_component_artifact_is_executable() {
                 revision.artifact_revision_id,
         "expression-component revisions must resolve into an "
         "immutable executable bundle with artifact provenance");
+    thermox::service::ProjectComponentCatalogService
+        component_catalog{
+            projects,
+            thermox::service::
+                make_default_simulation_runtime()};
+    const auto discovered =
+        component_catalog.get(team_a, project.project_id);
+    require(
+        discovered.schema_version ==
+                "thermox.project_component_catalog/v1" &&
+            discovered.components.size() == 1U &&
+            discovered.components.front().source
+                    .artifact_revision_id ==
+                revision.artifact_revision_id &&
+            discovered.components.front().component.kind ==
+                "custom.signal.persisted_gain" &&
+            !discovered.components.front()
+                 .catalog_fingerprint.empty(),
+        "project component discovery must pair a runtime "
+        "descriptor with its exact immutable source revision");
+    const auto latest_revision =
+        projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "persisted-gain",
+            revision.artifact_revision_id,
+            "thermox.expression_component",
+            "thermox.expression_component/v1",
+            expression_component_payload(),
+        });
+    const auto refreshed =
+        component_catalog.get(team_a, project.project_id);
+    require(
+        refreshed.components.size() == 2U &&
+            refreshed.components.front().source
+                    .artifact_revision_id ==
+                latest_revision.artifact_revision_id,
+        "project component discovery must expose the latest "
+        "immutable revision of each logical definition");
 
     const auto model = projects->create_model_revision({
         team_a,
@@ -501,9 +540,20 @@ void test_expression_component_artifact_is_executable() {
             projects
                     ->list_artifact_revisions(
                         team_a, project.project_id)
-                    .size() == 1U,
+                    .size() == 2U,
         "unsafe component definitions must be rejected before "
         "an immutable revision is published");
+
+    bool hidden = false;
+    try {
+        (void)component_catalog.get(team_b, project.project_id);
+    } catch (const thermox::service::ProjectStateError&) {
+        hidden = true;
+    }
+    require(
+        hidden,
+        "project component discovery must hide cross-Team "
+        "project existence");
 }
 
 void test_artifact_revisions_are_snapshotted_and_scoped() {

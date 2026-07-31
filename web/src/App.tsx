@@ -22,6 +22,10 @@ import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { ResultsWorkspace } from './ResultsWorkspace'
+import {
+  mergeProjectComponentCatalog,
+  requiredProjectComponentSources,
+} from './projectComponentCatalog'
 import { TopologyCanvas } from './TopologyCanvas'
 import type {
   ArtifactRevision,
@@ -37,6 +41,7 @@ import type {
   MediumDefinition,
   ModelRevision,
   ProjectModelValidation,
+  ProjectComponentCatalogEntry,
   Project,
   RunConfigurationRevision,
   SimulationJob,
@@ -59,6 +64,9 @@ function App() {
   const [revisions, setRevisions] = useState<ModelRevision[]>([])
   const [artifactRevisions, setArtifactRevisions] = useState<
     ArtifactRevision[]
+  >([])
+  const [projectComponents, setProjectComponents] = useState<
+    ProjectComponentCatalogEntry[]
   >([])
   const [caseRevisions, setCaseRevisions] = useState<CaseRevision[]>([])
   const [selectedCaseRevisionId, setSelectedCaseRevisionId] = useState('')
@@ -168,6 +176,7 @@ function App() {
   useEffect(() => {
     setRevisions([])
     setArtifactRevisions([])
+    setProjectComponents([])
     setSelectedRevisionId('')
     setTopology(undefined)
     if (!selectedProjectId) return
@@ -175,14 +184,16 @@ function App() {
     Promise.all([
       api.modelRevisions(selectedProjectId, controller.signal),
       api.artifactRevisions(selectedProjectId, controller.signal),
+      api.projectComponentCatalog(selectedProjectId, controller.signal),
     ])
-      .then(([response, artifacts]) => {
+      .then(([response, artifacts, components]) => {
         setError('')
         const ordered = [...response.model_revisions].sort(
           (left, right) => right.revision_number - left.revision_number,
         )
         setRevisions(ordered)
         setArtifactRevisions(artifacts.artifact_revisions)
+        setProjectComponents(components.components)
         setSelectedRevisionId(ordered[0]?.model_revision_id ?? '')
       })
       .catch((reason: unknown) => {
@@ -276,16 +287,47 @@ function App() {
   const selectedResultJob = resultJobs.find(
     (job) => job.job_id === selectedResultJobId,
   )
+  const effectiveCatalog = useMemo<Catalog | undefined>(() => {
+    if (!catalog) return undefined
+    return mergeProjectComponentCatalog(
+      catalog,
+      projectComponents,
+    )
+  }, [catalog, projectComponents])
+  const requiredComponentSources = useMemo(
+    () =>
+      requiredProjectComponentSources(
+        topology,
+        projectComponents,
+      ),
+    [projectComponents, topology],
+  )
+  const preferredArtifactRevisionIds = useMemo(
+    () =>
+      Object.fromEntries(
+        requiredComponentSources.map((entry) => [
+          entry.source.artifact_id,
+          entry.source.artifact_revision_id,
+        ]),
+      ),
+    [requiredComponentSources],
+  )
   const requiredArtifactIds = useMemo(
     () =>
       [
         ...new Set(
-          (topology?.model.components ?? []).flatMap((component) =>
-            Object.values(component.artifacts ?? {}),
-          ),
+          [
+            ...(topology?.model.components ?? []).flatMap(
+              (component) =>
+                Object.values(component.artifacts ?? {}),
+            ),
+            ...requiredComponentSources.map(
+              (entry) => entry.source.artifact_id,
+            ),
+          ],
         ),
       ].sort(),
-    [topology],
+    [requiredComponentSources, topology],
   )
   const visibleRunConfigurations = useMemo(
     () =>
@@ -302,6 +344,9 @@ function App() {
             (revision) => revision.artifact_id === artifactId,
           )
           if (validated) return validated.artifact_revision_id
+          const preferred =
+            preferredArtifactRevisionIds[artifactId]
+          if (preferred) return preferred
           return artifactRevisions
             .filter((revision) => revision.artifact_id === artifactId)
             .sort(
@@ -310,7 +355,12 @@ function App() {
             )[0]?.artifact_revision_id
         })
         .filter((id): id is string => Boolean(id)),
-    [artifactRevisions, requiredArtifactIds, validationResult],
+    [
+      artifactRevisions,
+      preferredArtifactRevisionIds,
+      requiredArtifactIds,
+      validationResult,
+    ],
   )
 
   useEffect(() => {
@@ -869,13 +919,13 @@ function App() {
     connection: ConnectionIntent,
     existing: ConnectionDefinition,
   ) {
-    if (!topology || !catalog) {
+    if (!topology || !effectiveCatalog) {
       throw new Error('Topology and runtime catalog are required.')
     }
     const operation = buildConnectionOperation(
       connection,
       topology,
-      catalog,
+      effectiveCatalog,
       existing.id,
     )
     await publishEdits(
@@ -939,7 +989,7 @@ function App() {
       setOperationError('A connection requires two concrete component ports.')
       return
     }
-    if (!catalog) {
+    if (!effectiveCatalog) {
       setOperationError('The runtime catalog is not loaded.')
       return
     }
@@ -947,7 +997,7 @@ function App() {
       const operation = buildConnectionOperation(
         connection,
         topology,
-        catalog,
+        effectiveCatalog,
       )
       await publishEdits(
         [operation],
@@ -1133,7 +1183,7 @@ function App() {
           ) : (
             <TopologyCanvas
               topology={topology}
-              catalog={catalog?.components ?? []}
+              catalog={effectiveCatalog?.components ?? []}
               revisionId={selectedRevisionId}
               publishing={publishing}
               onConnect={connectPorts}
@@ -1160,6 +1210,9 @@ function App() {
             operationStatus={caseOperationStatus}
             artifactRevisions={artifactRevisions}
             requiredArtifactIds={requiredArtifactIds}
+            preferredArtifactRevisionIds={
+              preferredArtifactRevisionIds
+            }
             validationResult={validationResult}
             validating={validating}
             onDismissOperation={() => {
@@ -1206,7 +1259,7 @@ function App() {
         ) : (
           <ResultsWorkspace
             topology={topology}
-            catalog={catalog?.components ?? []}
+            catalog={effectiveCatalog?.components ?? []}
             job={selectedResultJob}
             result={simulationResult}
             loading={resultLoading}
@@ -1231,7 +1284,9 @@ function App() {
                   onClick={() => setTopologySidebar('library')}
                 >
                   Library
-                  <span>{catalog?.components.length ?? 0}</span>
+                  <span>
+                    {effectiveCatalog?.components.length ?? 0}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1246,11 +1301,11 @@ function App() {
                 {topologySidebar === 'inspector' &&
                 selection &&
                 topology &&
-                catalog ? (
+                effectiveCatalog ? (
                   <InspectorPanel
                     selection={selection}
                     topology={topology}
-                    catalog={catalog}
+                    catalog={effectiveCatalog}
                     publishing={publishing}
                     onEditComponent={setEditingComponent}
                     onEditConnection={setEditingConnection}
@@ -1267,11 +1322,15 @@ function App() {
                   />
                 ) : (
                   <ComponentLibrary
-                    components={catalog?.components ?? []}
+                    components={
+                      effectiveCatalog?.components ?? []
+                    }
                     disabled={!topology || publishing}
                     fluidCount={topology?.model.media.length ?? 0}
                     artifactRevisionCount={artifactRevisions.length}
-                    catalogFingerprint={catalog?.fingerprint ?? ''}
+                    catalogFingerprint={
+                      effectiveCatalog?.fingerprint ?? ''
+                    }
                     onChoose={setNewComponentType}
                     onAddFluid={() => setAddingMedium(true)}
                   />
@@ -1324,11 +1383,11 @@ function App() {
       {workspaceView === 'topology' &&
         editingComponent &&
         topology &&
-        catalog && (
+        effectiveCatalog && (
         <ComponentForm
           key={`edit-${editingComponent.id}`}
           componentType={
-            catalog.components.find(
+            effectiveCatalog.components.find(
               (item) => item.kind === editingComponent.kind,
             )!
           }
@@ -1342,12 +1401,12 @@ function App() {
       {workspaceView === 'topology' &&
         editingConnection &&
         topology &&
-        catalog && (
+        effectiveCatalog && (
         <ConnectionForm
           key={`edit-${editingConnection.id}`}
           connection={editingConnection}
           topology={topology}
-          catalog={catalog}
+          catalog={effectiveCatalog}
           onCancel={() => setEditingConnection(undefined)}
           onSubmit={(intent) =>
             updateConnection(intent, editingConnection)
@@ -1371,7 +1430,7 @@ function App() {
       )}
       {(addingRunConfiguration || revisingRunConfiguration) &&
         topology &&
-        catalog &&
+        effectiveCatalog &&
         selectedCaseRevision && (
           <RunConfigurationForm
             key={
@@ -1380,7 +1439,7 @@ function App() {
                 : `create-${selectedCaseRevision.case_revision_id}`
             }
             topology={topology}
-            catalog={catalog}
+            catalog={effectiveCatalog}
             modelRevisionId={selectedRevisionId}
             caseRevision={selectedCaseRevision}
             artifactRevisionIds={selectedArtifactRevisionIds}

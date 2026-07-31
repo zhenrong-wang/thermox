@@ -344,6 +344,47 @@ void test_tenant_scoped_asynchronous_jobs() {
             component_uploaded.headers.at("Location")
                 .find_last_of('/') +
             1U);
+    const auto component_catalog = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/component-catalog",
+        {},
+        {},
+    }));
+    const auto parsed_component_catalog =
+        boost::json::parse(component_catalog.body);
+    require(
+        component_catalog.status == 200 &&
+            parsed_component_catalog.is_object() &&
+            parsed_component_catalog.as_object()
+                    .at("components")
+                    .as_array()
+                    .size() == 1U &&
+            component_catalog.body.find(
+                "\"schema_version\": "
+                "\"thermox.project_component_catalog/v1\"") !=
+                std::string::npos &&
+            component_catalog.body.find(
+                "custom.signal.http_gain") !=
+                std::string::npos &&
+            component_catalog.body.find(component_revision_id) !=
+                std::string::npos,
+        "project component catalog must expose descriptor and "
+        "immutable source revision");
+    require(
+        api.handle(authenticated(
+            {
+                "GET",
+                "/api/v1/projects/" + project.project_id +
+                    "/component-catalog",
+                {},
+                {},
+            },
+            "user-b",
+            "team-b"))
+                .status == 404,
+        "project component catalog must hide cross-Team "
+        "project existence");
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",

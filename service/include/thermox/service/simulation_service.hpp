@@ -684,6 +684,9 @@ public:
         const ValidateModelRequest& request) const;
     [[nodiscard]] CatalogResponse get_catalog(
         const CatalogRequest& request = {}) const;
+    [[nodiscard]] CatalogResponse get_catalog(
+        const SimulationComponentBundle& components,
+        const CatalogRequest& request = {}) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
     [[nodiscard]] CalibrationResponse run_calibration(

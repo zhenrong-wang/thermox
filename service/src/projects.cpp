@@ -1053,6 +1053,61 @@ ProjectService::resolve_artifact_revisions(
     return result;
 }
 
+std::optional<std::vector<ResolvedEngineeringArtifacts>>
+ProjectService::resolve_component_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError(
+            "project ID must not be empty");
+    }
+    if (!repository_->get_project(
+            identity.team_id, project_id)) {
+        return std::nullopt;
+    }
+    std::vector<ArtifactRevisionRecord> revisions;
+    for (const auto& revision :
+         repository_->list_artifact_revisions(
+             identity.team_id, project_id)) {
+        if (revision.artifact_type !=
+            platform::expression_component_artifact_type) {
+            continue;
+        }
+        revisions.push_back(revision);
+    }
+    if (revisions.size() > 512U) {
+        throw ProjectStateError(
+            "project component catalog exceeds the "
+            "512-revision limit");
+    }
+    std::sort(
+        revisions.begin(),
+        revisions.end(),
+        [](const auto& left, const auto& right) {
+            if (left.artifact_id != right.artifact_id) {
+                return left.artifact_id < right.artifact_id;
+            }
+            return left.revision_number >
+                right.revision_number;
+        });
+    std::vector<ResolvedEngineeringArtifacts> result;
+    result.reserve(revisions.size());
+    for (const auto& revision : revisions) {
+        auto resolved = resolve_artifact_revisions(
+            identity,
+            project_id,
+            {revision.artifact_revision_id});
+        if (!resolved) {
+            throw ProjectStateError(
+                "component artifact revision disappeared "
+                "during catalog resolution");
+        }
+        result.push_back(std::move(*resolved));
+    }
+    return result;
+}
+
 RunConfigurationRevisionRecord
 ProjectService::create_run_configuration_revision(
     const CreateRunConfigurationRevisionRequest& request) const {
@@ -1257,6 +1312,68 @@ ProjectModelValidationService::validate(
         artifacts->revisions,
         simulation_.validate_model(validation_request),
     };
+}
+
+ProjectComponentCatalogService::
+    ProjectComponentCatalogService(
+        std::shared_ptr<ProjectService> projects,
+        std::shared_ptr<const SimulationRuntime> runtime)
+    : projects_(std::move(projects)),
+      simulation_(std::move(runtime)) {
+    if (!projects_) {
+        throw std::invalid_argument(
+            "project component catalog requires a project "
+            "service");
+    }
+}
+
+ProjectComponentCatalogResponse
+ProjectComponentCatalogService::get(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    const auto resolved =
+        projects_->resolve_component_revisions(
+            identity, project_id);
+    if (!resolved) {
+        throw ProjectStateError("project was not found");
+    }
+    ProjectComponentCatalogResponse response;
+    response.project_id = project_id;
+    for (const auto& revision : *resolved) {
+        if (revision.components.expression_components.size() !=
+                1U ||
+            revision.revisions.size() != 1U) {
+            throw ProjectStateError(
+                "component catalog revision did not resolve "
+                "to exactly one definition");
+        }
+        const auto catalog =
+            simulation_.get_catalog(revision.components);
+        if (!catalog.succeeded()) {
+            throw ProjectStateError(
+                "project component catalog composition failed: " +
+                catalog.error.message);
+        }
+        const auto& definition =
+            revision.components.expression_components.front();
+        const auto found = std::find_if(
+            catalog.components.begin(),
+            catalog.components.end(),
+            [&](const auto& component) {
+                return component.kind == definition.kind;
+            });
+        if (found == catalog.components.end()) {
+            throw ProjectStateError(
+                "resolved component definition is missing from "
+                "the composed runtime catalog");
+        }
+        response.components.push_back({
+            revision.revisions.front(),
+            *found,
+            catalog.fingerprint,
+        });
+    }
+    return response;
 }
 
 }  // namespace thermox::service

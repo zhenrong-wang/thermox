@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   ArtifactRevision,
   ProjectModelValidation,
@@ -8,6 +8,7 @@ import type {
 interface ValidationPanelProps {
   artifactRevisions: ArtifactRevision[]
   requiredArtifactIds: string[]
+  preferredArtifactRevisionIds: Record<string, string>
   result?: ProjectModelValidation
   validating: boolean
   onValidate: (artifactRevisionIds: string[]) => Promise<void>
@@ -27,6 +28,7 @@ function diagnosticLocation(diagnostic: ValidationDiagnostic) {
 export function ValidationPanel({
   artifactRevisions,
   requiredArtifactIds,
+  preferredArtifactRevisionIds,
   result,
   validating,
   onValidate,
@@ -49,10 +51,30 @@ export function ValidationPanel({
     Object.fromEntries(
       requiredArtifactIds.map((artifactId) => [
         artifactId,
-        revisionsByArtifact.get(artifactId)?.[0]?.artifact_revision_id ?? '',
+        preferredArtifactRevisionIds[artifactId] ??
+          revisionsByArtifact.get(artifactId)?.[0]?.artifact_revision_id ??
+          '',
       ]),
     ),
   )
+  useEffect(() => {
+    setSelections((current) =>
+      Object.fromEntries(
+        requiredArtifactIds.map((artifactId) => [
+          artifactId,
+          preferredArtifactRevisionIds[artifactId] ??
+            current[artifactId] ??
+            revisionsByArtifact.get(artifactId)?.[0]
+              ?.artifact_revision_id ??
+            '',
+        ]),
+      ),
+    )
+  }, [
+    preferredArtifactRevisionIds,
+    requiredArtifactIds,
+    revisionsByArtifact,
+  ])
   const missing = requiredArtifactIds.filter(
     (artifactId) => !selections[artifactId],
   )

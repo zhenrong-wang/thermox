@@ -468,6 +468,8 @@ Work items:
    - Team/project-owned content-addressed revisions, generic HTTP artifact authoring,
      run-configuration binding, integrity-checked resolution, job reconstruction, and execution
      provenance; ✅
+   - project-scoped descriptor discovery, canvas-library integration, and automatic exact
+     definition-revision binding during validation and run authoring; ✅
    - approval policy, compound dimension analysis, property functions, and transient-state
      contracts remain follow-ons.
 8. Map validation and interpolation quality controls.

@@ -64,6 +64,14 @@ together. Resolution verifies content integrity, reconstructs the component bund
 the component artifact revision in job and execution provenance. The worker receives both the
 exact definition and its immutable identity.
 
+`GET /api/v1/projects/{project_id}/component-catalog` resolves the revision history of every
+logical expression-component artifact, composes each definition against the deployed runtime,
+and returns its ordinary component descriptor together with the source artifact revision.
+The browser presents the latest revision of each kind in the runtime component library and labels
+it as project-owned, while retaining historical descriptors so older topology revisions remain
+resolvable. Adding an instance stores the usual `kind` and `version` in topology; validation and
+run-configuration authoring add the matching source revision to the exact artifact set.
+
 Approval policy, dimension algebra across compound expressions, transient equations, constrained
 property functions, and a dedicated visual equation editor require later versioned contracts.
 Arbitrary Python is not part of this path.

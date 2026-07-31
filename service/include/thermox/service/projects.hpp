@@ -27,6 +27,8 @@ inline constexpr char run_configuration_revision_schema_v2[] =
     "thermox.run_configuration_revision/v2";
 inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
+inline constexpr char project_component_catalog_schema_v1[] =
+    "thermox.project_component_catalog/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};
@@ -386,6 +388,19 @@ struct ProjectModelValidationResponse {
     ValidateModelResponse validation;
 };
 
+struct ProjectComponentCatalogEntry {
+    ArtifactRevisionRecord source;
+    ComponentType component;
+    std::string catalog_fingerprint;
+};
+
+struct ProjectComponentCatalogResponse {
+    std::string schema_version{
+        project_component_catalog_schema_v1};
+    std::string project_id;
+    std::vector<ProjectComponentCatalogEntry> components;
+};
+
 class ProjectService {
 public:
     explicit ProjectService(
@@ -459,6 +474,11 @@ public:
         const std::string& project_id,
         const std::vector<std::string>&
             artifact_revision_ids) const;
+    [[nodiscard]] std::optional<
+        std::vector<ResolvedEngineeringArtifacts>>
+    resolve_component_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
     [[nodiscard]] RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const CreateRunConfigurationRevisionRequest&
@@ -503,6 +523,21 @@ private:
     SimulationService simulation_;
 };
 
+class ProjectComponentCatalogService {
+public:
+    ProjectComponentCatalogService(
+        std::shared_ptr<ProjectService> projects,
+        std::shared_ptr<const SimulationRuntime> runtime);
+
+    [[nodiscard]] ProjectComponentCatalogResponse get(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
+
+private:
+    std::shared_ptr<ProjectService> projects_;
+    SimulationService simulation_;
+};
+
 std::string serialize_project_json(
     const ProjectRecord& project);
 std::string serialize_projects_json(
@@ -527,5 +562,7 @@ std::string serialize_run_configuration_revisions_json(
     const std::vector<RunConfigurationRevisionRecord>& revisions);
 std::string serialize_project_model_validation_json(
     const ProjectModelValidationResponse& response);
+std::string serialize_project_component_catalog_json(
+    const ProjectComponentCatalogResponse& response);
 
 }  // namespace thermox::service

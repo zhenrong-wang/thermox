@@ -1288,7 +1288,8 @@ struct Api::Impl {
         : simulation(runtime),
           jobs(std::move(job_service)),
           projects(std::move(project_service)),
-          project_validation(projects, std::move(runtime)),
+          project_validation(projects, runtime),
+          project_components(projects, std::move(runtime)),
           options(api_options) {
         if (options.maximum_body_bytes == 0U) {
             throw std::invalid_argument(
@@ -1308,6 +1309,7 @@ struct Api::Impl {
     std::shared_ptr<service::SimulationJobService> jobs;
     std::shared_ptr<service::ProjectService> projects;
     service::ProjectModelValidationService project_validation;
+    service::ProjectComponentCatalogService project_components;
     ApiOptions options;
 };
 
@@ -1443,8 +1445,28 @@ Response Api::handle(const Request& request) const {
                 suffix.substr(separator);
             constexpr std::string_view artifacts_segment =
                 "/artifact-revisions";
+            constexpr std::string_view component_catalog_segment =
+                "/component-catalog";
             constexpr std::string_view run_configurations_segment =
                 "/run-configuration-revisions";
+            if (remainder == component_catalog_segment) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "project component catalog only "
+                        "supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                return json_response(
+                    200,
+                    service::
+                        serialize_project_component_catalog_json(
+                            impl_->project_components.get(
+                                identity, project_id)));
+            }
             if (remainder == run_configurations_segment) {
                 if (!impl_->projects
                          ->get_project(identity, project_id)) {

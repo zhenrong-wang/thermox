@@ -28,6 +28,7 @@ interface CaseWorkspaceProps {
   operationStatus: string
   artifactRevisions: ArtifactRevision[]
   requiredArtifactIds: string[]
+  preferredArtifactRevisionIds: Record<string, string>
   validationResult?: ProjectModelValidation
   validating: boolean
   onDismissOperation: () => void
@@ -95,6 +96,7 @@ export function CaseWorkspace({
   operationStatus,
   artifactRevisions,
   requiredArtifactIds,
+  preferredArtifactRevisionIds,
   validationResult,
   validating,
   onDismissOperation,
@@ -255,6 +257,9 @@ export function CaseWorkspace({
         <ValidationPanel
           artifactRevisions={artifactRevisions}
           requiredArtifactIds={requiredArtifactIds}
+          preferredArtifactRevisionIds={
+            preferredArtifactRevisionIds
+          }
           result={validationResult}
           validating={validating}
           onValidate={onValidate}

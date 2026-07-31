@@ -643,6 +643,16 @@ code {
   text-transform: uppercase;
 }
 
+.project-badge {
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: #216b54;
+  background: #def2e9;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .component-card strong {
   display: block;
   margin: 4px 0 7px;

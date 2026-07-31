@@ -101,6 +101,9 @@ export function ComponentLibrary({
                 {component.supports_transient && (
                   <span className="transient-badge">transient</span>
                 )}
+                {component.source_artifact_revision_id && (
+                  <span className="project-badge">project</span>
+                )}
               </div>
               <strong>{componentDisplayName(component.kind)}</strong>
               <div className="port-summary">

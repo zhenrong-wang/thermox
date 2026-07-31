@@ -530,6 +530,18 @@ export interface ArtifactRevisionList {
   artifact_revisions: ArtifactRevision[]
 }
 
+export interface ProjectComponentCatalogEntry {
+  source: ArtifactRevision
+  catalog_fingerprint: string
+  component: CatalogComponent
+}
+
+export interface ProjectComponentCatalog {
+  schema_version: 'thermox.project_component_catalog/v1'
+  project_id: string
+  components: ProjectComponentCatalogEntry[]
+}
+
 export interface ComponentDefinition {
   id: string
   label?: string
@@ -580,6 +592,8 @@ export interface CatalogComponent {
     artifact_type: string
     required: boolean
   }>
+  source_artifact_id?: string
+  source_artifact_revision_id?: string
 }
 
 export interface PropertyBackend {
