@@ -1,4 +1,5 @@
 import type {
+  ArtifactRevision,
   ArtifactRevisionList,
   ProjectComponentCatalog,
   Catalog,
@@ -18,6 +19,7 @@ import type {
   SimulationJobPage,
   SimulationResult,
   SimulationJobState,
+  ExpressionComponentDefinition,
 } from './types'
 
 class ApiError extends Error {
@@ -168,6 +170,27 @@ export const api = {
       `/api/v1/projects/${encodeURIComponent(projectId)}/component-catalog`,
       signal,
     ),
+  createExpressionComponentRevision: (
+    projectId: string,
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ExpressionComponentDefinition,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      artifact_id: artifactId,
+      artifact_type: 'thermox.expression_component',
+      artifact_schema_version: 'thermox.expression_component/v1',
+    })
+    if (parentArtifactRevisionId) {
+      query.set('parent_revision_id', parentArtifactRevisionId)
+    }
+    return postJson<ArtifactRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
+      definition,
+      signal,
+    )
+  },
   caseRevisions: (
     projectId: string,
     modelRevisionId: string,

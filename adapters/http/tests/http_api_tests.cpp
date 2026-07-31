@@ -367,10 +367,13 @@ void test_tenant_scoped_asynchronous_jobs() {
             component_catalog.body.find(
                 "custom.signal.http_gain") !=
                 std::string::npos &&
+            component_catalog.body.find(
+                "output.value - parameter.gain * input.value") !=
+                std::string::npos &&
             component_catalog.body.find(component_revision_id) !=
                 std::string::npos,
-        "project component catalog must expose descriptor and "
-        "immutable source revision");
+        "project component catalog must expose editable "
+        "definition, descriptor, and immutable source revision");
     require(
         api.handle(authenticated(
             {

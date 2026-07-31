@@ -53,6 +53,28 @@ const projectEntry: ProjectComponentCatalogEntry = {
       },
     ],
   },
+  definition: {
+    schema_version: 'thermox.expression_component/v1',
+    kind: 'custom.signal.gain',
+    version: '1.0.0',
+    system_boundary_role: '',
+    ports: [
+      {
+        name: 'input',
+        domain: 'signal',
+        direction: 'in',
+        maximum_connections: 1,
+      },
+    ],
+    parameters: [],
+    equations: [
+      {
+        name: 'gain_law',
+        expression: 'input.value',
+        residual_scale: 1,
+      },
+    ],
+  },
 }
 
 const historicalEntry: ProjectComponentCatalogEntry = {
@@ -66,6 +88,10 @@ const historicalEntry: ProjectComponentCatalogEntry = {
   },
   component: {
     ...projectEntry.component,
+    version: '0.9.0',
+  },
+  definition: {
+    ...projectEntry.definition,
     version: '0.9.0',
   },
 }

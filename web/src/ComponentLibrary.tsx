@@ -15,6 +15,8 @@ interface ComponentLibraryProps {
   catalogFingerprint: string
   onChoose: (component: CatalogComponent) => void
   onAddFluid: () => void
+  onDefine: () => void
+  onRevise: (component: CatalogComponent) => void
 }
 
 export function ComponentLibrary({
@@ -25,6 +27,8 @@ export function ComponentLibrary({
   catalogFingerprint,
   onChoose,
   onAddFluid,
+  onDefine,
+  onRevise,
 }: ComponentLibraryProps) {
   const [filter, setFilter] = useState('')
   const visibleComponents = useMemo(
@@ -53,14 +57,24 @@ export function ComponentLibrary({
             <h2>Component library</h2>
             <p>{components.length} registered types</p>
           </div>
-          <button
-            type="button"
-            className="resource-button"
-            disabled={disabled}
-            onClick={onAddFluid}
-          >
-            + Fluid
-          </button>
+          <div className="resource-actions">
+            <button
+              type="button"
+              className="resource-button"
+              disabled={disabled}
+              onClick={onDefine}
+            >
+              + Component
+            </button>
+            <button
+              type="button"
+              className="resource-button"
+              disabled={disabled}
+              onClick={onAddFluid}
+            >
+              + Fluid
+            </button>
+          </div>
         </div>
         <p className="library-instruction">
           Drag a type onto the canvas, or click it, to configure an instance.
@@ -84,37 +98,48 @@ export function ComponentLibrary({
           <p className="library-empty">No registered types match this filter.</p>
         ) : (
           visibleComponents.map((component) => (
-            <button
-              type="button"
-              className="component-card"
-              key={component.kind}
-              disabled={disabled}
-              draggable={!disabled}
-              onDragStart={(event) => beginDrag(event, component)}
-              onClick={() => onChoose(component)}
-              title={`Drag ${component.kind} onto the canvas`}
-            >
-              <div>
-                <span className="kind-family">
-                  {componentFamily(component.kind)}
-                </span>
-                {component.supports_transient && (
-                  <span className="transient-badge">transient</span>
-                )}
-                {component.source_artifact_revision_id && (
-                  <span className="project-badge">project</span>
-                )}
-              </div>
-              <strong>{componentDisplayName(component.kind)}</strong>
-              <div className="port-summary">
-                {component.ports.map((port) => (
-                  <span key={`${port.name}-${port.domain}`}>
-                    <i className={`port-${port.domain}`} />
-                    {port.name}
+            <div className="component-card-shell" key={component.kind}>
+              <button
+                type="button"
+                className="component-card"
+                disabled={disabled}
+                draggable={!disabled}
+                onDragStart={(event) => beginDrag(event, component)}
+                onClick={() => onChoose(component)}
+                title={`Drag ${component.kind} onto the canvas`}
+              >
+                <div>
+                  <span className="kind-family">
+                    {componentFamily(component.kind)}
                   </span>
-                ))}
-              </div>
-            </button>
+                  {component.supports_transient && (
+                    <span className="transient-badge">transient</span>
+                  )}
+                  {component.source_artifact_revision_id && (
+                    <span className="project-badge">project</span>
+                  )}
+                </div>
+                <strong>{componentDisplayName(component.kind)}</strong>
+                <div className="port-summary">
+                  {component.ports.map((port) => (
+                    <span key={`${port.name}-${port.domain}`}>
+                      <i className={`port-${port.domain}`} />
+                      {port.name}
+                    </span>
+                  ))}
+                </div>
+              </button>
+              {component.source_artifact_revision_id && (
+                <button
+                  type="button"
+                  className="component-revise-button"
+                  disabled={disabled}
+                  onClick={() => onRevise(component)}
+                >
+                  Revise
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>

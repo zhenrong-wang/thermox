@@ -344,6 +344,74 @@ void component_type_json(
     out << "]}";
 }
 
+void expression_component_json(
+    std::ostringstream& out,
+    const ExpressionComponentInput& definition) {
+    out << "{\"schema_version\": ";
+    json_string(out, definition.schema_version);
+    out << ", \"kind\": ";
+    json_string(out, definition.kind);
+    out << ", \"version\": ";
+    json_string(out, definition.version);
+    out << ", \"system_boundary_role\": ";
+    json_string(out, definition.system_boundary_role);
+    out << ", \"ports\": [";
+    for (std::size_t index = 0;
+         index < definition.ports.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& port = definition.ports[index];
+        out << "{\"name\": ";
+        json_string(out, port.name);
+        out << ", \"domain\": ";
+        json_string(out, port.domain);
+        out << ", \"direction\": ";
+        json_string(out, port.direction);
+        out << ", \"maximum_connections\": "
+            << port.maximum_connections << '}';
+    }
+    out << "], \"parameters\": [";
+    for (std::size_t index = 0;
+         index < definition.parameters.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& parameter = definition.parameters[index];
+        out << "{\"name\": ";
+        json_string(out, parameter.name);
+        out << ", \"dimension\": ";
+        json_string(out, parameter.dimension);
+        out << ", \"required\": "
+            << (parameter.required ? "true" : "false")
+            << ", \"default_value_si\": ";
+        if (parameter.default_value_si) {
+            json_number(out, *parameter.default_value_si);
+        } else {
+            out << "null";
+        }
+        out << ", \"lower_bound\": ";
+        json_number(out, parameter.lower_bound);
+        out << ", \"upper_bound\": ";
+        json_number(out, parameter.upper_bound);
+        out << ", \"lower_inclusive\": "
+            << (parameter.lower_inclusive ? "true" : "false")
+            << ", \"upper_inclusive\": "
+            << (parameter.upper_inclusive ? "true" : "false")
+            << '}';
+    }
+    out << "], \"equations\": [";
+    for (std::size_t index = 0;
+         index < definition.equations.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& equation = definition.equations[index];
+        out << "{\"name\": ";
+        json_string(out, equation.name);
+        out << ", \"expression\": ";
+        json_string(out, equation.expression);
+        out << ", \"residual_scale\": ";
+        json_number(out, equation.residual_scale);
+        out << '}';
+    }
+    out << "]}";
+}
+
 void run_configuration_revision_json(
     std::ostringstream& out,
     const RunConfigurationRevisionRecord& revision) {
@@ -596,6 +664,8 @@ std::string serialize_project_component_catalog_json(
         json_string(out, entry.catalog_fingerprint);
         out << ", \"component\": ";
         component_type_json(out, entry.component);
+        out << ", \"definition\": ";
+        expression_component_json(out, entry.definition);
         out << '}';
     }
     out << "]}\n";

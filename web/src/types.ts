@@ -534,12 +534,41 @@ export interface ProjectComponentCatalogEntry {
   source: ArtifactRevision
   catalog_fingerprint: string
   component: CatalogComponent
+  definition: ExpressionComponentDefinition
 }
 
 export interface ProjectComponentCatalog {
   schema_version: 'thermox.project_component_catalog/v1'
   project_id: string
   components: ProjectComponentCatalogEntry[]
+}
+
+export interface ExpressionComponentDefinition {
+  schema_version: 'thermox.expression_component/v1'
+  kind: string
+  version: string
+  system_boundary_role: string
+  ports: Array<{
+    name: string
+    domain: string
+    direction: 'in' | 'out' | 'bidirectional'
+    maximum_connections: number
+  }>
+  parameters: Array<{
+    name: string
+    dimension: string
+    required: boolean
+    default_value_si: number | null
+    lower_bound: number | null
+    upper_bound: number | null
+    lower_inclusive: boolean
+    upper_inclusive: boolean
+  }>
+  equations: Array<{
+    name: string
+    expression: string
+    residual_scale: number
+  }>
 }
 
 export interface ComponentDefinition {

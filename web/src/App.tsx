@@ -8,6 +8,7 @@ import { ComponentForm } from './ComponentForm'
 import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
 import { useDisplayUnits } from './DisplayUnitsContext'
+import { ExpressionComponentForm } from './ExpressionComponentForm'
 import {
   buildConnectionOperation,
   type ConnectionIntent,
@@ -89,6 +90,9 @@ function App() {
     useState<ConnectionDefinition>()
   const [selection, setSelection] = useState<GraphSelection>()
   const [addingMedium, setAddingMedium] = useState(false)
+  const [definingComponent, setDefiningComponent] = useState(false)
+  const [revisingComponent, setRevisingComponent] =
+    useState<ProjectComponentCatalogEntry>()
   const [addingCase, setAddingCase] = useState(false)
   const [casePublishing, setCasePublishing] = useState(false)
   const [caseOperationError, setCaseOperationError] = useState('')
@@ -589,6 +593,44 @@ function App() {
       `Added fluid ${medium.id}.`,
     )
     setAddingMedium(false)
+  }
+
+  async function publishExpressionComponent(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ProjectComponentCatalogEntry['definition'],
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before defining a component.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createExpressionComponentRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const [artifacts, components] = await Promise.all([
+        api.artifactRevisions(selectedProjectId),
+        api.projectComponentCatalog(selectedProjectId),
+      ])
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setProjectComponents(components.components)
+      setDefiningComponent(false)
+      setRevisingComponent(undefined)
+      setOperationStatus(
+        `Published ${definition.kind} ${definition.version} as ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
   }
 
   async function createCase(document: CaseDocument) {
@@ -1333,6 +1375,17 @@ function App() {
                     }
                     onChoose={setNewComponentType}
                     onAddFluid={() => setAddingMedium(true)}
+                    onDefine={() => setDefiningComponent(true)}
+                    onRevise={(component) => {
+                      const sourceRevisionId =
+                        component.source_artifact_revision_id
+                      const entry = projectComponents.find(
+                        (candidate) =>
+                          candidate.source.artifact_revision_id ===
+                          sourceRevisionId,
+                      )
+                      if (entry) setRevisingComponent(entry)
+                    }}
                   />
                 )}
               </div>
@@ -1421,6 +1474,25 @@ function App() {
           onSubmit={addMedium}
         />
       )}
+      {workspaceView === 'topology' &&
+        (definingComponent || revisingComponent) &&
+        catalog && (
+          <ExpressionComponentForm
+            key={
+              revisingComponent
+                ? `revise-component-${revisingComponent.source.artifact_revision_id}`
+                : 'define-component'
+            }
+            connectorDomains={catalog.connector_domains}
+            unitDimensions={catalog.unit_dimensions}
+            base={revisingComponent}
+            onCancel={() => {
+              setDefiningComponent(false)
+              setRevisingComponent(undefined)
+            }}
+            onSubmit={publishExpressionComponent}
+          />
+        )}
       {addingCase && (
         <CaseCreateForm
           revisions={caseRevisions}

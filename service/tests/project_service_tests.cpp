@@ -320,8 +320,9 @@ std::string performance_map_payload() {
 })json";
 }
 
-std::string expression_component_payload() {
-    return R"json({
+std::string expression_component_payload(
+    const std::string& version = "1.0.0") {
+    auto payload = std::string{R"json({
   "kind": "custom.signal.persisted_gain",
   "version": "1.0.0",
   "ports": [
@@ -345,7 +346,12 @@ std::string expression_component_payload() {
       "residual_scale": 1.0
     }
   ]
-})json";
+})json"};
+    payload.replace(
+        payload.find("\"version\": \"1.0.0\""),
+        std::string{"\"version\": \"1.0.0\""}.size(),
+        "\"version\": \"" + version + "\"");
+    return payload;
 }
 
 void test_expression_component_artifact_is_executable() {
@@ -397,10 +403,15 @@ void test_expression_component_artifact_is_executable() {
                 revision.artifact_revision_id &&
             discovered.components.front().component.kind ==
                 "custom.signal.persisted_gain" &&
+            discovered.components.front().definition.kind ==
+                "custom.signal.persisted_gain" &&
+            discovered.components.front().definition.equations
+                    .size() == 1U &&
             !discovered.components.front()
                  .catalog_fingerprint.empty(),
-        "project component discovery must pair a runtime "
-        "descriptor with its exact immutable source revision");
+        "project component discovery must pair its editable "
+        "definition and runtime descriptor with the exact "
+        "immutable source revision");
     const auto latest_revision =
         projects->create_artifact_revision({
             team_a,
@@ -409,7 +420,7 @@ void test_expression_component_artifact_is_executable() {
             revision.artifact_revision_id,
             "thermox.expression_component",
             "thermox.expression_component/v1",
-            expression_component_payload(),
+            expression_component_payload("1.0.1"),
         });
     const auto refreshed =
         component_catalog.get(team_a, project.project_id);
@@ -417,9 +428,44 @@ void test_expression_component_artifact_is_executable() {
         refreshed.components.size() == 2U &&
             refreshed.components.front().source
                     .artifact_revision_id ==
-                latest_revision.artifact_revision_id,
+                latest_revision.artifact_revision_id &&
+            refreshed.components.front().definition.version ==
+                "1.0.1",
         "project component discovery must expose the latest "
         "immutable revision of each logical definition");
+    bool duplicate_version_rejected = false;
+    try {
+        (void)projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "persisted-gain",
+            latest_revision.artifact_revision_id,
+            "thermox.expression_component",
+            "thermox.expression_component/v1",
+            expression_component_payload("1.0.1"),
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        duplicate_version_rejected = true;
+    }
+    bool duplicate_kind_rejected = false;
+    try {
+        (void)projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "second-gain-artifact",
+            {},
+            "thermox.expression_component",
+            "thermox.expression_component/v1",
+            expression_component_payload("2.0.0"),
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        duplicate_kind_rejected = true;
+    }
+    require(
+        duplicate_version_rejected &&
+            duplicate_kind_rejected,
+        "component authoring must reserve one logical artifact "
+        "per kind and one immutable revision per kind/version");
 
     const auto model = projects->create_model_revision({
         team_a,

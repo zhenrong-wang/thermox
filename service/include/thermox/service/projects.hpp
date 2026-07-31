@@ -391,6 +391,7 @@ struct ProjectModelValidationResponse {
 struct ProjectComponentCatalogEntry {
     ArtifactRevisionRecord source;
     ComponentType component;
+    ExpressionComponentInput definition;
     std::string catalog_fingerprint;
 };
 

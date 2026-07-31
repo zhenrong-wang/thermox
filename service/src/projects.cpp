@@ -914,6 +914,57 @@ ProjectService::create_artifact_revision(
             std::string("invalid engineering artifact: ") +
             error.what());
     }
+    if (request.artifact_type ==
+        platform::expression_component_artifact_type) {
+        const auto candidate =
+            detail::expression_component_from_payload(
+                request.artifact_schema_version, canonical);
+        for (const auto& revision :
+             repository_->list_artifact_revisions(
+                 request.identity.team_id,
+                 request.project_id)) {
+            if (revision.artifact_type !=
+                platform::expression_component_artifact_type) {
+                continue;
+            }
+            const auto payload =
+                artifact_content_->get(revision.content);
+            if (!payload ||
+                payload->size() != revision.content.byte_size ||
+                checksum(*payload) != revision.content.checksum) {
+                throw ProjectStateError(
+                    "persisted component definition failed "
+                    "integrity verification");
+            }
+            const auto existing =
+                detail::expression_component_from_payload(
+                    revision.artifact_schema_version,
+                    *payload);
+            if (revision.artifact_id == request.artifact_id &&
+                existing.kind != candidate.kind) {
+                throw ProjectRequestError(
+                    "a component artifact cannot change kind "
+                    "across revisions: " +
+                    request.artifact_id);
+            }
+            if (existing.kind != candidate.kind) {
+                continue;
+            }
+            if (revision.artifact_id != request.artifact_id) {
+                throw ProjectRequestError(
+                    "component kind is already owned by "
+                    "another project artifact: " +
+                    candidate.kind);
+            }
+            if (existing.version == candidate.version) {
+                throw ProjectRequestError(
+                    "component kind/version must be unique "
+                    "across immutable revisions: " +
+                    candidate.kind + " " +
+                    candidate.version);
+            }
+        }
+    }
     const auto expected_checksum = checksum(canonical);
     auto content = artifact_content_->put_json(
         request.identity.team_id,
@@ -1370,6 +1421,7 @@ ProjectComponentCatalogService::get(
         response.components.push_back({
             revision.revisions.front(),
             *found,
+            definition,
             catalog.fingerprint,
         });
     }

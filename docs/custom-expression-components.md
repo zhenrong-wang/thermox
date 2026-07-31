@@ -71,7 +71,11 @@ The browser presents the latest revision of each kind in the runtime component l
 it as project-owned, while retaining historical descriptors so older topology revisions remain
 resolvable. Adding an instance stores the usual `kind` and `version` in topology; validation and
 run-configuration authoring add the matching source revision to the exact artifact set.
+The canvas library can publish a safe definition or revise a project-owned definition through
+this same service contract. Revisions preserve the logical artifact and component kind, and must
+publish a new component version. The service rejects duplicate project kinds and reused
+kind/version pairs so an older topology cannot silently resolve to changed equations.
 
 Approval policy, dimension algebra across compound expressions, transient equations, constrained
-property functions, and a dedicated visual equation editor require later versioned contracts.
+property functions, and richer equation syntax assistance require later versioned contracts.
 Arbitrary Python is not part of this path.

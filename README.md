@@ -449,7 +449,9 @@ definitions through `thermox.expression_component/v1`. Expressions use registere
 variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
 arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v6`. Project-owned
 definitions are discovered from the project component catalog and appear directly in the canvas
-library with automatic source-revision binding. See
+library with automatic source-revision binding. The library also authors and revises safe
+definitions as immutable project artifacts; component identity/version rules are enforced by the
+service rather than the browser. See
 [Safe expression components](docs/custom-expression-components.md).
 
 ## Next steps
