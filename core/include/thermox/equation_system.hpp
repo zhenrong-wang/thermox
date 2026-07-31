@@ -68,6 +68,7 @@ public:
                              double scale,
                              double lower_bound,
                              double upper_bound);
+    void mark_initialization_anchor(std::size_t variable);
     std::size_t add_equation(std::string name, EquationCallback evaluate, double scale = 1.0);
     std::size_t add_checked_equation(std::string name,
                                      CheckedEquationCallback evaluate,
@@ -119,6 +120,9 @@ public:
         double target_rhs,
         ContinuationSparseEquationCallback assemble,
         double scale = 1.0);
+    void add_initialization_relation(
+        std::vector<LinearTerm> terms,
+        double rhs);
     [[nodiscard]] LinearEquationRelation classify_linear_equation(
         const std::vector<LinearTerm>& terms,
         double rhs,
@@ -143,6 +147,10 @@ private:
         std::map<std::size_t, double> coefficients;
         double rhs{0.0};
     };
+    struct InitializationLinearEquation {
+        std::vector<LinearTerm> terms;
+        double rhs{0.0};
+    };
 
     [[nodiscard]] LinearReduction reduce_linear_equation(
         const std::vector<LinearTerm>& terms,
@@ -151,10 +159,16 @@ private:
     void record_linear_equation_if_independent(
         const std::vector<LinearTerm>& terms,
         double rhs);
+    [[nodiscard]] std::vector<double>
+    propagated_initial_guess() const;
 
     VariableRegistry registry_;
     std::vector<Equation> equations_;
     std::vector<LinearBasisRow> linear_basis_;
+    std::vector<bool> initialization_anchors_;
+    std::vector<InitializationLinearEquation>
+        initialization_linear_equations_;
+    bool linear_initialization_enabled_{false};
 };
 
 }  // namespace thermox

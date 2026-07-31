@@ -1135,6 +1135,57 @@ void test_linear_equation_relation_classification() {
         "new absolute specification should remain independent");
 }
 
+void test_linear_initialization_propagates_from_explicit_anchor() {
+    thermox::EquationSystemBuilder system;
+    const auto source =
+        system.add_variable("source", 5.0, 1.0);
+    const auto connected =
+        system.add_variable("connected", 0.0, 1.0);
+    const auto transformed =
+        system.add_variable("transformed", 0.0, 1.0);
+    require_throws_invalid_argument(
+        [&]() {
+            system.mark_initialization_anchor(3);
+        },
+        "initialization anchors reject unknown variables");
+    require_throws_invalid_argument(
+        [&]() {
+            system.add_initialization_relation(
+                {{source, 1.0}, {source, -1.0}}, 0.0);
+        },
+        "initialization relations reject zero rows");
+    system.mark_initialization_anchor(source);
+
+    // Deliberately declare these in reverse propagation order.
+    system.add_linear_equation(
+        "transform",
+        {{transformed, 1.0}, {connected, -2.0}},
+        0.0);
+    system.add_initialization_relation(
+        {{transformed, 1.0}, {connected, -2.0}},
+        0.0);
+    system.add_linear_equation(
+        "connection",
+        {{connected, 1.0}, {source, -1.0}},
+        0.0);
+    system.add_initialization_relation(
+        {{connected, 1.0}, {source, -1.0}},
+        0.0);
+    system.add_linear_equation(
+        "target_boundary", {{source, 1.0}}, 10.0);
+
+    const auto problem = system.build();
+    require_near(
+        problem.initial_guess.at(source), 5.0, 0.0,
+        "explicit initialization anchor is preserved");
+    require_near(
+        problem.initial_guess.at(connected), 5.0, 0.0,
+        "connection seed propagates from explicit anchor");
+    require_near(
+        problem.initial_guess.at(transformed), 10.0, 0.0,
+        "linear component seed propagates over repeated sweeps");
+}
+
 }  // namespace
 
 int main() {
@@ -1175,6 +1226,7 @@ int main() {
         test_compiled_sparse_equation_system_builder();
         test_compiled_sparse_equation_duplicates_accumulate();
         test_linear_equation_relation_classification();
+        test_linear_initialization_propagates_from_explicit_anchor();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

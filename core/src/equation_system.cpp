@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -48,7 +49,10 @@ std::map<std::size_t, double> aggregate_terms(
 std::size_t EquationSystemBuilder::add_variable(std::string name,
                                                 double initial_value,
                                                 double scale) {
-    return registry_.add_variable(std::move(name), initial_value, scale);
+    const auto index = registry_.add_variable(
+        std::move(name), initial_value, scale);
+    initialization_anchors_.push_back(false);
+    return index;
 }
 
 std::size_t EquationSystemBuilder::add_variable(std::string name,
@@ -56,7 +60,21 @@ std::size_t EquationSystemBuilder::add_variable(std::string name,
                                                 double scale,
                                                 double lower_bound,
                                                 double upper_bound) {
-    return registry_.add_variable(std::move(name), initial_value, scale, lower_bound, upper_bound);
+    const auto index = registry_.add_variable(
+        std::move(name), initial_value, scale,
+        lower_bound, upper_bound);
+    initialization_anchors_.push_back(false);
+    return index;
+}
+
+void EquationSystemBuilder::mark_initialization_anchor(
+    std::size_t variable) {
+    if (variable >= initialization_anchors_.size()) {
+        throw std::invalid_argument(
+            "initialization anchor variable index out of range");
+    }
+    initialization_anchors_.at(variable) = true;
+    linear_initialization_enabled_ = true;
 }
 
 std::size_t EquationSystemBuilder::add_equation(std::string name,
@@ -419,6 +437,29 @@ std::size_t EquationSystemBuilder::add_continuation_linear_equation(
         std::move(assemble), scale);
 }
 
+void EquationSystemBuilder::add_initialization_relation(
+    std::vector<LinearTerm> terms,
+    double rhs) {
+    if (!std::isfinite(rhs)) {
+        throw std::invalid_argument(
+            "initialization relation rhs must be finite");
+    }
+    const auto coefficients = aggregate_terms(
+        terms, registry_.variables().size());
+    if (coefficients.empty()) {
+        throw std::invalid_argument(
+            "initialization relation must contain a nonzero "
+            "coefficient");
+    }
+    terms.clear();
+    terms.reserve(coefficients.size());
+    for (const auto& [variable, coefficient] : coefficients) {
+        terms.push_back({variable, coefficient});
+    }
+    initialization_linear_equations_.push_back(
+        {std::move(terms), rhs});
+}
+
 LinearEquationRelation EquationSystemBuilder::classify_linear_equation(
     const std::vector<LinearTerm>& terms,
     double rhs,
@@ -529,6 +570,67 @@ void EquationSystemBuilder::record_linear_equation_if_independent(
             reduced.rhs});
 }
 
+std::vector<double>
+EquationSystemBuilder::propagated_initial_guess() const {
+    auto initial = registry_.initial_guess();
+    if (!linear_initialization_enabled_) {
+        return initial;
+    }
+    auto informed = initialization_anchors_;
+    const auto& variables = registry_.variables();
+    for (std::size_t sweep = 0;
+         sweep < variables.size(); ++sweep) {
+        bool changed = false;
+        for (const auto& equation :
+             initialization_linear_equations_) {
+            std::size_t unknown =
+                std::numeric_limits<std::size_t>::max();
+            std::size_t unknown_count = 0;
+            double known_sum = 0.0;
+            for (const auto& term : equation.terms) {
+                if (!informed.at(term.variable)) {
+                    unknown = term.variable;
+                    ++unknown_count;
+                    continue;
+                }
+                known_sum +=
+                    term.coefficient *
+                    initial.at(term.variable);
+            }
+            if (unknown_count != 1) {
+                continue;
+            }
+            const auto term = std::find_if(
+                equation.terms.begin(),
+                equation.terms.end(),
+                [unknown](const auto& candidate) {
+                    return candidate.variable == unknown;
+                });
+            if (term == equation.terms.end()) {
+                throw std::logic_error(
+                    "initialization relation lost its unknown");
+            }
+            const double value =
+                (equation.rhs - known_sum) /
+                term->coefficient;
+            const auto& descriptor =
+                variables.at(unknown);
+            if (!std::isfinite(value) ||
+                value < descriptor.lower_bound ||
+                value > descriptor.upper_bound) {
+                continue;
+            }
+            initial.at(unknown) = value;
+            informed.at(unknown) = true;
+            changed = true;
+        }
+        if (!changed) {
+            break;
+        }
+    }
+    return initial;
+}
+
 NonlinearProblem EquationSystemBuilder::build() const {
     if (registry_.variables().empty()) {
         throw std::invalid_argument("equation system must contain at least one variable");
@@ -543,7 +645,7 @@ NonlinearProblem EquationSystemBuilder::build() const {
     NonlinearProblem problem;
     problem.variable_names = registry_.variable_names();
     problem.residual_names = registry_.residual_names();
-    problem.initial_guess = registry_.initial_guess();
+    problem.initial_guess = propagated_initial_guess();
     problem.variable_scales = registry_.variable_scales();
     problem.residual_scales = registry_.residual_scales();
     problem.lower_bounds = registry_.lower_bounds();

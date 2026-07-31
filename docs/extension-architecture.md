@@ -53,6 +53,12 @@ rules above the generic connector registry. Custom domains receive generic equal
 and graph-native primary results; domain-specific balance or derived-property evaluators can be
 added independently.
 
+Connector equality rows are also registered as initialization relations. An explicit case value
+on either endpoint therefore seeds the other endpoint while preserving values explicitly supplied
+on both sides. Native components may add their own linear initialization relations through
+`EquationSystemBuilder`, but this is opt-in and should only be used when the relation is safe for
+the component's entire target and continuation contract.
+
 ## Runtime identity
 
 Connector and unit descriptors plus native-extension package identities participate in the

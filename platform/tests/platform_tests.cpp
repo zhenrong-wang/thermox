@@ -1257,14 +1257,26 @@ void test_generic_model_compiles_to_connection_equations() {
             "property-aware graph provides mixed sparse Jacobian assembly");
 
     bool saw_pressure_guess = false;
+    bool saw_propagated_mass_flow = false;
     for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
         if (graph.problem.variable_names.at(i) == "compressor.inlet.p") {
             require_near(graph.problem.initial_guess.at(i), 100000.0, 1.0e-9,
                          "case initial guess should seed compiled variable");
             saw_pressure_guess = true;
+        } else if (
+            graph.problem.variable_names.at(i) ==
+            "compressor.inlet.m_dot") {
+            require_near(
+                graph.problem.initial_guess.at(i), 100.0,
+                1.0e-12,
+                "fixed source flow should seed the connected port");
+            saw_propagated_mass_flow = true;
         }
     }
     require(saw_pressure_guess, "compiled variables should include compressor inlet pressure");
+    require(
+        saw_propagated_mass_flow,
+        "compiled variables should include propagated inlet flow");
 
     std::vector<double> residual(graph.problem.residual_names.size(), 0.0);
     std::vector<double> x = graph.problem.initial_guess;
@@ -1277,7 +1289,19 @@ void test_generic_model_compiles_to_connection_equations() {
         }
     }
     graph.problem.residual(x, residual);
-    require_near(residual.at(0), 0.0, 1.0e-12, "mass-flow connection residual");
+    const auto mass_connection = std::find(
+        graph.problem.residual_names.begin(),
+        graph.problem.residual_names.end(),
+        "connection.air_link.m_dot");
+    require(
+        mass_connection != graph.problem.residual_names.end(),
+        "compiled graph exposes mass-flow connection residual");
+    require_near(
+        residual.at(static_cast<std::size_t>(
+            std::distance(
+                graph.problem.residual_names.begin(),
+                mass_connection))),
+        0.0, 1.0e-12, "mass-flow connection residual");
 }
 
 

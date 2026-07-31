@@ -1205,13 +1205,19 @@ CompiledModelGraph compile_model_graph(
                 const std::string full_name =
                     variable_key(component.id, port.name, spec.name);
                 double initial = spec.initial_value;
+                bool initialization_anchor = false;
                 if (const auto value = case_scalar_value(active_case, full_name, false)) {
                     initial = *value;
+                    initialization_anchor = true;
                     seen_case_keys.insert(full_name);
                 } else if (const auto fixed = case_scalar_value(active_case, full_name, true)) {
                     initial = *fixed;
+                    initialization_anchor = true;
                 }
                 const std::size_t index = system.add_variable(full_name, initial, spec.scale);
+                if (initialization_anchor) {
+                    system.mark_initialization_anchor(index);
+                }
                 variable_indices.emplace(full_name, index);
                 context.port_variables.emplace(
                     port.name + "." + spec.name, index);
@@ -1252,6 +1258,7 @@ CompiledModelGraph compile_model_graph(
             const std::vector<LinearTerm> terms{
                 {from_it->second, 1.0},
                 {to_it->second, -1.0}};
+            system.add_initialization_relation(terms, 0.0);
             if (system.classify_linear_equation(terms, 0.0) ==
                 LinearEquationRelation::redundant) {
                 graph.reduced_connection_equations.push_back(

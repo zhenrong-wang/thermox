@@ -31,6 +31,8 @@ Implemented in this sprint:
 
 - CMake-based C++20 equation-solver core library and CLI runner.
 - Generic equation-system builder for declaring variables, residual equations, scaling, bounds, and initial guesses independent of any cycle type.
+- Topology-aware initialization propagates fixed values and explicit guesses across typed
+  connections without overwriting user anchors or embedding cycle-specific traversal.
 - Generic DAE equation-system builder for differential/algebraic variables, accumulation equations,
   derivative scaling, bounds, checked evaluation, and fixed sparse Jacobians.
 - Variable and residual registries for equation-system assembly metadata.

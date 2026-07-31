@@ -286,7 +286,9 @@ Next:
    provenance. ✅
 5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
 6. Add topology-aware/continuation initialization for large reacting graphs so calibration
-   candidates begin from component-consistent neighboring states. ✅
+   candidates begin from component-consistent neighboring states. ✅ *(connector-domain
+   propagation now removes duplicate port guesses; component-owned nonlinear seed policies remain
+   explicit continuation hooks)*
 7. Calibrate only designated baseline cases, freeze the fitted canonical model, and predict
    independent cases through a leakage-guarded engineering-study service. ✅
 8. Add composition-preserving material split/mix routing for compressor bleed and cooling-air

@@ -17,6 +17,15 @@ domains reuse these contracts without adding domain concepts to the numeric modu
 incrementally maintained sparse row basis. The builder does not silently remove rows; the platform
 compiler uses this information only for generated connection equations at closed-loop boundaries.
 
+The builder also supports explicit linear initialization relations. Graph compilation treats case
+fixed values and user initial guesses as immutable initialization anchors, then repeatedly
+propagates an anchored value across connector equality relations when exactly one endpoint is not
+yet informed. This initializes connected fluid, material-species, shaft, electrical, heat, signal,
+and custom-domain variables without cycle-specific traversal or a dense auxiliary solve. Explicit
+guesses are never overwritten. Component equations do not participate implicitly: a component
+extension must deliberately publish a safe initialization relation so its continuation policy and
+physical branch selection cannot be changed accidentally.
+
 ## Steady nonlinear contract
 
 `NonlinearProblem` carries names, initial values, physical bounds, variable/residual scales, and
