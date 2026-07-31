@@ -426,7 +426,10 @@ stop a worker after its current calculation.
 
 The first React/TypeScript client lives in `web/`. It is a thin, system-agnostic interface over the
 HTTP service: project and immutable revision browsing, topology rendering with typed catalog ports,
-and a searchable runtime-generated component palette. It contains no physics, compiler, or solver
+and a searchable runtime-generated component palette. Its system-driven workflow leads from draft
+topology through engineering definition and authoritative service compilation to calculation and
+result analysis. The browser reports a system as calculatable only when the exact selected model,
+case, and artifact revisions compile successfully. It contains no physics, compiler, or solver
 logic.
 
 With the durable API running on its default loopback address:

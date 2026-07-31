@@ -30,6 +30,11 @@ import {
   resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import { TopologyCanvas } from './TopologyCanvas'
+import { WorkflowNavigator } from './WorkflowNavigator'
+import {
+  buildWorkflowStages,
+  type WorkspaceView,
+} from './workflow'
 import type {
   ArtifactRevision,
   Catalog,
@@ -60,7 +65,7 @@ function App() {
     setUnitDimensions,
   } = useDisplayUnits()
   const [workspaceView, setWorkspaceView] =
-    useState<'topology' | 'cases' | 'runs' | 'results'>('topology')
+    useState<WorkspaceView>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -445,6 +450,37 @@ function App() {
   const activeJobCount = simulationJobs.filter(
     (job) => job.state === 'queued' || job.state === 'running',
   ).length
+  const succeededJobCount = simulationJobs.filter(
+    (job) => job.state === 'succeeded',
+  ).length
+  const exactRevisionCompiled = Boolean(
+    selectedCaseRevision &&
+      validationMatchesExecutionSelection(
+        validationResult,
+        selectedRevisionId,
+        selectedCaseRevision.case_revision_id,
+        selectedArtifactRevisionIds,
+      ),
+  )
+  const unresolvedArtifactCount = Math.max(
+    0,
+    requiredArtifactIds.length - selectedArtifactRevisionIds.length,
+  )
+  const workflowStages = buildWorkflowStages({
+    componentCount: topology?.model.components.length ?? 0,
+    connectionCount: topology?.model.connections.length ?? 0,
+    mediumCount: topology?.model.media.length ?? 0,
+    hasCase: Boolean(selectedCaseRevision),
+    unresolvedArtifactCount,
+    compiled: exactRevisionCompiled,
+    variableCount:
+      validationResult?.validation.compilation.variable_count ?? 0,
+    equationCount:
+      validationResult?.validation.compilation.equation_count ?? 0,
+    runConfigurationCount: visibleRunConfigurations.length,
+    activeJobCount,
+    succeededJobCount,
+  })
 
   useEffect(() => {
     if (
@@ -1153,44 +1189,12 @@ function App() {
               ↻
             </button>
           </div>
-          <nav>
-            <button
-              className={
-                workspaceView === 'topology' ? 'nav-item active' : 'nav-item'
-              }
-              onClick={() => setWorkspaceView('topology')}
-            >
-              <span className="nav-icon">⌘</span>
-              Topology
-            </button>
-            <button
-              className={
-                workspaceView === 'cases' ? 'nav-item active' : 'nav-item'
-              }
-              onClick={() => setWorkspaceView('cases')}
-            >
-              <span className="nav-icon">◇</span>
-              Cases
-            </button>
-            <button
-              className={
-                workspaceView === 'runs' ? 'nav-item active' : 'nav-item'
-              }
-              onClick={() => setWorkspaceView('runs')}
-            >
-              <span className="nav-icon">▶</span>
-              Runs
-            </button>
-            <button
-              className={
-                workspaceView === 'results' ? 'nav-item active' : 'nav-item'
-              }
-              onClick={() => setWorkspaceView('results')}
-            >
-              <span className="nav-icon">▥</span>
-              Results
-            </button>
-          </nav>
+          <WorkflowNavigator
+            currentView={workspaceView}
+            stages={workflowStages}
+            calculatable={exactRevisionCompiled}
+            onSelect={setWorkspaceView}
+          />
           <div className="project-summary">
             <span>Current project</span>
             <strong>{selectedProject?.name ?? 'No project'}</strong>
