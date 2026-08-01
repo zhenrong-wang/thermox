@@ -444,6 +444,58 @@ void test_tenant_scoped_asynchronous_jobs() {
     const auto study_revision_id =
         study_created.headers.at("Location").substr(
             study_created.headers.at("Location").find_last_of('/') + 1U);
+    auto calibration_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/calibration-revisions",
+        std::string{
+            R"({"schema_version":)"
+            R"("thermox.calibration_revision.create/v1",)"
+            R"("calibration_id":"http-acceptance-fit",)"
+            R"("model_revision_id":")"} +
+            model.model_revision_id +
+            R"(","training_study_revision_ids":[")" +
+            study_revision_id +
+            R"("],"validation_study_revision_ids":[],)"
+            R"("definition":{"schema_version":"thermox.calibration/v1",)"
+            R"("calibration":{"id":"http-acceptance-fit",)"
+            R"("parameters":[{"id":"efficiency","scope":"component",)"
+            R"("targets":["components.compressor.parameters.eta_is"],)"
+            R"("cases":["design"],"bounds":{"lower":0.75,"upper":0.95}}],)"
+            R"("observations":[{"id":"shaft-power","case":"design",)"
+            R"("target":"compressor.shaft.W_dot",)"
+            R"("measured":{"value":35.0,"unit":"MW"},)"
+            R"("sigma":{"value":0.5,"unit":"MW"}}]}},)"
+            R"("solver":{"max_iterations":11}})");
+    const auto calibration_created = api.handle(
+        authenticated(std::move(calibration_upload)));
+    require(
+        calibration_created.status == 201 &&
+            calibration_created.headers.contains("Location") &&
+            calibration_created.body.find(
+                "\"max_iterations\": 11") != std::string::npos &&
+            calibration_created.body.find(study_revision_id) !=
+                std::string::npos,
+        "calibration routes must bind immutable training Studies: " +
+            std::to_string(calibration_created.status) + " " +
+            calibration_created.body);
+    const auto calibration_detail = api.handle(authenticated({
+        "GET", calibration_created.headers.at("Location"), {}, {},
+    }));
+    const auto calibration_history = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/calibration-revisions",
+        {}, {},
+    }));
+    require(
+        calibration_detail.status == 200 &&
+            calibration_history.status == 200 &&
+            calibration_history.body.find("http-acceptance-fit") !=
+                std::string::npos &&
+            api.handle(authenticated(
+                {"GET", calibration_created.headers.at("Location"), {}, {}},
+                "user-b", "team-b")).status == 404,
+        "calibration revisions must support scoped detail and history reads");
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",

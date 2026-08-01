@@ -7,6 +7,9 @@ import type {
   CaseEditOperation,
   CaseRevision,
   CaseRevisionList,
+  CalibrationRevision,
+  CalibrationRevisionList,
+  CreateCalibrationRevision,
   CreateRunConfiguration,
   CreateStudyRevision,
   GraphEditOperation,
@@ -291,6 +294,30 @@ export const api = {
   ) =>
     postJson<StudyRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/study-revisions`,
+      request,
+      signal,
+    ),
+  calibrationRevisions: (projectId: string, signal?: AbortSignal) =>
+    getJson<CalibrationRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/calibration-revisions`,
+      signal,
+    ),
+  calibrationRevision: (
+    projectId: string,
+    revisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<CalibrationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/calibration-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  createCalibrationRevision: (
+    projectId: string,
+    request: CreateCalibrationRevision,
+    signal?: AbortSignal,
+  ) =>
+    postJson<CalibrationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/calibration-revisions`,
       request,
       signal,
     ),

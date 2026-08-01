@@ -208,6 +208,77 @@ export interface CreateStudyRevision {
   result_projections: ResultProjection[]
 }
 
+export interface CalibrationDocument {
+  schema_version: 'thermox.calibration/v1'
+  calibration: {
+    id: string
+    label?: string
+    parameters: Array<{
+      id: string
+      label?: string
+      scope: string
+      targets: string[]
+      cases?: string[]
+      bounds?: { lower?: ScalarValue; upper?: ScalarValue }
+      prior?: { mean: ScalarValue; sigma: ScalarValue }
+    }>
+    observations: Array<{
+      id: string
+      label?: string
+      case: string
+      target: string
+      measured: ScalarValue
+      sigma: ScalarValue
+    }>
+  }
+}
+
+export interface CalibrationSolverSettings {
+  max_iterations: number
+  initial_step_fraction: number
+  minimum_step_fraction: number
+  step_reduction: number
+  minimum_continuation_fraction: number
+  continuation_growth: number
+  simulation_solver: SteadySolverSettings
+}
+
+export interface CalibrationRevision {
+  schema_version: 'thermox.calibration_revision/v1'
+  calibration_revision_id: string
+  calibration_id: string
+  project_id: string
+  team_id: string
+  revision_number: number
+  parent_calibration_revision_id: string
+  model_revision_id: string
+  training_study_revision_ids: string[]
+  validation_study_revision_ids: string[]
+  definition: CalibrationDocument
+  solver: CalibrationSolverSettings
+  checksum: string
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface CalibrationRevisionList {
+  schema_version: 'thermox.calibration_revision_list/v1'
+  calibration_revisions: CalibrationRevision[]
+}
+
+export interface CreateCalibrationRevision {
+  schema_version: 'thermox.calibration_revision.create/v1'
+  calibration_id: string
+  parent_calibration_revision_id: string
+  model_revision_id: string
+  training_study_revision_ids: string[]
+  validation_study_revision_ids: string[]
+  definition: CalibrationDocument
+  solver?: Omit<Partial<CalibrationSolverSettings>, 'simulation_solver'> & {
+    simulation_solver?: Partial<SteadySolverSettings>
+  }
+}
+
 export interface RunConfigurationRevision {
   schema_version: 'thermox.run_configuration_revision/v3'
   run_configuration_revision_id: string

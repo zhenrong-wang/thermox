@@ -1194,6 +1194,20 @@ CaseDefinition parse_case_document_root(
     return parse_case(require_object_member(object, "case"));
 }
 
+CalibrationDefinition parse_calibration_document_root(
+    const JsonValue& root) {
+    const JsonValue& object = require_object_root(root);
+    const auto schema_version =
+        require_string(object, "schema_version");
+    if (schema_version != "thermox.calibration/v1") {
+        throw std::invalid_argument(
+            "unsupported calibration schema_version: " +
+            schema_version);
+    }
+    return parse_calibration(
+        require_object_member(object, "calibration"));
+}
+
 }  // namespace
 
 std::string read_text_file(const std::string& path) {
@@ -1237,6 +1251,20 @@ CaseDefinition parse_case_document_text(
     const JsonValue root_value =
         JsonParser{text}.parse_document();
     return parse_case_document_root(root_value);
+}
+
+CalibrationDefinition parse_calibration_document_text(
+    const std::string& text) {
+    const JsonValue root_value =
+        JsonParser{text}.parse_document();
+    return parse_calibration_document_root(root_value);
+}
+
+CalibrationDefinition parse_calibration_document_text(
+    const std::string& text,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_calibration_document_text(text);
 }
 
 CaseDefinition parse_case_document_text(

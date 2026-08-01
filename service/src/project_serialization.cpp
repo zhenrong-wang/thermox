@@ -503,6 +503,66 @@ void study_revision_json(
         << epoch_milliseconds(revision.created_at) << '}';
 }
 
+void calibration_solver_json(
+    std::ostringstream& out,
+    const CalibrationSolverSettings& solver) {
+    out << "{\"max_iterations\": " << solver.max_iterations
+        << ", \"initial_step_fraction\": "
+        << solver.initial_step_fraction
+        << ", \"minimum_step_fraction\": "
+        << solver.minimum_step_fraction
+        << ", \"step_reduction\": " << solver.step_reduction
+        << ", \"minimum_continuation_fraction\": "
+        << solver.minimum_continuation_fraction
+        << ", \"continuation_growth\": "
+        << solver.continuation_growth
+        << ", \"simulation_solver\": ";
+    steady_solver_json(out, solver.simulation_solver);
+    out << '}';
+}
+
+void calibration_revision_json(
+    std::ostringstream& out,
+    const CalibrationRevisionRecord& revision) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"calibration_revision_id\": ";
+    json_string(out, revision.calibration_revision_id);
+    out << ", \"calibration_id\": ";
+    json_string(out, revision.calibration_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"revision_number\": " << revision.revision_number;
+    out << ", \"parent_calibration_revision_id\": ";
+    json_string(out, revision.parent_calibration_revision_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, revision.model_revision_id);
+    const auto ids = [&](const char* name,
+                         const std::vector<std::string>& values) {
+        out << ", \"" << name << "\": [";
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            if (index != 0U) out << ", ";
+            json_string(out, values[index]);
+        }
+        out << ']';
+    };
+    ids("training_study_revision_ids",
+        revision.training_study_revision_ids);
+    ids("validation_study_revision_ids",
+        revision.validation_study_revision_ids);
+    out << ", \"definition\": " << revision.definition_json;
+    out << ", \"solver\": ";
+    calibration_solver_json(out, revision.solver);
+    out << ", \"checksum\": ";
+    json_string(out, revision.checksum);
+    out << ", \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at) << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -633,6 +693,30 @@ std::string serialize_study_revisions_json(
          ++index) {
         if (index != 0U) out << ", ";
         study_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_calibration_revision_json(
+    const CalibrationRevisionRecord& revision) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    calibration_revision_json(out, revision);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_calibration_revisions_json(
+    const std::vector<CalibrationRevisionRecord>& revisions) {
+    std::ostringstream out;
+    out << std::setprecision(17)
+        << "{\"schema_version\": "
+           "\"thermox.calibration_revision_list/v1\", "
+           "\"calibration_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size(); ++index) {
+        if (index != 0U) out << ", ";
+        calibration_revision_json(out, revisions[index]);
     }
     out << "]}\n";
     return out.str();

@@ -1227,6 +1227,109 @@ service::CreateStudyRevisionRequest parse_create_study_request(
     return command;
 }
 
+service::CreateCalibrationRevisionRequest
+parse_create_calibration_request(const Request& request) {
+    boost::property_tree::ptree tree;
+    std::istringstream input(request.body);
+    try {
+        boost::property_tree::read_json(input, tree);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid calibration revision JSON: ") +
+            error.what());
+    }
+    const std::set<std::string> allowed = {
+        "schema_version", "calibration_id",
+        "parent_calibration_revision_id", "model_revision_id",
+        "training_study_revision_ids", "validation_study_revision_ids",
+        "definition", "solver",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown calibration revision field: " + key);
+        }
+    }
+    if (tree.get<std::string>("schema_version", "") !=
+        "thermox.calibration_revision.create/v1") {
+        throw std::invalid_argument(
+            "unsupported calibration revision create schema_version");
+    }
+    service::CreateCalibrationRevisionRequest command;
+    command.calibration_id =
+        tree.get<std::string>("calibration_id", "");
+    command.parent_calibration_revision_id = tree.get<std::string>(
+        "parent_calibration_revision_id", "");
+    command.model_revision_id =
+        tree.get<std::string>("model_revision_id", "");
+    const auto parse_ids = [&](const char* name,
+                               std::vector<std::string>& target) {
+        if (const auto values = tree.get_child_optional(name)) {
+            for (const auto& [key, value] : *values) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        std::string(name) + " must be an array");
+                }
+                target.push_back(value.get_value<std::string>());
+            }
+        }
+    };
+    parse_ids("training_study_revision_ids",
+              command.training_study_revision_ids);
+    parse_ids("validation_study_revision_ids",
+              command.validation_study_revision_ids);
+    const auto definition = tree.get_child_optional("definition");
+    if (!definition) {
+        throw std::invalid_argument("definition is required");
+    }
+    const auto typed_root = boost::json::parse(request.body);
+    if (!typed_root.is_object()) {
+        throw std::invalid_argument(
+            "calibration revision body must be an object");
+    }
+    const auto* typed_definition =
+        typed_root.as_object().if_contains("definition");
+    if (typed_definition == nullptr || !typed_definition->is_object()) {
+        throw std::invalid_argument("definition must be an object");
+    }
+    command.definition_json = boost::json::serialize(*typed_definition);
+    if (const auto solver = tree.get_child_optional("solver")) {
+        const std::set<std::string> solver_allowed = {
+            "max_iterations", "initial_step_fraction",
+            "minimum_step_fraction", "step_reduction",
+            "minimum_continuation_fraction", "continuation_growth",
+            "simulation_solver",
+        };
+        for (const auto& [key, unused] : *solver) {
+            (void)unused;
+            if (!solver_allowed.contains(key)) {
+                throw std::invalid_argument(
+                    "unknown calibration solver field: " + key);
+            }
+        }
+        auto& value = command.solver;
+        value.max_iterations =
+            solver->get("max_iterations", value.max_iterations);
+        value.initial_step_fraction = solver->get(
+            "initial_step_fraction", value.initial_step_fraction);
+        value.minimum_step_fraction = solver->get(
+            "minimum_step_fraction", value.minimum_step_fraction);
+        value.step_reduction =
+            solver->get("step_reduction", value.step_reduction);
+        value.minimum_continuation_fraction = solver->get(
+            "minimum_continuation_fraction",
+            value.minimum_continuation_fraction);
+        value.continuation_growth = solver->get(
+            "continuation_growth", value.continuation_growth);
+        if (const auto simulation =
+                solver->get_child_optional("simulation_solver")) {
+            parse_steady_solver(*simulation, value.simulation_solver);
+        }
+    }
+    return command;
+}
+
 Response project_response(
     const service::ProjectRecord& project,
     int status) {
@@ -1309,6 +1412,19 @@ Response study_revision_response(
     response.headers["Location"] =
         "/api/v1/projects/" + revision.project_id +
         "/study-revisions/" + revision.study_revision_id;
+    return response;
+}
+
+Response calibration_revision_response(
+    const service::CalibrationRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_calibration_revision_json(revision));
+    response.headers["ETag"] = "\"" + revision.checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/calibration-revisions/" + revision.calibration_revision_id;
     return response;
 }
 
@@ -1495,6 +1611,8 @@ Response Api::handle(const Request& request) const {
                 "/run-configuration-revisions";
             constexpr std::string_view studies_segment =
                 "/study-revisions";
+            constexpr std::string_view calibrations_segment =
+                "/calibration-revisions";
             if (remainder == component_catalog_segment) {
                 reject_unknown_query(target.query, {});
                 if (method != "get") {
@@ -1590,6 +1708,36 @@ Response Api::handle(const Request& request) const {
                 response.headers["Allow"] = "GET, POST";
                 return response;
             }
+            if (remainder == calibrations_segment) {
+                if (!impl_->projects->get_project(identity, project_id)) {
+                    return error_response(
+                        404, "project_not_found", "project was not found");
+                }
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    return json_response(
+                        200,
+                        service::serialize_calibration_revisions_json(
+                            impl_->projects->list_calibration_revisions(
+                                identity, project_id)));
+                }
+                if (method == "post") {
+                    require_json_request(
+                        request, impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_create_calibration_request(request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    return calibration_revision_response(
+                        impl_->projects->create_calibration_revision(command),
+                        201);
+                }
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "calibration revisions only support GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
             const std::string study_detail_prefix =
                 std::string(studies_segment) + "/";
             if (remainder.starts_with(study_detail_prefix)) {
@@ -1621,6 +1769,35 @@ Response Api::handle(const Request& request) const {
                         "study revision was not found");
                 }
                 return study_revision_response(*revision, 200);
+            }
+            const std::string calibration_detail_prefix =
+                std::string(calibrations_segment) + "/";
+            if (remainder.starts_with(calibration_detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405, "method_not_allowed",
+                        "calibration revision detail only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto revision_id = remainder.substr(
+                    calibration_detail_prefix.size());
+                if (revision_id.empty() ||
+                    revision_id.find('/') != std::string::npos) {
+                    return error_response(
+                        404, "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto revision = impl_->projects
+                    ->get_calibration_revision(
+                        identity, project_id, revision_id);
+                if (!revision) {
+                    return error_response(
+                        404, "calibration_revision_not_found",
+                        "calibration revision was not found");
+                }
+                return calibration_revision_response(*revision, 200);
             }
             const std::string run_configuration_detail_prefix =
                 std::string(run_configurations_segment) + "/";

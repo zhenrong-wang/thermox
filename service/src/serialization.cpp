@@ -92,6 +92,96 @@ void scalar_map(
     out << "}";
 }
 
+void calibration_definition_json(
+    std::ostream& out,
+    const platform::CalibrationDefinition& calibration,
+    std::string_view indent) {
+    const std::string child_indent(indent.size() + 2U, ' ');
+    const std::string item_indent(indent.size() + 4U, ' ');
+    out << "{\n" << child_indent << "\"id\": ";
+    json_string(out, calibration.id);
+    if (!calibration.label.empty()) {
+        out << ",\n" << child_indent << "\"label\": ";
+        json_string(out, calibration.label);
+    }
+    out << ",\n" << child_indent << "\"parameters\": [\n";
+    for (std::size_t index = 0; index < calibration.parameters.size();
+         ++index) {
+        const auto& parameter = calibration.parameters[index];
+        out << item_indent << "{\"id\": ";
+        json_string(out, parameter.id);
+        if (!parameter.label.empty()) {
+            out << ", \"label\": ";
+            json_string(out, parameter.label);
+        }
+        out << ", \"scope\": ";
+        json_string(out, parameter.scope);
+        out << ", \"targets\": [";
+        for (std::size_t target = 0; target < parameter.targets.size();
+             ++target) {
+            if (target != 0U) out << ", ";
+            json_string(out, parameter.targets[target]);
+        }
+        out << "]";
+        if (!parameter.case_ids.empty()) {
+            out << ", \"cases\": [";
+            for (std::size_t case_index = 0;
+                 case_index < parameter.case_ids.size(); ++case_index) {
+                if (case_index != 0U) out << ", ";
+                json_string(out, parameter.case_ids[case_index]);
+            }
+            out << "]";
+        }
+        if (parameter.lower_bound || parameter.upper_bound) {
+            out << ", \"bounds\": {";
+            if (parameter.lower_bound) {
+                out << "\"lower\": ";
+                scalar_value(out, *parameter.lower_bound);
+            }
+            if (parameter.lower_bound && parameter.upper_bound) out << ", ";
+            if (parameter.upper_bound) {
+                out << "\"upper\": ";
+                scalar_value(out, *parameter.upper_bound);
+            }
+            out << "}";
+        }
+        if (parameter.prior_mean) {
+            out << ", \"prior\": {\"mean\": ";
+            scalar_value(out, *parameter.prior_mean);
+            out << ", \"sigma\": ";
+            scalar_value(out, *parameter.prior_sigma);
+            out << "}";
+        }
+        out << "}" << (index + 1U == calibration.parameters.size()
+                              ? "\n"
+                              : ",\n");
+    }
+    out << child_indent << "],\n" << child_indent
+        << "\"observations\": [\n";
+    for (std::size_t index = 0; index < calibration.observations.size();
+         ++index) {
+        const auto& observation = calibration.observations[index];
+        out << item_indent << "{\"id\": ";
+        json_string(out, observation.id);
+        if (!observation.label.empty()) {
+            out << ", \"label\": ";
+            json_string(out, observation.label);
+        }
+        out << ", \"case\": ";
+        json_string(out, observation.case_id);
+        out << ", \"target\": ";
+        json_string(out, observation.target);
+        out << ", \"measured\": ";
+        scalar_value(out, observation.measured);
+        out << ", \"sigma\": ";
+        scalar_value(out, observation.sigma);
+        out << "}" << (index + 1U == calibration.observations.size()
+                              ? "\n"
+                              : ",\n");
+    }
+    out << child_indent << "]\n" << indent << "}";
+}
+
 void error_json(std::ostream& out, const ServiceError& error) {
     if (error.code.empty()) {
         out << "null";
@@ -532,6 +622,16 @@ std::string serialize_case_document_json(
             out, simulation_case.solver_options, "      ");
     }
     out << "\n  }\n}\n";
+    return out.str();
+}
+
+std::string serialize_calibration_document_json(
+    const platform::CalibrationDefinition& calibration) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": \"thermox.calibration/v1\","
+           "\n  \"calibration\": ";
+    calibration_definition_json(out, calibration, "  ");
+    out << "\n}\n";
     return out.str();
 }
 

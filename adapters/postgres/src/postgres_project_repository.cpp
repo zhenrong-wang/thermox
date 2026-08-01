@@ -175,6 +175,39 @@ service::TransientSolverSettings decode_transient_solver(
     return value;
 }
 
+Tree calibration_solver_tree(
+    const service::CalibrationSolverSettings& value) {
+    Tree tree;
+    tree.put("max_iterations", value.max_iterations);
+    tree.put("initial_step_fraction", value.initial_step_fraction);
+    tree.put("minimum_step_fraction", value.minimum_step_fraction);
+    tree.put("step_reduction", value.step_reduction);
+    tree.put("minimum_continuation_fraction",
+             value.minimum_continuation_fraction);
+    tree.put("continuation_growth", value.continuation_growth);
+    tree.add_child("simulation_solver",
+                   steady_solver_tree(value.simulation_solver));
+    return tree;
+}
+
+service::CalibrationSolverSettings decode_calibration_solver(
+    const Tree& tree) {
+    service::CalibrationSolverSettings value;
+    value.max_iterations = tree.get<int>("max_iterations");
+    value.initial_step_fraction =
+        tree.get<double>("initial_step_fraction");
+    value.minimum_step_fraction =
+        tree.get<double>("minimum_step_fraction");
+    value.step_reduction = tree.get<double>("step_reduction");
+    value.minimum_continuation_fraction =
+        tree.get<double>("minimum_continuation_fraction");
+    value.continuation_growth =
+        tree.get<double>("continuation_growth");
+    value.simulation_solver = decode_steady_solver(
+        tree.get_child("simulation_solver"));
+    return value;
+}
+
 std::string result_projections_payload(
     const std::vector<service::ResultProjection>& projections) {
     if (projections.empty()) {
@@ -396,6 +429,27 @@ service::StudyRevisionRecord decode_study_revision(
     return record;
 }
 
+service::CalibrationRevisionRecord decode_calibration_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::CalibrationRevisionRecord record;
+    record.calibration_revision_id = field(result, row, 0);
+    record.calibration_id = field(result, row, 1);
+    record.project_id = field(result, row, 2);
+    record.team_id = field(result, row, 3);
+    record.revision_number = std::stoull(field(result, row, 4));
+    record.parent_calibration_revision_id =
+        optional_field(result, row, 5);
+    record.model_revision_id = field(result, row, 6);
+    record.definition_json = field(result, row, 7);
+    record.solver = decode_calibration_solver(
+        read_tree(field(result, row, 8)));
+    record.checksum = field(result, row, 9);
+    record.created_by_user_id = field(result, row, 10);
+    record.created_at = decode_time(field(result, row, 11));
+    return record;
+}
+
 service::RunConfigurationRevisionRecord
 decode_run_configuration_revision(
     const PGresult* result,
@@ -458,6 +512,13 @@ constexpr const char study_revision_columns[] =
     "result_projections_payload, checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
+
+constexpr const char calibration_revision_columns[] =
+    "calibration_revision_id, calibration_id, project_id, team_id, "
+    "revision_number, parent_calibration_revision_id, "
+    "model_revision_id, definition_payload, solver_payload, "
+    "checksum, created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)::bigint::text";
 
 constexpr const char run_configuration_revision_columns[] =
     "run_configuration_revision_id, run_configuration_id, "
@@ -1138,6 +1199,144 @@ public:
         return records;
     }
 
+    service::CalibrationRevisionRecord create_calibration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& calibration_id,
+        const std::string& parent_calibration_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& training_study_revision_ids,
+        const std::vector<std::string>& validation_study_revision_ids,
+        const std::string& definition_json,
+        const service::CalibrationSolverSettings& solver,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto project = execute(
+            connection.get(),
+            "SELECT 1 FROM thermox_projects WHERE team_id = $1 "
+            "AND project_id = $2 FOR UPDATE",
+            {team_id.c_str(), project_id.c_str()});
+        if (PQntuples(project.get()) == 0) {
+            throw service::ProjectStateError("project was not found");
+        }
+        if (!parent_calibration_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM thermox_calibration_revisions "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND calibration_id = $3 "
+                "AND calibration_revision_id = $4",
+                {team_id.c_str(), project_id.c_str(),
+                 calibration_id.c_str(),
+                 parent_calibration_revision_id.c_str()});
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent calibration revision was not found");
+            }
+        }
+        const auto number = execute(
+            connection.get(),
+            "SELECT coalesce(max(revision_number), 0) + 1 "
+            "FROM thermox_calibration_revisions WHERE team_id = $1 "
+            "AND project_id = $2 AND calibration_id = $3",
+            {team_id.c_str(), project_id.c_str(), calibration_id.c_str()});
+        const auto revision_number = field(number.get(), 0, 0);
+        const char* parent = parent_calibration_revision_id.empty()
+            ? nullptr : parent_calibration_revision_id.c_str();
+        const auto solver_payload =
+            write_tree(calibration_solver_tree(solver));
+        const auto sql =
+            std::string("INSERT INTO thermox_calibration_revisions (") +
+            "calibration_id, project_id, team_id, revision_number, "
+            "parent_calibration_revision_id, model_revision_id, "
+            "definition_payload, solver_payload, checksum, "
+            "created_by_user_id) VALUES ("
+            "$1, $2, $3, $4::bigint, $5, $6, $7::jsonb, $8::jsonb, "
+            "$9, $10) RETURNING " + calibration_revision_columns;
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {calibration_id.c_str(), project_id.c_str(), team_id.c_str(),
+             revision_number.c_str(), parent, model_revision_id.c_str(),
+             definition_json.c_str(), solver_payload.c_str(),
+             checksum.c_str(), created_by_user_id.c_str()});
+        auto record = decode_calibration_revision(result.get());
+        const auto insert_studies = [&](const std::vector<std::string>& ids,
+                                        const char* role) {
+            for (std::size_t index = 0; index < ids.size(); ++index) {
+                const auto position = std::to_string(index);
+                (void)execute(
+                    connection.get(),
+                    "INSERT INTO thermox_calibration_studies ("
+                    "calibration_revision_id, project_id, team_id, role, "
+                    "position, study_revision_id) VALUES ("
+                    "$1, $2, $3, $4, $5::integer, $6)",
+                    {record.calibration_revision_id.c_str(),
+                     project_id.c_str(), team_id.c_str(), role,
+                     position.c_str(), ids[index].c_str()},
+                    PGRES_COMMAND_OK);
+            }
+        };
+        insert_studies(training_study_revision_ids, "training");
+        insert_studies(validation_study_revision_ids, "validation");
+        (void)execute(connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        record.training_study_revision_ids = training_study_revision_ids;
+        record.validation_study_revision_ids = validation_study_revision_ids;
+        return record;
+    }
+
+    std::optional<service::CalibrationRevisionRecord>
+    get_calibration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& calibration_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            calibration_revision_columns +
+            " FROM thermox_calibration_revisions WHERE team_id = $1 "
+            "AND project_id = $2 AND calibration_revision_id = $3";
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {team_id.c_str(), project_id.c_str(),
+             calibration_revision_id.c_str()});
+        if (PQntuples(result.get()) == 0) return std::nullopt;
+        auto record = decode_calibration_revision(result.get());
+        record.training_study_revision_ids = calibration_study_ids(
+            connection.get(), team_id, project_id,
+            calibration_revision_id, "training");
+        record.validation_study_revision_ids = calibration_study_ids(
+            connection.get(), team_id, project_id,
+            calibration_revision_id, "validation");
+        return record;
+    }
+
+    std::vector<service::CalibrationRevisionRecord>
+    list_calibration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            calibration_revision_columns +
+            " FROM thermox_calibration_revisions WHERE team_id = $1 "
+            "AND project_id = $2 ORDER BY calibration_id, revision_number";
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        std::vector<service::CalibrationRevisionRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            auto record = decode_calibration_revision(result.get(), row);
+            record.training_study_revision_ids = calibration_study_ids(
+                connection.get(), team_id, project_id,
+                record.calibration_revision_id, "training");
+            record.validation_study_revision_ids = calibration_study_ids(
+                connection.get(), team_id, project_id,
+                record.calibration_revision_id, "validation");
+            records.push_back(std::move(record));
+        }
+        return records;
+    }
+
     service::RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -1299,6 +1498,27 @@ public:
     }
 
 private:
+    static std::vector<std::string> calibration_study_ids(
+        PGconn* connection,
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& calibration_revision_id,
+        const char* role) {
+        const auto result = execute(
+            connection,
+            "SELECT study_revision_id FROM thermox_calibration_studies "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND calibration_revision_id = $3 AND role = $4 "
+            "ORDER BY position",
+            {team_id.c_str(), project_id.c_str(),
+             calibration_revision_id.c_str(), role});
+        std::vector<std::string> ids;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            ids.push_back(field(result.get(), row, 0));
+        }
+        return ids;
+    }
+
     static std::vector<std::string> study_artifact_ids(
         PGconn* connection,
         const std::string& team_id,

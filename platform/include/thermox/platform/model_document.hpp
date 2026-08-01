@@ -121,6 +121,11 @@ CaseDefinition parse_case_document_text(
 CaseDefinition parse_case_document_text(
     const std::string& text,
     const UnitRegistry& units);
+CalibrationDefinition parse_calibration_document_text(
+    const std::string& text);
+CalibrationDefinition parse_calibration_document_text(
+    const std::string& text,
+    const UnitRegistry& units);
 ScalarValue parse_scalar_value_document_text(
     const std::string& text);
 ScalarValue parse_scalar_value_document_text(

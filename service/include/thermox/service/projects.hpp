@@ -25,6 +25,8 @@ inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
 inline constexpr char study_revision_schema_v1[] =
     "thermox.study_revision/v1";
+inline constexpr char calibration_revision_schema_v1[] =
+    "thermox.calibration_revision/v1";
 inline constexpr char run_configuration_revision_schema_v3[] =
     "thermox.run_configuration_revision/v3";
 inline constexpr char project_model_validation_schema_v1[] =
@@ -109,6 +111,24 @@ struct StudyRevisionRecord {
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
     std::vector<ResultProjection> result_projections;
+    std::string checksum;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
+};
+
+struct CalibrationRevisionRecord {
+    std::string schema_version{calibration_revision_schema_v1};
+    std::string calibration_revision_id;
+    std::string calibration_id;
+    std::string project_id;
+    std::string team_id;
+    std::uint64_t revision_number{0};
+    std::string parent_calibration_revision_id;
+    std::string model_revision_id;
+    std::vector<std::string> training_study_revision_ids;
+    std::vector<std::string> validation_study_revision_ids;
+    std::string definition_json;
+    CalibrationSolverSettings solver;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -251,6 +271,28 @@ public:
         const std::string& team_id,
         const std::string& project_id) const = 0;
 
+    virtual CalibrationRevisionRecord create_calibration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& calibration_id,
+        const std::string& parent_calibration_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& training_study_revision_ids,
+        const std::vector<std::string>& validation_study_revision_ids,
+        const std::string& definition_json,
+        const CalibrationSolverSettings& solver,
+        const std::string& checksum) = 0;
+    virtual std::optional<CalibrationRevisionRecord>
+    get_calibration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& calibration_revision_id) const = 0;
+    virtual std::vector<CalibrationRevisionRecord>
+    list_calibration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const = 0;
+
     virtual RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -383,6 +425,18 @@ struct CreateStudyRevisionRequest {
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
     std::vector<ResultProjection> result_projections;
+};
+
+struct CreateCalibrationRevisionRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string calibration_id;
+    std::string parent_calibration_revision_id;
+    std::string model_revision_id;
+    std::vector<std::string> training_study_revision_ids;
+    std::vector<std::string> validation_study_revision_ids;
+    std::string definition_json;
+    CalibrationSolverSettings solver;
 };
 
 struct ResolvedEngineeringArtifacts {
@@ -536,6 +590,18 @@ public:
     list_study_revisions(
         const IdentityContext& identity,
         const std::string& project_id) const;
+    [[nodiscard]] CalibrationRevisionRecord
+    create_calibration_revision(
+        const CreateCalibrationRevisionRequest& request) const;
+    [[nodiscard]] std::optional<CalibrationRevisionRecord>
+    get_calibration_revision(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& calibration_revision_id) const;
+    [[nodiscard]] std::vector<CalibrationRevisionRecord>
+    list_calibration_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
     [[nodiscard]]
     std::optional<RunConfigurationRevisionRecord>
     get_run_configuration_revision(
@@ -613,6 +679,10 @@ std::string serialize_study_revision_json(
     const StudyRevisionRecord& revision);
 std::string serialize_study_revisions_json(
     const std::vector<StudyRevisionRecord>& revisions);
+std::string serialize_calibration_revision_json(
+    const CalibrationRevisionRecord& revision);
+std::string serialize_calibration_revisions_json(
+    const std::vector<CalibrationRevisionRecord>& revisions);
 std::string serialize_run_configuration_revision_json(
     const RunConfigurationRevisionRecord& revision);
 std::string serialize_run_configuration_revisions_json(

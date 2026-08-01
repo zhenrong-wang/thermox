@@ -857,6 +857,86 @@ void test_studies_bind_immutable_engineering_intent() {
         "study intent must agree with its exact operating case");
 }
 
+void test_calibrations_bind_exact_training_studies() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Calibration history", {}});
+    const auto model = service.create_model_revision({
+        team_a, project.project_id, {},
+        read_source_file("core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case = service.create_case_revision({
+        team_a, project.project_id, model.model_revision_id, {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+    thermox::service::CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.study_id = "compressor-design";
+    study_request.model_revision_id = model.model_revision_id;
+    study_request.case_revision_id = simulation_case.case_revision_id;
+    study_request.intent = simulation_case.mode;
+    const auto study = service.create_study_revision(study_request);
+
+    thermox::service::CreateCalibrationRevisionRequest request;
+    request.identity = team_a;
+    request.project_id = project.project_id;
+    request.calibration_id = "acceptance-fit";
+    request.model_revision_id = model.model_revision_id;
+    request.training_study_revision_ids = {study.study_revision_id};
+    request.definition_json = R"({
+      "schema_version": "thermox.calibration/v1",
+      "calibration": {
+        "id": "acceptance-fit",
+        "parameters": [{
+          "id": "efficiency", "scope": "component",
+          "targets": ["components.compressor.parameters.eta_is"],
+          "cases": ["design"],
+          "bounds": {"lower": 0.75, "upper": 0.95}
+        }],
+        "observations": [{
+          "id": "shaft-power", "case": "design",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 35.0, "unit": "MW"},
+          "sigma": {"value": 0.5, "unit": "MW"}
+        }]
+      }
+    })";
+    const auto first = service.create_calibration_revision(request);
+    request.parent_calibration_revision_id =
+        first.calibration_revision_id;
+    const auto second = service.create_calibration_revision(request);
+    require(
+        first.revision_number == 1U && second.revision_number == 2U &&
+            first.checksum == second.checksum &&
+            first.training_study_revision_ids ==
+                std::vector<std::string>{study.study_revision_id} &&
+            service.list_calibration_revisions(
+                team_a, project.project_id).size() == 2U &&
+            !service.get_calibration_revision(
+                team_b, project.project_id,
+                first.calibration_revision_id),
+        "calibrations must be immutable and bind exact Team-scoped Studies");
+    require(
+        thermox::service::serialize_calibration_revision_json(first)
+                .find("\"thermox.calibration/v1\"") !=
+            std::string::npos,
+        "calibration serialization must expose its canonical definition");
+
+    request.parent_calibration_revision_id.clear();
+    request.validation_study_revision_ids = {study.study_revision_id};
+    bool overlap_rejected = false;
+    try {
+        (void)service.create_calibration_revision(request);
+    } catch (const thermox::service::ProjectRequestError&) {
+        overlap_rejected = true;
+    }
+    require(overlap_rejected,
+            "training and validation Study sets must be disjoint");
+}
+
 void test_graph_edits_publish_valid_child_revisions() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -1158,6 +1238,7 @@ int main() {
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();
+        test_calibrations_bind_exact_training_studies();
         test_graph_edits_publish_valid_child_revisions();
         test_case_edits_publish_atomic_child_revisions();
         test_revision_backed_validation_resolves_exact_inputs();

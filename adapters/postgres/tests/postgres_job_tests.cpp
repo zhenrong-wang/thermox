@@ -98,6 +98,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "010_study_revisions.sql",
              "011_run_configurations_bind_studies.sql",
              "012_job_study_provenance.sql",
+             "013_calibration_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -788,6 +789,52 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL studies must preserve exact bindings and "
         "Team isolation");
+
+    thermox::service::CreateCalibrationRevisionRequest
+        calibration_request;
+    calibration_request.identity = team_a;
+    calibration_request.project_id = project.project_id;
+    calibration_request.calibration_id = "postgres-acceptance-fit";
+    calibration_request.model_revision_id = first.model_revision_id;
+    calibration_request.training_study_revision_ids = {
+        study.study_revision_id,
+    };
+    calibration_request.definition_json = R"json({
+      "schema_version": "thermox.calibration/v1",
+      "calibration": {
+        "id": "postgres-acceptance-fit",
+        "parameters": [{
+          "id": "efficiency", "scope": "component",
+          "targets": ["components.compressor.parameters.eta_is"],
+          "cases": ["design"],
+          "bounds": {"lower": 0.75, "upper": 0.95}
+        }],
+        "observations": [{
+          "id": "shaft-power", "case": "design",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 35.0, "unit": "MW"},
+          "sigma": {"value": 0.5, "unit": "MW"}
+        }]
+      }
+    })json";
+    calibration_request.solver.max_iterations = 13;
+    const auto calibration =
+        projects.create_calibration_revision(calibration_request);
+    const auto loaded_calibration = projects.get_calibration_revision(
+        team_a, project.project_id,
+        calibration.calibration_revision_id);
+    require(
+        loaded_calibration &&
+            loaded_calibration->training_study_revision_ids ==
+                calibration_request.training_study_revision_ids &&
+            loaded_calibration->solver.max_iterations == 13 &&
+            projects.list_calibration_revisions(
+                team_a, project.project_id).size() == 1U &&
+            !projects.get_calibration_revision(
+                team_b, project.project_id,
+                calibration.calibration_revision_id),
+        "PostgreSQL calibrations must preserve Study bindings, "
+        "solver policy, and Team isolation");
 
     thermox::service::CreateRunConfigurationRevisionRequest
         run_request;

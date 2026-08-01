@@ -295,6 +295,52 @@ std::string study_identity(
     return out.str();
 }
 
+void validate_calibration_solver(
+    const CalibrationSolverSettings& value) {
+    validate_steady_solver(value.simulation_solver);
+    if (value.max_iterations <= 0 ||
+        !std::isfinite(value.initial_step_fraction) ||
+        value.initial_step_fraction <= 0.0 ||
+        !std::isfinite(value.minimum_step_fraction) ||
+        value.minimum_step_fraction <= 0.0 ||
+        value.minimum_step_fraction > value.initial_step_fraction ||
+        !std::isfinite(value.step_reduction) ||
+        value.step_reduction <= 0.0 || value.step_reduction >= 1.0 ||
+        !std::isfinite(value.minimum_continuation_fraction) ||
+        value.minimum_continuation_fraction <= 0.0 ||
+        value.minimum_continuation_fraction > 1.0 ||
+        !std::isfinite(value.continuation_growth) ||
+        value.continuation_growth <= 1.0) {
+        throw ProjectRequestError("invalid calibration solver settings");
+    }
+}
+
+std::string calibration_identity(
+    const CreateCalibrationRevisionRequest& request,
+    const std::vector<std::string>& training,
+    const std::vector<std::string>& validation,
+    const std::string& definition_json) {
+    std::ostringstream out;
+    const auto append = [&](const std::string& value) {
+        out << value.size() << ':' << value << '|';
+    };
+    append(request.calibration_id);
+    append(request.model_revision_id);
+    for (const auto& id : training) append(id);
+    out << "validation|";
+    for (const auto& id : validation) append(id);
+    append(definition_json);
+    const auto& solver = request.solver;
+    out << std::setprecision(17) << solver.max_iterations << '|'
+        << solver.initial_step_fraction << '|'
+        << solver.minimum_step_fraction << '|'
+        << solver.step_reduction << '|'
+        << solver.minimum_continuation_fraction << '|'
+        << solver.continuation_growth << '|';
+    append_steady(out, solver.simulation_solver);
+    return out.str();
+}
+
 }  // namespace
 
 ProjectService::ProjectService(
@@ -1294,6 +1340,153 @@ ProjectService::list_study_revisions(
         throw ProjectRequestError("project ID must not be empty");
     }
     return repository_->list_study_revisions(
+        identity.team_id, project_id);
+}
+
+CalibrationRevisionRecord
+ProjectService::create_calibration_revision(
+    const CreateCalibrationRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() || request.calibration_id.empty() ||
+        request.model_revision_id.empty() || request.definition_json.empty()) {
+        throw ProjectRequestError(
+            "project, calibration, model revision, and definition must not be empty");
+    }
+    if (request.training_study_revision_ids.empty()) {
+        throw ProjectRequestError(
+            "a calibration requires at least one training Study revision");
+    }
+    validate_calibration_solver(request.solver);
+
+    auto training = request.training_study_revision_ids;
+    auto validation = request.validation_study_revision_ids;
+    std::sort(training.begin(), training.end());
+    std::sort(validation.begin(), validation.end());
+    if (std::adjacent_find(training.begin(), training.end()) != training.end() ||
+        std::adjacent_find(validation.begin(), validation.end()) != validation.end()) {
+        throw ProjectRequestError("calibration Study revision IDs must be unique");
+    }
+    std::vector<std::string> overlap;
+    std::set_intersection(
+        training.begin(), training.end(), validation.begin(), validation.end(),
+        std::back_inserter(overlap));
+    if (!overlap.empty()) {
+        throw ProjectRequestError(
+            "training and validation Study revisions must be disjoint");
+    }
+
+    const auto model = repository_->get_model_revision(
+        request.identity.team_id, request.project_id,
+        request.model_revision_id);
+    if (!model) throw ProjectStateError("model revision was not found");
+
+    std::vector<platform::CaseDefinition> cases;
+    std::set<std::string> training_case_ids;
+    const auto collect = [&](const std::vector<std::string>& ids,
+                             bool is_training) {
+        for (const auto& id : ids) {
+            const auto study = repository_->get_study_revision(
+                request.identity.team_id, request.project_id, id);
+            if (!study || study->model_revision_id != request.model_revision_id) {
+                throw ProjectStateError(
+                    "calibration Study revision was not found for the bound model");
+            }
+            if (run_mode(study->intent) != "steady") {
+                throw ProjectRequestError(
+                    "calibration currently supports steady Studies only");
+            }
+            const auto simulation_case = repository_->get_case_revision(
+                request.identity.team_id, request.project_id,
+                request.model_revision_id, study->case_revision_id);
+            if (!simulation_case) {
+                throw ProjectStateError(
+                    "calibration Study case revision was not found");
+            }
+            auto parsed = platform::parse_case_document_text(
+                simulation_case->canonical_case_json, units_);
+            if (is_training && !training_case_ids.insert(parsed.id).second) {
+                throw ProjectRequestError(
+                    "training Studies must bind distinct case IDs");
+            }
+            if (std::none_of(cases.begin(), cases.end(), [&](const auto& item) {
+                    return item.id == parsed.id;
+                })) {
+                cases.push_back(std::move(parsed));
+            }
+        }
+    };
+    collect(training, true);
+    collect(validation, false);
+
+    try {
+        auto definition = platform::parse_calibration_document_text(
+            request.definition_json, units_);
+        if (definition.id != request.calibration_id) {
+            throw ProjectRequestError(
+                "calibration definition ID does not match calibration_id");
+        }
+        for (const auto& observation : definition.observations) {
+            if (!training_case_ids.contains(observation.case_id)) {
+                throw ProjectRequestError(
+                    "calibration observations must reference training Study cases");
+            }
+        }
+        for (const auto& parameter : definition.parameters) {
+            for (const auto& case_id : parameter.case_ids) {
+                if (!training_case_ids.contains(case_id)) {
+                    throw ProjectRequestError(
+                        "case-scoped calibration parameters must reference training Study cases");
+                }
+            }
+        }
+        auto composed = platform::parse_topology_document_text(
+            model->canonical_model_json, units_);
+        composed.schema_version = "thermox.model/v2";
+        composed.cases = std::move(cases);
+        composed.calibrations = {definition};
+        (void)platform::parse_model_document_text(
+            detail::serialize_model_document_json(composed), units_);
+        const auto canonical_definition =
+            detail::serialize_calibration_document_json(definition);
+        return repository_->create_calibration_revision(
+            request.identity.team_id, request.identity.user_id,
+            request.project_id, request.calibration_id,
+            request.parent_calibration_revision_id,
+            request.model_revision_id, training, validation,
+            canonical_definition, request.solver,
+            checksum(calibration_identity(
+                request, training, validation, canonical_definition)));
+    } catch (const ProjectRequestError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid calibration revision: ") + error.what());
+    }
+}
+
+std::optional<CalibrationRevisionRecord>
+ProjectService::get_calibration_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& calibration_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || calibration_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and calibration revision IDs must not be empty");
+    }
+    return repository_->get_calibration_revision(
+        identity.team_id, project_id, calibration_revision_id);
+}
+
+std::vector<CalibrationRevisionRecord>
+ProjectService::list_calibration_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError("project ID must not be empty");
+    }
+    return repository_->list_calibration_revisions(
         identity.team_id, project_id);
 }
 

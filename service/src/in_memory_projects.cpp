@@ -456,6 +456,109 @@ public:
         return records;
     }
 
+    CalibrationRevisionRecord create_calibration_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& calibration_id,
+        const std::string& parent_calibration_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& training_study_revision_ids,
+        const std::vector<std::string>& validation_study_revision_ids,
+        const std::string& definition_json,
+        const CalibrationSolverSettings& solver,
+        const std::string& checksum) override {
+        std::lock_guard lock(mutex_);
+        const auto validate_studies = [&](const auto& ids) {
+            for (const auto& id : ids) {
+                const auto study = study_revisions_.find(id);
+                if (study == study_revisions_.end() ||
+                    study->second.team_id != team_id ||
+                    study->second.project_id != project_id ||
+                    study->second.model_revision_id != model_revision_id) {
+                    throw ProjectStateError(
+                        "calibration Study revision was not found");
+                }
+            }
+        };
+        validate_studies(training_study_revision_ids);
+        validate_studies(validation_study_revision_ids);
+        if (!parent_calibration_revision_id.empty()) {
+            const auto parent = calibration_revisions_.find(
+                parent_calibration_revision_id);
+            if (parent == calibration_revisions_.end() ||
+                parent->second.team_id != team_id ||
+                parent->second.project_id != project_id ||
+                parent->second.calibration_id != calibration_id) {
+                throw ProjectStateError(
+                    "parent calibration revision was not found");
+            }
+        }
+        const auto key = project_id + '\0' + calibration_id;
+        CalibrationRevisionRecord record;
+        record.calibration_revision_id = next_id(
+            "calibration-revision", next_calibration_revision_id_++);
+        record.calibration_id = calibration_id;
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.revision_number = ++calibration_revision_sequences_[key];
+        record.parent_calibration_revision_id =
+            parent_calibration_revision_id;
+        record.model_revision_id = model_revision_id;
+        record.training_study_revision_ids =
+            training_study_revision_ids;
+        record.validation_study_revision_ids =
+            validation_study_revision_ids;
+        record.definition_json = definition_json;
+        record.solver = solver;
+        record.checksum = checksum;
+        record.created_by_user_id = created_by_user_id;
+        record.created_at = std::chrono::system_clock::now();
+        calibration_revisions_.emplace(
+            record.calibration_revision_id, record);
+        return record;
+    }
+
+    std::optional<CalibrationRevisionRecord>
+    get_calibration_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& calibration_revision_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto found = calibration_revisions_.find(
+            calibration_revision_id);
+        if (found == calibration_revisions_.end() ||
+            found->second.team_id != team_id ||
+            found->second.project_id != project_id) {
+            return std::nullopt;
+        }
+        return found->second;
+    }
+
+    std::vector<CalibrationRevisionRecord>
+    list_calibration_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        std::lock_guard lock(mutex_);
+        std::vector<CalibrationRevisionRecord> records;
+        for (const auto& [id, record] : calibration_revisions_) {
+            (void)id;
+            if (record.team_id == team_id &&
+                record.project_id == project_id) {
+                records.push_back(record);
+            }
+        }
+        std::sort(
+            records.begin(), records.end(),
+            [](const auto& left, const auto& right) {
+                if (left.calibration_id != right.calibration_id) {
+                    return left.calibration_id < right.calibration_id;
+                }
+                return left.revision_number < right.revision_number;
+            });
+        return records;
+    }
+
     RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -578,6 +681,7 @@ private:
     std::uint64_t next_case_revision_id_{1};
     std::uint64_t next_artifact_revision_id_{1};
     std::uint64_t next_study_revision_id_{1};
+    std::uint64_t next_calibration_revision_id_{1};
     std::uint64_t next_run_configuration_revision_id_{1};
     std::unordered_map<std::string, ProjectRecord> projects_;
     std::unordered_map<std::string, ModelRevisionRecord>
@@ -587,6 +691,8 @@ private:
     std::unordered_map<std::string, ArtifactRevisionRecord>
         artifact_revisions_;
     std::unordered_map<std::string, StudyRevisionRecord> study_revisions_;
+    std::unordered_map<std::string, CalibrationRevisionRecord>
+        calibration_revisions_;
     std::unordered_map<
         std::string,
         RunConfigurationRevisionRecord>
@@ -599,6 +705,8 @@ private:
         artifact_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         study_revision_sequences_;
+    std::unordered_map<std::string, std::uint64_t>
+        calibration_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         run_configuration_revision_sequences_;
 };
