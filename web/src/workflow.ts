@@ -1,4 +1,9 @@
-export type WorkspaceView = 'topology' | 'cases' | 'runs' | 'results'
+export type WorkspaceView =
+  | 'topology'
+  | 'definition'
+  | 'studies'
+  | 'runs'
+  | 'results'
 
 export type WorkflowStageState =
   | 'complete'
@@ -10,6 +15,7 @@ export interface WorkflowInputs {
   componentCount: number
   connectionCount: number
   mediumCount: number
+  definitionIssueCount: number
   hasCase: boolean
   unresolvedArtifactCount: number
   compiled: boolean
@@ -38,7 +44,11 @@ export function buildWorkflowStages(
 ): WorkflowStage[] {
   const hasDraft = input.componentCount > 0
   const definitionInputsReady =
-    input.hasCase && input.unresolvedArtifactCount === 0
+    hasDraft && input.definitionIssueCount === 0
+  const studyInputsReady =
+    definitionInputsReady &&
+    input.hasCase &&
+    input.unresolvedArtifactCount === 0
   const hasRunConfiguration = input.runConfigurationCount > 0
   const hasSucceeded = input.succeededJobCount > 0
 
@@ -50,16 +60,23 @@ export function buildWorkflowStages(
       ].join(' · ')
     : 'Start with a registered component template.'
 
-  let definitionDetail = 'Create an operating case and define boundaries.'
+  let definitionDetail = hasDraft
+    ? `${plural(input.definitionIssueCount, 'physical input')} unresolved.`
+    : 'Build the equipment topology first.'
+  if (definitionInputsReady) {
+    definitionDetail = 'All local component inputs are defined.'
+  }
+
+  let studyDetail = 'Create an operating case and define boundaries.'
   if (input.hasCase && input.unresolvedArtifactCount > 0) {
-    definitionDetail = `${plural(
+    studyDetail = `${plural(
       input.unresolvedArtifactCount,
       'artifact binding',
     )} unresolved.`
-  } else if (definitionInputsReady && !input.compiled) {
-    definitionDetail = 'Compile the exact topology, case, and artifacts.'
+  } else if (studyInputsReady && !input.compiled) {
+    studyDetail = 'Compile the exact topology, case, and artifacts.'
   } else if (input.compiled) {
-    definitionDetail = `${plural(input.variableCount, 'variable')} · ${plural(
+    studyDetail = `${plural(input.variableCount, 'variable')} · ${plural(
       input.equationCount,
       'equation',
     )}`
@@ -89,20 +106,32 @@ export function buildWorkflowStages(
       state: hasDraft ? 'complete' : 'attention',
     },
     {
-      view: 'cases',
+      view: 'definition',
       number: 2,
-      title: 'Define & validate',
-      description: 'Parameters, boundaries, and artifacts',
+      title: 'Define system',
+      description: 'Physics, media, parameters, and data',
       detail: definitionDetail,
-      state: input.compiled
+      state: definitionInputsReady
         ? 'complete'
         : hasDraft
           ? 'attention'
           : 'locked',
     },
     {
-      view: 'runs',
+      view: 'studies',
       number: 3,
+      title: 'Define study',
+      description: 'Intent, boundaries, targets, and outputs',
+      detail: studyDetail,
+      state: input.compiled
+        ? 'complete'
+        : definitionInputsReady
+          ? 'attention'
+          : 'locked',
+    },
+    {
+      view: 'runs',
+      number: 4,
       title: 'Calculate',
       description: 'Configuration and execution',
       detail: calculateDetail,
@@ -114,7 +143,7 @@ export function buildWorkflowStages(
     },
     {
       view: 'results',
-      number: 4,
+      number: 5,
       title: 'Analyze',
       description: 'Balances, trends, and exports',
       detail: hasSucceeded

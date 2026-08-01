@@ -57,7 +57,7 @@ export function WorkflowNavigator({
             : 'Only server compilation can establish that the selected system is calculatable.'}
         </p>
         {!calculatable && (
-          <button type="button" onClick={() => onSelect('cases')}>
+          <button type="button" onClick={() => onSelect('studies')}>
             Review readiness
           </button>
         )}

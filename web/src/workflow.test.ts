@@ -5,6 +5,7 @@ const empty: WorkflowInputs = {
   componentCount: 0,
   connectionCount: 0,
   mediumCount: 0,
+  definitionIssueCount: 0,
   hasCase: false,
   unresolvedArtifactCount: 0,
   compiled: false,
@@ -24,6 +25,7 @@ describe('engineering workflow', () => {
       'locked',
       'locked',
       'locked',
+      'locked',
     ])
     expect(stages[0].detail).toContain('component template')
   })
@@ -36,8 +38,9 @@ describe('engineering workflow', () => {
       mediumCount: 1,
       hasCase: true,
     })
-    expect(beforeCompile[1].state).toBe('attention')
-    expect(beforeCompile[2].state).toBe('locked')
+    expect(beforeCompile[1].state).toBe('complete')
+    expect(beforeCompile[2].state).toBe('attention')
+    expect(beforeCompile[3].state).toBe('locked')
 
     const compiled = buildWorkflowStages({
       ...empty,
@@ -50,8 +53,9 @@ describe('engineering workflow', () => {
       equationCount: 18,
     })
     expect(compiled[1].state).toBe('complete')
-    expect(compiled[1].detail).toBe('18 variables · 18 equations')
-    expect(compiled[2].state).toBe('ready')
+    expect(compiled[2].state).toBe('complete')
+    expect(compiled[2].detail).toBe('18 variables · 18 equations')
+    expect(compiled[3].state).toBe('ready')
   })
 
   it('promotes successful execution into analysis readiness', () => {
@@ -67,8 +71,19 @@ describe('engineering workflow', () => {
       succeededJobCount: 2,
     })
 
-    expect(stages[2].state).toBe('complete')
-    expect(stages[3].state).toBe('ready')
-    expect(stages[3].detail).toContain('2 successful results')
+    expect(stages[3].state).toBe('complete')
+    expect(stages[4].state).toBe('ready')
+    expect(stages[4].detail).toContain('2 successful results')
+  })
+
+  it('keeps study authoring behind incomplete physical definitions', () => {
+    const stages = buildWorkflowStages({
+      ...empty,
+      componentCount: 2,
+      definitionIssueCount: 3,
+    })
+    expect(stages[1].state).toBe('attention')
+    expect(stages[1].detail).toContain('3 physical inputs')
+    expect(stages[2].state).toBe('locked')
   })
 })

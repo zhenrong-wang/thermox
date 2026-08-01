@@ -3,11 +3,13 @@ import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue, type ResultNodeValue } from './resultPresentation'
 import type { CatalogPort, ComponentDefinition } from './types'
+import type { ComponentDefinitionReadiness } from './definitionReadiness'
 
 export interface TopologyNodeData extends Record<string, unknown> {
   component: ComponentDefinition
   ports: CatalogPort[]
   resultValues?: ResultNodeValue[]
+  definition?: ComponentDefinitionReadiness
 }
 
 const domainColors: Record<string, string> = {
@@ -43,6 +45,14 @@ export function TopologyNode({ data, selected }: NodeProps) {
         <span className="node-id">{nodeData.component.id}</span>
       </header>
       <div className="node-kind">{nodeData.component.kind}</div>
+      {nodeData.definition && (
+        <div className={`node-definition-state ${nodeData.definition.state}`}>
+          <span>{nodeData.definition.state}</span>
+          {nodeData.definition.issues.length > 0 && (
+            <small>{nodeData.definition.issues.length} missing</small>
+          )}
+        </div>
+      )}
       <div className="node-ports">
         <div>
           {inputs.map((port, index) => (

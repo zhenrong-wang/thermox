@@ -9,6 +9,9 @@ The workspace currently provides:
 
 - Team-scoped project and immutable topology-revision browsing;
 - a graph canvas whose nodes and typed ports come from persisted topology plus the runtime catalog;
+- an explicit five-stage Build, Define, Study, Calculate, and Analyze workflow;
+- draft component placement without prematurely requiring physical parameters, media, or maps;
+- per-component draft/incomplete/defined authoring states on the graph and definition workspace;
 - a persistent, searchable component library generated from `thermox.catalog/v4`, with
   click-to-configure and drag-to-canvas instance creation;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;

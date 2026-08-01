@@ -24,6 +24,7 @@ isolated example models.
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
 - [Calibration Architecture](docs/calibration-architecture.md)
+- [Product Workflow Architecture](docs/product-workflow-architecture.md)
 - [Local Compose Stack](docs/local-compose.md)
 
 ## Current C++ numeric core

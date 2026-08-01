@@ -17,6 +17,13 @@ export interface DefinitionIssue {
   message: string
 }
 
+export type ComponentDefinitionState = 'draft' | 'incomplete' | 'defined'
+
+export interface ComponentDefinitionReadiness {
+  state: ComponentDefinitionState
+  issues: DefinitionIssue[]
+}
+
 function hasParameter(
   component: ComponentDefinition,
   name: string,
@@ -105,4 +112,36 @@ export function definitionIssues(
   }
 
   return issues
+}
+
+export function componentDefinitionReadiness(
+  topology: TopologyDocument | undefined,
+  catalog: Catalog | undefined,
+): Record<string, ComponentDefinitionReadiness> {
+  if (!topology || !catalog) return {}
+  const allIssues = definitionIssues(topology, catalog)
+  return Object.fromEntries(
+    topology.model.components.map((component) => {
+      const issues = allIssues.filter(
+        (issue) => issue.componentId === component.id,
+      )
+      const hasPhysicalDefinition =
+        Object.keys(component.media ?? {}).length > 0 ||
+        Object.keys(component.materials ?? {}).length > 0 ||
+        Object.keys(component.artifacts ?? {}).length > 0 ||
+        Object.keys(component.parameters ?? {}).length > 0
+      return [
+        component.id,
+        {
+          state:
+            issues.length === 0
+              ? 'defined'
+              : hasPhysicalDefinition
+                ? 'incomplete'
+                : 'draft',
+          issues,
+        },
+      ]
+    }),
+  )
 }

@@ -15,6 +15,7 @@ import { TopologyNode, type TopologyNodeData } from './TopologyNode'
 import type { GraphSelection } from './InspectorPanel'
 import type { ResultNodeValue } from './resultPresentation'
 import type { CatalogComponent, TopologyDocument } from './types'
+import type { ComponentDefinitionReadiness } from './definitionReadiness'
 
 interface TopologyCanvasProps {
   topology?: TopologyDocument
@@ -28,6 +29,7 @@ interface TopologyCanvasProps {
   resultValues?: Record<string, ResultNodeValue[]>
   selection?: GraphSelection
   onCreateTopology?: () => void
+  componentReadiness?: Record<string, ComponentDefinitionReadiness>
 }
 
 function endpoint(value: string): [string, string] {
@@ -42,6 +44,7 @@ function layoutNodes(
   catalog: Map<string, CatalogComponent>,
   resultValues: Record<string, ResultNodeValue[]>,
   selection?: GraphSelection,
+  componentReadiness: Record<string, ComponentDefinitionReadiness> = {},
 ): Node<TopologyNodeData>[] {
   const columns = Math.max(1, Math.ceil(Math.sqrt(topology.model.components.length)))
   const rowHeight = Object.keys(resultValues).length > 0 ? 310 : 230
@@ -58,6 +61,7 @@ function layoutNodes(
       component,
       ports: catalog.get(component.kind)?.ports ?? [],
       resultValues: resultValues[component.id] ?? [],
+      definition: componentReadiness[component.id],
     },
   }))
 }
@@ -99,6 +103,7 @@ export function TopologyCanvas({
   resultValues = {},
   selection,
   onCreateTopology,
+  componentReadiness = {},
 }: TopologyCanvasProps) {
   if (!topology) {
     return (
@@ -125,7 +130,13 @@ export function TopologyCanvas({
   }
 
   const catalogByKind = new Map(catalog.map((item) => [item.kind, item]))
-  const nodes = layoutNodes(topology, catalogByKind, resultValues, selection)
+  const nodes = layoutNodes(
+    topology,
+    catalogByKind,
+    resultValues,
+    selection,
+    componentReadiness,
+  )
   const edges = layoutEdges(topology, selection)
   const elementProps = readOnly
     ? { nodes, edges }

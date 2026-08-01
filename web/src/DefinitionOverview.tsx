@@ -37,11 +37,11 @@ export function DefinitionOverview({
     <section className="definition-overview">
       <header>
         <div>
-          <span className="section-kicker">Authoring checklist</span>
-          <h2>Engineering definition</h2>
+          <span className="section-kicker">Study compiler</span>
+          <h2>Study readiness</h2>
           <p>
-            Early authoring hints are shown here. The compiler below remains
-            the authority for calculatability.
+            This operating scenario depends on the selected physical-system
+            and artifact revisions. The compiler below remains authoritative.
           </p>
         </div>
         <span
@@ -64,10 +64,10 @@ export function DefinitionOverview({
           <strong>{topology?.model.components.length ?? 0}</strong>
           <small>
             {!inputsLoaded
-              ? 'loading catalog inputs'
+              ? 'loading physical inputs'
               : inputsComplete
-                ? 'catalog inputs present'
-                : 'definition issues found'}
+                ? 'physical inputs present'
+                : 'physical dependencies blocked'}
           </small>
         </div>
         <div>

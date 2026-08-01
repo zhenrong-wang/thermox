@@ -1,0 +1,242 @@
+import type { ComponentDefinitionReadiness } from './definitionReadiness'
+import type {
+  ArtifactRevision,
+  Catalog,
+  ComponentDefinition,
+  TopologyDocument,
+} from './types'
+
+interface DefinitionWorkspaceProps {
+  topology?: TopologyDocument
+  catalog?: Catalog
+  readiness: Record<string, ComponentDefinitionReadiness>
+  artifactRevisions: ArtifactRevision[]
+  publishing: boolean
+  operationError: string
+  operationStatus: string
+  onDismissOperation: () => void
+  onEditComponent: (component: ComponentDefinition) => void
+  onAddFluid: () => void
+  onAddMaterial: () => void
+  onBuild: () => void
+}
+
+export function DefinitionWorkspace({
+  topology,
+  catalog,
+  readiness,
+  artifactRevisions,
+  publishing,
+  operationError,
+  operationStatus,
+  onDismissOperation,
+  onEditComponent,
+  onAddFluid,
+  onAddMaterial,
+  onBuild,
+}: DefinitionWorkspaceProps) {
+  if (!topology || !catalog) {
+    return (
+      <section className="definition-workspace">
+        <div className="case-empty">
+          <div className="empty-orbit" />
+          <h2>No physical system selected</h2>
+          <p>Build a topology before defining its engineering inputs.</p>
+          <button type="button" className="primary-button" onClick={onBuild}>
+            Go to Build
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const states = Object.values(readiness)
+  const definedCount = states.filter((item) => item.state === 'defined').length
+  const issueCount = states.reduce((sum, item) => sum + item.issues.length, 0)
+
+  return (
+    <section className="definition-workspace">
+      <div className="case-toolbar">
+        <div>
+          <span className="eyebrow">Physical asset definition</span>
+          <h1>{topology.model.name}</h1>
+        </div>
+        <div className="definition-toolbar-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={publishing}
+            onClick={onAddFluid}
+          >
+            + Fluid
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={publishing}
+            onClick={onAddMaterial}
+          >
+            + Material
+          </button>
+        </div>
+      </div>
+
+      {(operationError || operationStatus || publishing) && (
+        <div
+          className={`operation-banner${operationError ? ' is-error' : ''}`}
+        >
+          {publishing
+            ? 'Publishing immutable physical-system revision…'
+            : operationError || operationStatus}
+          <button type="button" onClick={onDismissOperation}>×</button>
+        </div>
+      )}
+
+      <div className="definition-workspace-scroll">
+        <section className="physical-summary-grid">
+          <div>
+            <span>Components</span>
+            <strong>{definedCount}/{topology.model.components.length}</strong>
+            <small>locally defined</small>
+          </div>
+          <div>
+            <span>Fluids</span>
+            <strong>{topology.model.media.length}</strong>
+            <small>property-backed definitions</small>
+          </div>
+          <div>
+            <span>Materials</span>
+            <strong>{topology.model.materials?.length ?? 0}</strong>
+            <small>thermochemistry definitions</small>
+          </div>
+          <div>
+            <span>Engineering data</span>
+            <strong>{artifactRevisions.length}</strong>
+            <small>immutable artifact revisions</small>
+          </div>
+          <div>
+            <span>Local issues</span>
+            <strong>{issueCount}</strong>
+            <small>authoring hints before compilation</small>
+          </div>
+        </section>
+
+        <section className="physical-component-section">
+          <header>
+            <div>
+              <span className="section-kicker">Equipment instances</span>
+              <h2>Component definitions</h2>
+            </div>
+            <p>
+              Complete the physical inputs required by each selected component
+              model. System calculatability is established later by the study
+              compiler.
+            </p>
+          </header>
+          <div className="physical-component-list">
+            {topology.model.components.map((component) => {
+              const state = readiness[component.id] ?? {
+                state: 'draft' as const,
+                issues: [],
+              }
+              const descriptor = catalog.components.find(
+                (item) => item.kind === component.kind,
+              )
+              return (
+                <article key={component.id}>
+                  <div>
+                    <span className={`physical-state ${state.state}`}>
+                      {state.state}
+                    </span>
+                    <strong>{component.label || component.id}</strong>
+                    <code>{component.kind}</code>
+                  </div>
+                  <div className="physical-requirements">
+                    <span>{descriptor?.parameters.length ?? 0} parameters</span>
+                    <span>{descriptor?.artifacts.length ?? 0} artifact roles</span>
+                    <span>
+                      {descriptor?.ports.filter(
+                        (port) =>
+                          port.domain === 'fluid' || port.domain === 'material',
+                      ).length ?? 0}{' '}
+                      medium bindings
+                    </span>
+                  </div>
+                  <div className="physical-issue-copy">
+                    {state.issues.length ? (
+                      <>
+                        <strong>{state.issues[0].message}</strong>
+                        {state.issues.length > 1 && (
+                          <span>+{state.issues.length - 1} more requirements</span>
+                        )}
+                      </>
+                    ) : (
+                      <span>Local catalog requirements are complete.</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={publishing || !descriptor}
+                    onClick={() => onEditComponent(component)}
+                  >
+                    {state.state === 'defined' ? 'Review definition' : 'Define'}
+                  </button>
+                </article>
+              )
+            })}
+            {!topology.model.components.length && (
+              <div className="definition-list-empty">
+                <strong>No component instances</strong>
+                <p>Build the equipment topology before defining physics.</p>
+                <button type="button" onClick={onBuild}>Go to Build</button>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </section>
+  )
+}
+
+interface DefinitionSidebarProps {
+  topology?: TopologyDocument
+  readiness: Record<string, ComponentDefinitionReadiness>
+  onSelectComponent: (component: ComponentDefinition) => void
+}
+
+export function DefinitionSidebar({
+  topology,
+  readiness,
+  onSelectComponent,
+}: DefinitionSidebarProps) {
+  return (
+    <div className="definition-sidebar">
+      <header>
+        <span className="eyebrow">Definition scope</span>
+        <h2>Physical system</h2>
+        <p>Reusable asset data, not operating-case boundaries.</p>
+      </header>
+      <div className="definition-sidebar-list">
+        {(topology?.model.components ?? []).map((component) => {
+          const state = readiness[component.id]?.state ?? 'draft'
+          return (
+            <button
+              type="button"
+              key={component.id}
+              onClick={() => onSelectComponent(component)}
+            >
+              <span className={`physical-state ${state}`}>{state}</span>
+              <strong>{component.label || component.id}</strong>
+              <code>{component.kind}</code>
+            </button>
+          )
+        })}
+      </div>
+      <footer>
+        <span>Component readiness</span>
+        <code>authoring hints</code>
+      </footer>
+    </div>
+  )
+}

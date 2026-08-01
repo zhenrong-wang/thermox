@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { definitionIssues } from './definitionReadiness'
+import {
+  componentDefinitionReadiness,
+  definitionIssues,
+} from './definitionReadiness'
 import type { Catalog, TopologyDocument } from './types'
 
 const catalog = {
@@ -87,5 +90,25 @@ describe('definition readiness hints', () => {
 
     expect(issues).toHaveLength(1)
     expect(issues[0].kind).toBe('catalog')
+  })
+
+  it('distinguishes untouched drafts from partial physical definitions', () => {
+    expect(
+      componentDefinitionReadiness(
+        topology({ id: 'c1', kind: 'test.compressor' }),
+        catalog,
+      ).c1.state,
+    ).toBe('draft')
+
+    expect(
+      componentDefinitionReadiness(
+        topology({
+          id: 'c1',
+          kind: 'test.compressor',
+          parameters: { efficiency: 0.88 },
+        }),
+        catalog,
+      ).c1.state,
+    ).toBe('incomplete')
   })
 })

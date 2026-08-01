@@ -20,6 +20,7 @@ interface ComponentFormProps {
   topology: TopologyDocument
   artifactRevisions: ArtifactRevision[]
   component?: ComponentDefinition
+  intent?: 'draft' | 'define'
   onCancel: () => void
   onSubmit: (component: ComponentDefinition) => Promise<void>
 }
@@ -78,6 +79,7 @@ export function ComponentForm({
   topology,
   artifactRevisions,
   component,
+  intent = 'define',
   onCancel,
   onSubmit,
 }: ComponentFormProps) {
@@ -129,9 +131,10 @@ export function ComponentForm({
       setFormError('Component ID is required.')
       return
     }
+    const draftOnly = intent === 'draft' && !component
     const media: Record<string, string> = {}
     const materials: Record<string, string> = {}
-    for (const port of bindingPorts) {
+    for (const port of draftOnly ? [] : bindingPorts) {
       const value = bindings[port.name]
       if (!value) {
         setFormError(`Select a ${port.domain} binding for ${port.name}.`)
@@ -141,7 +144,7 @@ export function ComponentForm({
       else materials[port.name] = value
     }
     const numericParameters: Record<string, number> = {}
-    for (const descriptor of componentType.parameters) {
+    for (const descriptor of draftOnly ? [] : componentType.parameters) {
       const raw = parameters[descriptor.name]?.trim() ?? ''
       if (!raw) {
         if (descriptor.required && descriptor.default_value_si === null) {
@@ -162,36 +165,36 @@ export function ComponentForm({
         unitDimensions,
       )
     }
-    for (const descriptor of componentType.artifacts) {
+    for (const descriptor of draftOnly ? [] : componentType.artifacts) {
       if (descriptor.required && !artifacts[descriptor.role]?.trim()) {
         setFormError(`Artifact binding ${descriptor.role} is required.`)
         return
       }
     }
 
-    const component: ComponentDefinition = {
+    const nextComponent: ComponentDefinition = {
       id: trimmedId,
       kind: componentType.kind,
       version: componentType.version,
     }
-    if (label.trim()) component.label = label.trim()
-    if (Object.keys(media).length) component.media = media
-    if (Object.keys(materials).length) component.materials = materials
+    if (label.trim()) nextComponent.label = label.trim()
+    if (Object.keys(media).length) nextComponent.media = media
+    if (Object.keys(materials).length) nextComponent.materials = materials
     const artifactBindings = Object.fromEntries(
       Object.entries(artifacts)
         .map(([key, value]) => [key, value.trim()])
         .filter(([, value]) => Boolean(value)),
     )
     if (Object.keys(artifactBindings).length) {
-      component.artifacts = artifactBindings
+      nextComponent.artifacts = artifactBindings
     }
     if (Object.keys(numericParameters).length) {
-      component.parameters = numericParameters
+      nextComponent.parameters = numericParameters
     }
 
     setSubmitting(true)
     try {
-      await onSubmit(component)
+      await onSubmit(nextComponent)
     } catch (reason) {
       setFormError(
         reason instanceof Error ? reason.message : 'Component was rejected.',
@@ -206,8 +209,16 @@ export function ComponentForm({
       <form className="component-dialog" onSubmit={submit}>
         <header>
           <div>
-            <span className="eyebrow">Catalog-driven instance</span>
-            <h2>{component ? 'Edit component' : 'Add component'}</h2>
+            <span className="eyebrow">
+              {intent === 'draft' ? 'Draft topology instance' : 'Physical definition'}
+            </span>
+            <h2>
+              {component
+                ? 'Define component'
+                : intent === 'draft'
+                  ? 'Place component template'
+                  : 'Add component'}
+            </h2>
           </div>
           <button type="button" className="icon-button" onClick={onCancel}>
             ×
@@ -239,7 +250,17 @@ export function ComponentForm({
           </label>
         </div>
 
-        {bindingPorts.length > 0 && (
+        {intent === 'draft' && !component && (
+          <div className="registry-note">
+            <strong>Definition happens next</strong>
+            <span>
+              This creates a draft graph instance. Media, parameters, and
+              engineering data can be supplied in the Define workspace.
+            </span>
+          </div>
+        )}
+
+        {intent === 'define' && bindingPorts.length > 0 && (
           <fieldset>
             <legend>Medium and material bindings</legend>
             <div className="form-grid">
@@ -277,7 +298,7 @@ export function ComponentForm({
           </fieldset>
         )}
 
-        {componentType.parameters.length > 0 && (
+        {intent === 'define' && componentType.parameters.length > 0 && (
           <fieldset>
             <legend>Parameters · displayed in {profile} units</legend>
             <div className="form-grid">
@@ -336,7 +357,7 @@ export function ComponentForm({
           </fieldset>
         )}
 
-        {componentType.artifacts.length > 0 && (
+        {intent === 'define' && componentType.artifacts.length > 0 && (
           <fieldset>
             <legend>Engineering artifact bindings</legend>
             <div className="form-grid">
@@ -371,7 +392,9 @@ export function ComponentForm({
               ? 'Publishing…'
               : component
                 ? 'Publish updated revision'
-                : 'Publish child revision'}
+                : intent === 'draft'
+                  ? 'Place draft component'
+                  : 'Publish child revision'}
           </button>
         </footer>
       </form>

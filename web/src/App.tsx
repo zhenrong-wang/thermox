@@ -7,6 +7,11 @@ import { CaseWorkspace } from './CaseWorkspace'
 import { ComponentForm } from './ComponentForm'
 import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
+import {
+  DefinitionSidebar,
+  DefinitionWorkspace,
+} from './DefinitionWorkspace'
+import { componentDefinitionReadiness } from './definitionReadiness'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { ExpressionComponentForm } from './ExpressionComponentForm'
 import {
@@ -318,6 +323,18 @@ function App() {
       topology,
     )
   }, [catalog, projectComponents, topology])
+  const physicalReadiness = useMemo(
+    () => componentDefinitionReadiness(topology, topologyCatalog),
+    [topology, topologyCatalog],
+  )
+  const physicalIssueCount = useMemo(
+    () =>
+      Object.values(physicalReadiness).reduce(
+        (total, item) => total + item.issues.length,
+        0,
+      ),
+    [physicalReadiness],
+  )
   const requiredComponentSources = useMemo(
     () =>
       requiredProjectComponentSources(
@@ -475,6 +492,7 @@ function App() {
     componentCount: topology?.model.components.length ?? 0,
     connectionCount: topology?.model.connections.length ?? 0,
     mediumCount: topology?.model.media.length ?? 0,
+    definitionIssueCount: physicalIssueCount,
     hasCase: Boolean(selectedCaseRevision),
     unresolvedArtifactCount,
     compiled: exactRevisionCompiled,
@@ -1159,21 +1177,23 @@ function App() {
     }
   }
 
-  function inspectComponentOnCanvas(componentId: string) {
-    if (!topology?.model.components.some((item) => item.id === componentId)) {
+  function inspectComponentDefinition(componentId: string) {
+    const component = topology?.model.components.find(
+      (item) => item.id === componentId,
+    )
+    if (!component) {
       setCaseOperationError(
         `Component ${componentId} is not present in this topology revision.`,
       )
       return
     }
-    setSelection({ type: 'component', id: componentId })
-    setTopologySidebar('inspector')
-    setWorkspaceView('topology')
+    setEditingComponent(component)
+    setWorkspaceView('definition')
   }
 
   function inspectDiagnosticOnCanvas(diagnostic: ValidationDiagnostic) {
     if (diagnostic.component_id) {
-      inspectComponentOnCanvas(diagnostic.component_id)
+      inspectComponentDefinition(diagnostic.component_id)
       return
     }
     if (
@@ -1334,6 +1354,7 @@ function App() {
               catalog={topologyCatalog?.components ?? []}
               revisionId={selectedRevisionId}
               publishing={publishing}
+              componentReadiness={physicalReadiness}
               onCreateTopology={
                 selectedProjectId && !selectedRevisionId
                   ? () => {
@@ -1356,7 +1377,25 @@ function App() {
             />
           )}
           </section>
-        ) : workspaceView === 'cases' ? (
+        ) : workspaceView === 'definition' ? (
+          <DefinitionWorkspace
+            topology={topology}
+            catalog={topologyCatalog}
+            readiness={physicalReadiness}
+            artifactRevisions={artifactRevisions}
+            publishing={publishing}
+            operationError={operationError}
+            operationStatus={operationStatus}
+            onDismissOperation={() => {
+              setOperationError('')
+              setOperationStatus('')
+            }}
+            onEditComponent={setEditingComponent}
+            onAddFluid={() => setAddingMedium(true)}
+            onAddMaterial={() => setAddingMaterial(true)}
+            onBuild={() => setWorkspaceView('topology')}
+          />
+        ) : workspaceView === 'studies' ? (
           <CaseWorkspace
             key={selectedCaseRevisionId || 'empty-case'}
             revision={selectedCaseRevision}
@@ -1380,7 +1419,7 @@ function App() {
             }}
             onEdit={editCase}
             onValidate={validateCase}
-            onInspectComponent={inspectComponentOnCanvas}
+            onInspectComponent={inspectComponentDefinition}
             onInspectDiagnostic={inspectDiagnosticOnCanvas}
             onCreate={() => setAddingCase(true)}
           />
@@ -1519,6 +1558,12 @@ function App() {
                 )}
               </div>
             </>
+          ) : workspaceView === 'definition' ? (
+            <DefinitionSidebar
+              topology={topology}
+              readiness={physicalReadiness}
+              onSelectComponent={setEditingComponent}
+            />
           ) : workspaceView === 'runs' ? (
             <RunConfigurationPanel
               revisions={visibleRunConfigurations}
@@ -1541,7 +1586,7 @@ function App() {
                 void refreshResultJobs()
               }}
             />
-          ) : workspaceView === 'cases' ? (
+          ) : workspaceView === 'studies' ? (
             <CaseRevisionPanel
               revisions={caseRevisions}
               selectedId={selectedCaseRevisionId}
@@ -1556,13 +1601,14 @@ function App() {
         <ComponentForm
           key={`new-${newComponentType.kind}`}
           componentType={newComponentType}
+          intent="draft"
           topology={topology}
           artifactRevisions={artifactRevisions}
           onCancel={() => setNewComponentType(undefined)}
           onSubmit={addComponent}
         />
       )}
-      {workspaceView === 'topology' &&
+      {(workspaceView === 'topology' || workspaceView === 'definition') &&
         editingComponent &&
         topology &&
         topologyCatalog && (
@@ -1595,7 +1641,8 @@ function App() {
           }
         />
       )}
-      {workspaceView === 'topology' && addingMedium && topology && catalog && (
+      {(workspaceView === 'topology' || workspaceView === 'definition') &&
+        addingMedium && topology && catalog && (
         <MediumForm
           backends={catalog.property_backends}
           topology={topology}
@@ -1603,7 +1650,8 @@ function App() {
           onSubmit={addMedium}
         />
       )}
-      {workspaceView === 'topology' && addingMaterial && topology && catalog && (
+      {(workspaceView === 'topology' || workspaceView === 'definition') &&
+        addingMaterial && topology && catalog && (
         <MaterialForm
           backends={catalog.thermochemistry_backends}
           topology={topology}
