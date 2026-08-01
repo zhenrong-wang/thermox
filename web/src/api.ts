@@ -8,6 +8,7 @@ import type {
   CaseRevision,
   CaseRevisionList,
   CreateRunConfiguration,
+  CreateStudyRevision,
   GraphEditOperation,
   ModelRevision,
   ModelRevisionList,
@@ -19,6 +20,8 @@ import type {
   SimulationJobPage,
   SimulationResult,
   SimulationJobState,
+  StudyRevision,
+  StudyRevisionList,
   ExpressionComponentDefinition,
   TopologyDocument,
 } from './types'
@@ -265,6 +268,30 @@ export const api = {
         schema_version: 'thermox.project_model_validation_request/v1',
         artifact_revision_ids: artifactRevisionIds,
       },
+      signal,
+    ),
+  studyRevisions: (projectId: string, signal?: AbortSignal) =>
+    getJson<StudyRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/study-revisions`,
+      signal,
+    ),
+  studyRevision: (
+    projectId: string,
+    revisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<StudyRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/study-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  createStudyRevision: (
+    projectId: string,
+    request: CreateStudyRevision,
+    signal?: AbortSignal,
+  ) =>
+    postJson<StudyRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/study-revisions`,
+      request,
       signal,
     ),
   runConfigurationRevisions: (

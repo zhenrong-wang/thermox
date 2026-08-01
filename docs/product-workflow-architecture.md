@@ -155,8 +155,8 @@ system.
 | Numerical core | Scaled steady nonlinear solve, sparse structure, continuation, implicit DAE, diagnostics | Preserve; add new optimization backends only behind study contracts |
 | Physics | Registered CoolProp property packages and Cantera thermochemistry | Preserve registry boundary; expand packages independently |
 | Component/compiler platform | Generic typed graph, 49 runtime component types, maps, expression components, structural validation | Preserve; report readiness by entity and study intent |
-| Calibration/study service | Multi-case calibration and leakage-guarded prediction service exist synchronously | Persist calibration/study revisions and expose them through project APIs/jobs |
-| Persistence/jobs | Team/project scoping, immutable topology/case/run revisions, PostgreSQL, object storage, worker queue | Add durable study/calibration resources and bind jobs to study revision |
+| Calibration/study service | Immutable Study revisions now bind an exact topology, case, artifacts, intent, and output projections; multi-case calibration and leakage-guarded prediction also exist synchronously | Persist calibration revisions and connect multi-case calibration to durable Study resources |
+| Persistence/jobs | Team/project scoping, immutable topology/case/study/run revisions, PostgreSQL, object storage, worker queue | Bind run configurations and jobs to an exact Study revision instead of duplicating its inputs |
 | Web workflow | Canvas, component palette, physical forms, cases, compile validation, runs, results | Split Build/Define/Study, permit incomplete drafts, add entity badges, expose study semantics |
 
 ## Migration rules

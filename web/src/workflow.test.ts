@@ -9,6 +9,7 @@ const empty: WorkflowInputs = {
   hasCase: false,
   unresolvedArtifactCount: 0,
   compiled: false,
+  studyRevisionCount: 0,
   variableCount: 0,
   equationCount: 0,
   runConfigurationCount: 0,
@@ -30,7 +31,7 @@ describe('engineering workflow', () => {
     expect(stages[0].detail).toContain('component template')
   })
 
-  it('only marks a system calculatable after authoritative compilation', () => {
+  it('requires compilation and a published study before calculation', () => {
     const beforeCompile = buildWorkflowStages({
       ...empty,
       componentCount: 4,
@@ -53,9 +54,24 @@ describe('engineering workflow', () => {
       equationCount: 18,
     })
     expect(compiled[1].state).toBe('complete')
-    expect(compiled[2].state).toBe('complete')
-    expect(compiled[2].detail).toBe('18 variables · 18 equations')
-    expect(compiled[3].state).toBe('ready')
+    expect(compiled[2].state).toBe('attention')
+    expect(compiled[2].detail).toContain('immutable study')
+    expect(compiled[3].state).toBe('locked')
+
+    const published = buildWorkflowStages({
+      ...empty,
+      componentCount: 4,
+      connectionCount: 3,
+      mediumCount: 1,
+      hasCase: true,
+      compiled: true,
+      variableCount: 18,
+      equationCount: 18,
+      studyRevisionCount: 1,
+    })
+    expect(published[2].state).toBe('complete')
+    expect(published[2].detail).toBe('18 variables · 18 equations')
+    expect(published[3].state).toBe('ready')
   })
 
   it('promotes successful execution into analysis readiness', () => {
@@ -65,6 +81,7 @@ describe('engineering workflow', () => {
       connectionCount: 1,
       hasCase: true,
       compiled: true,
+      studyRevisionCount: 1,
       variableCount: 6,
       equationCount: 6,
       runConfigurationCount: 1,

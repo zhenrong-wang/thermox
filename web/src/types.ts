@@ -174,6 +174,40 @@ export interface ResultProjection {
   aggregation: ResultAggregation
 }
 
+export interface StudyRevision {
+  schema_version: 'thermox.study_revision/v1'
+  study_revision_id: string
+  study_id: string
+  project_id: string
+  team_id: string
+  revision_number: number
+  parent_study_revision_id: string
+  model_revision_id: string
+  case_revision_id: string
+  intent: string
+  artifact_revision_ids: string[]
+  result_projections: ResultProjection[]
+  checksum: string
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface StudyRevisionList {
+  schema_version: 'thermox.study_revision_list/v1'
+  study_revisions: StudyRevision[]
+}
+
+export interface CreateStudyRevision {
+  schema_version: 'thermox.study_revision.create/v1'
+  study_id: string
+  parent_study_revision_id: string
+  model_revision_id: string
+  case_revision_id: string
+  intent: string
+  artifact_revision_ids: string[]
+  result_projections: ResultProjection[]
+}
+
 export interface RunConfigurationRevision {
   schema_version: 'thermox.run_configuration_revision/v2'
   run_configuration_revision_id: string

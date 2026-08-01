@@ -1076,6 +1076,49 @@ void parse_transient_solver(
     }
 }
 
+std::vector<service::ResultProjection> parse_result_projections(
+    const boost::property_tree::ptree& tree) {
+    const std::set<std::string> fields = {
+        "id", "scope", "component_id", "port_name",
+        "value_name", "dimension", "aggregation",
+    };
+    std::vector<service::ResultProjection> result;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::invalid_argument(
+                "result_projections must be an array");
+        }
+        for (const auto& [field, unused] : value) {
+            (void)unused;
+            if (!fields.contains(field)) {
+                throw std::invalid_argument(
+                    "unknown result projection field: " + field);
+            }
+        }
+        service::ResultProjection projection;
+        projection.id = value.get<std::string>("id", "");
+        projection.component_id =
+            value.get<std::string>("component_id", "");
+        projection.port_name =
+            value.get<std::string>("port_name", "");
+        projection.value_name =
+            value.get<std::string>("value_name", "");
+        projection.dimension =
+            value.get<std::string>("dimension", "");
+        try {
+            projection.scope = service::result_value_scope_from_string(
+                value.get<std::string>("scope", ""));
+            projection.aggregation =
+                service::result_aggregation_from_string(
+                    value.get<std::string>("aggregation", "final"));
+        } catch (const service::ResultProjectionError& error) {
+            throw std::invalid_argument(error.what());
+        }
+        result.push_back(std::move(projection));
+    }
+    return result;
+}
+
 service::CreateRunConfigurationRevisionRequest
 parse_create_run_configuration_request(
     const Request& request) {
@@ -1145,54 +1188,63 @@ parse_create_run_configuration_request(
     }
     if (const auto projections =
             tree.get_child_optional("result_projections")) {
-        const std::set<std::string> projection_fields = {
-            "id",
-            "scope",
-            "component_id",
-            "port_name",
-            "value_name",
-            "dimension",
-            "aggregation",
-        };
-        for (const auto& [key, value] : *projections) {
+        command.result_projections =
+            parse_result_projections(*projections);
+    }
+    return command;
+}
+
+service::CreateStudyRevisionRequest parse_create_study_request(
+    const Request& request) {
+    boost::property_tree::ptree tree;
+    std::istringstream input(request.body);
+    try {
+        boost::property_tree::read_json(input, tree);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid study JSON: ") + error.what());
+    }
+    const std::set<std::string> allowed = {
+        "schema_version", "study_id", "parent_study_revision_id",
+        "model_revision_id", "case_revision_id", "intent",
+        "artifact_revision_ids", "result_projections",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown study field: " + key);
+        }
+    }
+    if (tree.get<std::string>("schema_version", "") !=
+        "thermox.study_revision.create/v1") {
+        throw std::invalid_argument(
+            "unsupported study create schema_version");
+    }
+    service::CreateStudyRevisionRequest command;
+    command.study_id = tree.get<std::string>("study_id", "");
+    command.parent_study_revision_id = tree.get<std::string>(
+        "parent_study_revision_id", "");
+    command.model_revision_id =
+        tree.get<std::string>("model_revision_id", "");
+    command.case_revision_id =
+        tree.get<std::string>("case_revision_id", "");
+    command.intent = tree.get<std::string>("intent", "");
+    if (const auto artifacts =
+            tree.get_child_optional("artifact_revision_ids")) {
+        for (const auto& [key, value] : *artifacts) {
             if (!key.empty()) {
                 throw std::invalid_argument(
-                    "result_projections must be an array");
+                    "artifact_revision_ids must be an array");
             }
-            for (const auto& [field, unused] : value) {
-                (void)unused;
-                if (!projection_fields.contains(field)) {
-                    throw std::invalid_argument(
-                        "unknown result projection field: " +
-                        field);
-                }
-            }
-            service::ResultProjection projection;
-            projection.id =
-                value.get<std::string>("id", "");
-            projection.component_id =
-                value.get<std::string>("component_id", "");
-            projection.port_name =
-                value.get<std::string>("port_name", "");
-            projection.value_name =
-                value.get<std::string>("value_name", "");
-            projection.dimension =
-                value.get<std::string>("dimension", "");
-            try {
-                projection.scope =
-                    service::result_value_scope_from_string(
-                        value.get<std::string>("scope", ""));
-                projection.aggregation =
-                    service::result_aggregation_from_string(
-                        value.get<std::string>(
-                            "aggregation", "final"));
-            } catch (
-                const service::ResultProjectionError& error) {
-                throw std::invalid_argument(error.what());
-            }
-            command.result_projections.push_back(
-                std::move(projection));
+            command.artifact_revision_ids.push_back(
+                value.get_value<std::string>());
         }
+    }
+    if (const auto projections =
+            tree.get_child_optional("result_projections")) {
+        command.result_projections =
+            parse_result_projections(*projections);
     }
     return command;
 }
@@ -1265,6 +1317,20 @@ Response run_configuration_revision_response(
         "/api/v1/projects/" + revision.project_id +
         "/run-configuration-revisions/" +
         revision.run_configuration_revision_id;
+    return response;
+}
+
+Response study_revision_response(
+    const service::StudyRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_study_revision_json(revision));
+    response.headers["ETag"] =
+        "\"" + revision.checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/study-revisions/" + revision.study_revision_id;
     return response;
 }
 
@@ -1449,6 +1515,8 @@ Response Api::handle(const Request& request) const {
                 "/component-catalog";
             constexpr std::string_view run_configurations_segment =
                 "/run-configuration-revisions";
+            constexpr std::string_view studies_segment =
+                "/study-revisions";
             if (remainder == component_catalog_segment) {
                 reject_unknown_query(target.query, {});
                 if (method != "get") {
@@ -1507,6 +1575,74 @@ Response Api::handle(const Request& request) const {
                     "GET and POST");
                 response.headers["Allow"] = "GET, POST";
                 return response;
+            }
+            if (remainder == studies_segment) {
+                if (!impl_->projects
+                         ->get_project(identity, project_id)) {
+                    return error_response(
+                        404,
+                        "project_not_found",
+                        "project was not found");
+                }
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    return json_response(
+                        200,
+                        service::serialize_study_revisions_json(
+                            impl_->projects->list_study_revisions(
+                                identity, project_id)));
+                }
+                if (method == "post") {
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_create_study_request(request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    return study_revision_response(
+                        impl_->projects->create_study_revision(
+                            command),
+                        201);
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "study revisions only support GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
+            const std::string study_detail_prefix =
+                std::string(studies_segment) + "/";
+            if (remainder.starts_with(study_detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "study revision detail only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto revision_id = remainder.substr(
+                    study_detail_prefix.size());
+                if (revision_id.empty() ||
+                    revision_id.find('/') != std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto revision = impl_->projects
+                    ->get_study_revision(
+                        identity, project_id, revision_id);
+                if (!revision) {
+                    return error_response(
+                        404,
+                        "study_revision_not_found",
+                        "study revision was not found");
+                }
+                return study_revision_response(*revision, 200);
             }
             const std::string run_configuration_detail_prefix =
                 std::string(run_configurations_segment) + "/";

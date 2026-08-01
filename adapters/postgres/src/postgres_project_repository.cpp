@@ -374,6 +374,28 @@ service::ArtifactRevisionRecord decode_artifact_revision(
     return record;
 }
 
+service::StudyRevisionRecord decode_study_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::StudyRevisionRecord record;
+    record.study_revision_id = field(result, row, 0);
+    record.study_id = field(result, row, 1);
+    record.project_id = field(result, row, 2);
+    record.team_id = field(result, row, 3);
+    record.revision_number = std::stoull(field(result, row, 4));
+    record.parent_study_revision_id =
+        optional_field(result, row, 5);
+    record.model_revision_id = field(result, row, 6);
+    record.case_revision_id = field(result, row, 7);
+    record.intent = field(result, row, 8);
+    record.result_projections =
+        decode_result_projections(field(result, row, 9));
+    record.checksum = field(result, row, 10);
+    record.created_by_user_id = field(result, row, 11);
+    record.created_at = decode_time(field(result, row, 12));
+    return record;
+}
+
 service::RunConfigurationRevisionRecord
 decode_run_configuration_revision(
     const PGresult* result,
@@ -433,6 +455,14 @@ constexpr const char artifact_revision_columns[] =
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
+constexpr const char study_revision_columns[] =
+    "study_revision_id, study_id, project_id, team_id, "
+    "revision_number, parent_study_revision_id, "
+    "model_revision_id, case_revision_id, intent, "
+    "result_projections_payload, checksum, created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
 constexpr const char run_configuration_revision_columns[] =
     "run_configuration_revision_id, run_configuration_id, "
     "project_id, team_id, revision_number, "
@@ -460,13 +490,15 @@ public:
             "to_regclass('thermox_model_revisions')::text, "
             "to_regclass('thermox_case_revisions')::text, "
             "to_regclass('thermox_artifact_revisions')::text, "
+            "to_regclass('thermox_study_revisions')::text, "
             "to_regclass("
             "'thermox_run_configuration_revisions')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
             PQgetisnull(schema.get(), 0, 1) ||
             PQgetisnull(schema.get(), 0, 2) ||
             PQgetisnull(schema.get(), 0, 3) ||
-            PQgetisnull(schema.get(), 0, 4)) {
+            PQgetisnull(schema.get(), 0, 4) ||
+            PQgetisnull(schema.get(), 0, 5)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -973,6 +1005,143 @@ public:
         return records;
     }
 
+    service::StudyRevisionRecord create_study_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& study_id,
+        const std::string& parent_study_revision_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id,
+        const std::string& intent,
+        const std::vector<std::string>& artifact_revision_ids,
+        const std::vector<service::ResultProjection>& result_projections,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(
+            connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto project = execute(
+            connection.get(),
+            "SELECT 1 FROM thermox_projects "
+            "WHERE team_id = $1 AND project_id = $2 FOR UPDATE",
+            {team_id.c_str(), project_id.c_str()});
+        if (PQntuples(project.get()) == 0) {
+            throw service::ProjectStateError(
+                "project was not found");
+        }
+        if (!parent_study_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM thermox_study_revisions "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND study_id = $3 AND study_revision_id = $4",
+                {team_id.c_str(), project_id.c_str(),
+                 study_id.c_str(),
+                 parent_study_revision_id.c_str()});
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent study revision was not found");
+            }
+        }
+        const auto number = execute(
+            connection.get(),
+            "SELECT coalesce(max(revision_number), 0) + 1 "
+            "FROM thermox_study_revisions WHERE team_id = $1 "
+            "AND project_id = $2 AND study_id = $3",
+            {team_id.c_str(), project_id.c_str(),
+             study_id.c_str()});
+        const auto revision_number = field(number.get(), 0, 0);
+        const char* parent = parent_study_revision_id.empty()
+            ? nullptr
+            : parent_study_revision_id.c_str();
+        const auto projections_payload =
+            result_projections_payload(result_projections);
+        const auto sql =
+            std::string("INSERT INTO thermox_study_revisions (") +
+            "study_id, project_id, team_id, revision_number, "
+            "parent_study_revision_id, model_revision_id, "
+            "case_revision_id, intent, result_projections_payload, "
+            "checksum, created_by_user_id) VALUES ("
+            "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
+            "($9::jsonb)->'items', $10, $11) RETURNING " +
+            study_revision_columns;
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {study_id.c_str(), project_id.c_str(), team_id.c_str(),
+             revision_number.c_str(), parent,
+             model_revision_id.c_str(), case_revision_id.c_str(),
+             intent.c_str(), projections_payload.c_str(),
+             checksum.c_str(), created_by_user_id.c_str()});
+        auto record = decode_study_revision(result.get());
+        for (std::size_t index = 0;
+             index < artifact_revision_ids.size(); ++index) {
+            const auto position = std::to_string(index);
+            (void)execute(
+                connection.get(),
+                "INSERT INTO thermox_study_artifacts ("
+                "study_revision_id, project_id, team_id, position, "
+                "artifact_revision_id) VALUES ("
+                "$1, $2, $3, $4::integer, $5)",
+                {record.study_revision_id.c_str(),
+                 project_id.c_str(), team_id.c_str(),
+                 position.c_str(),
+                 artifact_revision_ids[index].c_str()},
+                PGRES_COMMAND_OK);
+        }
+        (void)execute(
+            connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        record.artifact_revision_ids = artifact_revision_ids;
+        return record;
+    }
+
+    std::optional<service::StudyRevisionRecord>
+    get_study_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& study_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            study_revision_columns +
+            " FROM thermox_study_revisions WHERE team_id = $1 "
+            "AND project_id = $2 AND study_revision_id = $3";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {team_id.c_str(), project_id.c_str(),
+             study_revision_id.c_str()});
+        if (PQntuples(result.get()) == 0) return std::nullopt;
+        auto record = decode_study_revision(result.get());
+        record.artifact_revision_ids = study_artifact_ids(
+            connection.get(), team_id, project_id,
+            study_revision_id);
+        return record;
+    }
+
+    std::vector<service::StudyRevisionRecord>
+    list_study_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            study_revision_columns +
+            " FROM thermox_study_revisions WHERE team_id = $1 "
+            "AND project_id = $2 ORDER BY study_id, revision_number";
+        const auto result = execute(
+            connection.get(),
+            sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        std::vector<service::StudyRevisionRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            auto record = decode_study_revision(result.get(), row);
+            record.artifact_revision_ids = study_artifact_ids(
+                connection.get(), team_id, project_id,
+                record.study_revision_id);
+            records.push_back(std::move(record));
+        }
+        return records;
+    }
+
     service::RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -1184,6 +1353,26 @@ public:
     }
 
 private:
+    static std::vector<std::string> study_artifact_ids(
+        PGconn* connection,
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& study_revision_id) {
+        const auto result = execute(
+            connection,
+            "SELECT artifact_revision_id FROM "
+            "thermox_study_artifacts WHERE team_id = $1 "
+            "AND project_id = $2 AND study_revision_id = $3 "
+            "ORDER BY position",
+            {team_id.c_str(), project_id.c_str(),
+             study_revision_id.c_str()});
+        std::vector<std::string> ids;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            ids.push_back(field(result.get(), row, 0));
+        }
+        return ids;
+    }
+
     static std::vector<std::string> artifact_ids(
         PGconn* connection,
         const std::string& team_id,

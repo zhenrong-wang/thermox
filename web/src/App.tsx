@@ -52,6 +52,7 @@ import type {
   ComponentDefinition,
   ConnectionDefinition,
   CreateRunConfiguration,
+  CreateStudyRevision,
   GraphEditOperation,
   MediumDefinition,
   MaterialDefinition,
@@ -63,6 +64,7 @@ import type {
   SimulationJob,
   SimulationResult,
   SimulationJobState,
+  StudyRevision,
   TopologyDocument,
   ValidationDiagnostic,
 } from './types'
@@ -116,6 +118,7 @@ function App() {
   const [caseOperationStatus, setCaseOperationStatus] = useState('')
   const [validationResult, setValidationResult] =
     useState<ProjectModelValidation>()
+  const [studyRevisions, setStudyRevisions] = useState<StudyRevision[]>([])
   const [validating, setValidating] = useState(false)
   const [runConfigurationRevisions, setRunConfigurationRevisions] = useState<
     RunConfigurationRevision[]
@@ -170,6 +173,27 @@ function App() {
       .finally(() => setLoading(false))
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    setStudyRevisions([])
+    if (!selectedProjectId) return
+    const controller = new AbortController()
+    api
+      .studyRevisions(selectedProjectId, controller.signal)
+      .then((response) => {
+        setCaseOperationError('')
+        setStudyRevisions(
+          [...response.study_revisions].sort(
+            (left, right) =>
+              right.created_at_epoch_ms - left.created_at_epoch_ms,
+          ),
+        )
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setCaseOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId])
 
   useEffect(() => {
     setRunConfigurationRevisions([])
@@ -377,6 +401,13 @@ function App() {
       ),
     [runConfigurationRevisions, selectedRevisionId],
   )
+  const visibleStudies = useMemo(
+    () =>
+      studyRevisions.filter(
+        (revision) => revision.model_revision_id === selectedRevisionId,
+      ),
+    [selectedRevisionId, studyRevisions],
+  )
   const selectedArtifactRevisionIds = useMemo(
     () =>
       requiredArtifactIds
@@ -496,6 +527,7 @@ function App() {
     hasCase: Boolean(selectedCaseRevision),
     unresolvedArtifactCount,
     compiled: exactRevisionCompiled,
+    studyRevisionCount: visibleStudies.length,
     variableCount:
       validationResult?.validation.compilation.variable_count ?? 0,
     equationCount:
@@ -852,6 +884,57 @@ function App() {
       throw new Error(message)
     } finally {
       setValidating(false)
+    }
+  }
+
+  async function publishStudy() {
+    if (
+      !selectedProjectId ||
+      !selectedRevisionId ||
+      !selectedCaseRevision ||
+      !exactRevisionCompiled
+    ) {
+      setCaseOperationError(
+        'Validate the exact topology, case, and artifact revisions before publishing a study.',
+      )
+      return
+    }
+    const studyId = selectedCaseRevision.case_id
+    const parent = visibleStudies.find(
+      (revision) => revision.study_id === studyId,
+    )
+    const request: CreateStudyRevision = {
+      schema_version: 'thermox.study_revision.create/v1',
+      study_id: studyId,
+      parent_study_revision_id: parent?.study_revision_id ?? '',
+      model_revision_id: selectedRevisionId,
+      case_revision_id: selectedCaseRevision.case_revision_id,
+      intent: selectedCaseRevision.mode,
+      artifact_revision_ids: selectedArtifactRevisionIds,
+      result_projections: parent?.result_projections ?? [],
+    }
+    setCasePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const revision = await api.createStudyRevision(
+        selectedProjectId,
+        request,
+      )
+      setStudyRevisions((current) => [
+        revision,
+        ...current.filter(
+          (item) =>
+            item.study_revision_id !== revision.study_revision_id,
+        ),
+      ])
+      setCaseOperationStatus(
+        `Published study ${revision.study_id} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      setCaseOperationError(errorMessage(reason))
+    } finally {
+      setCasePublishing(false)
     }
   }
 
@@ -1589,10 +1672,15 @@ function App() {
           ) : workspaceView === 'studies' ? (
             <CaseRevisionPanel
               revisions={caseRevisions}
+              studies={visibleStudies}
               selectedId={selectedCaseRevisionId}
               publishing={casePublishing}
+              canPublishStudy={exactRevisionCompiled}
               onSelect={setSelectedCaseRevisionId}
               onCreate={() => setAddingCase(true)}
+              onPublishStudy={() => {
+                void publishStudy()
+              }}
             />
           ) : null}
         </aside>

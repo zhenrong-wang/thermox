@@ -1,19 +1,25 @@
-import type { CaseRevision } from './types'
+import type { CaseRevision, StudyRevision } from './types'
 
 interface CaseRevisionPanelProps {
   revisions: CaseRevision[]
   selectedId: string
   publishing: boolean
+  studies: StudyRevision[]
+  canPublishStudy: boolean
   onSelect: (revisionId: string) => void
   onCreate: () => void
+  onPublishStudy: () => void
 }
 
 export function CaseRevisionPanel({
   revisions,
   selectedId,
   publishing,
+  studies,
+  canPublishStudy,
   onSelect,
   onCreate,
+  onPublishStudy,
 }: CaseRevisionPanelProps) {
   return (
     <div className="case-revision-panel">
@@ -59,9 +65,47 @@ export function CaseRevisionPanel({
           </button>
         ))}
       </div>
+      <header className="study-revision-heading">
+        <div>
+          <span className="eyebrow">Executable intent</span>
+          <h2>Studies</h2>
+          <p>{studies.length} immutable revisions</p>
+        </div>
+        <button
+          type="button"
+          className="resource-button"
+          disabled={publishing || !canPublishStudy}
+          onClick={onPublishStudy}
+          title={
+            canPublishStudy
+              ? 'Publish the validated revision set as a study'
+              : 'Validate the exact topology, case, and artifacts first'
+          }
+        >
+          Publish
+        </button>
+      </header>
+      <div className="case-revision-list">
+        {!studies.length && (
+          <div className="case-list-empty">
+            <strong>No published studies</strong>
+            <span>Validate an operating case, then publish its intent.</span>
+          </div>
+        )}
+        {studies.map((revision) => (
+          <div className="case-revision-card" key={revision.study_revision_id}>
+            <div>
+              <strong>{revision.study_id}</strong>
+              <span>r{revision.revision_number}</span>
+            </div>
+            <small>{revision.intent}</small>
+            <code>{revision.checksum.slice(7, 19)}</code>
+          </div>
+        ))}
+      </div>
       <footer>
-        <span>Topology-scoped</span>
-        <code>thermox.case/v1</code>
+        <span>Case → durable study</span>
+        <code>thermox.study_revision/v1</code>
       </footer>
     </div>
   )

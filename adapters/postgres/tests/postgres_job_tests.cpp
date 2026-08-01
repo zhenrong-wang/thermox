@@ -95,6 +95,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "007_simulation_job_history.sql",
              "008_run_result_projections.sql",
              "009_request_component_bundles.sql",
+             "010_study_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -727,6 +728,38 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL artifact metadata must be immutable and "
         "Team scoped");
+
+    thermox::service::CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.study_id = "postgres-design-study";
+    study_request.model_revision_id = first.model_revision_id;
+    study_request.case_revision_id = first_case.case_revision_id;
+    study_request.intent = first_case.mode;
+    study_request.artifact_revision_ids = {
+        artifact.artifact_revision_id,
+    };
+    const auto study =
+        projects.create_study_revision(study_request);
+    const auto loaded_study = projects.get_study_revision(
+        team_a, project.project_id, study.study_revision_id);
+    require(
+        loaded_study &&
+            loaded_study->artifact_revision_ids ==
+                study_request.artifact_revision_ids &&
+            loaded_study->intent == "steady_state_design" &&
+            projects
+                    .list_study_revisions(
+                        team_a, project.project_id)
+                    .size() == 1U &&
+            !projects
+                 .get_study_revision(
+                     team_b,
+                     project.project_id,
+                     study.study_revision_id)
+                 .has_value(),
+        "PostgreSQL studies must preserve exact bindings and "
+        "Team isolation");
 
     thermox::service::CreateRunConfigurationRevisionRequest
         run_request;

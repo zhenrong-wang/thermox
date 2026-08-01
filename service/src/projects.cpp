@@ -286,6 +286,35 @@ std::string run_configuration_identity(
     return out.str();
 }
 
+std::string study_identity(
+    const CreateStudyRevisionRequest& request,
+    const std::vector<std::string>& artifacts) {
+    std::ostringstream out;
+    out << request.study_id.size() << ':' << request.study_id << '|'
+        << request.model_revision_id.size() << ':'
+        << request.model_revision_id << '|'
+        << request.case_revision_id.size() << ':'
+        << request.case_revision_id << '|'
+        << request.intent.size() << ':' << request.intent << '|';
+    for (const auto& id : artifacts) {
+        out << id.size() << ':' << id << '|';
+    }
+    out << request.result_projections.size() << '|';
+    for (const auto& projection : request.result_projections) {
+        const auto append = [&](const std::string& value) {
+            out << value.size() << ':' << value << '|';
+        };
+        append(projection.id);
+        append(to_string(projection.scope));
+        append(projection.component_id);
+        append(projection.port_name);
+        append(projection.value_name);
+        append(projection.dimension);
+        append(to_string(projection.aggregation));
+    }
+    return out.str();
+}
+
 }  // namespace
 
 ProjectService::ProjectService(
@@ -1230,6 +1259,102 @@ ProjectService::create_run_configuration_revision(
         request.result_projections,
         checksum(run_configuration_identity(
             request, mode, artifact_ids)));
+}
+
+StudyRevisionRecord ProjectService::create_study_revision(
+    const CreateStudyRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() || request.study_id.empty() ||
+        request.model_revision_id.empty() ||
+        request.case_revision_id.empty() || request.intent.empty()) {
+        throw ProjectRequestError(
+            "project, study, model revision, case revision, and "
+            "intent must not be empty");
+    }
+    const auto model_case = resolve_model_case(
+        request.identity,
+        request.project_id,
+        request.model_revision_id,
+        request.case_revision_id);
+    if (!model_case) {
+        throw ProjectStateError(
+            "model/case revision pair was not found");
+    }
+    if (request.intent != model_case->mode) {
+        throw ProjectRequestError(
+            "study intent must match the bound case mode");
+    }
+    (void)run_mode(request.intent);
+
+    auto artifact_ids = request.artifact_revision_ids;
+    std::sort(artifact_ids.begin(), artifact_ids.end());
+    if (std::adjacent_find(
+            artifact_ids.begin(), artifact_ids.end()) !=
+        artifact_ids.end()) {
+        throw ProjectRequestError(
+            "artifact revision IDs must be unique");
+    }
+    if (!resolve_artifact_revisions(
+            request.identity,
+            request.project_id,
+            artifact_ids)) {
+        throw ProjectStateError("artifact revision was not found");
+    }
+    try {
+        validate_result_projections(request.result_projections);
+    } catch (const ResultProjectionError& error) {
+        throw ProjectRequestError(error.what());
+    }
+    if (run_mode(request.intent) == "steady" &&
+        std::any_of(
+            request.result_projections.begin(),
+            request.result_projections.end(),
+            [](const auto& projection) {
+                return projection.aggregation !=
+                    ResultAggregation::final;
+            })) {
+        throw ProjectRequestError(
+            "steady studies only support final result projection "
+            "aggregation");
+    }
+    return repository_->create_study_revision(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.study_id,
+        request.parent_study_revision_id,
+        request.model_revision_id,
+        request.case_revision_id,
+        request.intent,
+        artifact_ids,
+        request.result_projections,
+        checksum(study_identity(request, artifact_ids)));
+}
+
+std::optional<StudyRevisionRecord>
+ProjectService::get_study_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& study_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || study_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and study revision IDs must not be empty");
+    }
+    return repository_->get_study_revision(
+        identity.team_id, project_id, study_revision_id);
+}
+
+std::vector<StudyRevisionRecord>
+ProjectService::list_study_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError("project ID must not be empty");
+    }
+    return repository_->list_study_revisions(
+        identity.team_id, project_id);
 }
 
 std::optional<RunConfigurationRevisionRecord>

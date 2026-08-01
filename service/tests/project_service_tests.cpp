@@ -780,6 +780,75 @@ void test_run_configurations_bind_complete_execution_intent() {
         "solver and result-projection policy");
 }
 
+void test_studies_bind_immutable_engineering_intent() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Study history", {}});
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+    thermox::service::CreateStudyRevisionRequest request;
+    request.identity = team_a;
+    request.project_id = project.project_id;
+    request.study_id = "compressor-design";
+    request.model_revision_id = model.model_revision_id;
+    request.case_revision_id = simulation_case.case_revision_id;
+    request.intent = simulation_case.mode;
+    request.result_projections = {{
+        "outlet_temperature",
+        thermox::service::ResultValueScope::port_derived,
+        "compressor",
+        "outlet",
+        "T",
+        "temperature",
+        thermox::service::ResultAggregation::final,
+    }};
+    const auto first = service.create_study_revision(request);
+    request.parent_study_revision_id = first.study_revision_id;
+    const auto second = service.create_study_revision(request);
+    const auto history = service.list_study_revisions(
+        team_a, project.project_id);
+    require(
+        first.revision_number == 1U &&
+            second.revision_number == 2U &&
+            history.size() == 2U &&
+            first.checksum == second.checksum &&
+            !service.get_study_revision(
+                team_b, project.project_id,
+                first.study_revision_id),
+        "studies must be immutable, revisioned, deterministic, "
+        "and Team scoped");
+    require(
+        thermox::service::serialize_study_revision_json(first)
+                .find("\"intent\": \"steady_state_design\"") !=
+            std::string::npos,
+        "study serialization must expose durable intent");
+
+    request.intent = "steady_state_off_design";
+    bool mismatch_rejected = false;
+    try {
+        (void)service.create_study_revision(request);
+    } catch (const thermox::service::ProjectRequestError&) {
+        mismatch_rejected = true;
+    }
+    require(
+        mismatch_rejected,
+        "study intent must agree with its exact operating case");
+}
+
 void test_graph_edits_publish_valid_child_revisions() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -1080,6 +1149,7 @@ int main() {
         test_expression_component_artifact_is_executable();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
+        test_studies_bind_immutable_engineering_intent();
         test_graph_edits_publish_valid_child_revisions();
         test_case_edits_publish_atomic_child_revisions();
         test_revision_backed_validation_resolves_exact_inputs();

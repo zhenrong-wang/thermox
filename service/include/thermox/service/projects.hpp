@@ -23,6 +23,8 @@ inline constexpr char case_revision_schema_v1[] =
     "thermox.case_revision/v1";
 inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
+inline constexpr char study_revision_schema_v1[] =
+    "thermox.study_revision/v1";
 inline constexpr char run_configuration_revision_schema_v2[] =
     "thermox.run_configuration_revision/v2";
 inline constexpr char project_model_validation_schema_v1[] =
@@ -90,6 +92,24 @@ struct ArtifactRevisionRecord {
     std::string artifact_type;
     std::string artifact_schema_version;
     ArtifactContentManifest content;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
+};
+
+struct StudyRevisionRecord {
+    std::string schema_version{study_revision_schema_v1};
+    std::string study_revision_id;
+    std::string study_id;
+    std::string project_id;
+    std::string team_id;
+    std::uint64_t revision_number{0};
+    std::string parent_study_revision_id;
+    std::string model_revision_id;
+    std::string case_revision_id;
+    std::string intent;
+    std::vector<std::string> artifact_revision_ids;
+    std::vector<ResultProjection> result_projections;
+    std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
 };
@@ -212,6 +232,26 @@ public:
         const std::string& artifact_revision_id) const = 0;
     virtual std::vector<ArtifactRevisionRecord>
     list_artifact_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const = 0;
+
+    virtual StudyRevisionRecord create_study_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& study_id,
+        const std::string& parent_study_revision_id,
+        const std::string& model_revision_id,
+        const std::string& case_revision_id,
+        const std::string& intent,
+        const std::vector<std::string>& artifact_revision_ids,
+        const std::vector<ResultProjection>& result_projections,
+        const std::string& checksum) = 0;
+    virtual std::optional<StudyRevisionRecord> get_study_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& study_revision_id) const = 0;
+    virtual std::vector<StudyRevisionRecord> list_study_revisions(
         const std::string& team_id,
         const std::string& project_id) const = 0;
 
@@ -342,6 +382,18 @@ struct CreateRunConfigurationRevisionRequest {
     std::vector<std::string> artifact_revision_ids;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
+    std::vector<ResultProjection> result_projections;
+};
+
+struct CreateStudyRevisionRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string study_id;
+    std::string parent_study_revision_id;
+    std::string model_revision_id;
+    std::string case_revision_id;
+    std::string intent;
+    std::vector<std::string> artifact_revision_ids;
     std::vector<ResultProjection> result_projections;
 };
 
@@ -484,6 +536,17 @@ public:
     create_run_configuration_revision(
         const CreateRunConfigurationRevisionRequest&
             request) const;
+    [[nodiscard]] StudyRevisionRecord create_study_revision(
+        const CreateStudyRevisionRequest& request) const;
+    [[nodiscard]] std::optional<StudyRevisionRecord>
+    get_study_revision(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& study_revision_id) const;
+    [[nodiscard]] std::vector<StudyRevisionRecord>
+    list_study_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
     [[nodiscard]]
     std::optional<RunConfigurationRevisionRecord>
     get_run_configuration_revision(
@@ -557,6 +620,10 @@ std::string serialize_artifact_revision_json(
     const ArtifactRevisionRecord& revision);
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions);
+std::string serialize_study_revision_json(
+    const StudyRevisionRecord& revision);
+std::string serialize_study_revisions_json(
+    const std::vector<StudyRevisionRecord>& revisions);
 std::string serialize_run_configuration_revision_json(
     const RunConfigurationRevisionRecord& revision);
 std::string serialize_run_configuration_revisions_json(

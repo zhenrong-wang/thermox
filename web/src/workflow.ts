@@ -19,6 +19,7 @@ export interface WorkflowInputs {
   hasCase: boolean
   unresolvedArtifactCount: number
   compiled: boolean
+  studyRevisionCount: number
   variableCount: number
   equationCount: number
   runConfigurationCount: number
@@ -50,6 +51,7 @@ export function buildWorkflowStages(
     input.hasCase &&
     input.unresolvedArtifactCount === 0
   const hasRunConfiguration = input.runConfigurationCount > 0
+  const hasStudy = input.studyRevisionCount > 0
   const hasSucceeded = input.succeededJobCount > 0
 
   const draftDetail = hasDraft
@@ -75,6 +77,8 @@ export function buildWorkflowStages(
     )} unresolved.`
   } else if (studyInputsReady && !input.compiled) {
     studyDetail = 'Compile the exact topology, case, and artifacts.'
+  } else if (input.compiled && !hasStudy) {
+    studyDetail = 'Publish the validated inputs as an immutable study.'
   } else if (input.compiled) {
     studyDetail = `${plural(input.variableCount, 'variable')} · ${plural(
       input.equationCount,
@@ -83,7 +87,9 @@ export function buildWorkflowStages(
   }
 
   let calculateDetail = 'Complete server validation first.'
-  if (input.compiled && !hasRunConfiguration) {
+  if (input.compiled && !hasStudy) {
+    calculateDetail = 'Publish an immutable study first.'
+  } else if (input.compiled && !hasRunConfiguration) {
     calculateDetail = 'Create an immutable run configuration.'
   } else if (input.activeJobCount > 0) {
     calculateDetail = `${plural(input.activeJobCount, 'calculation')} active.`
@@ -123,9 +129,9 @@ export function buildWorkflowStages(
       title: 'Define study',
       description: 'Intent, boundaries, targets, and outputs',
       detail: studyDetail,
-      state: input.compiled
+      state: hasStudy
         ? 'complete'
-        : definitionInputsReady
+        : input.compiled || definitionInputsReady
           ? 'attention'
           : 'locked',
     },
@@ -137,7 +143,7 @@ export function buildWorkflowStages(
       detail: calculateDetail,
       state: hasSucceeded
         ? 'complete'
-        : input.compiled
+        : hasStudy
           ? 'ready'
           : 'locked',
     },

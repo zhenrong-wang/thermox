@@ -389,6 +389,51 @@ void test_tenant_scoped_asynchronous_jobs() {
                 .status == 404,
         "project component catalog must hide cross-Team "
         "project existence");
+    auto study_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/study-revisions",
+        std::string{
+            R"({"schema_version":)"
+            R"("thermox.study_revision.create/v1",)"
+            R"("study_id":"http-design-study",)"
+            R"("model_revision_id":")"} +
+            model.model_revision_id +
+            R"(","case_revision_id":")" +
+            simulation_case.case_revision_id +
+            R"(","intent":"steady_state_design",)"
+            R"("artifact_revision_ids":[")" +
+            artifact_revision_id +
+            R"("],"result_projections":[]})");
+    const auto study_created = api.handle(
+        authenticated(std::move(study_upload)));
+    require(
+        study_created.status == 201 &&
+            study_created.headers.contains("Location") &&
+            study_created.body.find(
+                "\"intent\": \"steady_state_design\"") !=
+                std::string::npos,
+        "study routes must persist durable engineering intent");
+    const auto study_detail = api.handle(authenticated({
+        "GET", study_created.headers.at("Location"), {}, {},
+    }));
+    const auto study_history = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/study-revisions",
+        {},
+        {},
+    }));
+    require(
+        study_detail.status == 200 &&
+            study_history.status == 200 &&
+            study_history.body.find("http-design-study") !=
+                std::string::npos,
+        "study revisions must support detail and history reads");
+    require(
+        api.handle(authenticated(
+            {"GET", study_created.headers.at("Location"), {}, {}},
+            "user-b", "team-b")).status == 404,
+        "study revision detail must hide cross-Team existence");
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",

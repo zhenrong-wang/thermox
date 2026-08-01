@@ -484,6 +484,64 @@ void run_configuration_revision_json(
         << epoch_milliseconds(revision.created_at) << '}';
 }
 
+void study_revision_json(
+    std::ostringstream& out,
+    const StudyRevisionRecord& revision) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"study_revision_id\": ";
+    json_string(out, revision.study_revision_id);
+    out << ", \"study_id\": ";
+    json_string(out, revision.study_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"revision_number\": "
+        << revision.revision_number;
+    out << ", \"parent_study_revision_id\": ";
+    json_string(out, revision.parent_study_revision_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, revision.model_revision_id);
+    out << ", \"case_revision_id\": ";
+    json_string(out, revision.case_revision_id);
+    out << ", \"intent\": ";
+    json_string(out, revision.intent);
+    out << ", \"artifact_revision_ids\": [";
+    for (std::size_t index = 0;
+         index < revision.artifact_revision_ids.size(); ++index) {
+        if (index != 0U) out << ", ";
+        json_string(out, revision.artifact_revision_ids[index]);
+    }
+    out << "], \"result_projections\": [";
+    for (std::size_t index = 0;
+         index < revision.result_projections.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& projection = revision.result_projections[index];
+        out << "{\"id\": ";
+        json_string(out, projection.id);
+        out << ", \"scope\": ";
+        json_string(out, to_string(projection.scope));
+        out << ", \"component_id\": ";
+        json_string(out, projection.component_id);
+        out << ", \"port_name\": ";
+        json_string(out, projection.port_name);
+        out << ", \"value_name\": ";
+        json_string(out, projection.value_name);
+        out << ", \"dimension\": ";
+        json_string(out, projection.dimension);
+        out << ", \"aggregation\": ";
+        json_string(out, to_string(projection.aggregation));
+        out << '}';
+    }
+    out << "], \"checksum\": ";
+    json_string(out, revision.checksum);
+    out << ", \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at) << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -593,6 +651,29 @@ std::string serialize_run_configuration_revision_json(
     out << std::setprecision(17);
     run_configuration_revision_json(out, revision);
     out << '\n';
+    return out.str();
+}
+
+std::string serialize_study_revision_json(
+    const StudyRevisionRecord& revision) {
+    std::ostringstream out;
+    study_revision_json(out, revision);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_study_revisions_json(
+    const std::vector<StudyRevisionRecord>& revisions) {
+    std::ostringstream out;
+    out << "{\"schema_version\": "
+           "\"thermox.study_revision_list/v1\", "
+        << "\"study_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        study_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
     return out.str();
 }
 

@@ -229,6 +229,8 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}/component-catalog` | Discover project-owned component descriptors with exact source revisions |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/run-configuration-revisions` | List/publish reusable execution intents |
 | `GET` | `/api/v1/projects/{project_id}/run-configuration-revisions/{revision_id}` | Read an exact execution intent |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/study-revisions` | List/publish immutable engineering study intent |
+| `GET` | `/api/v1/projects/{project_id}/study-revisions/{revision_id}` | Read an exact study revision |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
 | `POST` | `/api/v1/simulations?project_id=...&run_configuration_revision_id=...` | Submit a run-configuration-backed asynchronous job |
 | `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
