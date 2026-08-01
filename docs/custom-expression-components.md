@@ -59,7 +59,7 @@ Creation canonicalizes the payload, validates the descriptor and safe grammar, s
 the provider-neutral artifact-content store, and publishes an immutable Team/project-owned
 revision with a SHA-256 checksum.
 
-Run-configuration `artifact_revision_ids` can pin component definitions and performance maps
+Study `artifact_revision_ids` can pin component definitions and performance maps
 together. Resolution verifies content integrity, reconstructs the component bundle, and records
 the component artifact revision in job and execution provenance. The worker receives both the
 exact definition and its immutable identity.
@@ -70,7 +70,7 @@ and returns its ordinary component descriptor together with the source artifact 
 The browser presents the latest revision of each kind in the runtime component library and labels
 it as project-owned, while retaining historical descriptors so older topology revisions remain
 resolvable. Adding an instance stores the usual `kind` and `version` in topology; validation and
-run-configuration authoring add the matching source revision to the exact artifact set.
+Study authoring adds the matching source revision to the exact artifact set.
 The canvas library can publish a safe definition or revise a project-owned definition through
 this same service contract. Revisions preserve the logical artifact and component kind, and must
 publish a new component version. The service rejects duplicate project kinds and reused

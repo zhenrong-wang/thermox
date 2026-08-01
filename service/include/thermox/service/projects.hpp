@@ -25,8 +25,8 @@ inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
 inline constexpr char study_revision_schema_v1[] =
     "thermox.study_revision/v1";
-inline constexpr char run_configuration_revision_schema_v2[] =
-    "thermox.run_configuration_revision/v2";
+inline constexpr char run_configuration_revision_schema_v3[] =
+    "thermox.run_configuration_revision/v3";
 inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
 inline constexpr char project_component_catalog_schema_v1[] =
@@ -116,20 +116,16 @@ struct StudyRevisionRecord {
 
 struct RunConfigurationRevisionRecord {
     std::string schema_version{
-        run_configuration_revision_schema_v2};
+        run_configuration_revision_schema_v3};
     std::string run_configuration_revision_id;
     std::string run_configuration_id;
     std::string project_id;
     std::string team_id;
     std::uint64_t revision_number{0};
     std::string parent_run_configuration_revision_id;
-    std::string model_revision_id;
-    std::string case_revision_id;
-    std::vector<std::string> artifact_revision_ids;
-    std::string mode;
+    std::string study_revision_id;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
-    std::vector<ResultProjection> result_projections;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -263,14 +259,9 @@ public:
         const std::string& run_configuration_id,
         const std::string&
             parent_run_configuration_revision_id,
-        const std::string& model_revision_id,
-        const std::string& case_revision_id,
-        const std::vector<std::string>&
-            artifact_revision_ids,
-        const std::string& mode,
+        const std::string& study_revision_id,
         const SteadySolverSettings& steady_solver,
         const TransientSolverSettings& transient_solver,
-        const std::vector<ResultProjection>& result_projections,
         const std::string& checksum) = 0;
     virtual std::optional<RunConfigurationRevisionRecord>
     get_run_configuration_revision(
@@ -377,12 +368,9 @@ struct CreateRunConfigurationRevisionRequest {
     std::string project_id;
     std::string run_configuration_id;
     std::string parent_run_configuration_revision_id;
-    std::string model_revision_id;
-    std::string case_revision_id;
-    std::vector<std::string> artifact_revision_ids;
+    std::string study_revision_id;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
-    std::vector<ResultProjection> result_projections;
 };
 
 struct CreateStudyRevisionRequest {
@@ -416,6 +404,7 @@ struct ResolvedModelCase {
 
 struct ResolvedRunConfiguration {
     RunConfigurationRevisionRecord configuration;
+    StudyRevisionRecord study;
     ResolvedModelCase model_case;
     ResolvedEngineeringArtifacts artifacts;
 };

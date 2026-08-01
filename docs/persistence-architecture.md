@@ -141,26 +141,23 @@ payloads in the immutable job snapshot. Consequently workers do not need project
 metadata reads during calculation, and job/result provenance records the logical artifact ID,
 persisted revision ID, schema, and SHA-256 identity.
 
-Migration `006_run_configuration_revisions.sql` adds reusable execution-intent history. Each
-run-configuration revision binds one exact topology/case pair, a canonical set of exact artifact
-revisions, and complete steady/transient solver settings. Composite foreign keys prevent
-cross-Team and cross-Project bindings. Parent revisions must remain in the same logical
-run-configuration chain, and a deterministic SHA-256 checksum identifies the complete binding and
-solver policy.
+Migrations `006_run_configuration_revisions.sql` and
+`011_run_configurations_bind_studies.sql` establish reusable execution-policy history. The v3
+contract binds one exact Study revision and complete steady/transient solver settings. The Study
+owns topology, case, engineering artifacts, intent, and output projections. Composite foreign keys
+prevent cross-Team and cross-Project bindings. Parent revisions remain in the same logical chain,
+and a deterministic SHA-256 checksum identifies the Study binding and solver policy.
 
 Production simulation submission now names only a Team-scoped Project and run-configuration
-revision. The application resolves its dependencies, verifies artifact content, and snapshots the
+revision. The application resolves its Study dependencies, verifies artifact content, and snapshots the
 composed model, typed artifacts, and solver settings into the durable job. Job and result
 provenance retain the run-configuration revision/checksum alongside topology and case identities.
 
-The React workspace exposes these records as reusable execution intents rather than immediately
-starting calculations. Creation pins the currently selected topology and case plus one exact
-revision for every required engineering artifact. It submits complete steady and transient solver
-policies and generic result projections. Revising a configuration preserves its logical ID,
-records the selected immutable parent, and republishes the entire intent; the browser never patches
-solver settings or bindings in place. Project-wide records are presented in the context of their
-bound topology revision so an interface cannot accidentally revise a configuration against a
-different graph.
+The React workspace exposes these records as reusable execution policies rather than immediately
+starting calculations. Creation selects a published Study and submits complete steady and
+transient solver policies. Revising a configuration preserves its logical ID, records the selected
+immutable parent, and republishes the policy; the browser never patches solver settings or bindings
+in place. Project-wide records are presented in the context of their Study topology.
 
 Migration `007_simulation_job_history.sql` promotes jobs into the queryable execution history used
 by product interfaces. It backfills and persists indexed Project and run-configuration identities,
@@ -174,8 +171,9 @@ requires the exact ETag returned by submission or status lookup in `If-Match`; m
 malformed preconditions remain distinct from job-state conflicts. Cancellation publishes a new
 terminal revision rather than deleting history, and cross-Team targets are reported as missing.
 
-Migration `008_run_result_projections.sql` adds unit-checked, system-agnostic output selections to
-immutable run configurations. The selections are checksummed and snapshotted into jobs. Successful
+Migration `008_run_result_projections.sql` originally added output selections to run configurations;
+the v3 boundary moves those unit-checked, system-agnostic selections to immutable Study revisions.
+The selections are checksummed and snapshotted into jobs. Successful
 workers atomically publish the projected `thermox.result_summary/v1` in PostgreSQL alongside the
 full result-artifact manifest, allowing history and status views to render selected engineering
 outputs without reading large object-store results.

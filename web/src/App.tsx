@@ -29,6 +29,7 @@ import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { ResultsWorkspace } from './ResultsWorkspace'
+import { StudyPublishForm } from './StudyPublishForm'
 import { validationMatchesExecutionSelection } from './runAuthoring'
 import {
   mergeProjectComponentCatalog,
@@ -61,6 +62,7 @@ import type {
   ProjectComponentCatalogEntry,
   Project,
   RunConfigurationRevision,
+  ResultProjection,
   SimulationJob,
   SimulationResult,
   SimulationJobState,
@@ -119,6 +121,7 @@ function App() {
   const [validationResult, setValidationResult] =
     useState<ProjectModelValidation>()
   const [studyRevisions, setStudyRevisions] = useState<StudyRevision[]>([])
+  const [addingStudy, setAddingStudy] = useState(false)
   const [validating, setValidating] = useState(false)
   const [runConfigurationRevisions, setRunConfigurationRevisions] = useState<
     RunConfigurationRevision[]
@@ -395,11 +398,20 @@ function App() {
     [requiredComponentSources, topology],
   )
   const visibleRunConfigurations = useMemo(
-    () =>
-      runConfigurationRevisions.filter(
-        (revision) => revision.model_revision_id === selectedRevisionId,
-      ),
-    [runConfigurationRevisions, selectedRevisionId],
+    () => {
+      const studyIds = new Set(
+        studyRevisions
+          .filter(
+            (revision) =>
+              revision.model_revision_id === selectedRevisionId,
+          )
+          .map((revision) => revision.study_revision_id),
+      )
+      return runConfigurationRevisions.filter((revision) =>
+        studyIds.has(revision.study_revision_id),
+      )
+    },
+    [runConfigurationRevisions, selectedRevisionId, studyRevisions],
   )
   const visibleStudies = useMemo(
     () =>
@@ -407,6 +419,15 @@ function App() {
         (revision) => revision.model_revision_id === selectedRevisionId,
       ),
     [selectedRevisionId, studyRevisions],
+  )
+  const selectedRunStudy = useMemo(
+    () =>
+      studyRevisions.find(
+        (study) =>
+          study.study_revision_id ===
+          selectedRunConfiguration?.study_revision_id,
+      ),
+    [selectedRunConfiguration, studyRevisions],
   )
   const selectedArtifactRevisionIds = useMemo(
     () =>
@@ -432,6 +453,23 @@ function App() {
       preferredArtifactRevisionIds,
       requiredArtifactIds,
       validationResult,
+    ],
+  )
+  const activePublishedStudy = useMemo(
+    () =>
+      visibleStudies.find(
+        (study) =>
+          study.case_revision_id === selectedCaseRevisionId &&
+          study.artifact_revision_ids.length ===
+            selectedArtifactRevisionIds.length &&
+          study.artifact_revision_ids.every((id) =>
+            selectedArtifactRevisionIds.includes(id),
+          ),
+      ),
+    [
+      selectedArtifactRevisionIds,
+      selectedCaseRevisionId,
+      visibleStudies,
     ],
   )
 
@@ -887,7 +925,7 @@ function App() {
     }
   }
 
-  async function publishStudy() {
+  async function publishStudy(resultProjections: ResultProjection[]) {
     if (
       !selectedProjectId ||
       !selectedRevisionId ||
@@ -911,7 +949,7 @@ function App() {
       case_revision_id: selectedCaseRevision.case_revision_id,
       intent: selectedCaseRevision.mode,
       artifact_revision_ids: selectedArtifactRevisionIds,
-      result_projections: parent?.result_projections ?? [],
+      result_projections: resultProjections,
     }
     setCasePublishing(true)
     setCaseOperationError('')
@@ -931,6 +969,7 @@ function App() {
       setCaseOperationStatus(
         `Published study ${revision.study_id} r${revision.revision_number}.`,
       )
+      setAddingStudy(false)
     } catch (reason) {
       setCaseOperationError(errorMessage(reason))
     } finally {
@@ -939,28 +978,9 @@ function App() {
   }
 
   function beginCreateRunConfiguration() {
-    if (!selectedCaseRevision) {
+    if (!activePublishedStudy) {
       setRunOperationError(
-        'Select or create an operating case for this topology revision first.',
-      )
-      return
-    }
-    if (selectedArtifactRevisionIds.length !== requiredArtifactIds.length) {
-      setRunOperationError(
-        'Resolve every component artifact to an immutable project revision first.',
-      )
-      return
-    }
-    if (
-      !validationMatchesExecutionSelection(
-        validationResult,
-        selectedRevisionId,
-        selectedCaseRevision.case_revision_id,
-        selectedArtifactRevisionIds,
-      )
-    ) {
-      setRunOperationError(
-        'Compile and validate this exact topology, case, and artifact revision set in Cases before creating a run.',
+        'Publish the validated topology, case, artifacts, and outputs as a Study before configuring execution.',
       )
       return
     }
@@ -1509,6 +1529,7 @@ function App() {
         ) : workspaceView === 'runs' ? (
           <RunConfigurationWorkspace
             revision={selectedRunConfiguration}
+            study={selectedRunStudy}
             publishing={runPublishing}
             operationError={runOperationError}
             operationStatus={runOperationStatus}
@@ -1679,7 +1700,7 @@ function App() {
               onSelect={setSelectedCaseRevisionId}
               onCreate={() => setAddingCase(true)}
               onPublishStudy={() => {
-                void publishStudy()
+                setAddingStudy(true)
               }}
             />
           ) : null}
@@ -1773,21 +1794,35 @@ function App() {
           onSubmit={createCase}
         />
       )}
-      {(addingRunConfiguration || revisingRunConfiguration) &&
+      {addingStudy &&
         topology &&
         topologyCatalog &&
         selectedCaseRevision && (
+          <StudyPublishForm
+            topology={topology}
+            catalog={topologyCatalog}
+            base={activePublishedStudy}
+            transient={
+              selectedCaseRevision.mode.includes('dynamic') ||
+              selectedCaseRevision.mode.includes('transient')
+            }
+            onCancel={() => setAddingStudy(false)}
+            onSubmit={publishStudy}
+          />
+        )}
+      {(addingRunConfiguration || revisingRunConfiguration) &&
+        (revisingRunConfiguration ? selectedRunStudy : activePublishedStudy) && (
           <RunConfigurationForm
             key={
               revisingRunConfiguration
                 ? `revise-${selectedRunConfigurationRevisionId}`
-                : `create-${selectedCaseRevision.case_revision_id}`
+                : `create-${activePublishedStudy?.study_revision_id}`
             }
-            topology={topology}
-            catalog={topologyCatalog}
-            modelRevisionId={selectedRevisionId}
-            caseRevision={selectedCaseRevision}
-            artifactRevisionIds={selectedArtifactRevisionIds}
+            study={
+              (revisingRunConfiguration
+                ? selectedRunStudy
+                : activePublishedStudy)!
+            }
             revisions={visibleRunConfigurations}
             base={
               revisingRunConfiguration

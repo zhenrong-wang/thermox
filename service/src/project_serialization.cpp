@@ -431,51 +431,12 @@ void run_configuration_revision_json(
     json_string(
         out,
         revision.parent_run_configuration_revision_id);
-    out << ", \"model_revision_id\": ";
-    json_string(out, revision.model_revision_id);
-    out << ", \"case_revision_id\": ";
-    json_string(out, revision.case_revision_id);
-    out << ", \"artifact_revision_ids\": [";
-    for (std::size_t index = 0;
-         index < revision.artifact_revision_ids.size();
-         ++index) {
-        if (index != 0U) {
-            out << ", ";
-        }
-        json_string(out, revision.artifact_revision_ids[index]);
-    }
-    out << "], \"mode\": ";
-    json_string(out, revision.mode);
+    out << ", \"study_revision_id\": ";
+    json_string(out, revision.study_revision_id);
     out << ", \"steady_solver\": ";
     steady_solver_json(out, revision.steady_solver);
     out << ", \"transient_solver\": ";
     transient_solver_json(out, revision.transient_solver);
-    out << ", \"result_projections\": [";
-    for (std::size_t index = 0;
-         index < revision.result_projections.size();
-         ++index) {
-        if (index != 0U) {
-            out << ", ";
-        }
-        const auto& projection =
-            revision.result_projections[index];
-        out << "{\"id\": ";
-        json_string(out, projection.id);
-        out << ", \"scope\": ";
-        json_string(out, to_string(projection.scope));
-        out << ", \"component_id\": ";
-        json_string(out, projection.component_id);
-        out << ", \"port_name\": ";
-        json_string(out, projection.port_name);
-        out << ", \"value_name\": ";
-        json_string(out, projection.value_name);
-        out << ", \"dimension\": ";
-        json_string(out, projection.dimension);
-        out << ", \"aggregation\": ";
-        json_string(out, to_string(projection.aggregation));
-        out << '}';
-    }
-    out << ']';
     out << ", \"checksum\": ";
     json_string(out, revision.checksum);
     out << ", \"created_by_user_id\": ";

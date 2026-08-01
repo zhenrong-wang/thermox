@@ -1135,12 +1135,9 @@ parse_create_run_configuration_request(
         "schema_version",
         "run_configuration_id",
         "parent_run_configuration_revision_id",
-        "model_revision_id",
-        "case_revision_id",
-        "artifact_revision_ids",
+        "study_revision_id",
         "steady_solver",
         "transient_solver",
-        "result_projections",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1150,7 +1147,7 @@ parse_create_run_configuration_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.run_configuration.create/v2") {
+        "thermox.run_configuration.create/v3") {
         throw std::invalid_argument(
             "unsupported run configuration create "
             "schema_version");
@@ -1161,22 +1158,8 @@ parse_create_run_configuration_request(
     command.parent_run_configuration_revision_id =
         tree.get<std::string>(
             "parent_run_configuration_revision_id", "");
-    command.model_revision_id =
-        tree.get<std::string>("model_revision_id", "");
-    command.case_revision_id =
-        tree.get<std::string>("case_revision_id", "");
-    if (const auto artifacts =
-            tree.get_child_optional(
-                "artifact_revision_ids")) {
-        for (const auto& [key, value] : *artifacts) {
-            if (!key.empty()) {
-                throw std::invalid_argument(
-                    "artifact_revision_ids must be an array");
-            }
-            command.artifact_revision_ids.push_back(
-                value.get_value<std::string>());
-        }
-    }
+    command.study_revision_id =
+        tree.get<std::string>("study_revision_id", "");
     if (const auto steady =
             tree.get_child_optional("steady_solver")) {
         parse_steady_solver(*steady, command.steady_solver);
@@ -1185,11 +1168,6 @@ parse_create_run_configuration_request(
             tree.get_child_optional("transient_solver")) {
         parse_transient_solver(
             *transient, command.transient_solver);
-    }
-    if (const auto projections =
-            tree.get_child_optional("result_projections")) {
-        command.result_projections =
-            parse_result_projections(*projections);
     }
     return command;
 }
@@ -2232,7 +2210,10 @@ Response Api::handle(const Request& request) const {
             command.idempotency_key =
                 required_header(request, "idempotency-key");
             command.mode =
-                resolved->configuration.mode == "steady"
+                (resolved->study.intent.find("dynamic") ==
+                         std::string::npos &&
+                     resolved->study.intent.find("transient") ==
+                         std::string::npos)
                 ? service::SimulationJobMode::steady
                 : service::SimulationJobMode::transient;
             command.model_json =
@@ -2258,7 +2239,7 @@ Response Api::handle(const Request& request) const {
             command.transient_solver =
                 resolved->configuration.transient_solver;
             command.result_projections =
-                resolved->configuration.result_projections;
+                resolved->study.result_projections;
             const auto record = impl_->jobs->submit(command);
             return job_record_response(
                 record,

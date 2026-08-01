@@ -4,10 +4,12 @@ import type {
   SimulationJob,
   SimulationJobState,
   SteadySolverSettings,
+  StudyRevision,
 } from './types'
 
 interface RunConfigurationWorkspaceProps {
   revision?: RunConfigurationRevision
+  study?: StudyRevision
   publishing: boolean
   operationError: string
   operationStatus: string
@@ -43,6 +45,7 @@ function SteadySolverSummary({ value }: { value: SteadySolverSettings }) {
 
 export function RunConfigurationWorkspace({
   revision,
+  study,
   publishing,
   operationError,
   operationStatus,
@@ -85,6 +88,12 @@ export function RunConfigurationWorkspace({
     )
   }
 
+  const mode =
+    study?.intent.includes('dynamic') ||
+    study?.intent.includes('transient')
+      ? 'transient'
+      : 'steady'
+
   return (
     <section className="run-workspace">
       <div className="case-toolbar">
@@ -123,30 +132,20 @@ export function RunConfigurationWorkspace({
         <section className="run-provenance-card">
           <header>
             <h2>Revision bindings</h2>
-            <span>{revision.mode}</span>
+            <span>{mode}</span>
           </header>
           <div>
             <label>
-              <span>Topology revision</span>
-              <code>{revision.model_revision_id}</code>
-            </label>
-            <label>
-              <span>Case revision</span>
-              <code>{revision.case_revision_id}</code>
+              <span>Study revision</span>
+              <code>{revision.study_revision_id}</code>
             </label>
             <label>
               <span>Parent configuration</span>
               <code>{revision.parent_run_configuration_revision_id || '—'}</code>
             </label>
             <label>
-              <span>Artifact revisions</span>
-              {revision.artifact_revision_ids.length ? (
-                revision.artifact_revision_ids.map((id) => (
-                  <code key={id}>{id}</code>
-                ))
-              ) : (
-                <code>none</code>
-              )}
+              <span>Study intent</span>
+              <code>{study?.intent ?? 'unavailable'}</code>
             </label>
           </div>
         </section>
@@ -154,12 +153,12 @@ export function RunConfigurationWorkspace({
         <section className="run-detail-card">
           <header>
             <h2>
-              {revision.mode === 'steady'
+              {mode === 'steady'
                 ? 'Steady nonlinear solver'
                 : 'Transient integration'}
             </h2>
           </header>
-          {revision.mode === 'steady' ? (
+          {mode === 'steady' ? (
             <SteadySolverSummary value={revision.steady_solver} />
           ) : (
             <>
@@ -184,13 +183,13 @@ export function RunConfigurationWorkspace({
         <section className="run-detail-card">
           <header>
             <h2>Result projections</h2>
-            <span>{revision.result_projections.length}</span>
+            <span>{study?.result_projections.length ?? 0}</span>
           </header>
           <div className="run-projection-list">
-            {!revision.result_projections.length && (
+            {!study?.result_projections.length && (
               <p>No summary projections configured.</p>
             )}
-            {revision.result_projections.map((projection) => (
+            {study?.result_projections.map((projection) => (
               <div key={projection.id}>
                 <strong>{projection.id}</strong>
                 <code>{projection.scope}</code>

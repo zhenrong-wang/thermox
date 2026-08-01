@@ -500,17 +500,23 @@ void test_expression_component_artifact_is_executable() {
   }
 })json",
         });
+    thermox::service::CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.study_id = "custom-study";
+    study_request.model_revision_id = model.model_revision_id;
+    study_request.case_revision_id = simulation_case.case_revision_id;
+    study_request.intent = simulation_case.mode;
+    study_request.artifact_revision_ids = {
+        revision.artifact_revision_id,
+    };
+    const auto study = projects->create_study_revision(study_request);
     thermox::service::CreateRunConfigurationRevisionRequest
         configuration;
     configuration.identity = team_a;
     configuration.project_id = project.project_id;
     configuration.run_configuration_id = "custom-run";
-    configuration.model_revision_id = model.model_revision_id;
-    configuration.case_revision_id =
-        simulation_case.case_revision_id;
-    configuration.artifact_revision_ids = {
-        revision.artifact_revision_id,
-    };
+    configuration.study_revision_id = study.study_revision_id;
     const auto run =
         projects->create_run_configuration_revision(
             configuration);
@@ -701,19 +707,17 @@ void test_run_configurations_bind_complete_execution_intent() {
         "thermox.performance_map/v1",
         performance_map_payload(),
     });
-    thermox::service::CreateRunConfigurationRevisionRequest
-        request;
-    request.identity = team_a;
-    request.project_id = project.project_id;
-    request.run_configuration_id = "design-run";
-    request.model_revision_id = model.model_revision_id;
-    request.case_revision_id =
-        simulation_case.case_revision_id;
-    request.artifact_revision_ids = {
+    thermox::service::CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.study_id = "design-study";
+    study_request.model_revision_id = model.model_revision_id;
+    study_request.case_revision_id = simulation_case.case_revision_id;
+    study_request.intent = simulation_case.mode;
+    study_request.artifact_revision_ids = {
         artifact.artifact_revision_id,
     };
-    request.steady_solver.max_iterations = 37;
-    request.result_projections = {
+    study_request.result_projections = {
         {
             "compressor_outlet_temperature",
             thermox::service::ResultValueScope::port_derived,
@@ -724,6 +728,14 @@ void test_run_configurations_bind_complete_execution_intent() {
             thermox::service::ResultAggregation::final,
         },
     };
+    const auto study = service.create_study_revision(study_request);
+    thermox::service::CreateRunConfigurationRevisionRequest
+        request;
+    request.identity = team_a;
+    request.project_id = project.project_id;
+    request.run_configuration_id = "design-run";
+    request.study_revision_id = study.study_revision_id;
+    request.steady_solver.max_iterations = 37;
     const auto first =
         service.create_run_configuration_revision(request);
     request.parent_run_configuration_revision_id =
@@ -735,7 +747,7 @@ void test_run_configurations_bind_complete_execution_intent() {
         project.project_id,
         first.run_configuration_revision_id);
     require(
-        first.mode == "steady" &&
+        first.study_revision_id == study.study_revision_id &&
             first.revision_number == 1U &&
             second.revision_number == 2U &&
             second.parent_run_configuration_revision_id ==
@@ -743,10 +755,8 @@ void test_run_configurations_bind_complete_execution_intent() {
             first.checksum == second.checksum &&
             first.checksum.starts_with("sha256:") &&
             first.steady_solver.max_iterations == 37 &&
-            first.result_projections.size() == 1U &&
-            first.result_projections.front().component_id ==
-                "compressor" &&
             resolved &&
+            resolved->study.result_projections.size() == 1U &&
             resolved->model_case.model_revision_id ==
                 model.model_revision_id &&
             resolved->artifacts.snapshot.performance_maps
@@ -772,12 +782,10 @@ void test_run_configurations_bind_complete_execution_intent() {
                 std::string::npos &&
             serialized.find("\"max_iterations\": 37") !=
                 std::string::npos &&
-            serialized.find(
-                "\"id\": "
-                "\"compressor_outlet_temperature\"") !=
+            serialized.find(study.study_revision_id) !=
                 std::string::npos,
-        "run configuration JSON must publish bindings and "
-        "solver and result-projection policy");
+        "run configuration JSON must publish its Study binding "
+        "and solver policy");
 }
 
 void test_studies_bind_immutable_engineering_intent() {

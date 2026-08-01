@@ -403,7 +403,14 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"(","intent":"steady_state_design",)"
             R"("artifact_revision_ids":[")" +
             artifact_revision_id +
-            R"("],"result_projections":[]})");
+            "\",\"" + component_revision_id +
+            R"("],"result_projections":[{)"
+            R"("id":"compressor_outlet_temperature",)"
+            R"("scope":"port_derived",)"
+            R"("component_id":"compressor",)"
+            R"("port_name":"outlet","value_name":"T",)"
+            R"("dimension":"temperature",)"
+            R"("aggregation":"final"}]})");
     const auto study_created = api.handle(
         authenticated(std::move(study_upload)));
     require(
@@ -434,30 +441,19 @@ void test_tenant_scoped_asynchronous_jobs() {
             {"GET", study_created.headers.at("Location"), {}, {}},
             "user-b", "team-b")).status == 404,
         "study revision detail must hide cross-Team existence");
+    const auto study_revision_id =
+        study_created.headers.at("Location").substr(
+            study_created.headers.at("Location").find_last_of('/') + 1U);
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.run_configuration.create/v2",)"
+            R"("thermox.run_configuration.create/v3",)"
             R"("run_configuration_id":"http-design-run",)"
-            R"("model_revision_id":")"} +
-            model.model_revision_id +
-            R"(","case_revision_id":")" +
-            simulation_case.case_revision_id +
-            R"(","artifact_revision_ids":[")" +
-            artifact_revision_id +
-            "\",\"" +
-            component_revision_id +
-            R"("],"steady_solver":{"max_iterations":37},)"
-            R"("result_projections":[{)"
-            R"("id":"compressor_outlet_temperature",)"
-            R"("scope":"port_derived",)"
-            R"("component_id":"compressor",)"
-            R"("port_name":"outlet",)"
-            R"("value_name":"T",)"
-            R"("dimension":"temperature",)"
-            R"("aggregation":"final"}]})");
+            R"("study_revision_id":")"} +
+            study_revision_id +
+            R"(","steady_solver":{"max_iterations":37}})");
     const auto run_created = api.handle(
         authenticated(std::move(run_upload)));
     require(
@@ -466,12 +462,10 @@ void test_tenant_scoped_asynchronous_jobs() {
             run_created.body.find(
                 "\"max_iterations\": 37") !=
                 std::string::npos &&
-            run_created.body.find(
-                "\"id\": "
-                "\"compressor_outlet_temperature\"") !=
+            run_created.body.find(study_revision_id) !=
                 std::string::npos,
-        "run configuration route must persist bindings and "
-        "solver and projection policy");
+        "run configuration route must persist its Study binding "
+        "and solver policy");
     const auto run_configuration_revision_id =
         run_created.headers.at("Location").substr(
             run_created.headers.at("Location").find_last_of('/') +
@@ -817,28 +811,47 @@ void test_authored_component_job_workflow() {
         "the authored component must compile through exact "
         "revision-backed validation");
 
+    const auto authored_study = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/study-revisions",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.study_revision.create/v1",)"
+                R"("study_id":"authored-gain-study",)"
+                R"("model_revision_id":")"} +
+                model.model_revision_id +
+                R"(","case_revision_id":")" +
+                simulation_case.case_revision_id +
+                R"(","intent":"steady_state_design",)"
+                R"("artifact_revision_ids":[")" +
+                component_revision_id +
+                R"("],"result_projections":[{)"
+                R"("id":"gain_output","scope":"port_primary",)"
+                R"("component_id":"gain","port_name":"output",)"
+                R"("value_name":"value",)"
+                R"("dimension":"dimensionless",)"
+                R"("aggregation":"final"}]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        authored_study.status == 201 &&
+            authored_study.headers.contains("Location"),
+        "the authored workflow must publish an immutable study");
+    const auto authored_study_revision_id =
+        authored_study.headers.at("Location").substr(
+            authored_study.headers.at("Location").find_last_of('/') + 1U);
+
     const auto run_created = api.handle(authenticated(
         json_post(
             "/api/v1/projects/" + project.project_id +
                 "/run-configuration-revisions",
             std::string{
                 R"({"schema_version":)"
-                R"("thermox.run_configuration.create/v2",)"
+                R"("thermox.run_configuration.create/v3",)"
                 R"("run_configuration_id":"authored-gain-run",)"
-                R"("model_revision_id":")"} +
-                model.model_revision_id +
-                R"(","case_revision_id":")" +
-                simulation_case.case_revision_id +
-                R"(","artifact_revision_ids":[")" +
-                component_revision_id +
-                R"("],"result_projections":[{)"
-                R"("id":"gain_output",)"
-                R"("scope":"port_primary",)"
-                R"("component_id":"gain",)"
-                R"("port_name":"output",)"
-                R"("value_name":"value",)"
-                R"("dimension":"dimensionless",)"
-                R"("aggregation":"final"}]})"),
+                R"("study_revision_id":")"} +
+                authored_study_revision_id + R"("})"),
         identity.user_id,
         identity.team_id));
     require(

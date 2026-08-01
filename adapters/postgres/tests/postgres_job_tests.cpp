@@ -96,6 +96,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "008_run_result_projections.sql",
              "009_request_component_bundles.sql",
              "010_study_revisions.sql",
+             "011_run_configurations_bind_studies.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -739,6 +740,17 @@ void test_projects_and_immutable_model_revisions(
     study_request.artifact_revision_ids = {
         artifact.artifact_revision_id,
     };
+    study_request.result_projections = {
+        {
+            "compressor_outlet_temperature",
+            thermox::service::ResultValueScope::port_derived,
+            "compressor",
+            "outlet",
+            "T",
+            "temperature",
+            thermox::service::ResultAggregation::final,
+        },
+    };
     const auto study =
         projects.create_study_revision(study_request);
     const auto loaded_study = projects.get_study_revision(
@@ -766,24 +778,8 @@ void test_projects_and_immutable_model_revisions(
     run_request.identity = team_a;
     run_request.project_id = project.project_id;
     run_request.run_configuration_id = "postgres-design-run";
-    run_request.model_revision_id = first.model_revision_id;
-    run_request.case_revision_id =
-        first_case.case_revision_id;
-    run_request.artifact_revision_ids = {
-        artifact.artifact_revision_id,
-    };
+    run_request.study_revision_id = study.study_revision_id;
     run_request.steady_solver.max_iterations = 41;
-    run_request.result_projections = {
-        {
-            "compressor_outlet_temperature",
-            thermox::service::ResultValueScope::port_derived,
-            "compressor",
-            "outlet",
-            "T",
-            "temperature",
-            thermox::service::ResultAggregation::final,
-        },
-    };
     const auto run =
         projects.create_run_configuration_revision(run_request);
     const auto loaded =
@@ -793,11 +789,8 @@ void test_projects_and_immutable_model_revisions(
             run.run_configuration_revision_id);
     require(
         loaded &&
-            loaded->artifact_revision_ids ==
-                run_request.artifact_revision_ids &&
+            loaded->study_revision_id == study.study_revision_id &&
             loaded->steady_solver.max_iterations == 41 &&
-            loaded->result_projections.size() == 1U &&
-            loaded->result_projections.front().value_name == "T" &&
             loaded->checksum == run.checksum &&
             projects
                     .list_run_configuration_revisions(

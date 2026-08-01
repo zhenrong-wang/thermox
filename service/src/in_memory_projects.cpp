@@ -464,25 +464,17 @@ public:
         const std::string& run_configuration_id,
         const std::string&
             parent_run_configuration_revision_id,
-        const std::string& model_revision_id,
-        const std::string& case_revision_id,
-        const std::vector<std::string>&
-            artifact_revision_ids,
-        const std::string& mode,
+        const std::string& study_revision_id,
         const SteadySolverSettings& steady_solver,
         const TransientSolverSettings& transient_solver,
-        const std::vector<ResultProjection>& result_projections,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
-        const auto simulation_case =
-            case_revisions_.find(case_revision_id);
-        if (simulation_case == case_revisions_.end() ||
-            simulation_case->second.team_id != team_id ||
-            simulation_case->second.project_id != project_id ||
-            simulation_case->second.model_revision_id !=
-                model_revision_id) {
+        const auto study = study_revisions_.find(study_revision_id);
+        if (study == study_revisions_.end() ||
+            study->second.team_id != team_id ||
+            study->second.project_id != project_id) {
             throw ProjectStateError(
-                "model/case revision pair was not found");
+                "study revision was not found");
         }
         if (!parent_run_configuration_revision_id.empty()) {
             const auto parent =
@@ -499,17 +491,6 @@ public:
                     "not found");
             }
         }
-        for (const auto& revision_id :
-             artifact_revision_ids) {
-            const auto artifact =
-                artifact_revisions_.find(revision_id);
-            if (artifact == artifact_revisions_.end() ||
-                artifact->second.team_id != team_id ||
-                artifact->second.project_id != project_id) {
-                throw ProjectStateError(
-                    "artifact revision was not found");
-            }
-        }
         const auto sequence_key =
             project_id + '\0' + run_configuration_id;
         RunConfigurationRevisionRecord record;
@@ -524,14 +505,9 @@ public:
                 sequence_key];
         record.parent_run_configuration_revision_id =
             parent_run_configuration_revision_id;
-        record.model_revision_id = model_revision_id;
-        record.case_revision_id = case_revision_id;
-        record.artifact_revision_ids =
-            artifact_revision_ids;
-        record.mode = mode;
+        record.study_revision_id = study_revision_id;
         record.steady_solver = steady_solver;
         record.transient_solver = transient_solver;
-        record.result_projections = result_projections;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;
         record.created_at = std::chrono::system_clock::now();

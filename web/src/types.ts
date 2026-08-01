@@ -209,20 +209,16 @@ export interface CreateStudyRevision {
 }
 
 export interface RunConfigurationRevision {
-  schema_version: 'thermox.run_configuration_revision/v2'
+  schema_version: 'thermox.run_configuration_revision/v3'
   run_configuration_revision_id: string
   run_configuration_id: string
   project_id: string
   team_id: string
   revision_number: number
   parent_run_configuration_revision_id: string
-  model_revision_id: string
-  case_revision_id: string
-  artifact_revision_ids: string[]
-  mode: 'steady' | 'transient'
+  study_revision_id: string
   steady_solver: SteadySolverSettings
   transient_solver: TransientSolverSettings
-  result_projections: ResultProjection[]
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
@@ -234,15 +230,12 @@ export interface RunConfigurationRevisionList {
 }
 
 export interface CreateRunConfiguration {
-  schema_version: 'thermox.run_configuration.create/v2'
+  schema_version: 'thermox.run_configuration.create/v3'
   run_configuration_id: string
   parent_run_configuration_revision_id: string
-  model_revision_id: string
-  case_revision_id: string
-  artifact_revision_ids: string[]
+  study_revision_id: string
   steady_solver: SteadySolverSettings
   transient_solver: TransientSolverSettings
-  result_projections: ResultProjection[]
 }
 
 export type SimulationJobState =

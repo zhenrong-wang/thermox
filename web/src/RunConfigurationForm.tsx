@@ -2,28 +2,17 @@ import { useState, type FormEvent } from 'react'
 import {
   defaultSteadySolver,
   defaultTransientSolver,
-  scopeRequiresComponent,
-  scopeRequiresPort,
 } from './runAuthoring'
 import type {
-  Catalog,
-  CaseRevision,
   CreateRunConfiguration,
-  ResultAggregation,
-  ResultProjection,
-  ResultValueScope,
   RunConfigurationRevision,
   SteadySolverSettings,
-  TopologyDocument,
+  StudyRevision,
   TransientSolverSettings,
 } from './types'
 
 interface RunConfigurationFormProps {
-  topology: TopologyDocument
-  catalog: Catalog
-  modelRevisionId: string
-  caseRevision: CaseRevision
-  artifactRevisionIds: string[]
+  study: StudyRevision
   revisions: RunConfigurationRevision[]
   base?: RunConfigurationRevision
   onCancel: () => void
@@ -86,20 +75,11 @@ const transientFields: Array<{
   },
 ]
 
-const scopes: ResultValueScope[] = [
-  'system_balance',
-  'kpi',
-  'component_metric',
-  'component_internal',
-  'port_primary',
-  'port_derived',
-]
-
 function suggestedId(
-  caseRevision: CaseRevision,
+  study: StudyRevision,
   revisions: RunConfigurationRevision[],
 ) {
-  const base = `${caseRevision.case_id}-run`
+  const base = `${study.study_id}-run`
   const used = new Set(
     revisions.map((revision) => revision.run_configuration_id),
   )
@@ -109,29 +89,19 @@ function suggestedId(
   return `run-${suffix}`
 }
 
-function projectionId(index: number) {
-  return `result_${index + 1}`
-}
-
 export function RunConfigurationForm({
-  topology,
-  catalog,
-  modelRevisionId,
-  caseRevision,
-  artifactRevisionIds,
+  study,
   revisions,
   base,
   onCancel,
   onSubmit,
 }: RunConfigurationFormProps) {
   const mode =
-    base?.mode ??
-    (caseRevision.mode.includes('dynamic') ||
-    caseRevision.mode.includes('transient')
+    study.intent.includes('dynamic') || study.intent.includes('transient')
       ? 'transient'
-      : 'steady')
+      : 'steady'
   const [configurationId, setConfigurationId] = useState(
-    base?.run_configuration_id ?? suggestedId(caseRevision, revisions),
+    base?.run_configuration_id ?? suggestedId(study, revisions),
   )
   const [steadySolver, setSteadySolver] = useState<SteadySolverSettings>(
     base?.steady_solver ?? { ...defaultSteadySolver },
@@ -143,49 +113,8 @@ export function RunConfigurationForm({
         nonlinear_solver: { ...defaultSteadySolver },
       },
     )
-  const [projections, setProjections] = useState<ResultProjection[]>(
-    base?.result_projections ?? [],
-  )
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
-
-  const componentPorts = (componentId: string) => {
-    const component = topology.model.components.find(
-      (item) => item.id === componentId,
-    )
-    return (
-      catalog.components.find((item) => item.kind === component?.kind)?.ports ??
-      []
-    )
-  }
-
-  function updateProjection(
-    index: number,
-    update: Partial<ResultProjection>,
-  ) {
-    setProjections((current) =>
-      current.map((projection, itemIndex) =>
-        itemIndex === index ? { ...projection, ...update } : projection,
-      ),
-    )
-  }
-
-  function addProjection() {
-    const component = topology.model.components[0]
-    const port = component ? componentPorts(component.id)[0] : undefined
-    setProjections((current) => [
-      ...current,
-      {
-        id: projectionId(current.length),
-        scope: 'port_derived',
-        component_id: component?.id ?? '',
-        port_name: port?.name ?? '',
-        value_name: 'T',
-        dimension: 'temperature',
-        aggregation: 'final',
-      },
-    ])
-  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -197,17 +126,13 @@ export function RunConfigurationForm({
     setSubmitting(true)
     try {
       await onSubmit({
-        schema_version: 'thermox.run_configuration.create/v2',
+        schema_version: 'thermox.run_configuration.create/v3',
         run_configuration_id: configurationId.trim(),
         parent_run_configuration_revision_id:
           base?.run_configuration_revision_id ?? '',
-        model_revision_id: base?.model_revision_id ?? modelRevisionId,
-        case_revision_id: base?.case_revision_id ?? caseRevision.case_revision_id,
-        artifact_revision_ids:
-          base?.artifact_revision_ids ?? artifactRevisionIds,
+        study_revision_id: base?.study_revision_id ?? study.study_revision_id,
         steady_solver: steadySolver,
         transient_solver: transientSolver,
-        result_projections: projections,
       })
     } catch (reason) {
       setFormError(
@@ -234,18 +159,16 @@ export function RunConfigurationForm({
         </header>
         <div className="run-binding-summary">
           <div>
-            <span>Topology</span>
-            <code>{base?.model_revision_id ?? modelRevisionId}</code>
+            <span>Study revision</span>
+            <code>{base?.study_revision_id ?? study.study_revision_id}</code>
           </div>
           <div>
-            <span>Case</span>
-            <code>{base?.case_revision_id ?? caseRevision.case_revision_id}</code>
+            <span>Intent</span>
+            <code>{study.intent}</code>
           </div>
           <div>
-            <span>Artifacts</span>
-            <strong>
-              {(base?.artifact_revision_ids ?? artifactRevisionIds).length}
-            </strong>
+            <span>Outputs</span>
+            <strong>{study.result_projections.length}</strong>
           </div>
           <div>
             <span>Mode</span>
@@ -331,139 +254,10 @@ export function RunConfigurationForm({
           </>
         )}
 
-        <fieldset>
-          <legend>Result projections</legend>
-          <div className="projection-editor">
-            {!projections.length && (
-              <p>No result summary projections. Full graph results remain available.</p>
-            )}
-            {projections.map((projection, index) => (
-              <div className="projection-row" key={`${projection.id}-${index}`}>
-                <input
-                  aria-label="Projection ID"
-                  value={projection.id}
-                  placeholder="Projection ID"
-                  onChange={(event) =>
-                    updateProjection(index, { id: event.target.value })
-                  }
-                />
-                <select
-                  aria-label="Projection scope"
-                  value={projection.scope}
-                  onChange={(event) => {
-                    const scope = event.target.value as ResultValueScope
-                    updateProjection(index, {
-                      scope,
-                      component_id: scopeRequiresComponent(scope)
-                        ? projection.component_id ||
-                          topology.model.components[0]?.id ||
-                          ''
-                        : '',
-                      port_name: scopeRequiresPort(scope)
-                        ? projection.port_name
-                        : '',
-                    })
-                  }}
-                >
-                  {scopes.map((scope) => (
-                    <option key={scope} value={scope}>
-                      {scope}
-                    </option>
-                  ))}
-                </select>
-                {scopeRequiresComponent(projection.scope) && (
-                  <select
-                    aria-label="Projection component"
-                    value={projection.component_id}
-                    onChange={(event) =>
-                      updateProjection(index, {
-                        component_id: event.target.value,
-                        port_name: scopeRequiresPort(projection.scope)
-                          ? componentPorts(event.target.value)[0]?.name ?? ''
-                          : '',
-                      })
-                    }
-                  >
-                    {topology.model.components.map((component) => (
-                      <option key={component.id} value={component.id}>
-                        {component.id}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {scopeRequiresPort(projection.scope) && (
-                  <select
-                    aria-label="Projection port"
-                    value={projection.port_name}
-                    onChange={(event) =>
-                      updateProjection(index, {
-                        port_name: event.target.value,
-                      })
-                    }
-                  >
-                    {componentPorts(projection.component_id).map((port) => (
-                      <option key={port.name} value={port.name}>
-                        {port.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  aria-label="Projection value"
-                  value={projection.value_name}
-                  placeholder="Value name"
-                  onChange={(event) =>
-                    updateProjection(index, {
-                      value_name: event.target.value,
-                    })
-                  }
-                />
-                <input
-                  aria-label="Projection dimension"
-                  value={projection.dimension}
-                  placeholder="Dimension"
-                  onChange={(event) =>
-                    updateProjection(index, {
-                      dimension: event.target.value,
-                    })
-                  }
-                />
-                <select
-                  aria-label="Projection aggregation"
-                  value={projection.aggregation}
-                  disabled={mode === 'steady'}
-                  onChange={(event) =>
-                    updateProjection(index, {
-                      aggregation: event.target.value as ResultAggregation,
-                    })
-                  }
-                >
-                  <option value="final">final</option>
-                  <option value="minimum">minimum</option>
-                  <option value="maximum">maximum</option>
-                </select>
-                <button
-                  type="button"
-                  className="projection-remove"
-                  onClick={() =>
-                    setProjections((current) =>
-                      current.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="secondary-button projection-add"
-              onClick={addProjection}
-            >
-              + Result projection
-            </button>
-          </div>
-        </fieldset>
+        <p className="form-note">
+          Physical inputs and result projections are owned by the bound Study.
+          This configuration controls execution policy only.
+        </p>
 
         {formError && <div className="form-error">{formError}</div>}
         <footer>

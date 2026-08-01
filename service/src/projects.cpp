@@ -243,18 +243,11 @@ void append_steady(
 }
 
 std::string run_configuration_identity(
-    const CreateRunConfigurationRevisionRequest& request,
-    const std::string& mode,
-    const std::vector<std::string>& artifacts) {
+    const CreateRunConfigurationRevisionRequest& request) {
     std::ostringstream out;
     out << std::setprecision(17)
         << request.run_configuration_id << '|'
-        << request.model_revision_id << '|'
-        << request.case_revision_id << '|'
-        << mode << '|';
-    for (const auto& id : artifacts) {
-        out << id.size() << ':' << id << '|';
-    }
+        << request.study_revision_id << '|';
     append_steady(out, request.steady_solver);
     const auto& transient = request.transient_solver;
     out << '|' << transient.start_time
@@ -270,19 +263,6 @@ std::string run_configuration_identity(
             transient.compute_consistent_initial_conditions
         << '|';
     append_steady(out, transient.nonlinear_solver);
-    out << '|' << request.result_projections.size() << '|';
-    for (const auto& projection : request.result_projections) {
-        const auto append = [&](const std::string& value) {
-            out << value.size() << ':' << value << '|';
-        };
-        append(projection.id);
-        append(to_string(projection.scope));
-        append(projection.component_id);
-        append(projection.port_name);
-        append(projection.value_name);
-        append(projection.dimension);
-        append(to_string(projection.aggregation));
-    }
     return out.str();
 }
 
@@ -1194,71 +1174,31 @@ ProjectService::create_run_configuration_revision(
     require_identity(request.identity);
     if (request.project_id.empty() ||
         request.run_configuration_id.empty() ||
-        request.model_revision_id.empty() ||
-        request.case_revision_id.empty()) {
+        request.study_revision_id.empty()) {
         throw ProjectRequestError(
-            "project, run configuration, model revision, and "
-            "case revision IDs must not be empty");
+            "project, run configuration, and study revision "
+            "IDs must not be empty");
     }
-    const auto model_case = resolve_model_case(
+    const auto study = get_study_revision(
         request.identity,
         request.project_id,
-        request.model_revision_id,
-        request.case_revision_id);
-    if (!model_case) {
+        request.study_revision_id);
+    if (!study) {
         throw ProjectStateError(
-            "model/case revision pair was not found");
+            "study revision was not found");
     }
-    auto artifact_ids = request.artifact_revision_ids;
-    std::sort(artifact_ids.begin(), artifact_ids.end());
-    if (std::adjacent_find(
-            artifact_ids.begin(), artifact_ids.end()) !=
-        artifact_ids.end()) {
-        throw ProjectRequestError(
-            "artifact revision IDs must be unique");
-    }
-    if (!resolve_artifact_revisions(
-            request.identity,
-            request.project_id,
-            artifact_ids)) {
-        throw ProjectStateError(
-            "artifact revision was not found");
-    }
-    const auto mode = run_mode(model_case->mode);
     validate_steady_solver(request.steady_solver);
     validate_transient_solver(request.transient_solver);
-    try {
-        validate_result_projections(request.result_projections);
-    } catch (const ResultProjectionError& error) {
-        throw ProjectRequestError(error.what());
-    }
-    if (mode == "steady" &&
-        std::any_of(
-            request.result_projections.begin(),
-            request.result_projections.end(),
-            [](const auto& projection) {
-                return projection.aggregation !=
-                    ResultAggregation::final;
-            })) {
-        throw ProjectRequestError(
-            "steady run configurations only support final "
-            "result projection aggregation");
-    }
     return repository_->create_run_configuration_revision(
         request.identity.team_id,
         request.identity.user_id,
         request.project_id,
         request.run_configuration_id,
         request.parent_run_configuration_revision_id,
-        request.model_revision_id,
-        request.case_revision_id,
-        artifact_ids,
-        mode,
+        request.study_revision_id,
         request.steady_solver,
         request.transient_solver,
-        request.result_projections,
-        checksum(run_configuration_identity(
-            request, mode, artifact_ids)));
+        checksum(run_configuration_identity(request)));
 }
 
 StudyRevisionRecord ProjectService::create_study_revision(
@@ -1403,15 +1343,23 @@ ProjectService::resolve_run_configuration(
     if (!configuration) {
         return std::nullopt;
     }
+    const auto study = get_study_revision(
+        identity,
+        project_id,
+        configuration->study_revision_id);
+    if (!study) {
+        throw ProjectStateError(
+            "persisted run configuration study was not found");
+    }
     const auto model_case = resolve_model_case(
         identity,
         project_id,
-        configuration->model_revision_id,
-        configuration->case_revision_id);
+        study->model_revision_id,
+        study->case_revision_id);
     const auto artifacts = resolve_artifact_revisions(
         identity,
         project_id,
-        configuration->artifact_revision_ids);
+        study->artifact_revision_ids);
     if (!model_case || !artifacts) {
         throw ProjectStateError(
             "persisted run configuration dependencies were "
@@ -1419,6 +1367,7 @@ ProjectService::resolve_run_configuration(
     }
     return ResolvedRunConfiguration{
         *configuration,
+        *study,
         *model_case,
         *artifacts,
     };

@@ -98,7 +98,9 @@ export function CaseRevisionPanel({
               <strong>{revision.study_id}</strong>
               <span>r{revision.revision_number}</span>
             </div>
-            <small>{revision.intent}</small>
+            <small>
+              {revision.intent} · {revision.result_projections.length} outputs
+            </small>
             <code>{revision.checksum.slice(7, 19)}</code>
           </div>
         ))}

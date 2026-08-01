@@ -57,7 +57,7 @@ export function RunConfigurationPanel({
               <span>r{revision.revision_number}</span>
             </div>
             <small>
-              {revision.mode} · {revision.result_projections.length} projections
+              Study {revision.study_revision_id}
             </small>
             <code>{revision.checksum.slice(7, 19)}</code>
           </button>
@@ -70,7 +70,7 @@ export function RunConfigurationPanel({
             Revise selected
           </button>
         ) : (
-          <code>thermox.run/v2</code>
+          <code>thermox.run/v3</code>
         )}
       </footer>
     </div>

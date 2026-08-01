@@ -410,18 +410,14 @@ decode_run_configuration_revision(
         std::stoull(field(result, row, 4));
     record.parent_run_configuration_revision_id =
         optional_field(result, row, 5);
-    record.model_revision_id = field(result, row, 6);
-    record.case_revision_id = field(result, row, 7);
-    record.mode = field(result, row, 8);
+    record.study_revision_id = field(result, row, 6);
     record.steady_solver = decode_steady_solver(
-        read_tree(field(result, row, 9)));
+        read_tree(field(result, row, 7)));
     record.transient_solver = decode_transient_solver(
-        read_tree(field(result, row, 10)));
-    record.result_projections =
-        decode_result_projections(field(result, row, 11));
-    record.checksum = field(result, row, 12);
-    record.created_by_user_id = field(result, row, 13);
-    record.created_at = decode_time(field(result, row, 14));
+        read_tree(field(result, row, 8)));
+    record.checksum = field(result, row, 9);
+    record.created_by_user_id = field(result, row, 10);
+    record.created_at = decode_time(field(result, row, 11));
     return record;
 }
 
@@ -467,9 +463,9 @@ constexpr const char run_configuration_revision_columns[] =
     "run_configuration_revision_id, run_configuration_id, "
     "project_id, team_id, revision_number, "
     "parent_run_configuration_revision_id, "
-    "model_revision_id, case_revision_id, mode, "
+    "study_revision_id, "
     "steady_solver_payload, transient_solver_payload, "
-    "result_projections_payload, checksum, created_by_user_id, "
+    "checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
@@ -503,16 +499,16 @@ public:
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
         }
-        const auto projection_schema = execute(
+        const auto run_schema = execute(
             connection.get(),
             "SELECT count(*) FROM pg_attribute "
             "WHERE attrelid = to_regclass("
             "'thermox_run_configuration_revisions') "
-            "AND attname = 'result_projections_payload' "
+            "AND attname = 'study_revision_id' "
             "AND NOT attisdropped");
-        if (field(projection_schema.get(), 0, 0) != "1") {
+        if (field(run_schema.get(), 0, 0) != "1") {
             throw std::runtime_error(
-                "PostgreSQL run projection schema is missing; "
+                "PostgreSQL run-study binding schema is missing; "
                 "apply all migrations");
         }
     }
@@ -1150,16 +1146,10 @@ public:
         const std::string& run_configuration_id,
         const std::string&
             parent_run_configuration_revision_id,
-        const std::string& model_revision_id,
-        const std::string& case_revision_id,
-        const std::vector<std::string>&
-            artifact_revision_ids,
-        const std::string& mode,
+        const std::string& study_revision_id,
         const service::SteadySolverSettings& steady_solver,
         const service::TransientSolverSettings&
             transient_solver,
-        const std::vector<service::ResultProjection>&
-            result_projections,
         const std::string& checksum) override {
         auto connection = connect(connection_string_);
         (void)execute(
@@ -1215,8 +1205,6 @@ public:
             write_tree(steady_solver_tree(steady_solver));
         const auto transient_payload = write_tree(
             transient_solver_tree(transient_solver));
-        const auto projections_payload =
-            result_projections_payload(result_projections);
         const auto result = execute(
             connection.get(),
             "INSERT INTO "
@@ -1224,24 +1212,21 @@ public:
             "run_configuration_id, project_id, team_id, "
             "revision_number, "
             "parent_run_configuration_revision_id, "
-            "model_revision_id, case_revision_id, mode, "
+            "study_revision_id, "
             "steady_solver_payload, "
             "transient_solver_payload, "
-            "result_projections_payload, checksum, "
-            "created_by_user_id"
+            "checksum, created_by_user_id"
             ") VALUES ("
-            "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
-            "$9, $10, ($11::jsonb)->'items', $12, $13"
+            "$1, $2, $3, $4::bigint, $5, $6, $7, $8, $9, $10"
             ") RETURNING "
             "run_configuration_revision_id, "
             "run_configuration_id, project_id, team_id, "
             "revision_number, "
             "parent_run_configuration_revision_id, "
-            "model_revision_id, case_revision_id, mode, "
+            "study_revision_id, "
             "steady_solver_payload, "
             "transient_solver_payload, "
-            "result_projections_payload, checksum, "
-            "created_by_user_id, "
+            "checksum, created_by_user_id, "
             "floor(extract(epoch FROM created_at) * 1000)"
             "::bigint::text",
             {
@@ -1250,42 +1235,16 @@ public:
                 team_id.c_str(),
                 revision_number.c_str(),
                 parent,
-                model_revision_id.c_str(),
-                case_revision_id.c_str(),
-                mode.c_str(),
+                study_revision_id.c_str(),
                 steady_payload.c_str(),
                 transient_payload.c_str(),
-                projections_payload.c_str(),
                 checksum.c_str(),
                 created_by_user_id.c_str(),
             });
         auto record =
             decode_run_configuration_revision(result.get());
-        for (std::size_t index = 0;
-             index < artifact_revision_ids.size();
-             ++index) {
-            const auto position = std::to_string(index);
-            (void)execute(
-                connection.get(),
-                "INSERT INTO "
-                "thermox_run_configuration_artifacts ("
-                "run_configuration_revision_id, project_id, "
-                "team_id, position, artifact_revision_id"
-                ") VALUES ($1, $2, $3, $4::integer, $5)",
-                {
-                    record.run_configuration_revision_id
-                        .c_str(),
-                    project_id.c_str(),
-                    team_id.c_str(),
-                    position.c_str(),
-                    artifact_revision_ids[index].c_str(),
-                },
-                PGRES_COMMAND_OK);
-        }
         (void)execute(
             connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
-        record.artifact_revision_ids =
-            artifact_revision_ids;
         return record;
     }
 
@@ -1312,14 +1271,7 @@ public:
         if (PQntuples(result.get()) == 0) {
             return std::nullopt;
         }
-        auto record =
-            decode_run_configuration_revision(result.get());
-        record.artifact_revision_ids = artifact_ids(
-            connection.get(),
-            team_id,
-            project_id,
-            run_configuration_revision_id);
-        return record;
+        return decode_run_configuration_revision(result.get());
     }
 
     std::vector<service::RunConfigurationRevisionRecord>
@@ -1339,15 +1291,9 @@ public:
         std::vector<service::RunConfigurationRevisionRecord>
             records;
         for (int row = 0; row < PQntuples(result.get()); ++row) {
-            auto record =
+            records.push_back(
                 decode_run_configuration_revision(
-                    result.get(), row);
-            record.artifact_revision_ids = artifact_ids(
-                connection.get(),
-                team_id,
-                project_id,
-                record.run_configuration_revision_id);
-            records.push_back(std::move(record));
+                    result.get(), row));
         }
         return records;
     }
@@ -1366,31 +1312,6 @@ private:
             "ORDER BY position",
             {team_id.c_str(), project_id.c_str(),
              study_revision_id.c_str()});
-        std::vector<std::string> ids;
-        for (int row = 0; row < PQntuples(result.get()); ++row) {
-            ids.push_back(field(result.get(), row, 0));
-        }
-        return ids;
-    }
-
-    static std::vector<std::string> artifact_ids(
-        PGconn* connection,
-        const std::string& team_id,
-        const std::string& project_id,
-        const std::string&
-            run_configuration_revision_id) {
-        const auto result = execute(
-            connection,
-            "SELECT artifact_revision_id FROM "
-            "thermox_run_configuration_artifacts "
-            "WHERE team_id = $1 AND project_id = $2 "
-            "AND run_configuration_revision_id = $3 "
-            "ORDER BY position",
-            {
-                team_id.c_str(),
-                project_id.c_str(),
-                run_configuration_revision_id.c_str(),
-            });
         std::vector<std::string> ids;
         for (int row = 0; row < PQntuples(result.get()); ++row) {
             ids.push_back(field(result.get(), row, 0));
