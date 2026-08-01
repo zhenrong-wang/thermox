@@ -82,7 +82,7 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v6` defines the Team-owned job lifecycle and idempotent
+All gates are now in place. `thermox.job/v7` defines the Team-owned job lifecycle and idempotent
 submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
@@ -123,9 +123,14 @@ while removing embedded cases from the persisted product model.
 
 `ProjectService` can resolve an exact Team-scoped project/topology/case tuple into a complete
 composed `thermox.model/v2` snapshot. Run configurations use this internal operation during job
-submission. `thermox.job/v6` captures the immutable source provenance and composed snapshot, so
+submission. `thermox.job/v7` captures the immutable source provenance and composed snapshot, so
 workers never reread mutable project state and can execute even if newer revisions are published
 later.
+
+Migration `012_job_study_provenance.sql` resets early-development job history for the v7 contract.
+Every run-backed request and execution record carries the exact Study revision and checksum in
+addition to run configuration, topology, and case provenance. Engineering intent is therefore
+directly queryable and independently verifiable in job and result records.
 
 Migration `005_artifact_revisions.sql` adds independent project engineering-artifact history.
 Each logical artifact has an ordered, parent-linked revision chain inside one Team and Project.

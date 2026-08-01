@@ -319,9 +319,9 @@ export function ResultsWorkspace({
         <div
           className={`result-provenance-chip${exactProvenance ? ' exact' : ''}`}
         >
-          <span>{exactProvenance ? 'Exact revision' : 'Topology source'}</span>
+          <span>{exactProvenance ? 'Exact Study' : 'Topology source'}</span>
           <code>
-            {job.request.source_revisions?.model_revision_id ?? 'snapshot'}
+            {job.request.source_revisions?.study_revision_id ?? 'snapshot'}
           </code>
         </div>
       </header>

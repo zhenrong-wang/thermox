@@ -26,6 +26,8 @@ export function exactRevisionProvenance(
       executed.run_configuration_revision_id &&
     requested.run_configuration_checksum ===
       executed.run_configuration_checksum &&
+    requested.study_revision_id === executed.study_revision_id &&
+    requested.study_checksum === executed.study_checksum &&
     requested.model_revision_id === executed.model_revision_id &&
     requested.model_checksum === executed.model_checksum &&
     requested.case_revision_id === executed.case_revision_id &&

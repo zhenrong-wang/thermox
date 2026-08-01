@@ -190,6 +190,11 @@ std::string request_fingerprint(
             stream,
             request.source_revisions
                 ->run_configuration_checksum);
+        append_string(
+            stream,
+            request.source_revisions->study_revision_id);
+        append_string(
+            stream, request.source_revisions->study_checksum);
     }
     append_steady_settings(stream, request.steady_solver);
     stream << '|'
@@ -225,7 +230,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v6) {
+    if (request.schema_version != job_schema_v7) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -258,6 +263,18 @@ void validate_request(const SimulationJobRequest& request) {
             throw JobRequestError(
                 "run configuration revision provenance "
                 "requires both revision ID and checksum");
+        }
+        if (source.study_revision_id.empty() !=
+            source.study_checksum.empty()) {
+            throw JobRequestError(
+                "study revision provenance requires both "
+                "revision ID and checksum");
+        }
+        if (!source.run_configuration_revision_id.empty() &&
+            source.study_revision_id.empty()) {
+            throw JobRequestError(
+                "run-backed jobs require Study revision "
+                "provenance");
         }
     }
     try {

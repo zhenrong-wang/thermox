@@ -84,6 +84,8 @@ describe('resultDiagnosticSummary', () => {
       project_id: 'project-1',
       run_configuration_revision_id: 'run-r1',
       run_configuration_checksum: 'sha256:run',
+      study_revision_id: 'study-r1',
+      study_checksum: 'sha256:study',
       model_revision_id: 'model-r1',
       model_checksum: 'sha256:model',
       case_revision_id: 'case-r1',

@@ -249,6 +249,8 @@ export interface RevisionProvenance {
   project_id: string
   run_configuration_revision_id: string
   run_configuration_checksum: string
+  study_revision_id: string
+  study_checksum: string
   model_revision_id: string
   model_checksum: string
   case_revision_id: string
@@ -264,7 +266,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v6'
+  schema_version: 'thermox.job/v7'
   job_id: string
   owner: {
     team_id: string
@@ -274,7 +276,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v6'
+    schema_version: 'thermox.job/v7'
     mode: 'steady' | 'transient'
     case_id: string
     source_revisions: RevisionProvenance | null

@@ -50,7 +50,7 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v6` Team-owned queued/running/succeeded/failed/cancelled jobs with required
+- `thermox.job/v7` Team-owned queued/running/succeeded/failed/cancelled jobs with required
   immutable request-scoped component-definition snapshots,
   idempotency keys,
   optimistic revisions, worker claims, revision-source execution provenance, and result-artifact
@@ -165,8 +165,8 @@ The application boundary needed by a thin network adapter is now complete:
 | Publish/read run-configuration revisions | `ProjectService` | `thermox.run_configuration_revision/v3` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
 | Resolve a complete execution intent | `ProjectService::resolve_run_configuration` | immutable model/artifact/solver snapshot |
-| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v6` JSON |
-| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v6` JSON |
+| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v7` JSON |
+| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v7` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the

@@ -210,6 +210,12 @@ export function ExecutionHistory({
                     </code>
                   </span>
                   <span>
+                    Study{' '}
+                    <code>
+                      {selected.request.source_revisions.study_revision_id}
+                    </code>
+                  </span>
+                  <span>
                     Config{' '}
                     <code>
                       {

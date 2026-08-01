@@ -725,6 +725,12 @@ std::string encode_request(
             request.source_revisions
                 ->run_configuration_checksum);
         source.put(
+            "study_revision_id",
+            request.source_revisions->study_revision_id);
+        source.put(
+            "study_checksum",
+            request.source_revisions->study_checksum);
+        source.put(
             "model_revision_id",
             request.source_revisions->model_revision_id);
         source.put(
@@ -789,6 +795,9 @@ service::SimulationJobRequest decode_request(
                     "run_configuration_revision_id", ""),
                 source->get<std::string>(
                     "run_configuration_checksum", ""),
+                source->get<std::string>(
+                    "study_revision_id", ""),
+                source->get<std::string>("study_checksum", ""),
             };
     }
     request.steady_solver = decode_steady_settings(
@@ -846,6 +855,12 @@ std::string encode_execution(
             "run_configuration_checksum",
             execution.source_revisions
                 ->run_configuration_checksum);
+        source.put(
+            "study_revision_id",
+            execution.source_revisions->study_revision_id);
+        source.put(
+            "study_checksum",
+            execution.source_revisions->study_checksum);
         source.put(
             "model_revision_id",
             execution.source_revisions->model_revision_id);
@@ -963,6 +978,9 @@ service::ExecutionMetadata decode_execution(
                     "run_configuration_revision_id", ""),
                 source->get<std::string>(
                     "run_configuration_checksum", ""),
+                source->get<std::string>(
+                    "study_revision_id", ""),
+                source->get<std::string>("study_checksum", ""),
             };
     }
     value.components =

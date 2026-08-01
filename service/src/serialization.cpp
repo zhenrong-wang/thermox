@@ -133,6 +133,10 @@ void revision_provenance_json(
     out << ", \"run_configuration_checksum\": ";
     json_string(
         out, source.run_configuration_checksum);
+    out << ", \"study_revision_id\": ";
+    json_string(out, source.study_revision_id);
+    out << ", \"study_checksum\": ";
+    json_string(out, source.study_checksum);
     out << ", \"model_revision_id\": ";
     json_string(out, source.model_revision_id);
     out << ", \"model_checksum\": ";

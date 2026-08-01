@@ -513,6 +513,11 @@ void test_tenant_scoped_asynchronous_jobs() {
             queued.body.find(
                 run_configuration_revision_id) !=
                 std::string::npos &&
+            queued.body.find(study_revision_id) !=
+                std::string::npos &&
+            queued.body.find(
+                "\"study_checksum\": \"sha256:") !=
+                std::string::npos &&
             queued.headers.contains("Location"),
         "authenticated submission must create a Team-owned "
         "revision-backed job");

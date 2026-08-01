@@ -97,6 +97,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "009_request_component_bundles.sql",
              "010_study_revisions.sql",
              "011_run_configurations_bind_studies.sql",
+             "012_job_study_provenance.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -299,6 +300,10 @@ void test_indexed_history_query(
     first_request.source_revisions
         ->run_configuration_checksum =
         "sha256:" + std::string(64, '3');
+    first_request.source_revisions->study_revision_id =
+        "study-postgres-a";
+    first_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '5');
     const auto first = jobs->create_or_get(
         first_request, "history-fingerprint-a");
     auto second_request = request("team-a", "history-b");
@@ -307,6 +312,10 @@ void test_indexed_history_query(
     second_request.source_revisions
         ->run_configuration_checksum =
         "sha256:" + std::string(64, '4');
+    second_request.source_revisions->study_revision_id =
+        "study-postgres-b";
+    second_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '6');
     const auto second = jobs->create_or_get(
         second_request, "history-fingerprint-b");
     (void)jobs->create_or_get(
@@ -321,6 +330,13 @@ void test_indexed_history_query(
             page.jobs.front().job_id == second.job_id &&
             page.jobs.front().created_at.time_since_epoch().count() >
                 0 &&
+            page.jobs.front().request.source_revisions &&
+            page.jobs.front().request.source_revisions
+                    ->study_revision_id ==
+                "study-postgres-b" &&
+            page.jobs.front().request.source_revisions
+                    ->study_checksum ==
+                "sha256:" + std::string(64, '6') &&
             page.next.has_value(),
         "PostgreSQL history must return a timestamped, bounded "
         "newest-first page");

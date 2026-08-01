@@ -2229,6 +2229,8 @@ Response Api::handle(const Request& request) const {
                     resolved->configuration
                         .run_configuration_revision_id,
                     resolved->configuration.checksum,
+                    resolved->study.study_revision_id,
+                    resolved->study.checksum,
                 };
             command.artifacts =
                 resolved->artifacts.snapshot;

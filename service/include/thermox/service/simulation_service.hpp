@@ -232,6 +232,8 @@ struct RevisionProvenance {
     std::string case_checksum;
     std::string run_configuration_revision_id;
     std::string run_configuration_checksum;
+    std::string study_revision_id;
+    std::string study_checksum;
 };
 
 struct ExecutionMetadata {

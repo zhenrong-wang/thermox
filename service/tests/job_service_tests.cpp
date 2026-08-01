@@ -336,7 +336,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v6\"") != std::string::npos &&
+                  "\"thermox.job/v7\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -595,6 +595,21 @@ void test_request_validation() {
     require(
         rejected,
         "job submission must require a trusted identity scope");
+
+    request = steady_request("missing-study-provenance");
+    request.source_revisions->run_configuration_revision_id =
+        "run-revision";
+    request.source_revisions->run_configuration_checksum =
+        "sha256:" + std::string(64, '3');
+    rejected = false;
+    try {
+        (void)service.submit(request);
+    } catch (const thermox::service::JobRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "run-backed jobs must require exact Study provenance");
 }
 
 void test_team_scope_isolation() {
@@ -642,6 +657,9 @@ void test_team_scoped_history_filters_and_paginates() {
     first_request.source_revisions
         ->run_configuration_checksum =
         "sha256:" + std::string(64, '3');
+    first_request.source_revisions->study_revision_id = "study-a";
+    first_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '5');
     const auto first = service.submit(first_request);
     auto second_request = steady_request("history-2");
     second_request.source_revisions
@@ -649,6 +667,9 @@ void test_team_scoped_history_filters_and_paginates() {
     second_request.source_revisions
         ->run_configuration_checksum =
         "sha256:" + std::string(64, '4');
+    second_request.source_revisions->study_revision_id = "study-b";
+    second_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '6');
     const auto second = service.submit(second_request);
     auto third_request = steady_request("history-3");
     third_request.source_revisions
@@ -656,6 +677,9 @@ void test_team_scoped_history_filters_and_paginates() {
     third_request.source_revisions
         ->run_configuration_checksum =
         "sha256:" + std::string(64, '3');
+    third_request.source_revisions->study_revision_id = "study-a";
+    third_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '5');
     const auto third = service.submit(third_request);
 
     auto other_request = first_request;
