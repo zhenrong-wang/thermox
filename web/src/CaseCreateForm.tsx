@@ -1,12 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { CaseDocument, CaseRevision } from './types'
-
-export const caseModes = [
-  'steady_state_design',
-  'steady_state_off_design',
-  'dynamic_initialization',
-  'dynamic_transient',
-] as const
+import { studyModes } from './studyIntent'
 
 interface CaseCreateFormProps {
   revisions: CaseRevision[]
@@ -93,9 +87,9 @@ export function CaseCreateForm({
               value={mode}
               onChange={(event) => setMode(event.target.value)}
             >
-              {caseModes.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {studyModes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
                 </option>
               ))}
             </select>

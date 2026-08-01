@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { buildMetadataEdits, buildScalarEdit } from './caseAuthoring'
-import { caseModes } from './CaseCreateForm'
+import { studyMode, studyModes } from './studyIntent'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import {
   dimensionForUnit,
@@ -172,6 +172,7 @@ export function CaseWorkspace({
     )
   }
   const activeCase = simulationCase
+  const intent = studyMode(activeCase.mode)
 
   async function updateMetadata(event: FormEvent) {
     event.preventDefault()
@@ -242,6 +243,17 @@ export function CaseWorkspace({
         </div>
       )}
       <div className="case-editor-scroll">
+        <section className="study-intent-card">
+          <div>
+            <span className="section-kicker">Engineering question</span>
+            <h2>{intent?.title ?? activeCase.mode}</h2>
+            <p>
+              {intent?.description ??
+                'This persisted operating mode is not recognized by the current client catalog.'}
+            </p>
+          </div>
+          <span>{intent?.execution ?? 'unknown'} execution</span>
+        </section>
         <form className="case-metadata" onSubmit={updateMetadata}>
           <div>
             <span className="section-kicker">Case identity</span>
@@ -258,9 +270,9 @@ export function CaseWorkspace({
           <label>
             <span>Mode</span>
             <select value={mode} onChange={(event) => setMode(event.target.value)}>
-              {caseModes.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {studyModes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
                 </option>
               ))}
             </select>

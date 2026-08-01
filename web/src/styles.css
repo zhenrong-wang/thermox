@@ -1812,6 +1812,44 @@ code {
   padding: 18px 20px 28px;
 }
 
+.study-intent-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+  padding: 13px 15px;
+  border: 1px solid #b8d4de;
+  border-left: 4px solid #3d8aa3;
+  border-radius: 5px;
+  background: #f3f9fa;
+}
+
+.study-intent-card h2 {
+  margin: 3px 0 0;
+  color: #31596a;
+  font-size: 12px;
+}
+
+.study-intent-card p {
+  max-width: 620px;
+  margin: 5px 0 0;
+  color: #66808b;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.study-intent-card > span {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 10px;
+  background: #dceef2;
+  color: #397184;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .case-metadata {
   display: grid;
   grid-template-columns: minmax(120px, 0.8fr) 1fr 1fr auto;
