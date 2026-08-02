@@ -309,10 +309,14 @@ void test_tenant_scoped_asynchronous_jobs() {
             "?artifact_id=http-test-gain"
             "&artifact_type=thermox.expression_component"
             "&artifact_schema_version="
-            "thermox.expression_component%2Fv1",
+            "thermox.expression_component%2Fv2",
         R"json({
           "kind": "custom.signal.http_gain",
           "version": "1.0.0",
+          "template_kind": "signal.gain",
+          "display_name": "Signal Gain",
+          "category": "Control",
+          "model_name": "Linear gain",
           "ports": [
             {"name": "input", "domain": "signal",
              "direction": "in"},
@@ -812,10 +816,14 @@ void test_authored_component_job_workflow() {
                 "?artifact_id=authored-gain"
                 "&artifact_type=thermox.expression_component"
                 "&artifact_schema_version="
-                "thermox.expression_component%2Fv1",
+                "thermox.expression_component%2Fv2",
             R"json({
               "kind": "custom.signal.authored_gain",
               "version": "1.0.0",
+              "template_kind": "signal.gain",
+              "display_name": "Authored Gain",
+              "category": "Control",
+              "model_name": "Linear gain",
               "ports": [
                 {"name": "input", "domain": "signal",
                  "direction": "in"},

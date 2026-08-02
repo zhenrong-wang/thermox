@@ -19,8 +19,8 @@ struct NativeExtensionPackage {
         register_components;
     std::function<void(physics::PropertyPackageRegistry&)>
         register_properties;
-    std::function<void(platform::PerformanceMapRegistry&)>
-        register_performance_maps;
+    std::function<void(platform::EngineeringArtifactRegistry&)>
+        register_engineering_artifacts;
     std::function<void(
         physics::ThermochemistryPackageRegistry&)>
         register_thermochemistry;
@@ -32,7 +32,7 @@ void apply_native_extension(
     const NativeExtensionPackage& extension,
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
-    platform::PerformanceMapRegistry& performance_maps,
+    platform::EngineeringArtifactRegistry& engineering_artifacts,
     physics::ThermochemistryPackageRegistry& thermochemistry,
     platform::UnitRegistry& units);
 
@@ -41,7 +41,7 @@ void apply_native_extension(
 std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
-    platform::PerformanceMapRegistry performance_maps = {},
+    platform::EngineeringArtifactRegistry engineering_artifacts = {},
     physics::ThermochemistryPackageRegistry thermochemistry = {},
     platform::UnitRegistry units =
         platform::make_default_unit_registry());

@@ -261,9 +261,12 @@ public:
         const thermox::platform::ComponentCompileContext& context,
         thermox::EquationSystemBuilder& system) const override {
         const auto found =
-            context.performance_maps.find("performance_map");
-        if (found == context.performance_maps.end() ||
-            !found->second || !found->second->map) {
+            context.artifacts.find("performance_map");
+        if (found == context.artifacts.end() ||
+            !found->second ||
+            !std::dynamic_pointer_cast<const
+                thermox::platform::PerformanceMapArtifact>(
+                    found->second)) {
             throw std::runtime_error(
                 "resolved performance map was not supplied");
         }
@@ -360,7 +363,7 @@ void test_component_artifact_bindings_resolve_at_compile_time() {
     thermox::platform::ComponentRegistry components;
     components.register_model(
         std::make_shared<const ArtifactConsumerModel>());
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact(make_test_map_artifact());
     const auto graph = thermox::platform::compile_model_graph(
         document, components,
@@ -377,9 +380,9 @@ void test_component_artifact_bindings_resolve_at_compile_time() {
                 document, components,
                 thermox::physics::
                     make_default_property_package_registry(),
-                thermox::platform::PerformanceMapRegistry{});
+                thermox::platform::EngineeringArtifactRegistry{});
         },
-        "no performance-map artifact registered");
+        "no engineering artifact registered");
 }
 
 void test_generic_model_document_loads_components_connections_and_cases() {
@@ -1556,7 +1559,7 @@ void test_map_driven_compressor_solves_bound_operating_point() {
   }]
 })json");
 
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact({
         "compressor-map",
         thermox::platform::performance_map_artifact_schema_v1,
@@ -1751,7 +1754,7 @@ void test_map_driven_compressor_solves_bound_operating_point() {
         "case geometry setting must interpolate conditioned "
         "compressor pressure ratio");
 
-    thermox::platform::PerformanceMapRegistry invalid_maps;
+    thermox::platform::EngineeringArtifactRegistry invalid_maps;
     invalid_maps.register_artifact({
         "compressor-map",
         thermox::platform::performance_map_artifact_schema_v1,
@@ -1862,7 +1865,7 @@ void test_map_continuation_recovers_out_of_domain_flow_guess() {
   }]
 })json");
 
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact({
         "flow-map",
         thermox::platform::performance_map_artifact_schema_v1,
@@ -1993,7 +1996,7 @@ void test_map_driven_turbine_solves_bound_operating_point() {
   }]
 })json");
 
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact({
         "turbine-map",
         thermox::platform::performance_map_artifact_schema_v1,
@@ -2719,7 +2722,7 @@ void test_material_thermochemistry_resolves_on_demand() {
                 document, components,
                 thermox::physics::
                     make_default_property_package_registry(),
-                thermox::platform::PerformanceMapRegistry{},
+                thermox::platform::EngineeringArtifactRegistry{},
                 thermox::physics::
                     ThermochemistryPackageRegistry{});
         },
@@ -2739,7 +2742,7 @@ void test_material_thermochemistry_resolves_on_demand() {
                 document, components,
                 thermox::physics::
                     make_default_property_package_registry(),
-                thermox::platform::PerformanceMapRegistry{},
+                thermox::platform::EngineeringArtifactRegistry{},
                 chemistry);
         },
         "under-specified");
@@ -2803,7 +2806,7 @@ void test_material_boundary_temperature_specification() {
             thermox::platform::make_default_component_registry(),
             thermox::physics::
                 make_default_property_package_registry(),
-            thermox::platform::PerformanceMapRegistry{},
+            thermox::platform::EngineeringArtifactRegistry{},
             chemistry, "ambient");
     const auto result = thermox::solve_newton(graph.problem);
     require(
@@ -2875,7 +2878,7 @@ void test_adiabatic_equilibrium_combustor() {
         thermox::platform::make_default_component_registry(),
         thermox::physics::
             make_default_property_package_registry(),
-        thermox::platform::PerformanceMapRegistry{},
+        thermox::platform::EngineeringArtifactRegistry{},
         chemistry, "design");
     const auto result = thermox::solve_newton(graph.problem);
     require(result.diagnostics.converged,
@@ -2957,7 +2960,7 @@ void test_adiabatic_equilibrium_combustor() {
             thermox::platform::make_default_component_registry(),
             thermox::physics::
                 make_default_property_package_registry(),
-            thermox::platform::PerformanceMapRegistry{},
+            thermox::platform::EngineeringArtifactRegistry{},
             chemistry, "design");
     const auto difficult_direct =
         thermox::solve_newton(difficult_graph.problem);
@@ -3023,7 +3026,7 @@ void test_material_compressor_and_turbine() {
             thermox::platform::make_default_component_registry(),
             thermox::physics::
                 make_default_property_package_registry(),
-            thermox::platform::PerformanceMapRegistry{},
+            thermox::platform::EngineeringArtifactRegistry{},
             chemistry_registry(), "design");
     };
 
@@ -3173,7 +3176,7 @@ void test_map_driven_material_turbomachinery() {
     }
   }]
 })json");
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact({
         "material-compressor-map",
         thermox::platform::performance_map_artifact_schema_v1,
@@ -3495,7 +3498,7 @@ void test_fixed_composition_source_allows_map_solved_flow() {
   }]
 })json");
 
-    thermox::platform::PerformanceMapRegistry maps;
+    thermox::platform::EngineeringArtifactRegistry maps;
     maps.register_artifact({
         "flow-solving-map",
         thermox::platform::performance_map_artifact_schema_v1,

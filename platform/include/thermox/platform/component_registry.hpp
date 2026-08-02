@@ -120,10 +120,8 @@ struct ComponentCompileContext {
         std::string,
         std::shared_ptr<const physics::ThermochemistryPackage>>
         port_thermochemistry;
-    std::map<
-        std::string,
-        std::shared_ptr<const PerformanceMapArtifact>>
-        performance_maps;
+    std::map<std::string, std::shared_ptr<const EngineeringArtifact>>
+        artifacts;
 };
 
 class ComponentModel {
@@ -247,13 +245,13 @@ CompiledModelGraph compile_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id = {});
 CompiledModelGraph compile_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry_registry,
     const std::string& case_id = {});
@@ -270,7 +268,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id = {});
 
 }  // namespace thermox::platform

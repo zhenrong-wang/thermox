@@ -168,13 +168,6 @@ void validate_component_descriptor(
                 "' declares duplicate artifact role: " +
                 artifact.role);
         }
-        if (artifact.artifact_type !=
-            performance_map_artifact_type) {
-            throw std::logic_error(
-                "component model '" + descriptor.kind +
-                "' declares unsupported artifact type: " +
-                artifact.artifact_type);
-        }
     }
     std::map<std::string, bool> internal_variables;
     for (const auto& variable : descriptor.internal_variables) {

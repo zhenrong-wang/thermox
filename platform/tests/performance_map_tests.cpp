@@ -9,6 +9,15 @@
 
 namespace {
 
+struct CorrelationArtifact final
+    : thermox::platform::EngineeringArtifact {
+    [[nodiscard]] std::string_view artifact_type()
+        const noexcept override {
+        return "example.correlation";
+    }
+    void validate() const override {}
+};
+
 void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -307,7 +316,7 @@ void test_conditioned_map_interpolates_third_coordinate() {
 }
 
 void test_versioned_artifact_registry() {
-    thermox::platform::PerformanceMapRegistry registry;
+    thermox::platform::EngineeringArtifactRegistry registry;
     registry.register_artifact(sample_artifact());
     require(
         registry.contains("compressor-map") &&
@@ -315,7 +324,10 @@ void test_versioned_artifact_registry() {
                 std::vector<std::string>{"compressor-map"},
         "registered map artifact must be discoverable");
     const auto artifact =
-        registry.require_artifact("compressor-map");
+        registry.require_as<
+            thermox::platform::PerformanceMapArtifact>(
+                "compressor-map",
+                thermox::platform::performance_map_artifact_type);
     require(
         artifact->revision == "vendor-revision-7" &&
             artifact->map->evaluate(5.0, 150.0).outputs.at(0) ==
@@ -360,12 +372,43 @@ void test_versioned_artifact_registry() {
             }),
     });
     require(
-        registry.require_artifact(
-                    "conditioned-compressor-map")
+        registry.require_as<
+                    thermox::platform::PerformanceMapArtifact>(
+                    "conditioned-compressor-map",
+                    thermox::platform::performance_map_artifact_type)
                 ->conditioned_map
                 ->evaluate(5.0, 150.0, 0.5)
                 .map.outputs.at(0) == 3.75,
         "v2 artifact must preserve conditioned map payload");
+}
+
+void test_registry_is_artifact_type_neutral() {
+    thermox::platform::EngineeringArtifactRegistry registry;
+    CorrelationArtifact correlation;
+    correlation.id = "bend-loss-correlation";
+    correlation.schema_version = "example.correlation/v1";
+    correlation.revision = "engineering-review-1";
+    correlation.checksum_sha256 = std::string(64, 'c');
+    registry.register_artifact(std::move(correlation));
+
+    require(
+        registry.require_artifact(
+                    "bend-loss-correlation",
+                    "example.correlation")
+                ->artifact_type() == "example.correlation",
+        "generic registry must preserve non-map artifact types");
+
+    bool wrong_type_rejected = false;
+    try {
+        static_cast<void>(registry.require_artifact(
+            "bend-loss-correlation",
+            thermox::platform::performance_map_artifact_type));
+    } catch (const std::invalid_argument&) {
+        wrong_type_rejected = true;
+    }
+    require(
+        wrong_type_rejected,
+        "generic registry must reject a mismatched artifact binding type");
 }
 
 }  // namespace
@@ -379,6 +422,7 @@ int main() {
         test_definition_validation();
         test_conditioned_map_interpolates_third_coordinate();
         test_versioned_artifact_registry();
+        test_registry_is_artifact_type_neutral();
         std::cout << "thermox performance map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

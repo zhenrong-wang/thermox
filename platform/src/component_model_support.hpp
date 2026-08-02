@@ -95,13 +95,26 @@ inline std::shared_ptr<const PerformanceMapArtifact>
 require_performance_map(
     const ComponentCompileContext& context,
     const std::string& role) {
-    const auto it = context.performance_maps.find(role);
-    if (it == context.performance_maps.end() || !it->second) {
+    const auto it = context.artifacts.find(role);
+    if (it == context.artifacts.end() || !it->second) {
         throw std::logic_error(
             "compiled performance-map artifact missing: " +
             context.component.id + "." + role);
     }
-    return it->second;
+    if (it->second->artifact_type() !=
+        performance_map_artifact_type) {
+        throw std::logic_error(
+            "compiled artifact has wrong type for performance-map role: " +
+            context.component.id + "." + role);
+    }
+    const auto map = std::dynamic_pointer_cast<
+        const PerformanceMapArtifact>(it->second);
+    if (!map) {
+        throw std::logic_error(
+            "compiled performance-map artifact has incompatible payload: " +
+            context.component.id + "." + role);
+    }
+    return map;
 }
 
 inline EvaluationStatus property_failure(

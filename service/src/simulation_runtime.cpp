@@ -45,7 +45,7 @@ void hash_number(std::uint64_t& hash, double value) {
 std::string catalog_fingerprint(
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
-    const platform::PerformanceMapRegistry& performance_maps,
+    const platform::EngineeringArtifactRegistry& engineering_artifacts,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry,
     const platform::UnitRegistry& units) {
@@ -158,10 +158,11 @@ std::string catalog_fingerprint(
                 std::to_string(static_cast<int>(capability)));
         }
     }
-    for (const auto& id : performance_maps.ids()) {
+    for (const auto& id : engineering_artifacts.ids()) {
         const auto artifact =
-            performance_maps.require_artifact(id);
+            engineering_artifacts.require_artifact(id);
         hash_text(hash, artifact->id);
+        hash_text(hash, artifact->artifact_type());
         hash_text(hash, artifact->schema_version);
         hash_text(hash, artifact->revision);
         hash_text(hash, artifact->checksum_sha256);
@@ -236,7 +237,7 @@ void apply_native_extension(
     const NativeExtensionPackage& extension,
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
-    platform::PerformanceMapRegistry& performance_maps,
+    platform::EngineeringArtifactRegistry& engineering_artifacts,
     physics::ThermochemistryPackageRegistry& thermochemistry,
     platform::UnitRegistry& units) {
     if (extension.package_id.empty() ||
@@ -247,7 +248,7 @@ void apply_native_extension(
     }
     if (!extension.register_components &&
         !extension.register_properties &&
-        !extension.register_performance_maps &&
+        !extension.register_engineering_artifacts &&
         !extension.register_thermochemistry &&
         !extension.register_units) {
         throw std::invalid_argument(
@@ -260,8 +261,9 @@ void apply_native_extension(
     if (extension.register_properties) {
         extension.register_properties(properties);
     }
-    if (extension.register_performance_maps) {
-        extension.register_performance_maps(performance_maps);
+    if (extension.register_engineering_artifacts) {
+        extension.register_engineering_artifacts(
+            engineering_artifacts);
     }
     if (extension.register_thermochemistry) {
         extension.register_thermochemistry(thermochemistry);
@@ -279,12 +281,12 @@ void apply_native_extension(
 std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
-    platform::PerformanceMapRegistry performance_maps,
+    platform::EngineeringArtifactRegistry engineering_artifacts,
     physics::ThermochemistryPackageRegistry thermochemistry,
     platform::UnitRegistry units) {
     return detail::NativeRuntimeFactory::create(
         std::move(components), std::move(properties),
-        std::move(performance_maps),
+        std::move(engineering_artifacts),
         std::move(thermochemistry), std::move(units));
 }
 
@@ -292,17 +294,18 @@ std::shared_ptr<const SimulationRuntime>
 detail::NativeRuntimeFactory::create(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
-    platform::PerformanceMapRegistry performance_maps,
+    platform::EngineeringArtifactRegistry engineering_artifacts,
     physics::ThermochemistryPackageRegistry thermochemistry,
     platform::UnitRegistry units) {
     auto impl = std::make_unique<SimulationRuntime::Impl>();
     impl->fingerprint =
         catalog_fingerprint(
-            components, properties, performance_maps,
+            components, properties, engineering_artifacts,
             thermochemistry, units);
     impl->components = std::move(components);
     impl->properties = std::move(properties);
-    impl->performance_maps = std::move(performance_maps);
+    impl->engineering_artifacts =
+        std::move(engineering_artifacts);
     impl->thermochemistry = std::move(thermochemistry);
     impl->units = std::move(units);
     return std::shared_ptr<const SimulationRuntime>(
@@ -327,7 +330,7 @@ detail::NativeRuntimeFactory::overlay(
     return create(
         std::move(components),
         base->impl_->properties,
-        base->impl_->performance_maps,
+        base->impl_->engineering_artifacts,
         base->impl_->thermochemistry,
         base->impl_->units);
 }

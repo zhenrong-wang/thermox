@@ -569,7 +569,7 @@ void validate_component_bindings(
 void resolve_component_artifacts(
     ComponentCompileContext& context,
     const ComponentModel& model,
-    const PerformanceMapRegistry& performance_map_registry) {
+    const EngineeringArtifactRegistry& artifact_registry) {
     for (const auto& artifact : model.descriptor().artifacts) {
         const auto binding =
             context.component.artifact_bindings.find(
@@ -578,17 +578,10 @@ void resolve_component_artifacts(
             context.component.artifact_bindings.end()) {
             continue;
         }
-        if (artifact.artifact_type ==
-            performance_map_artifact_type) {
-            context.performance_maps.emplace(
-                artifact.role,
-                performance_map_registry.require_artifact(
-                    binding->second));
-            continue;
-        }
-        throw std::logic_error(
-            "unsupported resolved component artifact type: " +
-            artifact.artifact_type);
+        context.artifacts.emplace(
+            artifact.role,
+            artifact_registry.require_artifact(
+                binding->second, artifact.artifact_type));
     }
 }
 
@@ -1083,18 +1076,18 @@ CompiledModelGraph compile_model_graph(
     const std::string& case_id) {
     return compile_model_graph(
         document, registry, property_registry,
-        PerformanceMapRegistry{}, case_id);
+        EngineeringArtifactRegistry{}, case_id);
 }
 
 CompiledModelGraph compile_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id) {
     return compile_model_graph(
         document, registry, property_registry,
-        performance_map_registry,
+        artifact_registry,
         physics::ThermochemistryPackageRegistry{}, case_id);
 }
 
@@ -1102,7 +1095,7 @@ CompiledModelGraph compile_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry_registry,
     const std::string& case_id) {
@@ -1237,7 +1230,7 @@ CompiledModelGraph compile_model_graph(
             }
         }
         resolve_component_artifacts(
-            context, model, performance_map_registry);
+            context, model, artifact_registry);
         validate_property_capabilities(context, model);
         model.add_equations(context, system);
     }
@@ -1625,14 +1618,14 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const std::string& case_id) {
     return compile_transient_model_graph(
         document, registry, property_registry,
-        PerformanceMapRegistry{}, case_id);
+        EngineeringArtifactRegistry{}, case_id);
 }
 
 CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
-    const PerformanceMapRegistry& performance_map_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
     if (active_case != nullptr &&
@@ -1767,7 +1760,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
                                          variable.dimension, index});
         }
         resolve_component_artifacts(
-            context, model, performance_map_registry);
+            context, model, artifact_registry);
         validate_property_capabilities(context, model);
         model.add_transient_equations(context, system);
     }

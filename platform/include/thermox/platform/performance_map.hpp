@@ -1,6 +1,7 @@
 #pragma once
 
-#include <map>
+#include "thermox/platform/engineering_artifact.hpp"
+
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -138,28 +139,33 @@ inline constexpr const char* performance_map_artifact_schema_v2 =
 // Immutable identity and payload for user-supplied engineering data. The
 // checksum identifies the canonical source payload; revision is a
 // user-facing data revision and is not used as a substitute for identity.
-struct PerformanceMapArtifact {
-    std::string id;
-    std::string schema_version;
-    std::string revision;
-    std::string checksum_sha256;
+struct PerformanceMapArtifact final : EngineeringArtifact {
+    PerformanceMapArtifact() = default;
+    PerformanceMapArtifact(
+        std::string artifact_id,
+        std::string artifact_schema_version,
+        std::string artifact_revision,
+        std::string artifact_checksum_sha256,
+        std::shared_ptr<const PerformanceMap> artifact_map,
+        std::shared_ptr<const ConditionedPerformanceMap>
+            artifact_conditioned_map = nullptr)
+        : map(std::move(artifact_map)),
+          conditioned_map(std::move(artifact_conditioned_map)) {
+        id = std::move(artifact_id);
+        schema_version = std::move(artifact_schema_version);
+        revision = std::move(artifact_revision);
+        checksum_sha256 =
+            std::move(artifact_checksum_sha256);
+    }
+
     std::shared_ptr<const PerformanceMap> map;
     std::shared_ptr<const ConditionedPerformanceMap> conditioned_map;
-};
 
-class PerformanceMapRegistry {
-public:
-    void register_artifact(PerformanceMapArtifact artifact);
-    [[nodiscard]] std::shared_ptr<const PerformanceMapArtifact>
-    require_artifact(const std::string& id) const;
-    [[nodiscard]] bool contains(const std::string& id) const;
-    [[nodiscard]] std::vector<std::string> ids() const;
-
-private:
-    std::map<
-        std::string,
-        std::shared_ptr<const PerformanceMapArtifact>>
-        artifacts_;
+    [[nodiscard]] std::string_view artifact_type()
+        const noexcept override {
+        return performance_map_artifact_type;
+    }
+    void validate() const override;
 };
 
 }  // namespace thermox::platform

@@ -206,14 +206,14 @@ platform::PerformanceMapArtifact performance_map_artifact(
         input.schema_version);
 }
 
-platform::PerformanceMapRegistry execution_performance_maps(
-    const platform::PerformanceMapRegistry& runtime_maps,
+platform::EngineeringArtifactRegistry execution_engineering_artifacts(
+    const platform::EngineeringArtifactRegistry& runtime_artifacts,
     const SimulationArtifactBundle& inputs) {
-    auto maps = runtime_maps;
+    auto artifacts = runtime_artifacts;
     for (const auto& input : inputs.performance_maps) {
-        maps.register_artifact(performance_map_artifact(input));
+        artifacts.register_artifact(performance_map_artifact(input));
     }
-    return maps;
+    return artifacts;
 }
 
 std::vector<ArtifactProvenance> artifact_provenance(
@@ -993,7 +993,7 @@ CalibrationCaseSolution solve_calibration_case(
     const SteadySolverSettings& settings,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
-    const platform::PerformanceMapRegistry& performance_maps,
+    const platform::EngineeringArtifactRegistry& engineering_artifacts,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry,
     const CalibrationState* warm_start) {
@@ -1005,7 +1005,7 @@ CalibrationCaseSolution solve_calibration_case(
             case_id);
     }
     auto graph = platform::compile_model_graph(
-        document, components, properties, performance_maps,
+        document, components, properties, engineering_artifacts,
         thermochemistry, case_id);
     if (warm_start != nullptr) {
         for (std::size_t index = 0;
@@ -1049,7 +1049,7 @@ ObjectiveEvaluation evaluate_calibration_objective(
     const SteadySolverSettings& settings,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
-    const platform::PerformanceMapRegistry& performance_maps,
+    const platform::EngineeringArtifactRegistry& engineering_artifacts,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry,
     const std::map<std::string, CalibrationState>*
@@ -1071,7 +1071,7 @@ ObjectiveEvaluation evaluate_calibration_objective(
                 observation.case_id,
                 solve_calibration_case(
                     document, observation.case_id, settings,
-                    components, properties, performance_maps,
+                    components, properties, engineering_artifacts,
                     thermochemistry, warm_start));
         }
         const auto& predicted = require_graph_value(
@@ -1204,13 +1204,13 @@ ValidateModelResponse SimulationService::validate_model(
         return response;
     }
     SimulationArtifactBundle artifacts;
-    platform::PerformanceMapRegistry performance_maps;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
     try {
         artifacts = resolve_artifacts(
             request.artifacts,
             impl_->artifact_resolver.get());
-        performance_maps = execution_performance_maps(
-            runtime->impl_->performance_maps,
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1246,7 +1246,7 @@ ValidateModelResponse SimulationService::validate_model(
                     document,
                     runtime->impl_->components,
                     runtime->impl_->properties,
-                    performance_maps,
+                    engineering_artifacts,
                     request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "transient";
@@ -1259,7 +1259,7 @@ ValidateModelResponse SimulationService::validate_model(
                 document,
                 runtime->impl_->components,
                 runtime->impl_->properties,
-                performance_maps,
+                engineering_artifacts,
                 runtime->impl_->thermochemistry,
                 request.case_id);
             response.compilation.compiled = true;
@@ -1529,13 +1529,13 @@ SteadySimulationResponse SimulationService::run_steady(
         return response;
     }
     SimulationArtifactBundle artifacts;
-    platform::PerformanceMapRegistry performance_maps;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
     try {
         artifacts = resolve_artifacts(
             request.artifacts,
             impl_->artifact_resolver.get());
-        performance_maps = execution_performance_maps(
-            runtime->impl_->performance_maps,
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1560,7 +1560,7 @@ SteadySimulationResponse SimulationService::run_steady(
             document,
             runtime->impl_->components,
             runtime->impl_->properties,
-            performance_maps,
+            engineering_artifacts,
             runtime->impl_->thermochemistry,
             request.case_id);
         response.metadata = execution_metadata(
@@ -1685,13 +1685,13 @@ CalibrationResponse SimulationService::run_calibration(
     }
 
     SimulationArtifactBundle artifacts;
-    platform::PerformanceMapRegistry performance_maps;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
     try {
         artifacts = resolve_artifacts(
             request.artifacts,
             impl_->artifact_resolver.get());
-        performance_maps = execution_performance_maps(
-            runtime->impl_->performance_maps,
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -1791,7 +1791,7 @@ CalibrationResponse SimulationService::run_calibration(
             settings.simulation_solver,
             runtime->impl_->components,
             runtime->impl_->properties,
-            performance_maps,
+            engineering_artifacts,
             runtime->impl_->thermochemistry,
             warm_starts);
     };
@@ -2144,13 +2144,13 @@ TransientSimulationResponse SimulationService::run_transient(
         return response;
     }
     SimulationArtifactBundle artifacts;
-    platform::PerformanceMapRegistry performance_maps;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
     try {
         artifacts = resolve_artifacts(
             request.artifacts,
             impl_->artifact_resolver.get());
-        performance_maps = execution_performance_maps(
-            runtime->impl_->performance_maps,
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
             artifacts);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_request;
@@ -2175,7 +2175,7 @@ TransientSimulationResponse SimulationService::run_transient(
             document,
             runtime->impl_->components,
             runtime->impl_->properties,
-            performance_maps,
+            engineering_artifacts,
             request.case_id);
         response.metadata = execution_metadata(
             document,

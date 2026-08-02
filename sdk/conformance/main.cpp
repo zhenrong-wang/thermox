@@ -77,7 +77,7 @@ int main() {
         platform::make_default_component_registry();
     auto properties =
         physics::make_default_property_package_registry();
-    platform::PerformanceMapRegistry performance_maps;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
     physics::ThermochemistryPackageRegistry thermochemistry;
     auto units = platform::make_default_unit_registry();
 
@@ -141,14 +141,14 @@ int main() {
         extension,
         components,
         properties,
-        performance_maps,
+        engineering_artifacts,
         thermochemistry,
         units);
 
     auto runtime = service::make_simulation_runtime(
         std::move(components),
         std::move(properties),
-        std::move(performance_maps),
+        std::move(engineering_artifacts),
         std::move(thermochemistry),
         std::move(units));
     service::SimulationService simulation{runtime};

@@ -69,9 +69,11 @@ Engineering datasets are not service-global mutable state. Validate, steady, tra
 calibration, and job requests may carry a `SimulationArtifactBundle` containing inline payloads or
 immutable references. An injected `EngineeringArtifactResolver` resolves references and the
 service requires an exact type/schema/revision/checksum match before constructing an
-execution-local performance-map registry over any immutable deployment defaults. The overlay is
-destroyed after the call, duplicate identities are rejected, queued jobs preserve references, and
-result-v3 records resolved artifact provenance. Project-owned expression-component artifacts use
+execution-local, typed engineering-artifact registry over any immutable deployment defaults.
+Performance maps are the first payload adapter; component compilation and native extension
+boundaries are artifact-type neutral. The overlay is destroyed after the call, duplicate
+identities are rejected, queued jobs preserve references, and result-v3 records resolved artifact
+provenance. Project-owned expression-component artifacts use
 the same revision and content-storage boundary, then resolve into an immutable
 `SimulationComponentBundle` overlay. Production PostgreSQL/object-storage adapters and in-memory
 test adapters implement the same application ports.

@@ -492,86 +492,33 @@ ConditionedMapEvaluation ConditionedPerformanceMap::evaluate(
     return result;
 }
 
-void PerformanceMapRegistry::register_artifact(
+void EngineeringArtifactRegistry::register_artifact(
     PerformanceMapArtifact artifact) {
-    if (artifact.id.empty()) {
-        throw std::invalid_argument(
-            "performance-map artifact id must not be empty");
-    }
-    if (artifact.schema_version !=
+    register_artifact(
+        std::shared_ptr<const EngineeringArtifact>(
+            std::make_shared<const PerformanceMapArtifact>(
+                std::move(artifact))));
+}
+
+void PerformanceMapArtifact::validate() const {
+    if (schema_version !=
             performance_map_artifact_schema_v1 &&
-        artifact.schema_version !=
+        schema_version !=
             performance_map_artifact_schema_v2) {
         throw std::invalid_argument(
-            "performance-map artifact '" + artifact.id +
+            "performance-map artifact '" + id +
             "' has unsupported schema version: " +
-            artifact.schema_version);
-    }
-    if (artifact.revision.empty()) {
-        throw std::invalid_argument(
-            "performance-map artifact '" + artifact.id +
-            "' must declare a revision");
-    }
-    const bool valid_checksum =
-        artifact.checksum_sha256.size() == 64 &&
-        std::all_of(
-            artifact.checksum_sha256.begin(),
-            artifact.checksum_sha256.end(),
-            [](unsigned char character) {
-                return std::isxdigit(character) != 0;
-            });
-    if (!valid_checksum) {
-        throw std::invalid_argument(
-            "performance-map artifact '" + artifact.id +
-            "' must declare a 64-character SHA-256 checksum");
+            schema_version);
     }
     const bool ordinary =
-        artifact.schema_version ==
+        schema_version ==
         performance_map_artifact_schema_v1;
-    if ((ordinary && (!artifact.map ||
-                      artifact.conditioned_map)) ||
-        (!ordinary && (artifact.map ||
-                       !artifact.conditioned_map))) {
+    if ((ordinary && (!map || conditioned_map)) ||
+        (!ordinary && (map || !conditioned_map))) {
         throw std::invalid_argument(
-            "performance-map artifact '" + artifact.id +
+            "performance-map artifact '" + id +
             "' payload does not match its schema version");
     }
-    const auto id = artifact.id;
-    if (!artifacts_
-             .emplace(
-                 id,
-                 std::make_shared<const PerformanceMapArtifact>(
-                     std::move(artifact)))
-             .second) {
-        throw std::invalid_argument(
-            "duplicate performance-map artifact id: " + id);
-    }
-}
-
-std::shared_ptr<const PerformanceMapArtifact>
-PerformanceMapRegistry::require_artifact(
-    const std::string& id) const {
-    const auto found = artifacts_.find(id);
-    if (found == artifacts_.end()) {
-        throw std::invalid_argument(
-            "no performance-map artifact registered for id: " +
-            id);
-    }
-    return found->second;
-}
-
-bool PerformanceMapRegistry::contains(
-    const std::string& id) const {
-    return artifacts_.find(id) != artifacts_.end();
-}
-
-std::vector<std::string> PerformanceMapRegistry::ids() const {
-    std::vector<std::string> result;
-    result.reserve(artifacts_.size());
-    for (const auto& [id, _] : artifacts_) {
-        result.push_back(id);
-    }
-    return result;
 }
 
 }  // namespace thermox::platform
