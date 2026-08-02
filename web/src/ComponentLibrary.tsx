@@ -15,6 +15,7 @@ interface ComponentLibraryProps {
   onChoose: (component: CatalogComponent) => void
   onAddFluid: () => void
   onAddMaterial: () => void
+  onAddCorrelation: () => void
   onCreateTopology?: () => void
   onDefine: () => void
   onRevise: (component: CatalogComponent) => void
@@ -30,6 +31,7 @@ export function ComponentLibrary({
   onChoose,
   onAddFluid,
   onAddMaterial,
+  onAddCorrelation,
   onCreateTopology,
   onDefine,
   onRevise,
@@ -117,6 +119,9 @@ export function ComponentLibrary({
             </button>
             <button type="button" className="resource-button" disabled={disabled} onClick={onDefine}>
               + Custom component
+            </button>
+            <button type="button" className="resource-button" disabled={disabled} onClick={onAddCorrelation}>
+              + Correlation
             </button>
           </div>
         </div>

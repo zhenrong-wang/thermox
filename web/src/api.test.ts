@@ -1,9 +1,61 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
-import type { ArtifactRevision, ExpressionComponentDefinition } from './types'
+import type {
+  ArtifactRevision,
+  CorrelationArtifactDefinition,
+  ExpressionComponentDefinition,
+} from './types'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('correlation artifact authoring API', () => {
+  it('publishes a typed immutable correlation revision', async () => {
+    const definition: CorrelationArtifactDefinition = {
+      schema_version: 'thermox.correlation/v1',
+      inputs: [{ name: 'mass_flow', dimension: 'mass_flow' }],
+      output: { name: 'pressure_loss', dimension: 'pressure' },
+      coefficients: { coefficient: 1.5 },
+      expression: 'coefficient * mass_flow * abs(mass_flow)',
+    }
+    const revision = {
+      schema_version: 'thermox.artifact_revision/v1',
+      artifact_revision_id: 'correlation-revision-2',
+      revision_number: 2,
+    } as ArtifactRevision
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(revision), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      api.createCorrelationRevision(
+        'project-a',
+        'bend-loss',
+        'correlation-revision-1',
+        definition,
+      ),
+    ).resolves.toEqual(revision)
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.searchParams.get('artifact_type')).toBe('thermox.correlation')
+    expect(url.searchParams.get('artifact_schema_version')).toBe(
+      'thermox.correlation/v1',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe(
+      'correlation-revision-1',
+    )
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(definition),
+    })
+  })
 })
 
 describe('expression component authoring API', () => {

@@ -18,6 +18,7 @@ interface DefinitionWorkspaceProps {
   onEditComponent: (component: ComponentDefinition) => void
   onAddFluid: () => void
   onAddMaterial: () => void
+  onAddCorrelation: () => void
   onBuild: () => void
 }
 
@@ -33,6 +34,7 @@ export function DefinitionWorkspace({
   onEditComponent,
   onAddFluid,
   onAddMaterial,
+  onAddCorrelation,
   onBuild,
 }: DefinitionWorkspaceProps) {
   if (!topology || !catalog) {
@@ -53,6 +55,15 @@ export function DefinitionWorkspace({
   const states = Object.values(readiness)
   const definedCount = states.filter((item) => item.state === 'defined').length
   const issueCount = states.reduce((sum, item) => sum + item.issues.length, 0)
+  const latestCorrelations = [...artifactRevisions]
+    .filter((revision) => revision.artifact_type === 'thermox.correlation')
+    .sort((left, right) => right.revision_number - left.revision_number)
+    .filter(
+      (revision, index, revisions) =>
+        revisions.findIndex(
+          (candidate) => candidate.artifact_id === revision.artifact_id,
+        ) === index,
+    )
 
   return (
     <section className="definition-workspace">
@@ -77,6 +88,14 @@ export function DefinitionWorkspace({
             onClick={onAddMaterial}
           >
             + Reacting mixture
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={publishing}
+            onClick={onAddCorrelation}
+          >
+            + Correlation
           </button>
         </div>
       </div>
@@ -190,6 +209,38 @@ export function DefinitionWorkspace({
                 <strong>No component instances</strong>
                 <p>Build the equipment topology before defining physics.</p>
                 <button type="button" onClick={onBuild}>Go to Build</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="physical-component-section engineering-data-section">
+          <header>
+            <div>
+              <span className="section-kicker">Engineering data registry</span>
+              <h2>Correlation artifacts</h2>
+            </div>
+            <p>
+              Correlations are immutable typed datasets. Component instances bind
+              them through declared roles; they are not components, fluids, or materials.
+            </p>
+          </header>
+          <div className="engineering-artifact-list">
+            {latestCorrelations.map((revision) => (
+              <article key={revision.artifact_revision_id}>
+                <div>
+                  <strong>{revision.artifact_id}</strong>
+                  <code>{revision.artifact_schema_version}</code>
+                </div>
+                <span>r{revision.revision_number}</span>
+                <small>{revision.content.checksum}</small>
+              </article>
+            ))}
+            {!latestCorrelations.length && (
+              <div className="definition-list-empty">
+                <strong>No project correlations</strong>
+                <p>Publish a typed equation, then bind it from a compatible component model.</p>
+                <button type="button" onClick={onAddCorrelation}>Publish correlation</button>
               </div>
             )}
           </div>

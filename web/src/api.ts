@@ -9,6 +9,7 @@ import type {
   CaseRevisionList,
   CalibrationRevision,
   CalibrationRevisionList,
+  CorrelationArtifactDefinition,
   CreateCalibrationRevision,
   CreateRunConfiguration,
   CreateStudyRevision,
@@ -203,6 +204,27 @@ export const api = {
       artifact_id: artifactId,
       artifact_type: 'thermox.expression_component',
       artifact_schema_version: 'thermox.expression_component/v2',
+    })
+    if (parentArtifactRevisionId) {
+      query.set('parent_revision_id', parentArtifactRevisionId)
+    }
+    return postJson<ArtifactRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
+      definition,
+      signal,
+    )
+  },
+  createCorrelationRevision: (
+    projectId: string,
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: CorrelationArtifactDefinition,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      artifact_id: artifactId,
+      artifact_type: 'thermox.correlation',
+      artifact_schema_version: 'thermox.correlation/v1',
     })
     if (parentArtifactRevisionId) {
       query.set('parent_revision_id', parentArtifactRevisionId)

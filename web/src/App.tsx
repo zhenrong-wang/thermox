@@ -8,6 +8,7 @@ import { CalibrationPublishForm } from './CalibrationPublishForm'
 import { ComponentForm } from './ComponentForm'
 import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
+import { CorrelationArtifactForm } from './CorrelationArtifactForm'
 import {
   DefinitionSidebar,
   DefinitionWorkspace,
@@ -53,6 +54,7 @@ import type {
   CaseEditOperation,
   CaseRevision,
   ComponentDefinition,
+  CorrelationArtifactDefinition,
   ConnectionDefinition,
   CreateRunConfiguration,
   CreateCalibrationRevision,
@@ -114,6 +116,7 @@ function App() {
   const [selection, setSelection] = useState<GraphSelection>()
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
+  const [addingCorrelation, setAddingCorrelation] = useState(false)
   const [definingComponent, setDefiningComponent] = useState(false)
   const [revisingComponent, setRevisingComponent] =
     useState<ProjectComponentCatalogEntry>()
@@ -881,6 +884,39 @@ function App() {
     }
   }
 
+  async function publishCorrelation(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: CorrelationArtifactDefinition,
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing engineering data.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createCorrelationRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const artifacts = await api.artifactRevisions(selectedProjectId)
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setAddingCorrelation(false)
+      setOperationStatus(
+        `Published correlation ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   async function createCase(document: CaseDocument) {
     if (!selectedProjectId || !selectedRevisionId) {
       throw new Error('Select a topology revision before creating a case.')
@@ -1606,6 +1642,7 @@ function App() {
             onEditComponent={setEditingComponent}
             onAddFluid={() => setAddingMedium(true)}
             onAddMaterial={() => setAddingMaterial(true)}
+            onAddCorrelation={() => setAddingCorrelation(true)}
             onBuild={() => setWorkspaceView('topology')}
           />
         ) : workspaceView === 'studies' ? (
@@ -1750,6 +1787,7 @@ function App() {
                     onChoose={setNewComponentType}
                     onAddFluid={() => setAddingMedium(true)}
                     onAddMaterial={() => setAddingMaterial(true)}
+                    onAddCorrelation={() => setAddingCorrelation(true)}
                     onCreateTopology={
                       selectedProjectId && !selectedRevisionId
                         ? () => {
@@ -1884,6 +1922,15 @@ function App() {
           onSubmit={addMaterial}
         />
       )}
+      {(workspaceView === 'topology' || workspaceView === 'definition') &&
+        addingCorrelation && catalog && (
+          <CorrelationArtifactForm
+            unitDimensions={catalog.unit_dimensions}
+            artifactRevisions={artifactRevisions}
+            onCancel={() => setAddingCorrelation(false)}
+            onSubmit={publishCorrelation}
+          />
+        )}
       {workspaceView === 'topology' &&
         (definingComponent || revisingComponent) &&
         catalog && (

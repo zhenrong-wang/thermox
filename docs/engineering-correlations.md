@@ -33,3 +33,9 @@ Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation happens before immutable
 content persistence; selected revisions resolve into the calculation request with complete
 identity and checksum provenance.
+
+The Definition workspace exposes the same contract through a dedicated Engineering Data Registry
+form. It uses catalog unit dimensions for every input and output, supports immutable coefficient
+sets, and publishes either a new logical artifact or the next child revision. Component forms do
+not treat correlations as equipment: they offer a correlation only when the selected calculation
+model declares a compatible `thermox.correlation` artifact role.

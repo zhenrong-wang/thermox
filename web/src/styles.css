@@ -1342,6 +1342,19 @@ code {
   grid-template-columns: 1fr 3fr 0.8fr;
 }
 
+.correlation-variable-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.correlation-expression-row {
+  grid-template-columns: 1fr;
+}
+
+.correlation-expression-row textarea {
+  resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
 .equation-expression textarea {
   resize: vertical;
   font-family: 'SFMono-Regular', Consolas, monospace;
@@ -1617,6 +1630,46 @@ code {
   border: 1px solid #d5e0e5;
   border-radius: 5px;
   background: #fbfcfc;
+}
+
+.engineering-data-section {
+  margin-top: 14px;
+}
+
+.engineering-artifact-list {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.engineering-artifact-list article {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 11px;
+  border: 1px solid #e0e7ea;
+  border-radius: 4px;
+  background: #fff;
+  color: #6f818c;
+  font-size: 8px;
+}
+
+.engineering-artifact-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.engineering-artifact-list strong {
+  color: #365567;
+  font-size: 10px;
+}
+
+.engineering-artifact-list code,
+.engineering-artifact-list small {
+  color: #788b96;
+  font-size: 8px;
+  overflow-wrap: anywhere;
 }
 
 .physical-component-section > header {

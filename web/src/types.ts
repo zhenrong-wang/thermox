@@ -634,6 +634,20 @@ export interface ArtifactRevisionList {
   artifact_revisions: ArtifactRevision[]
 }
 
+export interface CorrelationArtifactDefinition {
+  schema_version: 'thermox.correlation/v1'
+  inputs: Array<{
+    name: string
+    dimension: string
+  }>
+  output: {
+    name: string
+    dimension: string
+  }
+  coefficients: Record<string, number>
+  expression: string
+}
+
 export interface ProjectComponentCatalogEntry {
   source: ArtifactRevision
   catalog_fingerprint: string
