@@ -280,13 +280,13 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v4,
+            thermox::service::catalog_schema_v5,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 49,
+        response.components.size() == 50,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -311,6 +311,13 @@ void test_catalog_discovery() {
         compressor != response.components.end(),
         "catalog must expose fluid compressor");
     require(
+        compressor->template_kind == "compressor" &&
+            compressor->display_name == "Compressor" &&
+            compressor->category == "Turbomachinery" &&
+            compressor->model_name == "Isentropic efficiency",
+        "catalog must distinguish physical templates from "
+        "calculation models");
+    require(
         compressor->ports.size() == 3 &&
             compressor->parameters.size() == 2 &&
             std::all_of(
@@ -320,6 +327,25 @@ void test_catalog_discovery() {
                     return port.maximum_connections == 1;
                 }),
         "catalog must expose ports, cardinality, and parameter forms");
+    const auto return_bend = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "fitting.fluid.return_bend.fixed_loss_coefficient";
+        });
+    require(
+        return_bend != response.components.end() &&
+            return_bend->template_kind ==
+                "fitting.fluid.return_bend" &&
+            return_bend->display_name ==
+                "Return bend (180 deg)" &&
+            return_bend->model_name ==
+                "Fixed loss coefficient" &&
+            return_bend->required_property_capabilities ==
+                std::vector<std::string>{"state_ph"},
+        "catalog must expose the return bend as a physical "
+        "template with a density-aware calculation model");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -480,7 +506,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v4\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v5\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(

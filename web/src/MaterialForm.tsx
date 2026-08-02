@@ -65,7 +65,7 @@ export function MaterialForm({
       })
     } catch (reason) {
       setFormError(
-        reason instanceof Error ? reason.message : 'Material was rejected.',
+        reason instanceof Error ? reason.message : 'Reacting mixture was rejected.',
       )
     } finally {
       setSubmitting(false)
@@ -78,7 +78,7 @@ export function MaterialForm({
         <header>
           <div>
             <span className="eyebrow">Thermochemistry registry</span>
-            <h2>Add material definition</h2>
+            <h2>Add reacting mixture</h2>
           </div>
           <button type="button" className="icon-button" onClick={onCancel}>×</button>
         </header>
@@ -94,7 +94,7 @@ export function MaterialForm({
             </select>
           </label>
           <label>
-            <span>Material ID</span>
+            <span>Mixture ID</span>
             <input value={materialId} required onChange={(event) => setMaterialId(event.target.value)} />
           </label>
           <label>
@@ -125,7 +125,7 @@ export function MaterialForm({
         <footer>
           <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>
           <button type="submit" className="primary-button" disabled={submitting}>
-            {submitting ? 'Publishing…' : 'Publish material revision'}
+            {submitting ? 'Publishing…' : 'Publish mixture revision'}
           </button>
         </footer>
       </form>

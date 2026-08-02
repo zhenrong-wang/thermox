@@ -12,6 +12,10 @@ export function componentMatchesFilter(
 
   return (
     component.kind.toLowerCase().includes(query) ||
+    component.template_kind.toLowerCase().includes(query) ||
+    component.display_name.toLowerCase().includes(query) ||
+    component.category.toLowerCase().includes(query) ||
+    component.model_name.toLowerCase().includes(query) ||
     component.system_boundary_role.toLowerCase().includes(query) ||
     component.ports.some(
       (port) =>
@@ -19,13 +23,4 @@ export function componentMatchesFilter(
         port.domain.toLowerCase().includes(query),
     )
   )
-}
-
-export function componentDisplayName(kind: string): string {
-  return kind.split('.').filter(Boolean).at(-1) ?? kind
-}
-
-export function componentFamily(kind: string): string {
-  const parts = kind.split('.').filter(Boolean)
-  return parts.length > 2 ? `${parts[0]}.${parts[1]}` : kind
 }

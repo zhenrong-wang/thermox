@@ -715,6 +715,10 @@ export interface CatalogParameter {
 export interface CatalogComponent {
   kind: string
   version: string
+  template_kind: string
+  display_name: string
+  category: string
+  model_name: string
   system_boundary_role: string
   supports_steady: boolean
   supports_transient: boolean
@@ -777,7 +781,7 @@ export interface CatalogUnitDimension {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v4'
+  schema_version: 'thermox.catalog/v5'
   status: string
   fingerprint: string
   components: CatalogComponent[]

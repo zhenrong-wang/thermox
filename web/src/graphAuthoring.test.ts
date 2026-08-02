@@ -25,7 +25,7 @@ const topology: TopologyDocument = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v4',
+  schema_version: 'thermox.catalog/v5',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],
@@ -35,6 +35,10 @@ const catalog: Catalog = {
     {
       kind: 'source.test',
       version: '1.0.0',
+      template_kind: 'source.test',
+      display_name: 'Test source',
+      category: 'Boundaries',
+      model_name: 'Fixed source',
       system_boundary_role: 'source',
       supports_steady: true,
       supports_transient: false,
@@ -52,6 +56,10 @@ const catalog: Catalog = {
     {
       kind: 'sink.test',
       version: '1.0.0',
+      template_kind: 'sink.test',
+      display_name: 'Test sink',
+      category: 'Boundaries',
+      model_name: 'Fixed sink',
       system_boundary_role: 'sink',
       supports_steady: true,
       supports_transient: false,

@@ -838,7 +838,7 @@ function App() {
           entity: { ...material },
         },
       ],
-      `Added material ${material.id}.`,
+      `Added reacting mixture ${material.id}.`,
     )
     setAddingMaterial(false)
   }

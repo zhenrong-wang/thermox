@@ -53,6 +53,10 @@ std::string catalog_fingerprint(
     for (const auto& descriptor : components.descriptors()) {
         hash_text(hash, descriptor.kind);
         hash_text(hash, descriptor.version);
+        hash_text(hash, descriptor.template_kind);
+        hash_text(hash, descriptor.display_name);
+        hash_text(hash, descriptor.category);
+        hash_text(hash, descriptor.model_name);
         hash_text(
             hash,
             components.require_model(descriptor.kind)

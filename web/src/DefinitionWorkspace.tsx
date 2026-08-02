@@ -76,7 +76,7 @@ export function DefinitionWorkspace({
             disabled={publishing}
             onClick={onAddMaterial}
           >
-            + Material
+            + Reacting mixture
           </button>
         </div>
       </div>
@@ -105,7 +105,7 @@ export function DefinitionWorkspace({
             <small>property-backed definitions</small>
           </div>
           <div>
-            <span>Materials</span>
+            <span>Reacting mixtures</span>
             <strong>{topology.model.materials?.length ?? 0}</strong>
             <small>thermochemistry definitions</small>
           </div>

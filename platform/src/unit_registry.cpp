@@ -183,6 +183,13 @@ UnitRegistry make_default_unit_registry() {
             accepted("deg", std::acos(-1.0) / 180.0),
         }));
     registry.register_dimension(dimension(
+        "length", "m", display("mm", 1.0e3),
+        {
+            accepted("m"),
+            accepted("cm", 1.0e-2),
+            accepted("mm", 1.0e-3),
+        }));
+    registry.register_dimension(dimension(
         "mass_flow", "kg/s", display("kg/s"),
         {
             accepted("kg/s"),

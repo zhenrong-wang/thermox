@@ -76,7 +76,7 @@ export function DefinitionOverview({
             {(topology?.model.media.length ?? 0) +
               (topology?.model.materials?.length ?? 0)}
           </strong>
-          <small>fluids and materials registered</small>
+          <small>fluids and reacting mixtures registered</small>
         </div>
         <div>
           <span>Case inputs</span>

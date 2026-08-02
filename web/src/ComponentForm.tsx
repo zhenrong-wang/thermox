@@ -262,7 +262,7 @@ export function ComponentForm({
 
         {intent === 'define' && bindingPorts.length > 0 && (
           <fieldset>
-            <legend>Medium and material bindings</legend>
+            <legend>Fluid and reacting-mixture bindings</legend>
             <div className="form-grid">
               {bindingPorts.map((port) => {
                 const options =

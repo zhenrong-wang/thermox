@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@ using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
+using component_model_support::property_failure;
 
 void require_same_material(
     const ComponentCompileContext& context,
@@ -275,6 +277,146 @@ public:
             prefix + "isenthalpic",
             {{outlet_h, 1.0}, {inlet_h, -1.0}},
             0.0, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class ReturnBendFixedLossModel final : public ComponentModel {
+public:
+    ReturnBendFixedLossModel()
+        : descriptor_(make_descriptor(
+              "fitting.fluid.return_bend.fixed_loss_coefficient",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.template_kind = "fitting.fluid.return_bend";
+        descriptor_.display_name = "Return bend (180 deg)";
+        descriptor_.category = "Fluid fittings";
+        descriptor_.model_name = "Fixed loss coefficient";
+        descriptor_.parameters = {
+            {"inner_diameter", "length", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false,
+             true},
+            {"loss_coefficient", "dimensionless", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), true, true},
+        };
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph,
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const double diameter = required_parameter(
+            context.component, "inner_diameter");
+        const double loss_coefficient = required_parameter(
+            context.component, "loss_coefficient");
+        const double area =
+            std::numbers::pi * diameter * diameter / 4.0;
+        const double loss_scale =
+            loss_coefficient / (2.0 * area * area);
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "adiabatic_enthalpy",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}},
+            0.0, 100000.0);
+        system.add_checked_sparse_equation(
+            prefix + "pressure_loss",
+            [properties, inlet_m, inlet_p, inlet_h, outlet_p,
+             loss_scale](const std::vector<double>& x,
+                         double& residual) {
+                const auto state = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h));
+                if (!state.ok()) return property_failure(state);
+                const double density = state.state.density_kg_m3;
+                if (!std::isfinite(density) || density <= 0.0) {
+                    return EvaluationStatus::recoverable(
+                        "return-bend pressure loss requires positive "
+                        "finite inlet density");
+                }
+                const double mass_flow = x.at(inlet_m);
+                residual = x.at(inlet_p) - x.at(outlet_p) -
+                    loss_scale * mass_flow * std::abs(mass_flow) /
+                        density;
+                return EvaluationStatus::success();
+            },
+            {inlet_m, inlet_p, inlet_h, outlet_p},
+            [properties, inlet_m, inlet_p, inlet_h, outlet_p,
+             loss_scale](const std::vector<double>& x,
+                         std::vector<EquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(inlet_p),
+                        x.at(inlet_h));
+                if (!state.ok()) {
+                    throw std::runtime_error(state.message);
+                }
+                const double density =
+                    state.state.density_kg_m3;
+                if (!std::isfinite(density) || density <= 0.0) {
+                    throw std::runtime_error(
+                        "return-bend pressure loss requires positive "
+                        "finite inlet density");
+                }
+                const double mass_flow = x.at(inlet_m);
+                const double signed_square =
+                    mass_flow * std::abs(mass_flow);
+                const double density_factor =
+                    loss_scale * signed_square /
+                    (density * density);
+                jacobian.push_back({
+                    inlet_m,
+                    -2.0 * loss_scale * std::abs(mass_flow) /
+                        density});
+                jacobian.push_back({
+                    inlet_p,
+                    1.0 + density_factor *
+                        state.derivatives
+                            .density_wrt_pressure_at_enthalpy});
+                jacobian.push_back({
+                    inlet_h,
+                    density_factor *
+                        state.derivatives
+                            .density_wrt_enthalpy_at_pressure});
+                jacobian.push_back({outlet_p, -1.0});
+                return x.at(inlet_p) - x.at(outlet_p) -
+                    loss_scale * signed_square / density;
+            },
+            100000.0);
     }
 
 private:
@@ -594,6 +736,8 @@ void register_transport_component_models(
     registry.register_model(
         std::make_shared<
             IsenthalpicPressureRatioValveModel>());
+    registry.register_model(
+        std::make_shared<ReturnBendFixedLossModel>());
     registry.register_model(
         std::make_shared<FrozenMaterialPressureRatioModel>());
     registry.register_model(

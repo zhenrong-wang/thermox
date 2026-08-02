@@ -85,6 +85,14 @@ struct InternalVariableDescriptor {
 struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
+    // User-facing physical template identity is deliberately separate from
+    // the executable model kind. Multiple calculation models may implement
+    // one template (for example a map-based and an efficiency-based
+    // compressor).
+    std::string template_kind;
+    std::string display_name;
+    std::string category;
+    std::string model_name;
     // "source" or "sink" marks a component as an explicit system
     // boundary. Empty means ordinary equipment; its unconnected ports
     // are still treated as system boundaries in steady result audits.

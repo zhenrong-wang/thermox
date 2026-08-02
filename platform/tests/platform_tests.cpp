@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -987,6 +988,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
+        "fitting.fluid.return_bend.fixed_loss_coefficient",
         "transport.material.frozen_pressure_ratio",
         "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",
@@ -2406,6 +2408,71 @@ void test_generic_model_solves_isenthalpic_valve() {
         result.x.at(require_variable_index(
             graph.problem.variable_names, "valve.outlet.h")),
         1.2e6, 1.0e-7, "valve preserves enthalpy");
+}
+
+void test_return_bend_fixed_loss_uses_fluid_density() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "return_bend_loss",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "bend",
+      "kind": "fitting.fluid.return_bend.fixed_loss_coefficient",
+      "parameters": {
+        "inner_diameter": {"value": 0.5, "unit": "m"},
+        "loss_coefficient": 1.5
+      },
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "bend.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "bend.inlet.p": {"value": 2.0, "unit": "bar"},
+      "bend.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        properties, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+
+    const auto air = properties.create("ideal_gas_mixture", "Air");
+    const auto inlet = air->state_ph(2.0e5, 3.0e5);
+    require(inlet.ok(), "ideal-gas inlet state must evaluate");
+    const double area = std::numbers::pi * 0.5 * 0.5 / 4.0;
+    const double expected_loss =
+        1.5 * 2.0 * 2.0 /
+        (2.0 * inlet.state.density_kg_m3 * area * area);
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "bend.outlet.m_dot")),
+        2.0, 1.0e-10, "return bend conserves mass");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "bend.outlet.h")),
+        3.0e5, 1.0e-8,
+        "adiabatic return bend preserves enthalpy");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "bend.outlet.p")),
+        2.0e5 - expected_loss, 1.0e-7,
+        "return bend applies K rho v squared pressure loss");
 }
 
 void test_material_connector_and_frozen_transport() {
@@ -5202,6 +5269,7 @@ int main() {
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
+        test_return_bend_fixed_loss_uses_fluid_density();
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
         test_material_thermochemistry_resolves_on_demand();

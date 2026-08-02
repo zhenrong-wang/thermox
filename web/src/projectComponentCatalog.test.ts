@@ -13,6 +13,10 @@ import type {
 const native = {
   kind: 'source.signal.fixed',
   version: '1.0.0',
+  template_kind: 'source.signal.fixed',
+  display_name: 'Fixed signal source',
+  category: 'Boundaries',
+  model_name: 'Fixed value',
   system_boundary_role: 'source',
   supports_steady: true,
   supports_transient: false,
@@ -44,6 +48,10 @@ const projectEntry: ProjectComponentCatalogEntry = {
   component: {
     ...native,
     kind: 'custom.signal.gain',
+    template_kind: 'custom.signal.gain',
+    display_name: 'Signal gain',
+    category: 'Project components',
+    model_name: 'Custom expression',
     system_boundary_role: '',
     ports: [
       {
@@ -98,7 +106,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v4',
+  schema_version: 'thermox.catalog/v5',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],

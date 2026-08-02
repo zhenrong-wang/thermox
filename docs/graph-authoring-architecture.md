@@ -40,6 +40,35 @@ The intended instance workflow is:
 5. connect compatible registered ports and ask the service to publish and validate the child
    revision.
 
+## Physical templates and calculation models
+
+The catalog keeps the engineer-facing physical identity separate from the executable model kind.
+`template_kind`, `display_name`, and `category` describe equipment presented by authoring clients;
+`kind`, `version`, and `model_name` select one registered equation implementation. Several models
+may therefore implement one physical template without making maps or correlations appear as
+topology nodes. For example, the `compressor` template currently has isentropic-efficiency and
+performance-map implementations.
+
+The first fitting template follows the same rule:
+
+```text
+template_kind: fitting.fluid.return_bend
+display_name: Return bend (180 deg)
+kind: fitting.fluid.return_bend.fixed_loss_coefficient
+model_name: Fixed loss coefficient
+```
+
+Its instance declares an inner diameter and loss coefficient. The component evaluates inlet
+density through the bound property package and contributes the directed pressure-loss residual
+`p_in - p_out - K m_dot |m_dot| / (2 rho A^2)`, plus mass and adiabatic enthalpy continuity.
+Future registered correlation implementations can share the same physical template while adding
+geometry parameters or typed correlation-artifact roles.
+
+Fluids, reacting mixtures, construction materials, and engineering artifacts are definition
+resources rather than physical component templates. Canvas clients may provide creation shortcuts,
+but must present them separately and submit the same service-owned graph commands as nonvisual
+clients.
+
 An empirical formula is treated as a versioned correlation artifact only when a registered
 component declares that artifact role and implements its semantics. The browser does not evaluate
 arbitrary engineering expressions or infer equations from canvas annotations.

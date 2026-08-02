@@ -1364,6 +1364,18 @@ CatalogResponse SimulationService::get_catalog(
         ComponentType component;
         component.kind = descriptor.kind;
         component.version = descriptor.version;
+        component.template_kind = descriptor.template_kind.empty()
+            ? descriptor.kind
+            : descriptor.template_kind;
+        component.display_name = descriptor.display_name.empty()
+            ? descriptor.kind
+            : descriptor.display_name;
+        component.category = descriptor.category.empty()
+            ? "Other"
+            : descriptor.category;
+        component.model_name = descriptor.model_name.empty()
+            ? descriptor.kind
+            : descriptor.model_name;
         component.system_boundary_role =
             descriptor.system_boundary_role;
         component.supports_steady = descriptor.supports_steady;

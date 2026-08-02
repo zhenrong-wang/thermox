@@ -26,6 +26,19 @@ ComponentModelDescriptor make_descriptor(
     ComponentModelDescriptor out;
     out.kind = std::move(kind);
     out.version = "1.0.0";
+    const bool is_compressor = out.kind.starts_with("compressor.");
+    const bool is_turbine = out.kind.starts_with("turbine.");
+    const bool is_pump = out.kind.starts_with("pump.");
+    if (is_compressor || is_turbine || is_pump) {
+        out.template_kind = is_compressor
+            ? "compressor"
+            : (is_turbine ? "turbine" : "pump");
+        out.display_name = is_compressor
+            ? "Compressor"
+            : (is_turbine ? "Turbine" : "Pump");
+        out.category = "Turbomachinery";
+        out.model_name = "Isentropic efficiency";
+    }
     out.ports = {
         {"inlet", "fluid", "in"},
         {"outlet", "fluid", "out"},
@@ -48,6 +61,9 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
     auto out = make_descriptor(
         std::move(kind), std::move(shaft_direction));
     out.version = "2.0.0";
+    out.model_name = variable_geometry
+        ? "Variable-geometry performance map"
+        : "Performance map";
     out.parameters = {
         {"reference_pressure", "pressure", false, 101325.0,
          0.0, std::numeric_limits<double>::infinity(), false,

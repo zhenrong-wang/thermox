@@ -14,7 +14,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v4[] = "thermox.catalog/v4";
+inline constexpr char catalog_schema_v5[] = "thermox.catalog/v5";
 
 enum class OperationStatus {
     succeeded,
@@ -88,6 +88,10 @@ struct CatalogInternalVariableType {
 struct ComponentType {
     std::string kind;
     std::string version;
+    std::string template_kind;
+    std::string display_name;
+    std::string category;
+    std::string model_name;
     std::string system_boundary_role;
     std::vector<CatalogPortType> ports;
     std::vector<CatalogParameterType> parameters;
@@ -163,7 +167,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v4};
+    std::string schema_version{catalog_schema_v5};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;

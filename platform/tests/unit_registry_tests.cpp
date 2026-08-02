@@ -33,6 +33,12 @@ int main() {
                 time.unit == "s" &&
                 time.value_si == 120.0,
             "time conversion must produce canonical seconds");
+        const auto length = units.convert(400.0, "mm");
+        require(
+            length.dimension == "length" &&
+                length.unit == "m" &&
+                std::abs(length.value_si - 0.4) < 1.0e-12,
+            "length conversion must produce canonical metres");
         const auto inertia = units.convert(4.0, "kg*m^2");
         require(
             inertia.dimension == "moment_of_inertia" &&

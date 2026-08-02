@@ -874,6 +874,14 @@ std::string serialize_catalog_response_json(
         json_string(out, component.kind);
         out << ", \"version\": ";
         json_string(out, component.version);
+        out << ", \"template_kind\": ";
+        json_string(out, component.template_kind);
+        out << ", \"display_name\": ";
+        json_string(out, component.display_name);
+        out << ", \"category\": ";
+        json_string(out, component.category);
+        out << ", \"model_name\": ";
+        json_string(out, component.model_name);
         out << ", \"system_boundary_role\": ";
         json_string(out, component.system_boundary_role);
         out << ", \"supports_steady\": "
