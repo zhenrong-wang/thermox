@@ -634,6 +634,12 @@ export interface ArtifactRevisionList {
   artifact_revisions: ArtifactRevision[]
 }
 
+export interface ArtifactRevisionContent<T = unknown> {
+  schema_version: 'thermox.artifact_revision_content/v1'
+  revision: ArtifactRevision
+  artifact: T
+}
+
 export interface CorrelationArtifactDefinition {
   schema_version: 'thermox.correlation/v1'
   inputs: Array<{

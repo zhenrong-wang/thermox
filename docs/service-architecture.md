@@ -227,7 +227,7 @@ The initial routes are:
 | `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}/edits` | Apply typed operating-case edits and publish an immutable child revision |
 | `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}/validate` | Compile exact model/case/artifact revisions and return diagnostics with provenance |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/artifact-revisions` | List/publish immutable engineering artifacts |
-| `GET` | `/api/v1/projects/{project_id}/artifact-revisions/{artifact_revision_id}` | Read artifact revision metadata |
+| `GET` | `/api/v1/projects/{project_id}/artifact-revisions/{artifact_revision_id}` | Read tenant-scoped revision metadata and its integrity-checked canonical artifact payload |
 | `GET` | `/api/v1/projects/{project_id}/component-catalog` | Discover project-owned component descriptors with exact source revisions |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/run-configuration-revisions` | List/publish reusable execution intents |
 | `GET` | `/api/v1/projects/{project_id}/run-configuration-revisions/{revision_id}` | Read an exact execution intent |

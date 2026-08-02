@@ -11,6 +11,44 @@ afterEach(() => {
 })
 
 describe('correlation artifact authoring API', () => {
+  it('retrieves an exact immutable artifact payload for revision editing', async () => {
+    const content = {
+      schema_version: 'thermox.artifact_revision_content/v1',
+      revision: {
+        schema_version: 'thermox.artifact_revision/v1',
+        artifact_revision_id: 'correlation-revision-1',
+        artifact_type: 'thermox.correlation',
+      },
+      artifact: {
+        schema_version: 'thermox.correlation/v1',
+        inputs: [],
+        output: { name: 'loss', dimension: 'pressure' },
+        coefficients: {},
+        expression: '0',
+      },
+    }
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(content), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      api.artifactRevision<CorrelationArtifactDefinition>(
+        'project/a',
+        'revision 1',
+      ),
+    ).resolves.toEqual(content)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project%2Fa/artifact-revisions/revision%201',
+      expect.objectContaining({
+        headers: { Accept: 'application/json' },
+      }),
+    )
+  })
+
   it('publishes a typed immutable correlation revision', async () => {
     const definition: CorrelationArtifactDefinition = {
       schema_version: 'thermox.correlation/v1',

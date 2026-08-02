@@ -8,6 +8,10 @@ import type {
 interface CorrelationArtifactFormProps {
   unitDimensions: CatalogUnitDimension[]
   artifactRevisions: ArtifactRevision[]
+  base?: {
+    source: ArtifactRevision
+    definition: CorrelationArtifactDefinition
+  }
   onCancel: () => void
   onSubmit: (
     artifactId: string,
@@ -54,6 +58,7 @@ export function validateCorrelationDefinition(
 export function CorrelationArtifactForm({
   unitDimensions,
   artifactRevisions,
+  base,
   onCancel,
   onSubmit,
 }: CorrelationArtifactFormProps) {
@@ -61,41 +66,51 @@ export function CorrelationArtifactForm({
   const defaultDimension = dimensions.includes('dimensionless')
     ? 'dimensionless'
     : dimensions[0] ?? ''
-  const correlationRevisions = useMemo(
+  const correlationArtifactIds = useMemo(
     () =>
-      artifactRevisions
+      new Set(artifactRevisions
         .filter((revision) => revision.artifact_type === 'thermox.correlation')
-        .sort((left, right) => right.revision_number - left.revision_number),
+        .map((revision) => revision.artifact_id)),
     [artifactRevisions],
   )
-  const [artifactId, setArtifactId] = useState('pressure-loss-correlation')
-  const [inputs, setInputs] = useState<VariableDraft[]>([
+  const [artifactId, setArtifactId] = useState(
+    base?.source.artifact_id ?? 'pressure-loss-correlation',
+  )
+  const [inputs, setInputs] = useState<VariableDraft[]>(base?.definition.inputs ?? [
     { name: 'mass_flow', dimension: dimensions.includes('mass_flow') ? 'mass_flow' : defaultDimension },
     { name: 'density', dimension: dimensions.includes('density') ? 'density' : defaultDimension },
     { name: 'area', dimension: dimensions.includes('area') ? 'area' : defaultDimension },
   ])
-  const [outputName, setOutputName] = useState('pressure_loss')
+  const [outputName, setOutputName] = useState(base?.definition.output.name ?? 'pressure_loss')
   const [outputDimension, setOutputDimension] = useState(
-    dimensions.includes('pressure') ? 'pressure' : defaultDimension,
+    base?.definition.output.dimension ??
+      (dimensions.includes('pressure') ? 'pressure' : defaultDimension),
   )
-  const [coefficients, setCoefficients] = useState<CoefficientDraft[]>([
-    { name: 'loss_coefficient', value: '1.5' },
-  ])
+  const [coefficients, setCoefficients] = useState<CoefficientDraft[]>(
+    base
+      ? Object.entries(base.definition.coefficients).map(([name, value]) => ({
+          name,
+          value: String(value),
+        }))
+      : [{ name: 'loss_coefficient', value: '1.5' }],
+  )
   const [expression, setExpression] = useState(
-    'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
+    base?.definition.expression ??
+      'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
   )
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
-
-  const latestRevision = correlationRevisions.find(
-    (revision) => revision.artifact_id === artifactId.trim(),
-  )
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setFormError('')
     try {
       if (!artifactId.trim()) throw new Error('Artifact ID is required.')
+      if (!base && correlationArtifactIds.has(artifactId.trim())) {
+        throw new Error(
+          'That artifact ID already exists. Use its Revise action to create a child revision.',
+        )
+      }
       const coefficientValues: Record<string, number> = {}
       const coefficientNames = new Set<string>()
       for (const coefficient of coefficients) {
@@ -128,7 +143,7 @@ export function CorrelationArtifactForm({
       setSubmitting(true)
       await onSubmit(
         artifactId.trim(),
-        latestRevision?.artifact_revision_id ?? '',
+        base?.source.artifact_revision_id ?? '',
         definition,
       )
     } catch (reason) {
@@ -146,7 +161,7 @@ export function CorrelationArtifactForm({
         <header>
           <div>
             <span className="eyebrow">Engineering data registry</span>
-            <h2>Publish correlation</h2>
+            <h2>{base ? 'Revise correlation' : 'Publish correlation'}</h2>
           </div>
           <button type="button" className="icon-button" onClick={onCancel}>×</button>
         </header>
@@ -160,20 +175,15 @@ export function CorrelationArtifactForm({
           <label>
             <span>Artifact ID</span>
             <input
-              list="correlation-artifact-ids"
               value={artifactId}
               required
+              disabled={Boolean(base)}
               onChange={(event) => setArtifactId(event.target.value)}
             />
-            <datalist id="correlation-artifact-ids">
-              {[...new Set(correlationRevisions.map((item) => item.artifact_id))].map((id) => (
-                <option key={id} value={id} />
-              ))}
-            </datalist>
             <small>
-              {latestRevision
-                ? `Publishes the next immutable revision after r${latestRevision.revision_number}.`
-                : 'Creates a new logical engineering artifact.'}
+              {base
+                ? `Publishes an immutable child of r${base.source.revision_number}.`
+                : 'Creates a new logical engineering artifact. Use Revise for an existing ID.'}
             </small>
           </label>
           <label>
@@ -241,7 +251,7 @@ export function CorrelationArtifactForm({
         <footer>
           <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>
           <button type="submit" className="primary-button" disabled={submitting}>
-            {submitting ? 'Publishing…' : latestRevision ? 'Publish revision' : 'Publish correlation'}
+            {submitting ? 'Publishing…' : base ? 'Publish revision' : 'Publish correlation'}
           </button>
         </footer>
       </form>

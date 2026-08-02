@@ -117,6 +117,12 @@ function App() {
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
   const [addingCorrelation, setAddingCorrelation] = useState(false)
+  const [loadingCorrelationRevision, setLoadingCorrelationRevision] =
+    useState(false)
+  const [revisingCorrelation, setRevisingCorrelation] = useState<{
+    source: ArtifactRevision
+    definition: CorrelationArtifactDefinition
+  }>()
   const [definingComponent, setDefiningComponent] = useState(false)
   const [revisingComponent, setRevisingComponent] =
     useState<ProjectComponentCatalogEntry>()
@@ -262,6 +268,8 @@ function App() {
     setRevisions([])
     setArtifactRevisions([])
     setProjectComponents([])
+    setAddingCorrelation(false)
+    setRevisingCorrelation(undefined)
     setSelectedRevisionId('')
     setTopology(undefined)
     if (!selectedProjectId) return
@@ -905,6 +913,7 @@ function App() {
       const artifacts = await api.artifactRevisions(selectedProjectId)
       setArtifactRevisions(artifacts.artifact_revisions)
       setAddingCorrelation(false)
+      setRevisingCorrelation(undefined)
       setOperationStatus(
         `Published correlation ${artifactId} r${revision.revision_number}.`,
       )
@@ -914,6 +923,34 @@ function App() {
       throw new Error(message)
     } finally {
       setPublishing(false)
+    }
+  }
+
+  async function reviseCorrelation(source: ArtifactRevision) {
+    if (!selectedProjectId) return
+    setLoadingCorrelationRevision(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const content = await api.artifactRevision<CorrelationArtifactDefinition>(
+        selectedProjectId,
+        source.artifact_revision_id,
+      )
+      if (
+        content.revision.artifact_type !== 'thermox.correlation' ||
+        content.artifact.schema_version !== 'thermox.correlation/v1'
+      ) {
+        throw new Error('The selected revision is not a supported correlation artifact.')
+      }
+      setAddingCorrelation(false)
+      setRevisingCorrelation({
+        source: content.revision,
+        definition: content.artifact,
+      })
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
+    } finally {
+      setLoadingCorrelationRevision(false)
     }
   }
 
@@ -1632,7 +1669,7 @@ function App() {
             catalog={topologyCatalog}
             readiness={physicalReadiness}
             artifactRevisions={artifactRevisions}
-            publishing={publishing}
+            publishing={publishing || loadingCorrelationRevision}
             operationError={operationError}
             operationStatus={operationStatus}
             onDismissOperation={() => {
@@ -1642,7 +1679,13 @@ function App() {
             onEditComponent={setEditingComponent}
             onAddFluid={() => setAddingMedium(true)}
             onAddMaterial={() => setAddingMaterial(true)}
-            onAddCorrelation={() => setAddingCorrelation(true)}
+            onAddCorrelation={() => {
+              setRevisingCorrelation(undefined)
+              setAddingCorrelation(true)
+            }}
+            onReviseCorrelation={(revision) => {
+              void reviseCorrelation(revision)
+            }}
             onBuild={() => setWorkspaceView('topology')}
           />
         ) : workspaceView === 'studies' ? (
@@ -1923,11 +1966,20 @@ function App() {
         />
       )}
       {(workspaceView === 'topology' || workspaceView === 'definition') &&
-        addingCorrelation && catalog && (
+        (addingCorrelation || revisingCorrelation) && catalog && (
           <CorrelationArtifactForm
+            key={
+              revisingCorrelation
+                ? `revise-correlation-${revisingCorrelation.source.artifact_revision_id}`
+                : 'new-correlation'
+            }
             unitDimensions={catalog.unit_dimensions}
             artifactRevisions={artifactRevisions}
-            onCancel={() => setAddingCorrelation(false)}
+            base={revisingCorrelation}
+            onCancel={() => {
+              setAddingCorrelation(false)
+              setRevisingCorrelation(undefined)
+            }}
             onSubmit={publishCorrelation}
           />
         )}

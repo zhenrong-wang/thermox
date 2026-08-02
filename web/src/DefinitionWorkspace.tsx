@@ -19,6 +19,7 @@ interface DefinitionWorkspaceProps {
   onAddFluid: () => void
   onAddMaterial: () => void
   onAddCorrelation: () => void
+  onReviseCorrelation: (revision: ArtifactRevision) => void
   onBuild: () => void
 }
 
@@ -35,6 +36,7 @@ export function DefinitionWorkspace({
   onAddFluid,
   onAddMaterial,
   onAddCorrelation,
+  onReviseCorrelation,
   onBuild,
 }: DefinitionWorkspaceProps) {
   if (!topology || !catalog) {
@@ -234,6 +236,14 @@ export function DefinitionWorkspace({
                 </div>
                 <span>r{revision.revision_number}</span>
                 <small>{revision.content.checksum}</small>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={publishing}
+                  onClick={() => onReviseCorrelation(revision)}
+                >
+                  Revise
+                </button>
               </article>
             ))}
             {!latestCorrelations.length && (

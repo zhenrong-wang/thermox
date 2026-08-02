@@ -36,6 +36,8 @@ identity and checksum provenance.
 
 The Definition workspace exposes the same contract through a dedicated Engineering Data Registry
 form. It uses catalog unit dimensions for every input and output, supports immutable coefficient
-sets, and publishes either a new logical artifact or the next child revision. Component forms do
-not treat correlations as equipment: they offer a correlation only when the selected calculation
-model declares a compatible `thermox.correlation` artifact role.
+sets, and separates creation from revision. Revising retrieves the exact immutable parent payload
+through the tenant-scoped service API, verifies its stored size and checksum, and preloads the
+authoring form before publishing a child revision. Component forms do not treat correlations as
+equipment: they offer a correlation only when the selected calculation model declares a compatible
+`thermox.correlation` artifact role.

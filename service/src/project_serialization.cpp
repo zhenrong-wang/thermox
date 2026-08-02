@@ -665,6 +665,18 @@ std::string serialize_artifact_revision_json(
     return out.str();
 }
 
+std::string serialize_artifact_revision_content_json(
+    const ArtifactRevisionContent& content) {
+    std::ostringstream out;
+    out << "{\"schema_version\": ";
+    json_string(out, content.schema_version);
+    out << ", \"revision\": ";
+    artifact_revision_json(out, content.revision);
+    out << ", \"artifact\": "
+        << content.canonical_artifact_json << "}\n";
+    return out.str();
+}
+
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions) {
     std::ostringstream out;

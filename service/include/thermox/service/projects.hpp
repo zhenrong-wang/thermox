@@ -23,6 +23,8 @@ inline constexpr char case_revision_schema_v1[] =
     "thermox.case_revision/v1";
 inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
+inline constexpr char artifact_revision_content_schema_v1[] =
+    "thermox.artifact_revision_content/v1";
 inline constexpr char study_revision_schema_v1[] =
     "thermox.study_revision/v1";
 inline constexpr char calibration_revision_schema_v1[] =
@@ -96,6 +98,13 @@ struct ArtifactRevisionRecord {
     ArtifactContentManifest content;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
+};
+
+struct ArtifactRevisionContent {
+    std::string schema_version{
+        artifact_revision_content_schema_v1};
+    ArtifactRevisionRecord revision;
+    std::string canonical_artifact_json;
 };
 
 struct StudyRevisionRecord {
@@ -569,6 +578,11 @@ public:
         const IdentityContext& identity,
         const std::string& project_id,
         const std::string& artifact_revision_id) const;
+    [[nodiscard]] std::optional<ArtifactRevisionContent>
+    get_artifact_revision_content(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const;
     [[nodiscard]] std::vector<ArtifactRevisionRecord>
     list_artifact_revisions(
         const IdentityContext& identity,
@@ -687,6 +701,8 @@ std::string serialize_case_revisions_json(
     const std::vector<CaseRevisionRecord>& revisions);
 std::string serialize_artifact_revision_json(
     const ArtifactRevisionRecord& revision);
+std::string serialize_artifact_revision_content_json(
+    const ArtifactRevisionContent& content);
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions);
 std::string serialize_study_revision_json(

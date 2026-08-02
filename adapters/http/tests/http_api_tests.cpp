@@ -303,6 +303,39 @@ void test_tenant_scoped_asynchronous_jobs() {
         uploaded.headers.at("Location").substr(
             uploaded.headers.at("Location").find_last_of('/') +
             1U);
+    const auto artifact_detail = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions/" + artifact_revision_id,
+        {},
+        {},
+    }));
+    require(
+        artifact_detail.status == 200 &&
+            artifact_detail.body.find(
+                "thermox.artifact_revision_content/v1") !=
+                std::string::npos &&
+            artifact_detail.body.find("\"artifact\"") !=
+                std::string::npos &&
+            artifact_detail.body.find("corrected_mass_flow") !=
+                std::string::npos &&
+            artifact_detail.headers.contains("ETag"),
+        "artifact detail must return immutable metadata and the "
+        "integrity-checked canonical payload");
+    const auto hidden_artifact_detail = api.handle(authenticated(
+        {
+            "GET",
+            "/api/v1/projects/" + project.project_id +
+                "/artifact-revisions/" + artifact_revision_id,
+            {},
+            {},
+        },
+        "other-user",
+        "other-team"));
+    require(
+        hidden_artifact_detail.status == 404,
+        "artifact payload reads must not expose cross-Team "
+        "revisions");
     auto component_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/artifact-revisions"

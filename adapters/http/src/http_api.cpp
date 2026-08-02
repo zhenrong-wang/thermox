@@ -1384,6 +1384,16 @@ Response artifact_revision_response(
     return response;
 }
 
+Response artifact_revision_content_response(
+    const service::ArtifactRevisionContent& content) {
+    auto response = json_response(
+        200,
+        service::serialize_artifact_revision_content_json(content));
+    response.headers["ETag"] =
+        "\"" + content.revision.content.checksum + "\"";
+    return response;
+}
+
 Response run_configuration_revision_response(
     const service::RunConfigurationRevisionRecord& revision,
     int status) {
@@ -1922,7 +1932,7 @@ Response Api::handle(const Request& request) const {
                         "no route matches the request target");
                 }
                 const auto artifact =
-                    impl_->projects->get_artifact_revision(
+                    impl_->projects->get_artifact_revision_content(
                         identity,
                         project_id,
                         artifact_revision_id);
@@ -1932,7 +1942,7 @@ Response Api::handle(const Request& request) const {
                         "artifact_revision_not_found",
                         "artifact revision was not found");
                 }
-                return artifact_revision_response(*artifact, 200);
+                return artifact_revision_content_response(*artifact);
             }
             if (remainder == revisions_segment) {
                 if (!impl_->projects

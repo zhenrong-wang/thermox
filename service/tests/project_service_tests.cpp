@@ -752,15 +752,40 @@ void test_artifact_revisions_are_snapshotted_and_scoped() {
                 first.content.checksum.substr(7),
         "artifact resolution must produce an immutable "
         "execution snapshot with persisted provenance");
+    const auto content = service.get_artifact_revision_content(
+        team_a,
+        project.project_id,
+        first.artifact_revision_id);
+    require(
+        content &&
+            content->revision.artifact_revision_id ==
+                first.artifact_revision_id &&
+            content->canonical_artifact_json.find(
+                "corrected_mass_flow") != std::string::npos &&
+            !service
+                 .get_artifact_revision_content(
+                     team_b,
+                     project.project_id,
+                     first.artifact_revision_id)
+                 .has_value(),
+        "artifact content reads must return the exact canonical "
+        "payload and remain Team scoped");
     const auto serialized =
         thermox::service::serialize_artifact_revision_json(first);
+    const auto serialized_content =
+        thermox::service::serialize_artifact_revision_content_json(
+            *content);
     require(
         serialized.find(first.content.checksum) !=
                 std::string::npos &&
             serialized.find(first.content.object_key) ==
+                std::string::npos &&
+            serialized_content.find("\"artifact\"") !=
+                std::string::npos &&
+            serialized_content.find(first.content.object_key) ==
                 std::string::npos,
-        "public artifact metadata must publish integrity but "
-        "hide provider object keys");
+        "public artifact reads must publish integrity and payload "
+        "but hide provider object keys");
 }
 
 void test_run_configurations_bind_complete_execution_intent() {

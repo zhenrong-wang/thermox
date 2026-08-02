@@ -1644,7 +1644,7 @@ code {
 
 .engineering-artifact-list article {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr);
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr) auto;
   align-items: center;
   gap: 14px;
   padding: 10px 11px;

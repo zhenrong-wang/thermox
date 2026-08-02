@@ -1080,6 +1080,34 @@ ProjectService::get_artifact_revision(
         artifact_revision_id);
 }
 
+std::optional<ArtifactRevisionContent>
+ProjectService::get_artifact_revision_content(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& artifact_revision_id) const {
+    const auto revision = get_artifact_revision(
+        identity, project_id, artifact_revision_id);
+    if (!revision) {
+        return std::nullopt;
+    }
+    const auto payload = artifact_content_->get(revision->content);
+    if (!payload) {
+        throw ProjectStateError(
+            "persisted engineering artifact content was not found");
+    }
+    if (payload->size() != revision->content.byte_size ||
+        checksum(*payload) != revision->content.checksum) {
+        throw ProjectStateError(
+            "persisted engineering artifact content failed integrity "
+            "verification");
+    }
+    return ArtifactRevisionContent{
+        artifact_revision_content_schema_v1,
+        *revision,
+        *payload,
+    };
+}
+
 std::vector<ArtifactRevisionRecord>
 ProjectService::list_artifact_revisions(
     const IdentityContext& identity,
