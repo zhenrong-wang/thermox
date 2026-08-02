@@ -326,6 +326,8 @@ export interface RevisionProvenance {
   model_checksum: string
   case_revision_id: string
   case_checksum: string
+  calibration_revision_id: string
+  calibration_checksum: string
 }
 
 export interface ResultSummaryValue {
@@ -337,7 +339,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v7'
+  schema_version: 'thermox.job/v8'
   job_id: string
   owner: {
     team_id: string
@@ -347,9 +349,10 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v7'
-    mode: 'steady' | 'transient'
+    schema_version: 'thermox.job/v8'
+    mode: 'steady' | 'transient' | 'calibration'
     case_id: string
+    calibration_id: string
     source_revisions: RevisionProvenance | null
     engineering_artifacts: Array<{
       id: string
@@ -359,6 +362,7 @@ export interface SimulationJob {
       checksum_sha256: string
     }>
     result_projections: ResultProjection[]
+    validation_prediction_count: number
     fingerprint: string
   }
   worker_id: string | null

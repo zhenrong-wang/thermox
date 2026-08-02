@@ -48,6 +48,18 @@ void append_steady_settings(
            << settings.continuation_maximum_stages;
 }
 
+void append_calibration_settings(
+    std::ostringstream& stream,
+    const CalibrationSolverSettings& settings) {
+    stream << settings.max_iterations << '|'
+           << settings.initial_step_fraction << '|'
+           << settings.minimum_step_fraction << '|'
+           << settings.step_reduction << '|'
+           << settings.minimum_continuation_fraction << '|'
+           << settings.continuation_growth << '|';
+    append_steady_settings(stream, settings.simulation_solver);
+}
+
 void append_string(
     std::ostringstream& stream,
     const std::string& value) {
@@ -167,6 +179,8 @@ std::string request_fingerprint(
     stream << request.schema_version << '|'
            << to_string(request.mode) << '|'
            << request.case_id.size() << ':' << request.case_id << '|'
+           << request.calibration_id.size() << ':'
+           << request.calibration_id << '|'
            << request.model_json.size() << ':' << request.model_json << '|';
     stream << request.source_revisions.has_value() << '|';
     if (request.source_revisions) {
@@ -195,6 +209,12 @@ std::string request_fingerprint(
             request.source_revisions->study_revision_id);
         append_string(
             stream, request.source_revisions->study_checksum);
+        append_string(
+            stream,
+            request.source_revisions->calibration_revision_id);
+        append_string(
+            stream,
+            request.source_revisions->calibration_checksum);
     }
     append_steady_settings(stream, request.steady_solver);
     stream << '|'
@@ -213,6 +233,20 @@ std::string request_fingerprint(
     append_steady_settings(
         stream, request.transient_solver.nonlinear_solver);
     stream << '|';
+    append_calibration_settings(stream, request.calibration_solver);
+    stream << '|' << request.calibration_predictions.size() << '|';
+    for (const auto& prediction : request.calibration_predictions) {
+        append_string(stream, prediction.case_id);
+        stream << prediction.observations.size() << '|';
+        for (const auto& observation : prediction.observations) {
+            append_string(stream, observation.id);
+            append_string(stream, observation.target);
+            append_string(stream, observation.dimension);
+            stream << observation.measured_si << '|'
+                   << observation.sigma_si << '|';
+        }
+    }
+    stream << '|';
     append_artifacts(stream, request.artifacts);
     stream << '|';
     append_components(stream, request.components);
@@ -230,7 +264,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v7) {
+    if (request.schema_version != job_schema_v8) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -251,12 +285,27 @@ void validate_request(const SimulationJobRequest& request) {
         const auto& source = *request.source_revisions;
         if (source.project_id.empty() ||
             source.model_revision_id.empty() ||
-            source.model_checksum.empty() ||
-            source.case_revision_id.empty() ||
-            source.case_checksum.empty()) {
+            source.model_checksum.empty()) {
             throw JobRequestError(
                 "revision-backed jobs require complete source "
                 "revision provenance");
+        }
+        if (request.mode == SimulationJobMode::calibration) {
+            if (source.calibration_revision_id.empty() ||
+                source.calibration_checksum.empty() ||
+                !source.case_revision_id.empty() ||
+                !source.case_checksum.empty()) {
+                throw JobRequestError(
+                    "calibration jobs require calibration provenance "
+                    "and no single-case provenance");
+            }
+        } else if (source.case_revision_id.empty() ||
+                   source.case_checksum.empty() ||
+                   !source.calibration_revision_id.empty() ||
+                   !source.calibration_checksum.empty()) {
+            throw JobRequestError(
+                "simulation jobs require case provenance and no "
+                "calibration provenance");
         }
         if (source.run_configuration_revision_id.empty() !=
             source.run_configuration_checksum.empty()) {
@@ -281,6 +330,19 @@ void validate_request(const SimulationJobRequest& request) {
         validate_result_projections(request.result_projections);
     } catch (const ResultProjectionError& error) {
         throw JobRequestError(error.what());
+    }
+    if (request.mode == SimulationJobMode::calibration &&
+        (!request.case_id.empty() || request.calibration_id.empty() ||
+         !request.result_projections.empty())) {
+        throw JobRequestError(
+            "calibration jobs require a calibration ID and do not "
+            "accept a case ID or result projections");
+    }
+    if (request.mode != SimulationJobMode::calibration &&
+        (!request.calibration_id.empty() ||
+         !request.calibration_predictions.empty())) {
+        throw JobRequestError(
+            "simulation jobs do not accept calibration inputs");
     }
     if (request.mode == SimulationJobMode::steady &&
         std::any_of(
@@ -322,6 +384,8 @@ std::string to_string(SimulationJobMode mode) {
             return "steady";
         case SimulationJobMode::transient:
             return "transient";
+        case SimulationJobMode::calibration:
+            return "calibration";
     }
     return "unknown";
 }
@@ -591,6 +655,82 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 response.metadata,
                 manifest,
                 summary);
+        }
+
+        if (claimed->request.mode ==
+            SimulationJobMode::calibration) {
+            if (!claimed->request.calibration_predictions.empty()) {
+                EngineeringStudyRequest request;
+                request.model_json = claimed->request.model_json;
+                request.calibration_id = claimed->request.calibration_id;
+                request.calibration_solver =
+                    claimed->request.calibration_solver;
+                request.prediction_solver = claimed->request
+                    .calibration_solver.simulation_solver;
+                request.prediction_cases =
+                    claimed->request.calibration_predictions;
+                request.artifacts = claimed->request.artifacts;
+                request.components = claimed->request.components;
+                auto response =
+                    impl_->simulation.run_engineering_study(request);
+                response.calibration.metadata.source_revisions =
+                    claimed->request.source_revisions;
+                for (auto& prediction : response.predictions) {
+                    prediction.simulation.metadata.source_revisions =
+                        claimed->request.source_revisions;
+                }
+                require_lease();
+                if (!response.succeeded()) {
+                    return impl_->jobs->publish_failure(
+                        claimed->job_id,
+                        claimed->revision,
+                        response.error,
+                        response.calibration.metadata);
+                }
+                const auto content =
+                    serialize_engineering_study_response_json(response);
+                const auto manifest = impl_->artifacts->put_json(
+                    claimed->job_id,
+                    response.calibration.metadata.result_schema_version,
+                    content);
+                require_lease();
+                return impl_->jobs->publish_success(
+                    claimed->job_id,
+                    claimed->revision,
+                    response.calibration.metadata,
+                    manifest,
+                    std::nullopt);
+            }
+            CalibrationRequest request;
+            request.model_json = claimed->request.model_json;
+            request.calibration_id = claimed->request.calibration_id;
+            request.solver = claimed->request.calibration_solver;
+            request.artifacts = claimed->request.artifacts;
+            request.components = claimed->request.components;
+            auto response = impl_->simulation.run_calibration(request);
+            response.metadata.source_revisions =
+                claimed->request.source_revisions;
+            require_lease();
+            if (!response.succeeded()) {
+                return impl_->jobs->publish_failure(
+                    claimed->job_id,
+                    claimed->revision,
+                    response.error,
+                    response.metadata);
+            }
+            const auto content =
+                serialize_calibration_response_json(response);
+            const auto manifest = impl_->artifacts->put_json(
+                claimed->job_id,
+                response.metadata.result_schema_version,
+                content);
+            require_lease();
+            return impl_->jobs->publish_success(
+                claimed->job_id,
+                claimed->revision,
+                response.metadata,
+                manifest,
+                std::nullopt);
         }
 
         TransientSimulationRequest request;

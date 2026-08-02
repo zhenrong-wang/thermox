@@ -619,6 +619,39 @@ service::TransientSolverSettings decode_transient_settings(
     return value;
 }
 
+Tree calibration_settings(
+    const service::CalibrationSolverSettings& value) {
+    Tree tree;
+    tree.put("max_iterations", value.max_iterations);
+    tree.put("initial_step_fraction", value.initial_step_fraction);
+    tree.put("minimum_step_fraction", value.minimum_step_fraction);
+    tree.put("step_reduction", value.step_reduction);
+    tree.put("minimum_continuation_fraction",
+             value.minimum_continuation_fraction);
+    tree.put("continuation_growth", value.continuation_growth);
+    tree.add_child(
+        "simulation_solver", steady_settings(value.simulation_solver));
+    return tree;
+}
+
+service::CalibrationSolverSettings decode_calibration_settings(
+    const Tree& tree) {
+    service::CalibrationSolverSettings value;
+    value.max_iterations = tree.get<int>("max_iterations");
+    value.initial_step_fraction =
+        tree.get<double>("initial_step_fraction");
+    value.minimum_step_fraction =
+        tree.get<double>("minimum_step_fraction");
+    value.step_reduction = tree.get<double>("step_reduction");
+    value.minimum_continuation_fraction =
+        tree.get<double>("minimum_continuation_fraction");
+    value.continuation_growth =
+        tree.get<double>("continuation_growth");
+    value.simulation_solver = decode_steady_settings(
+        tree.get_child("simulation_solver"));
+    return value;
+}
+
 service::SimulationJobMode decode_mode(
     const std::string& mode) {
     if (mode == "steady") {
@@ -626,6 +659,9 @@ service::SimulationJobMode decode_mode(
     }
     if (mode == "transient") {
         return service::SimulationJobMode::transient;
+    }
+    if (mode == "calibration") {
+        return service::SimulationJobMode::calibration;
     }
     throw std::runtime_error(
         "invalid persisted simulation mode: " + mode);
@@ -711,6 +747,7 @@ std::string encode_request(
     tree.put("mode", service::to_string(request.mode));
     tree.put("model_json", request.model_json);
     tree.put("case_id", request.case_id);
+    tree.put("calibration_id", request.calibration_id);
     if (request.source_revisions) {
         Tree source;
         source.put(
@@ -731,6 +768,12 @@ std::string encode_request(
             "study_checksum",
             request.source_revisions->study_checksum);
         source.put(
+            "calibration_revision_id",
+            request.source_revisions->calibration_revision_id);
+        source.put(
+            "calibration_checksum",
+            request.source_revisions->calibration_checksum);
+        source.put(
             "model_revision_id",
             request.source_revisions->model_revision_id);
         source.put(
@@ -749,6 +792,31 @@ std::string encode_request(
     tree.add_child(
         "transient_solver",
         transient_settings(request.transient_solver));
+    tree.add_child(
+        "calibration_solver",
+        calibration_settings(request.calibration_solver));
+    tree.add_child(
+        "calibration_predictions",
+        array(
+            request.calibration_predictions,
+            [](const service::StudyPredictionCase& prediction) {
+                Tree encoded;
+                encoded.put("case_id", prediction.case_id);
+                encoded.add_child(
+                    "observations",
+                    array(
+                        prediction.observations,
+                        [](const service::StudyObservation& observation) {
+                            Tree item;
+                            item.put("id", observation.id);
+                            item.put("target", observation.target);
+                            item.put("dimension", observation.dimension);
+                            item.put("measured_si", observation.measured_si);
+                            item.put("sigma_si", observation.sigma_si);
+                            return item;
+                        }));
+                return encoded;
+            }));
     tree.add_child("artifacts", artifact_bundle(request.artifacts));
     tree.add_child(
         "components", component_bundle(request.components));
@@ -780,6 +848,8 @@ service::SimulationJobRequest decode_request(
         decode_mode(tree.get<std::string>("mode"));
     request.model_json = tree.get<std::string>("model_json");
     request.case_id = tree.get<std::string>("case_id");
+    request.calibration_id =
+        tree.get<std::string>("calibration_id");
     if (const auto source =
             tree.get_child_optional("source_revisions")) {
         request.source_revisions =
@@ -798,12 +868,39 @@ service::SimulationJobRequest decode_request(
                 source->get<std::string>(
                     "study_revision_id", ""),
                 source->get<std::string>("study_checksum", ""),
+                source->get<std::string>(
+                    "calibration_revision_id", ""),
+                source->get<std::string>(
+                    "calibration_checksum", ""),
             };
     }
     request.steady_solver = decode_steady_settings(
         tree.get_child("steady_solver"));
     request.transient_solver = decode_transient_settings(
         tree.get_child("transient_solver"));
+    request.calibration_solver = decode_calibration_settings(
+        tree.get_child("calibration_solver"));
+    request.calibration_predictions =
+        decode_array<service::StudyPredictionCase>(
+            tree.get_child("calibration_predictions"),
+            [](const Tree& encoded) {
+                service::StudyPredictionCase prediction;
+                prediction.case_id =
+                    encoded.get<std::string>("case_id");
+                prediction.observations =
+                    decode_array<service::StudyObservation>(
+                        encoded.get_child("observations"),
+                        [](const Tree& item) {
+                            return service::StudyObservation{
+                                item.get<std::string>("id"),
+                                item.get<std::string>("target"),
+                                item.get<std::string>("dimension"),
+                                item.get<double>("measured_si"),
+                                item.get<double>("sigma_si"),
+                            };
+                        });
+                return prediction;
+            });
     request.artifacts =
         decode_artifact_bundle(tree.get_child("artifacts"));
     request.components =
@@ -861,6 +958,12 @@ std::string encode_execution(
         source.put(
             "study_checksum",
             execution.source_revisions->study_checksum);
+        source.put(
+            "calibration_revision_id",
+            execution.source_revisions->calibration_revision_id);
+        source.put(
+            "calibration_checksum",
+            execution.source_revisions->calibration_checksum);
         source.put(
             "model_revision_id",
             execution.source_revisions->model_revision_id);
@@ -981,6 +1084,10 @@ service::ExecutionMetadata decode_execution(
                 source->get<std::string>(
                     "study_revision_id", ""),
                 source->get<std::string>("study_checksum", ""),
+                source->get<std::string>(
+                    "calibration_revision_id", ""),
+                source->get<std::string>(
+                    "calibration_checksum", ""),
             };
     }
     value.components =

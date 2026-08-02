@@ -218,7 +218,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v7` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v8` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated

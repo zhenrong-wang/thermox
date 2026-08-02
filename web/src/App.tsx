@@ -4,6 +4,7 @@ import { api, errorMessage, isAbortError } from './api'
 import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
+import { CalibrationPublishForm } from './CalibrationPublishForm'
 import { ComponentForm } from './ComponentForm'
 import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
@@ -45,6 +46,7 @@ import {
 } from './workflow'
 import type {
   ArtifactRevision,
+  CalibrationRevision,
   Catalog,
   CatalogComponent,
   CaseDocument,
@@ -53,6 +55,7 @@ import type {
   ComponentDefinition,
   ConnectionDefinition,
   CreateRunConfiguration,
+  CreateCalibrationRevision,
   CreateStudyRevision,
   GraphEditOperation,
   MediumDefinition,
@@ -122,6 +125,11 @@ function App() {
     useState<ProjectModelValidation>()
   const [studyRevisions, setStudyRevisions] = useState<StudyRevision[]>([])
   const [addingStudy, setAddingStudy] = useState(false)
+  const [calibrationRevisions, setCalibrationRevisions] = useState<
+    CalibrationRevision[]
+  >([])
+  const [addingCalibration, setAddingCalibration] = useState(false)
+  const [calibrationJobs, setCalibrationJobs] = useState<SimulationJob[]>([])
   const [validating, setValidating] = useState(false)
   const [runConfigurationRevisions, setRunConfigurationRevisions] = useState<
     RunConfigurationRevision[]
@@ -190,6 +198,32 @@ function App() {
             (left, right) =>
               right.created_at_epoch_ms - left.created_at_epoch_ms,
           ),
+        )
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setCaseOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId])
+
+  useEffect(() => {
+    setCalibrationRevisions([])
+    setCalibrationJobs([])
+    if (!selectedProjectId) return
+    const controller = new AbortController()
+    Promise.all([
+      api.calibrationRevisions(selectedProjectId, controller.signal),
+      api.projectJobs(selectedProjectId, controller.signal),
+    ])
+      .then(([response, jobs]) => {
+        setCalibrationRevisions(
+          [...response.calibration_revisions].sort(
+            (left, right) =>
+              right.created_at_epoch_ms - left.created_at_epoch_ms,
+          ),
+        )
+        setCalibrationJobs(
+          jobs.jobs.filter((job) => job.request.mode === 'calibration'),
         )
       })
       .catch((reason: unknown) => {
@@ -420,6 +454,13 @@ function App() {
       ),
     [selectedRevisionId, studyRevisions],
   )
+  const visibleCalibrations = useMemo(
+    () =>
+      calibrationRevisions.filter(
+        (revision) => revision.model_revision_id === selectedRevisionId,
+      ),
+    [calibrationRevisions, selectedRevisionId],
+  )
   const selectedRunStudy = useMemo(
     () =>
       studyRevisions.find(
@@ -541,6 +582,9 @@ function App() {
   const activeJobCount = simulationJobs.filter(
     (job) => job.state === 'queued' || job.state === 'running',
   ).length
+  const calibrationActiveJobCount = calibrationJobs.filter(
+    (job) => job.state === 'queued' || job.state === 'running',
+  ).length
   const succeededJobCount = simulationJobs.filter(
     (job) => job.state === 'succeeded',
   ).length
@@ -607,6 +651,26 @@ function App() {
     selectedRunConfigurationRevisionId,
     workspaceView,
   ])
+
+  useEffect(() => {
+    if (
+      workspaceView !== 'studies' ||
+      !selectedProjectId ||
+      calibrationActiveJobCount === 0
+    ) return
+    const timer = window.setInterval(() => {
+      void api.projectJobs(selectedProjectId)
+        .then((page) => {
+          setCalibrationJobs(
+            page.jobs.filter((job) => job.request.mode === 'calibration'),
+          )
+        })
+        .catch((reason: unknown) => {
+          setCaseOperationError(errorMessage(reason))
+        })
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [calibrationActiveJobCount, selectedProjectId, workspaceView])
 
   useEffect(() => {
     if (workspaceView !== 'results') return
@@ -974,6 +1038,52 @@ function App() {
       setCaseOperationError(errorMessage(reason))
     } finally {
       setCasePublishing(false)
+    }
+  }
+
+  async function publishCalibration(request: CreateCalibrationRevision) {
+    if (!selectedProjectId || !selectedRevisionId) {
+      throw new Error('Select an exact topology revision first.')
+    }
+    setCasePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const revision = await api.createCalibrationRevision(
+        selectedProjectId, request,
+      )
+      setCalibrationRevisions((current) => [revision, ...current])
+      setAddingCalibration(false)
+      setCaseOperationStatus(
+        `Published calibration ${revision.calibration_id} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      throw new Error(message)
+    } finally {
+      setCasePublishing(false)
+    }
+  }
+
+  async function runCalibration(revision: CalibrationRevision) {
+    if (!selectedProjectId) return
+    setCaseOperationError('')
+    setCaseOperationStatus('Submitting calibration…')
+    try {
+      const job = await api.submitCalibration(
+        selectedProjectId,
+        revision.calibration_revision_id,
+        crypto.randomUUID(),
+      )
+      setCalibrationJobs((current) => [
+        job,
+        ...current.filter((item) => item.job_id !== job.job_id),
+      ])
+      setCaseOperationStatus(`Calibration job ${job.job_id} is ${job.state}.`)
+    } catch (reason) {
+      setCaseOperationError(errorMessage(reason))
+      setCaseOperationStatus('')
     }
   }
 
@@ -1694,6 +1804,8 @@ function App() {
             <CaseRevisionPanel
               revisions={caseRevisions}
               studies={visibleStudies}
+              calibrations={visibleCalibrations}
+              calibrationJobs={calibrationJobs}
               selectedId={selectedCaseRevisionId}
               publishing={casePublishing}
               canPublishStudy={exactRevisionCompiled}
@@ -1701,6 +1813,10 @@ function App() {
               onCreate={() => setAddingCase(true)}
               onPublishStudy={() => {
                 setAddingStudy(true)
+              }}
+              onPublishCalibration={() => setAddingCalibration(true)}
+              onRunCalibration={(revision) => {
+                void runCalibration(revision)
               }}
             />
           ) : null}
@@ -1810,6 +1926,15 @@ function App() {
             onSubmit={publishStudy}
           />
         )}
+      {addingCalibration && selectedRevisionId && (
+        <CalibrationPublishForm
+          modelRevisionId={selectedRevisionId}
+          studies={visibleStudies}
+          cases={caseRevisions}
+          onCancel={() => setAddingCalibration(false)}
+          onSubmit={publishCalibration}
+        />
+      )}
       {(addingRunConfiguration || revisingRunConfiguration) &&
         (revisingRunConfiguration ? selectedRunStudy : activePublishedStudy) && (
           <RunConfigurationForm

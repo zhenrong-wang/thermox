@@ -82,7 +82,7 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v7` defines the Team-owned job lifecycle and idempotent
+All gates are now in place. `thermox.job/v8` defines the Team-owned job lifecycle and idempotent
 submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
 service writes a checksummed `thermox.result/v3` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
@@ -123,7 +123,7 @@ while removing embedded cases from the persisted product model.
 
 `ProjectService` can resolve an exact Team-scoped project/topology/case tuple into a complete
 composed `thermox.model/v2` snapshot. Run configurations use this internal operation during job
-submission. `thermox.job/v7` captures the immutable source provenance and composed snapshot, so
+submission. `thermox.job/v8` captures the immutable source provenance and composed snapshot, so
 workers never reread mutable project state and can execute even if newer revisions are published
 later.
 
@@ -171,7 +171,7 @@ Project, and run-configuration filters. The repository always applies Team owner
 filter or cursor, and the HTTP cursor encoding remains outside the transport-neutral service
 contract.
 
-Queued jobs may be cancelled through `DELETE /api/v1/simulations/{job_id}`. The thin HTTP adapter
+Queued jobs may be cancelled through `DELETE /api/v1/jobs/{job_id}`. The thin HTTP adapter
 requires the exact ETag returned by submission or status lookup in `If-Match`; missing, stale, and
 malformed preconditions remain distinct from job-state conflicts. Cancellation publishes a new
 terminal revision rather than deleting history, and cross-Team targets are reported as missing.

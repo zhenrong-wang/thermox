@@ -1382,6 +1382,8 @@ ProjectService::create_calibration_revision(
 
     std::vector<platform::CaseDefinition> cases;
     std::set<std::string> training_case_ids;
+    std::set<std::string> validation_case_ids;
+    std::optional<std::vector<std::string>> artifact_snapshot;
     const auto collect = [&](const std::vector<std::string>& ids,
                              bool is_training) {
         for (const auto& id : ids) {
@@ -1395,6 +1397,14 @@ ProjectService::create_calibration_revision(
                 throw ProjectRequestError(
                     "calibration currently supports steady Studies only");
             }
+            if (!artifact_snapshot) {
+                artifact_snapshot = study->artifact_revision_ids;
+            } else if (*artifact_snapshot !=
+                       study->artifact_revision_ids) {
+                throw ProjectRequestError(
+                    "all calibration Studies must bind the same "
+                    "engineering artifact revisions");
+            }
             const auto simulation_case = repository_->get_case_revision(
                 request.identity.team_id, request.project_id,
                 request.model_revision_id, study->case_revision_id);
@@ -1407,6 +1417,11 @@ ProjectService::create_calibration_revision(
             if (is_training && !training_case_ids.insert(parsed.id).second) {
                 throw ProjectRequestError(
                     "training Studies must bind distinct case IDs");
+            }
+            if (!is_training &&
+                !validation_case_ids.insert(parsed.id).second) {
+                throw ProjectRequestError(
+                    "validation Studies must bind distinct case IDs");
             }
             if (std::none_of(cases.begin(), cases.end(), [&](const auto& item) {
                     return item.id == parsed.id;
@@ -1425,12 +1440,34 @@ ProjectService::create_calibration_revision(
             throw ProjectRequestError(
                 "calibration definition ID does not match calibration_id");
         }
+        bool has_training_observation = false;
+        std::set<std::string> observed_case_ids;
         for (const auto& observation : definition.observations) {
-            if (!training_case_ids.contains(observation.case_id)) {
+            observed_case_ids.insert(observation.case_id);
+            if (training_case_ids.contains(observation.case_id)) {
+                has_training_observation = true;
+            } else if (!validation_case_ids.contains(observation.case_id)) {
                 throw ProjectRequestError(
-                    "calibration observations must reference training Study cases");
+                    "calibration observations must reference a bound "
+                    "training or validation Study case");
             }
         }
+        if (!has_training_observation) {
+            throw ProjectRequestError(
+                "calibration requires at least one training observation");
+        }
+        const auto require_observed = [&](const auto& ids,
+                                          const char* role) {
+            for (const auto& case_id : ids) {
+                if (!observed_case_ids.contains(case_id)) {
+                    throw ProjectRequestError(
+                        std::string(role) + " Study case '" + case_id +
+                        "' has no calibration observation");
+                }
+            }
+        };
+        require_observed(training_case_ids, "training");
+        require_observed(validation_case_ids, "validation");
         for (const auto& parameter : definition.parameters) {
             for (const auto& case_id : parameter.case_ids) {
                 if (!training_case_ids.contains(case_id)) {
@@ -1564,6 +1601,124 @@ ProjectService::resolve_run_configuration(
         *model_case,
         *artifacts,
     };
+}
+
+std::optional<ResolvedCalibration>
+ProjectService::resolve_calibration(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& calibration_revision_id) const {
+    const auto calibration = get_calibration_revision(
+        identity, project_id, calibration_revision_id);
+    if (!calibration) return std::nullopt;
+    const auto model = repository_->get_model_revision(
+        identity.team_id, project_id,
+        calibration->model_revision_id);
+    if (!model) {
+        throw ProjectStateError(
+            "persisted calibration model revision was not found");
+    }
+
+    std::vector<StudyRevisionRecord> studies;
+    std::vector<platform::CaseDefinition> cases;
+    std::set<std::string> training_case_ids;
+    std::set<std::string> validation_case_ids;
+    std::optional<std::vector<std::string>> artifact_ids;
+    const auto collect = [&](const std::vector<std::string>& ids,
+                             bool training) {
+        for (const auto& id : ids) {
+            const auto study = repository_->get_study_revision(
+                identity.team_id, project_id, id);
+            if (!study ||
+                study->model_revision_id != model->model_revision_id) {
+                throw ProjectStateError(
+                    "persisted calibration Study revision was not found");
+            }
+            if (!artifact_ids) {
+                artifact_ids = study->artifact_revision_ids;
+            } else if (*artifact_ids != study->artifact_revision_ids) {
+                throw ProjectStateError(
+                    "persisted calibration Studies have incompatible "
+                    "artifact revisions");
+            }
+            const auto simulation_case = repository_->get_case_revision(
+                identity.team_id, project_id,
+                model->model_revision_id, study->case_revision_id);
+            if (!simulation_case) {
+                throw ProjectStateError(
+                    "persisted calibration case revision was not found");
+            }
+            auto parsed = platform::parse_case_document_text(
+                simulation_case->canonical_case_json, units_);
+            (training ? training_case_ids : validation_case_ids)
+                .insert(parsed.id);
+            if (std::none_of(cases.begin(), cases.end(),
+                    [&](const auto& item) { return item.id == parsed.id; })) {
+                cases.push_back(std::move(parsed));
+            }
+            studies.push_back(*study);
+        }
+    };
+    collect(calibration->training_study_revision_ids, true);
+    collect(calibration->validation_study_revision_ids, false);
+    const auto artifacts = resolve_artifact_revisions(
+        identity, project_id, artifact_ids.value_or(
+            std::vector<std::string>{}));
+    if (!artifacts) {
+        throw ProjectStateError(
+            "persisted calibration artifacts were not found");
+    }
+    try {
+        auto document = platform::parse_topology_document_text(
+            model->canonical_model_json, units_);
+        document.schema_version = "thermox.model/v2";
+        document.cases = std::move(cases);
+        auto definition = platform::parse_calibration_document_text(
+            calibration->definition_json, units_);
+        std::vector<StudyPredictionCase> predictions;
+        auto training_definition = definition;
+        training_definition.observations.clear();
+        for (const auto& observation : definition.observations) {
+            if (training_case_ids.contains(observation.case_id)) {
+                training_definition.observations.push_back(observation);
+                continue;
+            }
+            if (!validation_case_ids.contains(observation.case_id)) {
+                throw ProjectStateError(
+                    "persisted calibration observation is not bound "
+                    "to a calibration Study");
+            }
+            auto prediction = std::find_if(
+                predictions.begin(), predictions.end(),
+                [&](const auto& item) {
+                    return item.case_id == observation.case_id;
+                });
+            if (prediction == predictions.end()) {
+                predictions.push_back({observation.case_id, {}});
+                prediction = std::prev(predictions.end());
+            }
+            prediction->observations.push_back({
+                observation.id,
+                observation.target,
+                observation.measured.dimension,
+                observation.measured.value_si,
+                observation.sigma.value_si,
+            });
+        }
+        document.calibrations = {std::move(training_definition)};
+        const auto executable =
+            detail::serialize_model_document_json(document);
+        (void)platform::parse_model_document_text(executable, units_);
+        return ResolvedCalibration{
+            *calibration, *model, std::move(studies), executable,
+            std::move(predictions),
+            *artifacts,
+        };
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string("persisted calibration composition failed: ") +
+            error.what());
+    }
 }
 
 ProjectModelValidationService::ProjectModelValidationService(

@@ -227,6 +227,10 @@ void revision_provenance_json(
     json_string(out, source.study_revision_id);
     out << ", \"study_checksum\": ";
     json_string(out, source.study_checksum);
+    out << ", \"calibration_revision_id\": ";
+    json_string(out, source.calibration_revision_id);
+    out << ", \"calibration_checksum\": ";
+    json_string(out, source.calibration_checksum);
     out << ", \"model_revision_id\": ";
     json_string(out, source.model_revision_id);
     out << ", \"model_checksum\": ";
@@ -1452,6 +1456,8 @@ std::string serialize_job_record_json(
     json_string(out, to_string(record.request.mode));
     out << ", \"case_id\": ";
     json_string(out, record.request.case_id);
+    out << ", \"calibration_id\": ";
+    json_string(out, record.request.calibration_id);
     out << ", \"source_revisions\": ";
     if (record.request.source_revisions) {
         revision_provenance_json(
@@ -1531,6 +1537,8 @@ std::string serialize_job_record_json(
         out << '}';
     }
     out << ']';
+    out << ", \"validation_prediction_count\": "
+        << record.request.calibration_predictions.size();
     out << ", \"fingerprint\": ";
     json_string(out, record.request_fingerprint);
     out << "}";

@@ -50,7 +50,7 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v7` Team-owned queued/running/succeeded/failed/cancelled jobs with required
+- `thermox.job/v8` Team-owned queued/running/succeeded/failed/cancelled simulation and calibration jobs with required
   immutable request-scoped component-definition snapshots,
   idempotency keys,
   optimistic revisions, worker claims, revision-source execution provenance, and result-artifact
@@ -165,8 +165,8 @@ The application boundary needed by a thin network adapter is now complete:
 | Publish/read run-configuration revisions | `ProjectService` | `thermox.run_configuration_revision/v3` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
 | Resolve a complete execution intent | `ProjectService::resolve_run_configuration` | immutable model/artifact/solver snapshot |
-| Submit a simulation | `SimulationJobService::submit` | `thermox.job/v7` JSON |
-| Inspect a simulation | `SimulationJobService::get` | `thermox.job/v7` JSON |
+| Submit a calculation | `SimulationJobService::submit` | `thermox.job/v8` JSON |
+| Inspect a calculation | `SimulationJobService::get` | `thermox.job/v8` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
@@ -234,9 +234,16 @@ The initial routes are:
 | `GET`, `POST` | `/api/v1/projects/{project_id}/calibration-revisions` | List/publish immutable calibration campaigns bound to exact model and Study revisions |
 | `GET` | `/api/v1/projects/{project_id}/calibration-revisions/{revision_id}` | Read an exact calibration definition, dataset split, and solver policy |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
-| `POST` | `/api/v1/simulations?project_id=...&run_configuration_revision_id=...` | Submit a run-configuration-backed asynchronous job |
-| `GET` | `/api/v1/simulations/{job_id}` | Read Team-scoped job status |
-| `GET` | `/api/v1/simulations/{job_id}/result` | Retrieve a succeeded Team-scoped result |
+| `GET`, `POST` | `/api/v1/jobs?project_id=...&run_configuration_revision_id=...` | List or submit run-configuration-backed asynchronous jobs |
+| `POST` | `/api/v1/jobs?project_id=...&calibration_revision_id=...` | Submit a calibration-revision-backed asynchronous job |
+| `GET` | `/api/v1/jobs/{job_id}` | Read Team-scoped job status |
+| `GET` | `/api/v1/jobs/{job_id}/result` | Retrieve a succeeded simulation or calibration result |
+
+Calibration execution composes the exact topology, cases, component artifacts, and calibration
+definition named by the immutable revision. Observations belonging to training Study cases drive
+the parameter fit. Observations belonging to validation Study cases are excluded from that
+objective and are evaluated afterward against the fitted model, preventing validation data from
+leaking into estimation.
 
 The deployed API disables synchronous steady/transient routes so expensive work cannot enter the
 request process. An explicitly configured embedded adapter may enable those routes for tests or

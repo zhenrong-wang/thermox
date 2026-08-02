@@ -15,11 +15,12 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v7[] = "thermox.job/v7";
+inline constexpr char job_schema_v8[] = "thermox.job/v8";
 
 enum class SimulationJobMode {
     steady,
     transient,
+    calibration,
 };
 
 std::string to_string(SimulationJobMode mode);
@@ -36,15 +37,18 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v7};
+    std::string schema_version{job_schema_v8};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
     std::string model_json;
     std::string case_id;
+    std::string calibration_id;
     std::optional<RevisionProvenance> source_revisions;
     SteadySolverSettings steady_solver;
     TransientSolverSettings transient_solver;
+    CalibrationSolverSettings calibration_solver;
+    std::vector<StudyPredictionCase> calibration_predictions;
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;
     std::vector<ResultProjection> result_projections;
@@ -64,7 +68,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v7};
+    std::string schema_version{job_schema_v8};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;
@@ -91,6 +95,7 @@ struct SimulationJobCursor {
 struct SimulationJobQuery {
     std::string project_id;
     std::string run_configuration_revision_id;
+    std::string calibration_revision_id;
     std::optional<SimulationJobState> state;
     std::size_t limit{50};
     std::optional<SimulationJobCursor> before;

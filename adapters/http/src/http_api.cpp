@@ -461,7 +461,7 @@ Response job_record_response(
     response.headers["ETag"] =
         "\"revision-" + std::to_string(record.revision) + "\"";
     response.headers["Location"] =
-        "/api/v1/simulations/" + record.job_id;
+        "/api/v1/jobs/" + record.job_id;
     return response;
 }
 
@@ -2303,13 +2303,14 @@ Response Api::handle(const Request& request) const {
                 service::serialize_transient_response_json(result));
         }
 
-        if (target.path == "/api/v1/simulations") {
+        if (target.path == "/api/v1/jobs") {
             if (method == "get") {
                 reject_unknown_query(
                     target.query,
                     {
                         "project_id",
                         "run_configuration_revision_id",
+                        "calibration_revision_id",
                         "state",
                         "limit",
                         "cursor",
@@ -2322,6 +2323,10 @@ Response Api::handle(const Request& request) const {
                     optional_query(
                         target.query,
                         "run_configuration_revision_id");
+                query.calibration_revision_id =
+                    optional_query(
+                        target.query,
+                        "calibration_revision_id");
                 query.state = optional_job_state(target.query);
                 query.limit = optional_history_limit(target.query);
                 const auto cursor =
@@ -2342,7 +2347,7 @@ Response Api::handle(const Request& request) const {
             if (method != "post") {
                 auto response = error_response(
                     405, "method_not_allowed",
-                    "simulations only support GET and POST");
+                    "jobs only support GET and POST");
                 response.headers["Allow"] = "GET, POST";
                 return response;
             }
@@ -2351,10 +2356,11 @@ Response Api::handle(const Request& request) const {
                 {
                     "project_id",
                     "run_configuration_revision_id",
+                    "calibration_revision_id",
                 });
             if (!request.body.empty()) {
                 throw std::invalid_argument(
-                    "revision-backed simulation submission "
+                    "revision-backed job submission "
                     "must not contain a request body");
             }
             const auto& identity = require_identity(request);
@@ -2364,12 +2370,56 @@ Response Api::handle(const Request& request) const {
                 optional_query(
                     target.query,
                     "run_configuration_revision_id");
+            const auto calibration_revision_id =
+                optional_query(
+                    target.query,
+                    "calibration_revision_id");
             if (project_id.empty() ||
-                run_configuration_revision_id.empty()) {
+                (run_configuration_revision_id.empty() ==
+                 calibration_revision_id.empty())) {
                 throw std::invalid_argument(
-                    "project_id and "
-                    "run_configuration_revision_id are "
-                    "required");
+                    "project_id and exactly one execution revision "
+                    "ID are required");
+            }
+            if (!calibration_revision_id.empty()) {
+                const auto resolved =
+                    impl_->projects->resolve_calibration(
+                        identity, project_id,
+                        calibration_revision_id);
+                if (!resolved) {
+                    return error_response(
+                        404, "calibration_revision_not_found",
+                        "calibration revision was not found");
+                }
+                service::SimulationJobRequest command;
+                command.identity = identity;
+                command.idempotency_key =
+                    required_header(request, "idempotency-key");
+                command.mode =
+                    service::SimulationJobMode::calibration;
+                command.model_json = resolved->executable_model_json;
+                command.calibration_id =
+                    resolved->calibration.calibration_id;
+                command.source_revisions =
+                    service::RevisionProvenance{
+                        project_id,
+                        resolved->model.model_revision_id,
+                        resolved->model.checksum,
+                        {}, {}, {}, {}, {}, {},
+                        resolved->calibration
+                            .calibration_revision_id,
+                        resolved->calibration.checksum,
+                    };
+                command.calibration_solver =
+                    resolved->calibration.solver;
+                command.calibration_predictions =
+                    resolved->validation_predictions;
+                command.artifacts = resolved->artifacts.snapshot;
+                command.components = resolved->artifacts.components;
+                const auto record = impl_->jobs->submit(command);
+                return job_record_response(
+                    record,
+                    service::is_terminal(record.state) ? 200 : 202);
             }
             const auto resolved =
                 impl_->projects->resolve_run_configuration(
@@ -2408,6 +2458,8 @@ Response Api::handle(const Request& request) const {
                     resolved->configuration.checksum,
                     resolved->study.study_revision_id,
                     resolved->study.checksum,
+                    {},
+                    {},
                 };
             command.artifacts =
                 resolved->artifacts.snapshot;
@@ -2426,7 +2478,7 @@ Response Api::handle(const Request& request) const {
         }
 
         constexpr std::string_view job_prefix =
-            "/api/v1/simulations/";
+            "/api/v1/jobs/";
         if (target.path.starts_with(job_prefix)) {
             reject_unknown_query(target.query, {});
             const auto& identity = require_identity(request);

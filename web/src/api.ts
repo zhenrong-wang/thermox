@@ -363,18 +363,42 @@ export const api = {
     if (state) query.set('state', state)
     if (cursor) query.set('cursor', cursor)
     return getJson<SimulationJobPage>(
-      `/api/v1/simulations?${query.toString()}`,
+      `/api/v1/jobs?${query.toString()}`,
+      signal,
+    )
+  },
+  projectJobs: (projectId: string, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ project_id: projectId, limit: '100' })
+    return getJson<SimulationJobPage>(
+      `/api/v1/jobs?${query.toString()}`,
+      signal,
+    )
+  },
+  calibrationJobs: (
+    projectId: string,
+    calibrationRevisionId: string,
+    state?: SimulationJobState,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      calibration_revision_id: calibrationRevisionId,
+      limit: '50',
+    })
+    if (state) query.set('state', state)
+    return getJson<SimulationJobPage>(
+      `/api/v1/jobs?${query.toString()}`,
       signal,
     )
   },
   simulationJob: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationJob>(
-      `/api/v1/simulations/${encodeURIComponent(jobId)}`,
+      `/api/v1/jobs/${encodeURIComponent(jobId)}`,
       signal,
     ),
   simulationResult: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationResult>(
-      `/api/v1/simulations/${encodeURIComponent(jobId)}/result`,
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
       signal,
     ),
   submitSimulation: (
@@ -388,7 +412,23 @@ export const api = {
       run_configuration_revision_id: runConfigurationRevisionId,
     })
     return postEmptyJson<SimulationJob>(
-      `/api/v1/simulations?${query.toString()}`,
+      `/api/v1/jobs?${query.toString()}`,
+      { 'Idempotency-Key': idempotencyKey },
+      signal,
+    )
+  },
+  submitCalibration: (
+    projectId: string,
+    calibrationRevisionId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      calibration_revision_id: calibrationRevisionId,
+    })
+    return postEmptyJson<SimulationJob>(
+      `/api/v1/jobs?${query.toString()}`,
       { 'Idempotency-Key': idempotencyKey },
       signal,
     )
@@ -399,7 +439,7 @@ export const api = {
     signal?: AbortSignal,
   ) =>
     deleteJson<SimulationJob>(
-      `/api/v1/simulations/${encodeURIComponent(jobId)}`,
+      `/api/v1/jobs/${encodeURIComponent(jobId)}`,
       { 'If-Match': `"revision-${revision}"` },
       signal,
     ),

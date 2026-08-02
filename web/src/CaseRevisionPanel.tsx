@@ -1,14 +1,23 @@
-import type { CaseRevision, StudyRevision } from './types'
+import type {
+  CalibrationRevision,
+  CaseRevision,
+  StudyRevision,
+  SimulationJob,
+} from './types'
 
 interface CaseRevisionPanelProps {
   revisions: CaseRevision[]
   selectedId: string
   publishing: boolean
   studies: StudyRevision[]
+  calibrations: CalibrationRevision[]
+  calibrationJobs: SimulationJob[]
   canPublishStudy: boolean
   onSelect: (revisionId: string) => void
   onCreate: () => void
   onPublishStudy: () => void
+  onPublishCalibration: () => void
+  onRunCalibration: (revision: CalibrationRevision) => void
 }
 
 export function CaseRevisionPanel({
@@ -16,10 +25,14 @@ export function CaseRevisionPanel({
   selectedId,
   publishing,
   studies,
+  calibrations,
+  calibrationJobs,
   canPublishStudy,
   onSelect,
   onCreate,
   onPublishStudy,
+  onPublishCalibration,
+  onRunCalibration,
 }: CaseRevisionPanelProps) {
   return (
     <div className="case-revision-panel">
@@ -105,9 +118,50 @@ export function CaseRevisionPanel({
           </div>
         ))}
       </div>
+      <header className="study-revision-heading">
+        <div>
+          <span className="eyebrow">Parameter estimation</span>
+          <h2>Calibrations</h2>
+          <p>{calibrations.length} immutable revisions</p>
+        </div>
+        <button type="button" className="resource-button"
+          disabled={publishing || studies.length === 0}
+          onClick={onPublishCalibration}>Publish</button>
+      </header>
+      <div className="case-revision-list">
+        {!calibrations.length && (
+          <div className="case-list-empty">
+            <strong>No calibration campaigns</strong>
+            <span>Publish Studies, then define parameters and observations.</span>
+          </div>
+        )}
+        {calibrations.map((revision) => (
+          <div className="case-revision-card" key={revision.calibration_revision_id}>
+            <div>
+              <strong>{revision.calibration_id}</strong>
+              <span>r{revision.revision_number}</span>
+            </div>
+            <small>{revision.training_study_revision_ids.length} training · {revision.validation_study_revision_ids.length} validation · {calibrationJobs.find((job) => job.request.source_revisions?.calibration_revision_id === revision.calibration_revision_id)?.state ?? 'not run'}</small>
+            <button type="button" className="resource-button"
+              onClick={() => onRunCalibration(revision)}>Run</button>
+            {calibrationJobs.find((job) =>
+              job.request.source_revisions?.calibration_revision_id ===
+                revision.calibration_revision_id &&
+              job.state === 'succeeded') && (
+              <a className="resource-button" target="_blank" rel="noreferrer"
+                href={`/api/v1/jobs/${calibrationJobs.find((job) =>
+                  job.request.source_revisions?.calibration_revision_id ===
+                    revision.calibration_revision_id &&
+                  job.state === 'succeeded')!.job_id}/result`}>
+                Result
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
       <footer>
-        <span>Case → durable study</span>
-        <code>thermox.study_revision/v1</code>
+        <span>Case → Study → calibration</span>
+        <code>immutable provenance</code>
       </footer>
     </div>
   )

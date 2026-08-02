@@ -463,6 +463,15 @@ struct ResolvedRunConfiguration {
     ResolvedEngineeringArtifacts artifacts;
 };
 
+struct ResolvedCalibration {
+    CalibrationRevisionRecord calibration;
+    ModelRevisionRecord model;
+    std::vector<StudyRevisionRecord> studies;
+    std::string executable_model_json;
+    std::vector<StudyPredictionCase> validation_predictions;
+    ResolvedEngineeringArtifacts artifacts;
+};
+
 struct ValidateProjectModelRequest {
     IdentityContext identity;
     std::string project_id;
@@ -620,6 +629,11 @@ public:
         const std::string& project_id,
         const std::string&
             run_configuration_revision_id) const;
+    [[nodiscard]] std::optional<ResolvedCalibration>
+    resolve_calibration(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& calibration_revision_id) const;
 
 private:
     std::shared_ptr<ProjectRepository> repository_;

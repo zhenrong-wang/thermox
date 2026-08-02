@@ -879,6 +879,25 @@ void test_calibrations_bind_exact_training_studies() {
     study_request.case_revision_id = simulation_case.case_revision_id;
     study_request.intent = simulation_case.mode;
     const auto study = service.create_study_revision(study_request);
+    const auto validation_case = service.create_case_revision({
+        team_a, project.project_id, model.model_revision_id, {},
+        R"({"schema_version":"thermox.case/v1","case":{
+          "id":"validation","mode":"steady_state_design",
+          "fixed_values":{
+            "compressor.inlet.m_dot":{"value":100,"unit":"kg/s"},
+            "compressor.inlet.p":{"value":101.325,"unit":"kPa"},
+            "compressor.inlet.T":{"value":300,"unit":"K"},
+            "compressor.shaft.omega":314.1592653589793},
+          "initial_guesses":{
+            "compressor.outlet.p":{"value":1.2,"unit":"MPa"},
+            "compressor.outlet.h":{"value":650,"unit":"kJ/kg"},
+            "compressor.shaft.W_dot":{"value":35,"unit":"MW"}}
+        }})",
+    });
+    study_request.study_id = "compressor-validation";
+    study_request.case_revision_id = validation_case.case_revision_id;
+    const auto validation_study =
+        service.create_study_revision(study_request);
 
     thermox::service::CreateCalibrationRevisionRequest request;
     request.identity = team_a;
@@ -886,6 +905,9 @@ void test_calibrations_bind_exact_training_studies() {
     request.calibration_id = "acceptance-fit";
     request.model_revision_id = model.model_revision_id;
     request.training_study_revision_ids = {study.study_revision_id};
+    request.validation_study_revision_ids = {
+        validation_study.study_revision_id,
+    };
     request.definition_json = R"({
       "schema_version": "thermox.calibration/v1",
       "calibration": {
@@ -898,6 +920,11 @@ void test_calibrations_bind_exact_training_studies() {
         }],
         "observations": [{
           "id": "shaft-power", "case": "design",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 35.0, "unit": "MW"},
+          "sigma": {"value": 0.5, "unit": "MW"}
+        }, {
+          "id": "validation-shaft-power", "case": "validation",
           "target": "compressor.shaft.W_dot",
           "measured": {"value": 35.0, "unit": "MW"},
           "sigma": {"value": 0.5, "unit": "MW"}
@@ -924,9 +951,42 @@ void test_calibrations_bind_exact_training_studies() {
                 .find("\"thermox.calibration/v1\"") !=
             std::string::npos,
         "calibration serialization must expose its canonical definition");
+    const auto resolved = service.resolve_calibration(
+        team_a, project.project_id, first.calibration_revision_id);
+    require(
+        resolved &&
+            resolved->calibration.calibration_revision_id ==
+                first.calibration_revision_id &&
+            resolved->studies.size() == 2U &&
+            resolved->validation_predictions.size() == 1U &&
+            resolved->validation_predictions.front().observations.size() ==
+                1U &&
+            resolved->executable_model_json.find(
+                "\"calibrations\": [") != std::string::npos,
+        "calibration execution must compose exact model, Study case, "
+        "definition, and artifact revisions");
+    thermox::service::EngineeringStudyRequest execution;
+    execution.model_json = resolved->executable_model_json;
+    execution.calibration_id = first.calibration_id;
+    execution.calibration_solver = first.solver;
+    execution.prediction_solver = first.solver.simulation_solver;
+    execution.prediction_cases = resolved->validation_predictions;
+    const auto execution_result =
+        thermox::service::SimulationService{
+            thermox::service::make_default_simulation_runtime()}
+            .run_engineering_study(execution);
+    require(
+        execution_result.succeeded() &&
+            execution_result.predictions.size() == 1U &&
+            execution_result.predictions.front().observations.size() == 1U,
+        "validation observations must be evaluated after fitting and "
+        "must not influence the calibration objective");
 
     request.parent_calibration_revision_id.clear();
-    request.validation_study_revision_ids = {study.study_revision_id};
+    request.validation_study_revision_ids = {
+        validation_study.study_revision_id,
+        study.study_revision_id,
+    };
     bool overlap_rejected = false;
     try {
         (void)service.create_calibration_revision(request);

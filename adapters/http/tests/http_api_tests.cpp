@@ -496,6 +496,44 @@ void test_tenant_scoped_asynchronous_jobs() {
                 {"GET", calibration_created.headers.at("Location"), {}, {}},
                 "user-b", "team-b")).status == 404,
         "calibration revisions must support scoped detail and history reads");
+    const auto calibration_revision_id =
+        calibration_created.headers.at("Location").substr(
+            calibration_created.headers.at("Location").find_last_of('/') +
+            1U);
+    thermox::http::Request calibration_submission{
+        "POST",
+        "/api/v1/jobs?project_id=" + project.project_id +
+            "&calibration_revision_id=" + calibration_revision_id,
+        {{"Idempotency-Key", "http-calibration-job-1"}},
+        {},
+    };
+    const auto calibration_queued = api.handle(
+        authenticated(calibration_submission));
+    require(
+        calibration_queued.status == 202 &&
+            calibration_queued.body.find(
+                "\"mode\": \"calibration\"") !=
+                std::string::npos &&
+            calibration_queued.body.find(calibration_revision_id) !=
+                std::string::npos,
+        "calibration revisions must submit provenance-bound jobs");
+    const auto calibration_completed =
+        job_service->run_next("http-calibration-worker");
+    require(
+        calibration_completed &&
+            calibration_completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "the common worker must execute calibration jobs");
+    const auto calibration_result = api.handle(authenticated({
+        "GET",
+        calibration_queued.headers.at("Location") + "/result",
+        {}, {},
+    }));
+    require(
+        calibration_result.status == 200 &&
+            calibration_result.body.find("http-acceptance-fit") !=
+                std::string::npos,
+        "calibration results must cross the durable artifact boundary");
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",
@@ -525,7 +563,7 @@ void test_tenant_scoped_asynchronous_jobs() {
 
     auto submission = thermox::http::Request{
         "POST",
-        "/api/v1/simulations?project_id=" +
+        "/api/v1/jobs?project_id=" +
             project.project_id +
             "&run_configuration_revision_id=" +
             run_configuration_revision_id,
@@ -575,11 +613,11 @@ void test_tenant_scoped_asynchronous_jobs() {
         "revision-backed job");
     const std::string job_id =
         queued.headers.at("Location").substr(
-            std::string("/api/v1/simulations/").size());
+            std::string("/api/v1/jobs/").size());
 
     auto history_request = thermox::http::Request{
         "GET",
-        "/api/v1/simulations?project_id=" +
+        "/api/v1/jobs?project_id=" +
             project.project_id +
             "&run_configuration_revision_id=" +
             run_configuration_revision_id +
@@ -607,7 +645,7 @@ void test_tenant_scoped_asynchronous_jobs() {
         "Team history route must not reveal cross-Team jobs");
     auto bad_history_request = history_request;
     bad_history_request.target =
-        "/api/v1/simulations?cursor=not-a-cursor";
+        "/api/v1/jobs?cursor=not-a-cursor";
     require(
         api.handle(authenticated(bad_history_request)).status == 400,
         "malformed history cursors must be rejected at the "
@@ -625,11 +663,11 @@ void test_tenant_scoped_asynchronous_jobs() {
         "a second queued job must expose its concurrency ETag");
     const auto cancellable_job_id =
         cancellable.headers.at("Location").substr(
-            std::string("/api/v1/simulations/").size());
+            std::string("/api/v1/jobs/").size());
 
     thermox::http::Request cancellation{
         "DELETE",
-        "/api/v1/simulations/" + cancellable_job_id,
+        "/api/v1/jobs/" + cancellable_job_id,
         {{"If-Match", "\"revision-1\""}},
         {},
     };
@@ -680,7 +718,7 @@ void test_tenant_scoped_asynchronous_jobs() {
 
     auto cancelled_history_request = thermox::http::Request{
         "GET",
-        "/api/v1/simulations?state=cancelled",
+        "/api/v1/jobs?state=cancelled",
         {},
         {}};
     const auto cancelled_history = api.handle(
@@ -693,7 +731,7 @@ void test_tenant_scoped_asynchronous_jobs() {
 
     auto other_lookup = thermox::http::Request{
         "GET",
-        "/api/v1/simulations/" + job_id,
+        "/api/v1/jobs/" + job_id,
         {},
         {}};
     other_lookup = authenticated(
@@ -718,7 +756,7 @@ void test_tenant_scoped_asynchronous_jobs() {
 
     auto result_request = thermox::http::Request{
         "GET",
-        "/api/v1/simulations/" + job_id + "/result",
+        "/api/v1/jobs/" + job_id + "/result",
         {},
         {}};
     const auto result = api.handle(
@@ -924,7 +962,7 @@ void test_authored_component_job_workflow() {
     auto submission = authenticated(
         {
             "POST",
-            "/api/v1/simulations?project_id=" +
+            "/api/v1/jobs?project_id=" +
                 project.project_id +
                 "&run_configuration_revision_id=" +
                 run_revision_id,
@@ -945,7 +983,7 @@ void test_authored_component_job_workflow() {
         "component provenance");
     const auto job_id =
         queued.headers.at("Location").substr(
-            std::string("/api/v1/simulations/").size());
+            std::string("/api/v1/jobs/").size());
     const auto completed =
         job_service->run_next("authored-component-worker");
     require(
@@ -964,7 +1002,7 @@ void test_authored_component_job_workflow() {
     const auto result = api.handle(authenticated(
         {
             "GET",
-            "/api/v1/simulations/" + job_id + "/result",
+            "/api/v1/jobs/" + job_id + "/result",
             {},
             {},
         },

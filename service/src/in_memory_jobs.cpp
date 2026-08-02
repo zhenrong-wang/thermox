@@ -101,6 +101,11 @@ public:
                      query.run_configuration_revision_id)) {
                 continue;
             }
+            if (!query.calibration_revision_id.empty() &&
+                (!source || source->calibration_revision_id !=
+                     query.calibration_revision_id)) {
+                continue;
+            }
             if (query.before &&
                 !(record.created_at < query.before->created_at ||
                   (record.created_at == query.before->created_at &&

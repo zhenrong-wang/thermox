@@ -227,10 +227,11 @@ public:
             "AND attname IN ("
             "'attempt', 'lease_expires_at', 'project_id', "
             "'run_configuration_revision_id', "
+            "'calibration_revision_id', "
             "'result_summary_payload') "
             "AND NOT attisdropped",
             {});
-        if (field(lease_schema.get(), 0, 0) != "5") {
+        if (field(lease_schema.get(), 0, 0) != "6") {
             throw std::runtime_error(
                 "PostgreSQL Thermox job schema is "
                 "missing; apply all migrations");
@@ -250,14 +251,17 @@ public:
             ? request.source_revisions
                   ->run_configuration_revision_id
             : std::string{};
+        const auto calibration_revision_id = request.source_revisions
+            ? request.source_revisions->calibration_revision_id
+            : std::string{};
         const auto inserted = execute(
             connection.get(),
             "INSERT INTO thermox_simulation_jobs ("
             "team_id, submitted_by_user_id, idempotency_key, "
             "request_fingerprint, request_payload, project_id, "
-            "run_configuration_revision_id"
+            "run_configuration_revision_id, calibration_revision_id"
             ") VALUES ($1, $2, $3, $4, $5::jsonb, "
-            "NULLIF($6, ''), NULLIF($7, '')) "
+            "NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, '')) "
             "ON CONFLICT (team_id, idempotency_key) DO NOTHING "
             "RETURNING "
             "job_id, team_id, submitted_by_user_id, revision, "
@@ -279,6 +283,7 @@ public:
                 payload.c_str(),
                 project_id.c_str(),
                 run_configuration_revision_id.c_str(),
+                calibration_revision_id.c_str(),
             });
         if (PQntuples(inserted.get()) == 1) {
             return decode_record(inserted.get());
@@ -384,17 +389,19 @@ public:
             "AND ($2 = '' OR project_id = $2) "
             "AND ($3 = '' OR "
             "run_configuration_revision_id = $3) "
-            "AND ($4 = '' OR state = $4) "
-            "AND ($5 = '' OR "
+            "AND ($4 = '' OR calibration_revision_id = $4) "
+            "AND ($5 = '' OR state = $5) "
+            "AND ($6 = '' OR "
             "(created_at, job_id) < ("
             "timestamptz 'epoch' + "
-            "$5::bigint * interval '1 microsecond', $6)) "
+            "$6::bigint * interval '1 microsecond', $7)) "
             "ORDER BY created_at DESC, job_id DESC "
-            "LIMIT $7::integer",
+            "LIMIT $8::integer",
             {
                 team_id.c_str(),
                 query.project_id.c_str(),
                 query.run_configuration_revision_id.c_str(),
+                query.calibration_revision_id.c_str(),
                 state.c_str(),
                 cursor_microseconds.c_str(),
                 cursor_job_id.c_str(),

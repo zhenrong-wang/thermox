@@ -336,7 +336,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v7\"") != std::string::npos &&
+                  "\"thermox.job/v8\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -356,6 +356,44 @@ void test_success_publishes_a_readable_artifact() {
     require(
         !service.run_next("worker-a").has_value(),
         "completed jobs must not be claimed again");
+}
+
+void test_calibration_jobs_use_the_worker_artifact_boundary() {
+    auto jobs = thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+    auto request = steady_request("calibration-run");
+    request.mode = thermox::service::SimulationJobMode::calibration;
+    request.case_id.clear();
+    request.calibration_id = "acceptance_fit";
+    request.source_revisions->case_revision_id.clear();
+    request.source_revisions->case_checksum.clear();
+    request.source_revisions->calibration_revision_id =
+        "calibration-revision-job-test";
+    request.source_revisions->calibration_checksum =
+        "sha256:" + std::string(64, '3');
+    const auto queued = service.submit(request);
+    const auto completed = service.run_next("calibration-worker");
+    require(
+        completed && completed->job_id == queued.job_id &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->result_artifact.has_value() &&
+            !completed->result_summary.has_value() &&
+            completed->execution->source_revisions
+                    ->calibration_revision_id ==
+                "calibration-revision-job-test",
+        "calibration jobs must execute through the leased worker and "
+        "retain exact calibration provenance");
+    const auto result = service.get_result(team_a, queued.job_id);
+    require(
+        result &&
+            result->content.find("\"calibration_id\": ") !=
+                std::string::npos &&
+            result->content.find("acceptance_fit") !=
+                std::string::npos,
+        "calibration jobs must publish a durable calibration result");
 }
 
 void test_solver_failure_is_a_terminal_job_failure() {
@@ -750,6 +788,7 @@ int main() {
         test_submission_is_idempotent_and_conflict_safe();
         test_worker_executes_request_scoped_component();
         test_success_publishes_a_readable_artifact();
+        test_calibration_jobs_use_the_worker_artifact_boundary();
         test_solver_failure_is_a_terminal_job_failure();
         test_projection_failure_is_structured();
         test_transient_jobs_use_the_same_artifact_boundary();
