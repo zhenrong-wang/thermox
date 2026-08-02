@@ -315,7 +315,7 @@ ExpressionComponentInput decode_expression_component(
     const std::string& schema_version,
     const Tree& tree) {
     if (schema_version !=
-        platform::expression_component_schema_v1) {
+        platform::expression_component_schema_v2) {
         throw std::invalid_argument(
             "unsupported expression-component schema: " +
             schema_version);
@@ -324,6 +324,13 @@ ExpressionComponentInput decode_expression_component(
     component.schema_version = schema_version;
     component.kind = tree.get<std::string>("kind");
     component.version = tree.get<std::string>("version");
+    component.template_kind =
+        tree.get<std::string>("template_kind");
+    component.display_name =
+        tree.get<std::string>("display_name");
+    component.category = tree.get<std::string>("category");
+    component.model_name =
+        tree.get<std::string>("model_name");
     component.system_boundary_role =
         tree.get<std::string>("system_boundary_role", "");
     component.ports =
@@ -390,6 +397,10 @@ Tree encode_expression_component(
     Tree tree;
     tree.put("kind", component.kind);
     tree.put("version", component.version);
+    tree.put("template_kind", component.template_kind);
+    tree.put("display_name", component.display_name);
+    tree.put("category", component.category);
+    tree.put("model_name", component.model_name);
     tree.put(
         "system_boundary_role",
         component.system_boundary_role);
@@ -463,6 +474,10 @@ platform::ExpressionComponentDefinition definition(
     value.schema_version = input.schema_version;
     value.descriptor.kind = input.kind;
     value.descriptor.version = input.version;
+    value.descriptor.template_kind = input.template_kind;
+    value.descriptor.display_name = input.display_name;
+    value.descriptor.category = input.category;
+    value.descriptor.model_name = input.model_name;
     value.descriptor.system_boundary_role =
         input.system_boundary_role;
     value.descriptor.supports_steady = true;

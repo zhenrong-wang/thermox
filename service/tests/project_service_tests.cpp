@@ -325,6 +325,10 @@ std::string expression_component_payload(
     auto payload = std::string{R"json({
   "kind": "custom.signal.persisted_gain",
   "version": "1.0.0",
+  "template_kind": "custom.signal.gain",
+  "display_name": "Signal gain",
+  "category": "Project components",
+  "model_name": "Algebraic gain",
   "ports": [
     {"name": "input", "domain": "signal", "direction": "in"},
     {"name": "output", "domain": "signal", "direction": "out"}
@@ -368,7 +372,7 @@ void test_expression_component_artifact_is_executable() {
         "persisted-gain",
         {},
         "thermox.expression_component",
-        "thermox.expression_component/v1",
+        "thermox.expression_component/v2",
         expression_component_payload(),
     });
     const auto resolved = projects->resolve_artifact_revisions(
@@ -382,6 +386,12 @@ void test_expression_component_artifact_is_executable() {
             resolved->components.expression_components.front()
                     .kind ==
                 "custom.signal.persisted_gain" &&
+            resolved->components.expression_components.front()
+                    .template_kind == "custom.signal.gain" &&
+            resolved->components.expression_components.front()
+                    .display_name == "Signal gain" &&
+            resolved->components.expression_components.front()
+                    .model_name == "Algebraic gain" &&
             resolved->snapshot.references.size() == 1U &&
             resolved->snapshot.references.front().revision ==
                 revision.artifact_revision_id,
@@ -403,6 +413,12 @@ void test_expression_component_artifact_is_executable() {
                 revision.artifact_revision_id &&
             discovered.components.front().component.kind ==
                 "custom.signal.persisted_gain" &&
+            discovered.components.front().component.template_kind ==
+                "custom.signal.gain" &&
+            discovered.components.front().component.display_name ==
+                "Signal gain" &&
+            discovered.components.front().component.model_name ==
+                "Algebraic gain" &&
             discovered.components.front().definition.kind ==
                 "custom.signal.persisted_gain" &&
             discovered.components.front().definition.equations
@@ -419,7 +435,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v1",
+            "thermox.expression_component/v2",
             expression_component_payload("1.0.1"),
         });
     const auto refreshed =
@@ -441,7 +457,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             latest_revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v1",
+            "thermox.expression_component/v2",
             expression_component_payload("1.0.1"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -455,7 +471,7 @@ void test_expression_component_artifact_is_executable() {
             "second-gain-artifact",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v1",
+            "thermox.expression_component/v2",
             expression_component_payload("2.0.0"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -581,7 +597,7 @@ void test_expression_component_artifact_is_executable() {
             "unsafe-component",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v1",
+            "thermox.expression_component/v2",
             unsafe,
         });
     } catch (const thermox::service::ProjectRequestError&) {

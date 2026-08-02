@@ -15,7 +15,7 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v8[] = "thermox.job/v8";
+inline constexpr char job_schema_v9[] = "thermox.job/v9";
 
 enum class SimulationJobMode {
     steady,
@@ -37,7 +37,7 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v8};
+    std::string schema_version{job_schema_v9};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
@@ -68,7 +68,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v8};
+    std::string schema_version{job_schema_v9};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;

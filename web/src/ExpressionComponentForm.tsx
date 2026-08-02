@@ -83,6 +83,18 @@ export function ExpressionComponentForm({
   const [version, setVersion] = useState(
     base ? nextPatchVersion(base.definition.version) : '1.0.0',
   )
+  const [templateKind, setTemplateKind] = useState(
+    base?.definition.template_kind ?? 'custom.signal.component',
+  )
+  const [displayName, setDisplayName] = useState(
+    base?.definition.display_name ?? 'Custom component',
+  )
+  const [category, setCategory] = useState(
+    base?.definition.category ?? 'Project components',
+  )
+  const [modelName, setModelName] = useState(
+    base?.definition.model_name ?? 'Custom expression',
+  )
   const [boundaryRole, setBoundaryRole] = useState(
     base?.definition.system_boundary_role ?? '',
   )
@@ -136,8 +148,18 @@ export function ExpressionComponentForm({
     event.preventDefault()
     setFormError('')
     try {
-      if (!artifactId.trim() || !kind.trim() || !version.trim()) {
-        throw new Error('Artifact ID, component kind, and version are required.')
+      if (
+        !artifactId.trim() ||
+        !kind.trim() ||
+        !version.trim() ||
+        !templateKind.trim() ||
+        !displayName.trim() ||
+        !category.trim() ||
+        !modelName.trim()
+      ) {
+        throw new Error(
+          'Artifact ID, physical template metadata, component kind, and version are required.',
+        )
       }
       if (base && version.trim() === base.definition.version) {
         throw new Error(
@@ -181,9 +203,13 @@ export function ExpressionComponentForm({
         artifactId.trim(),
         base?.source.artifact_revision_id ?? '',
         {
-          schema_version: 'thermox.expression_component/v1',
+          schema_version: 'thermox.expression_component/v2',
           kind: kind.trim(),
           version: version.trim(),
+          template_kind: templateKind.trim(),
+          display_name: displayName.trim(),
+          category: category.trim(),
+          model_name: modelName.trim(),
           system_boundary_role: boundaryRole.trim(),
           ports: ports.map((port) => ({
             ...port,
@@ -257,6 +283,38 @@ export function ExpressionComponentForm({
               value={version}
               required
               onChange={(event) => setVersion(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Physical template kind</span>
+            <input
+              value={templateKind}
+              required
+              onChange={(event) => setTemplateKind(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Equipment display name</span>
+            <input
+              value={displayName}
+              required
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Library category</span>
+            <input
+              value={category}
+              required
+              onChange={(event) => setCategory(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Calculation model name</span>
+            <input
+              value={modelName}
+              required
+              onChange={(event) => setModelName(event.target.value)}
             />
           </label>
           <label>

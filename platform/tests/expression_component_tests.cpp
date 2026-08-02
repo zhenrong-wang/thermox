@@ -38,6 +38,11 @@ pressure_loss_definition(std::string pressure_expression) {
     definition.descriptor.kind =
         "custom.fluid.pressure_loss";
     definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind =
+        "custom.fluid.pressure_loss";
+    definition.descriptor.display_name = "Custom pressure loss";
+    definition.descriptor.category = "Project components";
+    definition.descriptor.model_name = "Custom expression";
     definition.descriptor.ports = {
         {"inlet", "fluid", "in"},
         {"outlet", "fluid", "out"},
@@ -172,6 +177,15 @@ void test_expression_component_compiles_and_solves() {
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
     auto registry =
         thermox::platform::make_default_component_registry();
+    auto missing_template = pressure_loss_definition(
+        "outlet.p - inlet.p");
+    missing_template.descriptor.template_kind.clear();
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(missing_template));
+        },
+        "requires physical template kind");
     require_invalid(
         [&]() {
             thermox::platform::register_expression_component(

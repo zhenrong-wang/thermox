@@ -79,6 +79,10 @@ thermox::service::SimulationJobRequest expression_request(
     thermox::service::ExpressionComponentInput component;
     component.kind = "custom.signal.job_gain";
     component.version = "1.0.0";
+    component.template_kind = "custom.signal.gain";
+    component.display_name = "Signal gain";
+    component.category = "Project components";
+    component.model_name = "Algebraic gain";
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},
@@ -200,6 +204,21 @@ void test_submission_is_idempotent_and_conflict_safe() {
         conflict,
         "request-scoped component definitions must participate "
         "in the idempotency fingerprint");
+
+    auto metadata = expression_request("component-metadata");
+    (void)service.submit(metadata);
+    metadata.components.expression_components.front().display_name =
+        "Revised signal gain";
+    conflict = false;
+    try {
+        (void)service.submit(metadata);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "physical-template metadata must participate in the "
+        "idempotency fingerprint");
 }
 
 void test_worker_executes_request_scoped_component() {
@@ -336,7 +355,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v8\"") != std::string::npos &&
+                  "\"thermox.job/v9\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=

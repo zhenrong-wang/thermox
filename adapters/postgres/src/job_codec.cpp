@@ -312,6 +312,12 @@ Tree component_bundle(
                 encoded.put("kind", component.kind);
                 encoded.put("version", component.version);
                 encoded.put(
+                    "template_kind", component.template_kind);
+                encoded.put(
+                    "display_name", component.display_name);
+                encoded.put("category", component.category);
+                encoded.put("model_name", component.model_name);
+                encoded.put(
                     "system_boundary_role",
                     component.system_boundary_role);
                 encoded.add_child(
@@ -411,6 +417,14 @@ service::SimulationComponentBundle decode_component_bundle(
                     encoded.get<std::string>("kind");
                 component.version =
                     encoded.get<std::string>("version");
+                component.template_kind =
+                    encoded.get<std::string>("template_kind");
+                component.display_name =
+                    encoded.get<std::string>("display_name");
+                component.category =
+                    encoded.get<std::string>("category");
+                component.model_name =
+                    encoded.get<std::string>("model_name");
                 component.system_boundary_role =
                     encoded.get<std::string>(
                         "system_boundary_role");

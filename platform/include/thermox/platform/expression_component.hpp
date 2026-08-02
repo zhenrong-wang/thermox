@@ -8,8 +8,8 @@
 
 namespace thermox::platform {
 
-inline constexpr char expression_component_schema_v1[] =
-    "thermox.expression_component/v1";
+inline constexpr char expression_component_schema_v2[] =
+    "thermox.expression_component/v2";
 inline constexpr char expression_component_artifact_type[] =
     "thermox.expression_component";
 
@@ -20,7 +20,7 @@ struct AlgebraicExpressionEquation {
 };
 
 struct ExpressionComponentDefinition {
-    std::string schema_version{expression_component_schema_v1};
+    std::string schema_version{expression_component_schema_v2};
     ComponentModelDescriptor descriptor;
     std::vector<AlgebraicExpressionEquation> equations;
 };

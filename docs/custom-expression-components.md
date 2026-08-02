@@ -1,8 +1,9 @@
 # Safe expression components
 
 Thermox supports deployment-composed steady algebraic components through the versioned
-`thermox.expression_component/v1` contract. The component descriptor remains authoritative for
-kind, version, typed ports, parameter dimensions, defaults, and bounds. Equations add residual
+`thermox.expression_component/v2` contract. The component descriptor remains authoritative for
+physical-template identity, executable kind/version, typed ports, parameter dimensions, defaults,
+and bounds. Equations add residual
 behavior without loading executable user code.
 
 An expression can reference:
@@ -23,6 +24,26 @@ outlet.p - inlet.p * parameter.pressure_ratio
 outlet.h - inlet.h
 ```
 
+The declaration distinguishes the physical template from one executable model, so nonvisual
+clients can publish the same catalog structure used by the canvas:
+
+```json
+{
+  "kind": "project.fitting.return_bend.empirical",
+  "version": "1.0.0",
+  "template_kind": "project.fitting.return_bend",
+  "display_name": "Project return bend",
+  "category": "Project fittings",
+  "model_name": "Plant empirical equation",
+  "ports": [],
+  "parameters": [],
+  "equations": []
+}
+```
+
+The abbreviated empty arrays above illustrate identity only; publication requires valid ports and
+at least one residual equation.
+
 Registration parses and validates every expression before its runtime becomes immutable. A
 deployment may register trusted definitions in the base runtime. Validation, steady simulation,
 calibration, engineering-study, transient, and job requests may instead carry a
@@ -36,13 +57,14 @@ logarithm are reported as recoverable physical evaluations.
 
 Equation content has a deterministic implementation fingerprint. The service includes it in the
 runtime catalog fingerprint, so changing a custom equation changes validation and execution
-provenance even if its public descriptor is unchanged. `thermox.job/v8` also snapshots the complete
+provenance even if its public descriptor is unchanged. `thermox.job/v9` also snapshots the complete
 request-scoped bundle and includes it in the idempotency fingerprint. A worker therefore
 reconstructs exactly the submitted component implementation after a process restart.
 
-## Version 1 boundary
+## Version 2 boundary
 
-Version 1 is deliberately limited to steady algebraic equations over fixed-shape connector
+Version 2 adds required physical-template presentation metadata while remaining deliberately
+limited to steady algebraic equations over fixed-shape connector
 domains. It does not expose property-package calls, thermochemistry calls, artifact access,
 internal/transient states, parameter templates, or species-expanded material variables.
 Deployment code can register definitions at the trusted composition root through
@@ -53,8 +75,9 @@ request bundle.
 
 The generic engineering-artifact revision API accepts
 `artifact_type=thermox.expression_component` with
-`artifact_schema_version=thermox.expression_component/v1`. The JSON payload contains `kind`,
-`version`, `ports`, `parameters`, and `equations`; schema identity remains revision metadata.
+`artifact_schema_version=thermox.expression_component/v2`. The JSON payload contains physical
+template metadata (`template_kind`, `display_name`, and `category`), executable `kind`, `version`,
+`model_name`, `ports`, `parameters`, and `equations`; schema identity remains revision metadata.
 Creation canonicalizes the payload, validates the descriptor and safe grammar, stores it through
 the provider-neutral artifact-content store, and publishes an immutable Team/project-owned
 revision with a SHA-256 checksum.

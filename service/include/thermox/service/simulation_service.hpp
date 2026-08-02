@@ -336,9 +336,13 @@ struct ExpressionComponentEquationInput {
 
 struct ExpressionComponentInput {
     std::string schema_version{
-        "thermox.expression_component/v1"};
+        "thermox.expression_component/v2"};
     std::string kind;
     std::string version;
+    std::string template_kind;
+    std::string display_name;
+    std::string category;
+    std::string model_name;
     std::string system_boundary_role;
     std::vector<ExpressionComponentPortInput> ports;
     std::vector<ExpressionComponentParameterInput> parameters;

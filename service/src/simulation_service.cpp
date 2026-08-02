@@ -62,6 +62,11 @@ expression_component_definitions(
         definition.schema_version = input.schema_version;
         definition.descriptor.kind = input.kind;
         definition.descriptor.version = input.version;
+        definition.descriptor.template_kind =
+            input.template_kind;
+        definition.descriptor.display_name = input.display_name;
+        definition.descriptor.category = input.category;
+        definition.descriptor.model_name = input.model_name;
         definition.descriptor.system_boundary_role =
             input.system_boundary_role;
         definition.descriptor.supports_steady = true;

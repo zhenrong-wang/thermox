@@ -361,6 +361,14 @@ void expression_component_json(
     json_string(out, definition.kind);
     out << ", \"version\": ";
     json_string(out, definition.version);
+    out << ", \"template_kind\": ";
+    json_string(out, definition.template_kind);
+    out << ", \"display_name\": ";
+    json_string(out, definition.display_name);
+    out << ", \"category\": ";
+    json_string(out, definition.category);
+    out << ", \"model_name\": ";
+    json_string(out, definition.model_name);
     out << ", \"system_boundary_role\": ";
     json_string(out, definition.system_boundary_role);
     out << ", \"ports\": [";

@@ -1411,6 +1411,10 @@ void test_expression_component_flows_through_service_runtime() {
     thermox::platform::ExpressionComponentDefinition definition;
     definition.descriptor.kind = "custom.signal.gain";
     definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind = "custom.signal.gain";
+    definition.descriptor.display_name = "Signal gain";
+    definition.descriptor.category = "Project components";
+    definition.descriptor.model_name = "Algebraic gain";
     definition.descriptor.ports = {
         {"input", "signal", "in"},
         {"output", "signal", "out"},
@@ -1514,6 +1518,10 @@ void test_expression_component_is_request_scoped() {
     thermox::service::ExpressionComponentInput component;
     component.kind = "custom.signal.request_gain";
     component.version = "1.0.0";
+    component.template_kind = "custom.signal.gain";
+    component.display_name = "Signal gain";
+    component.category = "Project components";
+    component.model_name = "Algebraic gain";
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},

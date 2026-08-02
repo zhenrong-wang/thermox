@@ -35,7 +35,7 @@ const projectEntry: ProjectComponentCatalogEntry = {
     revision_number: 7,
     parent_artifact_revision_id: 'artifact-revision-6',
     artifact_type: 'thermox.expression_component',
-    artifact_schema_version: 'thermox.expression_component/v1',
+    artifact_schema_version: 'thermox.expression_component/v2',
     content: {
       media_type: 'application/json',
       byte_size: 42,
@@ -63,9 +63,13 @@ const projectEntry: ProjectComponentCatalogEntry = {
     ],
   },
   definition: {
-    schema_version: 'thermox.expression_component/v1',
+    schema_version: 'thermox.expression_component/v2',
     kind: 'custom.signal.gain',
     version: '1.0.0',
+    template_kind: 'custom.signal.gain',
+    display_name: 'Signal gain',
+    category: 'Project components',
+    model_name: 'Custom expression',
     system_boundary_role: '',
     ports: [
       {

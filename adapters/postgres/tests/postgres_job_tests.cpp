@@ -188,6 +188,10 @@ SimulationJobRequest request(
     thermox::service::ExpressionComponentInput component;
     component.kind = "custom.signal.persisted_gain";
     component.version = "1.0.0";
+    component.template_kind = "custom.signal.gain";
+    component.display_name = "Signal gain";
+    component.category = "Project components";
+    component.model_name = "Algebraic gain";
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},
@@ -258,6 +262,13 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.performance_maps.size() == 1 &&
             repeated.request.components.expression_components
                     .size() == 1 &&
+            repeated.request.components.expression_components
+                    .front().template_kind ==
+                "custom.signal.gain" &&
+            repeated.request.components.expression_components
+                    .front().display_name == "Signal gain" &&
+            repeated.request.components.expression_components
+                    .front().model_name == "Algebraic gain" &&
             repeated.request.components.expression_components
                     .front().equations.front().expression ==
                 "output.value - parameter.gain * input.value" &&

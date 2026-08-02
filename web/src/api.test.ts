@@ -9,9 +9,13 @@ afterEach(() => {
 describe('expression component authoring API', () => {
   it('publishes a typed immutable child revision', async () => {
     const definition: ExpressionComponentDefinition = {
-      schema_version: 'thermox.expression_component/v1',
+      schema_version: 'thermox.expression_component/v2',
       kind: 'custom.signal.gain',
       version: '1.0.1',
+      template_kind: 'custom.signal.gain',
+      display_name: 'Signal gain',
+      category: 'Project components',
+      model_name: 'Custom expression',
       system_boundary_role: '',
       ports: [
         {
@@ -67,7 +71,7 @@ describe('expression component authoring API', () => {
       'thermox.expression_component',
     )
     expect(url.searchParams.get('artifact_schema_version')).toBe(
-      'thermox.expression_component/v1',
+      'thermox.expression_component/v2',
     )
     expect(url.searchParams.get('parent_revision_id')).toBe('revision-1')
     expect(request).toMatchObject({

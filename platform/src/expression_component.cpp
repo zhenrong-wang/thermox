@@ -638,25 +638,33 @@ make_expression_component_model(
     const ComponentRegistry& registry,
     ExpressionComponentDefinition definition) {
     if (definition.schema_version !=
-        expression_component_schema_v1) {
+        expression_component_schema_v2) {
         throw std::invalid_argument(
             "unsupported expression component schema: " +
             definition.schema_version);
     }
     auto& descriptor = definition.descriptor;
+    if (descriptor.template_kind.empty() ||
+        descriptor.display_name.empty() ||
+        descriptor.category.empty() ||
+        descriptor.model_name.empty()) {
+        throw std::invalid_argument(
+            "expression component v2 requires physical template "
+            "kind, display name, category, and calculation model name");
+    }
     if (!descriptor.supports_steady ||
         descriptor.supports_transient ||
         !descriptor.transient_variables.empty() ||
         !descriptor.internal_variables.empty()) {
         throw std::invalid_argument(
-            "expression component v1 supports steady algebraic "
+            "expression component v2 supports steady algebraic "
             "components only");
     }
     if (!descriptor.artifacts.empty() ||
         !descriptor.required_property_capabilities.empty() ||
         !descriptor.required_thermochemistry_capabilities.empty()) {
         throw std::invalid_argument(
-            "expression component v1 cannot access artifacts or "
+            "expression component v2 cannot access artifacts or "
             "property/thermochemistry callbacks");
     }
     if (definition.equations.empty()) {
@@ -671,7 +679,7 @@ make_expression_component_model(
         for (const auto& variable : domain.variables) {
             if (variable.expand_species) {
                 throw std::invalid_argument(
-                    "expression component v1 does not support "
+                    "expression component v2 does not support "
                     "species-expanded connector variables: " +
                     port.name + "." + variable.name);
             }
@@ -689,7 +697,7 @@ make_expression_component_model(
         if (parameter.name.find('{') != std::string::npos ||
             parameter.name.find('}') != std::string::npos) {
             throw std::invalid_argument(
-                "expression component v1 does not support "
+                "expression component v2 does not support "
                 "parameter templates: " + parameter.name);
         }
         const auto symbol =

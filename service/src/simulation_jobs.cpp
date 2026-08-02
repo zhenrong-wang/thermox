@@ -139,6 +139,10 @@ void append_components(
         append_string(stream, component.schema_version);
         append_string(stream, component.kind);
         append_string(stream, component.version);
+        append_string(stream, component.template_kind);
+        append_string(stream, component.display_name);
+        append_string(stream, component.category);
+        append_string(stream, component.model_name);
         append_string(stream, component.system_boundary_role);
         stream << component.ports.size() << '|';
         for (const auto& port : component.ports) {
@@ -264,7 +268,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v8) {
+    if (request.schema_version != job_schema_v9) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
