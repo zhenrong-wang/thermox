@@ -61,6 +61,14 @@ layer contains a complete v1-style non-rectangular map with identical axes, outp
 extrapolation policies. Evaluation resolves corrected flow and corrected speed in the two
 neighboring layers, then interpolates their outputs and derivatives along the condition axis.
 
+The Definition workspace exposes ordinary `thermox.performance_map/v1` artifacts as their own
+Engineering Data Registry domain. The typed form declares both axes, any number of outputs,
+non-rectangular family curves, and the two extrapolation policies. It previews the first output
+across all family curves before publication. Creation and revision are explicit separate actions;
+revision authoring retrieves and integrity-checks the exact immutable parent payload before
+preloading the form. Conditioned `v2` maps remain supported by the platform and service runtime,
+but their higher-dimensional authoring workflow is intentionally separate from the v1 editor.
+
 Every axis and output has a stable name and physical dimension. Evaluation returns:
 
 - all interpolated outputs;

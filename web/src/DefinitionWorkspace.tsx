@@ -12,6 +12,7 @@ interface DefinitionWorkspaceProps {
   readiness: Record<string, ComponentDefinitionReadiness>
   artifactRevisions: ArtifactRevision[]
   publishing: boolean
+  loadingArtifactRevision: boolean
   operationError: string
   operationStatus: string
   onDismissOperation: () => void
@@ -20,6 +21,8 @@ interface DefinitionWorkspaceProps {
   onAddMaterial: () => void
   onAddCorrelation: () => void
   onReviseCorrelation: (revision: ArtifactRevision) => void
+  onAddPerformanceMap: () => void
+  onRevisePerformanceMap: (revision: ArtifactRevision) => void
   onBuild: () => void
 }
 
@@ -29,6 +32,7 @@ export function DefinitionWorkspace({
   readiness,
   artifactRevisions,
   publishing,
+  loadingArtifactRevision,
   operationError,
   operationStatus,
   onDismissOperation,
@@ -37,6 +41,8 @@ export function DefinitionWorkspace({
   onAddMaterial,
   onAddCorrelation,
   onReviseCorrelation,
+  onAddPerformanceMap,
+  onRevisePerformanceMap,
   onBuild,
 }: DefinitionWorkspaceProps) {
   if (!topology || !catalog) {
@@ -57,8 +63,18 @@ export function DefinitionWorkspace({
   const states = Object.values(readiness)
   const definedCount = states.filter((item) => item.state === 'defined').length
   const issueCount = states.reduce((sum, item) => sum + item.issues.length, 0)
+  const busy = publishing || loadingArtifactRevision
   const latestCorrelations = [...artifactRevisions]
     .filter((revision) => revision.artifact_type === 'thermox.correlation')
+    .sort((left, right) => right.revision_number - left.revision_number)
+    .filter(
+      (revision, index, revisions) =>
+        revisions.findIndex(
+          (candidate) => candidate.artifact_id === revision.artifact_id,
+        ) === index,
+    )
+  const latestPerformanceMaps = [...artifactRevisions]
+    .filter((revision) => revision.artifact_type === 'thermox.performance_map')
     .sort((left, right) => right.revision_number - left.revision_number)
     .filter(
       (revision, index, revisions) =>
@@ -78,7 +94,7 @@ export function DefinitionWorkspace({
           <button
             type="button"
             className="secondary-button"
-            disabled={publishing}
+            disabled={busy}
             onClick={onAddFluid}
           >
             + Fluid
@@ -86,7 +102,7 @@ export function DefinitionWorkspace({
           <button
             type="button"
             className="secondary-button"
-            disabled={publishing}
+            disabled={busy}
             onClick={onAddMaterial}
           >
             + Reacting mixture
@@ -94,21 +110,31 @@ export function DefinitionWorkspace({
           <button
             type="button"
             className="secondary-button"
-            disabled={publishing}
+            disabled={busy}
             onClick={onAddCorrelation}
           >
             + Correlation
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={onAddPerformanceMap}
+          >
+            + Performance map
+          </button>
         </div>
       </div>
 
-      {(operationError || operationStatus || publishing) && (
+      {(operationError || operationStatus || busy) && (
         <div
           className={`operation-banner${operationError ? ' is-error' : ''}`}
         >
-          {publishing
-            ? 'Publishing immutable physical-system revision…'
-            : operationError || operationStatus}
+          {loadingArtifactRevision
+            ? 'Loading and verifying immutable artifact payload…'
+            : publishing
+              ? 'Publishing immutable physical-system revision…'
+              : operationError || operationStatus}
           <button type="button" onClick={onDismissOperation}>×</button>
         </div>
       )}
@@ -198,7 +224,7 @@ export function DefinitionWorkspace({
                   <button
                     type="button"
                     className="primary-button"
-                    disabled={publishing || !descriptor}
+                    disabled={busy || !descriptor}
                     onClick={() => onEditComponent(component)}
                   >
                     {state.state === 'defined' ? 'Review definition' : 'Define'}
@@ -239,7 +265,7 @@ export function DefinitionWorkspace({
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={publishing}
+                  disabled={busy}
                   onClick={() => onReviseCorrelation(revision)}
                 >
                   Revise
@@ -251,6 +277,50 @@ export function DefinitionWorkspace({
                 <strong>No project correlations</strong>
                 <p>Publish a typed equation, then bind it from a compatible component model.</p>
                 <button type="button" onClick={onAddCorrelation}>Publish correlation</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="physical-component-section engineering-data-section">
+          <header>
+            <div>
+              <span className="section-kicker">Engineering data registry</span>
+              <h2>Performance maps</h2>
+            </div>
+            <p>
+              Generic typed characteristic surfaces consumed through component artifact roles.
+              Compressor and turbine semantics remain in their calculation models.
+            </p>
+          </header>
+          <div className="engineering-artifact-list">
+            {latestPerformanceMaps.map((revision) => (
+              <article key={revision.artifact_revision_id}>
+                <div>
+                  <strong>{revision.artifact_id}</strong>
+                  <code>{revision.artifact_schema_version}</code>
+                </div>
+                <span>r{revision.revision_number}</span>
+                <small>{revision.content.checksum}</small>
+                {revision.artifact_schema_version === 'thermox.performance_map/v1' ? (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => onRevisePerformanceMap(revision)}
+                  >
+                    Revise
+                  </button>
+                ) : (
+                  <span className="artifact-readonly-label">conditioned map</span>
+                )}
+              </article>
+            ))}
+            {!latestPerformanceMaps.length && (
+              <div className="definition-list-empty">
+                <strong>No project performance maps</strong>
+                <p>Publish typed family curves, then bind the map from a compatible component.</p>
+                <button type="button" onClick={onAddPerformanceMap}>Publish map</button>
               </div>
             )}
           </div>

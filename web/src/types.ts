@@ -654,6 +654,32 @@ export interface CorrelationArtifactDefinition {
   expression: string
 }
 
+export type MapExtrapolationPolicy = 'reject' | 'clamp' | 'linear'
+
+export interface PerformanceMapArtifactDefinition {
+  primary_variable: {
+    name: string
+    dimension: string
+  }
+  family_variable: {
+    name: string
+    dimension: string
+  }
+  output_variables: Array<{
+    name: string
+    dimension: string
+  }>
+  curves: Array<{
+    family_coordinate: number
+    samples: Array<{
+      coordinate: number
+      outputs: number[]
+    }>
+  }>
+  primary_extrapolation: MapExtrapolationPolicy
+  family_extrapolation: MapExtrapolationPolicy
+}
+
 export interface ProjectComponentCatalogEntry {
   source: ArtifactRevision
   catalog_fingerprint: string

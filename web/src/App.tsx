@@ -26,6 +26,7 @@ import {
 } from './InspectorPanel'
 import { MediumForm } from './MediumForm'
 import { MaterialForm } from './MaterialForm'
+import { PerformanceMapArtifactForm } from './PerformanceMapArtifactForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
@@ -62,6 +63,7 @@ import type {
   GraphEditOperation,
   MediumDefinition,
   MaterialDefinition,
+  PerformanceMapArtifactDefinition,
   ModelRevision,
   ProjectModelValidation,
   ProjectComponentCatalogEntry,
@@ -117,11 +119,16 @@ function App() {
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
   const [addingCorrelation, setAddingCorrelation] = useState(false)
-  const [loadingCorrelationRevision, setLoadingCorrelationRevision] =
+  const [loadingArtifactRevision, setLoadingArtifactRevision] =
     useState(false)
   const [revisingCorrelation, setRevisingCorrelation] = useState<{
     source: ArtifactRevision
     definition: CorrelationArtifactDefinition
+  }>()
+  const [addingPerformanceMap, setAddingPerformanceMap] = useState(false)
+  const [revisingPerformanceMap, setRevisingPerformanceMap] = useState<{
+    source: ArtifactRevision
+    definition: PerformanceMapArtifactDefinition
   }>()
   const [definingComponent, setDefiningComponent] = useState(false)
   const [revisingComponent, setRevisingComponent] =
@@ -270,6 +277,8 @@ function App() {
     setProjectComponents([])
     setAddingCorrelation(false)
     setRevisingCorrelation(undefined)
+    setAddingPerformanceMap(false)
+    setRevisingPerformanceMap(undefined)
     setSelectedRevisionId('')
     setTopology(undefined)
     if (!selectedProjectId) return
@@ -928,7 +937,7 @@ function App() {
 
   async function reviseCorrelation(source: ArtifactRevision) {
     if (!selectedProjectId) return
-    setLoadingCorrelationRevision(true)
+    setLoadingArtifactRevision(true)
     setOperationError('')
     setOperationStatus('')
     try {
@@ -943,6 +952,8 @@ function App() {
         throw new Error('The selected revision is not a supported correlation artifact.')
       }
       setAddingCorrelation(false)
+      setAddingPerformanceMap(false)
+      setRevisingPerformanceMap(undefined)
       setRevisingCorrelation({
         source: content.revision,
         definition: content.artifact,
@@ -950,7 +961,68 @@ function App() {
     } catch (reason) {
       setOperationError(errorMessage(reason))
     } finally {
-      setLoadingCorrelationRevision(false)
+      setLoadingArtifactRevision(false)
+    }
+  }
+
+  async function publishPerformanceMap(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: PerformanceMapArtifactDefinition,
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing engineering data.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createPerformanceMapRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const artifacts = await api.artifactRevisions(selectedProjectId)
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setAddingPerformanceMap(false)
+      setRevisingPerformanceMap(undefined)
+      setOperationStatus(
+        `Published performance map ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function revisePerformanceMap(source: ArtifactRevision) {
+    if (!selectedProjectId) return
+    setLoadingArtifactRevision(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const content = await api.artifactRevision<PerformanceMapArtifactDefinition>(
+        selectedProjectId,
+        source.artifact_revision_id,
+      )
+      if (
+        content.revision.artifact_type !== 'thermox.performance_map' ||
+        content.revision.artifact_schema_version !== 'thermox.performance_map/v1'
+      ) {
+        throw new Error('The selected revision is not an ordinary v1 performance map.')
+      }
+      setAddingPerformanceMap(false)
+      setAddingCorrelation(false)
+      setRevisingCorrelation(undefined)
+      setRevisingPerformanceMap({ source: content.revision, definition: content.artifact })
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
+    } finally {
+      setLoadingArtifactRevision(false)
     }
   }
 
@@ -1669,7 +1741,8 @@ function App() {
             catalog={topologyCatalog}
             readiness={physicalReadiness}
             artifactRevisions={artifactRevisions}
-            publishing={publishing || loadingCorrelationRevision}
+            publishing={publishing}
+            loadingArtifactRevision={loadingArtifactRevision}
             operationError={operationError}
             operationStatus={operationStatus}
             onDismissOperation={() => {
@@ -1680,11 +1753,22 @@ function App() {
             onAddFluid={() => setAddingMedium(true)}
             onAddMaterial={() => setAddingMaterial(true)}
             onAddCorrelation={() => {
+              setAddingPerformanceMap(false)
+              setRevisingPerformanceMap(undefined)
               setRevisingCorrelation(undefined)
               setAddingCorrelation(true)
             }}
             onReviseCorrelation={(revision) => {
               void reviseCorrelation(revision)
+            }}
+            onAddPerformanceMap={() => {
+              setAddingCorrelation(false)
+              setRevisingCorrelation(undefined)
+              setRevisingPerformanceMap(undefined)
+              setAddingPerformanceMap(true)
+            }}
+            onRevisePerformanceMap={(revision) => {
+              void revisePerformanceMap(revision)
             }}
             onBuild={() => setWorkspaceView('topology')}
           />
@@ -1981,6 +2065,24 @@ function App() {
               setRevisingCorrelation(undefined)
             }}
             onSubmit={publishCorrelation}
+          />
+        )}
+      {(workspaceView === 'topology' || workspaceView === 'definition') &&
+        (addingPerformanceMap || revisingPerformanceMap) && catalog && (
+          <PerformanceMapArtifactForm
+            key={
+              revisingPerformanceMap
+                ? `revise-map-${revisingPerformanceMap.source.artifact_revision_id}`
+                : 'new-performance-map'
+            }
+            unitDimensions={catalog.unit_dimensions}
+            artifactRevisions={artifactRevisions}
+            base={revisingPerformanceMap}
+            onCancel={() => {
+              setAddingPerformanceMap(false)
+              setRevisingPerformanceMap(undefined)
+            }}
+            onSubmit={publishPerformanceMap}
           />
         )}
       {workspaceView === 'topology' &&

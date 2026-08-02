@@ -1355,6 +1355,72 @@ code {
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
+.performance-map-curve {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(130px, 0.35fr) minmax(320px, 1fr);
+  gap: 10px;
+  margin: 10px;
+  padding: 10px 34px 10px 10px;
+  border: 1px solid #e1e8eb;
+  border-radius: 4px;
+  background: #f8fafb;
+}
+
+.performance-map-curve textarea {
+  resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.field-help {
+  margin: 7px 10px 0;
+  color: #7b8e99;
+  font-size: 9px;
+}
+
+.performance-map-preview {
+  margin: 18px 20px 0;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.performance-map-preview > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: #718792;
+  font-size: 9px;
+}
+
+.performance-map-preview strong {
+  color: #365567;
+  font-size: 10px;
+}
+
+.performance-map-preview svg {
+  width: 100%;
+  height: 180px;
+}
+
+.performance-map-preview .map-axis {
+  fill: none;
+  stroke: #b9c8cf;
+  stroke-width: 1;
+}
+
+.performance-map-preview .map-curve {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.artifact-readonly-label {
+  color: #82939d;
+  font-size: 8px;
+}
+
 .equation-expression textarea {
   resize: vertical;
   font-family: 'SFMono-Regular', Consolas, monospace;

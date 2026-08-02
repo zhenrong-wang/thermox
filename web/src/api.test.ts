@@ -4,6 +4,7 @@ import type {
   ArtifactRevision,
   CorrelationArtifactDefinition,
   ExpressionComponentDefinition,
+  PerformanceMapArtifactDefinition,
 } from './types'
 
 afterEach(() => {
@@ -93,6 +94,37 @@ describe('correlation artifact authoring API', () => {
       method: 'POST',
       body: JSON.stringify(definition),
     })
+  })
+})
+
+describe('performance map artifact authoring API', () => {
+  it('publishes an immutable ordinary map revision', async () => {
+    const definition: PerformanceMapArtifactDefinition = {
+      primary_variable: { name: 'flow', dimension: 'mass_flow' },
+      family_variable: { name: 'speed', dimension: 'angular_speed' },
+      output_variables: [{ name: 'efficiency', dimension: 'dimensionless' }],
+      curves: [
+        { family_coordinate: 1, samples: [{ coordinate: 1, outputs: [0.8] }, { coordinate: 2, outputs: [0.81] }] },
+        { family_coordinate: 2, samples: [{ coordinate: 1, outputs: [0.82] }, { coordinate: 2, outputs: [0.83] }] },
+      ],
+      primary_extrapolation: 'reject',
+      family_extrapolation: 'clamp',
+    }
+    const revision = { artifact_revision_id: 'map-r2', revision_number: 2 } as ArtifactRevision
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(revision), { status: 201 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.createPerformanceMapRevision('project-a', 'map-a', 'map-r1', definition)
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.searchParams.get('artifact_type')).toBe('thermox.performance_map')
+    expect(url.searchParams.get('artifact_schema_version')).toBe('thermox.performance_map/v1')
+    expect(url.searchParams.get('parent_revision_id')).toBe('map-r1')
+    expect(request).toMatchObject({ method: 'POST', body: JSON.stringify(definition) })
   })
 })
 
