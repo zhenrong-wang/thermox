@@ -2,6 +2,7 @@
 
 #include "artifact_payload.hpp"
 
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/performance_map.hpp"
 
@@ -311,6 +312,92 @@ Tree encode(const PerformanceMapArtifactInput& artifact) {
     return tree;
 }
 
+CorrelationArtifactInput decode_correlation(
+    const std::string& artifact_id,
+    const std::string& schema_version,
+    const std::string& revision,
+    const std::string& checksum,
+    const Tree& tree) {
+    if (schema_version !=
+        platform::correlation_artifact_schema_v1) {
+        throw std::invalid_argument(
+            "unsupported correlation schema: " +
+            schema_version);
+    }
+    CorrelationArtifactInput artifact;
+    artifact.id = artifact_id;
+    artifact.schema_version = schema_version;
+    artifact.revision = revision;
+    artifact.checksum_sha256 = checksum;
+    artifact.inputs = decode_array<CorrelationVariableInput>(
+        tree.get_child("inputs"),
+        [](const Tree& encoded) {
+            return CorrelationVariableInput{
+                encoded.get<std::string>("name"),
+                encoded.get<std::string>("dimension"),
+            };
+        });
+    artifact.output = {
+        tree.get<std::string>("output.name"),
+        tree.get<std::string>("output.dimension"),
+    };
+    if (const auto coefficients =
+            tree.get_child_optional("coefficients")) {
+        for (const auto& [name, encoded] : *coefficients) {
+            artifact.coefficients.emplace(
+                name, encoded.get_value<double>());
+        }
+    }
+    artifact.expression =
+        tree.get<std::string>("expression");
+    return artifact;
+}
+
+Tree encode_correlation(
+    const CorrelationArtifactInput& artifact) {
+    Tree tree;
+    tree.add_child(
+        "inputs",
+        array(
+            artifact.inputs,
+            [](const CorrelationVariableInput& input) {
+                Tree encoded;
+                encoded.put("name", input.name);
+                encoded.put("dimension", input.dimension);
+                return encoded;
+            }));
+    Tree output;
+    output.put("name", artifact.output.name);
+    output.put("dimension", artifact.output.dimension);
+    tree.add_child("output", output);
+    Tree coefficients;
+    for (const auto& [name, value] : artifact.coefficients) {
+        coefficients.put(name, value);
+    }
+    tree.add_child("coefficients", coefficients);
+    tree.put("expression", artifact.expression);
+    return tree;
+}
+
+platform::CorrelationArtifact correlation(
+    const CorrelationArtifactInput& input) {
+    std::vector<platform::CorrelationVariable> variables;
+    variables.reserve(input.inputs.size());
+    for (const auto& variable : input.inputs) {
+        variables.push_back({variable.name, variable.dimension});
+    }
+    return {
+        input.id,
+        input.schema_version,
+        input.revision,
+        input.checksum_sha256,
+        std::move(variables),
+        {input.output.name, input.output.dimension},
+        input.coefficients,
+        input.expression,
+    };
+}
+
 ExpressionComponentInput decode_expression_component(
     const std::string& schema_version,
     const Tree& tree) {
@@ -538,6 +625,27 @@ PerformanceMapArtifactInput performance_map_from_payload(
         schema_version,
         revision,
         checksum,
+        read(payload_json));
+}
+
+std::string canonicalize_correlation_payload(
+    const std::string& schema_version,
+    const std::string& payload_json) {
+    const auto artifact = decode_correlation(
+        "validation", schema_version, "validation",
+        std::string(64, '0'), read(payload_json));
+    correlation(artifact).validate();
+    return write(encode_correlation(artifact));
+}
+
+CorrelationArtifactInput correlation_from_payload(
+    const std::string& artifact_id,
+    const std::string& schema_version,
+    const std::string& revision,
+    const std::string& checksum,
+    const std::string& payload_json) {
+    return decode_correlation(
+        artifact_id, schema_version, revision, checksum,
         read(payload_json));
 }
 

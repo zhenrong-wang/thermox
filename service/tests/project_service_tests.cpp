@@ -358,6 +358,75 @@ std::string expression_component_payload(
     return payload;
 }
 
+std::string correlation_payload() {
+    return R"json({
+  "inputs": [
+    {"name": "mass_flow", "dimension": "mass_flow"},
+    {"name": "density", "dimension": "density"},
+    {"name": "area", "dimension": "area"}
+  ],
+  "output": {
+    "name": "pressure_loss",
+    "dimension": "pressure"
+  },
+  "coefficients": {"loss_coefficient": 1.5},
+  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)"
+})json";
+}
+
+void test_correlation_artifact_is_executable_input() {
+    thermox::service::ProjectService projects{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project = projects.create_project({
+        team_a, "Correlation artifact", {},
+    });
+    const auto revision = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "return-bend-pressure-loss",
+        {},
+        "thermox.correlation",
+        "thermox.correlation/v1",
+        correlation_payload(),
+    });
+    const auto resolved = projects.resolve_artifact_revisions(
+        team_a, project.project_id,
+        {revision.artifact_revision_id});
+    require(
+        resolved && resolved->snapshot.correlations.size() == 1U &&
+            resolved->snapshot.correlations.front().id ==
+                "return-bend-pressure-loss" &&
+            resolved->snapshot.correlations.front().expression.find(
+                "mass_flow") != std::string::npos &&
+            resolved->snapshot.correlations.front()
+                    .coefficients.at("loss_coefficient") == 1.5,
+        "correlation revisions must resolve into an immutable "
+        "executable artifact snapshot");
+
+    bool unsafe_rejected = false;
+    try {
+        (void)projects.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "unsafe-correlation",
+            {},
+            "thermox.correlation",
+            "thermox.correlation/v1",
+            R"json({
+              "inputs": [{"name": "x", "dimension": "dimensionless"}],
+              "output": {"name": "y", "dimension": "dimensionless"},
+              "coefficients": {},
+              "expression": "system(x)"
+            })json",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        unsafe_rejected = true;
+    }
+    require(unsafe_rejected,
+            "unsafe correlation expressions must be rejected before "
+            "persistence");
+}
+
 void test_expression_component_artifact_is_executable() {
     auto projects =
         std::make_shared<thermox::service::ProjectService>(
@@ -1311,6 +1380,7 @@ int main() {
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
         test_expression_component_artifact_is_executable();
+        test_correlation_artifact_is_executable_input();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();

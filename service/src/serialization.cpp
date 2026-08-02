@@ -2,6 +2,7 @@
 
 #include "serialization_internal.hpp"
 
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/performance_map.hpp"
 
 #include <chrono>
@@ -1498,9 +1499,31 @@ std::string serialize_job_record_json(
         out << '}';
     }
     for (std::size_t index = 0;
+         index < record.request.artifacts.correlations.size();
+         ++index) {
+        if (!record.request.artifacts.performance_maps.empty() ||
+            index != 0U) {
+            out << ", ";
+        }
+        const auto& artifact =
+            record.request.artifacts.correlations[index];
+        out << "{\"id\": ";
+        json_string(out, artifact.id);
+        out << ", \"artifact_type\": ";
+        json_string(out, platform::correlation_artifact_type);
+        out << ", \"schema_version\": ";
+        json_string(out, artifact.schema_version);
+        out << ", \"revision\": ";
+        json_string(out, artifact.revision);
+        out << ", \"checksum_sha256\": ";
+        json_string(out, artifact.checksum_sha256);
+        out << '}';
+    }
+    for (std::size_t index = 0;
          index < record.request.artifacts.references.size();
          ++index) {
         if (!record.request.artifacts.performance_maps.empty() ||
+            !record.request.artifacts.correlations.empty() ||
             index != 0U) {
             out << ", ";
         }

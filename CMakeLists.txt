@@ -75,6 +75,17 @@ add_test(
     COMMAND thermox_performance_map_tests
 )
 
+add_executable(thermox_correlation_tests
+    platform/tests/correlation_tests.cpp
+)
+target_link_libraries(thermox_correlation_tests PRIVATE
+    thermox_platform
+)
+add_test(
+    NAME thermox_correlation_tests
+    COMMAND thermox_correlation_tests
+)
+
 add_executable(
     thermox_expression_component_tests
     platform/tests/expression_component_tests.cpp)

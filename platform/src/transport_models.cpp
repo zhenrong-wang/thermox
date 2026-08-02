@@ -16,6 +16,7 @@ namespace {
 using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
+using component_model_support::require_correlation;
 using component_model_support::required_parameter;
 using component_model_support::property_failure;
 
@@ -423,6 +424,193 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class ReturnBendCorrelationModel final : public ComponentModel {
+public:
+    ReturnBendCorrelationModel()
+        : descriptor_(make_descriptor(
+              "fitting.fluid.return_bend.correlation",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.template_kind = "fitting.fluid.return_bend";
+        descriptor_.display_name = "Return bend (180 deg)";
+        descriptor_.category = "Fluid fittings";
+        descriptor_.model_name = "Engineering correlation";
+        descriptor_.parameters = {
+            {"inner_diameter", "length", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false,
+             true},
+        };
+        descriptor_.artifacts = {
+            {"pressure_loss_correlation",
+             correlation_artifact_type, true},
+        };
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph,
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const auto correlation = require_correlation(
+            context, "pressure_loss_correlation");
+        if (correlation->output().dimension != "pressure") {
+            throw std::invalid_argument(
+                "return-bend correlation output must have pressure "
+                "dimension");
+        }
+        const std::map<std::string, std::string> supported_inputs{
+            {"mass_flow", "mass_flow"},
+            {"density", "density"},
+            {"area", "area"},
+            {"diameter", "length"},
+        };
+        for (const auto& input : correlation->inputs()) {
+            const auto supported =
+                supported_inputs.find(input.name);
+            if (supported == supported_inputs.end()) {
+                throw std::invalid_argument(
+                    "return-bend correlation has unsupported input: " +
+                    input.name);
+            }
+            if (input.dimension != supported->second) {
+                throw std::invalid_argument(
+                    "return-bend correlation input '" + input.name +
+                    "' must have dimension '" + supported->second +
+                    "'");
+            }
+        }
+
+        const double diameter = required_parameter(
+            context.component, "inner_diameter");
+        const double area =
+            std::numbers::pi * diameter * diameter / 4.0;
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "adiabatic_enthalpy",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}},
+            0.0, 100000.0);
+
+        const auto correlation_inputs =
+            [correlation, area, diameter](
+                double mass_flow, double density) {
+                std::map<std::string, double> values;
+                for (const auto& input : correlation->inputs()) {
+                    if (input.name == "mass_flow") {
+                        values.emplace(input.name, mass_flow);
+                    } else if (input.name == "density") {
+                        values.emplace(input.name, density);
+                    } else if (input.name == "area") {
+                        values.emplace(input.name, area);
+                    } else if (input.name == "diameter") {
+                        values.emplace(input.name, diameter);
+                    }
+                }
+                return values;
+            };
+        system.add_checked_sparse_equation(
+            prefix + "pressure_loss_correlation",
+            [properties, correlation, correlation_inputs,
+             inlet_m, inlet_p, inlet_h, outlet_p](
+                const std::vector<double>& x,
+                double& residual) {
+                const auto state = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h));
+                if (!state.ok()) return property_failure(state);
+                const auto loss = correlation->evaluate(
+                    correlation_inputs(
+                        x.at(inlet_m),
+                        state.state.density_kg_m3));
+                if (!loss.error.empty()) {
+                    return EvaluationStatus::recoverable(loss.error);
+                }
+                residual = x.at(inlet_p) - x.at(outlet_p) -
+                    loss.value;
+                return EvaluationStatus::success();
+            },
+            {inlet_m, inlet_p, inlet_h, outlet_p},
+            [properties, correlation, correlation_inputs,
+             inlet_m, inlet_p, inlet_h, outlet_p](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(inlet_p),
+                        x.at(inlet_h));
+                if (!state.ok()) {
+                    throw std::runtime_error(state.message);
+                }
+                const auto loss = correlation->evaluate(
+                    correlation_inputs(
+                        x.at(inlet_m),
+                        state.state.density_kg_m3));
+                if (!loss.error.empty()) {
+                    throw std::runtime_error(loss.error);
+                }
+                const auto derivative =
+                    [&](const std::string& input) {
+                        const auto found =
+                            loss.input_derivatives.find(input);
+                        return found ==
+                                loss.input_derivatives.end()
+                            ? 0.0
+                            : found->second;
+                    };
+                const double density_derivative =
+                    derivative("density");
+                jacobian.push_back(
+                    {inlet_m, -derivative("mass_flow")});
+                jacobian.push_back({
+                    inlet_p,
+                    1.0 - density_derivative *
+                        state.derivatives
+                            .density_wrt_pressure_at_enthalpy});
+                jacobian.push_back({
+                    inlet_h,
+                    -density_derivative *
+                        state.derivatives
+                            .density_wrt_enthalpy_at_pressure});
+                jacobian.push_back({outlet_p, -1.0});
+                return x.at(inlet_p) - x.at(outlet_p) -
+                    loss.value;
+            },
+            100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class FrozenMaterialPressureRatioModel final
     : public ComponentModel {
 public:
@@ -738,6 +926,8 @@ void register_transport_component_models(
             IsenthalpicPressureRatioValveModel>());
     registry.register_model(
         std::make_shared<ReturnBendFixedLossModel>());
+    registry.register_model(
+        std::make_shared<ReturnBendCorrelationModel>());
     registry.register_model(
         std::make_shared<FrozenMaterialPressureRatioModel>());
     registry.register_model(

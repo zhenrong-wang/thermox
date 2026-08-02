@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -297,6 +298,22 @@ struct PerformanceMapArtifactInput {
     std::string condition_extrapolation{"reject"};
 };
 
+struct CorrelationVariableInput {
+    std::string name;
+    std::string dimension;
+};
+
+struct CorrelationArtifactInput {
+    std::string id;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+    std::vector<CorrelationVariableInput> inputs;
+    CorrelationVariableInput output;
+    std::map<std::string, double> coefficients;
+    std::string expression;
+};
+
 struct EngineeringArtifactReference {
     std::string id;
     std::string artifact_type;
@@ -307,6 +324,7 @@ struct EngineeringArtifactReference {
 
 struct SimulationArtifactBundle {
     std::vector<PerformanceMapArtifactInput> performance_maps;
+    std::vector<CorrelationArtifactInput> correlations;
     std::vector<EngineeringArtifactReference> references;
 };
 
@@ -361,6 +379,10 @@ public:
     std::optional<PerformanceMapArtifactInput>
     resolve_performance_map(const std::string& artifact_id)
         const = 0;
+    [[nodiscard]] virtual std::optional<CorrelationArtifactInput>
+    resolve_correlation(const std::string&) const {
+        return std::nullopt;
+    }
 };
 
 struct ResultValue {

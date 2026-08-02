@@ -117,6 +117,52 @@ thermox::service::EngineeringArtifactReference map_reference(
     };
 }
 
+thermox::service::CorrelationArtifactInput bend_correlation() {
+    thermox::service::CorrelationArtifactInput artifact;
+    artifact.id = "request-bend-correlation";
+    artifact.schema_version = "thermox.correlation/v1";
+    artifact.revision = "service-correlation-1";
+    artifact.checksum_sha256 = std::string(64, 'c');
+    artifact.inputs = {
+        {"mass_flow", "mass_flow"},
+        {"density", "density"},
+        {"area", "area"},
+    };
+    artifact.output = {"pressure_loss", "pressure"};
+    artifact.coefficients = {{"loss_coefficient", 1.5}};
+    artifact.expression =
+        "loss_coefficient * mass_flow * abs(mass_flow) / "
+        "(2 * density * area * area)";
+    return artifact;
+}
+
+std::string correlated_bend_model() {
+    return R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "service_correlated_bend",
+    "media": [{"id": "air", "backend": "ideal_gas_mixture", "substance": "Air"}],
+    "components": [{
+      "id": "bend",
+      "kind": "fitting.fluid.return_bend.correlation",
+      "parameters": {"inner_diameter": {"value": 0.5, "unit": "m"}},
+      "artifacts": {"pressure_loss_correlation": "request-bend-correlation"},
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "bend.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "bend.inlet.p": {"value": 2.0, "unit": "bar"},
+      "bend.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json";
+}
+
 std::string mapped_compressor_model() {
     return R"json({
   "schema_version": "thermox.model/v2",
@@ -255,6 +301,27 @@ void test_resolved_performance_map_artifacts() {
         "artifact references must fail explicitly without a resolver");
 }
 
+void test_request_scoped_correlation_artifacts() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = correlated_bend_model();
+    request.case_id = "design";
+    request.artifacts.correlations.push_back(
+        bend_correlation());
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "steady execution must use a request-scoped correlation: " +
+            response.error.message);
+    require(
+        response.metadata.artifacts.size() == 1U &&
+            response.metadata.artifacts.front().artifact_type ==
+                "thermox.correlation" &&
+            response.metadata.artifacts.front().id ==
+                "request-bend-correlation",
+        "correlation execution must retain immutable provenance");
+}
+
 void test_request_contract_validation() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -286,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 48,
+        response.components.size() == 49,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -2068,6 +2135,7 @@ int main() {
         test_request_contract_validation();
         test_request_scoped_performance_map_artifacts();
         test_resolved_performance_map_artifacts();
+        test_request_scoped_correlation_artifacts();
         test_catalog_discovery();
         test_validation_and_canonicalization();
 #ifdef THERMOX_TEST_HAS_CANTERA

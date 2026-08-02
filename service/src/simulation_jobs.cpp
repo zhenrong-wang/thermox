@@ -120,6 +120,26 @@ void append_artifacts(
         }
         append_string(stream, artifact.condition_extrapolation);
     }
+    stream << artifacts.correlations.size() << '|';
+    for (const auto& artifact : artifacts.correlations) {
+        append_string(stream, artifact.id);
+        append_string(stream, artifact.schema_version);
+        append_string(stream, artifact.revision);
+        append_string(stream, artifact.checksum_sha256);
+        stream << artifact.inputs.size() << '|';
+        for (const auto& input : artifact.inputs) {
+            append_string(stream, input.name);
+            append_string(stream, input.dimension);
+        }
+        append_string(stream, artifact.output.name);
+        append_string(stream, artifact.output.dimension);
+        stream << artifact.coefficients.size() << '|';
+        for (const auto& [name, value] : artifact.coefficients) {
+            append_string(stream, name);
+            stream << value << '|';
+        }
+        append_string(stream, artifact.expression);
+    }
     stream << artifacts.references.size() << '|';
     for (const auto& reference : artifacts.references) {
         append_string(stream, reference.id);
@@ -268,7 +288,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v9) {
+    if (request.schema_version != job_schema_v10) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

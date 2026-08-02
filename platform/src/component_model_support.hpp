@@ -1,5 +1,6 @@
 #pragma once
 
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/component_registry.hpp"
 
 #include <memory>
@@ -115,6 +116,31 @@ require_performance_map(
             context.component.id + "." + role);
     }
     return map;
+}
+
+inline std::shared_ptr<const CorrelationArtifact>
+require_correlation(
+    const ComponentCompileContext& context,
+    const std::string& role) {
+    const auto it = context.artifacts.find(role);
+    if (it == context.artifacts.end() || !it->second) {
+        throw std::logic_error(
+            "compiled correlation artifact missing: " +
+            context.component.id + "." + role);
+    }
+    if (it->second->artifact_type() != correlation_artifact_type) {
+        throw std::logic_error(
+            "compiled artifact has wrong type for correlation role: " +
+            context.component.id + "." + role);
+    }
+    const auto correlation = std::dynamic_pointer_cast<
+        const CorrelationArtifact>(it->second);
+    if (!correlation) {
+        throw std::logic_error(
+            "compiled correlation artifact has incompatible payload: " +
+            context.component.id + "." + role);
+    }
+    return correlation;
 }
 
 inline EvaluationStatus property_failure(

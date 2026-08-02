@@ -633,6 +633,56 @@ private:
 
 }  // namespace
 
+struct SafeExpression::Impl {
+    ParsedExpression parsed;
+};
+
+SafeExpression::SafeExpression(
+    std::shared_ptr<const Impl> impl)
+    : impl_(std::move(impl)) {}
+
+SafeExpression SafeExpression::parse(
+    const std::string& expression) {
+    return SafeExpression(std::make_shared<const Impl>(
+        Impl{ExpressionParser(expression).parse()}));
+}
+
+const std::set<std::string>& SafeExpression::symbols()
+    const {
+    return impl_->parsed.symbols;
+}
+
+SafeExpressionEvaluation SafeExpression::evaluate(
+    const std::map<std::string, double>& values) const {
+    std::map<std::string, std::size_t> variables;
+    std::vector<std::string> names;
+    std::vector<double> ordered_values;
+    names.reserve(impl_->parsed.symbols.size());
+    ordered_values.reserve(impl_->parsed.symbols.size());
+    for (const auto& symbol : impl_->parsed.symbols) {
+        const auto found = values.find(symbol);
+        if (found == values.end()) {
+            return {
+                0.0, {}, "unbound symbol '" + symbol + "'"};
+        }
+        variables.emplace(symbol, names.size());
+        names.push_back(symbol);
+        ordered_values.push_back(found->second);
+    }
+    if (values.size() != names.size()) {
+        return {0.0, {}, "safe expression received unknown symbols"};
+    }
+    const auto result = thermox::platform::evaluate(
+        *impl_->parsed.root, ordered_values, variables, {});
+    SafeExpressionEvaluation output;
+    output.value = result.value;
+    output.error = result.error;
+    for (const auto& [index, derivative] : result.derivatives) {
+        output.derivatives.emplace(names.at(index), derivative);
+    }
+    return output;
+}
+
 std::shared_ptr<const ComponentModel>
 make_expression_component_model(
     const ComponentRegistry& registry,

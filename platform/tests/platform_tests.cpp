@@ -990,6 +990,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
+        "fitting.fluid.return_bend.correlation",
         "transport.material.frozen_pressure_ratio",
         "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",

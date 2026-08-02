@@ -178,6 +178,21 @@ SimulationJobRequest request(
     };
     map.map = payload;
     value.artifacts.performance_maps.push_back(std::move(map));
+    thermox::service::CorrelationArtifactInput correlation;
+    correlation.id = "bend-correlation";
+    correlation.schema_version = "thermox.correlation/v1";
+    correlation.revision = "vendor-2";
+    correlation.checksum_sha256 = std::string(64, 'c');
+    correlation.inputs = {
+        {"mass_flow", "mass_flow"},
+        {"density", "density"},
+    };
+    correlation.output = {"pressure_loss", "pressure"};
+    correlation.coefficients = {{"coefficient", 1.5}};
+    correlation.expression =
+        "coefficient * mass_flow * abs(mass_flow) / density";
+    value.artifacts.correlations.push_back(
+        std::move(correlation));
     value.artifacts.references.push_back({
         "fuel-spec",
         "thermox.material",
@@ -260,6 +275,9 @@ void test_idempotency_and_tenant_scope(
         first.job_id == repeated.job_id &&
             repeated.request.steady_solver.max_iterations == 17 &&
             repeated.request.artifacts.performance_maps.size() == 1 &&
+            repeated.request.artifacts.correlations.size() == 1 &&
+            repeated.request.artifacts.correlations.front()
+                    .coefficients.at("coefficient") == 1.5 &&
             repeated.request.components.expression_components
                     .size() == 1 &&
             repeated.request.components.expression_components

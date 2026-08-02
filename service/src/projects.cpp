@@ -5,6 +5,7 @@
 
 #include "thermox/service/in_memory_projects.hpp"
 #include "thermox/platform/expression_component.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
 
@@ -940,6 +941,8 @@ ProjectService::create_artifact_revision(
     if (request.artifact_type !=
             platform::performance_map_artifact_type &&
         request.artifact_type !=
+            platform::correlation_artifact_type &&
+        request.artifact_type !=
             platform::expression_component_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
@@ -955,15 +958,23 @@ ProjectService::create_artifact_revision(
     }
     std::string canonical;
     try {
-        canonical =
-            request.artifact_type ==
-                platform::performance_map_artifact_type
-            ? detail::canonicalize_performance_map_payload(
-                  request.artifact_schema_version,
-                  request.artifact_json)
-            : detail::canonicalize_expression_component_payload(
-                  request.artifact_schema_version,
-                  request.artifact_json);
+        if (request.artifact_type ==
+            platform::performance_map_artifact_type) {
+            canonical =
+                detail::canonicalize_performance_map_payload(
+                    request.artifact_schema_version,
+                    request.artifact_json);
+        } else if (request.artifact_type ==
+                   platform::correlation_artifact_type) {
+            canonical = detail::canonicalize_correlation_payload(
+                request.artifact_schema_version,
+                request.artifact_json);
+        } else {
+            canonical =
+                detail::canonicalize_expression_component_payload(
+                    request.artifact_schema_version,
+                    request.artifact_json);
+        }
     } catch (const std::exception& error) {
         throw ProjectRequestError(
             std::string("invalid engineering artifact: ") +
@@ -1130,6 +1141,16 @@ ProjectService::resolve_artifact_revisions(
             platform::performance_map_artifact_type) {
             result.snapshot.performance_maps.push_back(
                 detail::performance_map_from_payload(
+                    revision->artifact_id,
+                    revision->artifact_schema_version,
+                    revision->artifact_revision_id,
+                    revision->content.checksum.substr(7),
+                    *payload));
+        } else if (
+            revision->artifact_type ==
+            platform::correlation_artifact_type) {
+            result.snapshot.correlations.push_back(
+                detail::correlation_from_payload(
                     revision->artifact_id,
                     revision->artifact_schema_version,
                     revision->artifact_revision_id,

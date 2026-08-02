@@ -72,7 +72,7 @@ Implemented in this sprint:
   commands; an injectable immutable runtime; component/property/connector catalog discovery;
   compile-aware validation; structured diagnostics; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v9` workflow adds Team-scoped idempotent execution, leased worker claims,
+  values. Its `thermox.job/v10` workflow adds Team-scoped idempotent execution, leased worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
@@ -447,7 +447,7 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 Trusted deployments and request-scoped simulations can compose safe steady algebraic component
 definitions through `thermox.expression_component/v2`. Expressions use registered connector
 variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
-arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v9`. Project-owned
+arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v10`. Project-owned
 definitions are discovered from the project component catalog and appear directly in the canvas
 library with automatic source-revision binding. The library also authors and revises safe
 definitions as immutable project artifacts; component identity/version rules are enforced by the

@@ -8,6 +8,7 @@
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/expression_component.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/results.hpp"
 #include "thermox/physics/property_registry.hpp"
@@ -213,6 +214,24 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
     for (const auto& input : inputs.performance_maps) {
         artifacts.register_artifact(performance_map_artifact(input));
     }
+    for (const auto& input : inputs.correlations) {
+        std::vector<platform::CorrelationVariable> variables;
+        variables.reserve(input.inputs.size());
+        for (const auto& variable : input.inputs) {
+            variables.push_back(
+                {variable.name, variable.dimension});
+        }
+        artifacts.register_artifact(platform::CorrelationArtifact{
+            input.id,
+            input.schema_version,
+            input.revision,
+            input.checksum_sha256,
+            std::move(variables),
+            {input.output.name, input.output.dimension},
+            input.coefficients,
+            input.expression,
+        });
+    }
     return artifacts;
 }
 
@@ -221,11 +240,21 @@ std::vector<ArtifactProvenance> artifact_provenance(
     std::vector<ArtifactProvenance> provenance;
     provenance.reserve(
         inputs.performance_maps.size() +
+        inputs.correlations.size() +
         inputs.references.size());
     for (const auto& artifact : inputs.performance_maps) {
         provenance.push_back({
             artifact.id,
             platform::performance_map_artifact_type,
+            artifact.schema_version,
+            artifact.revision,
+            artifact.checksum_sha256,
+        });
+    }
+    for (const auto& artifact : inputs.correlations) {
+        provenance.push_back({
+            artifact.id,
+            platform::correlation_artifact_type,
             artifact.schema_version,
             artifact.revision,
             artifact.checksum_sha256,
@@ -248,6 +277,7 @@ SimulationArtifactBundle resolve_artifacts(
     const EngineeringArtifactResolver* resolver) {
     SimulationArtifactBundle resolved;
     resolved.performance_maps = inputs.performance_maps;
+    resolved.correlations = inputs.correlations;
     for (const auto& reference : inputs.references) {
         if (reference.id.empty() ||
             reference.artifact_type.empty() ||
@@ -261,6 +291,34 @@ SimulationArtifactBundle resolve_artifacts(
         if (reference.artifact_type ==
             platform::expression_component_artifact_type) {
             resolved.references.push_back(reference);
+            continue;
+        }
+        if (reference.artifact_type ==
+            platform::correlation_artifact_type) {
+            if (resolver == nullptr) {
+                throw std::invalid_argument(
+                    "no engineering artifact resolver configured for id: " +
+                    reference.id);
+            }
+            auto artifact =
+                resolver->resolve_correlation(reference.id);
+            if (!artifact) {
+                throw std::invalid_argument(
+                    "engineering artifact not found: " +
+                    reference.id);
+            }
+            if (artifact->id != reference.id ||
+                artifact->schema_version !=
+                    reference.schema_version ||
+                artifact->revision != reference.revision ||
+                artifact->checksum_sha256 !=
+                    reference.checksum_sha256) {
+                throw std::invalid_argument(
+                    "resolved engineering artifact identity mismatch for id: " +
+                    reference.id);
+            }
+            resolved.correlations.push_back(
+                std::move(*artifact));
             continue;
         }
         if (reference.artifact_type !=

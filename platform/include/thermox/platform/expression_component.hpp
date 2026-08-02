@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/safe_expression.hpp"
 
 #include <memory>
 #include <string>

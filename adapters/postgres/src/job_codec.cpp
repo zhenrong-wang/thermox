@@ -260,6 +260,67 @@ service::EngineeringArtifactReference decode_artifact_reference(
     };
 }
 
+Tree correlation(
+    const service::CorrelationArtifactInput& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("schema_version", value.schema_version);
+    tree.put("revision", value.revision);
+    tree.put("checksum_sha256", value.checksum_sha256);
+    tree.add_child(
+        "inputs",
+        array(
+            value.inputs,
+            [](const service::CorrelationVariableInput& input) {
+                Tree encoded;
+                encoded.put("name", input.name);
+                encoded.put("dimension", input.dimension);
+                return encoded;
+            }));
+    Tree output;
+    output.put("name", value.output.name);
+    output.put("dimension", value.output.dimension);
+    tree.add_child("output", output);
+    Tree coefficients;
+    for (const auto& [name, coefficient] : value.coefficients) {
+        coefficients.put(name, coefficient);
+    }
+    tree.add_child("coefficients", coefficients);
+    tree.put("expression", value.expression);
+    return tree;
+}
+
+service::CorrelationArtifactInput decode_correlation(
+    const Tree& tree) {
+    service::CorrelationArtifactInput value;
+    value.id = tree.get<std::string>("id");
+    value.schema_version =
+        tree.get<std::string>("schema_version");
+    value.revision = tree.get<std::string>("revision");
+    value.checksum_sha256 =
+        tree.get<std::string>("checksum_sha256");
+    value.inputs =
+        decode_array<service::CorrelationVariableInput>(
+            tree.get_child("inputs"),
+            [](const Tree& encoded) {
+                return service::CorrelationVariableInput{
+                    encoded.get<std::string>("name"),
+                    encoded.get<std::string>("dimension"),
+                };
+            });
+    value.output = {
+        tree.get<std::string>("output.name"),
+        tree.get<std::string>("output.dimension"),
+    };
+    for (const auto& [name, encoded] :
+         tree.get_child("coefficients")) {
+        value.coefficients.emplace(
+            name, encoded.get_value<double>());
+    }
+    value.expression = tree.get<std::string>("expression");
+    return value;
+}
+
 Tree artifact_bundle(
     const service::SimulationArtifactBundle& value) {
     Tree tree;
@@ -269,6 +330,13 @@ Tree artifact_bundle(
             value.performance_maps,
             [](const auto& item) {
                 return performance_map(item);
+            }));
+    tree.add_child(
+        "correlations",
+        array(
+            value.correlations,
+            [](const auto& item) {
+                return correlation(item);
             }));
     tree.add_child(
         "references",
@@ -288,6 +356,12 @@ service::SimulationArtifactBundle decode_artifact_bundle(
             tree.get_child("performance_maps"),
             [](const Tree& item) {
                 return decode_performance_map(item);
+            });
+    value.correlations =
+        decode_array<service::CorrelationArtifactInput>(
+            tree.get_child("correlations"),
+            [](const Tree& item) {
+                return decode_correlation(item);
             });
     value.references =
         decode_array<service::EngineeringArtifactReference>(

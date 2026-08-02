@@ -50,7 +50,7 @@ The current synchronous service exposes:
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v9` Team-owned queued/running/succeeded/failed/cancelled simulation and calibration jobs with required
+- `thermox.job/v10` Team-owned queued/running/succeeded/failed/cancelled simulation and calibration jobs with required
   immutable request-scoped component-definition snapshots,
   idempotency keys,
   optimistic revisions, worker claims, revision-source execution provenance, and result-artifact
@@ -70,7 +70,7 @@ calibration, and job requests may carry a `SimulationArtifactBundle` containing 
 immutable references. An injected `EngineeringArtifactResolver` resolves references and the
 service requires an exact type/schema/revision/checksum match before constructing an
 execution-local, typed engineering-artifact registry over any immutable deployment defaults.
-Performance maps are the first payload adapter; component compilation and native extension
+Performance maps and safe algebraic correlations are the first payload adapters; component compilation and native extension
 boundaries are artifact-type neutral. The overlay is destroyed after the call, duplicate
 identities are rejected, queued jobs preserve references, and result-v3 records resolved artifact
 provenance. Project-owned expression-component artifacts use
@@ -167,8 +167,8 @@ The application boundary needed by a thin network adapter is now complete:
 | Publish/read run-configuration revisions | `ProjectService` | `thermox.run_configuration_revision/v3` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
 | Resolve a complete execution intent | `ProjectService::resolve_run_configuration` | immutable model/artifact/solver snapshot |
-| Submit a calculation | `SimulationJobService::submit` | `thermox.job/v9` JSON |
-| Inspect a calculation | `SimulationJobService::get` | `thermox.job/v9` JSON |
+| Submit a calculation | `SimulationJobService::submit` | `thermox.job/v10` JSON |
+| Inspect a calculation | `SimulationJobService::get` | `thermox.job/v10` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v3` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
