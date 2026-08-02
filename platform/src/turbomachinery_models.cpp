@@ -799,16 +799,10 @@ void register_turbomachinery_component_models(
     ComponentRegistry& registry) {
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
-            "compressor.gas.isentropic_efficiency", true));
-    registry.register_model(
-        std::make_shared<TurbomachineryModel>(
             "compressor.fluid.isentropic_efficiency", true));
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "pump.fluid.isentropic_efficiency", true));
-    registry.register_model(
-        std::make_shared<TurbomachineryModel>(
-            "turbine.gas.isentropic_efficiency", false));
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "turbine.fluid.isentropic_efficiency", false));

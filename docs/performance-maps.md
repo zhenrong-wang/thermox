@@ -29,7 +29,7 @@ Component artifact bindings are generic:
 ```json
 {
   "id": "gt1.compressor",
-  "kind": "compressor.gas.map",
+  "kind": "compressor.fluid.performance_map",
   "artifacts": {
     "performance_map": "gt1-compressor-oem-map"
   }

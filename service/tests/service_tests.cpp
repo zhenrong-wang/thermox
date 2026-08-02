@@ -286,7 +286,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 50,
+        response.components.size() == 48,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),

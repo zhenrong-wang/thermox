@@ -423,7 +423,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
       {
         "id": "compressor",
         "label": "Main compressor",
-        "kind": "compressor.gas.isentropic_efficiency",
+        "kind": "compressor.fluid.isentropic_efficiency",
         "version": "1.0.0",
         "parameters": {
           "pressure_ratio": 12.0,
@@ -439,7 +439,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
       },
       {
         "id": "turbine",
-        "kind": "turbine.gas.isentropic_efficiency",
+        "kind": "turbine.fluid.isentropic_efficiency",
         "parameters": {
           "eta_is": {
             "value": 0.89,
@@ -538,7 +538,7 @@ void test_generic_model_document_loads_components_connections_and_cases() {
     require(document.cases.size() == 1, "one case should load");
 
     const auto& compressor = document.components.at(1);
-    require(compressor.kind == "compressor.gas.isentropic_efficiency", "component kind should load");
+    require(compressor.kind == "compressor.fluid.isentropic_efficiency", "component kind should load");
     require(
         compressor.medium_bindings.at("inlet") == "air",
         "fluid medium binding should load");
@@ -897,7 +897,7 @@ void test_compiler_enforces_connection_contracts() {
 void test_component_registry_exposes_default_models() {
     const auto registry = thermox::platform::make_default_component_registry();
     require(registry.contains("source.fluid.boundary"), "default registry should contain fluid source");
-    require(registry.contains("compressor.gas.isentropic_efficiency"),
+    require(registry.contains("compressor.fluid.isentropic_efficiency"),
             "default registry should contain compressor");
     require(registry.contains("compressor.fluid.isentropic_efficiency"),
             "default registry should contain generic-fluid compressor");
@@ -968,7 +968,6 @@ void test_component_catalog_exposes_parameter_contracts() {
         "sink.signal.boundary",
         "source.control.boundary",
         "sink.control.boundary",
-        "compressor.gas.isentropic_efficiency",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
         "compressor.fluid.variable_geometry_map",
@@ -976,7 +975,6 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.performance_map",
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
-        "turbine.gas.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
         "turbine.fluid.variable_geometry_map",
@@ -2083,7 +2081,7 @@ void test_generic_model_solves_ideal_gas_turbine_residuals() {
     "components": [
       {
         "id": "turbine",
-        "kind": "turbine.gas.isentropic_efficiency",
+        "kind": "turbine.fluid.isentropic_efficiency",
         "parameters": {
           "pressure_ratio": 12.0,
           "eta_is": 0.89
@@ -4373,7 +4371,7 @@ void test_generic_model_compiler_rejects_bad_port_contract() {
     "components": [
       {
         "id": "compressor",
-        "kind": "compressor.gas.isentropic_efficiency",
+        "kind": "compressor.fluid.isentropic_efficiency",
         "media": {
           "inlet": "air",
           "outlet": "air",
