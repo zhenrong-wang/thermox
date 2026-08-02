@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { PerformanceMapImportPanel } from './PerformanceMapImportPanel'
 import type {
   ArtifactRevision,
   CatalogUnitDimension,
@@ -241,6 +242,15 @@ export function PerformanceMapArtifactForm({
         </div>
         <fieldset><legend>Coordinates</legend>{variableEditor('Primary axis', primary, setPrimary)}{variableEditor('Family axis', family, setFamily)}</fieldset>
         <fieldset><legend>Outputs</legend>{outputs.map((output, index) => <div className="repeatable-row correlation-variable-row" key={index}><label><span>Output name</span><input required value={output.name} onChange={(event) => setOutputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label><label><span>Dimension</span><select required value={output.dimension} onChange={(event) => setOutputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value } : item))}>{dimensions.map((dimension) => <option key={dimension}>{dimension}</option>)}</select></label><button type="button" className="row-remove-button" aria-label={`Remove output ${output.name}`} onClick={() => setOutputs((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}<button type="button" className="add-row-button" onClick={() => setOutputs((current) => [...current, { name: `output_${current.length + 1}`, dimension: dimensionless }])}>+ Add output</button></fieldset>
+        <PerformanceMapImportPanel
+          primaryName={primary.name}
+          familyName={family.name}
+          outputNames={outputs.map((output) => output.name)}
+          onApply={(imported) => setCurves(imported.map((curve) => ({
+            familyCoordinate: String(curve.family_coordinate),
+            samples: samplesText(curve.samples),
+          })))}
+        />
         <fieldset><legend>Family curves</legend><p className="field-help">Enter one sample per line: primary coordinate, then outputs in the declared order ({outputs.map((output) => output.name || '?').join(', ')}).</p>{curves.map((curve, index) => <div className="performance-map-curve" key={index}><label><span>{family.name || 'Family'} coordinate</span><input type="number" step="any" required value={curve.familyCoordinate} onChange={(event) => setCurves((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, familyCoordinate: event.target.value } : item))} /></label><label><span>Samples · {primary.name || 'primary'}, outputs…</span><textarea rows={4} required value={curve.samples} onChange={(event) => setCurves((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, samples: event.target.value } : item))} /></label><button type="button" className="row-remove-button" aria-label={`Remove curve ${index + 1}`} onClick={() => setCurves((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}<button type="button" className="add-row-button" onClick={() => setCurves((current) => [...current, { familyCoordinate: '', samples: '' }])}>+ Add curve</button></fieldset>
         <MapPreview definition={preview} />
         {formError && <p className="form-error">{formError}</p>}

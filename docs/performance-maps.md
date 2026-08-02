@@ -68,6 +68,11 @@ across all family curves before publication. Creation and revision are explicit 
 revision authoring retrieves and integrity-checks the exact immutable parent payload before
 preloading the form. Conditioned `v2` maps remain supported by the platform and service runtime,
 but their higher-dimensional authoring workflow is intentionally separate from the v1 editor.
+For production-sized ordinary maps, the browser can import comma-, tab-, or semicolon-delimited
+long-form tables and explicitly map columns to the family axis, primary axis, and declared outputs.
+The import adapter handles quoted fields, rejects non-finite mapped values and duplicate operating
+points, and normalizes rows into ordered non-rectangular curves locally. The service still receives
+the same declaration JSON, so CSV is an interface concern rather than a platform-core format.
 
 Every axis and output has a stable name and physical dimension. Evaluation returns:
 

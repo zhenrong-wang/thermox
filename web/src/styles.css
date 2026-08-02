@@ -1372,6 +1372,57 @@ code {
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
+.performance-map-import-source {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  align-items: end;
+  gap: 16px;
+  padding: 10px;
+}
+
+.performance-map-import-source p {
+  margin: 0 0 3px;
+  color: #718792;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.performance-map-column-mapping {
+  margin: 0 10px;
+  padding: 10px;
+  border: 1px solid #d9e4e8;
+  border-radius: 4px;
+  background: #f5f9fa;
+}
+
+.performance-map-column-mapping .form-grid {
+  padding: 10px 0 0;
+}
+
+.import-table-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #7b8e99;
+  font-size: 9px;
+}
+
+.import-table-summary strong {
+  color: #365567;
+}
+
+.import-apply-button {
+  margin-top: 10px;
+}
+
+.import-success {
+  margin: 10px;
+  color: #287256;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .field-help {
   margin: 7px 10px 0;
   color: #7b8e99;
