@@ -3,11 +3,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace thermox::platform {
@@ -283,6 +285,280 @@ public:
     }
 
 private:
+    ComponentModelDescriptor descriptor_;
+};
+
+struct RestrictionEvaluation {
+    EvaluationStatus status;
+    double residual{0.0};
+};
+
+using RestrictionEvaluator = std::function<RestrictionEvaluation(
+    const std::vector<double>&)>;
+
+double assemble_restriction_numerical_row(
+    const RestrictionEvaluator& evaluate,
+    const std::vector<std::pair<std::size_t, double>>& variables,
+    const std::vector<double>& x,
+    std::vector<EquationPartial>& jacobian) {
+    const auto base = evaluate(x);
+    if (!base.status.ok()) {
+        throw std::runtime_error(base.status.message);
+    }
+    for (const auto& [variable, minimum_step] : variables) {
+        const double step = std::max(
+            minimum_step, std::abs(x.at(variable)) * 1.0e-6);
+        auto plus = x;
+        auto minus = x;
+        plus.at(variable) += step;
+        minus.at(variable) -= step;
+        const auto plus_value = evaluate(plus);
+        const auto minus_value = evaluate(minus);
+        double derivative = 0.0;
+        if (plus_value.status.ok() && minus_value.status.ok()) {
+            derivative =
+                (plus_value.residual - minus_value.residual) /
+                (2.0 * step);
+        } else if (plus_value.status.ok()) {
+            derivative =
+                (plus_value.residual - base.residual) / step;
+        } else if (minus_value.status.ok()) {
+            derivative =
+                (base.residual - minus_value.residual) / step;
+        } else {
+            throw std::runtime_error(
+                "could not evaluate a local restriction-model "
+                "derivative");
+        }
+        jacobian.push_back({variable, derivative});
+    }
+    return base.residual;
+}
+
+class FlowAreaRestrictionModel final : public ComponentModel {
+public:
+    explicit FlowAreaRestrictionModel(bool compressible_gas)
+        : compressible_gas_(compressible_gas) {
+        descriptor_ = make_descriptor(
+            compressible_gas
+                ? "restriction.fluid.orifice.perfect_gas"
+                : "restriction.fluid.orifice.nonflashing_liquid",
+            {{"inlet", "fluid", "in"},
+             {"outlet", "fluid", "out"}});
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "restriction.fluid.orifice";
+        descriptor_.display_name = "Flow restriction / orifice";
+        descriptor_.category = "Fluid control";
+        descriptor_.model_name = compressible_gas
+            ? "Perfect-gas with choking"
+            : "Non-flashing liquid";
+        descriptor_.parameters = {
+            {"flow_diameter", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"discharge_coefficient", "dimensionless", true,
+             std::nullopt, 0.0, 1.0, false, true},
+        };
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph};
+        if (!compressible_gas) {
+            descriptor_.required_property_capabilities.push_back(
+                physics::PropertyCapability::saturation_p);
+        }
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const double diameter = required_parameter(
+            context.component, "flow_diameter");
+        const double discharge_coefficient = required_parameter(
+            context.component, "discharge_coefficient");
+        const double effective_area = discharge_coefficient *
+            std::numbers::pi * diameter * diameter / 4.0;
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "isenthalpic_throttling",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}},
+            0.0, 100000.0);
+
+        RestrictionEvaluator evaluate;
+        if (!compressible_gas_) {
+            evaluate = [properties, effective_area, inlet_m, inlet_p,
+                        inlet_h, outlet_p](
+                           const std::vector<double>& x) {
+                const double pressure_drop =
+                    x.at(inlet_p) - x.at(outlet_p);
+                if (!std::isfinite(pressure_drop) ||
+                    pressure_drop <= 0.0) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "non-flashing liquid restriction requires "
+                            "inlet pressure above outlet pressure")};
+                }
+                const auto inlet = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h));
+                if (!inlet.ok()) {
+                    return RestrictionEvaluation{
+                        property_failure(inlet)};
+                }
+                if (inlet.state.phase != physics::Phase::liquid) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "non-flashing liquid restriction requires "
+                            "a liquid inlet state")};
+                }
+                const auto saturation =
+                    properties->saturation_p(x.at(outlet_p));
+                if (!saturation.ok()) {
+                    return RestrictionEvaluation{
+                        property_failure(saturation)};
+                }
+                const double flashing_margin =
+                    saturation.liquid.enthalpy_j_kg - x.at(inlet_h);
+                const double enthalpy_tolerance = 1.0e-8 * std::max(
+                    std::abs(saturation.liquid.enthalpy_j_kg), 1.0);
+                if (!std::isfinite(flashing_margin) ||
+                    flashing_margin <= enthalpy_tolerance) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "non-flashing liquid restriction reaches "
+                            "the outlet saturation boundary; select a "
+                            "validated flashing-flow model")};
+                }
+                const double density = inlet.state.density_kg_m3;
+                if (!std::isfinite(density) || density <= 0.0) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "liquid restriction requires positive "
+                            "finite inlet density")};
+                }
+                return RestrictionEvaluation{
+                    EvaluationStatus::success(),
+                    x.at(inlet_m) - effective_area *
+                        std::sqrt(2.0 * density * pressure_drop)};
+            };
+        } else {
+            evaluate = [properties, effective_area, inlet_m, inlet_p,
+                        inlet_h, outlet_p](
+                           const std::vector<double>& x) {
+                const double upstream_pressure = x.at(inlet_p);
+                const double downstream_pressure = x.at(outlet_p);
+                if (!std::isfinite(upstream_pressure) ||
+                    !std::isfinite(downstream_pressure) ||
+                    downstream_pressure <= 0.0 ||
+                    downstream_pressure >= upstream_pressure) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "compressible restriction requires 0 < "
+                            "outlet pressure < inlet pressure")};
+                }
+                const auto inlet = properties->state_ph(
+                    upstream_pressure, x.at(inlet_h));
+                if (!inlet.ok()) {
+                    return RestrictionEvaluation{
+                        property_failure(inlet)};
+                }
+                if (inlet.state.phase != physics::Phase::vapor) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "compressible-gas restriction requires a "
+                            "vapor inlet state")};
+                }
+                const double gamma =
+                    inlet.state.cp_j_kg_k / inlet.state.cv_j_kg_k;
+                const double density = inlet.state.density_kg_m3;
+                if (!std::isfinite(gamma) || gamma <= 1.0 ||
+                    !std::isfinite(density) || density <= 0.0) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "compressible restriction requires positive "
+                            "density and a finite heat-capacity ratio "
+                            "greater than one")};
+                }
+                const double critical_ratio = std::pow(
+                    2.0 / (gamma + 1.0),
+                    gamma / (gamma - 1.0));
+                const double pressure_ratio = std::max(
+                    downstream_pressure / upstream_pressure,
+                    critical_ratio);
+                const double flux_squared =
+                    2.0 * gamma / (gamma - 1.0) * density *
+                    upstream_pressure *
+                    (std::pow(pressure_ratio, 2.0 / gamma) -
+                     std::pow(
+                         pressure_ratio,
+                         (gamma + 1.0) / gamma));
+                if (!std::isfinite(flux_squared) ||
+                    flux_squared <= 0.0) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "compressible restriction produced an "
+                            "invalid mass-flux state")};
+                }
+                return RestrictionEvaluation{
+                    EvaluationStatus::success(),
+                    x.at(inlet_m) -
+                        effective_area * std::sqrt(flux_squared)};
+            };
+        }
+
+        const std::vector<std::pair<std::size_t, double>> derivatives{
+            {inlet_m, 1.0e-7},
+            {inlet_p, 0.1},
+            {inlet_h, 0.1},
+            {outlet_p, 0.1},
+        };
+        system.add_checked_sparse_equation(
+            prefix + (compressible_gas_
+                ? "compressible_mass_flow"
+                : "nonflashing_liquid_mass_flow"),
+            [evaluate](const std::vector<double>& x, double& residual) {
+                const auto value = evaluate(x);
+                residual = value.residual;
+                return value.status;
+            },
+            {inlet_m, inlet_p, inlet_h, outlet_p},
+            [evaluate, derivatives](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                return assemble_restriction_numerical_row(
+                    evaluate, derivatives, x, jacobian);
+            },
+            100.0);
+        system.add_initialization_relation(
+            {{outlet_p, 1.0}, {inlet_p, -0.9}}, 0.0);
+    }
+
+private:
+    bool compressible_gas_{false};
     ComponentModelDescriptor descriptor_;
 };
 
@@ -1248,6 +1524,10 @@ void register_transport_component_models(
     registry.register_model(
         std::make_shared<
             IsenthalpicPressureRatioValveModel>());
+    registry.register_model(
+        std::make_shared<FlowAreaRestrictionModel>(false));
+    registry.register_model(
+        std::make_shared<FlowAreaRestrictionModel>(true));
     registry.register_model(
         std::make_shared<ReturnBendFixedLossModel>());
     registry.register_model(

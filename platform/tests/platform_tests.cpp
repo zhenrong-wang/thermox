@@ -1005,6 +1005,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
+        "restriction.fluid.orifice.nonflashing_liquid",
+        "restriction.fluid.orifice.perfect_gas",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",
@@ -2433,6 +2435,172 @@ void test_generic_model_solves_isenthalpic_valve() {
         result.x.at(require_variable_index(
             graph.problem.variable_names, "valve.outlet.h")),
         1.2e6, 1.0e-7, "valve preserves enthalpy");
+}
+
+void test_nonflashing_liquid_orifice_solves_flow_and_guards_flashing() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "liquid_orifice",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "orifice",
+      "kind": "restriction.fluid.orifice.nonflashing_liquid",
+      "parameters": {
+        "flow_diameter": {"value": 20.0, "unit": "mm"},
+        "discharge_coefficient": 0.62
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "subcooled",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "orifice.inlet.p": {"value": 5.0, "unit": "bar"},
+      "orifice.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "orifice.outlet.p": {"value": 4.0, "unit": "bar"}
+    }
+  }, {
+    "id": "would_flash",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "orifice.inlet.p": {"value": 5.0, "unit": "bar"},
+      "orifice.inlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "orifice.outlet.p": {"value": 1.0, "unit": "bar"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, properties, "subcooled");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto inlet = water->state_ph(5.0e5, 3.0e5);
+    require(inlet.ok(), "subcooled inlet must evaluate");
+    const double area = std::numbers::pi * 0.02 * 0.02 / 4.0;
+    const double expected_flow = 0.62 * area * std::sqrt(
+        2.0 * inlet.state.density_kg_m3 * 1.0e5);
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "orifice.inlet.m_dot")),
+        expected_flow, 1.0e-10,
+        "liquid orifice follows discharge-area pressure law");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names, "orifice.outlet.h")),
+        3.0e5, 1.0e-8,
+        "liquid restriction is isenthalpic");
+
+    const auto flashing_graph =
+        thermox::platform::compile_model_graph(
+            document, registry, properties, "would_flash");
+    const auto flashing_result =
+        thermox::solve_newton(flashing_graph.problem);
+    require(!flashing_result.diagnostics.converged,
+            "non-flashing model must not extrapolate into flashing");
+    require(
+        flashing_result.diagnostics.message.find(
+            "outlet saturation boundary") != std::string::npos,
+        "flashing rejection should explain the physical boundary");
+}
+
+void test_compressible_orifice_transitions_to_choked_flow() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "gas_orifice",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "orifice",
+      "kind": "restriction.fluid.orifice.perfect_gas",
+      "parameters": {
+        "flow_diameter": {"value": 30.0, "unit": "mm"},
+        "discharge_coefficient": 0.70
+      },
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "subcritical",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "orifice.inlet.p": {"value": 2.0, "unit": "bar"},
+      "orifice.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "orifice.outlet.p": {"value": 1.6, "unit": "bar"}
+    }
+  }, {
+    "id": "choked_a",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "orifice.inlet.p": {"value": 2.0, "unit": "bar"},
+      "orifice.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "orifice.outlet.p": {"value": 0.8, "unit": "bar"}
+    }
+  }, {
+    "id": "choked_b",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "orifice.inlet.p": {"value": 2.0, "unit": "bar"},
+      "orifice.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "orifice.outlet.p": {"value": 0.4, "unit": "bar"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto solve_case = [&](const std::string& case_id) {
+        const auto graph = thermox::platform::compile_model_graph(
+            document, registry, properties, case_id);
+        const auto result = thermox::solve_newton(graph.problem);
+        require(result.diagnostics.converged,
+                result.diagnostics.message);
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, "orifice.inlet.m_dot"));
+    };
+    const double subcritical_flow = solve_case("subcritical");
+    const double choked_a = solve_case("choked_a");
+    const double choked_b = solve_case("choked_b");
+    require(choked_a > subcritical_flow,
+            "gas orifice flow should rise before choking");
+    require_near(choked_a, choked_b, 1.0e-12,
+                 "choked mass flow is independent of downstream pressure");
+
+    const auto air = properties.create("ideal_gas_mixture", "Air");
+    const auto inlet = air->state_ph(2.0e5, 3.0e5);
+    require(inlet.ok(), "gas-orifice inlet must evaluate");
+    const double gamma =
+        inlet.state.cp_j_kg_k / inlet.state.cv_j_kg_k;
+    const double critical_ratio = std::pow(
+        2.0 / (gamma + 1.0), gamma / (gamma - 1.0));
+    const double flux = std::sqrt(
+        2.0 * gamma / (gamma - 1.0) *
+        inlet.state.density_kg_m3 * 2.0e5 *
+        (std::pow(critical_ratio, 2.0 / gamma) -
+         std::pow(critical_ratio, (gamma + 1.0) / gamma)));
+    const double expected_choked_flow = 0.70 *
+        std::numbers::pi * 0.03 * 0.03 / 4.0 * flux;
+    require_near(choked_a, expected_choked_flow, 1.0e-9,
+                 "gas orifice matches ideal-gas critical mass flux");
 }
 
 void test_return_bend_fixed_loss_uses_fluid_density() {
@@ -5701,6 +5869,8 @@ int main() {
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
+        test_nonflashing_liquid_orifice_solves_flow_and_guards_flashing();
+        test_compressible_orifice_transitions_to_choked_flow();
         test_return_bend_fixed_loss_uses_fluid_density();
         test_darcy_weisbach_pipe_uses_transport_properties();
         test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();

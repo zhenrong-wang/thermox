@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 56,
+        response.components.size() == 58,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -429,6 +429,20 @@ void test_catalog_discovery() {
                 std::vector<std::string>{"state_ph", "transport"},
         "catalog must expose the property-backed pipe and its "
         "explicit ambient heat boundary");
+    const auto gas_orifice = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "restriction.fluid.orifice.perfect_gas";
+        });
+    require(
+        gas_orifice != response.components.end() &&
+            gas_orifice->template_kind ==
+                "restriction.fluid.orifice" &&
+            gas_orifice->category == "Fluid control" &&
+            gas_orifice->parameters.size() == 2,
+        "catalog must expose the generic choking-orifice model");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),

@@ -52,6 +52,9 @@ Implemented in this sprint:
   friction, roughness, local losses, and elevation head; the heat-transfer variant exposes its
   ambient duty through a typed heat port so whole-system energy audits remain explicit. See
   [Single-phase pipe models](docs/single-phase-pipe-models.md).
+- Flow-area restriction models cover non-flashing liquids and perfect-gas subcritical/choked
+  flow. Their validity checks reject flashing liquid states instead of silently applying the
+  wrong correlation. See [Flow restriction models](docs/flow-restriction-models.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

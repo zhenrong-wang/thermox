@@ -154,6 +154,9 @@ Delivered:
 6. Generic single-phase Darcy-Weisbach pipe models with laminar/transitional/turbulent friction,
    roughness, local losses, elevation head, registered transport properties, and an optional
    explicit ambient heat boundary. ✅
+7. Generic flow-area restrictions for non-flashing liquids and perfect gases, including exact
+   critical-pressure-ratio choking and an explicit saturation-boundary rejection for liquid
+   flashing. ✅
 
 ## Heat transfer and phase-change components
 
