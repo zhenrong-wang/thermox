@@ -1,5 +1,10 @@
 # NETL B31A combined-cycle benchmark
 
+Engineer-facing validation reports:
+
+- [English technical report](../../docs/validation/netl-b31a-validation-report.en.md)
+- [简体中文技术报告](../../docs/validation/netl-b31a-validation-report.zh-CN.md)
+
 This directory contains a public, reproducible engineering benchmark for the
 generic Thermox engine. It is deliberately separate from component model code:
 published case values configure a normal registered topology and never alter
