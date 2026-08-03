@@ -34,7 +34,10 @@ describe('run authoring defaults', () => {
         { artifact_revision_id: 'artifact-2' },
         { artifact_revision_id: 'artifact-1' },
       ],
-      validation: { compilation: { compiled: true } },
+      validation: {
+        compilation: { compiled: true },
+        readiness: { calculatable: true },
+      },
     } as ProjectModelValidation
     expect(
       validationMatchesExecutionSelection(
@@ -56,6 +59,15 @@ describe('run authoring defaults', () => {
       validationMatchesExecutionSelection(
         validation,
         'model-2',
+        'case-1',
+        ['artifact-1', 'artifact-2'],
+      ),
+    ).toBe(false)
+    validation.validation.readiness.calculatable = false
+    expect(
+      validationMatchesExecutionSelection(
+        validation,
+        'model-1',
         'case-1',
         ['artifact-1', 'artifact-2'],
       ),

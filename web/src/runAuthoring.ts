@@ -12,7 +12,7 @@ export function validationMatchesExecutionSelection(
   artifactRevisionIds: string[],
 ) {
   if (
-    !validation?.validation.compilation.compiled ||
+    !validation?.validation.readiness.calculatable ||
     validation.model_revision_id !== modelRevisionId ||
     validation.case_revision_id !== caseRevisionId
   ) {

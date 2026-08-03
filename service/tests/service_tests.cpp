@@ -599,6 +599,25 @@ void test_validation_and_canonicalization() {
                 response.compilation.equation_count,
         "validation must compile and structurally analyze the model");
     require(
+        response.readiness.calculatable &&
+            response.readiness.layers.size() == 6 &&
+            std::all_of(
+                response.readiness.layers.begin(),
+                response.readiness.layers.end(),
+                [](const auto& layer) {
+                    return layer.state ==
+                        thermox::service::ReadinessState::ready;
+                }) &&
+            std::all_of(
+                response.readiness.entities.begin(),
+                response.readiness.entities.end(),
+                [](const auto& entity) {
+                    return entity.state ==
+                        thermox::service::ReadinessState::ready;
+                }),
+        "successful validation must authorize the exact revision "
+        "set through every readiness layer and entity");
+    require(
         response.canonical_model_json.find("thermox.model/v2") !=
             std::string::npos,
         "canonical model must retain its schema");
@@ -619,6 +638,52 @@ void test_validation_and_canonicalization() {
     require(
         reparsed.model.model_id == response.model.model_id,
         "canonical round trip must preserve model identity");
+
+    auto unknown_case = request;
+    unknown_case.case_id = "not-declared";
+    const auto study_blocked = service.validate_model(unknown_case);
+    const auto blocked_study_layer = std::find_if(
+        study_blocked.readiness.layers.begin(),
+        study_blocked.readiness.layers.end(),
+        [](const auto& layer) {
+            return layer.id == "study";
+        });
+    require(
+        !study_blocked.readiness.calculatable &&
+            blocked_study_layer !=
+                study_blocked.readiness.layers.end() &&
+            blocked_study_layer->state ==
+                thermox::service::ReadinessState::blocked &&
+            !study_blocked.diagnostics.empty() &&
+            study_blocked.diagnostics.front().code ==
+                "unknown_case" &&
+            study_blocked.diagnostics.front().stage == "study",
+        "an unknown operating case must block study readiness");
+
+    thermox::service::ValidateModelRequest malformed;
+    malformed.model_json = "{not-json";
+    const auto draft_blocked = service.validate_model(malformed);
+    const auto blocked_draft_layer = std::find_if(
+        draft_blocked.readiness.layers.begin(),
+        draft_blocked.readiness.layers.end(),
+        [](const auto& layer) {
+            return layer.id == "draft";
+        });
+    require(
+        !draft_blocked.readiness.calculatable &&
+            blocked_draft_layer !=
+                draft_blocked.readiness.layers.end() &&
+            blocked_draft_layer->state ==
+                thermox::service::ReadinessState::blocked &&
+            std::count_if(
+                draft_blocked.readiness.layers.begin(),
+                draft_blocked.readiness.layers.end(),
+                [](const auto& layer) {
+                    return layer.state == thermox::service::
+                        ReadinessState::not_evaluated;
+                }) == 5,
+        "a malformed document must block draft readiness without "
+        "claiming that downstream layers were evaluated");
 
     thermox::service::SteadySimulationRequest simulation;
     simulation.model_json = response.canonical_model_json;
@@ -1068,8 +1133,46 @@ void test_compile_aware_validation_diagnostics() {
     require(
         response.diagnostics.front().code ==
             "unknown_component_type" &&
-            response.diagnostics.front().stage == "compilation",
+            response.diagnostics.front().stage == "physical" &&
+            response.diagnostics.front().component_id == "custom" &&
+            response.diagnostics.front().json_path ==
+                "/model/components/0",
         "validation must return a stable catalog diagnostic");
+    const auto physical = std::find_if(
+        response.readiness.layers.begin(),
+        response.readiness.layers.end(),
+        [](const auto& layer) {
+            return layer.id == "physical";
+        });
+    const auto component = std::find_if(
+        response.readiness.entities.begin(),
+        response.readiness.entities.end(),
+        [](const auto& entity) {
+            return entity.entity_type == "component" &&
+                entity.entity_id == "custom";
+        });
+    require(
+        !response.readiness.calculatable &&
+            physical != response.readiness.layers.end() &&
+            physical->state ==
+                thermox::service::ReadinessState::blocked &&
+            physical->diagnostic_codes ==
+                std::vector<std::string>{"unknown_component_type"} &&
+            component != response.readiness.entities.end() &&
+            component->state ==
+                thermox::service::ReadinessState::blocked,
+        "readiness must block the physical layer and identify the "
+        "affected component");
+    const auto json =
+        thermox::service::serialize_validate_response_json(response);
+    require(
+        json.find("\"readiness\": {\"calculatable\": false") !=
+                std::string::npos &&
+            json.find("\"id\": \"physical\", \"state\": \"blocked\"") !=
+                std::string::npos &&
+            json.find("\"entity_id\": \"custom\"") !=
+                std::string::npos,
+        "validation JSON must expose the authoritative readiness contract");
 }
 
 void test_structurally_singular_validation_diagnostic() {

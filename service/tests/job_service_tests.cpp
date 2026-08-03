@@ -139,7 +139,16 @@ void test_submission_is_idempotent_and_conflict_safe() {
         thermox::service::make_in_memory_job_repository();
     auto artifacts =
         thermox::service::make_in_memory_result_artifact_store();
-    thermox::service::SimulationJobService service(jobs, artifacts);
+    const auto engineering_artifact = unused_test_map();
+    auto alternate_artifact = engineering_artifact;
+    alternate_artifact.id = "job-map-alternate";
+    alternate_artifact.checksum_sha256 = std::string(64, 'c');
+    const auto engineering_resolver = thermox::service::
+        make_in_memory_engineering_artifact_resolver(
+            {engineering_artifact, alternate_artifact});
+    thermox::service::SimulationJobService service(
+        thermox::service::make_default_simulation_runtime(),
+        engineering_resolver, jobs, artifacts);
 
     auto request = steady_request("submission-1");
     request.artifacts.performance_maps.push_back(
@@ -174,10 +183,10 @@ void test_submission_is_idempotent_and_conflict_safe() {
 
     auto referenced = steady_request("reference-submission");
     referenced.artifacts.references.push_back(
-        map_reference(unused_test_map()));
+        map_reference(engineering_artifact));
     (void)service.submit(referenced);
-    referenced.artifacts.references.front().checksum_sha256 =
-        std::string(64, 'c');
+    referenced.artifacts.references.front() =
+        map_reference(alternate_artifact);
     conflict = false;
     try {
         (void)service.submit(referenced);
@@ -415,7 +424,7 @@ void test_calibration_jobs_use_the_worker_artifact_boundary() {
         "calibration jobs must publish a durable calibration result");
 }
 
-void test_solver_failure_is_a_terminal_job_failure() {
+void test_non_ready_submission_is_rejected() {
     auto jobs =
         thermox::service::make_in_memory_job_repository();
     auto artifacts =
@@ -424,32 +433,20 @@ void test_solver_failure_is_a_terminal_job_failure() {
 
     auto request = steady_request("failed-run");
     request.model_json = "{not valid JSON";
-    const auto queued = service.submit(request);
-    const auto completed = service.run_next("worker-b");
+    bool rejected = false;
+    try {
+        (void)service.submit(request);
+    } catch (const thermox::service::JobRequestError& error) {
+        rejected = std::string(error.what()).find(
+            "not calculation-ready") != std::string::npos;
+    }
     require(
-        completed.has_value() &&
-            completed->job_id == queued.job_id &&
-            completed->state ==
-                thermox::service::SimulationJobState::failed &&
-            completed->error.has_value() &&
-            !completed->result_artifact.has_value(),
-        "simulation errors must publish failure without an "
-        "artifact");
+        rejected,
+        "a malformed model must be rejected by the authoritative "
+        "readiness gate before it enters the durable queue");
     require(
-        completed->error->code == "invalid_model" &&
-            completed->error->stage == "validation",
-        "job failure must preserve the simulation error");
-    const auto json =
-        thermox::service::serialize_job_record_json(*completed);
-    require(
-        json.find("\"state\": \"failed\"") !=
-                std::string::npos &&
-            json.find("\"code\": \"invalid_model\"") !=
-                std::string::npos &&
-            json.find("\"result_artifact\": null") !=
-                std::string::npos,
-        "failed job JSON must expose its structured error "
-        "without a result manifest");
+        !service.run_next("worker-b").has_value(),
+        "a rejected calculation must not create queued work");
 }
 
 void test_projection_failure_is_structured() {
@@ -808,7 +805,7 @@ int main() {
         test_worker_executes_request_scoped_component();
         test_success_publishes_a_readable_artifact();
         test_calibration_jobs_use_the_worker_artifact_boundary();
-        test_solver_failure_is_a_terminal_job_failure();
+        test_non_ready_submission_is_rejected();
         test_projection_failure_is_structured();
         test_transient_jobs_use_the_same_artifact_boundary();
         test_cancel_and_optimistic_revision_rules();

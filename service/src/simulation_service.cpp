@@ -402,6 +402,11 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.suggestions = {
             "Select an exposed graph result and use a measured value "
             "with the same physical dimension."};
+    } else if (message.find("unknown case id") !=
+               std::string::npos) {
+        diagnostic.code = "unknown_case";
+        diagnostic.suggestions = {
+            "Select an operating case declared by the exact model revision."};
     } else if (message.find("no component model registered") !=
         std::string::npos) {
         diagnostic.code = "unknown_component_type";
@@ -459,6 +464,21 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.code = "port_cardinality_exceeded";
         diagnostic.suggestions = {
             "Insert an explicit mixer, splitter, junction, or distribution component."};
+    } else if (message.find("connection '") !=
+                   std::string::npos ||
+               message.find("connection endpoint") !=
+                   std::string::npos) {
+        diagnostic.code = "invalid_topology_connection";
+        diagnostic.suggestions = {
+            "Correct the connection endpoints, directions, domains, or resource compatibility."};
+    } else if (message.find("case '") != std::string::npos ||
+               message.find("fixed value references") !=
+                   std::string::npos ||
+               message.find("initial guess references") !=
+                   std::string::npos) {
+        diagnostic.code = "invalid_study_definition";
+        diagnostic.suggestions = {
+            "Correct the selected case specifications and result-variable references."};
     } else if (message.find("under-specified") !=
                std::string::npos) {
         diagnostic.code = "under_specified_model";
@@ -492,8 +512,179 @@ Diagnostic compilation_diagnostic(const std::string& message) {
         diagnostic.code = "unsupported_simulation_mode";
         diagnostic.suggestions = {
             "Choose a case mode supported by every component in the graph."};
+    } else if (message.find("component '") !=
+               std::string::npos) {
+        diagnostic.code = "invalid_component_definition";
+        diagnostic.suggestions = {
+            "Correct the component parameters, bindings, or registered model selection."};
     }
     return diagnostic;
+}
+
+std::string quoted_value_after(
+    const std::string& message,
+    const std::string_view prefix) {
+    const auto begin = message.find(prefix);
+    if (begin == std::string::npos) return {};
+    const auto value_begin = begin + prefix.size();
+    const auto end = message.find('\'', value_begin);
+    if (end == std::string::npos) return {};
+    return message.substr(value_begin, end - value_begin);
+}
+
+std::string readiness_layer_for(const std::string& code) {
+    static const std::set<std::string> physical{
+        "invalid_components",
+        "invalid_artifacts",
+        "unknown_component_type",
+        "missing_required_parameter",
+        "unknown_component_parameter",
+        "property_package_version_mismatch",
+        "component_version_mismatch",
+        "missing_medium_binding",
+        "unsupported_property_capability",
+        "unknown_property_backend",
+    };
+    static const std::set<std::string> topology{
+        "connector_contract_version_mismatch",
+        "unknown_component_port",
+        "incompatible_connection_kind",
+        "port_cardinality_exceeded",
+        "invalid_topology_connection",
+    };
+    static const std::set<std::string> study{
+        "invalid_calibration_observation",
+        "unknown_case",
+        "unsupported_simulation_mode",
+        "invalid_study_definition",
+    };
+    if (code == "invalid_component_definition") return "physical";
+    if (physical.contains(code)) return "physical";
+    if (topology.contains(code)) return "topology";
+    if (study.contains(code)) return "study";
+    if (code == "invalid_model_document" ||
+        code == "missing_model_document") {
+        return "draft";
+    }
+    return "compilation";
+}
+
+ReadinessLayer& readiness_layer(
+    ReadinessSummary& readiness,
+    const std::string& id) {
+    const auto found = std::find_if(
+        readiness.layers.begin(), readiness.layers.end(),
+        [&](const ReadinessLayer& layer) {
+            return layer.id == id;
+        });
+    if (found == readiness.layers.end()) {
+        throw std::logic_error("unknown readiness layer: " + id);
+    }
+    return *found;
+}
+
+void set_layer_state(
+    ReadinessSummary& readiness,
+    const std::string& id,
+    const ReadinessState state,
+    const std::string& diagnostic_code = {}) {
+    auto& layer = readiness_layer(readiness, id);
+    layer.state = state;
+    if (!diagnostic_code.empty() &&
+        std::find(
+            layer.diagnostic_codes.begin(),
+            layer.diagnostic_codes.end(),
+            diagnostic_code) == layer.diagnostic_codes.end()) {
+        layer.diagnostic_codes.push_back(diagnostic_code);
+    }
+}
+
+void initialize_entity_readiness(
+    ReadinessSummary& readiness,
+    const platform::ModelDocument& document) {
+    readiness.entities.clear();
+    readiness.entities.push_back({
+        "system", document.model_id,
+        ReadinessState::not_evaluated, {}});
+    for (const auto& component : document.components) {
+        readiness.entities.push_back({
+            "component", component.id,
+            ReadinessState::not_evaluated, {}});
+    }
+    for (const auto& connection : document.connections) {
+        readiness.entities.push_back({
+            "connection", connection.id,
+            ReadinessState::not_evaluated, {}});
+    }
+}
+
+void set_all_entities_ready(ReadinessSummary& readiness) {
+    for (auto& entity : readiness.entities) {
+        entity.state = ReadinessState::ready;
+    }
+}
+
+void attribute_diagnostic(
+    Diagnostic& diagnostic,
+    ReadinessSummary& readiness,
+    const platform::ModelDocument& document) {
+    diagnostic.stage = readiness_layer_for(diagnostic.code);
+    diagnostic.component_id =
+        quoted_value_after(diagnostic.message, "component '");
+    diagnostic.connection_id =
+        quoted_value_after(diagnostic.message, "connection '");
+    const auto endpoint =
+        quoted_value_after(diagnostic.message, "port '");
+    if (!endpoint.empty()) {
+        const auto separator = endpoint.find('.');
+        if (separator != std::string::npos) {
+            diagnostic.component_id = endpoint.substr(0, separator);
+            diagnostic.port_name = endpoint.substr(separator + 1);
+        }
+    }
+    if (diagnostic.code == "unknown_component_type" &&
+        diagnostic.component_id.empty()) {
+        for (const auto& component : document.components) {
+            if (diagnostic.message.find(component.kind) !=
+                std::string::npos) {
+                diagnostic.component_id = component.id;
+                break;
+            }
+        }
+    }
+    const auto component = std::find_if(
+        document.components.begin(), document.components.end(),
+        [&](const platform::ComponentDefinition& candidate) {
+            return candidate.id == diagnostic.component_id;
+        });
+    if (component != document.components.end()) {
+        diagnostic.json_path = "/model/components/" +
+            std::to_string(std::distance(
+                document.components.begin(), component));
+    }
+    const auto connection = std::find_if(
+        document.connections.begin(), document.connections.end(),
+        [&](const platform::ConnectionDefinition& candidate) {
+            return candidate.id == diagnostic.connection_id;
+        });
+    if (connection != document.connections.end()) {
+        diagnostic.json_path = "/model/connections/" +
+            std::to_string(std::distance(
+                document.connections.begin(), connection));
+    }
+    for (auto& entity : readiness.entities) {
+        const bool matches =
+            (entity.entity_type == "component" &&
+             entity.entity_id == diagnostic.component_id) ||
+            (entity.entity_type == "connection" &&
+             entity.entity_id == diagnostic.connection_id) ||
+            (entity.entity_type == "system" &&
+             diagnostic.component_id.empty() &&
+             diagnostic.connection_id.empty());
+        if (!matches) continue;
+        entity.state = ReadinessState::blocked;
+        entity.diagnostic_codes.push_back(diagnostic.code);
+    }
 }
 
 const platform::CaseDefinition* selected_case(
@@ -1210,6 +1401,18 @@ std::string to_string(DiagnosticSeverity severity) {
     return "unknown";
 }
 
+std::string to_string(ReadinessState state) {
+    switch (state) {
+        case ReadinessState::not_evaluated:
+            return "not_evaluated";
+        case ReadinessState::blocked:
+            return "blocked";
+        case ReadinessState::ready:
+            return "ready";
+    }
+    return "unknown";
+}
+
 SimulationService::SimulationService()
     : SimulationService(make_default_simulation_runtime()) {}
 
@@ -1249,6 +1452,17 @@ ValidateModelResponse SimulationService::validate_model(
     if (request.model_json.empty()) {
         response.error = make_error(
             "missing_model", "request", "model_json must not be empty");
+        set_layer_state(
+            response.readiness, "draft", ReadinessState::blocked,
+            "missing_model_document");
+        response.diagnostics.push_back({
+            "missing_model_document",
+            DiagnosticSeverity::error,
+            "draft",
+            {}, {}, {}, {},
+            "model_json must not be empty",
+            {"Submit an authorable model document."},
+        });
         return response;
     }
     std::shared_ptr<const SimulationRuntime> runtime;
@@ -1259,6 +1473,17 @@ ValidateModelResponse SimulationService::validate_model(
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
             "invalid_components", "components", ex.what());
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::blocked,
+            "invalid_components");
+        response.diagnostics.push_back({
+            "invalid_components",
+            DiagnosticSeverity::error,
+            "physical",
+            {}, {}, {}, {},
+            ex.what(),
+            {"Correct the request-scoped component definitions."},
+        });
         return response;
     }
     SimulationArtifactBundle artifacts;
@@ -1274,25 +1499,41 @@ ValidateModelResponse SimulationService::validate_model(
         response.status = OperationStatus::invalid_request;
         response.error = make_error(
             "invalid_artifacts", "artifacts", ex.what());
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::blocked,
+            "invalid_artifacts");
+        response.diagnostics.push_back({
+            "invalid_artifacts",
+            DiagnosticSeverity::error,
+            "physical",
+            {}, {}, {}, {},
+            ex.what(),
+            {"Provide valid immutable engineering artifact payloads or references."},
+        });
         return response;
     }
+    std::optional<platform::ModelDocument> document;
     try {
-        const auto document =
-            platform::parse_model_document_text(
-                request.model_json, runtime->impl_->units);
-        response.model = model_metadata(document);
+        document = platform::parse_model_document_text(
+            request.model_json, runtime->impl_->units);
+        initialize_entity_readiness(response.readiness, *document);
+        set_layer_state(
+            response.readiness, "draft", ReadinessState::ready);
+        response.model = model_metadata(*document);
         response.canonical_model_json =
-            detail::serialize_model_document_json(document);
+            detail::serialize_model_document_json(*document);
         platform::validate_calibration_observation_contracts(
-            document, runtime->impl_->components,
+            *document, runtime->impl_->components,
             runtime->impl_->thermochemistry);
         const auto* simulation_case =
-            selected_case(document, request.case_id);
+            selected_case(*document, request.case_id);
         if (!request.case_id.empty() && simulation_case == nullptr) {
             throw std::invalid_argument(
                 "unknown case id during graph compilation: " +
                 request.case_id);
         }
+        set_layer_state(
+            response.readiness, "study", ReadinessState::ready);
         response.model.case_id =
             simulation_case == nullptr ? "" : simulation_case->id;
         response.compilation.catalog_fingerprint =
@@ -1301,7 +1542,7 @@ ValidateModelResponse SimulationService::validate_model(
         if (mode == "transient") {
             const auto graph =
                 platform::compile_transient_model_graph(
-                    document,
+                    *document,
                     runtime->impl_->components,
                     runtime->impl_->properties,
                     engineering_artifacts,
@@ -1314,7 +1555,7 @@ ValidateModelResponse SimulationService::validate_model(
                 graph.problem.residual_names.size();
         } else {
             const auto graph = platform::compile_model_graph(
-                document,
+                *document,
                 runtime->impl_->components,
                 runtime->impl_->properties,
                 engineering_artifacts,
@@ -1329,6 +1570,16 @@ ValidateModelResponse SimulationService::validate_model(
             response.compilation.reduced_connection_equations =
                 graph.reduced_connection_equations;
         }
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::ready);
+        set_layer_state(
+            response.readiness, "topology", ReadinessState::ready);
+        set_layer_state(
+            response.readiness, "compilation", ReadinessState::ready);
+        set_layer_state(
+            response.readiness, "execution", ReadinessState::ready);
+        set_all_entities_ready(response.readiness);
+        response.readiness.calculatable = true;
         response.status = OperationStatus::succeeded;
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
@@ -1336,8 +1587,19 @@ ValidateModelResponse SimulationService::validate_model(
         const bool compilation =
             !response.canonical_model_json.empty();
         if (compilation) {
-            const auto diagnostic =
-                compilation_diagnostic(message);
+            auto diagnostic = compilation_diagnostic(message);
+            if (document.has_value()) {
+                attribute_diagnostic(
+                    diagnostic, response.readiness, *document);
+            } else {
+                diagnostic.stage =
+                    readiness_layer_for(diagnostic.code);
+            }
+            set_layer_state(
+                response.readiness,
+                diagnostic.stage,
+                ReadinessState::blocked,
+                diagnostic.code);
             response.error = make_error(
                 diagnostic.code, diagnostic.stage, message);
             response.diagnostics.push_back(diagnostic);
@@ -1355,6 +1617,9 @@ ValidateModelResponse SimulationService::validate_model(
                 message,
                 {"Correct the model document and submit it again."},
             });
+            set_layer_state(
+                response.readiness, "draft", ReadinessState::blocked,
+                "invalid_model_document");
         }
     }
     return response;

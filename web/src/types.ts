@@ -87,6 +87,33 @@ export interface ValidationDiagnostic {
   suggestions: string[]
 }
 
+export type ReadinessState = 'not_evaluated' | 'blocked' | 'ready'
+
+export interface ReadinessLayer {
+  id:
+    | 'draft'
+    | 'physical'
+    | 'topology'
+    | 'study'
+    | 'compilation'
+    | 'execution'
+  state: ReadinessState
+  diagnostic_codes: string[]
+}
+
+export interface EntityReadiness {
+  entity_type: 'system' | 'component' | 'connection'
+  entity_id: string
+  state: ReadinessState
+  diagnostic_codes: string[]
+}
+
+export interface ReadinessSummary {
+  calculatable: boolean
+  layers: ReadinessLayer[]
+  entities: EntityReadiness[]
+}
+
 export interface ProjectModelValidation {
   schema_version: 'thermox.project_model_validation/v1'
   project_id: string
@@ -119,6 +146,7 @@ export interface ProjectModelValidation {
       catalog_fingerprint: string
       reduced_connection_equations: string[]
     }
+    readiness: ReadinessSummary
     diagnostics: ValidationDiagnostic[]
   }
 }

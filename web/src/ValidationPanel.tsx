@@ -81,6 +81,7 @@ export function ValidationPanel({
     (artifactId) => !selections[artifactId],
   )
   const compilation = result?.validation.compilation
+  const readiness = result?.validation.readiness
   const diagnostics = result?.validation.diagnostics ?? []
 
   return (
@@ -159,12 +160,14 @@ export function ValidationPanel({
           <div className="validation-summary">
             <span
               className={
-                compilation?.compiled
+                readiness?.calculatable
                   ? 'validation-state valid'
                   : 'validation-state invalid'
               }
             >
-              {compilation?.compiled ? 'Compiled' : 'Not compiled'}
+              {readiness?.calculatable
+                ? 'Ready to calculate'
+                : 'Calculation blocked'}
             </span>
             <div>
               <strong>{compilation?.variable_count ?? 0}</strong>
@@ -177,6 +180,18 @@ export function ValidationPanel({
             <code>
               {compilation?.catalog_fingerprint.slice(0, 18) || 'no catalog'}
             </code>
+          </div>
+          <div className="readiness-layers" aria-label="Calculation readiness">
+            {readiness?.layers.map((layer) => (
+              <div
+                key={layer.id}
+                className={`readiness-layer ${layer.state}`}
+                title={layer.diagnostic_codes.join(', ')}
+              >
+                <span>{layer.id}</span>
+                <strong>{layer.state.replace('_', ' ')}</strong>
+              </div>
+            ))}
           </div>
           <div className="validation-provenance">
             <span>

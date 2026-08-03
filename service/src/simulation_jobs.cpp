@@ -503,6 +503,24 @@ SimulationJobService& SimulationJobService::operator=(
 SimulationJobRecord SimulationJobService::submit(
     const SimulationJobRequest& request) {
     validate_request(request);
+    if (request.mode != SimulationJobMode::calibration) {
+        ValidateModelRequest validation_request;
+        validation_request.model_json = request.model_json;
+        validation_request.case_id = request.case_id;
+        validation_request.artifacts = request.artifacts;
+        validation_request.components = request.components;
+        const auto validation =
+            impl_->simulation.validate_model(validation_request);
+        if (!validation.readiness.calculatable) {
+            std::string reason = validation.error.message;
+            if (reason.empty() && !validation.diagnostics.empty()) {
+                reason = validation.diagnostics.front().message;
+            }
+            throw JobRequestError(
+                "simulation request is not calculation-ready" +
+                (reason.empty() ? std::string{} : ": " + reason));
+        }
+    }
     return impl_->jobs->create_or_get(
         request, request_fingerprint(request));
 }

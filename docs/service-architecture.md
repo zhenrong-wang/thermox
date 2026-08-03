@@ -160,7 +160,7 @@ The application boundary needed by a thin network adapter is now complete:
 | Intended operation | Application call | Wire representation |
 | --- | --- | --- |
 | Discover component types | `SimulationService::get_catalog` | `thermox.catalog/v5` JSON |
-| Validate and compile a model | `SimulationService::validate_model` | result-v3 validation JSON |
+| Validate readiness and compile a model | `SimulationService::validate_model` | result-v3 validation JSON with layered readiness and an authoritative calculation gate |
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
 | Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
 | Publish/read operating-case revisions | `ProjectService` | `thermox.case_revision/v1` JSON |

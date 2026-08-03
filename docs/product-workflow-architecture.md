@@ -154,10 +154,10 @@ system.
 |---|---|---|
 | Numerical core | Scaled steady nonlinear solve, sparse structure, continuation, implicit DAE, diagnostics | Preserve; add new optimization backends only behind study contracts |
 | Physics | Registered CoolProp property packages and Cantera thermochemistry | Preserve registry boundary; expand packages independently |
-| Component/compiler platform | Generic typed graph, 54 built-in runtime component models, maps, correlations, expression components, structural validation | Preserve; report readiness by entity and study intent |
-| Calibration/study service | Immutable Study revisions now bind an exact topology, case, artifacts, intent, and output projections; multi-case calibration and leakage-guarded prediction also exist synchronously | Persist calibration revisions and connect multi-case calibration to durable Study resources |
-| Persistence/jobs | Team/project scoping, immutable topology/case/study/run revisions, PostgreSQL, object storage, worker queue; run configuration v3 owns solver policy and job v7 carries exact Study provenance | Add durable calibration resources that reference Study revisions |
-| Web workflow | Canvas, component palette, physical forms, cases, compile validation, runs, results | Split Build/Define/Study, permit incomplete drafts, add entity badges, expose study semantics |
+| Component/compiler platform | Generic typed graph, 54 built-in runtime component models, maps, correlations, expression components, structural validation, and layered entity readiness | Preserve; add dimensioned engineering-acceptance evaluation after completed runs |
+| Calibration/study service | Immutable Study and calibration revisions bind exact topology, cases, artifacts, intent, dataset split, and output projections; calibration executes as a durable job | Preserve; add identifiability diagnostics behind the optimizer contract |
+| Persistence/jobs | Team/project scoping, immutable topology/case/study/calibration/run revisions, PostgreSQL, object storage, and a leased worker queue with exact provenance | Preserve; add comparison and generated-report artifacts through existing storage ports |
+| Web workflow | Build/Define/Study/Calculate/Analyze workspaces, canvas and catalog authoring, exact revision validation, durable runs, results, and service readiness display | Project entity readiness onto canvas badges; add engineering acceptance and study comparison views |
 
 ## Migration rules
 

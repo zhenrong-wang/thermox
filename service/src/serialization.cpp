@@ -367,6 +367,48 @@ void diagnostic_json(
     out << "]}";
 }
 
+void readiness_json(
+    std::ostream& out,
+    const ReadinessSummary& readiness) {
+    out << "{\"calculatable\": "
+        << (readiness.calculatable ? "true" : "false")
+        << ", \"layers\": [";
+    for (std::size_t i = 0; i < readiness.layers.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& layer = readiness.layers[i];
+        out << "{\"id\": ";
+        json_string(out, layer.id);
+        out << ", \"state\": ";
+        json_string(out, to_string(layer.state));
+        out << ", \"diagnostic_codes\": [";
+        for (std::size_t code = 0;
+             code < layer.diagnostic_codes.size(); ++code) {
+            if (code != 0) out << ", ";
+            json_string(out, layer.diagnostic_codes[code]);
+        }
+        out << "]}";
+    }
+    out << "], \"entities\": [";
+    for (std::size_t i = 0; i < readiness.entities.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& entity = readiness.entities[i];
+        out << "{\"entity_type\": ";
+        json_string(out, entity.entity_type);
+        out << ", \"entity_id\": ";
+        json_string(out, entity.entity_id);
+        out << ", \"state\": ";
+        json_string(out, to_string(entity.state));
+        out << ", \"diagnostic_codes\": [";
+        for (std::size_t code = 0;
+             code < entity.diagnostic_codes.size(); ++code) {
+            if (code != 0) out << ", ";
+            json_string(out, entity.diagnostic_codes[code]);
+        }
+        out << "]}";
+    }
+    out << "]}";
+}
+
 void result_value_json(
     std::ostream& out,
     const ResultValue& value) {
@@ -1091,7 +1133,9 @@ std::string serialize_validate_response_json(
             out,
             response.compilation.reduced_connection_equations[i]);
     }
-    out << "]},\n  \"diagnostics\": [";
+    out << "]},\n  \"readiness\": ";
+    readiness_json(out, response.readiness);
+    out << ",\n  \"diagnostics\": [";
     for (std::size_t i = 0;
          i < response.diagnostics.size(); ++i) {
         if (i != 0) out << ", ";

@@ -2397,6 +2397,49 @@ code {
   color: #974941;
 }
 
+.readiness-layers {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 9px 14px;
+  border-top: 1px solid #e6ece9;
+  background: #fbfcfc;
+}
+
+.readiness-layer {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #dfe7e3;
+  border-radius: 4px;
+  color: #75887f;
+  text-transform: capitalize;
+}
+
+.readiness-layer span {
+  overflow: hidden;
+  font-size: 8px;
+  text-overflow: ellipsis;
+}
+
+.readiness-layer strong {
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.readiness-layer.ready {
+  border-color: #bfddce;
+  background: #eff8f3;
+  color: #2d7055;
+}
+
+.readiness-layer.blocked {
+  border-color: #e2bfbb;
+  background: #fff2f1;
+  color: #974941;
+}
+
 .validation-provenance {
   display: flex;
   flex-wrap: wrap;

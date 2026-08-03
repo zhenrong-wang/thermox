@@ -942,6 +942,12 @@ void test_authored_component_job_workflow() {
         validation.status == 200 &&
             validation.body.find("\"compiled\": true") !=
                 std::string::npos &&
+            validation.body.find(
+                "\"readiness\": {\"calculatable\": true") !=
+                std::string::npos &&
+            validation.body.find(
+                "\"id\": \"execution\", \"state\": \"ready\"") !=
+                std::string::npos &&
             validation.body.find(component_revision_id) !=
                 std::string::npos,
         "the authored component must compile through exact "

@@ -36,6 +36,14 @@ enum class DiagnosticSeverity {
 
 std::string to_string(DiagnosticSeverity severity);
 
+enum class ReadinessState {
+    not_evaluated,
+    blocked,
+    ready,
+};
+
+std::string to_string(ReadinessState state);
+
 struct ServiceError {
     std::string schema_version{error_schema_v1};
     std::string code;
@@ -493,12 +501,39 @@ struct CompilationSummary {
     std::string catalog_fingerprint;
 };
 
+struct ReadinessLayer {
+    std::string id;
+    ReadinessState state{ReadinessState::not_evaluated};
+    std::vector<std::string> diagnostic_codes;
+};
+
+struct EntityReadiness {
+    std::string entity_type;
+    std::string entity_id;
+    ReadinessState state{ReadinessState::not_evaluated};
+    std::vector<std::string> diagnostic_codes;
+};
+
+struct ReadinessSummary {
+    bool calculatable{false};
+    std::vector<ReadinessLayer> layers{
+        {"draft", ReadinessState::not_evaluated, {}},
+        {"physical", ReadinessState::not_evaluated, {}},
+        {"topology", ReadinessState::not_evaluated, {}},
+        {"study", ReadinessState::not_evaluated, {}},
+        {"compilation", ReadinessState::not_evaluated, {}},
+        {"execution", ReadinessState::not_evaluated, {}},
+    };
+    std::vector<EntityReadiness> entities;
+};
+
 struct ValidateModelResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
     ModelMetadata model;
     std::string canonical_model_json;
     CompilationSummary compilation;
+    ReadinessSummary readiness;
     std::vector<Diagnostic> diagnostics;
 
     [[nodiscard]] bool succeeded() const {
