@@ -1023,6 +1023,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "cooler.material.fixed_duty",
         "evaporator.fluid.fixed_outlet_quality",
         "condenser.fluid.fixed_outlet_quality",
+        "drum.fluid.equilibrium_two_phase",
         "volume.fluid.rigid_adiabatic",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
@@ -5758,6 +5759,160 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
     }
 }
 
+void test_dynamic_equilibrium_drum_conserves_inventory() {
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create("water_steam_if97", "Water");
+    constexpr double initial_pressure = 2.0e5;
+    constexpr double initial_quality = 0.10;
+    constexpr double volume = 1.0;
+    constexpr double height = 2.0;
+    const auto saturation = water->saturation_p(initial_pressure);
+    require(saturation.ok(), "drum initial saturation must evaluate");
+    const double specific_volume =
+        (1.0 - initial_quality) /
+            saturation.liquid.density_kg_m3 +
+        initial_quality / saturation.vapor.density_kg_m3;
+    const double initial_mass = volume / specific_volume;
+    const double initial_specific_energy =
+        (1.0 - initial_quality) *
+            saturation.liquid.internal_energy_j_kg +
+        initial_quality *
+            saturation.vapor.internal_energy_j_kg;
+    const double initial_energy =
+        initial_mass * initial_specific_energy;
+    const double initial_level = height / volume * initial_mass *
+        (1.0 - initial_quality) /
+        saturation.liquid.density_kg_m3;
+
+    std::ostringstream number;
+    number << std::setprecision(17);
+    const auto format = [&](double value) {
+        number.str({});
+        number.clear();
+        number << value;
+        return number.str();
+    };
+    std::string text = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "heated_equilibrium_drum",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "drum",
+      "kind": "drum.fluid.equilibrium_two_phase",
+      "parameters": {
+        "volume": {"value": 1.0, "unit": "m3"},
+        "vessel_height": {"value": 2.0, "unit": "m"}
+      },
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "heated_hold",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "drum.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "drum.inlet.p": {"value": 2.0, "unit": "bar"},
+      "drum.inlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "drum.vapor_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "drum.liquid_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "drum.heat.Q_dot": {"value": 10.0, "unit": "kW"}
+    },
+    "initial_guesses": {
+      "drum.total_mass": __MASS__,
+      "drum.total_internal_energy": __ENERGY__,
+      "drum.pressure": __PRESSURE__,
+      "drum.vapor_quality": __QUALITY__,
+      "drum.liquid_level": __LEVEL__
+    }
+  }]
+})json";
+    const auto replace = [&](const std::string& token,
+                             const std::string& value) {
+        std::size_t position = 0;
+        while ((position = text.find(token, position)) !=
+               std::string::npos) {
+            text.replace(position, token.size(), value);
+            position += value.size();
+        }
+    };
+    replace("__MASS__", format(initial_mass));
+    replace("__ENERGY__", format(initial_energy));
+    replace("__PRESSURE__", format(initial_pressure));
+    replace("__QUALITY__", format(initial_quality));
+    replace("__LEVEL__", format(initial_level));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(text);
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            properties, "heated_hold");
+    const auto mass = require_variable_index(
+        graph.problem.variable_names, "drum.total_mass");
+    const auto energy = require_variable_index(
+        graph.problem.variable_names,
+        "drum.total_internal_energy");
+    const auto pressure = require_variable_index(
+        graph.problem.variable_names, "drum.pressure");
+    const auto quality = require_variable_index(
+        graph.problem.variable_names, "drum.vapor_quality");
+    const auto level = require_variable_index(
+        graph.problem.variable_names, "drum.liquid_level");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require_near(initialized.derivative.at(mass), 0.0, 1.0e-9,
+                 "closed drum has zero mass derivative");
+    require_near(initialized.derivative.at(energy), 1.0e4, 1.0e-5,
+                 "drum heat input becomes stored-energy derivative");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.01;
+    options.max_step = 0.02;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    const auto& final = result.trajectory.back().state;
+    require_near(final.at(mass), initial_mass, 1.0e-8,
+                 "closed drum conserves total mass");
+    require_near(final.at(energy), initial_energy + 1000.0, 1.0e-3,
+                 "drum integrates applied heat into internal energy");
+    require(final.at(quality) >= 0.0 && final.at(quality) <= 1.0,
+            "drum quality remains physical");
+    const auto final_saturation =
+        water->saturation_p(final.at(pressure));
+    require(final_saturation.ok(),
+            "final drum saturation must evaluate");
+    const double final_specific_volume =
+        (1.0 - final.at(quality)) /
+            final_saturation.liquid.density_kg_m3 +
+        final.at(quality) /
+            final_saturation.vapor.density_kg_m3;
+    require_near(final.at(mass) * final_specific_volume,
+                 volume, 1.0e-8,
+                 "drum final rigid-volume closure");
+    const double expected_level = height / volume * final.at(mass) *
+        (1.0 - final.at(quality)) /
+        final_saturation.liquid.density_kg_m3;
+    require_near(final.at(level), expected_level, 1.0e-9,
+                 "drum reports liquid level from phase volume");
+}
+
 void test_transient_compiler_rejects_steady_only_components() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -6013,6 +6168,7 @@ int main() {
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();
+        test_dynamic_equilibrium_drum_conserves_inventory();
         test_shaft_train_and_generator_close_power_balance();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();

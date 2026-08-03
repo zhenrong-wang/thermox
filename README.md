@@ -58,6 +58,10 @@ Implemented in this sprint:
 - A generic equilibrium flash separator splits an in-dome stream into saturated liquid and vapor
   outlets using the selected property backend, with lever-rule mass allocation and exact energy
   closure. See [Equilibrium flash separation](docs/equilibrium-flash-separation.md).
+- A transient equilibrium drum stores total mass and internal energy, solves pressure and vapor
+  quality from rigid-volume saturation closure, reports liquid level, and exchanges feed, phase
+  outlets, and boundary heat through typed ports. See
+  [Dynamic equilibrium drum](docs/dynamic-equilibrium-drum.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

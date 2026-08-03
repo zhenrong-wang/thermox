@@ -177,6 +177,8 @@ Delivered:
    UA exchangers with independent pressure losses and thermochemistry/property contracts. ✅
 7. Property-backed equilibrium flash separator with saturated liquid/vapor outlets, pressure
    loss, saturation-dome validation, and exact lever-rule mass/energy closure. ✅
+8. Dynamic rigid two-phase equilibrium drum with differential mass/internal-energy inventory,
+   algebraic pressure/quality/level closure, phase-specific outlets, and an explicit heat port. ✅
 
 ## Component catalog and modularization foundation
 

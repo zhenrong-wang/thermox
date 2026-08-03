@@ -39,6 +39,7 @@ stream to an admissible state before separation.
 
 This model assumes instantaneous thermodynamic equilibrium, perfect phase disengagement, no heat
 loss, and no stored inventory. It does not model entrainment, liquid carryover, residence time,
-level control, pressure dynamics, nonequilibrium flashing, or separator sizing. A dynamic steam
-drum should be a separate registered inventory component with mass and energy states; it can share
-the same saturation-property foundation without changing this steady separator contract.
+level control, pressure dynamics, nonequilibrium flashing, or separator sizing. Those inventory
+effects belong to the separate registered
+[dynamic equilibrium drum](dynamic-equilibrium-drum.md), which shares the saturation-property
+foundation without changing this steady separator contract.

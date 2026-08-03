@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 59,
+        response.components.size() == 60,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -458,6 +458,23 @@ void test_catalog_discovery() {
             flash_separator->required_property_capabilities ==
                 std::vector<std::string>{"saturation_p"},
         "catalog must expose the equilibrium flash separator");
+    const auto drum = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "drum.fluid.equilibrium_two_phase";
+        });
+    require(
+        drum != response.components.end() &&
+            drum->template_kind == "drum.fluid" &&
+            drum->category == "Fluid inventory" &&
+            !drum->supports_steady && drum->supports_transient &&
+            drum->ports.size() == 4 &&
+            drum->internal_variables.size() == 5 &&
+            drum->required_property_capabilities ==
+                std::vector<std::string>{"saturation_p"},
+        "catalog must expose dynamic equilibrium drum states and ports");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),
