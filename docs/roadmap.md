@@ -167,6 +167,8 @@ Delivered:
 4. Simple closed-loop IF97 pump–evaporator–turbine–condenser Rankine graph with power, heat,
    pressure, quality, efficiency, and exact stream-closure regressions. ✅
 5. CLI and clean-build regression coverage for the Rankine model document. ✅
+6. Composition-aware material-to-fluid fixed-duty, design-point energy-balance, and counterflow
+   UA exchangers with independent pressure losses and thermochemistry/property contracts. ✅
 
 ## Component catalog and modularization foundation
 
@@ -315,6 +317,7 @@ Goal: produce a credible single-pressure combined-cycle heat balance.
 Work items:
 
 1. Add HRSG component models:
+   - generic gas/material-to-water design-point energy-balance section; ✅
    - economizer
    - evaporator/drum simplified
    - superheater
@@ -480,6 +483,9 @@ Work items:
    - NETL 2025 Case B31A aggregate HRSG boundary audit with independently reconstructed
      water/steam duty, Cantera exhaust properties, explicit numerical/external tolerances, and a
      service-level regression test; ✅
+   - NETL B31A connected HP/IP/LP steam train with gland loss, HP leakage, reheat and LP admission
+     mixing, precision-aware condenser boundary, calibrated stage efficiencies, and independent
+     stage/aggregate power acceptance checks; ✅
    - segmented triple-pressure/reheat HRSG, multi-admission steam turbine, and complete 2x1 plant
      remain follow-ons.
 

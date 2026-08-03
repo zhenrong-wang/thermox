@@ -943,6 +943,10 @@ void test_component_registry_exposes_default_models() {
                 "heat_exchanger.material_fluid.counterflow_ua"),
             "default registry should contain material-fluid UA heat "
             "exchanger");
+    require(registry.contains(
+                "heat_exchanger.material_fluid.energy_balance"),
+            "default registry should contain material-fluid "
+            "design-point energy balance");
     require(registry.contains("heater.material.fixed_duty"),
             "default registry should contain fixed-duty material heater");
     require(registry.contains("cooler.material.fixed_duty"),
@@ -1008,6 +1012,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.material_fluid.fixed_duty",
+        "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",
         "heater.material.fixed_duty",
         "cooler.material.fixed_duty",
@@ -3825,6 +3830,74 @@ void test_material_fluid_heat_exchangers() {
                  1.0e-6, "material-side pressure loss is applied");
     require_near(fixed_value("hx.cold_out.p"), 9.8e4,
                  1.0e-6, "fluid-side pressure loss is applied");
+
+    const auto balanced_graph = compile(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_fluid_energy_balance",
+    "media": [{
+      "id": "cold_air", "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "materials": [{
+      "id": "exhaust", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.material_fluid.energy_balance",
+      "parameters": {
+        "hot_pressure_loss_fraction": 0.05,
+        "cold_pressure_loss_fraction": 0.02
+      },
+      "materials": {"hot_in": "exhaust", "hot_out": "exhaust"},
+      "media": {"cold_in": "cold_air", "cold_out": "cold_air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "hx.hot_in.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "hx.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "hx.cold_in.m_dot": {"value": 20.0, "unit": "kg/s"},
+      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
+      "hx.cold_in.h": {"value": 300.0, "unit": "kJ/kg"},
+      "hx.cold_out.T": {"value": 320.0, "unit": "K"}
+    },
+    "initial_guesses": {
+      "hx.hot_out.h": {"value": 557.0, "unit": "kJ/kg"},
+      "hx.cold_out.h": {"value": 321.4, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto balanced =
+        thermox::solve_continuation(balanced_graph.problem);
+    require(balanced.continuation.converged,
+            balanced.continuation.message);
+    const auto balanced_value = [&](const std::string& name) {
+        return balanced.x.at(require_variable_index(
+            balanced_graph.problem.variable_names, name));
+    };
+    const double balanced_hot_duty = 10.0 *
+        (balanced_value("hx.hot_in.h") -
+         balanced_value("hx.hot_out.h"));
+    const double balanced_cold_duty = 20.0 *
+        (balanced_value("hx.cold_out.h") -
+         balanced_value("hx.cold_in.h"));
+    require(balanced_hot_duty > 0.0,
+            "design-point exchanger transfers positive heat");
+    require_near(balanced_hot_duty, balanced_cold_duty, 1.0e-5,
+                 "design-point exchanger closes energy balance");
+    require_near(balanced_value("hx.hot_out.p"), 1.9e5,
+                 1.0e-6,
+                 "design-point exchanger applies hot pressure loss");
+    require_near(balanced_value("hx.cold_out.p"), 9.8e4,
+                 1.0e-6,
+                 "design-point exchanger applies cold pressure loss");
 
     const auto conditioner_graph = compile(R"json({
   "schema_version": "thermox.model/v2",

@@ -523,29 +523,50 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+enum class MaterialFluidExchangerMode {
+    fixed_duty,
+    energy_balance,
+    counterflow_ua,
+};
+
 class MaterialFluidHeatExchangerModel final : public ComponentModel {
 public:
-    explicit MaterialFluidHeatExchangerModel(bool fixed_duty)
-        : fixed_duty_(fixed_duty),
+    explicit MaterialFluidHeatExchangerModel(
+        MaterialFluidExchangerMode mode)
+        : mode_(mode),
           descriptor_(material_fluid_exchanger_descriptor(
-              fixed_duty
+              mode == MaterialFluidExchangerMode::fixed_duty
                   ? "heat_exchanger.material_fluid.fixed_duty"
-                  : "heat_exchanger.material_fluid.counterflow_ua")) {
-        descriptor_.model_name = fixed_duty
-            ? "Fixed heat duty"
-            : "Counterflow UA";
+                  : mode == MaterialFluidExchangerMode::energy_balance
+                      ? "heat_exchanger.material_fluid.energy_balance"
+                      : "heat_exchanger.material_fluid.counterflow_ua")) {
+        descriptor_.model_name =
+            mode == MaterialFluidExchangerMode::fixed_duty
+                ? "Fixed heat duty"
+                : mode == MaterialFluidExchangerMode::energy_balance
+                    ? "Energy balance"
+                    : "Counterflow UA";
         descriptor_.parameters = {
-            {fixed_duty ? "heat_duty" : "UA",
-             fixed_duty ? "power" : "thermal_conductance",
-             true, std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
             {"hot_pressure_loss_fraction", "dimensionless", false,
              0.0, 0.0, 1.0, true, false},
             {"cold_pressure_loss_fraction", "dimensionless", false,
              0.0, 0.0, 1.0, true, false}};
+        if (mode != MaterialFluidExchangerMode::energy_balance) {
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin(),
+                {mode == MaterialFluidExchangerMode::fixed_duty
+                     ? "heat_duty"
+                     : "UA",
+                 mode == MaterialFluidExchangerMode::fixed_duty
+                     ? "power"
+                     : "thermal_conductance",
+                 true, std::nullopt, 0.0,
+                 std::numeric_limits<double>::infinity(), false,
+                 true});
+        }
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph};
-        if (!fixed_duty) {
+        if (mode == MaterialFluidExchangerMode::counterflow_ua) {
             descriptor_.required_property_capabilities = {
                 physics::PropertyCapability::state_ph};
         }
@@ -650,9 +671,16 @@ public:
              {cold_in_p, -(1.0 - cold_loss)}},
             0.0, 100000.0);
 
-        if (fixed_duty_) {
+        if (mode_ == MaterialFluidExchangerMode::fixed_duty) {
             add_fixed_duty_equations(
                 context, system, prefix, hot_in_flows,
+                hot_in_h, hot_out_h, cold_in_m,
+                cold_in_h, cold_out_h);
+            return;
+        }
+        if (mode_ == MaterialFluidExchangerMode::energy_balance) {
+            add_energy_balance_equation(
+                system, prefix, hot_in_flows,
                 hot_in_h, hot_out_h, cold_in_m,
                 cold_in_h, cold_out_h);
             return;
@@ -734,27 +762,15 @@ private:
             std::max(duty, 1.0));
     }
 
-    static void add_ua_equations(
-        const ComponentCompileContext& context,
+    static void add_energy_balance_equation(
         EquationSystemBuilder& system,
         const std::string& prefix,
-        std::shared_ptr<const physics::ThermochemistryPackage>
-            hot_properties,
-        std::shared_ptr<const physics::PropertyPackage>
-            cold_properties,
-        const std::vector<std::string>& species,
         const std::vector<std::size_t>& hot_flows,
-        std::size_t hot_in_p,
         std::size_t hot_in_h,
-        std::size_t hot_out_p,
         std::size_t hot_out_h,
         std::size_t cold_in_m,
-        std::size_t cold_in_p,
         std::size_t cold_in_h,
-        std::size_t cold_out_p,
         std::size_t cold_out_h) {
-        const double conductance =
-            required_parameter(context.component, "UA");
         std::vector<std::size_t> energy_variables = hot_flows;
         energy_variables.insert(
             energy_variables.end(),
@@ -797,6 +813,33 @@ private:
                         anchor_imbalance;
             },
             1.0e7);
+    }
+
+    static void add_ua_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system,
+        const std::string& prefix,
+        std::shared_ptr<const physics::ThermochemistryPackage>
+            hot_properties,
+        std::shared_ptr<const physics::PropertyPackage>
+            cold_properties,
+        const std::vector<std::string>& species,
+        const std::vector<std::size_t>& hot_flows,
+        std::size_t hot_in_p,
+        std::size_t hot_in_h,
+        std::size_t hot_out_p,
+        std::size_t hot_out_h,
+        std::size_t cold_in_m,
+        std::size_t cold_in_p,
+        std::size_t cold_in_h,
+        std::size_t cold_out_p,
+        std::size_t cold_out_h) {
+        const double conductance =
+            required_parameter(context.component, "UA");
+        add_energy_balance_equation(
+            system, prefix, hot_flows,
+            hot_in_h, hot_out_h, cold_in_m,
+            cold_in_h, cold_out_h);
 
         system.add_continuation_checked_equation(
             prefix + "counterflow_heat_transfer",
@@ -887,7 +930,7 @@ private:
             1.0e7);
     }
 
-    bool fixed_duty_{false};
+    MaterialFluidExchangerMode mode_;
     ComponentModelDescriptor descriptor_;
 };
 
@@ -1153,9 +1196,14 @@ void register_heat_transfer_component_models(
     registry.register_model(
         std::make_shared<CounterflowUaHeatExchangerModel>());
     registry.register_model(
-        std::make_shared<MaterialFluidHeatExchangerModel>(true));
+        std::make_shared<MaterialFluidHeatExchangerModel>(
+            MaterialFluidExchangerMode::fixed_duty));
     registry.register_model(
-        std::make_shared<MaterialFluidHeatExchangerModel>(false));
+        std::make_shared<MaterialFluidHeatExchangerModel>(
+            MaterialFluidExchangerMode::energy_balance));
+    registry.register_model(
+        std::make_shared<MaterialFluidHeatExchangerModel>(
+            MaterialFluidExchangerMode::counterflow_ua));
     registry.register_model(
         std::make_shared<PrescribedDutyMaterialConditionerModel>(true));
     registry.register_model(

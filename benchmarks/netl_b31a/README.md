@@ -82,11 +82,13 @@ The differences are all below 2.15 kJ/kg (0.061 percent for the worst
 high-enthalpy state). They reflect steam-table reference and displayed-input
 precision rather than numerical non-closure.
 
-Stream 10 is wet steam, so its published pressure and enthalpy are used as the
-independent pair. IF97 returns 318.958 K (45.808 degC) and quality 0.9130. The
-report prints 38 degC and pressure to only two decimal places in MPa; 38 degC
-saturation pressure is approximately 0.0066 MPa, which prints as 0.01 MPa.
-Consequently all three displayed values cannot be imposed simultaneously.
+Stream 10 is wet steam, so pressure and enthalpy are the independent pair. The
+metric stream table rounds pressure to 0.01 MPa, but the detailed balance
+diagram provides the more precise 1 psia boundary. At 1 psia and the published
+enthalpy, IF97 returns 311.869 K (38.719 degC) and quality 0.9189, consistent
+with the displayed 38 degC / 101 degF. This demonstrates why benchmark adapters
+must retain the highest-precision source value instead of treating converted,
+rounded columns as independent measurements.
 
 Detailed source consistency checks also establish:
 
@@ -105,6 +107,47 @@ These checks are executable service regressions. Numerical residual limits,
 property agreement tolerances, and source-balance tolerances are separate
 assertions so one category cannot conceal another.
 
+## Decomposed steam-turbine train
+
+`steam_turbine_train.json` replaces the aggregate steam-power arithmetic with a
+connected physical graph:
+
+```text
+main steam -> gland split -> HP turbine -> cold-reheat / HP-leak split
+hot reheat + throttled HP leak -> IP mixer -> IP turbine
+IP exhaust + LP steam admission -> LP mixer -> LP turbine -> condenser
+```
+
+It uses ordinary registered splitters, valves, mixers, IF97 turbines, and
+boundaries. The graph contains no B31A-specific component implementation. The
+design-point isentropic efficiencies are component calibration inputs derived
+from the published inlet/outlet states. The declaration records their bounds,
+observations, uncertainty, and component-level targets in the normal Thermox
+calibration contract:
+
+| Stage | Calibrated eta_is | Thermox shaft power (MW) |
+|---|---:|---:|
+| HP | 0.89802 | 59.812 |
+| IP | 0.90396 | 92.600 |
+| LP | 0.91687 | 126.292 |
+| Total | - | 278.704 |
+
+With the report's 97.5 percent steam-generator efficiency, the connected model
+produces 271.736 MWe versus 272 MWe published. Its normalized numerical
+residual is below `1e-10` (approximately `4.3e-14` in the recorded run).
+
+Two interpretation choices are explicit: the 1,405 lb/h gland stream is split
+before the HP turbine at main-steam enthalpy, as shown in the diagram, and the
+33,112 lb/h HP leakage is assigned HP-exhaust enthalpy before throttling to the
+reheat pressure because no separate leakage state is published. The latter and
+displayed SI/US flow rounding account for part of the 0.264 MWe difference.
+These are benchmark-adapter assumptions, not hidden core corrections.
+
+The calibrated efficiency model validates topology, mixing, leakage routing,
+stage balances, and design-point calculation. It is not yet an off-design steam
+turbine prediction model; that requires stage-group maps or equivalent OEM
+correlations and a wet-stage efficiency model.
+
 Run the case with:
 
 ```sh
@@ -115,6 +158,10 @@ Run the case with:
 ./build/thermox_cli solve \
   --model benchmarks/netl_b31a/steam_stream_states.json \
   --case published_states --format text
+
+./build/thermox_cli solve \
+  --model benchmarks/netl_b31a/steam_turbine_train.json \
+  --case published_design --format text
 ```
 
 ## Scope and next expansion

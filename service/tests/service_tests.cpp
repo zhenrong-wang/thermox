@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 53,
+        response.components.size() == 54,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -878,10 +878,95 @@ void test_netl_b31a_steam_stream_property_benchmark() {
     const double exhaust_quality = require_result_value(
         exhaust.derived_values, "vapor_quality").value_si;
     require(
-        std::abs(exhaust_temperature - 318.957548207) < 1.0e-3 &&
+        std::abs(exhaust_temperature - 311.869076244) < 1.0e-3 &&
             exhaust_quality > 0.90 && exhaust_quality < 0.93,
-        "the rounded 0.01 MPa LP exhaust boundary must resolve as "
-        "wet steam with explicit saturation temperature and quality");
+        "the detailed 1 psia LP exhaust boundary must resolve as "
+        "wet steam near the published temperature with explicit "
+        "quality");
+}
+
+void test_netl_b31a_decomposed_steam_turbine_train() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/netl_b31a/steam_turbine_train.json");
+    request.case_id = "published_design";
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "NETL B31A decomposed steam train must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-10,
+        "decomposed steam-train equations must close independently "
+        "of published-data tolerances");
+
+    struct StageTarget {
+        const char* id;
+        double outlet_pressure_pa;
+        double outlet_enthalpy_j_kg;
+        double shaft_power_w;
+    };
+    constexpr StageTarget targets[] = {
+        {"hp_turbine", 4.13e6, 3125122.33267645,
+         59811657.3037643},
+        {"ip_turbine", 0.52e6, 3064091.52889555,
+         92600048.3263533},
+        {"lp_turbine", 6894.757293168, 2375860.0,
+         126292155.644046},
+    };
+    double total_shaft_power = 0.0;
+    for (const auto& target : targets) {
+        const auto& outlet = require_port_result(
+            response.graph, target.id, "outlet");
+        const auto& shaft = require_port_result(
+            response.graph, target.id, "shaft");
+        require(
+            std::abs(
+                require_result_value(
+                    outlet.primary_values, "p").value_si -
+                target.outlet_pressure_pa) < 1.0e-3 &&
+            std::abs(
+                require_result_value(
+                    outlet.primary_values, "h").value_si -
+                target.outlet_enthalpy_j_kg) < 1.0e-3,
+            std::string(target.id) +
+                " must reproduce its independently calibrated "
+                "design outlet state");
+        const double power = require_result_value(
+            shaft.primary_values, "W_dot").value_si;
+        require(
+            std::abs(power - target.shaft_power_w) < 1.0,
+            std::string(target.id) +
+                " shaft balance must remain reproducible");
+        total_shaft_power += power;
+    }
+    require(
+        std::abs(total_shaft_power - 278703861.274164) < 1.0,
+        "decomposed HP/IP/LP shaft powers must aggregate exactly");
+    require(
+        std::abs(total_shaft_power * 0.975 / 1.0e6 - 272.0) < 0.4,
+        "decomposed train must reproduce published generator power "
+        "within source/property precision");
+
+    const auto& cold_reheat = require_port_result(
+        response.graph, "cold_reheat", "inlet");
+    const auto& lp_exhaust = require_port_result(
+        response.graph, "condenser_inlet", "inlet");
+    require(
+        std::abs(
+            require_result_value(
+                cold_reheat.primary_values, "m_dot").value_si -
+            526630.0 / 3600.0) < 1.0e-9,
+        "HP split must preserve the published cold-reheat flow");
+    require(
+        std::abs(
+            require_result_value(
+                lp_exhaust.primary_values, "m_dot").value_si -
+            659752.0 / 3600.0) < 1.0e-3,
+        "split, leakage, reheat, and LP admission routing must "
+        "reproduce condenser flow within source rounding");
 }
 
 void test_netl_b31a_published_balance_consistency() {
@@ -2380,6 +2465,7 @@ int main() {
         test_netl_b31a_hrsg_boundary_benchmark();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
+        test_netl_b31a_decomposed_steam_turbine_train();
         test_netl_b31a_published_balance_consistency();
         test_compile_aware_validation_diagnostics();
         test_structurally_singular_validation_diagnostic();

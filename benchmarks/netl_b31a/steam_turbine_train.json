@@ -1,0 +1,193 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "netl_b31a_steam_turbine_train",
+    "name": "NETL B31A decomposed HP-IP-LP steam turbine train",
+    "revision": "1",
+    "media": [
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water",
+        "package_version": "8.0.0"
+      }
+    ],
+    "materials": [],
+    "components": [
+      {"id": "main_steam", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "gland_split", "kind": "junction.fluid.splitter.two_outlet", "version": "1.0.0", "media": {"inlet": "water", "outlet_a": "water", "outlet_b": "water"}},
+      {"id": "gland_loss", "kind": "sink.fluid.boundary", "version": "1.0.0", "media": {"inlet": "water"}},
+      {
+        "id": "hp_turbine",
+        "kind": "turbine.fluid.isentropic_efficiency",
+        "version": "1.0.0",
+        "parameters": {"pressure_ratio": 4.18886198547215, "eta_is": 0.898024117642766},
+        "media": {"inlet": "water", "outlet": "water"}
+      },
+      {"id": "hp_exhaust_split", "kind": "junction.fluid.splitter.two_outlet", "version": "1.0.0", "media": {"inlet": "water", "outlet_a": "water", "outlet_b": "water"}},
+      {"id": "cold_reheat", "kind": "sink.fluid.boundary", "version": "1.0.0", "media": {"inlet": "water"}},
+      {"id": "hp_leak_valve", "kind": "valve.fluid.isenthalpic_pressure_ratio", "version": "1.0.0", "parameters": {"pressure_ratio": 1.07552083333333}, "media": {"inlet": "water", "outlet": "water"}},
+      {"id": "hot_reheat", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "ip_inlet_mixer", "kind": "junction.fluid.mixer.two_inlet", "version": "1.0.0", "media": {"inlet_a": "water", "inlet_b": "water", "outlet": "water"}},
+      {
+        "id": "ip_turbine",
+        "kind": "turbine.fluid.isentropic_efficiency",
+        "version": "1.0.0",
+        "parameters": {"pressure_ratio": 7.38461538461538, "eta_is": 0.903963681008807},
+        "media": {"inlet": "water", "outlet": "water"}
+      },
+      {"id": "ip_exhaust_valve", "kind": "valve.fluid.isenthalpic_pressure_ratio", "version": "1.0.0", "parameters": {"pressure_ratio": 1.01960784313725}, "media": {"inlet": "water", "outlet": "water"}},
+      {"id": "lp_admission", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "lp_inlet_mixer", "kind": "junction.fluid.mixer.two_inlet", "version": "1.0.0", "media": {"inlet_a": "water", "inlet_b": "water", "outlet": "water"}},
+      {
+        "id": "lp_turbine",
+        "kind": "turbine.fluid.isentropic_efficiency",
+        "version": "1.0.0",
+        "parameters": {"pressure_ratio": 73.9692462424106, "eta_is": 0.91686935819758},
+        "media": {"inlet": "water", "outlet": "water"}
+      },
+      {"id": "condenser_inlet", "kind": "sink.fluid.boundary", "version": "1.0.0", "media": {"inlet": "water"}}
+    ],
+    "connections": [
+      {"id": "main_to_gland_split", "from": "main_steam.outlet", "to": "gland_split.inlet", "kind": "fluid_link"},
+      {"id": "gland_split_to_hp", "from": "gland_split.outlet_a", "to": "hp_turbine.inlet", "kind": "fluid_link"},
+      {"id": "gland_loss_boundary", "from": "gland_split.outlet_b", "to": "gland_loss.inlet", "kind": "fluid_link"},
+      {"id": "hp_to_exhaust_split", "from": "hp_turbine.outlet", "to": "hp_exhaust_split.inlet", "kind": "fluid_link"},
+      {"id": "cold_reheat_boundary", "from": "hp_exhaust_split.outlet_a", "to": "cold_reheat.inlet", "kind": "fluid_link"},
+      {"id": "hp_leak_to_valve", "from": "hp_exhaust_split.outlet_b", "to": "hp_leak_valve.inlet", "kind": "fluid_link"},
+      {"id": "reheat_to_ip_mixer", "from": "hot_reheat.outlet", "to": "ip_inlet_mixer.inlet_a", "kind": "fluid_link"},
+      {"id": "leak_to_ip_mixer", "from": "hp_leak_valve.outlet", "to": "ip_inlet_mixer.inlet_b", "kind": "fluid_link"},
+      {"id": "ip_mixer_to_turbine", "from": "ip_inlet_mixer.outlet", "to": "ip_turbine.inlet", "kind": "fluid_link"},
+      {"id": "ip_to_pressure_equalizer", "from": "ip_turbine.outlet", "to": "ip_exhaust_valve.inlet", "kind": "fluid_link"},
+      {"id": "ip_to_lp_mixer", "from": "ip_exhaust_valve.outlet", "to": "lp_inlet_mixer.inlet_a", "kind": "fluid_link"},
+      {"id": "lp_admission_to_mixer", "from": "lp_admission.outlet", "to": "lp_inlet_mixer.inlet_b", "kind": "fluid_link"},
+      {"id": "lp_mixer_to_turbine", "from": "lp_inlet_mixer.outlet", "to": "lp_turbine.inlet", "kind": "fluid_link"},
+      {"id": "lp_to_condenser", "from": "lp_turbine.outlet", "to": "condenser_inlet.inlet", "kind": "fluid_link"}
+    ]
+  },
+  "cases": [
+    {
+      "id": "published_design",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "main_steam.outlet.m_dot": {"value": 150.635, "unit": "kg/s"},
+        "main_steam.outlet.p": {"value": 17.30, "unit": "MPa"},
+        "main_steam.outlet.T": {"value": 585.0, "unit": "degC"},
+        "gland_loss.inlet.m_dot": {"value": 0.177027161625, "unit": "kg/s"},
+        "cold_reheat.inlet.m_dot": {"value": 146.286111111111, "unit": "kg/s"},
+        "hot_reheat.outlet.m_dot": {"value": 159.865277777778, "unit": "kg/s"},
+        "hot_reheat.outlet.T": {"value": 585.0, "unit": "degC"},
+        "lp_admission.outlet.m_dot": {"value": 19.2272222222222, "unit": "kg/s"},
+        "lp_admission.outlet.T": {"value": 304.0, "unit": "degC"},
+        "hp_turbine.shaft.omega": {"value": 314.159265358979, "unit": "rad/s"},
+        "ip_turbine.shaft.omega": {"value": 314.159265358979, "unit": "rad/s"},
+        "lp_turbine.shaft.omega": {"value": 314.159265358979, "unit": "rad/s"}
+      },
+      "initial_guesses": {
+        "hot_reheat.outlet.p": {"value": 3.84, "unit": "MPa"},
+        "lp_admission.outlet.p": {"value": 0.51, "unit": "MPa"},
+        "gland_split.inlet.p": {"value": 17.30, "unit": "MPa"},
+        "gland_split.inlet.h": {"value": 3522.65, "unit": "kJ/kg"},
+        "gland_split.outlet_a.p": {"value": 17.30, "unit": "MPa"},
+        "gland_split.outlet_a.h": {"value": 3522.65, "unit": "kJ/kg"},
+        "gland_split.outlet_b.p": {"value": 17.30, "unit": "MPa"},
+        "gland_split.outlet_b.h": {"value": 3522.65, "unit": "kJ/kg"},
+        "gland_loss.inlet.p": {"value": 17.30, "unit": "MPa"},
+        "gland_loss.inlet.h": {"value": 3522.65, "unit": "kJ/kg"},
+        "hp_turbine.inlet.p": {"value": 17.30, "unit": "MPa"},
+        "hp_turbine.inlet.h": {"value": 3522.65, "unit": "kJ/kg"},
+        "hp_turbine.outlet.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "hp_turbine.outlet.p": {"value": 4.13, "unit": "MPa"},
+        "hp_turbine.shaft.W_dot": {"value": 60.0, "unit": "MW"},
+        "hp_exhaust_split.inlet.p": {"value": 4.13, "unit": "MPa"},
+        "hp_exhaust_split.inlet.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "hp_exhaust_split.outlet_a.p": {"value": 4.13, "unit": "MPa"},
+        "hp_exhaust_split.outlet_a.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "hp_exhaust_split.outlet_b.p": {"value": 4.13, "unit": "MPa"},
+        "hp_exhaust_split.outlet_b.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "cold_reheat.inlet.p": {"value": 4.13, "unit": "MPa"},
+        "cold_reheat.inlet.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "hp_leak_valve.inlet.p": {"value": 4.13, "unit": "MPa"},
+        "hp_leak_valve.inlet.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "hp_leak_valve.outlet.p": {"value": 3.84, "unit": "MPa"},
+        "hp_leak_valve.outlet.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "ip_inlet_mixer.inlet_a.p": {"value": 3.84, "unit": "MPa"},
+        "ip_inlet_mixer.inlet_a.h": {"value": 3641.74, "unit": "kJ/kg"},
+        "ip_inlet_mixer.inlet_b.p": {"value": 3.84, "unit": "MPa"},
+        "ip_inlet_mixer.inlet_b.h": {"value": 3124.08, "unit": "kJ/kg"},
+        "ip_inlet_mixer.outlet.p": {"value": 3.84, "unit": "MPa"},
+        "ip_inlet_mixer.outlet.h": {"value": 3628.0, "unit": "kJ/kg"},
+        "ip_turbine.inlet.p": {"value": 3.84, "unit": "MPa"},
+        "ip_turbine.inlet.h": {"value": 3628.0, "unit": "kJ/kg"},
+        "ip_turbine.outlet.h": {"value": 3062.57, "unit": "kJ/kg"},
+        "ip_turbine.outlet.p": {"value": 0.52, "unit": "MPa"},
+        "ip_turbine.shaft.W_dot": {"value": 92.0, "unit": "MW"},
+        "ip_exhaust_valve.inlet.p": {"value": 0.52, "unit": "MPa"},
+        "ip_exhaust_valve.inlet.h": {"value": 3062.57, "unit": "kJ/kg"},
+        "ip_exhaust_valve.outlet.p": {"value": 0.51, "unit": "MPa"},
+        "ip_exhaust_valve.outlet.h": {"value": 3062.57, "unit": "kJ/kg"},
+        "lp_inlet_mixer.inlet_a.p": {"value": 0.51, "unit": "MPa"},
+        "lp_inlet_mixer.inlet_a.h": {"value": 3062.57, "unit": "kJ/kg"},
+        "lp_inlet_mixer.inlet_b.p": {"value": 0.51, "unit": "MPa"},
+        "lp_inlet_mixer.inlet_b.h": {"value": 3072.61, "unit": "kJ/kg"},
+        "lp_inlet_mixer.outlet.p": {"value": 0.51, "unit": "MPa"},
+        "lp_inlet_mixer.outlet.h": {"value": 3063.62, "unit": "kJ/kg"},
+        "lp_turbine.inlet.p": {"value": 0.51, "unit": "MPa"},
+        "lp_turbine.inlet.h": {"value": 3065.0, "unit": "kJ/kg"},
+        "lp_turbine.outlet.h": {"value": 2375.86, "unit": "kJ/kg"},
+        "lp_turbine.outlet.p": {"value": 0.006894757293168, "unit": "MPa"},
+        "lp_turbine.shaft.W_dot": {"value": 127.0, "unit": "MW"},
+        "condenser_inlet.inlet.p": {"value": 0.006894757293168, "unit": "MPa"},
+        "condenser_inlet.inlet.h": {"value": 2375.86, "unit": "kJ/kg"}
+      }
+    }
+  ],
+  "calibrations": [
+    {
+      "id": "published_stage_efficiency_fit",
+      "parameters": [
+        {
+          "id": "hp_eta_is",
+          "scope": "component",
+          "targets": ["components.hp_turbine.parameters.eta_is"],
+          "bounds": {"lower": 0.75, "upper": 0.99}
+        },
+        {
+          "id": "ip_eta_is",
+          "scope": "component",
+          "targets": ["components.ip_turbine.parameters.eta_is"],
+          "bounds": {"lower": 0.75, "upper": 0.99}
+        },
+        {
+          "id": "lp_eta_is",
+          "scope": "component",
+          "targets": ["components.lp_turbine.parameters.eta_is"],
+          "bounds": {"lower": 0.75, "upper": 0.99}
+        }
+      ],
+      "observations": [
+        {
+          "id": "hp_outlet_enthalpy",
+          "case": "published_design",
+          "target": "hp_turbine.outlet.h",
+          "measured": {"value": 3125.12233267645, "unit": "kJ/kg"},
+          "sigma": {"value": 2.5, "unit": "kJ/kg"}
+        },
+        {
+          "id": "ip_outlet_enthalpy",
+          "case": "published_design",
+          "target": "ip_turbine.outlet.h",
+          "measured": {"value": 3064.09152889555, "unit": "kJ/kg"},
+          "sigma": {"value": 2.5, "unit": "kJ/kg"}
+        },
+        {
+          "id": "lp_outlet_enthalpy",
+          "case": "published_design",
+          "target": "lp_turbine.outlet.h",
+          "measured": {"value": 2375.86, "unit": "kJ/kg"},
+          "sigma": {"value": 2.5, "unit": "kJ/kg"}
+        }
+      ]
+    }
+  ]
+}

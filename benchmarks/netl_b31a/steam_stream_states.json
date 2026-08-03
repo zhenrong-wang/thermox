@@ -45,7 +45,7 @@
         "stream_9.outlet.p": {"value": 0.51, "unit": "MPa"},
         "stream_9.outlet.T": {"value": 304.0, "unit": "degC"},
         "stream_10.outlet.m_dot": {"value": 183.264444444444, "unit": "kg/s"},
-        "stream_10.outlet.p": {"value": 0.01, "unit": "MPa"},
+        "stream_10.outlet.p": {"value": 0.006894757293168, "unit": "MPa"},
         "stream_10.outlet.h": {"value": 2375.86, "unit": "kJ/kg"},
         "stream_11.outlet.m_dot": {"value": 183.441666666667, "unit": "kg/s"},
         "stream_11.outlet.p": {"value": 0.01, "unit": "MPa"},
