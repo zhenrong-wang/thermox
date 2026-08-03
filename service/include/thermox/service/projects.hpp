@@ -120,6 +120,8 @@ struct StudyRevisionRecord {
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
     std::vector<ResultProjection> result_projections;
+    std::vector<EngineeringAcceptanceCriterion>
+        acceptance_criteria;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -271,6 +273,8 @@ public:
         const std::string& intent,
         const std::vector<std::string>& artifact_revision_ids,
         const std::vector<ResultProjection>& result_projections,
+        const std::vector<EngineeringAcceptanceCriterion>&
+            acceptance_criteria,
         const std::string& checksum) = 0;
     virtual std::optional<StudyRevisionRecord> get_study_revision(
         const std::string& team_id,
@@ -434,6 +438,8 @@ struct CreateStudyRevisionRequest {
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
     std::vector<ResultProjection> result_projections;
+    std::vector<EngineeringAcceptanceCriterion>
+        acceptance_criteria;
 };
 
 struct CreateCalibrationRevisionRequest {

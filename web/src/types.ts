@@ -202,6 +202,35 @@ export interface ResultProjection {
   aggregation: ResultAggregation
 }
 
+export interface EngineeringAcceptanceCriterion {
+  id: string
+  projection_id: string
+  dimension: string
+  lower_bound_si: number | null
+  upper_bound_si: number | null
+  lower_inclusive: boolean
+  upper_inclusive: boolean
+}
+
+export interface EngineeringAcceptanceResult {
+  criterion_id: string
+  projection_id: string
+  dimension: string
+  actual_value_si: number
+  lower_bound_si: number | null
+  upper_bound_si: number | null
+  lower_inclusive: boolean
+  upper_inclusive: boolean
+  passed: boolean
+}
+
+export interface EngineeringAcceptanceSummary {
+  passed: boolean
+  passed_count: number
+  failed_count: number
+  criteria: EngineeringAcceptanceResult[]
+}
+
 export interface StudyRevision {
   schema_version: 'thermox.study_revision/v1'
   study_revision_id: string
@@ -215,6 +244,7 @@ export interface StudyRevision {
   intent: string
   artifact_revision_ids: string[]
   result_projections: ResultProjection[]
+  acceptance_criteria: EngineeringAcceptanceCriterion[]
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
@@ -234,6 +264,7 @@ export interface CreateStudyRevision {
   intent: string
   artifact_revision_ids: string[]
   result_projections: ResultProjection[]
+  acceptance_criteria: EngineeringAcceptanceCriterion[]
 }
 
 export interface CalibrationDocument {
@@ -390,6 +421,7 @@ export interface SimulationJob {
       checksum_sha256: string
     }>
     result_projections: ResultProjection[]
+    acceptance_criteria: EngineeringAcceptanceCriterion[]
     validation_prediction_count: number
     fingerprint: string
   }
@@ -459,6 +491,7 @@ export interface SimulationJob {
     schema_version: 'thermox.result_summary/v1'
     mode: 'steady' | 'transient'
     values: ResultSummaryValue[]
+    engineering_acceptance: EngineeringAcceptanceSummary | null
   } | null
 }
 

@@ -52,6 +52,8 @@ struct SimulationJobRequest {
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;
     std::vector<ResultProjection> result_projections;
+    std::vector<EngineeringAcceptanceCriterion>
+        acceptance_criteria;
 };
 
 struct ResultArtifactManifest {

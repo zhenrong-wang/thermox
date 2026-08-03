@@ -289,6 +289,26 @@ void test_success_publishes_a_readable_artifact() {
             thermox::service::ResultAggregation::final,
         },
     };
+    request.acceptance_criteria = {
+        {
+            "outlet_temperature_operating_band",
+            "compressor_outlet_temperature",
+            "temperature",
+            300.0,
+            1000.0,
+            true,
+            true,
+        },
+        {
+            "outlet_temperature_intentionally_failing",
+            "compressor_outlet_temperature",
+            "temperature",
+            1000.0,
+            std::nullopt,
+            true,
+            true,
+        },
+    };
     const auto queued = service.submit(request);
     bool unavailable = false;
     try {
@@ -335,6 +355,17 @@ void test_success_publishes_a_readable_artifact() {
             completed->result_summary->values.front().dimension ==
                 "temperature",
         "workers must materialize configured result projections");
+    require(
+        completed->result_summary->engineering_acceptance &&
+            !completed->result_summary->engineering_acceptance->passed &&
+            completed->result_summary->engineering_acceptance
+                    ->passed_count == 1U &&
+            completed->result_summary->engineering_acceptance
+                    ->failed_count == 1U &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "engineering acceptance must report pass/fail criteria "
+        "without rewriting successful numerical execution state");
 
     const auto& manifest = *completed->result_artifact;
     require(
@@ -370,6 +401,10 @@ void test_success_publishes_a_readable_artifact() {
             json.find("\"result_artifact\": {") !=
                 std::string::npos &&
             json.find("\"result_summary\": {") !=
+                std::string::npos &&
+            json.find("\"engineering_acceptance\": {") !=
+                std::string::npos &&
+            json.find("\"failed_count\": 1") !=
                 std::string::npos &&
             json.find("\"execution\": {") !=
                 std::string::npos,

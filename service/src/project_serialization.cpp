@@ -511,6 +511,35 @@ void study_revision_json(
         json_string(out, to_string(projection.aggregation));
         out << '}';
     }
+    out << "], \"acceptance_criteria\": [";
+    for (std::size_t index = 0;
+         index < revision.acceptance_criteria.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& criterion = revision.acceptance_criteria[index];
+        out << "{\"id\": ";
+        json_string(out, criterion.id);
+        out << ", \"projection_id\": ";
+        json_string(out, criterion.projection_id);
+        out << ", \"dimension\": ";
+        json_string(out, criterion.dimension);
+        out << ", \"lower_bound_si\": ";
+        if (criterion.lower_bound_si) {
+            out << *criterion.lower_bound_si;
+        } else {
+            out << "null";
+        }
+        out << ", \"upper_bound_si\": ";
+        if (criterion.upper_bound_si) {
+            out << *criterion.upper_bound_si;
+        } else {
+            out << "null";
+        }
+        out << ", \"lower_inclusive\": "
+            << (criterion.lower_inclusive ? "true" : "false")
+            << ", \"upper_inclusive\": "
+            << (criterion.upper_inclusive ? "true" : "false")
+            << '}';
+    }
     out << "], \"checksum\": ";
     json_string(out, revision.checksum);
     out << ", \"created_by_user_id\": ";

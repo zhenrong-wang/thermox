@@ -100,6 +100,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "012_job_study_provenance.sql",
              "013_calibration_revisions.sql",
              "014_calibration_jobs.sql",
+             "015_study_acceptance_criteria.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +

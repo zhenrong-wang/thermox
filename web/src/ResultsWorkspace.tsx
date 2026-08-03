@@ -364,6 +364,65 @@ export function ResultsWorkspace({
             )}
           </div>
 
+          {job.result_summary?.engineering_acceptance && (
+            <section className={`engineering-acceptance-card ${
+              job.result_summary.engineering_acceptance.passed
+                ? 'accepted' : 'not-accepted'
+            }`}>
+              <header>
+                <div>
+                  <span className="section-kicker">Engineering criteria</span>
+                  <h2>Acceptance evaluation</h2>
+                </div>
+                <strong>
+                  {job.result_summary.engineering_acceptance.passed
+                    ? 'Accepted' : 'Not accepted'}
+                </strong>
+              </header>
+              {job.result_summary.engineering_acceptance.criteria.map(
+                (criterion) => {
+                  const actual = displayValue(
+                    criterion.actual_value_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
+                  const lower = criterion.lower_bound_si === null
+                    ? '−∞'
+                    : formatResultValue(displayValue(
+                      criterion.lower_bound_si,
+                      criterion.dimension,
+                      profile,
+                      unitDimensions,
+                    ).value)
+                  const upper = criterion.upper_bound_si === null
+                    ? '+∞'
+                    : formatResultValue(displayValue(
+                      criterion.upper_bound_si,
+                      criterion.dimension,
+                      profile,
+                      unitDimensions,
+                    ).value)
+                  return (
+                    <div className="acceptance-result-row" key={criterion.criterion_id}>
+                      <span className={criterion.passed ? 'passed' : 'failed'}>
+                        {criterion.passed ? 'Pass' : 'Fail'}
+                      </span>
+                      <strong>{criterion.criterion_id}</strong>
+                      <code>
+                        {formatResultValue(actual.value)} {actual.unit}
+                      </code>
+                      <small>
+                        {criterion.lower_inclusive ? '[' : '('}{lower}, {upper}
+                        {criterion.upper_inclusive ? ']' : ')'} {actual.unit}
+                      </small>
+                    </div>
+                  )
+                },
+              )}
+            </section>
+          )}
+
           {diagnosticSummary && (
             <section className="solver-diagnostic-card">
               <header>

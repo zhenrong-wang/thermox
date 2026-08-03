@@ -934,6 +934,15 @@ void test_studies_bind_immutable_engineering_intent() {
         "temperature",
         thermox::service::ResultAggregation::final,
     }};
+    request.acceptance_criteria = {{
+        "outlet_temperature_band",
+        "outlet_temperature",
+        "temperature",
+        300.0,
+        700.0,
+        true,
+        true,
+    }};
     const auto first = service.create_study_revision(request);
     request.parent_study_revision_id = first.study_revision_id;
     const auto second = service.create_study_revision(request);
@@ -944,6 +953,7 @@ void test_studies_bind_immutable_engineering_intent() {
             second.revision_number == 2U &&
             history.size() == 2U &&
             first.checksum == second.checksum &&
+            first.acceptance_criteria.size() == 1U &&
             !service.get_study_revision(
                 team_b, project.project_id,
                 first.study_revision_id),
@@ -951,9 +961,28 @@ void test_studies_bind_immutable_engineering_intent() {
         "and Team scoped");
     require(
         thermox::service::serialize_study_revision_json(first)
-                .find("\"intent\": \"steady_state_design\"") !=
-            std::string::npos,
-        "study serialization must expose durable intent");
+                    .find("\"intent\": \"steady_state_design\"") !=
+                std::string::npos &&
+            thermox::service::serialize_study_revision_json(first)
+                    .find("\"acceptance_criteria\": [") !=
+                std::string::npos,
+        "study serialization must expose durable intent and "
+        "engineering acceptance criteria");
+
+    auto invalid_criterion = request;
+    invalid_criterion.parent_study_revision_id.clear();
+    invalid_criterion.study_id = "invalid-acceptance";
+    invalid_criterion.acceptance_criteria.front().dimension = "power";
+    bool invalid_criterion_rejected = false;
+    try {
+        (void)service.create_study_revision(invalid_criterion);
+    } catch (const thermox::service::ProjectRequestError&) {
+        invalid_criterion_rejected = true;
+    }
+    require(
+        invalid_criterion_rejected,
+        "Study publication must reject acceptance criteria whose "
+        "dimension differs from the selected result projection");
 
     request.intent = "steady_state_off_design";
     bool mismatch_rejected = false;

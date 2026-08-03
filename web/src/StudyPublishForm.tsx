@@ -5,6 +5,7 @@ import {
 } from './runAuthoring'
 import type {
   Catalog,
+  EngineeringAcceptanceCriterion,
   ResultAggregation,
   ResultProjection,
   ResultValueScope,
@@ -18,7 +19,10 @@ interface StudyPublishFormProps {
   base?: StudyRevision
   transient: boolean
   onCancel: () => void
-  onSubmit: (projections: ResultProjection[]) => Promise<void>
+  onSubmit: (
+    projections: ResultProjection[],
+    acceptanceCriteria: EngineeringAcceptanceCriterion[],
+  ) => Promise<void>
 }
 
 const scopes: ResultValueScope[] = [
@@ -41,6 +45,9 @@ export function StudyPublishForm({
   const [projections, setProjections] = useState<ResultProjection[]>(
     base?.result_projections ?? [],
   )
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<
+    EngineeringAcceptanceCriterion[]
+  >(base?.acceptance_criteria ?? [])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -72,12 +79,35 @@ export function StudyPublishForm({
       },
     ])
   }
+  const updateCriterion = (
+    index: number,
+    value: Partial<EngineeringAcceptanceCriterion>,
+  ) => setAcceptanceCriteria((current) =>
+    current.map((criterion, item) =>
+      item === index ? { ...criterion, ...value } : criterion,
+    ),
+  )
+  const addCriterion = () => {
+    const projection = projections[0]
+    setAcceptanceCriteria((current) => [
+      ...current,
+      {
+        id: `acceptance_${current.length + 1}`,
+        projection_id: projection?.id ?? '',
+        dimension: projection?.dimension ?? '',
+        lower_bound_si: null,
+        upper_bound_si: null,
+        lower_inclusive: true,
+        upper_inclusive: true,
+      },
+    ])
+  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setSubmitting(true)
     setError('')
     try {
-      await onSubmit(projections)
+      await onSubmit(projections, acceptanceCriteria)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Study was rejected.')
     } finally {
@@ -163,6 +193,77 @@ export function StudyPublishForm({
             ))}
             <button type="button" className="secondary-button projection-add"
               onClick={add}>+ Result projection</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Engineering acceptance</legend>
+          <p className="form-note acceptance-note">
+            Optional canonical-SI bounds are evaluated after a converged run.
+            They do not change numerical solver status.
+          </p>
+          <div className="projection-editor">
+            {!acceptanceCriteria.length && (
+              <p>No engineering acceptance criteria configured.</p>
+            )}
+            {acceptanceCriteria.map((criterion, index) => (
+              <div className="acceptance-row" key={`${criterion.id}-${index}`}>
+                <input aria-label="Acceptance criterion ID" value={criterion.id}
+                  placeholder="Criterion ID" onChange={(event) =>
+                    updateCriterion(index, { id: event.target.value })} />
+                <select aria-label="Acceptance projection"
+                  value={criterion.projection_id}
+                  onChange={(event) => {
+                    const projection = projections.find(
+                      (item) => item.id === event.target.value,
+                    )
+                    updateCriterion(index, {
+                      projection_id: event.target.value,
+                      dimension: projection?.dimension ?? '',
+                    })
+                  }}>
+                  {!projections.length && <option value="">No projection</option>}
+                  {projections.map((projection) => (
+                    <option value={projection.id} key={projection.id}>
+                      {projection.id}
+                    </option>
+                  ))}
+                </select>
+                <input aria-label="Acceptance dimension" value={criterion.dimension}
+                  readOnly placeholder="Dimension" />
+                <input aria-label="Acceptance lower bound SI" type="number" step="any"
+                  value={criterion.lower_bound_si ?? ''} placeholder="Lower bound (SI)"
+                  onChange={(event) => updateCriterion(index, {
+                    lower_bound_si: event.target.value === ''
+                      ? null : Number(event.target.value),
+                  })} />
+                <input aria-label="Acceptance upper bound SI" type="number" step="any"
+                  value={criterion.upper_bound_si ?? ''} placeholder="Upper bound (SI)"
+                  onChange={(event) => updateCriterion(index, {
+                    upper_bound_si: event.target.value === ''
+                      ? null : Number(event.target.value),
+                  })} />
+                <label className="acceptance-inclusive">
+                  <input type="checkbox" checked={criterion.lower_inclusive}
+                    onChange={(event) => updateCriterion(index, {
+                      lower_inclusive: event.target.checked,
+                    })} /> lower inclusive
+                </label>
+                <label className="acceptance-inclusive">
+                  <input type="checkbox" checked={criterion.upper_inclusive}
+                    onChange={(event) => updateCriterion(index, {
+                      upper_inclusive: event.target.checked,
+                    })} /> upper inclusive
+                </label>
+                <button type="button" className="projection-remove"
+                  aria-label="Remove acceptance criterion"
+                  onClick={() => setAcceptanceCriteria((current) =>
+                    current.filter((_, item) => item !== index))}>×</button>
+              </div>
+            ))}
+            <button type="button" className="secondary-button projection-add"
+              disabled={!projections.length} onClick={addCriterion}>
+              + Acceptance criterion
+            </button>
           </div>
         </fieldset>
         {error && <div className="form-error">{error}</div>}

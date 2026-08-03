@@ -234,6 +234,22 @@ export function ExecutionHistory({
                 </div>
               )}
               {selected.result_summary && (
+                <>
+                {selected.result_summary.engineering_acceptance && (
+                  <div className={`job-acceptance ${
+                    selected.result_summary.engineering_acceptance.passed
+                      ? 'accepted' : 'not-accepted'
+                  }`}>
+                    <strong>
+                      {selected.result_summary.engineering_acceptance.passed
+                        ? 'Engineering accepted' : 'Engineering not accepted'}
+                    </strong>
+                    <span>
+                      {selected.result_summary.engineering_acceptance.passed_count} passed ·{' '}
+                      {selected.result_summary.engineering_acceptance.failed_count} failed
+                    </span>
+                  </div>
+                )}
                 <div className="job-summary">
                   <header>
                     <h3>Projected results</h3>
@@ -258,6 +274,7 @@ export function ExecutionHistory({
                     })()
                   ))}
                 </div>
+                </>
               )}
               {selected.result_artifact && (
                 <div className="result-manifest">

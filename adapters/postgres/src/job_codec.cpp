@@ -822,6 +822,43 @@ service::ResultProjection decode_result_projection(
     return value;
 }
 
+Tree acceptance_criterion(
+    const service::EngineeringAcceptanceCriterion& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("projection_id", value.projection_id);
+    tree.put("dimension", value.dimension);
+    if (value.lower_bound_si) {
+        tree.put("lower_bound_si", *value.lower_bound_si);
+    }
+    if (value.upper_bound_si) {
+        tree.put("upper_bound_si", *value.upper_bound_si);
+    }
+    tree.put("lower_inclusive", value.lower_inclusive);
+    tree.put("upper_inclusive", value.upper_inclusive);
+    return tree;
+}
+
+service::EngineeringAcceptanceCriterion
+decode_acceptance_criterion(const Tree& tree) {
+    service::EngineeringAcceptanceCriterion value;
+    value.id = tree.get<std::string>("id");
+    value.projection_id =
+        tree.get<std::string>("projection_id");
+    value.dimension = tree.get<std::string>("dimension");
+    if (const auto lower =
+            tree.get_optional<double>("lower_bound_si")) {
+        value.lower_bound_si = *lower;
+    }
+    if (const auto upper =
+            tree.get_optional<double>("upper_bound_si")) {
+        value.upper_bound_si = *upper;
+    }
+    value.lower_inclusive = tree.get("lower_inclusive", true);
+    value.upper_inclusive = tree.get("upper_inclusive", true);
+    return value;
+}
+
 }  // namespace
 
 std::string encode_request(
@@ -915,6 +952,13 @@ std::string encode_request(
             [](const service::ResultProjection& projection) {
                 return result_projection(projection);
             }));
+    tree.add_child(
+        "acceptance_criteria",
+        array(
+            request.acceptance_criteria,
+            [](const service::EngineeringAcceptanceCriterion& criterion) {
+                return acceptance_criterion(criterion);
+            }));
     return write(tree);
 }
 
@@ -1000,6 +1044,18 @@ service::SimulationJobRequest decode_request(
                 return decode_result_projection(encoded);
             });
     service::validate_result_projections(
+        request.result_projections);
+    if (const auto encoded =
+            tree.get_child_optional("acceptance_criteria")) {
+        request.acceptance_criteria =
+            decode_array<service::EngineeringAcceptanceCriterion>(
+                *encoded,
+                [](const Tree& item) {
+                    return decode_acceptance_criterion(item);
+                });
+    }
+    service::validate_engineering_acceptance_criteria(
+        request.acceptance_criteria,
         request.result_projections);
     return request;
 }
@@ -1299,6 +1355,35 @@ std::string encode_result_summary(
                     "sample_time", value.sample_time);
                 return encoded;
             }));
+    if (summary.engineering_acceptance) {
+        const auto& acceptance = *summary.engineering_acceptance;
+        Tree encoded;
+        encoded.put("passed", acceptance.passed);
+        encoded.put("passed_count", acceptance.passed_count);
+        encoded.put("failed_count", acceptance.failed_count);
+        encoded.add_child(
+            "criteria",
+            array(
+                acceptance.criteria,
+                [](const service::EngineeringAcceptanceResult& result) {
+                    Tree item;
+                    item.put("criterion_id", result.criterion_id);
+                    item.put("projection_id", result.projection_id);
+                    item.put("dimension", result.dimension);
+                    item.put("actual_value_si", result.actual_value_si);
+                    if (result.lower_bound_si) {
+                        item.put("lower_bound_si", *result.lower_bound_si);
+                    }
+                    if (result.upper_bound_si) {
+                        item.put("upper_bound_si", *result.upper_bound_si);
+                    }
+                    item.put("lower_inclusive", result.lower_inclusive);
+                    item.put("upper_inclusive", result.upper_inclusive);
+                    item.put("passed", result.passed);
+                    return item;
+                }));
+        tree.add_child("engineering_acceptance", encoded);
+    }
     return write(tree);
 }
 
@@ -1336,6 +1421,44 @@ service::ResultSummary decode_result_summary(
                     encoded.get<double>("sample_time");
                 return value;
             });
+    if (const auto encoded =
+            tree.get_child_optional("engineering_acceptance")) {
+        service::EngineeringAcceptanceSummary acceptance;
+        acceptance.passed = encoded->get<bool>("passed");
+        acceptance.passed_count =
+            encoded->get<std::size_t>("passed_count");
+        acceptance.failed_count =
+            encoded->get<std::size_t>("failed_count");
+        acceptance.criteria =
+            decode_array<service::EngineeringAcceptanceResult>(
+                encoded->get_child("criteria"),
+                [](const Tree& item) {
+                    service::EngineeringAcceptanceResult result;
+                    result.criterion_id =
+                        item.get<std::string>("criterion_id");
+                    result.projection_id =
+                        item.get<std::string>("projection_id");
+                    result.dimension =
+                        item.get<std::string>("dimension");
+                    result.actual_value_si =
+                        item.get<double>("actual_value_si");
+                    if (const auto lower = item.get_optional<double>(
+                            "lower_bound_si")) {
+                        result.lower_bound_si = *lower;
+                    }
+                    if (const auto upper = item.get_optional<double>(
+                            "upper_bound_si")) {
+                        result.upper_bound_si = *upper;
+                    }
+                    result.lower_inclusive =
+                        item.get("lower_inclusive", true);
+                    result.upper_inclusive =
+                        item.get("upper_inclusive", true);
+                    result.passed = item.get<bool>("passed");
+                    return result;
+                });
+        summary.engineering_acceptance = std::move(acceptance);
+    }
     return summary;
 }
 

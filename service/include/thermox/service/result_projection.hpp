@@ -2,6 +2,7 @@
 
 #include "thermox/service/simulation_service.hpp"
 
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -53,10 +54,41 @@ struct ProjectedResultValue {
     double sample_time{0.0};
 };
 
+struct EngineeringAcceptanceCriterion {
+    std::string id;
+    std::string projection_id;
+    std::string dimension;
+    std::optional<double> lower_bound_si;
+    std::optional<double> upper_bound_si;
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
+struct EngineeringAcceptanceResult {
+    std::string criterion_id;
+    std::string projection_id;
+    std::string dimension;
+    double actual_value_si{0.0};
+    std::optional<double> lower_bound_si;
+    std::optional<double> upper_bound_si;
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+    bool passed{false};
+};
+
+struct EngineeringAcceptanceSummary {
+    bool passed{false};
+    std::size_t passed_count{0};
+    std::size_t failed_count{0};
+    std::vector<EngineeringAcceptanceResult> criteria;
+};
+
 struct ResultSummary {
     std::string schema_version{result_summary_schema_v1};
     std::string mode;
     std::vector<ProjectedResultValue> values;
+    std::optional<EngineeringAcceptanceSummary>
+        engineering_acceptance;
 };
 
 class ResultProjectionError : public std::runtime_error {
@@ -66,6 +98,14 @@ public:
 
 void validate_result_projections(
     const std::vector<ResultProjection>& projections);
+
+void validate_engineering_acceptance_criteria(
+    const std::vector<EngineeringAcceptanceCriterion>& criteria,
+    const std::vector<ResultProjection>& projections);
+
+EngineeringAcceptanceSummary evaluate_engineering_acceptance(
+    const ResultSummary& summary,
+    const std::vector<EngineeringAcceptanceCriterion>& criteria);
 
 ResultSummary project_steady_result(
     const GraphResult& graph,

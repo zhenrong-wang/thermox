@@ -224,6 +224,121 @@ void validate_result_projections(
     }
 }
 
+void validate_engineering_acceptance_criteria(
+    const std::vector<EngineeringAcceptanceCriterion>& criteria,
+    const std::vector<ResultProjection>& projections) {
+    if (criteria.size() > 256U) {
+        throw ResultProjectionError(
+            "a Study may define at most 256 engineering "
+            "acceptance criteria");
+    }
+    std::set<std::string> ids;
+    for (const auto& criterion : criteria) {
+        if (criterion.id.empty() ||
+            criterion.projection_id.empty() ||
+            criterion.dimension.empty()) {
+            throw ResultProjectionError(
+                "acceptance criterion ID, projection ID, and "
+                "dimension must not be empty");
+        }
+        if (!ids.insert(criterion.id).second) {
+            throw ResultProjectionError(
+                "engineering acceptance criterion IDs must be unique");
+        }
+        const auto projection = std::find_if(
+            projections.begin(), projections.end(),
+            [&](const ResultProjection& candidate) {
+                return candidate.id == criterion.projection_id;
+            });
+        if (projection == projections.end()) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' references unknown result projection '" +
+                criterion.projection_id + "'");
+        }
+        if (projection->dimension != criterion.dimension) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' dimension does not match its result projection");
+        }
+        if (!criterion.lower_bound_si &&
+            !criterion.upper_bound_si) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' must define at least one bound");
+        }
+        if ((criterion.lower_bound_si &&
+             !std::isfinite(*criterion.lower_bound_si)) ||
+            (criterion.upper_bound_si &&
+             !std::isfinite(*criterion.upper_bound_si))) {
+            throw ResultProjectionError(
+                "engineering acceptance bounds must be finite");
+        }
+        if (criterion.lower_bound_si &&
+            criterion.upper_bound_si &&
+            (*criterion.lower_bound_si >
+                 *criterion.upper_bound_si ||
+             (*criterion.lower_bound_si ==
+                  *criterion.upper_bound_si &&
+              (!criterion.lower_inclusive ||
+               !criterion.upper_inclusive)))) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' has an empty bound interval");
+        }
+    }
+}
+
+EngineeringAcceptanceSummary evaluate_engineering_acceptance(
+    const ResultSummary& summary,
+    const std::vector<EngineeringAcceptanceCriterion>& criteria) {
+    EngineeringAcceptanceSummary acceptance;
+    acceptance.passed = true;
+    acceptance.criteria.reserve(criteria.size());
+    for (const auto& criterion : criteria) {
+        const auto value = std::find_if(
+            summary.values.begin(), summary.values.end(),
+            [&](const ProjectedResultValue& candidate) {
+                return candidate.id == criterion.projection_id;
+            });
+        if (value == summary.values.end()) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' cannot find projected result '" +
+                criterion.projection_id + "'");
+        }
+        if (value->dimension != criterion.dimension) {
+            throw ResultProjectionError(
+                "acceptance criterion '" + criterion.id +
+                "' matched a result with a different dimension");
+        }
+        const bool lower_passed = !criterion.lower_bound_si ||
+            (criterion.lower_inclusive
+                 ? value->value_si >= *criterion.lower_bound_si
+                 : value->value_si > *criterion.lower_bound_si);
+        const bool upper_passed = !criterion.upper_bound_si ||
+            (criterion.upper_inclusive
+                 ? value->value_si <= *criterion.upper_bound_si
+                 : value->value_si < *criterion.upper_bound_si);
+        const bool passed = lower_passed && upper_passed;
+        acceptance.criteria.push_back({
+            criterion.id,
+            criterion.projection_id,
+            criterion.dimension,
+            value->value_si,
+            criterion.lower_bound_si,
+            criterion.upper_bound_si,
+            criterion.lower_inclusive,
+            criterion.upper_inclusive,
+            passed,
+        });
+        acceptance.passed_count += passed ? 1U : 0U;
+        acceptance.failed_count += passed ? 0U : 1U;
+        acceptance.passed = acceptance.passed && passed;
+    }
+    return acceptance;
+}
+
 ResultSummary project_steady_result(
     const GraphResult& graph,
     const std::vector<ResultProjection>& projections) {

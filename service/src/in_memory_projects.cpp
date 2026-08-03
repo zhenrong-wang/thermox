@@ -371,6 +371,8 @@ public:
         const std::string& intent,
         const std::vector<std::string>& artifact_revision_ids,
         const std::vector<ResultProjection>& result_projections,
+        const std::vector<EngineeringAcceptanceCriterion>&
+            acceptance_criteria,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
         const auto simulation_case = case_revisions_.find(case_revision_id);
@@ -411,6 +413,7 @@ public:
         record.intent = intent;
         record.artifact_revision_ids = artifact_revision_ids;
         record.result_projections = result_projections;
+        record.acceptance_criteria = acceptance_criteria;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;
         record.created_at = std::chrono::system_clock::now();

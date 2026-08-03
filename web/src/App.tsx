@@ -60,6 +60,7 @@ import type {
   CreateRunConfiguration,
   CreateCalibrationRevision,
   CreateStudyRevision,
+  EngineeringAcceptanceCriterion,
   GraphEditOperation,
   MediumDefinition,
   MaterialDefinition,
@@ -1134,7 +1135,10 @@ function App() {
     }
   }
 
-  async function publishStudy(resultProjections: ResultProjection[]) {
+  async function publishStudy(
+    resultProjections: ResultProjection[],
+    acceptanceCriteria: EngineeringAcceptanceCriterion[],
+  ) {
     if (
       !selectedProjectId ||
       !selectedRevisionId ||
@@ -1159,6 +1163,7 @@ function App() {
       intent: selectedCaseRevision.mode,
       artifact_revision_ids: selectedArtifactRevisionIds,
       result_projections: resultProjections,
+      acceptance_criteria: acceptanceCriteria,
     }
     setCasePublishing(true)
     setCaseOperationError('')

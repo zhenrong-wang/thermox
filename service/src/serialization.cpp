@@ -1480,7 +1480,53 @@ std::string serialize_result_summary_json(
         }
         out << '}';
     }
-    out << "]\n}\n";
+    out << "],\n  \"engineering_acceptance\": ";
+    if (!summary.engineering_acceptance) {
+        out << "null";
+    } else {
+        const auto& acceptance = *summary.engineering_acceptance;
+        out << "{\"passed\": "
+            << (acceptance.passed ? "true" : "false")
+            << ", \"passed_count\": "
+            << acceptance.passed_count
+            << ", \"failed_count\": "
+            << acceptance.failed_count
+            << ", \"criteria\": [";
+        for (std::size_t index = 0;
+             index < acceptance.criteria.size(); ++index) {
+            if (index != 0U) out << ", ";
+            const auto& criterion = acceptance.criteria[index];
+            out << "{\"criterion_id\": ";
+            json_string(out, criterion.criterion_id);
+            out << ", \"projection_id\": ";
+            json_string(out, criterion.projection_id);
+            out << ", \"dimension\": ";
+            json_string(out, criterion.dimension);
+            out << ", \"actual_value_si\": ";
+            json_number(out, criterion.actual_value_si);
+            out << ", \"lower_bound_si\": ";
+            if (criterion.lower_bound_si) {
+                json_number(out, *criterion.lower_bound_si);
+            } else {
+                out << "null";
+            }
+            out << ", \"upper_bound_si\": ";
+            if (criterion.upper_bound_si) {
+                json_number(out, *criterion.upper_bound_si);
+            } else {
+                out << "null";
+            }
+            out << ", \"lower_inclusive\": "
+                << (criterion.lower_inclusive ? "true" : "false")
+                << ", \"upper_inclusive\": "
+                << (criterion.upper_inclusive ? "true" : "false")
+                << ", \"passed\": "
+                << (criterion.passed ? "true" : "false")
+                << '}';
+        }
+        out << "]}";
+    }
+    out << "\n}\n";
     return out.str();
 }
 
@@ -1610,6 +1656,38 @@ std::string serialize_job_record_json(
         out << ", \"aggregation\": ";
         json_string(out, to_string(projection.aggregation));
         out << '}';
+    }
+    out << ']';
+    out << ", \"acceptance_criteria\": [";
+    for (std::size_t index = 0;
+         index < record.request.acceptance_criteria.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        const auto& criterion =
+            record.request.acceptance_criteria[index];
+        out << "{\"id\": ";
+        json_string(out, criterion.id);
+        out << ", \"projection_id\": ";
+        json_string(out, criterion.projection_id);
+        out << ", \"dimension\": ";
+        json_string(out, criterion.dimension);
+        out << ", \"lower_bound_si\": ";
+        if (criterion.lower_bound_si) {
+            json_number(out, *criterion.lower_bound_si);
+        } else {
+            out << "null";
+        }
+        out << ", \"upper_bound_si\": ";
+        if (criterion.upper_bound_si) {
+            json_number(out, *criterion.upper_bound_si);
+        } else {
+            out << "null";
+        }
+        out << ", \"lower_inclusive\": "
+            << (criterion.lower_inclusive ? "true" : "false")
+            << ", \"upper_inclusive\": "
+            << (criterion.upper_inclusive ? "true" : "false")
+            << '}';
     }
     out << ']';
     out << ", \"validation_prediction_count\": "

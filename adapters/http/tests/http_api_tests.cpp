@@ -973,12 +973,21 @@ void test_authored_component_job_workflow() {
                 R"("component_id":"gain","port_name":"output",)"
                 R"("value_name":"value",)"
                 R"("dimension":"dimensionless",)"
-                R"("aggregation":"final"}]})"),
+                R"("aggregation":"final"}],)"
+                R"("acceptance_criteria":[{)"
+                R"("id":"gain-output-band",)"
+                R"("projection_id":"gain_output",)"
+                R"("dimension":"dimensionless",)"
+                R"("lower_bound_si":9.0,)"
+                R"("upper_bound_si":null}]})"),
         identity.user_id,
         identity.team_id));
     require(
         authored_study.status == 201 &&
-            authored_study.headers.contains("Location"),
+            authored_study.headers.contains("Location") &&
+            authored_study.body.find(
+                "\"acceptance_criteria\": [") !=
+                std::string::npos,
         "the authored workflow must publish an immutable study");
     const auto authored_study_revision_id =
         authored_study.headers.at("Location").substr(
@@ -1038,6 +1047,8 @@ void test_authored_component_job_workflow() {
             completed->state ==
                 thermox::service::SimulationJobState::succeeded &&
             completed->result_summary &&
+            completed->result_summary->engineering_acceptance &&
+            completed->result_summary->engineering_acceptance->passed &&
             completed->result_summary->values.size() == 1U &&
             std::abs(
                 completed->result_summary->values.front()

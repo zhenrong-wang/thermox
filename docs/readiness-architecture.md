@@ -54,6 +54,7 @@ exact Study and run configuration, providing a second server-side consistency bo
 ## Boundary with engineering acceptance
 
 Readiness answers whether a calculation may run. Numerical diagnostics answer whether equations
-converged. Engineering acceptance will answer whether completed physical results satisfy declared,
-dimensioned criteria. These remain separate contracts so a converged calculation cannot be
-misrepresented as an accepted engineering result.
+converged. Engineering acceptance answers whether completed physical results satisfy the
+dimensioned criteria declared by the immutable Study. These remain separate contracts: a job can
+succeed numerically while its engineering acceptance verdict is false. See
+`engineering-acceptance-architecture.md`.

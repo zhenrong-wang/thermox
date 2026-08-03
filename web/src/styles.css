@@ -3020,6 +3020,50 @@ code {
   margin-top: 3px;
 }
 
+.acceptance-note {
+  margin: 0;
+  padding: 8px 10px 0;
+}
+
+.acceptance-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 90px 1fr 1fr 90px 90px 29px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.acceptance-row > input,
+.acceptance-row > select {
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 7px;
+  border: 1px solid #ccd9df;
+  border-radius: 4px;
+  background: #fff;
+  color: #314f62;
+  font-size: 8px;
+}
+
+.acceptance-row > input:read-only {
+  background: #edf2f4;
+  color: #7b8c96;
+}
+
+.acceptance-inclusive {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #647985;
+  font-size: 7px;
+}
+
+.acceptance-inclusive input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
 .execution-history {
   overflow: hidden;
   margin-bottom: 14px;
@@ -3545,6 +3589,70 @@ code {
   color: #2e624d;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 13px;
+}
+
+.engineering-acceptance-card {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid #d7e1e5;
+  border-radius: 5px;
+  background: #fbfcfc;
+}
+
+.engineering-acceptance-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e7ea;
+}
+
+.engineering-acceptance-card h2 {
+  margin: 2px 0 0;
+  color: #385363;
+  font-size: 11px;
+}
+
+.engineering-acceptance-card > header > strong,
+.job-acceptance strong {
+  color: #247454;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.engineering-acceptance-card.not-accepted > header > strong,
+.job-acceptance.not-accepted strong {
+  color: #a04b44;
+}
+
+.acceptance-result-row {
+  display: grid;
+  grid-template-columns: 45px minmax(100px, 1fr) 150px minmax(180px, 1fr);
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #e5ebee;
+  font-size: 8px;
+}
+
+.acceptance-result-row .passed { color: #247454; }
+.acceptance-result-row .failed { color: #a04b44; }
+.acceptance-result-row code { color: #36596c; }
+.acceptance-result-row small { color: #778b96; }
+
+.job-acceptance {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 9px;
+  border: 1px solid #cfe3d8;
+  border-radius: 4px;
+  background: #f2f8f5;
+  font-size: 8px;
+}
+
+.job-acceptance.not-accepted {
+  border-color: #e7cbc8;
+  background: #fff5f4;
 }
 
 .solver-diagnostic-card {

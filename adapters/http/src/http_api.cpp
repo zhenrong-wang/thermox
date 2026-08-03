@@ -1119,6 +1119,54 @@ std::vector<service::ResultProjection> parse_result_projections(
     return result;
 }
 
+std::vector<service::EngineeringAcceptanceCriterion>
+parse_acceptance_criteria(
+    const boost::property_tree::ptree& tree) {
+    const std::set<std::string> fields = {
+        "id", "projection_id", "dimension",
+        "lower_bound_si", "upper_bound_si",
+        "lower_inclusive", "upper_inclusive",
+    };
+    std::vector<service::EngineeringAcceptanceCriterion> result;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::invalid_argument(
+                "acceptance_criteria must be an array");
+        }
+        for (const auto& [field, unused] : value) {
+            (void)unused;
+            if (!fields.contains(field)) {
+                throw std::invalid_argument(
+                    "unknown acceptance criterion field: " + field);
+            }
+        }
+        service::EngineeringAcceptanceCriterion criterion;
+        criterion.id = value.get<std::string>("id", "");
+        criterion.projection_id =
+            value.get<std::string>("projection_id", "");
+        criterion.dimension =
+            value.get<std::string>("dimension", "");
+        if (const auto lower =
+                value.get_child_optional("lower_bound_si");
+            lower && lower->data() != "null") {
+            criterion.lower_bound_si =
+                lower->get_value<double>();
+        }
+        if (const auto upper =
+                value.get_child_optional("upper_bound_si");
+            upper && upper->data() != "null") {
+            criterion.upper_bound_si =
+                upper->get_value<double>();
+        }
+        criterion.lower_inclusive =
+            value.get("lower_inclusive", true);
+        criterion.upper_inclusive =
+            value.get("upper_inclusive", true);
+        result.push_back(std::move(criterion));
+    }
+    return result;
+}
+
 service::CreateRunConfigurationRevisionRequest
 parse_create_run_configuration_request(
     const Request& request) {
@@ -1186,6 +1234,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         "schema_version", "study_id", "parent_study_revision_id",
         "model_revision_id", "case_revision_id", "intent",
         "artifact_revision_ids", "result_projections",
+        "acceptance_criteria",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1223,6 +1272,11 @@ service::CreateStudyRevisionRequest parse_create_study_request(
             tree.get_child_optional("result_projections")) {
         command.result_projections =
             parse_result_projections(*projections);
+    }
+    if (const auto criteria =
+            tree.get_child_optional("acceptance_criteria")) {
+        command.acceptance_criteria =
+            parse_acceptance_criteria(*criteria);
     }
     return command;
 }
@@ -2481,6 +2535,8 @@ Response Api::handle(const Request& request) const {
                 resolved->configuration.transient_solver;
             command.result_projections =
                 resolved->study.result_projections;
+            command.acceptance_criteria =
+                resolved->study.acceptance_criteria;
             const auto record = impl_->jobs->submit(command);
             return job_record_response(
                 record,

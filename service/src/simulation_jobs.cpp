@@ -284,6 +284,22 @@ std::string request_fingerprint(
         append_string(stream, projection.dimension);
         append_string(stream, to_string(projection.aggregation));
     }
+    stream << '|' << request.acceptance_criteria.size() << '|';
+    for (const auto& criterion : request.acceptance_criteria) {
+        append_string(stream, criterion.id);
+        append_string(stream, criterion.projection_id);
+        append_string(stream, criterion.dimension);
+        stream << criterion.lower_bound_si.has_value() << '|';
+        if (criterion.lower_bound_si) {
+            stream << *criterion.lower_bound_si << '|';
+        }
+        stream << criterion.upper_bound_si.has_value() << '|';
+        if (criterion.upper_bound_si) {
+            stream << *criterion.upper_bound_si << '|';
+        }
+        stream << criterion.lower_inclusive << '|'
+               << criterion.upper_inclusive << '|';
+    }
     return fnv1a64(stream.str());
 }
 
@@ -352,6 +368,9 @@ void validate_request(const SimulationJobRequest& request) {
     }
     try {
         validate_result_projections(request.result_projections);
+        validate_engineering_acceptance_criteria(
+            request.acceptance_criteria,
+            request.result_projections);
     } catch (const ResultProjectionError& error) {
         throw JobRequestError(error.what());
     }
@@ -677,13 +696,20 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                     response.error,
                     response.metadata);
             }
-            const auto summary =
+            auto summary =
                 claimed->request.result_projections.empty()
                 ? std::optional<ResultSummary>{}
                 : std::optional<ResultSummary>{
                       project_steady_result(
                           response.graph,
                           claimed->request.result_projections)};
+            if (summary &&
+                !claimed->request.acceptance_criteria.empty()) {
+                summary->engineering_acceptance =
+                    evaluate_engineering_acceptance(
+                        *summary,
+                        claimed->request.acceptance_criteria);
+            }
             const auto content =
                 serialize_steady_response_json(response);
             const auto manifest = impl_->artifacts->put_json(
@@ -793,13 +819,20 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 response.error,
                 response.metadata);
         }
-        const auto summary =
+        auto summary =
             claimed->request.result_projections.empty()
             ? std::optional<ResultSummary>{}
             : std::optional<ResultSummary>{
                   project_transient_result(
                       response.trajectory,
                       claimed->request.result_projections)};
+        if (summary &&
+            !claimed->request.acceptance_criteria.empty()) {
+            summary->engineering_acceptance =
+                evaluate_engineering_acceptance(
+                    *summary,
+                    claimed->request.acceptance_criteria);
+        }
         const auto content =
             serialize_transient_response_json(response);
         const auto manifest = impl_->artifacts->put_json(

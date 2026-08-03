@@ -293,6 +293,25 @@ std::string study_identity(
         append(projection.dimension);
         append(to_string(projection.aggregation));
     }
+    out << request.acceptance_criteria.size() << '|';
+    for (const auto& criterion : request.acceptance_criteria) {
+        const auto append = [&](const std::string& value) {
+            out << value.size() << ':' << value << '|';
+        };
+        append(criterion.id);
+        append(criterion.projection_id);
+        append(criterion.dimension);
+        out << criterion.lower_bound_si.has_value() << '|';
+        if (criterion.lower_bound_si) {
+            out << *criterion.lower_bound_si << '|';
+        }
+        out << criterion.upper_bound_si.has_value() << '|';
+        if (criterion.upper_bound_si) {
+            out << *criterion.upper_bound_si << '|';
+        }
+        out << criterion.lower_inclusive << '|'
+            << criterion.upper_inclusive << '|';
+    }
     return out.str();
 }
 
@@ -1337,6 +1356,9 @@ StudyRevisionRecord ProjectService::create_study_revision(
     }
     try {
         validate_result_projections(request.result_projections);
+        validate_engineering_acceptance_criteria(
+            request.acceptance_criteria,
+            request.result_projections);
     } catch (const ResultProjectionError& error) {
         throw ProjectRequestError(error.what());
     }
@@ -1363,6 +1385,7 @@ StudyRevisionRecord ProjectService::create_study_revision(
         request.intent,
         artifact_ids,
         request.result_projections,
+        request.acceptance_criteria,
         checksum(study_identity(request, artifact_ids)));
 }
 
