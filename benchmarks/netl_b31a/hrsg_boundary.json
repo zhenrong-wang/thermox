@@ -1,0 +1,98 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "netl_b31a_hrsg_boundary",
+    "name": "NETL B31A aggregate HRSG boundary-constrained benchmark",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "netl_exhaust",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": ["O2", "H2O", "CO2", "N2", "AR"]
+      }
+    ],
+    "components": [
+      {
+        "id": "hrsg_exhaust_inlet",
+        "kind": "source.material.boundary",
+        "version": "1.0.0",
+        "materials": {"outlet": "netl_exhaust"}
+      },
+      {
+        "id": "aggregate_hrsg",
+        "kind": "cooler.material.fixed_duty",
+        "version": "1.0.0",
+        "parameters": {
+          "heat_duty": {"value": 684.970477475, "unit": "MW"},
+          "pressure_loss_fraction": 0.0909090909090909
+        },
+        "materials": {
+          "inlet": "netl_exhaust",
+          "outlet": "netl_exhaust"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "exhaust_into_hrsg",
+        "from": "hrsg_exhaust_inlet.outlet",
+        "to": "aggregate_hrsg.inlet",
+        "kind": "material_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "published_boundary",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "hrsg_exhaust_inlet.outlet.m_dot[O2]": {
+          "value": 140.820355626727,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[H2O]": {
+          "value": 61.709508374386,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[CO2]": {
+          "value": 70.716385197187,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[N2]": {
+          "value": 785.478799732255,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[AR]": {
+          "value": 13.443006625001,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.p": {
+          "value": 0.11,
+          "unit": "MPa"
+        },
+        "hrsg_exhaust_inlet.outlet.T": {
+          "value": 652.0,
+          "unit": "degC"
+        }
+      },
+      "initial_guesses": {
+        "hrsg_exhaust_inlet.outlet.h": {
+          "value": -650.0,
+          "unit": "kJ/kg"
+        },
+        "aggregate_hrsg.outlet.p": {
+          "value": 0.10,
+          "unit": "MPa"
+        },
+        "aggregate_hrsg.outlet.h": {
+          "value": -1290.0,
+          "unit": "kJ/kg"
+        }
+      }
+    }
+  ]
+}

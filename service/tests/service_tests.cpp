@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 49,
+        response.components.size() == 53,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -709,6 +709,74 @@ void test_cantera_brayton_integration_benchmark() {
             864.300347) < 1.0e-3,
         "Brayton exhaust temperature must match the independent "
         "Cantera reference");
+}
+
+void test_netl_b31a_hrsg_boundary_benchmark() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/netl_b31a/hrsg_boundary.json");
+    request.case_id = "published_boundary";
+    request.solver.continuation_enabled = true;
+    const auto response = service.run_steady(request);
+
+    require(
+        response.succeeded(),
+        "NETL B31A HRSG boundary benchmark must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-10,
+        "NETL B31A numerical equations must close independently "
+        "of the published-data discrepancy");
+    require(
+        response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0,
+        "NETL B31A benchmark must reach the full published "
+        "steam-side heat duty");
+
+    const auto& inlet = require_port_result(
+        response.graph, "aggregate_hrsg", "inlet");
+    const auto& outlet = require_port_result(
+        response.graph, "aggregate_hrsg", "outlet");
+    const double inlet_temperature = require_result_value(
+        inlet.derived_values, "T").value_si;
+    const double outlet_temperature = require_result_value(
+        outlet.derived_values, "T").value_si;
+    require(
+        std::abs(inlet_temperature - 925.15) < 1.0e-3,
+        "NETL B31A exhaust inlet boundary must retain 652 degC");
+    require(
+        std::abs(outlet_temperature - 352.15) < 7.0,
+        "steam-side heat recovery must predict the published 79 "
+        "degC stack temperature within the declared 7 K boundary "
+        "audit tolerance");
+
+    constexpr const char* species[] = {
+        "m_dot[O2]", "m_dot[H2O]", "m_dot[CO2]",
+        "m_dot[N2]", "m_dot[AR]"};
+    double mass_flow = 0.0;
+    for (const auto* name : species) {
+        const double inlet_flow = require_result_value(
+            inlet.primary_values, name).value_si;
+        const double outlet_flow = require_result_value(
+            outlet.primary_values, name).value_si;
+        require(
+            std::abs(inlet_flow - outlet_flow) < 1.0e-9,
+            "aggregate HRSG must conserve each exhaust species");
+        mass_flow += inlet_flow;
+    }
+    require(
+        std::abs(mass_flow - 3859805.0 / 3600.0) < 1.0e-9,
+        "NETL B31A exhaust flow boundary must retain the published "
+        "total flow");
+    const double recovered_heat = mass_flow * (
+        require_result_value(inlet.primary_values, "h").value_si -
+        require_result_value(outlet.primary_values, "h").value_si);
+    require(
+        std::abs(recovered_heat - 684970477.475) < 1.0,
+        "aggregate HRSG must conserve the independently derived "
+        "water/steam-side heat duty");
 }
 #endif
 
@@ -2140,6 +2208,7 @@ int main() {
         test_validation_and_canonicalization();
 #ifdef THERMOX_TEST_HAS_CANTERA
         test_cantera_brayton_integration_benchmark();
+        test_netl_b31a_hrsg_boundary_benchmark();
 #endif
         test_compile_aware_validation_diagnostics();
         test_structurally_singular_validation_diagnostic();

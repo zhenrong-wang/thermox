@@ -477,6 +477,11 @@ Work items:
 9. Multi-user auth, authorization, project isolation, audit logs.
 9. Scalable job workers and deployment automation.
 10. Extended benchmark suite against published/reference examples.
+   - NETL 2025 Case B31A aggregate HRSG boundary audit with independently reconstructed
+     water/steam duty, Cantera exhaust properties, explicit numerical/external tolerances, and a
+     service-level regression test; ✅
+   - segmented triple-pressure/reheat HRSG, multi-admission steam turbine, and complete 2x1 plant
+     remain follow-ons.
 
 Exit criteria:
 

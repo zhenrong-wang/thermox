@@ -13,7 +13,9 @@ namespace {
 
 using component_model_support::property_failure;
 using component_model_support::require_port_variable;
+using component_model_support::require_port_species;
 using component_model_support::require_property_package;
+using component_model_support::require_thermochemistry_package;
 using component_model_support::required_parameter;
 
 ComponentModelDescriptor exchanger_descriptor(std::string kind) {
@@ -26,6 +28,66 @@ ComponentModelDescriptor exchanger_descriptor(std::string kind) {
         {"cold_in", "fluid", "in"},
         {"cold_out", "fluid", "out"}};
     return out;
+}
+
+ComponentModelDescriptor material_fluid_exchanger_descriptor(
+    std::string kind) {
+    ComponentModelDescriptor out;
+    out.kind = std::move(kind);
+    out.version = "1.0.0";
+    out.template_kind = "heat_exchanger.material_fluid";
+    out.display_name = "Gas-to-fluid heat exchanger";
+    out.category = "Heat transfer";
+    out.ports = {
+        {"hot_in", "material", "in"},
+        {"hot_out", "material", "out"},
+        {"cold_in", "fluid", "in"},
+        {"cold_out", "fluid", "out"}};
+    return out;
+}
+
+EvaluationStatus thermochemistry_failure(
+    const physics::ThermochemicalResult& result) {
+    if (result.status == physics::PropertyStatus::backend_error) {
+        return EvaluationStatus::fatal(result.message);
+    }
+    return EvaluationStatus::recoverable(result.message);
+}
+
+physics::SpeciesComposition material_composition(
+    const std::vector<double>& values,
+    const std::vector<std::string>& species,
+    const std::vector<std::size_t>& flows) {
+    std::vector<double> fractions;
+    fractions.reserve(flows.size());
+    double total = 0.0;
+    for (const auto flow : flows) {
+        const double value = values.at(flow);
+        if (!std::isfinite(value) || value < 0.0) {
+            throw std::domain_error(
+                "heat exchanger material species flows must be "
+                "finite and nonnegative");
+        }
+        fractions.push_back(value);
+        total += value;
+    }
+    if (!std::isfinite(total) || total <= 0.0) {
+        throw std::domain_error(
+            "heat exchanger material flow must be finite and positive");
+    }
+    for (double& fraction : fractions) fraction /= total;
+    return {
+        physics::CompositionBasis::mass_fraction,
+        species,
+        std::move(fractions)};
+}
+
+double total_flow(
+    const std::vector<double>& values,
+    const std::vector<std::size_t>& flows) {
+    double total = 0.0;
+    for (const auto flow : flows) total += values.at(flow);
+    return total;
 }
 
 double parameter_value(
@@ -461,6 +523,504 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class MaterialFluidHeatExchangerModel final : public ComponentModel {
+public:
+    explicit MaterialFluidHeatExchangerModel(bool fixed_duty)
+        : fixed_duty_(fixed_duty),
+          descriptor_(material_fluid_exchanger_descriptor(
+              fixed_duty
+                  ? "heat_exchanger.material_fluid.fixed_duty"
+                  : "heat_exchanger.material_fluid.counterflow_ua")) {
+        descriptor_.model_name = fixed_duty
+            ? "Fixed heat duty"
+            : "Counterflow UA";
+        descriptor_.parameters = {
+            {fixed_duty ? "heat_duty" : "UA",
+             fixed_duty ? "power" : "thermal_conductance",
+             true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"hot_pressure_loss_fraction", "dimensionless", false,
+             0.0, 0.0, 1.0, true, false},
+            {"cold_pressure_loss_fraction", "dimensionless", false,
+             0.0, 0.0, 1.0, true, false}};
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph};
+        if (!fixed_duty) {
+            descriptor_.required_property_capabilities = {
+                physics::PropertyCapability::state_ph};
+        }
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto species = require_port_species(context, "hot_in");
+        if (species != require_port_species(context, "hot_out")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material heat-exchanger ports must use the same "
+                "species basis");
+        }
+        const auto cold_properties =
+            require_property_package(context, "cold_in");
+        if (cold_properties !=
+            require_property_package(context, "cold_out")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' fluid heat-exchanger ports must use the same medium");
+        }
+        const auto hot_properties =
+            require_thermochemistry_package(context, "hot_in");
+        const auto hot_out_properties =
+            require_thermochemistry_package(context, "hot_out");
+        if (hot_properties->name() != hot_out_properties->name() ||
+            hot_properties->version() !=
+                hot_out_properties->version() ||
+            hot_properties->mechanism() !=
+                hot_out_properties->mechanism() ||
+            hot_properties->phase() != hot_out_properties->phase()) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material heat-exchanger ports must resolve the "
+                "same thermochemistry package");
+        }
+
+        std::vector<std::size_t> hot_in_flows;
+        std::vector<std::size_t> hot_out_flows;
+        hot_in_flows.reserve(species.size());
+        hot_out_flows.reserve(species.size());
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "hot_in." + variable);
+            const auto outlet = require_port_variable(
+                context, "hot_out." + variable);
+            hot_in_flows.push_back(inlet);
+            hot_out_flows.push_back(outlet);
+            system.add_linear_equation(
+                prefix + "hot_species_continuity." + name,
+                {{outlet, 1.0}, {inlet, -1.0}}, 0.0, 100.0);
+        }
+
+        const auto hot_in_p =
+            require_port_variable(context, "hot_in.p");
+        const auto hot_in_h =
+            require_port_variable(context, "hot_in.h");
+        const auto hot_out_p =
+            require_port_variable(context, "hot_out.p");
+        const auto hot_out_h =
+            require_port_variable(context, "hot_out.h");
+        const auto cold_in_m =
+            require_port_variable(context, "cold_in.m_dot");
+        const auto cold_in_p =
+            require_port_variable(context, "cold_in.p");
+        const auto cold_in_h =
+            require_port_variable(context, "cold_in.h");
+        const auto cold_out_m =
+            require_port_variable(context, "cold_out.m_dot");
+        const auto cold_out_p =
+            require_port_variable(context, "cold_out.p");
+        const auto cold_out_h =
+            require_port_variable(context, "cold_out.h");
+        const double hot_loss = parameter_value(
+            context.component, descriptor_,
+            "hot_pressure_loss_fraction");
+        const double cold_loss = parameter_value(
+            context.component, descriptor_,
+            "cold_pressure_loss_fraction");
+
+        system.add_linear_equation(
+            prefix + "hot_pressure_loss",
+            {{hot_out_p, 1.0},
+             {hot_in_p, -(1.0 - hot_loss)}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "cold_mass_continuity",
+            {{cold_out_m, 1.0}, {cold_in_m, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "cold_pressure_loss",
+            {{cold_out_p, 1.0},
+             {cold_in_p, -(1.0 - cold_loss)}},
+            0.0, 100000.0);
+
+        if (fixed_duty_) {
+            add_fixed_duty_equations(
+                context, system, prefix, hot_in_flows,
+                hot_in_h, hot_out_h, cold_in_m,
+                cold_in_h, cold_out_h);
+            return;
+        }
+        add_ua_equations(
+            context, system, prefix, hot_properties,
+            cold_properties, species, hot_in_flows,
+            hot_in_p, hot_in_h, hot_out_p, hot_out_h,
+            cold_in_m, cold_in_p, cold_in_h,
+            cold_out_p, cold_out_h);
+    }
+
+private:
+    static void add_fixed_duty_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system,
+        const std::string& prefix,
+        const std::vector<std::size_t>& hot_flows,
+        std::size_t hot_in_h,
+        std::size_t hot_out_h,
+        std::size_t cold_in_m,
+        std::size_t cold_in_h,
+        std::size_t cold_out_h) {
+        const double duty =
+            required_parameter(context.component, "heat_duty");
+        std::vector<std::size_t> hot_variables = hot_flows;
+        hot_variables.push_back(hot_in_h);
+        hot_variables.push_back(hot_out_h);
+        system.add_continuation_sparse_equation(
+            prefix + "hot_energy",
+            std::move(hot_variables),
+            [hot_flows, hot_in_h, hot_out_h, duty](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                const double mass = total_flow(x, hot_flows);
+                const double delta_h =
+                    x.at(hot_in_h) - x.at(hot_out_h);
+                const double anchor_duty =
+                    total_flow(anchor, hot_flows) *
+                    (anchor.at(hot_in_h) -
+                     anchor.at(hot_out_h));
+                const double staged_duty =
+                    anchor_duty + continuation_parameter *
+                        (duty - anchor_duty);
+                for (const auto flow : hot_flows) {
+                    jacobian.push_back({flow, delta_h});
+                }
+                jacobian.push_back({hot_in_h, mass});
+                jacobian.push_back({hot_out_h, -mass});
+                return mass * delta_h - staged_duty;
+            },
+            std::max(duty, 1.0));
+        system.add_continuation_sparse_equation(
+            prefix + "cold_energy",
+            {cold_in_m, cold_in_h, cold_out_h},
+            [cold_in_m, cold_in_h, cold_out_h, duty](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                const double delta_h =
+                    x.at(cold_out_h) - x.at(cold_in_h);
+                const double anchor_duty =
+                    anchor.at(cold_in_m) *
+                    (anchor.at(cold_out_h) -
+                     anchor.at(cold_in_h));
+                const double staged_duty =
+                    anchor_duty + continuation_parameter *
+                        (duty - anchor_duty);
+                jacobian.push_back({cold_in_m, delta_h});
+                jacobian.push_back(
+                    {cold_in_h, -x.at(cold_in_m)});
+                jacobian.push_back(
+                    {cold_out_h, x.at(cold_in_m)});
+                return x.at(cold_in_m) * delta_h - staged_duty;
+            },
+            std::max(duty, 1.0));
+    }
+
+    static void add_ua_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system,
+        const std::string& prefix,
+        std::shared_ptr<const physics::ThermochemistryPackage>
+            hot_properties,
+        std::shared_ptr<const physics::PropertyPackage>
+            cold_properties,
+        const std::vector<std::string>& species,
+        const std::vector<std::size_t>& hot_flows,
+        std::size_t hot_in_p,
+        std::size_t hot_in_h,
+        std::size_t hot_out_p,
+        std::size_t hot_out_h,
+        std::size_t cold_in_m,
+        std::size_t cold_in_p,
+        std::size_t cold_in_h,
+        std::size_t cold_out_p,
+        std::size_t cold_out_h) {
+        const double conductance =
+            required_parameter(context.component, "UA");
+        std::vector<std::size_t> energy_variables = hot_flows;
+        energy_variables.insert(
+            energy_variables.end(),
+            {hot_in_h, hot_out_h, cold_in_m,
+             cold_in_h, cold_out_h});
+        system.add_continuation_sparse_equation(
+            prefix + "energy_balance",
+            std::move(energy_variables),
+            [hot_flows, hot_in_h, hot_out_h,
+             cold_in_m, cold_in_h, cold_out_h](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                const double hot_mass = total_flow(x, hot_flows);
+                const double hot_delta =
+                    x.at(hot_in_h) - x.at(hot_out_h);
+                const double cold_delta =
+                    x.at(cold_out_h) - x.at(cold_in_h);
+                const double anchor_imbalance =
+                    total_flow(anchor, hot_flows) *
+                        (anchor.at(hot_in_h) -
+                         anchor.at(hot_out_h)) -
+                    anchor.at(cold_in_m) *
+                        (anchor.at(cold_out_h) -
+                         anchor.at(cold_in_h));
+                for (const auto flow : hot_flows) {
+                    jacobian.push_back({flow, hot_delta});
+                }
+                jacobian.push_back({hot_in_h, hot_mass});
+                jacobian.push_back({hot_out_h, -hot_mass});
+                jacobian.push_back({cold_in_m, -cold_delta});
+                jacobian.push_back(
+                    {cold_in_h, x.at(cold_in_m)});
+                jacobian.push_back(
+                    {cold_out_h, -x.at(cold_in_m)});
+                return hot_mass * hot_delta -
+                    x.at(cold_in_m) * cold_delta -
+                    (1.0 - continuation_parameter) *
+                        anchor_imbalance;
+            },
+            1.0e7);
+
+        system.add_continuation_checked_equation(
+            prefix + "counterflow_heat_transfer",
+            [hot_properties = std::move(hot_properties),
+             cold_properties = std::move(cold_properties),
+             species, hot_flows, conductance,
+             hot_in_p, hot_in_h, hot_out_p, hot_out_h,
+             cold_in_p, cold_in_h, cold_out_p, cold_out_h](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                double& residual) {
+                try {
+                    const auto composition = material_composition(
+                        x, species, hot_flows);
+                    const auto anchor_composition =
+                        material_composition(
+                            anchor, species, hot_flows);
+                    const auto hot_in = hot_properties->state_ph(
+                        x.at(hot_in_p), x.at(hot_in_h), composition);
+                    if (!hot_in.ok())
+                        return thermochemistry_failure(hot_in);
+                    const auto hot_out = hot_properties->state_ph(
+                        x.at(hot_out_p), x.at(hot_out_h), composition);
+                    if (!hot_out.ok())
+                        return thermochemistry_failure(hot_out);
+                    const auto cold_in = cold_properties->state_ph(
+                        x.at(cold_in_p), x.at(cold_in_h));
+                    if (!cold_in.ok()) return property_failure(cold_in);
+                    const auto cold_out = cold_properties->state_ph(
+                        x.at(cold_out_p), x.at(cold_out_h));
+                    if (!cold_out.ok()) return property_failure(cold_out);
+                    const auto anchor_hot_in = hot_properties->state_ph(
+                        anchor.at(hot_in_p), anchor.at(hot_in_h),
+                        anchor_composition);
+                    if (!anchor_hot_in.ok())
+                        return thermochemistry_failure(anchor_hot_in);
+                    const auto anchor_hot_out = hot_properties->state_ph(
+                        anchor.at(hot_out_p), anchor.at(hot_out_h),
+                        anchor_composition);
+                    if (!anchor_hot_out.ok())
+                        return thermochemistry_failure(anchor_hot_out);
+                    const auto anchor_cold_in =
+                        cold_properties->state_ph(
+                            anchor.at(cold_in_p),
+                            anchor.at(cold_in_h));
+                    if (!anchor_cold_in.ok())
+                        return property_failure(anchor_cold_in);
+                    const auto anchor_cold_out =
+                        cold_properties->state_ph(
+                            anchor.at(cold_out_p),
+                            anchor.at(cold_out_h));
+                    if (!anchor_cold_out.ok())
+                        return property_failure(anchor_cold_out);
+                    double lmtd = 0.0;
+                    const auto status =
+                        continued_log_mean_temperature_difference(
+                            hot_in.state.thermodynamic.temperature_k -
+                                cold_out.state.temperature_k,
+                            hot_out.state.thermodynamic.temperature_k -
+                                cold_in.state.temperature_k,
+                            anchor_hot_in.state.thermodynamic.temperature_k -
+                                anchor_cold_out.state.temperature_k,
+                            anchor_hot_out.state.thermodynamic.temperature_k -
+                                anchor_cold_in.state.temperature_k,
+                            anchor_hot_in.state.thermodynamic.temperature_k -
+                                anchor_cold_in.state.temperature_k,
+                            continuation_parameter,
+                            lmtd);
+                    if (!status.ok()) return status;
+                    const double hot_mass =
+                        total_flow(x, hot_flows);
+                    const double anchor_duty =
+                        total_flow(anchor, hot_flows) *
+                        (anchor.at(hot_in_h) -
+                         anchor.at(hot_out_h));
+                    const double staged_heat_transfer =
+                        anchor_duty + continuation_parameter *
+                            (conductance * lmtd - anchor_duty);
+                    residual = hot_mass *
+                        (x.at(hot_in_h) - x.at(hot_out_h)) -
+                        staged_heat_transfer;
+                    return EvaluationStatus::success();
+                } catch (const std::domain_error& error) {
+                    return EvaluationStatus::recoverable(error.what());
+                }
+            },
+            1.0e7);
+    }
+
+    bool fixed_duty_{false};
+    ComponentModelDescriptor descriptor_;
+};
+
+class PrescribedDutyMaterialConditionerModel final
+    : public ComponentModel {
+public:
+    explicit PrescribedDutyMaterialConditionerModel(bool heating)
+        : heating_(heating) {
+        descriptor_.kind = heating
+            ? "heater.material.fixed_duty"
+            : "cooler.material.fixed_duty";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind =
+            "thermal_conditioner.material";
+        descriptor_.display_name = heating
+            ? "Material heater (fixed duty)"
+            : "Material cooler (fixed duty)";
+        descriptor_.category = "Heat transfer";
+        descriptor_.ports = {
+            {"inlet", "material", "in"},
+            {"outlet", "material", "out"}};
+        descriptor_.parameters = {
+            {"heat_duty", "power", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"pressure_loss_fraction", "dimensionless", false,
+             0.0, 0.0, 1.0, true, false}};
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto species = require_port_species(context, "inlet");
+        if (species != require_port_species(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material conditioner ports must use the same "
+                "species basis");
+        }
+        const auto properties =
+            require_thermochemistry_package(context, "inlet");
+        const auto outlet_properties =
+            require_thermochemistry_package(context, "outlet");
+        if (properties->name() != outlet_properties->name() ||
+            properties->version() != outlet_properties->version() ||
+            properties->mechanism() !=
+                outlet_properties->mechanism() ||
+            properties->phase() != outlet_properties->phase()) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material conditioner ports must resolve the "
+                "same thermochemistry package");
+        }
+
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        std::vector<std::size_t> inlet_flows;
+        inlet_flows.reserve(species.size());
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "inlet." + variable);
+            const auto outlet = require_port_variable(
+                context, "outlet." + variable);
+            inlet_flows.push_back(inlet);
+            system.add_linear_equation(
+                prefix + "species_continuity." + name,
+                {{outlet, 1.0}, {inlet, -1.0}}, 0.0, 100.0);
+        }
+
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const double pressure_loss = parameter_value(
+            context.component, descriptor_,
+            "pressure_loss_fraction");
+        const double duty =
+            required_parameter(context.component, "heat_duty");
+        system.add_linear_equation(
+            prefix + "pressure_loss",
+            {{outlet_p, 1.0},
+             {inlet_p, -(1.0 - pressure_loss)}},
+            0.0, 100000.0);
+
+        std::vector<std::size_t> energy_variables = inlet_flows;
+        energy_variables.push_back(inlet_h);
+        energy_variables.push_back(outlet_h);
+        system.add_continuation_sparse_equation(
+            prefix + "energy",
+            std::move(energy_variables),
+            [flows = std::move(inlet_flows), inlet_h, outlet_h,
+             duty, direction = heating_ ? -1.0 : 1.0](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                const double mass = total_flow(x, flows);
+                const double delta_h = direction *
+                    (x.at(inlet_h) - x.at(outlet_h));
+                const double anchor_duty =
+                    total_flow(anchor, flows) * direction *
+                    (anchor.at(inlet_h) -
+                     anchor.at(outlet_h));
+                const double staged_duty =
+                    anchor_duty + continuation_parameter *
+                        (duty - anchor_duty);
+                for (const auto flow : flows) {
+                    jacobian.push_back({flow, delta_h});
+                }
+                jacobian.push_back(
+                    {inlet_h, direction * mass});
+                jacobian.push_back(
+                    {outlet_h, -direction * mass});
+                return mass * delta_h - staged_duty;
+            },
+            std::max(duty, 1.0));
+    }
+
+private:
+    bool heating_{false};
+    ComponentModelDescriptor descriptor_;
+};
+
 class FixedOutletQualityPhaseChangeModel final : public ComponentModel {
 public:
     FixedOutletQualityPhaseChangeModel(
@@ -592,6 +1152,14 @@ void register_heat_transfer_component_models(
         std::make_shared<FixedDutyHeatExchangerModel>());
     registry.register_model(
         std::make_shared<CounterflowUaHeatExchangerModel>());
+    registry.register_model(
+        std::make_shared<MaterialFluidHeatExchangerModel>(true));
+    registry.register_model(
+        std::make_shared<MaterialFluidHeatExchangerModel>(false));
+    registry.register_model(
+        std::make_shared<PrescribedDutyMaterialConditionerModel>(true));
+    registry.register_model(
+        std::make_shared<PrescribedDutyMaterialConditionerModel>(false));
     registry.register_model(
         std::make_shared<FixedOutletQualityPhaseChangeModel>(
             "evaporator.fluid.fixed_outlet_quality", true));

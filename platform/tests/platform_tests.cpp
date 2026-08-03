@@ -936,6 +936,18 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains("heat_exchanger.fluid.counterflow_ua"),
             "default registry should contain counterflow UA heat exchanger");
     require(registry.contains(
+                "heat_exchanger.material_fluid.fixed_duty"),
+            "default registry should contain material-fluid fixed-duty "
+            "heat exchanger");
+    require(registry.contains(
+                "heat_exchanger.material_fluid.counterflow_ua"),
+            "default registry should contain material-fluid UA heat "
+            "exchanger");
+    require(registry.contains("heater.material.fixed_duty"),
+            "default registry should contain fixed-duty material heater");
+    require(registry.contains("cooler.material.fixed_duty"),
+            "default registry should contain fixed-duty material cooler");
+    require(registry.contains(
                 "evaporator.fluid.fixed_outlet_quality"),
             "default registry should contain quality-target evaporator");
     require(registry.contains(
@@ -995,6 +1007,10 @@ void test_component_catalog_exposes_parameter_contracts() {
         "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
+        "heat_exchanger.material_fluid.fixed_duty",
+        "heat_exchanger.material_fluid.counterflow_ua",
+        "heater.material.fixed_duty",
+        "cooler.material.fixed_duty",
         "evaporator.fluid.fixed_outlet_quality",
         "condenser.fluid.fixed_outlet_quality",
         "volume.fluid.rigid_adiabatic",
@@ -3732,6 +3748,198 @@ void test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger() {
         "fixed-duty continuation preserves the target cold state");
 }
 
+void test_material_fluid_heat_exchangers() {
+    const auto chemistry_registry = [] {
+        thermox::physics::ThermochemistryPackageRegistry registry;
+        registry.register_backend(
+            {"test_backend", "test-thermochemistry", "1.0.0",
+             {thermox::physics::ThermochemistryCapability::state_ph}},
+            [](std::string_view, std::string_view) {
+                return std::make_shared<
+                    const TestThermochemistryPackage>();
+            });
+        return registry;
+    };
+    const auto compile = [&](const std::string& text) {
+        return thermox::platform::compile_model_graph(
+            thermox::platform::parse_model_document_text(text),
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::make_default_property_package_registry(),
+            thermox::platform::EngineeringArtifactRegistry{},
+            chemistry_registry(), "design");
+    };
+    const auto fixed_graph = compile(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_fluid_fixed_duty",
+    "media": [{
+      "id": "cold_air", "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "materials": [{
+      "id": "exhaust", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.material_fluid.fixed_duty",
+      "parameters": {
+        "heat_duty": {"value": 1.0, "unit": "MW"},
+        "hot_pressure_loss_fraction": 0.05,
+        "cold_pressure_loss_fraction": 0.02
+      },
+      "materials": {"hot_in": "exhaust", "hot_out": "exhaust"},
+      "media": {"cold_in": "cold_air", "cold_out": "cold_air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "hx.hot_in.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "hx.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "hx.cold_in.m_dot": {"value": 20.0, "unit": "kg/s"},
+      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
+      "hx.cold_in.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto fixed = thermox::solve_newton(fixed_graph.problem);
+    require(fixed.diagnostics.converged, fixed.diagnostics.message);
+    const auto fixed_value = [&](const std::string& name) {
+        return fixed.x.at(require_variable_index(
+            fixed_graph.problem.variable_names, name));
+    };
+    require_near(fixed_value("hx.hot_out.m_dot[N2]"), 8.0,
+                 1.0e-9, "fixed-duty exchanger preserves nitrogen");
+    require_near(fixed_value("hx.hot_out.m_dot[O2]"), 2.0,
+                 1.0e-9, "fixed-duty exchanger preserves oxygen");
+    require_near(fixed_value("hx.hot_out.h"), 5.0e5,
+                 1.0e-6, "material side supplies fixed duty");
+    require_near(fixed_value("hx.cold_out.h"), 3.5e5,
+                 1.0e-6, "fluid side receives fixed duty");
+    require_near(fixed_value("hx.hot_out.p"), 1.9e5,
+                 1.0e-6, "material-side pressure loss is applied");
+    require_near(fixed_value("hx.cold_out.p"), 9.8e4,
+                 1.0e-6, "fluid-side pressure loss is applied");
+
+    const auto conditioner_graph = compile(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_fixed_duty_conditioner",
+    "media": [],
+    "materials": [{
+      "id": "exhaust", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "cooler", "kind": "cooler.material.fixed_duty",
+      "parameters": {
+        "heat_duty": {"value": 1.0, "unit": "MW"},
+        "pressure_loss_fraction": 0.05
+      },
+      "materials": {"inlet": "exhaust", "outlet": "exhaust"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "cooler.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "cooler.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "cooler.inlet.p": {"value": 2.0, "unit": "bar"},
+      "cooler.inlet.h": {"value": 600.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto conditioner =
+        thermox::solve_continuation(conditioner_graph.problem);
+    require(conditioner.continuation.converged,
+            conditioner.continuation.message);
+    const auto conditioner_value = [&](const std::string& name) {
+        return conditioner.x.at(require_variable_index(
+            conditioner_graph.problem.variable_names, name));
+    };
+    require_near(conditioner_value("cooler.outlet.m_dot[N2]"),
+                 8.0, 1.0e-9,
+                 "material cooler preserves nitrogen");
+    require_near(conditioner_value("cooler.outlet.m_dot[O2]"),
+                 2.0, 1.0e-9,
+                 "material cooler preserves oxygen");
+    require_near(conditioner_value("cooler.outlet.h"), 5.0e5,
+                 1.0e-6,
+                 "material cooler removes prescribed duty");
+    require_near(conditioner_value("cooler.outlet.p"), 1.9e5,
+                 1.0e-6,
+                 "material cooler applies pressure loss");
+
+    const auto ua_graph = compile(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_fluid_ua",
+    "media": [{
+      "id": "cold_air", "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "materials": [{
+      "id": "exhaust", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "hx",
+      "kind": "heat_exchanger.material_fluid.counterflow_ua",
+      "parameters": {
+        "UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_pressure_loss_fraction": 0.01,
+        "cold_pressure_loss_fraction": 0.02
+      },
+      "materials": {"hot_in": "exhaust", "hot_out": "exhaust"},
+      "media": {"cold_in": "cold_air", "cold_out": "cold_air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "hx.hot_in.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "hx.hot_in.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "hx.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "hx.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "hx.cold_in.m_dot": {"value": 20.0, "unit": "kg/s"},
+      "hx.cold_in.p": {"value": 1.0, "unit": "bar"},
+      "hx.cold_in.T": {"value": 300.0, "unit": "K"}
+    },
+    "initial_guesses": {
+      "hx.hot_out.h": {"value": 580.0, "unit": "kJ/kg"},
+      "hx.cold_in.h": {"value": 301.35, "unit": "kJ/kg"},
+      "hx.cold_out.h": {"value": 311.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto ua = thermox::solve_continuation(ua_graph.problem);
+    require(ua.continuation.converged, ua.continuation.message);
+    const auto ua_value = [&](const std::string& name) {
+        return ua.x.at(require_variable_index(
+            ua_graph.problem.variable_names, name));
+    };
+    const double hot_duty = 10.0 *
+        (ua_value("hx.hot_in.h") - ua_value("hx.hot_out.h"));
+    const double cold_duty = ua_value("hx.cold_in.m_dot") *
+        (ua_value("hx.cold_out.h") - ua_value("hx.cold_in.h"));
+    require(hot_duty > 0.0, "UA exchanger transfers positive heat");
+    require_near(hot_duty, cold_duty, 1.0e-4,
+                 "material-fluid UA exchanger conserves energy");
+    require(ua_value("hx.hot_out.h") < ua_value("hx.hot_in.h"),
+            "material-fluid UA exchanger cools the material side");
+    require(ua_value("hx.cold_out.h") > ua_value("hx.cold_in.h"),
+            "material-fluid UA exchanger heats the fluid side");
+}
+
 void test_generic_model_solves_counterflow_ua_heat_exchanger() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -5281,6 +5489,7 @@ int main() {
         test_map_driven_material_turbomachinery();
         test_fixed_composition_source_allows_map_solved_flow();
         test_generic_model_solves_cross_medium_fixed_duty_heat_exchanger();
+        test_material_fluid_heat_exchangers();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_if97_fixed_quality_evaporator_and_condenser();
         test_if97_rankine_graph_regression();
