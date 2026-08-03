@@ -1,0 +1,108 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "closed_loop_drum_feed",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "feed",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "feed_valve",
+      "kind": "valve.fluid.actuated_nonflashing_liquid",
+      "parameters": {
+        "full_open_diameter": {"value": 5.0, "unit": "mm"},
+        "discharge_coefficient": 0.62
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "drum",
+      "kind": "drum.fluid.equilibrium_two_phase",
+      "parameters": {
+        "volume": {"value": 1.0, "unit": "m3"},
+        "vessel_height": {"value": 2.0, "unit": "m"}
+      },
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }, {
+      "id": "level_controller",
+      "kind": "control.pi_bounded.normalized",
+      "parameters": {
+        "proportional_gain": 2.0,
+        "integral_time": {"value": 5.0, "unit": "s"},
+        "tracking_time": {"value": 1.0, "unit": "s"},
+        "bias": 0.20,
+        "lower_limit": 0.02,
+        "upper_limit": 0.80
+      }
+    }, {
+      "id": "feed_actuator",
+      "kind": "control.first_order_lag.normalized",
+      "parameters": {
+        "gain": 1.0,
+        "time_constant": {"value": 0.5, "unit": "s"}
+      }
+    }],
+    "connections": [{
+      "id": "feed_to_valve",
+      "kind": "fluid_link",
+      "from": "feed.outlet",
+      "to": "feed_valve.inlet"
+    }, {
+      "id": "valve_to_drum",
+      "kind": "fluid_link",
+      "from": "feed_valve.outlet",
+      "to": "drum.inlet"
+    }, {
+      "id": "level_measurement",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.signal/v1",
+      "from": "drum.level_signal",
+      "to": "level_controller.measurement"
+    }, {
+      "id": "controller_to_actuator",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.control/v1",
+      "from": "level_controller.command",
+      "to": "feed_actuator.command"
+    }, {
+      "id": "actuator_to_valve",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.control/v1",
+      "from": "feed_actuator.response",
+      "to": "feed_valve.command"
+    }]
+  },
+  "cases": [{
+    "id": "level_control",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "feed.outlet.p": {"value": 20.0, "unit": "bar"},
+      "feed.outlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "drum.vapor_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "drum.liquid_outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "drum.heat.Q_dot": {"value": 0.0, "unit": "kW"},
+      "level_controller.setpoint.value": 0.015
+    },
+    "initial_guesses": {
+      "drum.total_mass": {"value": 11.17, "unit": "kg"},
+      "drum.total_internal_energy": {"value": 7.90, "unit": "MJ"},
+      "drum.pressure": {"value": 2.0, "unit": "bar"},
+      "drum.vapor_quality": 0.10,
+      "drum.liquid_level": {"value": 21.3, "unit": "mm"},
+      "level_controller.integral_state": 0.0,
+      "feed_actuator.response.value": 0.20,
+      "feed_valve.inlet.p": {"value": 20.0, "unit": "bar"},
+      "feed_valve.outlet.p": {"value": 2.0, "unit": "bar"},
+      "feed_valve.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "feed_valve.outlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+}

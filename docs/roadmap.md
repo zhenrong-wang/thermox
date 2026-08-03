@@ -183,6 +183,8 @@ Delivered:
    that composes with registered controller and actuator-lag blocks. ✅
 10. Transient bounded normalized PI controller with explicit setpoint/measurement ports, command
     saturation, integral state, and tracking back-calculation anti-windup. ✅
+11. Declared closed-loop dynamic reference joining property-backed fluid flow, two-phase inventory,
+    level sensing, bounded PI control, actuator dynamics, and consistent DAE initialization. ✅
 
 ## Component catalog and modularization foundation
 

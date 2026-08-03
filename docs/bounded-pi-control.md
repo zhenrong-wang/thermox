@@ -37,6 +37,10 @@ The PI integral and actuator response remain separate differential states. This 
 ownership, allows actuator time constants to vary independently, and makes each block testable or
 replaceable through the registry.
 
+The runnable [closed-loop drum feed-control example](closed-loop-drum-control.md) exercises this
+composition through the same declaration, service, graph compiler, and transient solver contracts
+used by external callers.
+
 ## Numerical and modeling limits
 
 The clamp is continuous and piecewise differentiable; its derivative is zero in saturation and one

@@ -150,6 +150,12 @@ add_test(NAME platform_transient_example_cli
         --case charge
         --end-time 10
 )
+add_test(NAME platform_closed_loop_drum_cli
+    COMMAND thermox_cli simulate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/closed_loop_drum_control.json
+        --case level_control
+        --end-time 0.5
+)
 add_test(NAME platform_rankine_example_cli
     COMMAND thermox_cli solve
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/simple_rankine.json

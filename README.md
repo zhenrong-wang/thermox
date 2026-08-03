@@ -68,6 +68,9 @@ Implemented in this sprint:
 - A transient bounded PI controller provides explicit setpoint/error handling, configurable command
   limits, and back-calculation anti-windup as a reusable control-graph component. See
   [Bounded PI control](docs/bounded-pi-control.md).
+- A declared closed-loop drum example composes a fluid boundary, actuated feed valve, equilibrium
+  two-phase inventory, level measurement, bounded PI controller, and actuator lag in one DAE. See
+  [Closed-loop drum feed control](docs/closed-loop-drum-control.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
@@ -324,6 +327,16 @@ total internal energy are differential states, while pressure and enthalpy are a
 closed by the selected fluid package. The same component therefore works with any registered
 backend that supplies a PH flash. Its closure Jacobian consumes the shared PH-derivative contract:
 analytic where the backend advertises it and an explicit bounded fallback otherwise.
+
+Run the property-backed closed-loop drum and feed-control model:
+
+```sh
+./build/thermox_cli simulate \
+  --model core/examples/closed_loop_drum_control.json \
+  --case level_control \
+  --end-time 0.5 \
+  --format json
+```
 
 Run the IF97 Rankine regression:
 

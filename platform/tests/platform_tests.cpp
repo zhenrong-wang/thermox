@@ -6115,6 +6115,202 @@ void test_bounded_pi_controller_prevents_integrator_windup() {
             "back-calculation converges to a finite anti-windup state");
 }
 
+void test_closed_loop_drum_feed_control_composes_platform_domains() {
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create("water_steam_if97", "Water");
+    constexpr double initial_pressure = 2.0e5;
+    constexpr double initial_quality = 0.10;
+    const auto saturation = water->saturation_p(initial_pressure);
+    require(saturation.ok(),
+            "closed-loop drum initial saturation must evaluate");
+    const double specific_volume =
+        (1.0 - initial_quality) /
+            saturation.liquid.density_kg_m3 +
+        initial_quality / saturation.vapor.density_kg_m3;
+    const double initial_mass = 1.0 / specific_volume;
+    const double initial_energy = initial_mass *
+        ((1.0 - initial_quality) *
+             saturation.liquid.internal_energy_j_kg +
+         initial_quality *
+             saturation.vapor.internal_energy_j_kg);
+    const double initial_level = 2.0 * initial_mass *
+        (1.0 - initial_quality) /
+        saturation.liquid.density_kg_m3;
+    std::ostringstream number;
+    number << std::setprecision(17);
+    const auto format = [&](double value) {
+        number.str({});
+        number.clear();
+        number << value;
+        return number.str();
+    };
+    std::string text = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "closed_loop_drum_feed",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "feed",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "feed_valve",
+      "kind": "valve.fluid.actuated_nonflashing_liquid",
+      "parameters": {
+        "full_open_diameter": {"value": 5.0, "unit": "mm"},
+        "discharge_coefficient": 0.62
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "drum",
+      "kind": "drum.fluid.equilibrium_two_phase",
+      "parameters": {
+        "volume": {"value": 1.0, "unit": "m3"},
+        "vessel_height": {"value": 2.0, "unit": "m"}
+      },
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }, {
+      "id": "level_controller",
+      "kind": "control.pi_bounded.normalized",
+      "parameters": {
+        "proportional_gain": 2.0,
+        "integral_time": {"value": 5.0, "unit": "s"},
+        "tracking_time": {"value": 1.0, "unit": "s"},
+        "bias": 0.20,
+        "lower_limit": 0.02,
+        "upper_limit": 0.80
+      }
+    }, {
+      "id": "feed_actuator",
+      "kind": "control.first_order_lag.normalized",
+      "parameters": {
+        "gain": 1.0,
+        "time_constant": {"value": 0.5, "unit": "s"}
+      }
+    }],
+    "connections": [{
+      "id": "feed_to_valve",
+      "kind": "fluid_link",
+      "from": "feed.outlet",
+      "to": "feed_valve.inlet"
+    }, {
+      "id": "valve_to_drum",
+      "kind": "fluid_link",
+      "from": "feed_valve.outlet",
+      "to": "drum.inlet"
+    }, {
+      "id": "level_measurement",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.signal/v1",
+      "from": "drum.level_signal",
+      "to": "level_controller.measurement"
+    }, {
+      "id": "controller_to_actuator",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.control/v1",
+      "from": "level_controller.command",
+      "to": "feed_actuator.command"
+    }, {
+      "id": "actuator_to_valve",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.control/v1",
+      "from": "feed_actuator.response",
+      "to": "feed_valve.command"
+    }]
+  },
+  "cases": [{
+    "id": "level_control",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "feed.outlet.p": {"value": 20.0, "unit": "bar"},
+      "feed.outlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "drum.vapor_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "drum.liquid_outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "drum.heat.Q_dot": {"value": 0.0, "unit": "kW"},
+      "level_controller.setpoint.value": 0.015
+    },
+    "initial_guesses": {
+      "drum.total_mass": __MASS__,
+      "drum.total_internal_energy": __ENERGY__,
+      "drum.pressure": __PRESSURE__,
+      "drum.vapor_quality": __QUALITY__,
+      "drum.liquid_level": __LEVEL__,
+      "level_controller.integral_state": 0.0,
+      "feed_actuator.response.value": 0.20,
+      "feed_valve.inlet.p": {"value": 20.0, "unit": "bar"},
+      "feed_valve.outlet.p": {"value": 2.0, "unit": "bar"},
+      "feed_valve.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "feed_valve.outlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json";
+    const auto replace = [&](const std::string& token,
+                             const std::string& value) {
+        std::size_t position = 0;
+        while ((position = text.find(token, position)) !=
+               std::string::npos) {
+            text.replace(position, token.size(), value);
+            position += value.size();
+        }
+    };
+    replace("__MASS__", format(initial_mass));
+    replace("__ENERGY__", format(initial_energy));
+    replace("__PRESSURE__", format(initial_pressure));
+    replace("__QUALITY__", format(initial_quality));
+    replace("__LEVEL__", format(initial_level));
+    const auto document =
+        thermox::platform::parse_model_document_text(text);
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            properties, "level_control");
+    const auto mass = require_variable_index(
+        graph.problem.variable_names, "drum.total_mass");
+    const auto level = require_variable_index(
+        graph.problem.variable_names, "drum.liquid_level");
+    const auto signal = require_variable_index(
+        graph.problem.variable_names, "drum.level_signal.value");
+    const auto command = require_variable_index(
+        graph.problem.variable_names,
+        "level_controller.command.value");
+    const auto valve_flow = require_variable_index(
+        graph.problem.variable_names, "feed_valve.outlet.m_dot");
+    const auto initialized = thermox::make_consistent_initial_conditions(
+        graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require(initialized.state.at(valve_flow) > 0.05,
+            "initial commanded feed exceeds fixed liquid discharge");
+    require_near(initialized.state.at(signal),
+                 initialized.state.at(level) / 2.0, 1.0e-12,
+                 "drum level signal is normalized in closed loop");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.5;
+    options.initial_step = 0.01;
+    options.max_step = 0.05;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    const auto& final = result.trajectory.back().state;
+    require(final.at(mass) > initial_mass,
+            "closed-loop feed increases inventory from low level");
+    require(final.at(command) >= 0.02 && final.at(command) <= 0.80,
+            "closed-loop PI command remains within declared bounds");
+    require_near(final.at(signal), final.at(level) / 2.0, 1.0e-10,
+                 "closed-loop level measurement remains consistent");
+}
+
 void test_transient_compiler_rejects_steady_only_components() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -6374,6 +6570,7 @@ int main() {
         test_transient_fluid_volume_closes_with_real_fluid_backends();
         test_dynamic_equilibrium_drum_conserves_inventory();
         test_bounded_pi_controller_prevents_integrator_windup();
+        test_closed_loop_drum_feed_control_composes_platform_domains();
         test_shaft_train_and_generator_close_power_balance();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();
