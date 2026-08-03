@@ -1011,6 +1011,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",
         "pipe.fluid.darcy_weisbach_heat_transfer",
+        "separator.fluid.equilibrium_flash",
         "transport.material.frozen_pressure_ratio",
         "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",
@@ -2813,6 +2814,119 @@ void test_darcy_weisbach_pipe_exposes_ambient_heat_boundary() {
                          outlet.state.temperature_k) - 300.0),
         1.0e-4,
         "pipe heat loss follows the declared conductance law");
+}
+
+void test_equilibrium_flash_separator_closes_phase_split() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "equilibrium_flash",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "separator",
+      "kind": "separator.fluid.equilibrium_flash",
+      "parameters": {"pressure_loss_fraction": 0.10},
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "two_phase",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "separator.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "separator.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "separator.inlet.h": {"value": 1200.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "subcooled",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "separator.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "separator.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "separator.inlet.h": {"value": 500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, properties, "two_phase");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto saturation = water->saturation_p(9.0e5);
+    require(saturation.ok(), "separator saturation state must evaluate");
+    const double quality =
+        (1.2e6 - saturation.liquid.enthalpy_j_kg) /
+        (saturation.vapor.enthalpy_j_kg -
+         saturation.liquid.enthalpy_j_kg);
+    require(quality > 0.0 && quality < 1.0,
+            "separator test inlet must lie inside saturation dome");
+    require_near(value("separator.vapor_outlet.p"), 9.0e5, 1.0e-7,
+                 "separator vapor pressure");
+    require_near(value("separator.liquid_outlet.p"), 9.0e5, 1.0e-7,
+                 "separator liquid pressure");
+    require_near(
+        value("separator.vapor_outlet.h"),
+        saturation.vapor.enthalpy_j_kg, 1.0e-6,
+        "separator saturated-vapor enthalpy");
+    require_near(
+        value("separator.liquid_outlet.h"),
+        saturation.liquid.enthalpy_j_kg, 1.0e-6,
+        "separator saturated-liquid enthalpy");
+    require_near(value("separator.vapor_outlet.m_dot"),
+                 10.0 * quality, 1.0e-9,
+                 "separator vapor fraction follows the lever rule");
+    require_near(value("separator.liquid_outlet.m_dot"),
+                 10.0 * (1.0 - quality), 1.0e-9,
+                 "separator liquid fraction follows the lever rule");
+
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph, properties);
+    const auto graph_result = evaluator.evaluate(result.x);
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_mass_flow"),
+        0.0, 1.0e-10,
+        "separator system mass audit");
+    require_near(
+        require_result_value(
+            graph_result.system_balances,
+            "net_boundary_energy_flow"),
+        0.0, 1.0e-5,
+        "separator system energy audit");
+
+    const auto subcooled_graph =
+        thermox::platform::compile_model_graph(
+            document, registry, properties, "subcooled");
+    const auto subcooled_result =
+        thermox::solve_newton(subcooled_graph.problem);
+    require(!subcooled_result.diagnostics.converged,
+            "equilibrium separator must reject a subcooled inlet");
+    require(
+        subcooled_result.diagnostics.message.find(
+            "outside the liquid-vapor saturation dome") !=
+            std::string::npos,
+        "separator validity diagnostic must identify saturation dome: " +
+            subcooled_result.diagnostics.message);
 }
 
 void test_material_connector_and_frozen_transport() {
@@ -5874,6 +5988,7 @@ int main() {
         test_return_bend_fixed_loss_uses_fluid_density();
         test_darcy_weisbach_pipe_uses_transport_properties();
         test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();
+        test_equilibrium_flash_separator_closes_phase_split();
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
         test_material_thermochemistry_resolves_on_demand();

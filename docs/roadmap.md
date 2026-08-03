@@ -175,6 +175,8 @@ Delivered:
 5. CLI and clean-build regression coverage for the Rankine model document. ✅
 6. Composition-aware material-to-fluid fixed-duty, design-point energy-balance, and counterflow
    UA exchangers with independent pressure losses and thermochemistry/property contracts. ✅
+7. Property-backed equilibrium flash separator with saturated liquid/vapor outlets, pressure
+   loss, saturation-dome validation, and exact lever-rule mass/energy closure. ✅
 
 ## Component catalog and modularization foundation
 

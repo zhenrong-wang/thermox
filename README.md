@@ -55,6 +55,9 @@ Implemented in this sprint:
 - Flow-area restriction models cover non-flashing liquids and perfect-gas subcritical/choked
   flow. Their validity checks reject flashing liquid states instead of silently applying the
   wrong correlation. See [Flow restriction models](docs/flow-restriction-models.md).
+- A generic equilibrium flash separator splits an in-dome stream into saturated liquid and vapor
+  outlets using the selected property backend, with lever-rule mass allocation and exact energy
+  closure. See [Equilibrium flash separation](docs/equilibrium-flash-separation.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
