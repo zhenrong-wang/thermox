@@ -1005,6 +1005,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
+        "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
         "restriction.fluid.orifice.perfect_gas",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
@@ -2603,6 +2604,144 @@ void test_compressible_orifice_transitions_to_choked_flow() {
         std::numbers::pi * 0.03 * 0.03 / 4.0 * flux;
     require_near(choked_a, expected_choked_flow, 1.0e-9,
                  "gas orifice matches ideal-gas critical mass flux");
+}
+
+void test_actuated_liquid_valve_scales_area_with_command() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "actuated_liquid_valve",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "valve",
+      "kind": "valve.fluid.actuated_nonflashing_liquid",
+      "parameters": {
+        "full_open_diameter": {"value": 20.0, "unit": "mm"},
+        "discharge_coefficient": 0.62,
+        "minimum_opening": 0.10
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "quarter_command",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "valve.inlet.p": {"value": 5.0, "unit": "bar"},
+      "valve.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "valve.outlet.p": {"value": 4.0, "unit": "bar"},
+      "valve.command.value": 0.25
+    }
+  }, {
+    "id": "three_quarter_command",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "valve.inlet.p": {"value": 5.0, "unit": "bar"},
+      "valve.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "valve.outlet.p": {"value": 4.0, "unit": "bar"},
+      "valve.command.value": 0.75
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto solve_case = [&](const std::string& case_id) {
+        const auto graph = thermox::platform::compile_model_graph(
+            document, registry, properties, case_id);
+        const auto result = thermox::solve_newton(graph.problem);
+        require(result.diagnostics.converged,
+                result.diagnostics.message);
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, "valve.inlet.m_dot"));
+    };
+    const double lower_flow = solve_case("quarter_command");
+    const double higher_flow = solve_case("three_quarter_command");
+    require_near(
+        higher_flow / lower_flow,
+        (0.10 + 0.90 * 0.75) / (0.10 + 0.90 * 0.25),
+        1.0e-10,
+        "actuated valve command scales effective flow area");
+}
+
+void test_actuated_valve_composes_with_dynamic_control_lag() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_actuated_valve",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "lag",
+      "kind": "control.first_order_lag.normalized",
+      "parameters": {"gain": 1.0, "time_constant": 2.0}
+    }, {
+      "id": "valve",
+      "kind": "valve.fluid.actuated_nonflashing_liquid",
+      "parameters": {
+        "full_open_diameter": {"value": 20.0, "unit": "mm"},
+        "discharge_coefficient": 0.62
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": [{
+      "id": "actuator_to_valve",
+      "kind": "signal_link",
+      "contract_version": "thermox.connector.control/v1",
+      "from": "lag.response",
+      "to": "valve.command"
+    }]
+  },
+  "cases": [{
+    "id": "open",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "lag.command.value": 0.75,
+      "valve.inlet.p": {"value": 5.0, "unit": "bar"},
+      "valve.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "valve.outlet.p": {"value": 4.0, "unit": "bar"}
+    },
+    "initial_guesses": {"lag.response.value": 0.25}
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::make_default_property_package_registry(),
+            "open");
+    const auto response = require_variable_index(
+        graph.problem.variable_names, "lag.response.value");
+    const auto initialized = thermox::make_consistent_initial_conditions(
+        graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require_near(initialized.derivative.at(response), 0.25, 1.0e-10,
+                 "actuator lag initializes command response rate");
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.01;
+    options.max_step = 0.02;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    require(result.trajectory.back().state.at(response) > 0.25,
+            "actuator response moves toward commanded opening");
+    require(
+        result.trajectory.back().state.at(require_variable_index(
+            graph.problem.variable_names, "valve.inlet.m_dot")) > 0.0,
+        "dynamic valve solves positive liquid flow");
 }
 
 void test_return_bend_fixed_loss_uses_fluid_density() {
@@ -5822,7 +5961,6 @@ void test_dynamic_equilibrium_drum_conserves_inventory() {
     "mode": "dynamic_transient",
     "fixed_values": {
       "drum.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
-      "drum.inlet.p": {"value": 2.0, "unit": "bar"},
       "drum.inlet.h": {"value": 500.0, "unit": "kJ/kg"},
       "drum.vapor_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
       "drum.liquid_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
@@ -6140,6 +6278,8 @@ int main() {
         test_generic_model_solves_isenthalpic_valve();
         test_nonflashing_liquid_orifice_solves_flow_and_guards_flashing();
         test_compressible_orifice_transitions_to_choked_flow();
+        test_actuated_liquid_valve_scales_area_with_command();
+        test_actuated_valve_composes_with_dynamic_control_lag();
         test_return_bend_fixed_loss_uses_fluid_density();
         test_darcy_weisbach_pipe_uses_transport_properties();
         test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();

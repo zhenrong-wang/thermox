@@ -11,6 +11,7 @@ void register_turbomachinery_component_models(
 void register_material_turbomachinery_component_models(
     ComponentRegistry& registry);
 void register_transport_component_models(ComponentRegistry& registry);
+void register_valve_component_models(ComponentRegistry& registry);
 void register_phase_separation_component_models(
     ComponentRegistry& registry);
 void register_heat_transfer_component_models(

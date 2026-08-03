@@ -9,6 +9,7 @@ The component is transient-only. Its typed ports are:
 - one fluid inlet;
 - saturated-vapor and saturated-liquid outlets;
 - one heat inlet, with positive `Q_dot` adding energy to the drum.
+- one normalized level-signal output, equal to `liquid_level / vessel_height`.
 
 All fluid ports use the same registered medium. The property backend must provide saturation states
 at pressure.
@@ -40,6 +41,7 @@ V = M ((1 - x) / rho_f + x / rho_g)
 U = M ((1 - x) u_f + x u_g)
 
 p_vapor_out = p_liquid_out = p
+p_inlet = p
 h_vapor_out = h_g
 h_liquid_out = h_f
 T_heat_port = T_sat
@@ -52,7 +54,10 @@ L = vessel_height / V * M (1 - x) / rho_f
 ```
 
 The reported level is therefore a geometric consequence of liquid phase volume, not a separate
-calibration variable.
+calibration variable. The normalized level signal allows the drum to connect to the platform's
+dimensionless control blocks without exposing an internal implementation variable. Equating inlet
+port pressure to vessel pressure also gives an upstream feed valve the downstream pressure needed
+to solve its flow law.
 
 ## Initialization
 

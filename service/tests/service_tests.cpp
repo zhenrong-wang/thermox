@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 60,
+        response.components.size() == 61,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -470,11 +470,28 @@ void test_catalog_discovery() {
             drum->template_kind == "drum.fluid" &&
             drum->category == "Fluid inventory" &&
             !drum->supports_steady && drum->supports_transient &&
-            drum->ports.size() == 4 &&
+            drum->ports.size() == 5 &&
             drum->internal_variables.size() == 5 &&
             drum->required_property_capabilities ==
                 std::vector<std::string>{"saturation_p"},
         "catalog must expose dynamic equilibrium drum states and ports");
+    const auto actuated_valve = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "valve.fluid.actuated_nonflashing_liquid";
+        });
+    require(
+        actuated_valve != response.components.end() &&
+            actuated_valve->template_kind == "valve.fluid" &&
+            actuated_valve->category == "Fluid control" &&
+            actuated_valve->supports_steady &&
+            actuated_valve->supports_transient &&
+            actuated_valve->ports.size() == 3 &&
+            actuated_valve->required_property_capabilities ==
+                std::vector<std::string>{"state_ph", "saturation_p"},
+        "catalog must expose the normalized actuated liquid valve");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),

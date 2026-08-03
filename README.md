@@ -62,6 +62,9 @@ Implemented in this sprint:
   quality from rigid-volume saturation closure, reports liquid level, and exchanges feed, phase
   outlets, and boundary heat through typed ports. See
   [Dynamic equilibrium drum](docs/dynamic-equilibrium-drum.md).
+- A steady/transient actuated liquid valve consumes the platform's normalized control contract,
+  maps command to effective area, and composes directly with controller and actuator-lag blocks.
+  See [Actuated valve control](docs/actuated-valve-control.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

@@ -179,6 +179,8 @@ Delivered:
    loss, saturation-dome validation, and exact lever-rule mass/energy closure. ✅
 8. Dynamic rigid two-phase equilibrium drum with differential mass/internal-energy inventory,
    algebraic pressure/quality/level closure, phase-specific outlets, and an explicit heat port. ✅
+9. Normalized drum level measurement plus a steady/transient actuated non-flashing liquid valve
+   that composes with registered controller and actuator-lag blocks. ✅
 
 ## Component catalog and modularization foundation
 

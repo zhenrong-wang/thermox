@@ -100,6 +100,7 @@ public:
             {"vapor_outlet", "fluid", "out"},
             {"liquid_outlet", "fluid", "out"},
             {"heat", "heat", "in"},
+            {"level_signal", "signal", "out"},
         };
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
@@ -161,6 +162,8 @@ public:
             require_port_variable(context, "inlet.m_dot");
         const auto inlet_h =
             require_port_variable(context, "inlet.h");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
         const auto vapor_m =
             require_port_variable(context, "vapor_outlet.m_dot");
         const auto vapor_p =
@@ -177,6 +180,8 @@ public:
             require_port_variable(context, "heat.Q_dot");
         const auto heat_temperature =
             require_port_variable(context, "heat.T");
+        const auto level_signal =
+            require_port_variable(context, "level_signal.value");
         const auto mass =
             require_internal_variable(context, "total_mass");
         const auto energy = require_internal_variable(
@@ -229,6 +234,10 @@ public:
                 return EvaluationStatus::success();
             },
             1.0e7);
+        system.add_linear_equation(
+            prefix + "inlet_pressure",
+            {{inlet_p, 1.0, 0.0}, {pressure, -1.0, 0.0}},
+            0.0, 100000.0);
         system.add_linear_equation(
             prefix + "vapor_pressure",
             {{vapor_p, 1.0, 0.0}, {pressure, -1.0, 0.0}},
@@ -403,6 +412,11 @@ public:
                 return EvaluationStatus::success();
             },
             vessel_height);
+        system.add_linear_equation(
+            prefix + "normalized_level_signal",
+            {{level_signal, 1.0, 0.0},
+             {level, -1.0 / vessel_height, 0.0}},
+            0.0, 1.0);
     }
 
 private:
