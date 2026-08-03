@@ -1,0 +1,62 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "gas_to_water_dynamic_heat_exchanger_cell",
+    "media": [{
+      "id": "hot_air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }, {
+      "id": "cold_water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "cell",
+      "kind": "heat_exchanger.fluid.dynamic_cell",
+      "parameters": {
+        "hot_fluid_mass": {"value": 0.69686, "unit": "kg"},
+        "cold_fluid_mass": {"value": 49.83, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 10.0,
+        "cold_loss_coefficient": 10.0
+      },
+      "media": {
+        "hot_in": "hot_air",
+        "hot_out": "hot_air",
+        "cold_in": "cold_water",
+        "cold_out": "cold_water"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "heat_up",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "cell.hot_in.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.hot_in.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell.cold_in.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.cold_in.h": {"value": 112.75, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "cell.hot_total_energy": {"value": 250.0, "unit": "kJ"},
+      "cell.hot_enthalpy": {"value": 502.25, "unit": "kJ/kg"},
+      "cell.cold_total_energy": {"value": 5.61, "unit": "MJ"},
+      "cell.cold_enthalpy": {"value": 112.75, "unit": "kJ/kg"},
+      "cell.wall_temperature": {"value": 400.0, "unit": "K"},
+      "cell.hot_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.hot_out.p": {"value": 1.996, "unit": "bar"},
+      "cell.hot_out.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell.cold_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "cell.cold_out.h": {"value": 112.75, "unit": "kJ/kg"}
+    }
+  }]
+}

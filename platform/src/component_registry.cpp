@@ -1055,6 +1055,7 @@ ComponentRegistry make_default_component_registry() {
     register_valve_component_models(registry);
     register_phase_separation_component_models(registry);
     register_heat_transfer_component_models(registry);
+    register_dynamic_heat_transfer_component_models(registry);
     register_fluid_inventory_component_models(registry);
     register_drum_component_models(registry);
     register_storage_component_models(registry);

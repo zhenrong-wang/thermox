@@ -353,8 +353,20 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 62,
+        response.components.size() == 63,
         "service must expose the complete component registry");
+    const auto dynamic_cell = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "heat_exchanger.fluid.dynamic_cell";
+        });
+    require(
+        dynamic_cell != response.components.end() &&
+            dynamic_cell->supports_steady &&
+            dynamic_cell->supports_transient &&
+            dynamic_cell->internal_variables.size() == 5,
+        "catalog must expose steady/transient heat-exchanger cells");
     const auto rotor = std::find_if(
         response.components.begin(),
         response.components.end(),

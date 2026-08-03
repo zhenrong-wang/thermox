@@ -156,6 +156,12 @@ add_test(NAME platform_closed_loop_drum_cli
         --case level_control
         --end-time 0.5
 )
+add_test(NAME platform_dynamic_heat_exchanger_cli
+    COMMAND thermox_cli simulate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_heat_exchanger_cell.json
+        --case heat_up
+        --end-time 0.5
+)
 add_test(NAME platform_rankine_example_cli
     COMMAND thermox_cli solve
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/simple_rankine.json

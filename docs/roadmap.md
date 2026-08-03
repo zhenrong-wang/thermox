@@ -185,6 +185,8 @@ Delivered:
     saturation, integral state, and tracking back-calculation anti-windup. ✅
 11. Declared closed-loop dynamic reference joining property-backed fluid flow, two-phase inventory,
     level sensing, bounded PI control, actuator dynamics, and consistent DAE initialization. ✅
+12. Generic steady/transient mixed heat-exchanger cell with independent hot/cold property packages,
+    constant fluid-energy holdups, wall capacitance, and flow-dependent pressure loss. ✅
 
 ## Component catalog and modularization foundation
 

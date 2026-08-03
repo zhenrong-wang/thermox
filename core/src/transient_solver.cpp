@@ -541,6 +541,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     }
 
     int consecutive_rejections = 0;
+    std::string last_rejection_message;
     while (time < options.end_time &&
            result.diagnostics.accepted_steps < options.max_steps) {
         step = std::min(step, options.end_time - time);
@@ -583,11 +584,28 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         }
 
         if (!std::isfinite(error) || error > 1.0) {
+            if (!full.success) {
+                last_rejection_message =
+                    "full implicit step failed: " +
+                    full.diagnostics.message;
+            } else if (!first_half.success) {
+                last_rejection_message =
+                    "first half step failed: " +
+                    first_half.diagnostics.message;
+            } else if (!second_half.success) {
+                last_rejection_message =
+                    "second half step failed: " +
+                    second_half.diagnostics.message;
+            } else {
+                last_rejection_message =
+                    "estimated local error exceeded tolerance";
+            }
             ++result.diagnostics.rejected_steps;
             ++consecutive_rejections;
             if (consecutive_rejections > options.max_consecutive_rejections) {
                 result.diagnostics.message =
-                    "maximum consecutive rejected time steps reached";
+                    "maximum consecutive rejected time steps reached: " +
+                    last_rejection_message;
                 result.diagnostics.final_time = time;
                 return result;
             }
@@ -598,7 +616,8 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             step *= factor;
             if (step < options.min_step) {
                 result.diagnostics.message =
-                    "time step fell below min_step after a rejected step";
+                    "time step fell below min_step after a rejected step: " +
+                    last_rejection_message;
                 result.diagnostics.final_time = time;
                 return result;
             }

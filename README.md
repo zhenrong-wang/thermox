@@ -71,6 +71,10 @@ Implemented in this sprint:
 - A declared closed-loop drum example composes a fluid boundary, actuated feed valve, equilibrium
   two-phase inventory, level measurement, bounded PI controller, and actuator lag in one DAE. See
   [Closed-loop drum feed control](docs/closed-loop-drum-control.md).
+- A steady/transient heat-exchanger cell combines two property-backed constant fluid holdups,
+  wall thermal capacitance, and flow-dependent pressure loss. Cells compose into co-current or
+  counterflow distributed equipment. See
+  [Dynamic heat-exchanger cell](docs/dynamic-heat-exchanger-cell.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
