@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 54,
+        response.components.size() == 56,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -413,6 +413,22 @@ void test_catalog_discovery() {
                 std::vector<std::string>{"state_ph"},
         "catalog must expose the return bend as a physical "
         "template with a density-aware calculation model");
+    const auto pipe = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "pipe.fluid.darcy_weisbach_heat_transfer";
+        });
+    require(
+        pipe != response.components.end() &&
+            pipe->template_kind == "pipe.fluid" &&
+            pipe->category == "Fluid transport" &&
+            pipe->ports.size() == 3 &&
+            pipe->required_property_capabilities ==
+                std::vector<std::string>{"state_ph", "transport"},
+        "catalog must expose the property-backed pipe and its "
+        "explicit ambient heat boundary");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),

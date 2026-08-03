@@ -151,6 +151,9 @@ Delivered:
 4. Transient fluid boundaries and fixed sparse DAE assembly for a connected source-volume-sink
    network. ✅
 5. SI normalization for volume, mass, and energy component/case values. ✅
+6. Generic single-phase Darcy-Weisbach pipe models with laminar/transitional/turbulent friction,
+   roughness, local losses, elevation head, registered transport properties, and an optional
+   explicit ambient heat boundary. ✅
 
 ## Heat transfer and phase-change components
 

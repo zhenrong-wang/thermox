@@ -1007,6 +1007,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "valve.fluid.isenthalpic_pressure_ratio",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
+        "pipe.fluid.darcy_weisbach",
+        "pipe.fluid.darcy_weisbach_heat_transfer",
         "transport.material.frozen_pressure_ratio",
         "combustor.material.adiabatic_equilibrium",
         "heat_exchanger.fluid.fixed_duty",
@@ -2496,6 +2498,153 @@ void test_return_bend_fixed_loss_uses_fluid_density() {
             graph.problem.variable_names, "bend.outlet.p")),
         2.0e5 - expected_loss, 1.0e-7,
         "return bend applies K rho v squared pressure loss");
+}
+
+void test_darcy_weisbach_pipe_uses_transport_properties() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "single_phase_pipe",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "pipe",
+      "kind": "pipe.fluid.darcy_weisbach",
+      "parameters": {
+        "length": {"value": 40.0, "unit": "m"},
+        "inner_diameter": {"value": 0.10, "unit": "m"},
+        "roughness": {"value": 0.000045, "unit": "m"},
+        "elevation_change": {"value": 3.0, "unit": "m"},
+        "local_loss_coefficient": 1.2
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "pipe.inlet.m_dot": {"value": 1.5, "unit": "kg/s"},
+      "pipe.inlet.p": {"value": 5.0, "unit": "bar"},
+      "pipe.inlet.h": {"value": 500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        properties, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("pipe.outlet.m_dot"), 1.5, 1.0e-10,
+                 "pipe conserves mass");
+    require_near(value("pipe.outlet.h"), 5.0e5, 1.0e-8,
+                 "adiabatic pipe preserves enthalpy");
+
+    const auto water = properties.create("water_steam_if97", "Water");
+    const double outlet_pressure = value("pipe.outlet.p");
+    const auto mean_state = water->state_ph(
+        0.5 * (5.0e5 + outlet_pressure), 5.0e5);
+    require(mean_state.ok(), "pipe mean water state must evaluate");
+    const double diameter = 0.10;
+    const double area = std::numbers::pi * diameter * diameter / 4.0;
+    const double reynolds = 1.5 * diameter /
+        (area * mean_state.state.viscosity_pa_s);
+    const double haaland = 1.0 / std::pow(
+        -1.8 * std::log10(
+            std::pow(0.000045 / (3.7 * diameter), 1.11) +
+            6.9 / reynolds),
+        2.0);
+    const double expected_drop =
+        (haaland * 40.0 / diameter + 1.2) * 1.5 * 1.5 /
+            (2.0 * mean_state.state.density_kg_m3 * area * area) +
+        mean_state.state.density_kg_m3 * 9.80665 * 3.0;
+    require_near(
+        5.0e5 - outlet_pressure, expected_drop, 1.0e-5,
+        "pipe applies friction, local, and elevation pressure loss");
+}
+
+void test_darcy_weisbach_pipe_exposes_ambient_heat_boundary() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "heat_losing_pipe",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "pipe",
+      "kind": "pipe.fluid.darcy_weisbach_heat_transfer",
+      "parameters": {
+        "length": {"value": 10.0, "unit": "m"},
+        "inner_diameter": {"value": 0.08, "unit": "m"},
+        "overall_thermal_conductance": {"value": 200.0, "unit": "W/K"}
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "pipe.inlet.m_dot": {"value": 2.0, "unit": "kg/s"},
+      "pipe.inlet.p": {"value": 5.0, "unit": "bar"},
+      "pipe.inlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "pipe.ambient.T": {"value": 300.0, "unit": "K"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        properties, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const double heat_loss = value("pipe.ambient.Q_dot");
+    require(heat_loss > 0.0,
+            "hot pipe should reject positive heat to ambient");
+    require(value("pipe.outlet.h") < 6.0e5,
+            "heat rejection should reduce outlet enthalpy");
+    require_near(
+        2.0 * (value("pipe.outlet.h") - 6.0e5) + heat_loss,
+        0.0, 1.0e-6,
+        "pipe fluid and ambient heat boundary close energy");
+
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto inlet = water->state_ph(5.0e5, 6.0e5);
+    const auto outlet = water->state_ph(
+        value("pipe.outlet.p"), value("pipe.outlet.h"));
+    require(inlet.ok() && outlet.ok(),
+            "pipe endpoint states must evaluate");
+    require_near(
+        heat_loss,
+        200.0 * (0.5 * (inlet.state.temperature_k +
+                         outlet.state.temperature_k) - 300.0),
+        1.0e-4,
+        "pipe heat loss follows the declared conductance law");
 }
 
 void test_material_connector_and_frozen_transport() {
@@ -5553,6 +5702,8 @@ int main() {
         test_generic_model_solves_two_outlet_splitter();
         test_generic_model_solves_isenthalpic_valve();
         test_return_bend_fixed_loss_uses_fluid_density();
+        test_darcy_weisbach_pipe_uses_transport_properties();
+        test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
         test_material_thermochemistry_resolves_on_demand();

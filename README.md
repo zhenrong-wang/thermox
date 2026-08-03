@@ -48,6 +48,10 @@ Implemented in this sprint:
   analytic/finite-difference derivative rows.
 - Composition-preserving material splitters and enthalpy-conserving material mixers for bleed,
   cooling, recirculation, and multistream reacting-system graphs.
+- Generic single-phase pipe models use registered density and viscosity for Darcy-Weisbach
+  friction, roughness, local losses, and elevation head; the heat-transfer variant exposes its
+  ambient duty through a typed heat port so whole-system energy audits remain explicit. See
+  [Single-phase pipe models](docs/single-phase-pipe-models.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

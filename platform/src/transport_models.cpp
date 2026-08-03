@@ -1,6 +1,7 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -17,6 +18,7 @@ using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
 using component_model_support::require_correlation;
+using component_model_support::parameter_or;
 using component_model_support::required_parameter;
 using component_model_support::property_failure;
 
@@ -611,6 +613,328 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+struct PipeHydraulicParameters {
+    double length_m{0.0};
+    double diameter_m{0.0};
+    double roughness_m{0.0};
+    double elevation_change_m{0.0};
+    double local_loss_coefficient{0.0};
+};
+
+EvaluationStatus evaluate_pipe_pressure_balance(
+    const physics::PropertyPackage& properties,
+    const PipeHydraulicParameters& parameters,
+    double mass_flow_kg_s,
+    double inlet_pressure_pa,
+    double inlet_enthalpy_j_kg,
+    double outlet_pressure_pa,
+    double outlet_enthalpy_j_kg,
+    double& residual) {
+    constexpr double gravity_m_s2 = 9.80665;
+    const double mean_pressure =
+        0.5 * (inlet_pressure_pa + outlet_pressure_pa);
+    const double mean_enthalpy =
+        0.5 * (inlet_enthalpy_j_kg + outlet_enthalpy_j_kg);
+    const auto state =
+        properties.state_ph(mean_pressure, mean_enthalpy);
+    if (!state.ok()) return property_failure(state);
+    if (state.state.phase == physics::Phase::two_phase) {
+        return EvaluationStatus::recoverable(
+            "Darcy-Weisbach pipe model is restricted to single-phase "
+            "states");
+    }
+    const double density = state.state.density_kg_m3;
+    const double viscosity = state.state.viscosity_pa_s;
+    if (!std::isfinite(density) || density <= 0.0 ||
+        !std::isfinite(viscosity) || viscosity <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "Darcy-Weisbach pipe model requires positive finite "
+            "density and dynamic viscosity");
+    }
+
+    const double area = std::numbers::pi *
+        parameters.diameter_m * parameters.diameter_m / 4.0;
+    const double absolute_flow = std::abs(mass_flow_kg_s);
+    double friction_pressure_loss = 0.0;
+    if (absolute_flow > 1.0e-14) {
+        const double reynolds = absolute_flow *
+            parameters.diameter_m / (area * viscosity);
+        const double laminar_factor = 64.0 / reynolds;
+        const double haaland_argument = std::pow(
+            parameters.roughness_m /
+                (3.7 * parameters.diameter_m),
+            1.11) + 6.9 / reynolds;
+        const double turbulent_factor = 1.0 /
+            std::pow(-1.8 * std::log10(haaland_argument), 2.0);
+        double friction_factor = laminar_factor;
+        if (reynolds >= 4000.0) {
+            friction_factor = turbulent_factor;
+        } else if (reynolds > 2300.0) {
+            const double fraction =
+                (reynolds - 2300.0) / (4000.0 - 2300.0);
+            const double blend =
+                fraction * fraction * (3.0 - 2.0 * fraction);
+            friction_factor =
+                (1.0 - blend) * laminar_factor +
+                blend * turbulent_factor;
+        }
+        const double total_loss_coefficient =
+            friction_factor * parameters.length_m /
+                parameters.diameter_m +
+            parameters.local_loss_coefficient;
+        friction_pressure_loss = total_loss_coefficient *
+            mass_flow_kg_s * absolute_flow /
+            (2.0 * density * area * area);
+    }
+    const double elevation_pressure_change =
+        density * gravity_m_s2 * parameters.elevation_change_m;
+    residual = inlet_pressure_pa - outlet_pressure_pa -
+        friction_pressure_loss - elevation_pressure_change;
+    return EvaluationStatus::success();
+}
+
+class DarcyWeisbachPipeModel final : public ComponentModel {
+public:
+    explicit DarcyWeisbachPipeModel(bool heat_transfer)
+        : heat_transfer_(heat_transfer) {
+        if (heat_transfer) {
+            descriptor_ = make_descriptor(
+                "pipe.fluid.darcy_weisbach_heat_transfer",
+                {{"inlet", "fluid", "in"},
+                 {"outlet", "fluid", "out"},
+                 {"ambient", "heat", "out"}});
+        } else {
+            descriptor_ = make_descriptor(
+                "pipe.fluid.darcy_weisbach",
+                {{"inlet", "fluid", "in"},
+                 {"outlet", "fluid", "out"}});
+        }
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "pipe.fluid";
+        descriptor_.display_name = "Single-phase pipe";
+        descriptor_.category = "Fluid transport";
+        descriptor_.model_name = heat_transfer
+            ? "Darcy-Weisbach with ambient heat transfer"
+            : "Adiabatic Darcy-Weisbach";
+        descriptor_.parameters = {
+            {"length", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"inner_diameter", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"roughness", "length", false, 0.0, 0.0,
+             std::numeric_limits<double>::infinity(), true, true},
+            {"elevation_change", "length", false, 0.0,
+             -std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::infinity(), true, true},
+            {"local_loss_coefficient", "dimensionless", false, 0.0,
+             0.0, std::numeric_limits<double>::infinity(), true, true},
+        };
+        if (heat_transfer) {
+            descriptor_.parameters.push_back({
+                "overall_thermal_conductance", "thermal_conductance",
+                true, std::nullopt, 0.0,
+                std::numeric_limits<double>::infinity(), false, true});
+        }
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph,
+            physics::PropertyCapability::transport};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const PipeHydraulicParameters parameters{
+            required_parameter(context.component, "length"),
+            required_parameter(context.component, "inner_diameter"),
+            parameter_or(context.component, "roughness", 0.0),
+            parameter_or(context.component, "elevation_change", 0.0),
+            parameter_or(
+                context.component, "local_loss_coefficient", 0.0)};
+        if (parameters.roughness_m >= parameters.diameter_m) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' roughness must be smaller than inner_diameter");
+        }
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 100.0);
+        if (!heat_transfer_) {
+            system.add_linear_equation(
+                prefix + "adiabatic_enthalpy",
+                {{outlet_h, 1.0}, {inlet_h, -1.0}},
+                0.0, 100000.0);
+        } else {
+            const auto heat_flow =
+                require_port_variable(context, "ambient.Q_dot");
+            system.add_sparse_equation(
+                prefix + "fluid_energy_balance",
+                {inlet_m, inlet_h, outlet_h, heat_flow},
+                [inlet_m, inlet_h, outlet_h, heat_flow](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    const double delta_h =
+                        x.at(outlet_h) - x.at(inlet_h);
+                    jacobian.push_back({inlet_m, delta_h});
+                    jacobian.push_back({inlet_h, -x.at(inlet_m)});
+                    jacobian.push_back({outlet_h, x.at(inlet_m)});
+                    jacobian.push_back({heat_flow, 1.0});
+                    return x.at(inlet_m) * delta_h +
+                        x.at(heat_flow);
+                },
+                1.0e6);
+
+            const double conductance = required_parameter(
+                context.component, "overall_thermal_conductance");
+            const auto ambient_temperature =
+                require_port_variable(context, "ambient.T");
+            system.add_checked_sparse_equation(
+                prefix + "ambient_heat_transfer",
+                [properties, inlet_p, inlet_h, outlet_p, outlet_h,
+                 heat_flow, ambient_temperature, conductance](
+                    const std::vector<double>& x, double& residual) {
+                    const auto inlet = properties->state_ph(
+                        x.at(inlet_p), x.at(inlet_h));
+                    if (!inlet.ok()) return property_failure(inlet);
+                    const auto outlet = properties->state_ph(
+                        x.at(outlet_p), x.at(outlet_h));
+                    if (!outlet.ok()) return property_failure(outlet);
+                    residual = x.at(heat_flow) - conductance *
+                        (0.5 * (inlet.state.temperature_k +
+                                outlet.state.temperature_k) -
+                         x.at(ambient_temperature));
+                    return EvaluationStatus::success();
+                },
+                {inlet_p, inlet_h, outlet_p, outlet_h, heat_flow,
+                 ambient_temperature},
+                [properties, inlet_p, inlet_h, outlet_p, outlet_h,
+                 heat_flow, ambient_temperature, conductance](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    const auto inlet =
+                        physics::state_ph_derivatives_with_fallback(
+                            *properties, x.at(inlet_p), x.at(inlet_h));
+                    const auto outlet =
+                        physics::state_ph_derivatives_with_fallback(
+                            *properties, x.at(outlet_p), x.at(outlet_h));
+                    if (!inlet.ok() || !outlet.ok()) {
+                        throw std::runtime_error(
+                            inlet.ok() ? outlet.message : inlet.message);
+                    }
+                    jacobian.push_back({heat_flow, 1.0});
+                    jacobian.push_back({ambient_temperature, conductance});
+                    jacobian.push_back({inlet_p, -0.5 * conductance *
+                        inlet.derivatives
+                            .temperature_wrt_pressure_at_enthalpy});
+                    jacobian.push_back({inlet_h, -0.5 * conductance *
+                        inlet.derivatives
+                            .temperature_wrt_enthalpy_at_pressure});
+                    jacobian.push_back({outlet_p, -0.5 * conductance *
+                        outlet.derivatives
+                            .temperature_wrt_pressure_at_enthalpy});
+                    jacobian.push_back({outlet_h, -0.5 * conductance *
+                        outlet.derivatives
+                            .temperature_wrt_enthalpy_at_pressure});
+                    return x.at(heat_flow) - conductance *
+                        (0.5 * (inlet.state.temperature_k +
+                                outlet.state.temperature_k) -
+                         x.at(ambient_temperature));
+                },
+                1.0e5);
+        }
+
+        const auto evaluate_pressure =
+            [properties, parameters, inlet_m, inlet_p, inlet_h,
+             outlet_p, outlet_h](const std::vector<double>& x,
+                                 double& residual) {
+                return evaluate_pipe_pressure_balance(
+                    *properties, parameters, x.at(inlet_m),
+                    x.at(inlet_p), x.at(inlet_h), x.at(outlet_p),
+                    x.at(outlet_h), residual);
+            };
+        const std::vector<std::size_t> pressure_variables{
+            inlet_m, inlet_p, inlet_h, outlet_p, outlet_h};
+        system.add_checked_sparse_equation(
+            prefix + "darcy_weisbach_pressure_balance",
+            evaluate_pressure, pressure_variables,
+            [evaluate_pressure, pressure_variables](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double base = 0.0;
+                const auto base_status = evaluate_pressure(x, base);
+                if (!base_status.ok()) {
+                    throw std::runtime_error(base_status.message);
+                }
+                for (const auto variable : pressure_variables) {
+                    const double magnitude = std::abs(x.at(variable));
+                    const double step = std::max(
+                        variable == pressure_variables.front()
+                            ? 1.0e-7
+                            : 0.1,
+                        magnitude * 1.0e-6);
+                    auto plus = x;
+                    auto minus = x;
+                    plus.at(variable) += step;
+                    minus.at(variable) -= step;
+                    double plus_value = 0.0;
+                    double minus_value = 0.0;
+                    const auto plus_status =
+                        evaluate_pressure(plus, plus_value);
+                    const auto minus_status =
+                        evaluate_pressure(minus, minus_value);
+                    double derivative = 0.0;
+                    if (plus_status.ok() && minus_status.ok()) {
+                        derivative =
+                            (plus_value - minus_value) / (2.0 * step);
+                    } else if (plus_status.ok()) {
+                        derivative = (plus_value - base) / step;
+                    } else if (minus_status.ok()) {
+                        derivative = (base - minus_value) / step;
+                    } else {
+                        throw std::runtime_error(
+                            "could not evaluate a local derivative for "
+                            "Darcy-Weisbach pipe pressure balance");
+                    }
+                    jacobian.push_back({variable, derivative});
+                }
+                return base;
+            },
+            100000.0);
+        system.add_initialization_relation(
+            {{outlet_p, 1.0}, {inlet_p, -1.0}}, 0.0);
+    }
+
+private:
+    bool heat_transfer_{false};
+    ComponentModelDescriptor descriptor_;
+};
+
 class FrozenMaterialPressureRatioModel final
     : public ComponentModel {
 public:
@@ -928,6 +1252,10 @@ void register_transport_component_models(
         std::make_shared<ReturnBendFixedLossModel>());
     registry.register_model(
         std::make_shared<ReturnBendCorrelationModel>());
+    registry.register_model(
+        std::make_shared<DarcyWeisbachPipeModel>(false));
+    registry.register_model(
+        std::make_shared<DarcyWeisbachPipeModel>(true));
     registry.register_model(
         std::make_shared<FrozenMaterialPressureRatioModel>());
     registry.register_model(
