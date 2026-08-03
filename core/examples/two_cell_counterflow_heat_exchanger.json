@@ -1,0 +1,172 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "two_cell_counterflow_gas_to_water",
+    "media": [{
+      "id": "hot_air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }, {
+      "id": "cold_water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "hot_source",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "hot_air"}
+    }, {
+      "id": "cell_1",
+      "kind": "heat_exchanger.fluid.dynamic_cell",
+      "parameters": {
+        "hot_fluid_mass": {"value": 0.69686, "unit": "kg"},
+        "cold_fluid_mass": {"value": 49.83, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 10.0,
+        "cold_loss_coefficient": 10.0
+      },
+      "media": {
+        "hot_in": "hot_air",
+        "hot_out": "hot_air",
+        "cold_in": "cold_water",
+        "cold_out": "cold_water"
+      }
+    }, {
+      "id": "cell_2",
+      "kind": "heat_exchanger.fluid.dynamic_cell",
+      "parameters": {
+        "hot_fluid_mass": {"value": 0.69686, "unit": "kg"},
+        "cold_fluid_mass": {"value": 49.83, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 10.0,
+        "cold_loss_coefficient": 10.0
+      },
+      "media": {
+        "hot_in": "hot_air",
+        "hot_out": "hot_air",
+        "cold_in": "cold_water",
+        "cold_out": "cold_water"
+      }
+    }, {
+      "id": "hot_sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "hot_air"}
+    }, {
+      "id": "cold_source",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "cold_water"}
+    }, {
+      "id": "cold_sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "cold_water"}
+    }],
+    "connections": [{
+      "id": "hot_feed",
+      "kind": "fluid_link",
+      "from": "hot_source.outlet",
+      "to": "cell_1.hot_in"
+    }, {
+      "id": "hot_between_cells",
+      "kind": "fluid_link",
+      "from": "cell_1.hot_out",
+      "to": "cell_2.hot_in"
+    }, {
+      "id": "hot_discharge",
+      "kind": "fluid_link",
+      "from": "cell_2.hot_out",
+      "to": "hot_sink.inlet"
+    }, {
+      "id": "cold_feed",
+      "kind": "fluid_link",
+      "from": "cold_source.outlet",
+      "to": "cell_2.cold_in"
+    }, {
+      "id": "cold_between_cells",
+      "kind": "fluid_link",
+      "from": "cell_2.cold_out",
+      "to": "cell_1.cold_in"
+    }, {
+      "id": "cold_discharge",
+      "kind": "fluid_link",
+      "from": "cell_1.cold_out",
+      "to": "cold_sink.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "steady",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "hot_source.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "hot_source.outlet.p": {"value": 2.0, "unit": "bar"},
+      "hot_source.outlet.T": {"value": 500.0, "unit": "K"},
+      "cold_source.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cold_source.outlet.p": {"value": 2.0, "unit": "bar"},
+      "cold_source.outlet.T": {"value": 300.0, "unit": "K"}
+    },
+    "initial_guesses": {
+      "hot_source.outlet.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_1.hot_in.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_1.hot_out.h": {"value": 450.0, "unit": "kJ/kg"},
+      "cell_2.hot_in.h": {"value": 450.0, "unit": "kJ/kg"},
+      "cell_2.hot_out.h": {"value": 410.0, "unit": "kJ/kg"},
+      "hot_sink.inlet.h": {"value": 410.0, "unit": "kJ/kg"},
+      "cold_source.outlet.h": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_2.cold_in.h": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_2.cold_out.h": {"value": 135.0, "unit": "kJ/kg"},
+      "cell_1.cold_in.h": {"value": 135.0, "unit": "kJ/kg"},
+      "cell_1.cold_out.h": {"value": 155.0, "unit": "kJ/kg"},
+      "cold_sink.inlet.h": {"value": 155.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "heat_up",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "hot_source.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "hot_source.outlet.p": {"value": 2.0, "unit": "bar"},
+      "hot_source.outlet.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cold_source.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cold_source.outlet.p": {"value": 2.0, "unit": "bar"},
+      "cold_source.outlet.h": {"value": 112.75, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "cell_1.hot_total_energy": {"value": 250.0, "unit": "kJ"},
+      "cell_1.hot_enthalpy": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_1.cold_total_energy": {"value": 5.61, "unit": "MJ"},
+      "cell_1.cold_enthalpy": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_1.wall_temperature": {"value": 400.0, "unit": "K"},
+      "cell_2.hot_total_energy": {"value": 250.0, "unit": "kJ"},
+      "cell_2.hot_enthalpy": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_2.cold_total_energy": {"value": 5.61, "unit": "MJ"},
+      "cell_2.cold_enthalpy": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_2.wall_temperature": {"value": 400.0, "unit": "K"},
+      "cell_1.hot_out.p": {"value": 1.996, "unit": "bar"},
+      "cell_2.hot_in.p": {"value": 1.996, "unit": "bar"},
+      "cell_2.hot_out.p": {"value": 1.992, "unit": "bar"},
+      "hot_sink.inlet.p": {"value": 1.992, "unit": "bar"},
+      "cell_2.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "cell_1.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "cell_1.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "cold_sink.inlet.p": {"value": 2.0, "unit": "bar"},
+      "cell_1.hot_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell_2.hot_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell_1.cold_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell_2.cold_out.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell_1.hot_out.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_2.hot_in.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_2.hot_out.h": {"value": 502.25, "unit": "kJ/kg"},
+      "hot_sink.inlet.h": {"value": 502.25, "unit": "kJ/kg"},
+      "cell_2.cold_out.h": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_1.cold_in.h": {"value": 112.75, "unit": "kJ/kg"},
+      "cell_1.cold_out.h": {"value": 112.75, "unit": "kJ/kg"},
+      "cold_sink.inlet.h": {"value": 112.75, "unit": "kJ/kg"}
+    }
+  }]
+}

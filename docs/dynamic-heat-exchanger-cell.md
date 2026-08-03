@@ -60,6 +60,9 @@ discretization; connecting it in the same order creates a co-current discretizat
 evaporators, superheaters, reheaters, recuperators, and reactor heat-transport sections should be
 declared as graphs of generic cells rather than introduced as cycle-specific solver code.
 
+The runnable [two-cell counterflow reference](distributed-heat-exchanger.md) demonstrates this
+ordering with boundary components and verifies both the steady and transient graph.
+
 ## Run the reference
 
 The gas-to-water example binds ideal-gas air on the hot side and IF97 water on the cold side:

@@ -187,6 +187,8 @@ Delivered:
     level sensing, bounded PI control, actuator dynamics, and consistent DAE initialization. ✅
 12. Generic steady/transient mixed heat-exchanger cell with independent hot/cold property packages,
     constant fluid-energy holdups, wall capacitance, and flow-dependent pressure loss. ✅
+13. Declared two-cell counterflow gas-to-water exchanger proving distributed cell composition,
+    cumulative pressure loss, steady duty closure, and transient whole-system energy closure. ✅
 
 ## Component catalog and modularization foundation
 

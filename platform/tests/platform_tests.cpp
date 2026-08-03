@@ -4992,6 +4992,106 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
             "dynamic cell retains finite stored fluid energies");
 }
 
+void test_two_cell_counterflow_exchanger_composes_and_conserves() {
+    const auto document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/two_cell_counterflow_heat_exchanger.json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+
+    const auto steady_graph =
+        thermox::platform::compile_model_graph(
+            document, registry, properties, "steady");
+    const auto steady = thermox::solve_newton(steady_graph.problem);
+    require(steady.diagnostics.converged,
+            "two-cell steady solve: " +
+                steady.diagnostics.message);
+    const auto steady_value = [&](const std::string& name) {
+        return steady.x.at(require_variable_index(
+            steady_graph.problem.variable_names, name));
+    };
+    const double hot_duty =
+        steady_value("hot_source.outlet.m_dot") *
+        (steady_value("hot_source.outlet.h") -
+         steady_value("hot_sink.inlet.h"));
+    const double cold_duty =
+        steady_value("cold_source.outlet.m_dot") *
+        (steady_value("cold_sink.inlet.h") -
+         steady_value("cold_source.outlet.h"));
+    require(hot_duty > 0.0,
+            "two-cell counterflow exchanger transfers heat hot to cold");
+    require_near(hot_duty, cold_duty, 1.0e-5,
+                 "two-cell counterflow steady energy balance");
+    require(
+        steady_value("hot_source.outlet.p") >
+            steady_value("cell_1.hot_out.p") &&
+        steady_value("cell_1.hot_out.p") >
+            steady_value("hot_sink.inlet.p"),
+        "hot-side pressure falls through both cells");
+    require(
+        steady_value("cold_source.outlet.p") >
+            steady_value("cell_2.cold_out.p") &&
+        steady_value("cell_2.cold_out.p") >
+            steady_value("cold_sink.inlet.p"),
+        "counterflow cold-side pressure falls through both cells");
+
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, properties, "heat_up");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            "two-cell consistent initialization: " +
+                initialized.diagnostics.message);
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.5;
+    options.initial_step = 0.01;
+    options.max_step = 0.05;
+    const auto transient =
+        thermox::integrate_dae(graph.problem, options);
+    require(transient.diagnostics.success,
+            "two-cell transient integration: " +
+                transient.diagnostics.message);
+    const auto index = [&](const std::string& name) {
+        return require_variable_index(graph.problem.variable_names, name);
+    };
+    const auto& final = transient.trajectory.back();
+    require(final.state.at(index("cell_1.hot_enthalpy")) <
+                initialized.state.at(index("cell_1.hot_enthalpy")) &&
+                final.state.at(index("cell_2.hot_enthalpy")) <
+                initialized.state.at(index("cell_2.hot_enthalpy")),
+            "both counterflow cells cool their hot holdups");
+    require(final.state.at(index("cell_1.cold_enthalpy")) >
+                initialized.state.at(index("cell_1.cold_enthalpy")) &&
+                final.state.at(index("cell_2.cold_enthalpy")) >
+                initialized.state.at(index("cell_2.cold_enthalpy")),
+            "both counterflow cells heat their cold holdups");
+    constexpr double wall_capacity = 50000.0;
+    double stored_rate = 0.0;
+    for (const std::string cell : {"cell_1", "cell_2"}) {
+        stored_rate += final.derivative.at(
+            index(cell + ".hot_total_energy"));
+        stored_rate += final.derivative.at(
+            index(cell + ".cold_total_energy"));
+        stored_rate += wall_capacity * final.derivative.at(
+            index(cell + ".wall_temperature"));
+    }
+    const double boundary_rate =
+        final.state.at(index("hot_source.outlet.m_dot")) *
+            final.state.at(index("hot_source.outlet.h")) -
+        final.state.at(index("hot_sink.inlet.m_dot")) *
+            final.state.at(index("hot_sink.inlet.h")) +
+        final.state.at(index("cold_source.outlet.m_dot")) *
+            final.state.at(index("cold_source.outlet.h")) -
+        final.state.at(index("cold_sink.inlet.m_dot")) *
+            final.state.at(index("cold_sink.inlet.h"));
+    require_near(stored_rate, boundary_rate, 1.0e-5,
+                 "two-cell transient whole-system energy-rate closure");
+}
+
 void test_if97_fixed_quality_evaporator_and_condenser() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -6774,6 +6874,7 @@ int main() {
         test_material_fluid_heat_exchangers();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_forms();
+        test_two_cell_counterflow_exchanger_composes_and_conserves();
         test_if97_fixed_quality_evaporator_and_condenser();
         test_if97_rankine_graph_regression();
         test_generic_model_solves_if97_pump();

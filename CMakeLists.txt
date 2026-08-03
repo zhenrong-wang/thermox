@@ -162,6 +162,17 @@ add_test(NAME platform_dynamic_heat_exchanger_cli
         --case heat_up
         --end-time 0.5
 )
+add_test(NAME platform_two_cell_counterflow_steady_cli
+    COMMAND thermox_cli solve
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/two_cell_counterflow_heat_exchanger.json
+        --case steady
+)
+add_test(NAME platform_two_cell_counterflow_transient_cli
+    COMMAND thermox_cli simulate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/two_cell_counterflow_heat_exchanger.json
+        --case heat_up
+        --end-time 0.5
+)
 add_test(NAME platform_rankine_example_cli
     COMMAND thermox_cli solve
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/simple_rankine.json

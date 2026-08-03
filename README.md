@@ -75,6 +75,9 @@ Implemented in this sprint:
   wall thermal capacitance, and flow-dependent pressure loss. Cells compose into co-current or
   counterflow distributed equipment. See
   [Dynamic heat-exchanger cell](docs/dynamic-heat-exchanger-cell.md).
+- A two-cell gas-to-water reference reverses the cold-side cell ordering to prove that distributed
+  counterflow equipment is ordinary declared topology, with steady and transient whole-system
+  energy closure. See [Distributed heat exchanger](docs/distributed-heat-exchanger.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
