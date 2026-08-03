@@ -1032,7 +1032,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "shaft.inertia.two_port",
         "generator.electrical.efficiency",
         "control.proportional.normalized",
-        "control.first_order_lag.normalized"};
+        "control.first_order_lag.normalized",
+        "control.pi_bounded.normalized"};
     std::sort(expected_kinds.begin(), expected_kinds.end());
     require(registry.kinds() == expected_kinds,
             "default component modules should preserve the complete catalog");
@@ -6051,6 +6052,69 @@ void test_dynamic_equilibrium_drum_conserves_inventory() {
                  "drum reports liquid level from phase volume");
 }
 
+void test_bounded_pi_controller_prevents_integrator_windup() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "bounded_pi",
+    "media": [],
+    "components": [{
+      "id": "controller",
+      "kind": "control.pi_bounded.normalized",
+      "parameters": {
+        "proportional_gain": 2.0,
+        "integral_time": {"value": 2.0, "unit": "s"},
+        "tracking_time": {"value": 0.5, "unit": "s"},
+        "bias": 0.0,
+        "lower_limit": 0.0,
+        "upper_limit": 1.0
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "upper_saturation",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "controller.setpoint.value": 1.0,
+      "controller.measurement.value": 0.0
+    },
+    "initial_guesses": {"controller.integral_state": 0.0}
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            "upper_saturation");
+    const auto integral = require_variable_index(
+        graph.problem.variable_names, "controller.integral_state");
+    const auto command = require_variable_index(
+        graph.problem.variable_names, "controller.command.value");
+    const auto initialized = thermox::make_consistent_initial_conditions(
+        graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    require_near(initialized.state.at(command), 1.0, 1.0e-12,
+                 "PI output applies upper saturation");
+    require_near(initialized.derivative.at(integral), -1.0, 1.0e-10,
+                 "anti-windup drives integrator toward tracking state");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 2.0;
+    options.initial_step = 0.02;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    const auto& final = result.trajectory.back().state;
+    require_near(final.at(command), 1.0, 1.0e-10,
+                 "PI output remains bounded during persistent error");
+    require(final.at(integral) < -0.45 && final.at(integral) > -0.55,
+            "back-calculation converges to a finite anti-windup state");
+}
+
 void test_transient_compiler_rejects_steady_only_components() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -6309,6 +6373,7 @@ int main() {
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();
         test_dynamic_equilibrium_drum_conserves_inventory();
+        test_bounded_pi_controller_prevents_integrator_windup();
         test_shaft_train_and_generator_close_power_balance();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();

@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 61,
+        response.components.size() == 62,
         "service must expose the complete component registry");
     const auto rotor = std::find_if(
         response.components.begin(),
@@ -492,6 +492,22 @@ void test_catalog_discovery() {
             actuated_valve->required_property_capabilities ==
                 std::vector<std::string>{"state_ph", "saturation_p"},
         "catalog must expose the normalized actuated liquid valve");
+    const auto bounded_pi = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "control.pi_bounded.normalized";
+        });
+    require(
+        bounded_pi != response.components.end() &&
+            bounded_pi->template_kind == "control.pi" &&
+            bounded_pi->category == "Control" &&
+            !bounded_pi->supports_steady &&
+            bounded_pi->supports_transient &&
+            bounded_pi->ports.size() == 3 &&
+            bounded_pi->internal_variables.size() == 1,
+        "catalog must expose bounded PI anti-windup state and ports");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),

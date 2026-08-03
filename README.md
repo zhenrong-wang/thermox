@@ -65,6 +65,9 @@ Implemented in this sprint:
 - A steady/transient actuated liquid valve consumes the platform's normalized control contract,
   maps command to effective area, and composes directly with controller and actuator-lag blocks.
   See [Actuated valve control](docs/actuated-valve-control.md).
+- A transient bounded PI controller provides explicit setpoint/error handling, configurable command
+  limits, and back-calculation anti-windup as a reusable control-graph component. See
+  [Bounded PI control](docs/bounded-pi-control.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

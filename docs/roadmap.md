@@ -181,6 +181,8 @@ Delivered:
    algebraic pressure/quality/level closure, phase-specific outlets, and an explicit heat port. ✅
 9. Normalized drum level measurement plus a steady/transient actuated non-flashing liquid valve
    that composes with registered controller and actuator-lag blocks. ✅
+10. Transient bounded normalized PI controller with explicit setpoint/measurement ports, command
+    saturation, integral state, and tracking back-calculation anti-windup. ✅
 
 ## Component catalog and modularization foundation
 

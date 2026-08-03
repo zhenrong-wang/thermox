@@ -36,10 +36,10 @@ This keeps actuator time constants out of the valve's hydraulic correlation and 
 actuators to be attached to the same valve model. The dynamic graph compiler and DAE kernel preserve
 the control response as a differential state while solving valve flow algebraically at each step.
 
-The equilibrium drum publishes `level_signal = liquid_level / vessel_height`. It can feed a
-normalized proportional controller, whose output can pass through the actuator lag into this valve.
-Gain and bias currently provide setpoint/error normalization externally; saturation, PID integral
-state, rate limiting, dead band, and fail-position behavior remain explicit future control blocks.
+The equilibrium drum publishes `level_signal = liquid_level / vessel_height`. It can feed the
+registered [bounded PI controller](bounded-pi-control.md), whose output can pass through the
+actuator lag into this valve. Rate limiting, dead band, derivative action, and fail-position
+behavior remain explicit future control blocks.
 
 ## Physical boundaries
 

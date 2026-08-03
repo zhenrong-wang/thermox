@@ -49,11 +49,14 @@ contracts:
   `command = gain * measurement + bias`.
 - `control.first_order_lag.normalized` maps a control command to a control response using
   `tau d(response)/dt + response = gain * command`.
+- `control.pi_bounded.normalized` accepts explicit setpoint and measurement signals, bounds its
+  command, and tracks saturation through a differential integral state with back-calculation
+  anti-windup.
 
 The lag's steady form is the zero-derivative relation. Its `time_constant` is strictly positive and
 uses the registry-owned time dimension. Signal, control, and shaft source/sink boundaries make
 these paths independently composable and testable.
 
-These blocks assume their values have already been normalized. Dimensioned measurements,
-saturation, rate limits, dead bands, PID state, and actuator-specific behavior should be added as
-explicit registered models rather than hidden inside these equations.
+These blocks assume their values have already been normalized. Dimensioned measurements, rate
+limits, dead bands, derivative filtering, and actuator-specific behavior should remain explicit
+registered models rather than being hidden inside unrelated equipment equations.
