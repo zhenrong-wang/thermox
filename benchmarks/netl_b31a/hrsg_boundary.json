@@ -93,6 +93,60 @@
           "unit": "kJ/kg"
         }
       }
+    },
+    {
+      "id": "published_gas_enthalpy",
+      "mode": "steady_state_design",
+      "parameter_overrides": {
+        "components.aggregate_hrsg.parameters.heat_duty": {
+          "value": 692.202418347222,
+          "unit": "MW"
+        }
+      },
+      "fixed_values": {
+        "hrsg_exhaust_inlet.outlet.m_dot[O2]": {
+          "value": 140.820355626727,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[H2O]": {
+          "value": 61.709508374386,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[CO2]": {
+          "value": 70.716385197187,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[N2]": {
+          "value": 785.478799732255,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.m_dot[AR]": {
+          "value": 13.443006625001,
+          "unit": "kg/s"
+        },
+        "hrsg_exhaust_inlet.outlet.p": {
+          "value": 0.11,
+          "unit": "MPa"
+        },
+        "hrsg_exhaust_inlet.outlet.T": {
+          "value": 652.0,
+          "unit": "degC"
+        }
+      },
+      "initial_guesses": {
+        "hrsg_exhaust_inlet.outlet.h": {
+          "value": -650.0,
+          "unit": "kJ/kg"
+        },
+        "aggregate_hrsg.outlet.p": {
+          "value": 0.10,
+          "unit": "MPa"
+        },
+        "aggregate_hrsg.outlet.h": {
+          "value": -1300.0,
+          "unit": "kJ/kg"
+        }
+      }
     }
   ]
 }

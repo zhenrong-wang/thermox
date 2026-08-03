@@ -747,6 +747,18 @@ void test_netl_b31a_hrsg_boundary_benchmark() {
         std::abs(inlet_temperature - 925.15) < 1.0e-3,
         "NETL B31A exhaust inlet boundary must retain 652 degC");
     require(
+        std::abs(
+            require_result_value(
+                inlet.derived_values, "rho").value_si -
+            0.4) < 0.01 &&
+            std::abs(
+                require_result_value(
+                    inlet.derived_values,
+                    "mean_molecular_weight").value_si -
+                0.028357) < 1.0e-6,
+        "Cantera exhaust density and molecular weight must agree "
+        "with the published stream table at displayed precision");
+    require(
         std::abs(outlet_temperature - 352.15) < 7.0,
         "steam-side heat recovery must predict the published 79 "
         "degC stack temperature within the declared 7 K boundary "
@@ -777,8 +789,165 @@ void test_netl_b31a_hrsg_boundary_benchmark() {
         std::abs(recovered_heat - 684970477.475) < 1.0,
         "aggregate HRSG must conserve the independently derived "
         "water/steam-side heat duty");
+
+    request.case_id = "published_gas_enthalpy";
+    const auto gas_side = service.run_steady(request);
+    require(
+        gas_side.succeeded() && gas_side.diagnostics.converged &&
+            gas_side.diagnostics.final_residual_norm < 1.0e-10,
+        "NETL B31A gas-side enthalpy benchmark must solve");
+    const auto& gas_side_outlet = require_port_result(
+        gas_side.graph, "aggregate_hrsg", "outlet");
+    require(
+        std::abs(
+            require_result_value(
+                gas_side_outlet.derived_values, "T").value_si -
+            352.15) < 1.0,
+        "Cantera must reproduce the published stack temperature "
+        "within 1 K when driven by the published Aspen enthalpy "
+        "difference");
+    require(
+        std::abs(
+            require_result_value(
+                gas_side_outlet.derived_values, "rho").value_si -
+            1.0) < 0.04,
+        "Cantera stack density must agree with the published "
+        "stream table at displayed precision");
 }
 #endif
+
+void test_netl_b31a_steam_stream_property_benchmark() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/netl_b31a/steam_stream_states.json");
+    request.case_id = "published_states";
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "NETL B31A steam-state benchmark must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-10,
+        "NETL B31A independent IF97 state equations must close");
+    require(
+        response.diagnostics.iterations <= 1,
+        "fixed pressure/temperature states must use property-informed "
+        "enthalpy initialization");
+
+    struct PublishedState {
+        const char* id;
+        double enthalpy_j_kg;
+        double density_kg_m3;
+        double density_tolerance;
+    };
+    constexpr PublishedState states[] = {
+        {"stream_5", 3520.51e3, 48.1, 0.1},
+        {"stream_6", 3124.08e3, 15.1, 0.1},
+        {"stream_7", 3641.17e3, 9.9, 0.1},
+        {"stream_8", 3062.57e3, 2.0, 0.1},
+        {"stream_9", 3071.95e3, 1.9, 0.1},
+        {"stream_11", 160.78e3, 992.8, 0.3},
+    };
+    for (const auto& expected : states) {
+        const auto& port = require_port_result(
+            response.graph, expected.id, "outlet");
+        require(
+            std::abs(
+                require_result_value(
+                    port.primary_values, "h").value_si -
+                expected.enthalpy_j_kg) < 2500.0,
+            std::string(expected.id) +
+                " IF97 enthalpy must agree with the published "
+                "steam-table value within 2.5 kJ/kg");
+        require(
+            std::abs(
+                require_result_value(
+                    port.derived_values, "rho").value_si -
+                expected.density_kg_m3) <
+                    expected.density_tolerance,
+            std::string(expected.id) +
+                " IF97 density must agree at published precision");
+    }
+
+    const auto& exhaust = require_port_result(
+        response.graph, "stream_10", "outlet");
+    const double exhaust_temperature = require_result_value(
+        exhaust.derived_values, "T").value_si;
+    const double exhaust_quality = require_result_value(
+        exhaust.derived_values, "vapor_quality").value_si;
+    require(
+        std::abs(exhaust_temperature - 318.957548207) < 1.0e-3 &&
+            exhaust_quality > 0.90 && exhaust_quality < 0.93,
+        "the rounded 0.01 MPa LP exhaust boundary must resolve as "
+        "wet steam with explicit saturation temperature and quality");
+}
+
+void test_netl_b31a_published_balance_consistency() {
+    constexpr double air_kg_h = 3764363.0;
+    constexpr double fuel_kg_h = 95442.0;
+    constexpr double exhaust_kg_h = 3859805.0;
+    require(
+        air_kg_h + fuel_kg_h == exhaust_kg_h,
+        "NETL B31A gas-path mass balance must close exactly at "
+        "published precision");
+
+    constexpr double m5 = 542286.0;
+    constexpr double m6 = 526630.0;
+    constexpr double m7 = 575515.0;
+    constexpr double m9 = 69218.0;
+    constexpr double m10 = 659752.0;
+    constexpr double m11 = 660390.0;
+    require(
+        std::abs((m11 + m6) - (m5 + m7 + m9)) <= 1.0,
+        "NETL B31A HRSG water/steam mass balance must close within "
+        "one kg/h of displayed rounding");
+
+    constexpr double h3 = 872.29;
+    constexpr double h4 = 226.68;
+    constexpr double h5 = 3520.51;
+    constexpr double h6 = 3124.08;
+    constexpr double h7 = 3641.17;
+    constexpr double h9 = 3071.95;
+    constexpr double h10 = 2375.86;
+    constexpr double h11 = 160.78;
+    const double gas_recovery_gj_h =
+        exhaust_kg_h * (h3 - h4) / 1.0e6;
+    const double steam_recovery_gj_h =
+        (m5 * h5 + m7 * h7 + m9 * h9 -
+         m6 * h6 - m11 * h11) / 1.0e6;
+    const double steam_shaft_mw =
+        (m5 * h5 + m7 * h7 + m9 * h9 -
+         m6 * h6 - m10 * h10) / 3.6e6;
+    const double condenser_gj_h =
+        m10 * (h10 - h11) / 1.0e6;
+    require(
+        std::abs(gas_recovery_gj_h - 2491.92870605) < 1.0e-6 &&
+            std::abs(steam_recovery_gj_h - 2465.89371891) <
+                1.0e-6,
+        "NETL B31A detailed HRSG duties must remain reproducible");
+    require(
+        std::abs(
+            (gas_recovery_gj_h - steam_recovery_gj_h) /
+                gas_recovery_gj_h -
+            0.010447725522) < 1.0e-9,
+        "NETL B31A gas/steam HRSG discrepancy must stay distinct "
+        "from the numerical residual");
+    require(
+        std::abs(steam_shaft_mw * 0.975 - 272.0) < 0.1,
+        "NETL B31A stream enthalpies must reproduce published "
+        "steam-generator terminal power");
+    require(
+        std::abs(condenser_gj_h - 1461.0) < 0.5,
+        "NETL B31A stream enthalpies must reproduce published "
+        "condenser duty");
+    require(
+        std::abs(741.0 / 1386.417 * 100.0 - 53.4) < 0.1 &&
+            std::abs(1386.417 / 741.0 * 3600.0 - 6736.0) < 1.0,
+        "NETL B31A net efficiency and heat rate must be internally "
+        "consistent at published precision");
+}
 
 void test_compile_aware_validation_diagnostics() {
     thermox::service::SimulationService service;
@@ -2210,6 +2379,8 @@ int main() {
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
 #endif
+        test_netl_b31a_steam_stream_property_benchmark();
+        test_netl_b31a_published_balance_consistency();
         test_compile_aware_validation_diagnostics();
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();

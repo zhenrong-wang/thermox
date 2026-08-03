@@ -1195,6 +1195,46 @@ CompiledModelGraph compile_model_graph(
             }
             const auto species = context.port_species.find(
                 port.name);
+            std::optional<double> temperature_initialized_enthalpy;
+            if (port.domain == "fluid") {
+                const std::string temperature_name = variable_key(
+                    component.id, port.name, "T");
+                const std::string enthalpy_name = variable_key(
+                    component.id, port.name, "h");
+                const auto target_temperature = case_scalar_value(
+                    active_case, temperature_name, true);
+                const bool has_enthalpy_initial =
+                    case_scalar_value(
+                        active_case, enthalpy_name, false).has_value() ||
+                    case_scalar_value(
+                        active_case, enthalpy_name, true).has_value();
+                if (target_temperature && !has_enthalpy_initial) {
+                    const std::string pressure_name = variable_key(
+                        component.id, port.name, "p");
+                    double pressure = 101325.0;
+                    if (const auto initial_pressure = case_scalar_value(
+                            active_case, pressure_name, false)) {
+                        pressure = *initial_pressure;
+                    } else if (const auto fixed_pressure =
+                                   case_scalar_value(
+                                       active_case, pressure_name, true)) {
+                        pressure = *fixed_pressure;
+                    }
+                    const auto properties =
+                        context.port_properties.find(port.name);
+                    if (properties != context.port_properties.end() &&
+                        properties->second &&
+                        properties->second->supports(
+                            physics::PropertyCapability::state_pt)) {
+                        const auto state = properties->second->state_pt(
+                            pressure, *target_temperature);
+                        if (state.ok()) {
+                            temperature_initialized_enthalpy =
+                                state.state.enthalpy_j_kg;
+                        }
+                    }
+                }
+            }
             for (const auto& spec : canonical_variables_for_domain(
                      registry, port.domain,
                      species == context.port_species.end()
@@ -1210,6 +1250,10 @@ CompiledModelGraph compile_model_graph(
                     seen_case_keys.insert(full_name);
                 } else if (const auto fixed = case_scalar_value(active_case, full_name, true)) {
                     initial = *fixed;
+                    initialization_anchor = true;
+                } else if (spec.name == "h" &&
+                           temperature_initialized_enthalpy) {
+                    initial = *temperature_initialized_enthalpy;
                     initialization_anchor = true;
                 }
                 const std::size_t index = system.add_variable(full_name, initial, spec.scale);

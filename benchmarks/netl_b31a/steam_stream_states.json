@@ -1,0 +1,56 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "netl_b31a_steam_stream_states",
+    "name": "NETL B31A water and steam stream property audit",
+    "revision": "1",
+    "media": [
+      {
+        "id": "water",
+        "backend": "water_steam_if97",
+        "substance": "Water",
+        "package_version": "8.0.0"
+      }
+    ],
+    "materials": [],
+    "components": [
+      {"id": "stream_5", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_6", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_7", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_8", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_9", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_10", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}},
+      {"id": "stream_11", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "water"}}
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "published_states",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "stream_5.outlet.m_dot": {"value": 150.635, "unit": "kg/s"},
+        "stream_5.outlet.p": {"value": 17.30, "unit": "MPa"},
+        "stream_5.outlet.T": {"value": 585.0, "unit": "degC"},
+        "stream_6.outlet.m_dot": {"value": 146.286111111111, "unit": "kg/s"},
+        "stream_6.outlet.p": {"value": 4.13, "unit": "MPa"},
+        "stream_6.outlet.T": {"value": 364.0, "unit": "degC"},
+        "stream_7.outlet.m_dot": {"value": 159.865277777778, "unit": "kg/s"},
+        "stream_7.outlet.p": {"value": 3.84, "unit": "MPa"},
+        "stream_7.outlet.T": {"value": 585.0, "unit": "degC"},
+        "stream_8.outlet.m_dot": {"value": 164.037222222222, "unit": "kg/s"},
+        "stream_8.outlet.p": {"value": 0.52, "unit": "MPa"},
+        "stream_8.outlet.T": {"value": 300.0, "unit": "degC"},
+        "stream_9.outlet.m_dot": {"value": 19.2272222222222, "unit": "kg/s"},
+        "stream_9.outlet.p": {"value": 0.51, "unit": "MPa"},
+        "stream_9.outlet.T": {"value": 304.0, "unit": "degC"},
+        "stream_10.outlet.m_dot": {"value": 183.264444444444, "unit": "kg/s"},
+        "stream_10.outlet.p": {"value": 0.01, "unit": "MPa"},
+        "stream_10.outlet.h": {"value": 2375.86, "unit": "kJ/kg"},
+        "stream_11.outlet.m_dot": {"value": 183.441666666667, "unit": "kg/s"},
+        "stream_11.outlet.p": {"value": 0.01, "unit": "MPa"},
+        "stream_11.outlet.T": {"value": 38.0, "unit": "degC"}
+      }
+    }
+  ]
+}
