@@ -72,6 +72,7 @@ import type {
   RunConfigurationRevision,
   ResultProjection,
   SimulationJob,
+  SimulationJobComparison,
   SimulationResult,
   SimulationJobState,
   StudyRevision,
@@ -177,6 +178,11 @@ function App() {
   const [simulationResult, setSimulationResult] = useState<SimulationResult>()
   const [resultLoading, setResultLoading] = useState(false)
   const [resultError, setResultError] = useState('')
+  const [comparisonJobs, setComparisonJobs] = useState<SimulationJob[]>([])
+  const [resultComparison, setResultComparison] =
+    useState<SimulationJobComparison>()
+  const [comparisonLoading, setComparisonLoading] = useState(false)
+  const [comparisonError, setComparisonError] = useState('')
 
   useEffect(() => {
     setSubmissionIdempotencyKey('')
@@ -752,6 +758,22 @@ function App() {
       })
     return () => controller.abort()
   }, [selectedResultJobId, workspaceView])
+
+  useEffect(() => {
+    setResultComparison(undefined)
+    setComparisonError('')
+    setComparisonJobs([])
+    if (workspaceView !== 'results' || !selectedProjectId) return
+    const controller = new AbortController()
+    api.projectJobs(selectedProjectId, controller.signal)
+      .then((page) => setComparisonJobs(page.jobs.filter((job) =>
+        job.state === 'succeeded' && Boolean(job.result_summary),
+      )))
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setComparisonError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [selectedProjectId, selectedResultJobId, workspaceView])
 
   async function publishEdits(
     operations: GraphEditOperation[],
@@ -1432,6 +1454,23 @@ function App() {
     }
   }
 
+  async function compareResultJob(candidateJobId: string) {
+    if (!selectedResultJobId) return
+    setComparisonLoading(true)
+    setComparisonError('')
+    try {
+      setResultComparison(await api.compareSimulationJobs(
+        selectedResultJobId,
+        candidateJobId,
+      ))
+    } catch (reason) {
+      setResultComparison(undefined)
+      setComparisonError(errorMessage(reason))
+    } finally {
+      setComparisonLoading(false)
+    }
+  }
+
   async function updateComponent(component: ComponentDefinition) {
     await publishEdits(
       [
@@ -1848,8 +1887,19 @@ function App() {
             result={simulationResult}
             loading={resultLoading}
             error={resultError}
+            comparisonJobs={comparisonJobs}
+            comparison={resultComparison}
+            comparisonLoading={comparisonLoading}
+            comparisonError={comparisonError}
             onRetry={() => {
               void retryResult()
+            }}
+            onCompare={(candidateJobId) => {
+              void compareResultJob(candidateJobId)
+            }}
+            onClearComparison={() => {
+              setResultComparison(undefined)
+              setComparisonError('')
             }}
           />
         )}

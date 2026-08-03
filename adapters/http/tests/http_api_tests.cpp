@@ -1076,6 +1076,61 @@ void test_authored_component_job_workflow() {
                 std::string::npos,
         "the authored workflow must expose calculated output "
         "and immutable component provenance");
+
+    submission.headers["Idempotency-Key"] =
+        "authored-component-comparison-job";
+    const auto candidate_queued = api.handle(submission);
+    require(
+        candidate_queued.status == 202,
+        "a second immutable run must be available for comparison");
+    const auto candidate_job_id =
+        candidate_queued.headers.at("Location").substr(
+            std::string("/api/v1/jobs/").size());
+    const auto candidate_completed =
+        job_service->run_next("authored-comparison-worker");
+    require(
+        candidate_completed &&
+            candidate_completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "comparison candidate must complete successfully");
+    const auto comparison = api.handle(authenticated(
+        json_post(
+            "/api/v1/job-comparisons",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.job_comparison.create/v1",)"
+                R"("baseline_job_id":")"} +
+                job_id + R"(","candidate_job_id":")" +
+                candidate_job_id + R"("})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        comparison.status == 200 &&
+            comparison.body.find(
+                "\"thermox.job_comparison/v1\"") !=
+                std::string::npos &&
+            comparison.body.find("\"matched_count\": 1") !=
+                std::string::npos &&
+            comparison.body.find("\"absolute_delta_si\": 0") !=
+                std::string::npos &&
+            comparison.body.find(
+                "\"accepted_to_accepted\"") !=
+                std::string::npos,
+        "HTTP comparison must expose service-owned aligned deltas "
+        "and acceptance transitions");
+    const auto hidden_comparison = api.handle(authenticated(
+        json_post(
+            "/api/v1/job-comparisons",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.job_comparison.create/v1",)"
+                R"("baseline_job_id":")"} +
+                job_id + R"(","candidate_job_id":")" +
+                candidate_job_id + R"("})"),
+        "user-b", "team-b"));
+    require(
+        hidden_comparison.status == 404,
+        "HTTP comparison must preserve Team non-disclosure");
 }
 
 void test_team_scoped_projects_and_model_revisions() {

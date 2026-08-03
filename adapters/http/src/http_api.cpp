@@ -627,6 +627,41 @@ std::string require_json_string(
     return std::string(value.as_string());
 }
 
+std::pair<std::string, std::string>
+parse_job_comparison_request(const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid job comparison JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "job comparison request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "baseline_job_id" &&
+            field.key() != "candidate_job_id") {
+            throw std::invalid_argument(
+                "unknown job comparison field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_json_string(root, "schema_version") !=
+        "thermox.job_comparison.create/v1") {
+        throw std::invalid_argument(
+            "unsupported job comparison schema_version");
+    }
+    return {
+        require_json_string(root, "baseline_job_id"),
+        require_json_string(root, "candidate_job_id"),
+    };
+}
+
 service::ApplyGraphEditsRequest parse_graph_edit_request(
     const Request& request) {
     boost::json::value value;
@@ -2541,6 +2576,33 @@ Response Api::handle(const Request& request) const {
             return job_record_response(
                 record,
                 service::is_terminal(record.state) ? 200 : 202);
+        }
+
+        if (target.path == "/api/v1/job-comparisons") {
+            if (method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "job comparison only supports POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
+            reject_unknown_query(target.query, {});
+            require_json_request(
+                request, impl_->options.maximum_body_bytes);
+            const auto& identity = require_identity(request);
+            const auto [baseline_job_id, candidate_job_id] =
+                parse_job_comparison_request(request);
+            const auto comparison = impl_->jobs->compare(
+                identity, baseline_job_id, candidate_job_id);
+            if (!comparison) {
+                return error_response(
+                    404, "comparison_job_not_found",
+                    "one or more comparison jobs were not found");
+            }
+            return json_response(
+                200,
+                service::serialize_job_comparison_json(
+                    *comparison));
         }
 
         constexpr std::string_view job_prefix =

@@ -3,7 +3,9 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -832,6 +834,109 @@ void test_team_scoped_history_filters_and_paginates() {
         "and an opaque continuation cursor");
 }
 
+void test_completed_study_jobs_compare_by_projected_identity() {
+    auto jobs = thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    auto baseline_request = steady_request("comparison-baseline");
+    baseline_request.source_revisions->study_revision_id = "study-base";
+    baseline_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '3');
+    auto candidate_request = steady_request("comparison-candidate");
+    candidate_request.source_revisions->study_revision_id =
+        "study-candidate";
+    candidate_request.source_revisions->study_checksum =
+        "sha256:" + std::string(64, '4');
+    const auto baseline = jobs->create_or_get(
+        baseline_request, "comparison-baseline-fingerprint");
+    const auto candidate = jobs->create_or_get(
+        candidate_request, "comparison-candidate-fingerprint");
+
+    thermox::service::ResultSummary baseline_summary;
+    baseline_summary.mode = "steady";
+    baseline_summary.values = {
+        {"net_power", "power", 100.0,
+         thermox::service::ResultAggregation::final, false, 0.0},
+        {"outlet_temperature", "temperature", 300.0,
+         thermox::service::ResultAggregation::final, false, 0.0},
+        {"baseline_only", "pressure", 1.0e5,
+         thermox::service::ResultAggregation::final, false, 0.0},
+    };
+    baseline_summary.engineering_acceptance =
+        thermox::service::EngineeringAcceptanceSummary{
+            false, 0, 1, {}};
+    thermox::service::ResultSummary candidate_summary;
+    candidate_summary.mode = "steady";
+    candidate_summary.values = {
+        {"net_power", "power", 110.0,
+         thermox::service::ResultAggregation::final, false, 0.0},
+        {"outlet_temperature", "power", 310.0,
+         thermox::service::ResultAggregation::final, false, 0.0},
+        {"candidate_only", "mass_flow", 25.0,
+         thermox::service::ResultAggregation::final, false, 0.0},
+    };
+    candidate_summary.engineering_acceptance =
+        thermox::service::EngineeringAcceptanceSummary{
+            true, 1, 0, {}};
+    const thermox::service::ResultArtifactManifest manifest{
+        "comparison-artifact", "application/json",
+        thermox::service::result_schema_v3, 2, "checksum"};
+    const auto claimed_baseline = jobs->claim_next("comparison-worker");
+    require(
+        claimed_baseline && claimed_baseline->job_id == baseline.job_id,
+        "comparison fixture must claim the baseline job first");
+    (void)jobs->publish_success(
+        baseline.job_id, claimed_baseline->revision, {}, manifest,
+        baseline_summary);
+    const auto claimed_candidate = jobs->claim_next("comparison-worker");
+    require(
+        claimed_candidate && claimed_candidate->job_id == candidate.job_id,
+        "comparison fixture must claim the candidate job second");
+    (void)jobs->publish_success(
+        candidate.job_id, claimed_candidate->revision, {}, manifest,
+        candidate_summary);
+
+    const auto comparison = service.compare(
+        team_a, baseline.job_id, candidate.job_id);
+    require(
+        comparison && comparison->matched_count == 1U &&
+            comparison->incompatible_count == 1U &&
+            comparison->baseline_only_count == 1U &&
+            comparison->candidate_only_count == 1U &&
+            comparison->values.front().id == "baseline_only" &&
+            comparison->engineering_acceptance.transition ==
+                "not_accepted_to_accepted",
+        "comparison must align outputs by stable projection ID and "
+        "report coverage and acceptance transitions");
+    const auto matched = std::find_if(
+        comparison->values.begin(), comparison->values.end(),
+        [](const auto& value) { return value.id == "net_power"; });
+    require(
+        matched != comparison->values.end() &&
+            matched->absolute_delta_si == 10.0 &&
+            matched->relative_delta &&
+            std::abs(*matched->relative_delta - 0.1) < 1.0e-12,
+        "matched outputs must expose candidate-minus-baseline SI and "
+        "relative deltas");
+    require(
+        !service.compare(team_b, baseline.job_id, candidate.job_id),
+        "comparison must not disclose jobs across Team boundaries");
+    const auto json =
+        thermox::service::serialize_job_comparison_json(*comparison);
+    require(
+        json.find("\"schema_version\": "
+                  "\"thermox.job_comparison/v1\"") !=
+                std::string::npos &&
+            json.find("\"relative_delta\": 0.10000000000000001") !=
+                std::string::npos &&
+            json.find("\"dimension_mismatch\"") !=
+                std::string::npos,
+        "comparison JSON must retain versioned deltas and explicit "
+        "incompatibility evidence");
+}
+
 }  // namespace
 
 int main() {
@@ -849,6 +954,7 @@ int main() {
         test_request_validation();
         test_team_scope_isolation();
         test_team_scoped_history_filters_and_paginates();
+        test_completed_study_jobs_compare_by_projected_identity();
         std::cout << "thermox job service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

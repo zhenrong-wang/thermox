@@ -23,6 +23,8 @@ std::string serialize_result_summary_json(
     const ResultSummary& summary);
 std::string serialize_job_record_json(
     const SimulationJobRecord& record);
+std::string serialize_job_comparison_json(
+    const SimulationJobComparison& comparison);
 std::string serialize_job_page_json(
     const SimulationJobPage& page,
     const std::string& next_cursor);

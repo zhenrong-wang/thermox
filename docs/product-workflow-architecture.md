@@ -147,7 +147,8 @@ system.
 - Verify immutable provenance before graph overlays.
 - Explore balances, KPIs, component/port values, trajectories, events, and solver evidence.
 - Evaluate Study-owned dimensioned acceptance criteria without conflating them with solver status.
-- Compare studies and export data through service-owned large-result paths as those are added.
+- Compare completed Study jobs through service-owned projection alignment and export data through
+  service-owned large-result paths.
 
 ## Current implementation audit
 
@@ -157,8 +158,8 @@ system.
 | Physics | Registered CoolProp property packages and Cantera thermochemistry | Preserve registry boundary; expand packages independently |
 | Component/compiler platform | Generic typed graph, 54 built-in runtime component models, maps, correlations, expression components, structural validation, layered entity readiness, and dimensioned engineering acceptance | Preserve; extend criteria beyond absolute scalar intervals behind the Study contract |
 | Calibration/study service | Immutable Study and calibration revisions bind exact topology, cases, artifacts, intent, dataset split, and output projections; calibration executes as a durable job | Preserve; add identifiability diagnostics behind the optimizer contract |
-| Persistence/jobs | Team/project scoping, immutable topology/case/study/calibration/run revisions, PostgreSQL, object storage, and a leased worker queue with exact provenance | Preserve; add comparison and generated-report artifacts through existing storage ports |
-| Web workflow | Build/Define/Study/Calculate/Analyze workspaces, canvas and catalog authoring, exact revision validation, durable runs, readiness display, and acceptance authoring/results | Project entity readiness onto canvas badges; add study comparison views |
+| Persistence/jobs | Team/project scoping, immutable topology/case/study/calibration/run revisions, PostgreSQL, object storage, leased worker queue, and service-owned comparison with exact provenance | Preserve; add generated-report artifacts through existing storage ports |
+| Web workflow | Build/Define/Study/Calculate/Analyze workspaces, canvas and catalog authoring, exact revision validation, durable runs, readiness, acceptance, and Study comparison | Project entity readiness onto canvas badges; add generated engineering report workflows |
 
 ## Migration rules
 

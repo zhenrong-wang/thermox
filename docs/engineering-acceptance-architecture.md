@@ -66,8 +66,10 @@ This first contract supports absolute scalar intervals. It intentionally does no
 - tolerance relative to a reference or measured value;
 - equations involving multiple projected values;
 - severity levels, waivers, or approval signatures;
-- comparison across Study revisions;
 - generated engineering reports.
+
+Pairwise comparison across successful Study jobs is provided by the service-owned
+`thermox.job_comparison/v1` contract; see `study-comparison-architecture.md`.
 
 Those features should extend the Study-owned criterion/evaluation model rather than enter the
 numeric kernel or individual component implementations.

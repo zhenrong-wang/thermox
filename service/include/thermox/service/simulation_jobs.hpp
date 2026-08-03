@@ -16,6 +16,8 @@
 namespace thermox::service {
 
 inline constexpr char job_schema_v10[] = "thermox.job/v10";
+inline constexpr char job_comparison_schema_v1[] =
+    "thermox.job_comparison/v1";
 
 enum class SimulationJobMode {
     steady,
@@ -108,6 +110,52 @@ struct SimulationJobPage {
     std::optional<SimulationJobCursor> next;
 };
 
+enum class ComparedValueStatus {
+    matched,
+    baseline_only,
+    candidate_only,
+    dimension_mismatch,
+    aggregation_mismatch,
+};
+
+std::string to_string(ComparedValueStatus status);
+
+struct ComparedResultValue {
+    std::string id;
+    ComparedValueStatus status{ComparedValueStatus::matched};
+    std::string baseline_dimension;
+    std::string candidate_dimension;
+    std::optional<ResultAggregation> baseline_aggregation;
+    std::optional<ResultAggregation> candidate_aggregation;
+    std::optional<double> baseline_value_si;
+    std::optional<double> candidate_value_si;
+    std::optional<double> absolute_delta_si;
+    std::optional<double> relative_delta;
+};
+
+struct EngineeringAcceptanceComparison {
+    std::optional<bool> baseline_passed;
+    std::optional<bool> candidate_passed;
+    std::string transition{"not_evaluated"};
+};
+
+struct SimulationJobComparison {
+    std::string schema_version{job_comparison_schema_v1};
+    std::string team_id;
+    std::string project_id;
+    std::string baseline_job_id;
+    std::string candidate_job_id;
+    std::string baseline_study_revision_id;
+    std::string candidate_study_revision_id;
+    std::string mode;
+    std::size_t matched_count{0};
+    std::size_t incompatible_count{0};
+    std::size_t baseline_only_count{0};
+    std::size_t candidate_only_count{0};
+    std::vector<ComparedResultValue> values;
+    EngineeringAcceptanceComparison engineering_acceptance;
+};
+
 struct SimulationWorkerSettings {
     std::chrono::milliseconds lease_duration{30000};
     std::chrono::milliseconds heartbeat_interval{10000};
@@ -127,6 +175,11 @@ public:
 class JobStateError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
+};
+
+class JobComparisonError : public std::invalid_argument {
+public:
+    using std::invalid_argument::invalid_argument;
 };
 
 class SimulationJobRepository {
@@ -234,6 +287,10 @@ public:
     [[nodiscard]] std::optional<ResultArtifact> get_result(
         const IdentityContext& identity,
         const std::string& job_id) const;
+    [[nodiscard]] std::optional<SimulationJobComparison> compare(
+        const IdentityContext& identity,
+        const std::string& baseline_job_id,
+        const std::string& candidate_job_id) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
         const std::string& worker_id,
         const SimulationWorkerSettings& settings = {});

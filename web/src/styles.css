@@ -3550,6 +3550,36 @@ code {
   margin: 12px 20px 0;
 }
 
+.comparison-control {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(260px, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  border-bottom: 1px solid #dce4e8;
+  background: #f8fafb;
+}
+
+.comparison-control > div {
+  display: grid;
+  gap: 2px;
+}
+
+.comparison-control > div > strong {
+  color: #3d5c6d;
+  font-size: 9px;
+}
+
+.comparison-control select {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #cad8df;
+  border-radius: 4px;
+  background: #fff;
+  color: #3f6072;
+  font-size: 8px;
+}
+
 .result-loading {
   padding: 60px 20px;
   color: #6f818c;
@@ -3653,6 +3683,98 @@ code {
 .job-acceptance.not-accepted {
   border-color: #e7cbc8;
   background: #fff5f4;
+}
+
+.study-comparison-card {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid #cbdce4;
+  border-radius: 5px;
+  background: #fbfcfd;
+}
+
+.study-comparison-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dce6eb;
+  background: #f3f8fa;
+}
+
+.study-comparison-card h2 {
+  margin: 2px 0 0;
+  color: #34586b;
+  font-size: 11px;
+}
+
+.study-comparison-card > header > strong {
+  color: #52768a;
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.comparison-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e9ed;
+  color: #6f838e;
+  font-size: 8px;
+}
+
+.comparison-provenance code {
+  color: #3d687c;
+}
+
+.comparison-table-wrap {
+  overflow-x: auto;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8px;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5ebee;
+  color: #58717e;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.comparison-table th {
+  color: #7b8d96;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.comparison-table td strong {
+  color: #385d70;
+}
+
+.comparison-status {
+  padding: 3px 6px;
+  border-radius: 9px;
+  background: #edf2f4;
+  color: #667d89;
+  font-size: 7px;
+  text-transform: capitalize;
+}
+
+.comparison-status.matched {
+  background: #e4f2eb;
+  color: #2e7457;
+}
+
+.comparison-status.dimension_mismatch,
+.comparison-status.aggregation_mismatch {
+  background: #fae8e6;
+  color: #994d47;
 }
 
 .solver-diagnostic-card {

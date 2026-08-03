@@ -1754,6 +1754,90 @@ std::string serialize_job_record_json(
     return out.str();
 }
 
+std::string serialize_job_comparison_json(
+    const SimulationJobComparison& comparison) {
+    const auto optional_number = [](std::ostream& out,
+                                    const std::optional<double>& value) {
+        if (value) json_number(out, *value);
+        else out << "null";
+    };
+    const auto optional_aggregation = [](
+        std::ostream& out,
+        const std::optional<ResultAggregation>& value) {
+        if (value) json_string(out, to_string(*value));
+        else out << "null";
+    };
+    const auto optional_bool = [](std::ostream& out,
+                                  const std::optional<bool>& value) {
+        if (value) out << (*value ? "true" : "false");
+        else out << "null";
+    };
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, comparison.schema_version);
+    out << ",\n  \"team_id\": ";
+    json_string(out, comparison.team_id);
+    out << ",\n  \"project_id\": ";
+    json_string(out, comparison.project_id);
+    out << ",\n  \"baseline_job_id\": ";
+    json_string(out, comparison.baseline_job_id);
+    out << ",\n  \"candidate_job_id\": ";
+    json_string(out, comparison.candidate_job_id);
+    out << ",\n  \"baseline_study_revision_id\": ";
+    json_string(out, comparison.baseline_study_revision_id);
+    out << ",\n  \"candidate_study_revision_id\": ";
+    json_string(out, comparison.candidate_study_revision_id);
+    out << ",\n  \"mode\": ";
+    json_string(out, comparison.mode);
+    out << ",\n  \"coverage\": {\"matched_count\": "
+        << comparison.matched_count
+        << ", \"incompatible_count\": "
+        << comparison.incompatible_count
+        << ", \"baseline_only_count\": "
+        << comparison.baseline_only_count
+        << ", \"candidate_only_count\": "
+        << comparison.candidate_only_count << "}";
+    out << ",\n  \"engineering_acceptance\": {"
+        << "\"baseline_passed\": ";
+    optional_bool(
+        out, comparison.engineering_acceptance.baseline_passed);
+    out << ", \"candidate_passed\": ";
+    optional_bool(
+        out, comparison.engineering_acceptance.candidate_passed);
+    out << ", \"transition\": ";
+    json_string(
+        out, comparison.engineering_acceptance.transition);
+    out << "},\n  \"values\": [";
+    for (std::size_t index = 0;
+         index < comparison.values.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& value = comparison.values[index];
+        out << "{\"id\": ";
+        json_string(out, value.id);
+        out << ", \"status\": ";
+        json_string(out, to_string(value.status));
+        out << ", \"baseline_dimension\": ";
+        json_string(out, value.baseline_dimension);
+        out << ", \"candidate_dimension\": ";
+        json_string(out, value.candidate_dimension);
+        out << ", \"baseline_aggregation\": ";
+        optional_aggregation(out, value.baseline_aggregation);
+        out << ", \"candidate_aggregation\": ";
+        optional_aggregation(out, value.candidate_aggregation);
+        out << ", \"baseline_value_si\": ";
+        optional_number(out, value.baseline_value_si);
+        out << ", \"candidate_value_si\": ";
+        optional_number(out, value.candidate_value_si);
+        out << ", \"absolute_delta_si\": ";
+        optional_number(out, value.absolute_delta_si);
+        out << ", \"relative_delta\": ";
+        optional_number(out, value.relative_delta);
+        out << '}';
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_job_page_json(
     const SimulationJobPage& page,
     const std::string& next_cursor) {

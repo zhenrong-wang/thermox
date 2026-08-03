@@ -28,6 +28,7 @@ import {
 import type {
   CatalogComponent,
   SimulationJob,
+  SimulationJobComparison,
   SimulationResult,
   TopologyDocument,
 } from './types'
@@ -40,7 +41,13 @@ interface ResultsWorkspaceProps {
   result?: SimulationResult
   loading: boolean
   error: string
+  comparisonJobs: SimulationJob[]
+  comparison?: SimulationJobComparison
+  comparisonLoading: boolean
+  comparisonError: string
   onRetry: () => void
+  onCompare: (candidateJobId: string) => void
+  onClearComparison: () => void
 }
 
 const scopeLabels: Record<ResultScopeFilter, string> = {
@@ -218,7 +225,13 @@ export function ResultsWorkspace({
   result,
   loading,
   error,
+  comparisonJobs,
+  comparison,
+  comparisonLoading,
+  comparisonError,
   onRetry,
+  onCompare,
+  onClearComparison,
 }: ResultsWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
   const [sampleIndex, setSampleIndex] = useState(0)
@@ -226,6 +239,7 @@ export function ResultsWorkspace({
   const [scope, setScope] = useState<ResultScopeFilter>('all')
   const [seriesKey, setSeriesKey] = useState('')
   const [selection, setSelection] = useState<GraphSelection>()
+  const [candidateJobId, setCandidateJobId] = useState('')
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -278,6 +292,19 @@ export function ResultsWorkspace({
 
   const selectedComponentId =
     selection?.type === 'component' ? selection.id : ''
+  const candidates = comparisonJobs.filter(
+    (candidate) =>
+      candidate.job_id !== job?.job_id &&
+      candidate.request.mode === job?.request.mode,
+  )
+
+  useEffect(() => {
+    setCandidateJobId((current) =>
+      candidates.some((candidate) => candidate.job_id === current)
+        ? current
+        : candidates[0]?.job_id ?? '',
+    )
+  }, [job?.job_id, comparisonJobs])
 
   if (!job) {
     return (
@@ -304,7 +331,6 @@ export function ResultsWorkspace({
     topologyRevisionId,
     Boolean(topology),
   )
-
   return (
     <section className="results-workspace">
       <header className="results-header">
@@ -333,6 +359,42 @@ export function ResultsWorkspace({
             Retry
           </button>
         </div>
+      )}
+      <section className="comparison-control">
+        <div>
+          <span className="section-kicker">Study evidence</span>
+          <strong>Compare this result</strong>
+        </div>
+        <select
+          aria-label="Comparison candidate"
+          value={candidateJobId}
+          disabled={!candidates.length || comparisonLoading}
+          onChange={(event) => {
+            setCandidateJobId(event.target.value)
+            onClearComparison()
+          }}
+        >
+          {!candidates.length && (
+            <option value="">No compatible result</option>
+          )}
+          {candidates.map((candidate) => (
+            <option value={candidate.job_id} key={candidate.job_id}>
+              {candidate.request.source_revisions?.study_revision_id || 'Study'} ·{' '}
+              {candidate.job_id}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!candidateJobId || comparisonLoading}
+          onClick={() => onCompare(candidateJobId)}
+        >
+          {comparisonLoading ? 'Comparing…' : 'Compare'}
+        </button>
+      </section>
+      {comparisonError && (
+        <div className="operation-banner is-error">{comparisonError}</div>
       )}
       {loading && <div className="result-loading">Loading full result…</div>}
       {!loading && result && !graph && (
@@ -420,6 +482,104 @@ export function ResultsWorkspace({
                   )
                 },
               )}
+            </section>
+          )}
+
+          {comparison && (
+            <section className="study-comparison-card">
+              <header>
+                <div>
+                  <span className="section-kicker">Service-owned comparison</span>
+                  <h2>Study result delta</h2>
+                </div>
+                <strong>
+                  {comparison.engineering_acceptance.transition.replaceAll('_', ' ')}
+                </strong>
+              </header>
+              <div className="comparison-provenance">
+                <span>Baseline <code>{comparison.baseline_study_revision_id}</code></span>
+                <span>Candidate <code>{comparison.candidate_study_revision_id}</code></span>
+                <span>
+                  {comparison.coverage.matched_count} matched ·{' '}
+                  {comparison.coverage.incompatible_count} incompatible
+                </span>
+              </div>
+              <div className="comparison-table-wrap">
+                <table className="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Projection</th>
+                      <th>Status</th>
+                      <th>Baseline</th>
+                      <th>Candidate</th>
+                      <th>Δ candidate − baseline</th>
+                      <th>Relative</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparison.values.map((value) => {
+                      const baseline = value.baseline_value_si === null
+                        ? undefined
+                        : displayValue(
+                            value.baseline_value_si,
+                            value.baseline_dimension,
+                            profile,
+                            unitDimensions,
+                          )
+                      const candidate = value.candidate_value_si === null
+                        ? undefined
+                        : displayValue(
+                            value.candidate_value_si,
+                            value.candidate_dimension,
+                            profile,
+                            unitDimensions,
+                          )
+                      const delta = value.absolute_delta_si === null
+                        ? undefined
+                        : (() => {
+                            const displayed = displayValue(
+                              value.absolute_delta_si,
+                              value.baseline_dimension,
+                              profile,
+                              unitDimensions,
+                            )
+                            const zero = displayValue(
+                              0,
+                              value.baseline_dimension,
+                              profile,
+                              unitDimensions,
+                            )
+                            return {
+                              value: displayed.value - zero.value,
+                              unit: displayed.unit,
+                            }
+                          })()
+                      return (
+                        <tr key={value.id}>
+                          <td><strong>{value.id}</strong></td>
+                          <td>
+                            <span className={`comparison-status ${value.status}`}>
+                              {value.status.replaceAll('_', ' ')}
+                            </span>
+                          </td>
+                          <td>{baseline
+                            ? `${formatResultValue(baseline.value)} ${baseline.unit}`
+                            : '—'}</td>
+                          <td>{candidate
+                            ? `${formatResultValue(candidate.value)} ${candidate.unit}`
+                            : '—'}</td>
+                          <td>{delta
+                            ? `${formatResultValue(delta.value)} ${delta.unit}`
+                            : '—'}</td>
+                          <td>{value.relative_delta === null
+                            ? '—'
+                            : `${formatResultValue(value.relative_delta * 100)}%`}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 

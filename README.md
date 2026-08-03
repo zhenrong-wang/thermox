@@ -27,6 +27,7 @@ isolated example models.
 - [Product Workflow Architecture](docs/product-workflow-architecture.md)
 - [Calculation Readiness Architecture](docs/readiness-architecture.md)
 - [Engineering Acceptance Architecture](docs/engineering-acceptance-architecture.md)
+- [Study Comparison Architecture](docs/study-comparison-architecture.md)
 - [Local Compose Stack](docs/local-compose.md)
 
 ## Current C++ numeric core
@@ -81,6 +82,9 @@ Implemented in this sprint:
 - Study-owned, dimensioned engineering acceptance criteria bind canonical-SI bounds to declared
   result projections. Durable jobs snapshot and evaluate them after successful steady/transient
   projection while keeping engineering verdicts separate from numerical job status.
+- Team- and Project-scoped Study comparison aligns completed projected results by stable identity,
+  reports missing or incompatible outputs explicitly, and calculates candidate-minus-baseline SI
+  and relative deltas through one service-owned contract used by HTTP and web clients.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, and transient HTTP routes onto `thermox_service`, with strict query decoding,
   JSON content checks, body limits, transport status codes, and safe response headers. A thin

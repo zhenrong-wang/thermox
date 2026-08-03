@@ -501,6 +501,49 @@ export interface SimulationJobPage {
   next_cursor: string | null
 }
 
+export type ComparedValueStatus =
+  | 'matched'
+  | 'baseline_only'
+  | 'candidate_only'
+  | 'dimension_mismatch'
+  | 'aggregation_mismatch'
+
+export interface ComparedResultValue {
+  id: string
+  status: ComparedValueStatus
+  baseline_dimension: string
+  candidate_dimension: string
+  baseline_aggregation: ResultAggregation | null
+  candidate_aggregation: ResultAggregation | null
+  baseline_value_si: number | null
+  candidate_value_si: number | null
+  absolute_delta_si: number | null
+  relative_delta: number | null
+}
+
+export interface SimulationJobComparison {
+  schema_version: 'thermox.job_comparison/v1'
+  team_id: string
+  project_id: string
+  baseline_job_id: string
+  candidate_job_id: string
+  baseline_study_revision_id: string
+  candidate_study_revision_id: string
+  mode: 'steady' | 'transient'
+  coverage: {
+    matched_count: number
+    incompatible_count: number
+    baseline_only_count: number
+    candidate_only_count: number
+  }
+  engineering_acceptance: {
+    baseline_passed: boolean | null
+    candidate_passed: boolean | null
+    transition: string
+  }
+  values: ComparedResultValue[]
+}
+
 export interface GraphResultValue {
   name: string
   dimension: string

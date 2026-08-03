@@ -7,6 +7,7 @@ add_library(thermox_service
     src/in_memory_projects.cpp
     src/project_serialization.cpp
     src/projects.cpp
+    src/result_comparison.cpp
     src/result_projection.cpp
     src/serialization.cpp
     src/simulation_jobs.cpp

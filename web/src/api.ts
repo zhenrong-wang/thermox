@@ -23,6 +23,7 @@ import type {
   RunConfigurationRevision,
   RunConfigurationRevisionList,
   SimulationJob,
+  SimulationJobComparison,
   SimulationJobPage,
   SimulationResult,
   SimulationJobState,
@@ -453,6 +454,20 @@ export const api = {
   simulationResult: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationResult>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
+      signal,
+    ),
+  compareSimulationJobs: (
+    baselineJobId: string,
+    candidateJobId: string,
+    signal?: AbortSignal,
+  ) =>
+    postJson<SimulationJobComparison>(
+      '/api/v1/job-comparisons',
+      {
+        schema_version: 'thermox.job_comparison.create/v1',
+        baseline_job_id: baselineJobId,
+        candidate_job_id: candidateJobId,
+      },
       signal,
     ),
   submitSimulation: (
