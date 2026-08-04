@@ -231,10 +231,16 @@ ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
 double integration_error_norm(const std::vector<double>& coarse,
                               const std::vector<double>& refined,
                               const std::vector<double>& previous,
+                              const std::vector<DaeVariableKind>& kinds,
                               double absolute_tolerance,
                               double relative_tolerance) {
     long double sum = 0.0;
+    std::size_t controlled_variables = 0;
     for (std::size_t i = 0; i < coarse.size(); ++i) {
+        if (!kinds.empty() &&
+            kinds[i] != DaeVariableKind::differential) {
+            continue;
+        }
         const double scale =
             absolute_tolerance +
             relative_tolerance *
@@ -242,8 +248,11 @@ double integration_error_norm(const std::vector<double>& coarse,
         const long double error =
             static_cast<long double>(refined[i] - coarse[i]) / static_cast<long double>(scale);
         sum += error * error;
+        ++controlled_variables;
     }
-    return std::sqrt(static_cast<double>(sum / static_cast<long double>(coarse.size())));
+    if (controlled_variables == 0) return 0.0;
+    return std::sqrt(static_cast<double>(
+        sum / static_cast<long double>(controlled_variables)));
 }
 
 bool event_crossed(double before, double after, EventDirection direction) {
@@ -602,6 +611,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         double error = std::numeric_limits<double>::infinity();
         if (full.success && first_half.success && second_half.success) {
             error = integration_error_norm(full.state, second_half.state, state,
+                                           problem.variable_kinds,
                                            options.absolute_tolerance,
                                            options.relative_tolerance);
         }

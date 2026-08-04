@@ -89,6 +89,12 @@ PropertyResult error_result(PropertyStatus status, const std::string& message) {
 
 PropertyResult map_exception(CoolProp::CoolPropBaseError& error) {
     const std::string message = error.what();
+    if (contains_case_insensitive(message, "out of range") ||
+        contains_case_insensitive(message, "outside the range") ||
+        contains_case_insensitive(message, "below the minimum") ||
+        contains_case_insensitive(message, "above the maximum")) {
+        return error_result(PropertyStatus::out_of_range, message);
+    }
     if (contains_case_insensitive(message, "saturation") ||
         contains_case_insensitive(message, "two-phase")) {
         return error_result(PropertyStatus::saturation_boundary, message);
@@ -168,7 +174,15 @@ PropertyResult coolprop_state(
     } catch (CoolProp::CoolPropBaseError& error) {
         return map_exception(error);
     } catch (const std::exception& error) {
-        return error_result(PropertyStatus::backend_error, error.what());
+        const std::string message = error.what();
+        if (contains_case_insensitive(message, "out of range") ||
+            contains_case_insensitive(message, "outside the range") ||
+            contains_case_insensitive(message, "below the minimum") ||
+            contains_case_insensitive(message, "above the maximum")) {
+            return error_result(
+                PropertyStatus::out_of_range, message);
+        }
+        return error_result(PropertyStatus::backend_error, message);
     }
 }
 

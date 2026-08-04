@@ -333,10 +333,13 @@ Cases use `initial_guesses` to initialize differential states. A transient case 
 differential state in `fixed_values`, because that would constrain it for the entire trajectory
 rather than initialize it.
 
-`volume.fluid.rigid_adiabatic` is transient-only. It stores `mass` and `total_energy` as
-differential states and uses algebraic `pressure` and `enthalpy` with PH density/internal-energy
-closures. Its `volume` parameter accepts `m3`, `m^3`, or `L`; initial mass and total energy accept
-`kg` and `J`/`kJ`/`MJ`.
+`volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
+store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`
+with PH density/internal-energy closures. The heat-transfer variant adds an incoming heat port and
+includes `Q_dot` in the energy accumulation equation. Their `volume` parameter accepts `m3`,
+`m^3`, or `L`; initial mass and total energy accept `kg` and `J`/`kJ`/`MJ`. See
+[Regime-spanning rigid fluid volume](regime-spanning-rigid-fluid-volume.md) for the verified phase
+boundary and current applicability limits.
 
 Before producing a solver problem, each compiler compares the number of unknowns and residual
 equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched

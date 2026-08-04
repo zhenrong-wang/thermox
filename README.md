@@ -365,6 +365,9 @@ total internal energy are differential states, while pressure and enthalpy are a
 closed by the selected fluid package. The same component therefore works with any registered
 backend that supplies a PH flash. Its closure Jacobian consumes the shared PH-derivative contract:
 analytic where the backend advertises it and an explicit bounded fallback otherwise.
+`volume.fluid.rigid_heat_transfer` adds a heat port, and the compact IF97 reference case verifies a
+two-phase-to-vapor transition. See
+[Regime-spanning rigid fluid volume](docs/regime-spanning-rigid-fluid-volume.md).
 
 Run the property-backed closed-loop drum and feed-control model:
 
@@ -537,9 +540,11 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Add regime-spanning finite-volume cells, applicability envelopes, and validated packaged
-   drift-flux/flow-regime correlations; the generic correlation binding now exists, while current
-   equilibrium cells and two-phase pipes deliberately reject phase-boundary crossings.
+1. Complete bidirectional regime-spanning finite-volume cells and validated packaged
+   drift-flux/flow-regime correlations. The general rigid PH inventory and its
+   two-phase-to-vapor path are verified; liquid/two-phase traversal remains limited by the IF97
+   derivative boundary, while specialized equilibrium cells and two-phase pipes retain explicit
+   applicability guards.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
 3. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic

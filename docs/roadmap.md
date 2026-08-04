@@ -212,6 +212,9 @@ Delivered:
 21. Correlation-driven two-phase void-fraction transport using immutable engineering artifacts,
     dimension-checked live phase/flow/geometry inputs, physical output guards, and shared
     steady/transient component contracts. ✅
+22. General rigid PH inventory with optional heat transfer, differential-state-only adaptive error
+    control, and an end-to-end IF97 two-phase-to-vapor transition regression. Bidirectional
+    liquid/two-phase traversal remains an explicit follow-up. ✅
 
 ## Component catalog and modularization foundation
 

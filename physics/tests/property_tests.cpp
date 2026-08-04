@@ -359,6 +359,28 @@ void verify_saturation_pairs(
         "PH two-phase core properties");
 }
 
+void verify_if97_derivatives_near_vapor_boundary(
+    const thermox::physics::PropertyPackage& package) {
+    const auto saturation = package.saturation_p(1.0e6);
+    require(saturation.ok(), "IF97 saturation derivative reference");
+    const double enthalpy =
+        saturation.vapor.enthalpy_j_kg - 100.0;
+    const auto result =
+        thermox::physics::state_ph_derivatives_with_fallback(
+            package, 1.0e6, enthalpy);
+    require(result.ok(),
+            "IF97 derivative fallback near vapor boundary: " +
+                result.message);
+    require(result.state.phase == thermox::physics::Phase::two_phase,
+            "IF97 derivative reference remains inside saturation dome");
+    require(
+        std::isfinite(result.derivatives.density_wrt_pressure_at_enthalpy) &&
+            std::isfinite(result.derivatives.density_wrt_enthalpy_at_pressure) &&
+            std::isfinite(result.derivatives.internal_energy_wrt_pressure_at_enthalpy) &&
+            std::isfinite(result.derivatives.internal_energy_wrt_enthalpy_at_pressure),
+        "IF97 one-sided boundary derivatives must remain finite");
+}
+
 void verify_water_reference_points(
     const thermox::physics::PropertyPackage& package) {
     const auto region_1 = package.state_pt(3e6, 300.0);
@@ -542,6 +564,7 @@ int main() {
     verify_saturation_pairs(co2, 7.2e6);
     verify_saturation_pairs(if97, 1e5);
     verify_saturation_pairs(if97, 20e6);
+    verify_if97_derivatives_near_vapor_boundary(if97);
     require(!ideal_gas.supports(
                 thermox::physics::PropertyCapability::saturation_p),
             "ideal gas should not advertise saturation_p");

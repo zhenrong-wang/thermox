@@ -1,0 +1,84 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_regime_spanning_rigid_volume",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "heater",
+      "kind": "source.heat.boundary"
+    }, {
+      "id": "vessel",
+      "kind": "volume.fluid.rigid_heat_transfer",
+      "parameters": {
+        "volume": {"value": 1.0, "unit": "L"}
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "discharge_inertance",
+      "kind": "pipe.fluid.hydraulic_inertance",
+      "parameters": {
+        "length": {"value": 100.0, "unit": "m"},
+        "flow_diameter": {"value": 10.0, "unit": "mm"}
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "pressure_regulated_outlet",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "vessel_heating",
+      "kind": "heat_link",
+      "from": "heater.outlet",
+      "to": "vessel.heat"
+    }, {
+      "id": "vessel_to_inertance",
+      "kind": "fluid_link",
+      "from": "vessel.outlet",
+      "to": "discharge_inertance.inlet"
+    }, {
+      "id": "regulated_discharge",
+      "kind": "fluid_link",
+      "from": "discharge_inertance.outlet",
+      "to": "pressure_regulated_outlet.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "two_phase_to_vapor",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "heater.outlet.Q_dot": {"value": 1.0, "unit": "W"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "pressure_regulated_outlet.inlet.p": {"value": 1.0, "unit": "MPa"}
+    },
+    "initial_guesses": {
+      "heater.outlet.T": {"value": 451.0, "unit": "K"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.outlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.outlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "vessel.heat.Q_dot": {"value": 1.0, "unit": "W"},
+      "vessel.heat.T": {"value": 451.0, "unit": "K"},
+      "vessel.mass": 0.005145689429943418,
+      "vessel.total_energy": 13289.57954695287,
+      "vessel.pressure": {"value": 1.0, "unit": "MPa"},
+      "vessel.enthalpy": {"value": 2777.0, "unit": "kJ/kg"},
+      "discharge_inertance.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "discharge_inertance.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "discharge_inertance.inlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "discharge_inertance.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "discharge_inertance.outlet.p": {"value": 1.0, "unit": "MPa"},
+      "discharge_inertance.outlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "pressure_regulated_outlet.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "pressure_regulated_outlet.inlet.h": {"value": 2777.0, "unit": "kJ/kg"}
+    }
+  }]
+}

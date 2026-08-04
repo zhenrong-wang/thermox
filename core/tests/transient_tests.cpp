@@ -242,6 +242,53 @@ void test_index_one_dae_consistent_initialization_and_integration() {
                  "algebraic constraint remains satisfied during integration");
 }
 
+void test_adaptive_error_control_uses_differential_states_only() {
+    thermox::DaeProblem problem;
+    problem.variable_names = {"inventory", "oscillatory_readout"};
+    problem.residual_names = {"inventory_decay", "readout_constraint"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::differential,
+        thermox::DaeVariableKind::algebraic};
+    problem.initial_state = {1.0, std::sin(1000.0)};
+    problem.initial_derivative = {-1.0, 0.0};
+    problem.variable_scales = {1.0, 1.0};
+    problem.derivative_scales = {1.0, 1.0};
+    problem.residual_scales = {1.0, 1.0};
+    problem.residual = [](
+        double, const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        residual[0] = derivative[0] + state[0];
+        residual[1] = state[1] - std::sin(1000.0 * state[0]);
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double, const std::vector<double>& state,
+        const std::vector<double>&, double derivative_coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = derivative_coefficient + 1.0;
+        jacobian[1][0] = -1000.0 * std::cos(1000.0 * state[0]);
+        jacobian[1][1] = 1.0;
+        return thermox::EvaluationStatus::success();
+    };
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.5;
+    options.initial_step = 0.1;
+    options.max_step = 0.1;
+    options.absolute_tolerance = 1.0e-6;
+    options.relative_tolerance = 1.0e-4;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(result.diagnostics.accepted_steps < 100,
+            "algebraic readout must not drive adaptive step size");
+    const auto& final = result.trajectory.back().state;
+    require_near(final[0], std::exp(-0.5), 2.0e-3,
+                 "differential state controls integration accuracy");
+    require_near(final[1], std::sin(1000.0 * final[0]), 1.0e-7,
+                 "algebraic constraint remains solved");
+}
+
 void test_terminal_event_stops_integration() {
     auto problem = make_decay_problem();
     problem.events.push_back(thermox::DaeEvent{
@@ -270,6 +317,7 @@ int main() {
         test_singular_initialization_names_unresolved_unknown();
         test_adaptive_dae_integration();
         test_index_one_dae_consistent_initialization_and_integration();
+        test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";

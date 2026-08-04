@@ -88,7 +88,11 @@ struct TimeIntegrationOptions {
     int max_steps{100000};
     int max_consecutive_rejections{20};
     bool compute_consistent_initial_conditions{true};
-    SolverOptions nonlinear_options;
+    SolverOptions nonlinear_options = [] {
+        SolverOptions options;
+        options.residual_tolerance = 1.0e-8;
+        return options;
+    }();
 };
 
 struct DaeState {

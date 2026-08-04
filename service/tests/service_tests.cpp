@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 70,
+        response.components.size() == 71,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),

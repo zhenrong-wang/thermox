@@ -1040,6 +1040,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "condenser.fluid.fixed_outlet_quality",
         "drum.fluid.equilibrium_two_phase",
         "volume.fluid.rigid_adiabatic",
+        "volume.fluid.rigid_heat_transfer",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
         "shaft.train.two_load",

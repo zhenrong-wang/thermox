@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -1144,11 +1146,14 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
                     dominant_magnitude = magnitude;
                 }
             }
+            std::ostringstream magnitude;
+            magnitude << std::scientific << std::setprecision(6)
+                      << dominant_magnitude;
             diagnostics.message =
                 "line search failed to reduce residual; dominant "
                 "scaled residual '" +
                 problem.residual_names.at(dominant) + "'=" +
-                std::to_string(dominant_magnitude);
+                magnitude.str();
             return {x, diagnostics};
         }
 

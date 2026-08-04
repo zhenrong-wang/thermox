@@ -3,7 +3,9 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace thermox::platform {
 
@@ -15,15 +17,29 @@ using component_model_support::require_port_variable;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
 
-class RigidAdiabaticFluidVolumeModel final
+class RigidFluidVolumeModel final
     : public ComponentModel {
 public:
-    RigidAdiabaticFluidVolumeModel() {
-        descriptor_.kind = "volume.fluid.rigid_adiabatic";
+    explicit RigidFluidVolumeModel(bool heat_transfer)
+        : heat_transfer_(heat_transfer) {
+        descriptor_.kind = heat_transfer_
+            ? "volume.fluid.rigid_heat_transfer"
+            : "volume.fluid.rigid_adiabatic";
         descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "volume.fluid.rigid";
+        descriptor_.display_name = heat_transfer_
+            ? "Rigid fluid volume with heat transfer"
+            : "Adiabatic rigid fluid volume";
+        descriptor_.category = "Fluid inventory";
+        descriptor_.model_name =
+            "Regime-spanning pressure-enthalpy inventory";
         descriptor_.ports = {
             {"inlet", "fluid", "in"},
             {"outlet", "fluid", "out"}};
+        if (heat_transfer_) {
+            descriptor_.ports.push_back(
+                {"heat", "heat", "in"});
+        }
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true}};
@@ -90,6 +106,14 @@ public:
             require_internal_variable(context, "pressure");
         const auto enthalpy =
             require_internal_variable(context, "enthalpy");
+        const auto heat_flow = heat_transfer_
+            ? std::optional<std::size_t>(require_port_variable(
+                  context, "heat.Q_dot"))
+            : std::nullopt;
+        const auto heat_temperature = heat_transfer_
+            ? std::optional<std::size_t>(require_port_variable(
+                  context, "heat.T"))
+            : std::nullopt;
         const std::string prefix =
             "component." + context.component.id + ".";
 
@@ -98,16 +122,21 @@ public:
             {{mass, 0.0, 1.0}, {inlet_m, -1.0, 0.0},
              {outlet_m, 1.0, 0.0}},
             0.0, 100.0);
+        auto energy_pattern = std::vector<std::size_t>{
+            energy, inlet_m, inlet_h, outlet_m, outlet_h};
+        if (heat_flow) energy_pattern.push_back(*heat_flow);
         system.add_sparse_equation(
             prefix + "energy_accumulation",
-            {energy, inlet_m, inlet_h, outlet_m, outlet_h},
-            [energy, inlet_m, inlet_h, outlet_m, outlet_h](
+            energy_pattern,
+            [energy, inlet_m, inlet_h, outlet_m, outlet_h,
+             heat_flow](
                 double, const std::vector<double>& x,
                 const std::vector<double>& x_dot, double& residual,
                 std::vector<DaeEquationPartial>& jacobian) {
                 residual = x_dot.at(energy) -
                            x.at(inlet_m) * x.at(inlet_h) +
                            x.at(outlet_m) * x.at(outlet_h);
+                if (heat_flow) residual -= x.at(*heat_flow);
                 jacobian.push_back({energy, 0.0, 1.0});
                 jacobian.push_back(
                     {inlet_m, -x.at(inlet_h), 0.0});
@@ -117,6 +146,10 @@ public:
                     {outlet_m, x.at(outlet_h), 0.0});
                 jacobian.push_back(
                     {outlet_h, x.at(outlet_m), 0.0});
+                if (heat_flow) {
+                    jacobian.push_back(
+                        {*heat_flow, -1.0, 0.0});
+                }
                 return EvaluationStatus::success();
             },
             1.0e6);
@@ -128,6 +161,38 @@ public:
             prefix + "outlet_enthalpy",
             {{outlet_h, 1.0, 0.0}, {enthalpy, -1.0, 0.0}},
             0.0, 100000.0);
+        if (heat_temperature) {
+            system.add_sparse_equation(
+                prefix + "heat_surface_temperature",
+                {*heat_temperature, pressure, enthalpy},
+                [properties, heat_temperature = *heat_temperature,
+                 pressure, enthalpy](
+                    double, const std::vector<double>& x,
+                    const std::vector<double>&, double& residual,
+                    std::vector<DaeEquationPartial>& jacobian) {
+                    const auto state =
+                        physics::state_ph_derivatives_with_fallback(
+                            *properties, x.at(pressure),
+                            x.at(enthalpy));
+                    if (!state.ok()) return property_failure(state);
+                    residual = x.at(heat_temperature) -
+                        state.state.temperature_k;
+                    jacobian.push_back(
+                        {heat_temperature, 1.0, 0.0});
+                    jacobian.push_back({
+                        pressure,
+                        -state.derivatives
+                            .temperature_wrt_pressure_at_enthalpy,
+                        0.0});
+                    jacobian.push_back({
+                        enthalpy,
+                        -state.derivatives
+                            .temperature_wrt_enthalpy_at_pressure,
+                        0.0});
+                    return EvaluationStatus::success();
+                },
+                1000.0);
+        }
         system.add_sparse_equation(
             prefix + "volume_closure",
             {mass, pressure, enthalpy},
@@ -197,6 +262,7 @@ public:
 
 private:
     ComponentModelDescriptor descriptor_;
+    bool heat_transfer_{false};
 };
 
 }  // namespace
@@ -204,7 +270,9 @@ private:
 void register_fluid_inventory_component_models(
     ComponentRegistry& registry) {
     registry.register_model(
-        std::make_shared<RigidAdiabaticFluidVolumeModel>());
+        std::make_shared<RigidFluidVolumeModel>(false));
+    registry.register_model(
+        std::make_shared<RigidFluidVolumeModel>(true));
 }
 
 }  // namespace thermox::platform

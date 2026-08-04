@@ -62,6 +62,31 @@ PhDerivativesResult state_ph_derivatives_with_fallback(
             const PropertyResult& upper, double step,
             auto extract, double& derivative)
             -> const PropertyResult* {
+            const bool lower_same_phase = lower.ok() &&
+                lower.state.phase == base.state.phase;
+            const bool upper_same_phase = upper.ok() &&
+                upper.state.phase == base.state.phase;
+            if (lower_same_phase && upper_same_phase) {
+                derivative =
+                    (extract(upper.state) -
+                     extract(lower.state)) /
+                    (2.0 * step);
+                return nullptr;
+            }
+            if (upper_same_phase) {
+                derivative =
+                    (extract(upper.state) -
+                     extract(base.state)) /
+                    step;
+                return nullptr;
+            }
+            if (lower_same_phase) {
+                derivative =
+                    (extract(base.state) -
+                     extract(lower.state)) /
+                    step;
+                return nullptr;
+            }
             if (lower.ok() && upper.ok()) {
                 derivative =
                     (extract(upper.state) -

@@ -709,7 +709,11 @@ struct TransientSolverSettings {
     int max_steps{100000};
     int max_consecutive_rejections{20};
     bool compute_consistent_initial_conditions{true};
-    SteadySolverSettings nonlinear_solver;
+    SteadySolverSettings nonlinear_solver = [] {
+        SteadySolverSettings settings;
+        settings.residual_tolerance = 1.0e-8;
+        return settings;
+    }();
 };
 
 struct TransientSimulationRequest {
