@@ -186,6 +186,12 @@ if(TARGET thermox_cantera_backend)
             --case boil
             --end-time 1.0
     )
+    add_test(NAME platform_dynamic_single_pressure_hrsg_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_single_pressure_hrsg.json
+            --case startup_segment
+            --end-time 0.1
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve

@@ -1014,6 +1014,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
         "restriction.fluid.orifice.perfect_gas",
+        "restriction.fluid.local_loss.homogeneous_two_phase",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",

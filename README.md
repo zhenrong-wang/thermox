@@ -53,8 +53,10 @@ Implemented in this sprint:
   ambient duty through a typed heat port so whole-system energy audits remain explicit. See
   [Single-phase pipe models](docs/single-phase-pipe-models.md).
 - Flow-area restriction models cover non-flashing liquids and perfect-gas subcritical/choked
-  flow. Their validity checks reject flashing liquid states instead of silently applying the
-  wrong correlation. See [Flow restriction models](docs/flow-restriction-models.md).
+  flow, while a separate homogeneous-equilibrium local-loss model supplies hydraulic impedance
+  between two-phase inventories. Their validity checks reject incompatible phase states instead
+  of silently applying the wrong correlation. See
+  [Flow restriction models](docs/flow-restriction-models.md).
 - A generic equilibrium flash separator splits an in-dome stream into saturated liquid and vapor
   outlets using the selected property backend, with lever-rule mass allocation and exact energy
   closure. See [Equilibrium flash separation](docs/equilibrium-flash-separation.md).
@@ -87,6 +89,10 @@ Implemented in this sprint:
 - A transient equilibrium two-phase cell couples composition-aware hot gas to a rigid saturated
   fluid inventory, resolving mass, energy, pressure, vapor quality, and wall storage. See
   [Dynamic two-phase heat-transfer cell](docs/dynamic-two-phase-heat-transfer-cell.md).
+- A declaration-only single-pressure HRSG composes economizer, equilibrium evaporator,
+  two-phase hydraulic loss, separator drum, and superheater models across counterflow Cantera
+  exhaust and IF97 water paths. See
+  [Dynamic single-pressure HRSG](docs/dynamic-single-pressure-hrsg.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

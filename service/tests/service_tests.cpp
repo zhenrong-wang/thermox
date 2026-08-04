@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 65,
+        response.components.size() == 66,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -393,6 +393,19 @@ void test_catalog_discovery() {
             two_phase_cell->internal_variables.size() == 5,
         "catalog must expose the equilibrium two-phase inventory "
         "cell");
+    const auto two_phase_loss = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "restriction.fluid.local_loss.homogeneous_two_phase";
+        });
+    require(
+        two_phase_loss != response.components.end() &&
+            two_phase_loss->supports_steady &&
+            two_phase_loss->supports_transient &&
+            two_phase_loss->parameters.size() == 2,
+        "catalog must expose the homogeneous two-phase hydraulic "
+        "impedance contract");
     const auto rotor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -826,6 +839,95 @@ void test_validation_and_canonicalization() {
         solved.succeeded(),
         "canonical model must preserve dimensional solve semantics: " +
             solved.error.message);
+}
+
+void test_homogeneous_two_phase_local_loss() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "two_phase_local_loss",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "source",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "loss",
+      "kind": "restriction.fluid.local_loss.homogeneous_two_phase",
+      "parameters": {
+        "flow_diameter": {"value": 50.0, "unit": "mm"},
+        "loss_coefficient": 42.0
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "source_to_loss",
+      "kind": "fluid_link",
+      "from": "source.outlet",
+      "to": "loss.inlet"
+    }, {
+      "id": "loss_to_sink",
+      "kind": "fluid_link",
+      "from": "loss.outlet",
+      "to": "sink.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "forward",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "source.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "source.outlet.p": {"value": 2.0, "unit": "bar"},
+      "source.outlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "loss.inlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "loss.inlet.p": {"value": 2.0, "unit": "bar"},
+      "loss.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "loss.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "loss.outlet.p": {"value": 1.95, "unit": "bar"},
+      "loss.outlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json";
+    request.case_id = "forward";
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged,
+        "homogeneous two-phase local loss must solve: " +
+            response.error.message);
+    const auto& inlet = require_port_result(
+        response.graph, "loss", "inlet");
+    const auto& outlet = require_port_result(
+        response.graph, "loss", "outlet");
+    require(
+        inlet.phase == "two_phase" && outlet.phase == "two_phase" &&
+            require_result_value(
+                inlet.primary_values, "p").value_si >
+                require_result_value(
+                    outlet.primary_values, "p").value_si &&
+            std::abs(require_result_value(
+                inlet.primary_values, "m_dot").value_si -
+                require_result_value(
+                    outlet.primary_values, "m_dot").value_si) <
+                1.0e-12 &&
+            std::abs(require_result_value(
+                inlet.primary_values, "h").value_si -
+                require_result_value(
+                    outlet.primary_values, "h").value_si) <
+                1.0e-9,
+        "two-phase local loss must conserve mass and enthalpy while "
+        "producing a positive pressure drop");
 }
 
 #ifdef THERMOX_TEST_HAS_CANTERA
@@ -1320,6 +1422,134 @@ void test_dynamic_equilibrium_two_phase_material_fluid_cell() {
                  final_mass.derivative_si_s) < 1.0e-12,
         "two-phase inventory accumulation must close against net "
         "boundary mass flow");
+}
+
+void test_composed_dynamic_single_pressure_hrsg() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/dynamic_single_pressure_hrsg.json");
+    request.case_id = "startup_segment";
+    request.solver.end_time = 0.1;
+    request.solver.max_step = 0.05;
+    const auto response = service.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.trajectory.size() > 1,
+        "composed single-pressure HRSG must solve: " +
+            response.error.message);
+
+    const auto& final = response.trajectory.back().graph;
+    const auto& source = require_port_result(
+        final, "exhaust_source", "outlet");
+    const auto& superheater_hot_out = require_port_result(
+        final, "superheater", "hot_out");
+    const auto& evaporator_hot_out = require_port_result(
+        final, "evaporator", "hot_out");
+    const auto& stack = require_port_result(
+        final, "stack", "inlet");
+    const auto temperature = [](const auto& port) {
+        return require_result_value(
+            port.derived_values, "T").value_si;
+    };
+    require(
+        temperature(source) > temperature(superheater_hot_out) &&
+            temperature(superheater_hot_out) >
+                temperature(evaporator_hot_out) &&
+            temperature(evaporator_hot_out) > temperature(stack),
+        "HRSG exhaust temperature must fall through superheater, "
+        "evaporator, and economizer in gas-flow order");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        require(
+            std::abs(require_result_value(
+                source.primary_values, species).value_si -
+                require_result_value(
+                    stack.primary_values, species).value_si) <
+                1.0e-10,
+            "composed HRSG must conserve every exhaust species");
+    }
+
+    const auto& feedwater = require_port_result(
+        final, "feedwater", "outlet");
+    const auto& evaporator_outlet = require_port_result(
+        final, "evaporator", "cold_out");
+    const auto& restriction_outlet = require_port_result(
+        final, "evaporator_outlet_loss", "outlet");
+    const auto& drum_vapor = require_port_result(
+        final, "separator_drum", "vapor_outlet");
+    const auto& steam = require_port_result(
+        final, "superheater", "cold_out");
+    require(
+        feedwater.phase == "liquid" &&
+            evaporator_outlet.phase == "two_phase" &&
+            restriction_outlet.phase == "two_phase" &&
+            drum_vapor.phase == "two_phase" &&
+            require_result_value(
+                drum_vapor.derived_values,
+                "vapor_quality").value_si > 1.0 - 1.0e-10 &&
+            steam.phase == "vapor" &&
+            temperature(steam) > temperature(drum_vapor),
+        "HRSG water path must progress through liquid, two-phase, "
+        "separated vapor, and superheated-vapor states");
+    require(
+        require_result_value(
+            evaporator_outlet.primary_values, "p").value_si >
+            require_result_value(
+                restriction_outlet.primary_values, "p").value_si &&
+            require_result_value(
+                restriction_outlet.primary_values,
+                "m_dot").value_si > 0.0,
+        "two-phase hydraulic impedance must sustain positive flow "
+        "and a positive pressure drop");
+
+    const auto& evaporator = require_component_result(
+        final, "evaporator");
+    const auto& drum = require_component_result(
+        final, "separator_drum");
+    const double stored_mass_rate = require_result_value(
+        evaporator.internal_values,
+        "fluid_mass").derivative_si_s + require_result_value(
+        drum.internal_values, "total_mass").derivative_si_s;
+    const double boundary_mass_rate = require_result_value(
+        final.system_balances,
+        "net_boundary_mass_flow").value_si;
+    require(
+        std::abs(stored_mass_rate - boundary_mass_rate) < 1.0e-10,
+        "coupled evaporator and drum inventories must close the "
+        "whole-system mass rate");
+
+    const auto& superheater = require_component_result(
+        final, "superheater");
+    const auto& economizer = require_component_result(
+        final, "economizer");
+    const auto storage_rate = [](const auto& component,
+                                 const char* energy,
+                                 double wall_capacity) {
+        return require_result_value(
+            component.internal_values, energy).derivative_si_s +
+            wall_capacity * require_result_value(
+                component.internal_values,
+                "wall_temperature").derivative_si_s;
+    };
+    const double stored_energy_rate =
+        storage_rate(
+            superheater, "cold_total_energy", 300000.0) +
+        storage_rate(
+            evaporator, "fluid_total_energy", 50000.0) +
+        storage_rate(
+            economizer, "cold_total_energy", 30000.0) +
+        require_result_value(
+            drum.internal_values,
+            "total_internal_energy").derivative_si_s;
+    const double boundary_energy_rate = require_result_value(
+        final.system_balances,
+        "net_boundary_energy_flow").value_si;
+    require(
+        std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-2,
+        "all HRSG fluid, drum, and wall storage rates must close "
+        "against boundary enthalpy flow");
 }
 #endif
 
@@ -3016,12 +3246,14 @@ int main() {
         test_request_scoped_correlation_artifacts();
         test_catalog_discovery();
         test_validation_and_canonicalization();
+        test_homogeneous_two_phase_local_loss();
 #ifdef THERMOX_TEST_HAS_CANTERA
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_dynamic_cantera_if97_hrsg_cell();
         test_distributed_cantera_if97_counterflow_exchanger();
         test_dynamic_equilibrium_two_phase_material_fluid_cell();
+        test_composed_dynamic_single_pressure_hrsg();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();

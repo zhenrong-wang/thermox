@@ -1,0 +1,278 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_single_pressure_hrsg",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "materials": [{
+      "id": "exhaust_gas",
+      "backend": "cantera",
+      "mechanism": "gri30.yaml",
+      "phase": "gri30",
+      "species": ["N2", "O2", "H2O", "CO2"]
+    }],
+    "components": [{
+      "id": "exhaust_source",
+      "kind": "source.material.boundary",
+      "materials": {"outlet": "exhaust_gas"}
+    }, {
+      "id": "superheater",
+      "kind": "heat_exchanger.material_fluid.dynamic_cell",
+      "parameters": {
+        "cold_fluid_mass": {"value": 1.0, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 300.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 0.2, "unit": "kW/K"},
+        "cold_side_UA": {"value": 0.2, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.20, "unit": "m"},
+        "hot_loss_coefficient": 8.0,
+        "cold_loss_coefficient": 2.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "evaporator",
+      "kind": "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
+      "parameters": {
+        "fluid_volume": {"value": 1.0, "unit": "m3"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 8.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "economizer",
+      "kind": "heat_exchanger.material_fluid.dynamic_cell",
+      "parameters": {
+        "cold_fluid_mass": {"value": 5.0, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 30.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 0.8, "unit": "kW/K"},
+        "cold_side_UA": {"value": 0.8, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 5.0, "unit": "mm"},
+        "hot_loss_coefficient": 8.0,
+        "cold_loss_coefficient": 2.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "stack",
+      "kind": "sink.material.boundary",
+      "materials": {"inlet": "exhaust_gas"}
+    }, {
+      "id": "feedwater",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "evaporator_outlet_loss",
+      "kind": "restriction.fluid.local_loss.homogeneous_two_phase",
+      "parameters": {
+        "flow_diameter": {"value": 50.0, "unit": "mm"},
+        "loss_coefficient": 42.0
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "separator_drum",
+      "kind": "drum.fluid.equilibrium_two_phase",
+      "parameters": {
+        "volume": {"value": 0.5, "unit": "m3"},
+        "vessel_height": {"value": 1.5, "unit": "m"}
+      },
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }, {
+      "id": "steam_sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }, {
+      "id": "blowdown_sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "gas_to_superheater",
+      "kind": "material_link",
+      "from": "exhaust_source.outlet",
+      "to": "superheater.hot_in"
+    }, {
+      "id": "gas_to_evaporator",
+      "kind": "material_link",
+      "from": "superheater.hot_out",
+      "to": "evaporator.hot_in"
+    }, {
+      "id": "gas_to_economizer",
+      "kind": "material_link",
+      "from": "evaporator.hot_out",
+      "to": "economizer.hot_in"
+    }, {
+      "id": "gas_to_stack",
+      "kind": "material_link",
+      "from": "economizer.hot_out",
+      "to": "stack.inlet"
+    }, {
+      "id": "feedwater_to_economizer",
+      "kind": "fluid_link",
+      "from": "feedwater.outlet",
+      "to": "economizer.cold_in"
+    }, {
+      "id": "economizer_to_evaporator",
+      "kind": "fluid_link",
+      "from": "economizer.cold_out",
+      "to": "evaporator.cold_in"
+    }, {
+      "id": "evaporator_to_drum",
+      "kind": "fluid_link",
+      "from": "evaporator.cold_out",
+      "to": "evaporator_outlet_loss.inlet"
+    }, {
+      "id": "outlet_loss_to_drum",
+      "kind": "fluid_link",
+      "from": "evaporator_outlet_loss.outlet",
+      "to": "separator_drum.inlet"
+    }, {
+      "id": "drum_vapor_to_superheater",
+      "kind": "fluid_link",
+      "from": "separator_drum.vapor_outlet",
+      "to": "superheater.cold_in"
+    }, {
+      "id": "superheated_steam",
+      "kind": "fluid_link",
+      "from": "superheater.cold_out",
+      "to": "steam_sink.inlet"
+    }, {
+      "id": "drum_blowdown",
+      "kind": "fluid_link",
+      "from": "separator_drum.liquid_outlet",
+      "to": "blowdown_sink.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "startup_segment",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "exhaust_source.outlet.m_dot[N2]": {"value": 0.75316, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[O2]": {"value": 0.14897, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[H2O]": {"value": 0.04406, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[CO2]": {"value": 0.05381, "unit": "kg/s"},
+      "exhaust_source.outlet.p": {"value": 1.2, "unit": "bar"},
+      "exhaust_source.outlet.h": {"value": -444.67, "unit": "kJ/kg"},
+      "feedwater.outlet.p": {"value": 2.05, "unit": "bar"},
+      "feedwater.outlet.h": {"value": 112.75, "unit": "kJ/kg"},
+      "steam_sink.inlet.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "blowdown_sink.inlet.m_dot": {"value": 0.0001, "unit": "kg/s"},
+      "separator_drum.heat.Q_dot": {"value": 0.0, "unit": "kW"}
+    },
+    "initial_guesses": {
+      "superheater.hot_in.m_dot[N2]": 0.75316,
+      "superheater.hot_in.m_dot[O2]": 0.14897,
+      "superheater.hot_in.m_dot[H2O]": 0.04406,
+      "superheater.hot_in.m_dot[CO2]": 0.05381,
+      "superheater.hot_in.p": {"value": 1.2, "unit": "bar"},
+      "superheater.hot_in.h": {"value": -444.67, "unit": "kJ/kg"},
+      "superheater.hot_out.m_dot[N2]": 0.75316,
+      "superheater.hot_out.m_dot[O2]": 0.14897,
+      "superheater.hot_out.m_dot[H2O]": 0.04406,
+      "superheater.hot_out.m_dot[CO2]": 0.05381,
+      "superheater.hot_out.p": {"value": 1.19, "unit": "bar"},
+      "superheater.hot_out.h": {"value": -560.0, "unit": "kJ/kg"},
+      "superheater.cold_in.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "superheater.cold_in.p": {"value": 1.945, "unit": "bar"},
+      "superheater.cold_in.h": {"value": 2706.0, "unit": "kJ/kg"},
+      "superheater.cold_out.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "superheater.cold_out.p": {"value": 1.9449, "unit": "bar"},
+      "superheater.cold_out.h": {"value": 2800.0, "unit": "kJ/kg"},
+      "superheater.cold_total_energy": {"value": 2.64, "unit": "MJ"},
+      "superheater.cold_enthalpy": {"value": 2800.0, "unit": "kJ/kg"},
+      "superheater.wall_temperature": {"value": 650.0, "unit": "K"},
+
+      "evaporator.hot_in.m_dot[N2]": 0.75316,
+      "evaporator.hot_in.m_dot[O2]": 0.14897,
+      "evaporator.hot_in.m_dot[H2O]": 0.04406,
+      "evaporator.hot_in.m_dot[CO2]": 0.05381,
+      "evaporator.hot_in.p": {"value": 1.19, "unit": "bar"},
+      "evaporator.hot_in.h": {"value": -560.0, "unit": "kJ/kg"},
+      "evaporator.hot_out.m_dot[N2]": 0.75316,
+      "evaporator.hot_out.m_dot[O2]": 0.14897,
+      "evaporator.hot_out.m_dot[H2O]": 0.04406,
+      "evaporator.hot_out.m_dot[CO2]": 0.05381,
+      "evaporator.hot_out.p": {"value": 1.18, "unit": "bar"},
+      "evaporator.hot_out.h": {"value": -680.0, "unit": "kJ/kg"},
+      "evaporator.cold_in.m_dot": {"value": 0.043, "unit": "kg/s"},
+      "evaporator.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "evaporator.cold_in.h": {"value": 400.0, "unit": "kJ/kg"},
+      "evaporator.cold_out.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "evaporator.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "evaporator.cold_out.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "evaporator.fluid_mass": 2.4936494821191739,
+      "evaporator.fluid_total_energy": {"value": 3.540474223178761, "unit": "MJ"},
+      "evaporator.fluid_pressure": {"value": 2.0, "unit": "bar"},
+      "evaporator.vapor_quality": 0.45209637102333294,
+      "evaporator.wall_temperature": {"value": 600.0, "unit": "K"},
+
+      "economizer.hot_in.m_dot[N2]": 0.75316,
+      "economizer.hot_in.m_dot[O2]": 0.14897,
+      "economizer.hot_in.m_dot[H2O]": 0.04406,
+      "economizer.hot_in.m_dot[CO2]": 0.05381,
+      "economizer.hot_in.p": {"value": 1.18, "unit": "bar"},
+      "economizer.hot_in.h": {"value": -680.0, "unit": "kJ/kg"},
+      "economizer.hot_out.m_dot[N2]": 0.75316,
+      "economizer.hot_out.m_dot[O2]": 0.14897,
+      "economizer.hot_out.m_dot[H2O]": 0.04406,
+      "economizer.hot_out.m_dot[CO2]": 0.05381,
+      "economizer.hot_out.p": {"value": 1.17, "unit": "bar"},
+      "economizer.hot_out.h": {"value": -800.0, "unit": "kJ/kg"},
+      "economizer.cold_in.m_dot": {"value": 0.043, "unit": "kg/s"},
+      "economizer.cold_in.p": {"value": 2.05, "unit": "bar"},
+      "economizer.cold_in.h": {"value": 112.75, "unit": "kJ/kg"},
+      "economizer.cold_out.m_dot": {"value": 0.043, "unit": "kg/s"},
+      "economizer.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "economizer.cold_out.h": {"value": 400.0, "unit": "kJ/kg"},
+      "economizer.cold_total_energy": {"value": 2.0, "unit": "MJ"},
+      "economizer.cold_enthalpy": {"value": 400.0, "unit": "kJ/kg"},
+      "economizer.wall_temperature": {"value": 500.0, "unit": "K"},
+
+      "feedwater.outlet.m_dot": {"value": 0.043, "unit": "kg/s"},
+      "evaporator_outlet_loss.inlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "evaporator_outlet_loss.inlet.p": {"value": 2.0, "unit": "bar"},
+      "evaporator_outlet_loss.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "evaporator_outlet_loss.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "evaporator_outlet_loss.outlet.p": {"value": 1.945, "unit": "bar"},
+      "evaporator_outlet_loss.outlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "separator_drum.inlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "separator_drum.inlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "separator_drum.vapor_outlet.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "separator_drum.vapor_outlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.vapor_outlet.h": {"value": 2706.0, "unit": "kJ/kg"},
+      "separator_drum.liquid_outlet.m_dot": {"value": 0.0001, "unit": "kg/s"},
+      "separator_drum.liquid_outlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.liquid_outlet.h": {"value": 504.7, "unit": "kJ/kg"},
+      "separator_drum.heat.T": {"value": 393.36, "unit": "K"},
+      "separator_drum.total_mass": {"value": 5.585, "unit": "kg"},
+      "separator_drum.total_internal_energy": {"value": 3.90, "unit": "MJ"},
+      "separator_drum.pressure": {"value": 1.945, "unit": "bar"},
+      "separator_drum.vapor_quality": 0.10,
+      "separator_drum.liquid_level": {"value": 8.0, "unit": "mm"},
+
+      "stack.inlet.m_dot[N2]": 0.75316,
+      "stack.inlet.m_dot[O2]": 0.14897,
+      "stack.inlet.m_dot[H2O]": 0.04406,
+      "stack.inlet.m_dot[CO2]": 0.05381,
+      "stack.inlet.p": {"value": 1.17, "unit": "bar"},
+      "stack.inlet.h": {"value": -800.0, "unit": "kJ/kg"},
+      "steam_sink.inlet.p": {"value": 1.9449, "unit": "bar"},
+      "steam_sink.inlet.h": {"value": 2800.0, "unit": "kJ/kg"},
+      "blowdown_sink.inlet.p": {"value": 1.945, "unit": "bar"},
+      "blowdown_sink.inlet.h": {"value": 504.7, "unit": "kJ/kg"}
+    }
+  }]
+}

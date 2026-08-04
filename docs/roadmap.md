@@ -197,6 +197,9 @@ Delivered:
     closure. ✅
 16. Transient material-to-fluid equilibrium two-phase cell with rigid-volume mass/energy storage,
     pressure-quality saturation closure, wall capacitance, and graph-audited conservation. ✅
+17. Homogeneous-equilibrium two-phase hydraulic impedance plus a declaration-only dynamic
+    single-pressure HRSG combining economizer, evaporator, separator drum, and superheater with
+    whole-system mass/energy and exhaust-species audits. ✅
 
 ## Component catalog and modularization foundation
 
@@ -346,10 +349,10 @@ Work items:
 
 1. Add HRSG component models:
    - generic gas/material-to-water design-point energy-balance section; ✅
-   - economizer
-   - evaporator/drum simplified
-   - superheater
-   - gas-side pressure drop
+   - economizer ✅ *(generic dynamic material-to-fluid cell)*
+   - evaporator/drum simplified ✅ *(equilibrium inventories and two-phase hydraulic impedance)*
+   - superheater ✅ *(generic dynamic material-to-fluid cell)*
+   - gas-side pressure drop ✅ *(composition-aware cell local-loss equations)*
    - pinch/approach constraints
 2. Add gas turbine off-design placeholders:
    - generic dimensioned, non-rectangular map interpolation kernel; ✅
