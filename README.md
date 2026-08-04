@@ -78,6 +78,9 @@ Implemented in this sprint:
 - A two-cell gas-to-water reference reverses the cold-side cell ordering to prove that distributed
   counterflow equipment is ordinary declared topology, with steady and transient whole-system
   energy closure. See [Distributed heat exchanger](docs/distributed-heat-exchanger.md).
+- A composition-aware steady/transient cell couples a Cantera material stream to a property-backed
+  fluid inventory and wall, preserving every declared exhaust species while exchanging heat with
+  IF97 water. See [Dynamic material-to-fluid heat exchanger](docs/dynamic-material-fluid-heat-exchanger.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

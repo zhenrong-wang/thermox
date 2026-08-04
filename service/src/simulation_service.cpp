@@ -1546,6 +1546,7 @@ ValidateModelResponse SimulationService::validate_model(
                     runtime->impl_->components,
                     runtime->impl_->properties,
                     engineering_artifacts,
+                    runtime->impl_->thermochemistry,
                     request.case_id);
             response.compilation.compiled = true;
             response.compilation.mode = "transient";
@@ -2499,6 +2500,7 @@ TransientSimulationResponse SimulationService::run_transient(
             runtime->impl_->components,
             runtime->impl_->properties,
             engineering_artifacts,
+            runtime->impl_->thermochemistry,
             request.case_id);
         response.metadata = execution_metadata(
             document,

@@ -270,5 +270,13 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const physics::PropertyPackageRegistry& property_registry,
     const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id = {});
+CompiledTransientModelGraph compile_transient_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const std::string& case_id = {});
 
 }  // namespace thermox::platform

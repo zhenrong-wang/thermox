@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 63,
+        response.components.size() == 64,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -367,6 +367,19 @@ void test_catalog_discovery() {
             dynamic_cell->supports_transient &&
             dynamic_cell->internal_variables.size() == 5,
         "catalog must expose steady/transient heat-exchanger cells");
+    const auto material_fluid_cell = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "heat_exchanger.material_fluid.dynamic_cell";
+        });
+    require(
+        material_fluid_cell != response.components.end() &&
+            material_fluid_cell->supports_steady &&
+            material_fluid_cell->supports_transient &&
+            material_fluid_cell->internal_variables.size() == 3,
+        "catalog must expose the composition-aware dynamic "
+        "material-to-fluid cell");
     const auto rotor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -985,6 +998,63 @@ void test_netl_b31a_hrsg_boundary_benchmark() {
             1.0) < 0.04,
         "Cantera stack density must agree with the published "
         "stream table at displayed precision");
+}
+
+void test_dynamic_cantera_if97_hrsg_cell() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/dynamic_exhaust_water_hrsg_cell.json");
+    request.case_id = "heat_up";
+    request.solver.end_time = 0.1;
+    request.solver.max_step = 0.05;
+    const auto response = service.run_transient(request);
+
+    require(
+        response.succeeded(),
+        "dynamic Cantera-to-IF97 HRSG cell must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.success &&
+            response.diagnostics.accepted_steps > 0 &&
+            !response.trajectory.empty(),
+        "dynamic material-to-fluid cell must complete adaptive DAE "
+        "integration");
+
+    const auto& graph = response.trajectory.back().graph;
+    const auto& hot_in = require_port_result(
+        graph, "hrsg_cell", "hot_in");
+    const auto& hot_out = require_port_result(
+        graph, "hrsg_cell", "hot_out");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        require(
+            std::abs(
+                require_result_value(
+                    hot_in.primary_values, species).value_si -
+                require_result_value(
+                    hot_out.primary_values, species).value_si) <
+                1.0e-10,
+            "dynamic HRSG cell must conserve each exhaust species");
+    }
+    require(
+        require_result_value(
+            hot_out.primary_values, "h").value_si <
+            require_result_value(
+                hot_in.primary_values, "h").value_si,
+        "dynamic HRSG cell must cool the exhaust stream");
+
+    const auto& cold_in = require_port_result(
+        graph, "hrsg_cell", "cold_in");
+    const auto& cold_out = require_port_result(
+        graph, "hrsg_cell", "cold_out");
+    require(
+        require_result_value(
+            cold_out.primary_values, "h").value_si >
+            require_result_value(
+                cold_in.primary_values, "h").value_si,
+        "dynamic HRSG cell must heat the IF97 water stream");
 }
 #endif
 
@@ -2673,6 +2743,7 @@ int main() {
 #ifdef THERMOX_TEST_HAS_CANTERA
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
+        test_dynamic_cantera_if97_hrsg_cell();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();

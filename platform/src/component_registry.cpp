@@ -1056,6 +1056,7 @@ ComponentRegistry make_default_component_registry() {
     register_phase_separation_component_models(registry);
     register_heat_transfer_component_models(registry);
     register_dynamic_heat_transfer_component_models(registry);
+    register_dynamic_material_heat_transfer_component_models(registry);
     register_fluid_inventory_component_models(registry);
     register_drum_component_models(registry);
     register_storage_component_models(registry);
@@ -1675,6 +1676,19 @@ CompiledTransientModelGraph compile_transient_model_graph(
     const physics::PropertyPackageRegistry& property_registry,
     const EngineeringArtifactRegistry& artifact_registry,
     const std::string& case_id) {
+    return compile_transient_model_graph(
+        document, registry, property_registry, artifact_registry,
+        physics::ThermochemistryPackageRegistry{}, case_id);
+}
+
+CompiledTransientModelGraph compile_transient_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
     if (active_case != nullptr &&
         active_case->mode != "dynamic_initialization" &&
@@ -1732,9 +1746,48 @@ CompiledTransientModelGraph compile_transient_model_graph(
             } else if (port.domain == "material") {
                 medium_id =
                     require_material_binding(component, port.name);
+                const auto& material =
+                    find_material(document, medium_id);
                 context.port_species.emplace(
-                    port.name,
-                    find_material(document, medium_id).species);
+                    port.name, material.species);
+                if (!model.descriptor()
+                         .required_thermochemistry_capabilities
+                         .empty()) {
+                    auto package = thermochemistry_registry.create(
+                        material.backend, material.mechanism,
+                        material.phase);
+                    if (!material.package_version.empty() &&
+                        material.package_version != package->version()) {
+                        throw std::invalid_argument(
+                            "material '" + material.id +
+                            "' requests thermochemistry package version '" +
+                            material.package_version + "' but backend '" +
+                            material.backend + "' provides version '" +
+                            std::string(package->version()) + "'");
+                    }
+                    for (const auto& species : material.species) {
+                        if (std::find(
+                                package->species_basis().begin(),
+                                package->species_basis().end(),
+                                species) == package->species_basis().end()) {
+                            throw std::invalid_argument(
+                                "material '" + material.id +
+                                "' species is absent from backend mechanism: " +
+                                species);
+                        }
+                    }
+                    for (const auto capability :
+                         model.descriptor()
+                             .required_thermochemistry_capabilities) {
+                        if (!package->supports(capability)) {
+                            throw std::invalid_argument(
+                                "component '" + component.id +
+                                "' requires an unsupported thermochemistry capability");
+                        }
+                    }
+                    context.port_thermochemistry.emplace(
+                        port.name, std::move(package));
+                }
             }
             const auto species = context.port_species.find(
                 port.name);

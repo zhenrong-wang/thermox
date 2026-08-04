@@ -124,6 +124,12 @@ private:
         state.thermodynamic.temperature_k = temperature;
         state.thermodynamic.enthalpy_j_kg =
             1000.0 * temperature;
+        state.thermodynamic.density_kg_m3 =
+            pressure / (287.0 * temperature);
+        state.thermodynamic.internal_energy_j_kg =
+            713.0 * temperature;
+        state.thermodynamic.cp_j_kg_k = 1000.0;
+        state.thermodynamic.cv_j_kg_k = 713.0;
         state.thermodynamic.entropy_j_kg_k =
             1000.0 * std::log(temperature / 300.0) -
             287.0 * std::log(pressure / 101325.0);
@@ -1021,6 +1027,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.material_fluid.fixed_duty",
         "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",
+        "heat_exchanger.material_fluid.dynamic_cell",
         "heater.material.fixed_duty",
         "cooler.material.fixed_duty",
         "evaporator.fluid.fixed_outlet_quality",
@@ -4992,6 +4999,206 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
             "dynamic cell retains finite stored fluid energies");
 }
 
+void test_dynamic_material_fluid_cell_conserves_species_and_energy() {
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto cold_initial = water->state_pt(2.0e5, 300.0);
+    require(cold_initial.ok(),
+            "material-fluid cell initial water state evaluates");
+    constexpr double cold_mass = 49.83;
+    const double cold_energy =
+        cold_mass * cold_initial.state.internal_energy_j_kg;
+    std::ostringstream number;
+    number << std::setprecision(17);
+    const auto format = [&](double value) {
+        number.str({});
+        number.clear();
+        number << value;
+        return number.str();
+    };
+    std::string text = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_material_fluid_cell",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "materials": [{
+      "id": "exhaust",
+      "backend": "test_backend",
+      "mechanism": "test.yaml",
+      "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "cell",
+      "kind": "heat_exchanger.material_fluid.dynamic_cell",
+      "parameters": {
+        "cold_fluid_mass": {"value": 49.83, "unit": "kg"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 10.0,
+        "cold_loss_coefficient": 10.0
+      },
+      "materials": {"hot_in": "exhaust", "hot_out": "exhaust"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "steady",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "cell.hot_in.m_dot[N2]": {"value": 0.8, "unit": "kg/s"},
+      "cell.hot_in.m_dot[O2]": {"value": 0.2, "unit": "kg/s"},
+      "cell.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "cell.cold_in.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.cold_in.h": __COLD_H__
+    },
+    "initial_guesses": {
+      "cell.hot_out.m_dot[N2]": 0.8,
+      "cell.hot_out.m_dot[O2]": 0.2,
+      "cell.hot_out.p": 199500.0,
+      "cell.hot_out.h": 450000.0,
+      "cell.cold_out.m_dot": 1.0,
+      "cell.cold_out.p": 199999.0,
+      "cell.cold_out.h": 150000.0
+    }
+  }, {
+    "id": "transient",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "cell.hot_in.m_dot[N2]": {"value": 0.8, "unit": "kg/s"},
+      "cell.hot_in.m_dot[O2]": {"value": 0.2, "unit": "kg/s"},
+      "cell.hot_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.hot_in.h": {"value": 600.0, "unit": "kJ/kg"},
+      "cell.cold_in.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "cell.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "cell.cold_in.h": __COLD_H__
+    },
+    "initial_guesses": {
+      "cell.hot_out.m_dot[N2]": 0.8,
+      "cell.hot_out.m_dot[O2]": 0.2,
+      "cell.hot_out.p": 199500.0,
+      "cell.hot_out.h": 450000.0,
+      "cell.cold_out.m_dot": 1.0,
+      "cell.cold_out.p": 199999.0,
+      "cell.cold_out.h": __COLD_H__,
+      "cell.cold_total_energy": __COLD_ENERGY__,
+      "cell.cold_enthalpy": __COLD_H__,
+      "cell.wall_temperature": 450.0
+    }
+  }]
+})json";
+    const auto replace = [&](const std::string& token, double value) {
+        const std::string replacement = format(value);
+        std::size_t position = 0;
+        while ((position = text.find(token, position)) !=
+               std::string::npos) {
+            text.replace(position, token.size(), replacement);
+            position += replacement.size();
+        }
+    };
+    replace("__COLD_H__", cold_initial.state.enthalpy_j_kg);
+    replace("__COLD_ENERGY__", cold_energy);
+    const auto document =
+        thermox::platform::parse_model_document_text(text);
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<const TestThermochemistryPackage>();
+        });
+
+    const auto steady_graph = thermox::platform::compile_model_graph(
+        document, registry, properties,
+        thermox::platform::EngineeringArtifactRegistry{},
+        chemistry, "steady");
+    const auto steady = thermox::solve_newton(steady_graph.problem);
+    require(steady.diagnostics.converged,
+            "material-fluid steady cell: " +
+                steady.diagnostics.message);
+    const auto steady_value = [&](const std::string& name) {
+        return steady.x.at(require_variable_index(
+            steady_graph.problem.variable_names, name));
+    };
+    require_near(
+        steady_value("cell.hot_out.m_dot[N2]"), 0.8, 1.0e-12,
+        "material-fluid cell preserves N2 flow");
+    require_near(
+        steady_value("cell.hot_out.m_dot[O2]"), 0.2, 1.0e-12,
+        "material-fluid cell preserves O2 flow");
+    const double steady_hot_duty =
+        steady_value("cell.hot_in.h") -
+        steady_value("cell.hot_out.h");
+    const double steady_cold_duty =
+        steady_value("cell.cold_in.m_dot") *
+        (steady_value("cell.cold_out.h") -
+         steady_value("cell.cold_in.h"));
+    require_near(steady_hot_duty, steady_cold_duty, 1.0e-5,
+                 "material-fluid steady cell energy closure");
+
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, properties,
+            thermox::platform::EngineeringArtifactRegistry{},
+            chemistry, "transient");
+    require(graph.problem.sparse_jacobian_pattern.has_value(),
+            "material-fluid transient cell preserves sparse DAE assembly");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            "material-fluid consistent initialization: " +
+                initialized.diagnostics.message);
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.2;
+    options.initial_step = 0.005;
+    options.max_step = 0.02;
+    const auto transient = thermox::integrate_dae(graph.problem, options);
+    require(transient.diagnostics.success,
+            "material-fluid transient cell: " +
+                transient.diagnostics.message);
+    const auto index = [&](const std::string& name) {
+        return require_variable_index(graph.problem.variable_names, name);
+    };
+    const auto& final = transient.trajectory.back();
+    require(final.state.at(index("cell.cold_enthalpy")) >
+                cold_initial.state.enthalpy_j_kg,
+            "material exhaust heats the cold-fluid holdup");
+    constexpr double wall_capacity = 50000.0;
+    const double stored_rate =
+        final.derivative.at(index("cell.cold_total_energy")) +
+        wall_capacity *
+            final.derivative.at(index("cell.wall_temperature"));
+    const double hot_in_flow =
+        final.state.at(index("cell.hot_in.m_dot[N2]")) +
+        final.state.at(index("cell.hot_in.m_dot[O2]"));
+    const double hot_out_flow =
+        final.state.at(index("cell.hot_out.m_dot[N2]")) +
+        final.state.at(index("cell.hot_out.m_dot[O2]"));
+    const double boundary_rate =
+        hot_in_flow * final.state.at(index("cell.hot_in.h")) -
+        hot_out_flow * final.state.at(index("cell.hot_out.h")) +
+        final.state.at(index("cell.cold_in.m_dot")) *
+            final.state.at(index("cell.cold_in.h")) -
+        final.state.at(index("cell.cold_out.m_dot")) *
+            final.state.at(index("cell.cold_out.h"));
+    require_near(stored_rate, boundary_rate, 1.0e-5,
+                 "material-fluid transient energy-rate closure");
+}
+
 void test_two_cell_counterflow_exchanger_composes_and_conserves() {
     const auto document = thermox::platform::load_model_document(
         std::string(THERMOX_SOURCE_DIR) +
@@ -6874,6 +7081,7 @@ int main() {
         test_material_fluid_heat_exchangers();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_forms();
+        test_dynamic_material_fluid_cell_conserves_species_and_energy();
         test_two_cell_counterflow_exchanger_composes_and_conserves();
         test_if97_fixed_quality_evaporator_and_condenser();
         test_if97_rankine_graph_regression();

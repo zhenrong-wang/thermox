@@ -10,6 +10,7 @@ add_library(thermox_platform
     src/combustion_models.cpp
     src/drum_models.cpp
     src/dynamic_heat_exchanger_models.cpp
+    src/dynamic_material_heat_exchanger_models.cpp
     src/fluid_inventory_models.cpp
     src/heat_transfer_models.cpp
     src/material_turbomachinery_models.cpp

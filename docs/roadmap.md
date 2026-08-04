@@ -189,6 +189,9 @@ Delivered:
     constant fluid-energy holdups, wall capacitance, and flow-dependent pressure loss. ✅
 13. Declared two-cell counterflow gas-to-water exchanger proving distributed cell composition,
     cumulative pressure loss, steady duty closure, and transient whole-system energy closure. ✅
+14. Composition-aware steady/transient material-to-fluid cell coupling Cantera exhaust to an IF97
+    fluid inventory, with species conservation, wall storage, pressure loss, and DAE energy
+    closure. ✅
 
 ## Component catalog and modularization foundation
 

@@ -162,6 +162,14 @@ add_test(NAME platform_dynamic_heat_exchanger_cli
         --case heat_up
         --end-time 0.5
 )
+if(TARGET thermox_cantera_backend)
+    add_test(NAME platform_dynamic_material_fluid_hrsg_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_exhaust_water_hrsg_cell.json
+            --case heat_up
+            --end-time 0.1
+    )
+endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/two_cell_counterflow_heat_exchanger.json
