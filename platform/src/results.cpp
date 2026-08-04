@@ -72,9 +72,9 @@ struct GraphResultEvaluator::Impl {
         const physics::PropertyPackageRegistry& property_registry,
         const physics::ThermochemistryPackageRegistry*
             thermochemistry_registry,
-        bool include_steady_boundary_audit) {
+        bool include_boundary_audit) {
         variable_count = count;
-        steady_boundary_audit = include_steady_boundary_audit;
+        boundary_audit = include_boundary_audit;
         port_variables = compiled_ports;
         internal_variables = compiled_internal;
         for (const auto& variable : compiled_ports) {
@@ -138,7 +138,7 @@ struct GraphResultEvaluator::Impl {
         boundary_ports;
     std::map<std::pair<std::string, std::string>, std::string>
         port_directions;
-    bool steady_boundary_audit{false};
+    bool boundary_audit{false};
     std::map<
         std::string,
         std::shared_ptr<const physics::PropertyPackage>>
@@ -178,7 +178,20 @@ GraphResultEvaluator::GraphResultEvaluator(
     impl_->initialize(
         document, graph.port_variables, graph.internal_variables,
         graph.problem.variable_names.size(), property_registry,
-        nullptr, false);
+        nullptr, true);
+}
+
+GraphResultEvaluator::GraphResultEvaluator(
+    const ModelDocument& document,
+    const CompiledTransientModelGraph& graph,
+    const physics::PropertyPackageRegistry& property_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->initialize(
+        document, graph.port_variables, graph.internal_variables,
+        graph.problem.variable_names.size(), property_registry,
+        &thermochemistry_registry, true);
 }
 
 GraphResultEvaluator::~GraphResultEvaluator() = default;
@@ -366,7 +379,7 @@ GraphResult GraphResultEvaluator::evaluate(
             });
         }
     }
-    if (impl_->steady_boundary_audit) {
+    if (impl_->boundary_audit) {
         double net_mass_flow = 0.0;
         double net_energy_flow = 0.0;
         bool has_mass_flow = false;

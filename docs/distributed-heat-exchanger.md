@@ -64,3 +64,32 @@ as separate Study revisions.
 The same topology pattern can represent recuperators and single-phase economizer or superheater
 sections. Two-phase void fraction, circulation, moving boundaries, and flow-regime correlations
 require additional registered calculation models; they are not inferred from this example.
+
+## Composition-aware exhaust reference
+
+`core/examples/two_cell_counterflow_exhaust_water.json` uses the same reversed cold-side topology,
+but binds the hot ports to a four-species Cantera exhaust material and the cold ports to IF97 water.
+The two cell instances are ordinary `heat_exchanger.material_fluid.dynamic_cell` components; there
+is no distributed-exchanger or HRSG branch in the graph compiler or solver.
+
+Run the steady and transient cases with:
+
+```sh
+./build/thermox_cli solve \
+  --model core/examples/two_cell_counterflow_exhaust_water.json \
+  --case steady
+
+./build/thermox_cli simulate \
+  --model core/examples/two_cell_counterflow_exhaust_water.json \
+  --case heat_up \
+  --end-time 0.1
+```
+
+At the declared steady point, the model transfers approximately 305.6 kW, cools the exhaust from
+about 866.5 K to 598.5 K, and heats water from about 300.0 K to 373.0 K. These values are generated
+by illustrative UA, geometry, holdup, and loss inputs; they are verification results rather than
+equipment predictions or calibration targets.
+
+The service regression checks every declared species at every hot port, monotonic pressure loss on
+both paths, hot/cold duty closure, transient storage derivatives for both cells, and equality of the
+summed stored-energy rate with the graph's net boundary enthalpy flow.

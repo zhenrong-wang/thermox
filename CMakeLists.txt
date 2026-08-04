@@ -169,6 +169,17 @@ if(TARGET thermox_cantera_backend)
             --case heat_up
             --end-time 0.1
     )
+    add_test(NAME platform_distributed_material_fluid_steady_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/two_cell_counterflow_exhaust_water.json
+            --case steady
+    )
+    add_test(NAME platform_distributed_material_fluid_transient_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/two_cell_counterflow_exhaust_water.json
+            --case heat_up
+            --end-time 0.1
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve

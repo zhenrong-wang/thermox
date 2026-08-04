@@ -59,6 +59,10 @@ Regression coverage verifies real Cantera/IF97 service compilation, consistent D
 adaptive integration, exact N2/O2/H2O/CO2 flow conservation, exhaust cooling, water heating, and
 stored-energy closure. The example is an isolated heat-recovery cell, not a calibrated full HRSG.
 
+The [distributed heat-exchanger reference](distributed-heat-exchanger.md#composition-aware-exhaust-reference)
+composes two instances in counterflow and verifies cumulative pressure loss, exact species
+transport, and whole-system steady/transient energy closure.
+
 ## Scope and next extension
 
 The hot gas has no inventory or pressure-wave dynamics; axial conduction, radiation, ambient loss,

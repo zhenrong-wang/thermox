@@ -81,6 +81,9 @@ Implemented in this sprint:
 - A composition-aware steady/transient cell couples a Cantera material stream to a property-backed
   fluid inventory and wall, preserving every declared exhaust species while exchanging heat with
   IF97 water. See [Dynamic material-to-fluid heat exchanger](docs/dynamic-material-fluid-heat-exchanger.md).
+- A declared two-cell counterflow reference composes those mixed-domain cells into a distributed
+  Cantera-exhaust/IF97-water exchanger with cumulative pressure loss and whole-system energy
+  closure. See [Distributed heat exchanger](docs/distributed-heat-exchanger.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

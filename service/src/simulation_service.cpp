@@ -2542,7 +2542,8 @@ TransientSimulationResponse SimulationService::run_transient(
     try {
         const platform::GraphResultEvaluator evaluator(
             document, graph,
-            runtime->impl_->properties);
+            runtime->impl_->properties,
+            runtime->impl_->thermochemistry);
         response.trajectory.reserve(result.trajectory.size());
         for (const auto& sample : result.trajectory) {
             response.trajectory.push_back({

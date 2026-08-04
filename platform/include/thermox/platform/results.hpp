@@ -55,6 +55,12 @@ public:
         const ModelDocument& document,
         const CompiledTransientModelGraph& graph,
         const physics::PropertyPackageRegistry& property_registry);
+    GraphResultEvaluator(
+        const ModelDocument& document,
+        const CompiledTransientModelGraph& graph,
+        const physics::PropertyPackageRegistry& property_registry,
+        const physics::ThermochemistryPackageRegistry&
+            thermochemistry_registry);
     ~GraphResultEvaluator();
     GraphResultEvaluator(GraphResultEvaluator&&) noexcept;
     GraphResultEvaluator& operator=(GraphResultEvaluator&&) noexcept;

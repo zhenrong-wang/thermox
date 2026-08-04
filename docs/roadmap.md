@@ -192,6 +192,9 @@ Delivered:
 14. Composition-aware steady/transient material-to-fluid cell coupling Cantera exhaust to an IF97
     fluid inventory, with species conservation, wall storage, pressure loss, and DAE energy
     closure. ✅
+15. Declared two-cell counterflow Cantera-exhaust/IF97-water exchanger proving mixed-domain spatial
+    composition, exact species transport, cumulative pressure loss, and steady/transient energy
+    closure. ✅
 
 ## Component catalog and modularization foundation
 

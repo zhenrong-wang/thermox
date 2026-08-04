@@ -417,17 +417,19 @@ graph:
 Steady responses contain one `graph`. Each transient trajectory and event sample contains the same
 graph structure; transient primary and internal values also carry `derivative_si_s`. Fluid
 temperature, density, entropy, phase, quality, heat capacities, speed of sound, viscosity, and
-thermal conductivity are derived through the selected property package. Other domains expose their
-canonical primary values without fluid-specific fields.
+thermal conductivity are derived through the selected property package. Material ports expose the
+same thermodynamic fields plus mean molecular weight through the selected thermochemistry package.
+Other domains expose their canonical primary values without thermodynamic fields.
 
-Steady results audit system boundaries directly from registered component/port semantics and graph
-connectivity. Explicit source/sink components declare their boundary role; every unconnected
-directional ordinary-equipment port is also an external boundary. Positive values enter the modeled system.
+Steady and transient results audit system boundaries directly from registered component/port
+semantics and graph connectivity. Explicit source/sink components declare their boundary role;
+every unconnected directional ordinary-equipment port is also an external boundary. Positive
+values enter the modeled system.
 Fluid and material streams contribute mass and enthalpy flow, while heat, shaft, and electrical
 ports contribute energy flow. A nonzero net energy flow is not silently labeled a solver error: it
 may identify modeled conversion losses or an omitted energy carrier that must be reported
-separately. Transient samples intentionally omit this steady audit until accumulation terms are
-included.
+separately. For transient samples, the net boundary energy flow is expected to equal the summed
+instantaneous storage rate rather than zero.
 
 Every steady component with at least two directional energy or material ports also reports
 `net_mass_flow` and/or `net_energy_flow` metrics. The same positive-inward sign convention applies.

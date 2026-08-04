@@ -1056,6 +1056,144 @@ void test_dynamic_cantera_if97_hrsg_cell() {
                 cold_in.primary_values, "h").value_si,
         "dynamic HRSG cell must heat the IF97 water stream");
 }
+
+void test_distributed_cantera_if97_counterflow_exchanger() {
+    thermox::service::SimulationService service;
+    const auto model = read_source_file(
+        "core/examples/two_cell_counterflow_exhaust_water.json");
+
+    thermox::service::SteadySimulationRequest steady_request;
+    steady_request.model_json = model;
+    steady_request.case_id = "steady";
+    const auto steady = service.run_steady(steady_request);
+    require(
+        steady.succeeded() && steady.diagnostics.converged,
+        "distributed Cantera-to-IF97 exchanger must solve: " +
+            steady.error.message);
+
+    const auto& source = require_port_result(
+        steady.graph, "exhaust_source", "outlet");
+    const auto& cell_1_in = require_port_result(
+        steady.graph, "cell_1", "hot_in");
+    const auto& cell_1_out = require_port_result(
+        steady.graph, "cell_1", "hot_out");
+    const auto& cell_2_in = require_port_result(
+        steady.graph, "cell_2", "hot_in");
+    const auto& cell_2_out = require_port_result(
+        steady.graph, "cell_2", "hot_out");
+    const auto& stack = require_port_result(
+        steady.graph, "stack", "inlet");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        const double expected = require_result_value(
+            source.primary_values, species).value_si;
+        for (const auto* port : {
+                 &cell_1_in, &cell_1_out, &cell_2_in,
+                 &cell_2_out, &stack}) {
+            require(
+                std::abs(require_result_value(
+                    port->primary_values, species).value_si -
+                    expected) < 1.0e-10,
+                "distributed exchanger must conserve every exhaust "
+                "species through every cell");
+        }
+    }
+    require(
+        require_result_value(
+            source.primary_values, "p").value_si >
+            require_result_value(
+                cell_1_out.primary_values, "p").value_si &&
+        require_result_value(
+            cell_1_out.primary_values, "p").value_si >
+            require_result_value(
+                cell_2_out.primary_values, "p").value_si,
+        "distributed exchanger hot pressure must fall through both "
+        "cells");
+
+    const auto& water_source = require_port_result(
+        steady.graph, "water_source", "outlet");
+    const auto& cell_2_cold_out = require_port_result(
+        steady.graph, "cell_2", "cold_out");
+    const auto& water_sink = require_port_result(
+        steady.graph, "water_sink", "inlet");
+    const double hot_duty =
+        require_result_value(
+            source.primary_values, "h").value_si -
+        require_result_value(
+            stack.primary_values, "h").value_si;
+    const double cold_duty = require_result_value(
+        water_source.primary_values, "m_dot").value_si * (
+        require_result_value(
+            water_sink.primary_values, "h").value_si -
+        require_result_value(
+            water_source.primary_values, "h").value_si);
+    require(
+        hot_duty > 0.0 && std::abs(hot_duty - cold_duty) < 1.0e-4,
+        "distributed exchanger must close steady hot/cold duty");
+    require(
+        require_result_value(
+            water_source.primary_values, "p").value_si >
+            require_result_value(
+                cell_2_cold_out.primary_values, "p").value_si &&
+        require_result_value(
+            cell_2_cold_out.primary_values, "p").value_si >
+            require_result_value(
+                water_sink.primary_values, "p").value_si,
+        "counterflow water pressure must fall through both cells");
+
+    thermox::service::TransientSimulationRequest transient_request;
+    transient_request.model_json = model;
+    transient_request.case_id = "heat_up";
+    transient_request.solver.end_time = 0.1;
+    transient_request.solver.max_step = 0.05;
+    const auto transient = service.run_transient(transient_request);
+    require(
+        transient.succeeded() && transient.diagnostics.success &&
+            !transient.trajectory.empty(),
+        "distributed Cantera-to-IF97 transient must solve: " +
+            transient.error.message);
+    const auto& final = transient.trajectory.back().graph;
+    const auto& final_stack = require_port_result(
+        final, "stack", "inlet");
+    require(
+        std::isfinite(require_result_value(
+            final_stack.derived_values, "T").value_si),
+        "transient material ports must expose thermochemistry-derived "
+        "state values");
+    double stored_energy_rate = 0.0;
+    constexpr double wall_capacity = 50000.0;
+    for (const auto* cell_id : {"cell_1", "cell_2"}) {
+        const auto& cell = require_component_result(final, cell_id);
+        const auto& cold_energy = require_result_value(
+            cell.internal_values, "cold_total_energy");
+        const auto& wall_temperature = require_result_value(
+            cell.internal_values, "wall_temperature");
+        require(
+            cold_energy.has_derivative &&
+                wall_temperature.has_derivative,
+            "distributed exchanger must expose storage derivatives");
+        stored_energy_rate += cold_energy.derivative_si_s +
+            wall_capacity * wall_temperature.derivative_si_s;
+    }
+    const double boundary_energy_rate = require_result_value(
+        final.system_balances,
+        "net_boundary_energy_flow").value_si;
+    require(
+        std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-4,
+        "distributed transient must close whole-system stored-energy "
+        "rate against boundary enthalpy flow");
+    const auto& final_water_source = require_port_result(
+        final, "water_source", "outlet");
+    const auto& final_water_sink = require_port_result(
+        final, "water_sink", "inlet");
+    require(
+        require_result_value(
+            final_water_sink.primary_values, "h").value_si >
+            require_result_value(
+                final_water_source.primary_values, "h").value_si,
+        "distributed transient must heat the counterflow water path");
+}
 #endif
 
 void test_netl_b31a_steam_stream_property_benchmark() {
@@ -2541,6 +2679,17 @@ void test_transient_service() {
                 "temperature" &&
             store.internal_values.front().has_derivative,
         "transient graph must expose internal state and derivative");
+    const double boundary_energy_rate = require_result_value(
+        response.trajectory.back().graph.system_balances,
+        "net_boundary_energy_flow").value_si;
+    require(
+        std::abs(boundary_energy_rate - 1.0e6) < 1.0e-6 &&
+            std::abs(
+                1.5e6 * store.internal_values.front()
+                    .derivative_si_s -
+                boundary_energy_rate) < 1.0e-3,
+        "transient boundary audit must equal the differential "
+        "storage rate");
 
     const auto json =
         thermox::service::serialize_transient_response_json(response);
@@ -2744,6 +2893,7 @@ int main() {
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_dynamic_cantera_if97_hrsg_cell();
+        test_distributed_cantera_if97_counterflow_exchanger();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();
