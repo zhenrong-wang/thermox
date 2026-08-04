@@ -206,6 +206,9 @@ Delivered:
 19. Signed homogeneous-equilibrium gravity/local-loss transport plus a declaration-only pump-free
     natural-circulation drum/evaporator loop with density-head, reverse-flow contract, momentum,
     phase, species, mass, and energy verification. ✅
+20. Constant-slip two-phase gravity/local-loss transport plus a declaration-only distributed
+    two-cell boiling riser with independent inventory states, inter-cell flow, phase, species,
+    mass, and energy verification. ✅
 
 ## Component catalog and modularization foundation
 

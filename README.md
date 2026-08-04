@@ -101,6 +101,10 @@ Implemented in this sprint:
   hydraulic inertance, resolving dense-liquid downcomer pressure recovery and low-density
   two-phase riser head from registered properties. See
   [Dynamic natural circulation](docs/dynamic-natural-circulation.md).
+- A distributed two-cell boiling riser composes equilibrium inventories with independent
+  constant-slip elevation/loss segments. Vapor quality, cell pressure, inter-cell flow, exhaust
+  cooling, and storage closure evolve together without a boiler-specific solver. See
+  [Distributed two-phase riser](docs/dynamic-distributed-two-phase-riser.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
@@ -529,12 +533,15 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Add multi-signal transient comparison, event/window reductions, and server-side export for
+1. Add regime-spanning finite-volume cells and replaceable drift-flux/flow-regime correlations;
+   the current equilibrium cells and constant-slip pipe deliberately reject phase-boundary
+   crossings.
+2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
-2. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic
+3. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic
    derivatives, while IF97 uses the shared provenance-marked bounded fallback.
-3. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
+4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.
-4. Extend the delivered anchor-aware component homotopy hooks from fixed/fluid-map
+5. Extend the delivered anchor-aware component homotopy hooks from fixed/fluid-map
    turbomachinery, heat exchangers, and the equilibrium combustor to
    composition-coupled material maps and future finite-rate reactor models.

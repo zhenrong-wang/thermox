@@ -1017,6 +1017,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "restriction.fluid.orifice.perfect_gas",
         "restriction.fluid.local_loss.homogeneous_two_phase",
         "pipe.fluid.homogeneous_equilibrium_local_loss",
+        "pipe.fluid.constant_slip_two_phase_local_loss",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",
@@ -2984,6 +2985,117 @@ void test_homogeneous_gravity_pipe_supports_reverse_flow_and_transient() {
     require(initialized.diagnostics.converged,
             "transient gravity-pipe initialization: " +
                 initialized.diagnostics.message);
+}
+
+void test_constant_slip_two_phase_pipe_closes_void_fraction_pressure_balance() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "constant_slip_riser",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "riser",
+      "kind": "pipe.fluid.constant_slip_two_phase_local_loss",
+      "parameters": {
+        "flow_diameter": {"value": 0.1, "unit": "m"},
+        "loss_coefficient": 2.0,
+        "elevation_change": {"value": 5.0, "unit": "m"},
+        "slip_ratio": 2.0
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "steady",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "dynamic",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "single_phase_rejected",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, properties, "steady");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(solved.diagnostics.converged,
+            solved.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return solved.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const double outlet_pressure = value("riser.outlet.p");
+    const double mean_pressure = 0.5 * (1.0e6 + outlet_pressure);
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto state = water->state_ph(mean_pressure, 1.5e6);
+    const auto saturation = water->saturation_p(mean_pressure);
+    require(state.ok() && saturation.ok() &&
+                state.state.phase == thermox::physics::Phase::two_phase,
+            "constant-slip test mean state must be two phase");
+    const double quality = state.state.vapor_quality;
+    const double rho_l = saturation.liquid.density_kg_m3;
+    const double rho_v = saturation.vapor.density_kg_m3;
+    const double alpha = 1.0 /
+        (1.0 + ((1.0 - quality) / quality) *
+            (rho_v / rho_l) * 2.0);
+    const double density = alpha * rho_v + (1.0 - alpha) * rho_l;
+    const double area = std::numbers::pi * 0.1 * 0.1 / 4.0;
+    const double expected_drop =
+        2.0 * 0.2 * 0.2 / (2.0 * density * area * area) +
+        density * 9.80665 * 5.0;
+    require(alpha > 0.0 && alpha < 1.0,
+            "constant-slip closure produces physical void fraction");
+    require_near(1.0e6 - outlet_pressure, expected_drop, 1.0e-5,
+                 "constant-slip riser pressure balance");
+    require_near(value("riser.outlet.m_dot"), 0.2, 1.0e-12,
+                 "constant-slip riser conserves mass");
+    require_near(value("riser.outlet.h"), 1.5e6, 1.0e-8,
+                 "constant-slip riser transports enthalpy");
+
+    const auto transient =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, properties, "dynamic");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            transient.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            "transient constant-slip initialization: " +
+                initialized.diagnostics.message);
+
+    const auto incompatible =
+        thermox::platform::compile_model_graph(
+            document, registry, properties,
+            "single_phase_rejected");
+    const auto incompatible_result =
+        thermox::solve_newton(incompatible.problem);
+    require(!incompatible_result.diagnostics.converged,
+            "constant-slip pipe must reject a single-phase mean state");
 }
 
 void test_darcy_weisbach_pipe_uses_transport_properties() {
@@ -7236,6 +7348,7 @@ int main() {
         test_actuated_valve_composes_with_dynamic_control_lag();
         test_return_bend_fixed_loss_uses_fluid_density();
         test_homogeneous_gravity_pipe_supports_reverse_flow_and_transient();
+        test_constant_slip_two_phase_pipe_closes_void_fraction_pressure_balance();
         test_darcy_weisbach_pipe_uses_transport_properties();
         test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();
         test_equilibrium_flash_separator_closes_phase_split();

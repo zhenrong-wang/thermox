@@ -1,0 +1,194 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_distributed_two_phase_riser",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "materials": [{
+      "id": "exhaust_gas",
+      "backend": "cantera",
+      "mechanism": "gri30.yaml",
+      "phase": "gri30",
+      "species": ["N2", "O2", "H2O", "CO2"]
+    }],
+    "components": [{
+      "id": "exhaust_source",
+      "kind": "source.material.boundary",
+      "materials": {"outlet": "exhaust_gas"}
+    }, {
+      "id": "lower_cell",
+      "kind": "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
+      "parameters": {
+        "fluid_volume": {"value": 1.0, "unit": "m3"},
+        "wall_thermal_capacity": {"value": 75.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "cold_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 4.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "lower_riser",
+      "kind": "pipe.fluid.constant_slip_two_phase_local_loss",
+      "parameters": {
+        "flow_diameter": {"value": 50.0, "unit": "mm"},
+        "loss_coefficient": 50.0,
+        "elevation_change": {"value": 5.0, "unit": "m"},
+        "slip_ratio": 1.5
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "upper_cell",
+      "kind": "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
+      "parameters": {
+        "fluid_volume": {"value": 1.0, "unit": "m3"},
+        "wall_thermal_capacity": {"value": 75.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "cold_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 4.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "upper_riser",
+      "kind": "pipe.fluid.constant_slip_two_phase_local_loss",
+      "parameters": {
+        "flow_diameter": {"value": 50.0, "unit": "mm"},
+        "loss_coefficient": 50.0,
+        "elevation_change": {"value": 5.0, "unit": "m"},
+        "slip_ratio": 2.0
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "stack",
+      "kind": "sink.material.boundary",
+      "materials": {"inlet": "exhaust_gas"}
+    }, {
+      "id": "feed",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "outlet",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "gas_to_lower", "kind": "material_link",
+      "from": "exhaust_source.outlet", "to": "lower_cell.hot_in"
+    }, {
+      "id": "gas_between_cells", "kind": "material_link",
+      "from": "lower_cell.hot_out", "to": "upper_cell.hot_in"
+    }, {
+      "id": "gas_to_stack", "kind": "material_link",
+      "from": "upper_cell.hot_out", "to": "stack.inlet"
+    }, {
+      "id": "feed_to_lower", "kind": "fluid_link",
+      "from": "feed.outlet", "to": "lower_cell.cold_in"
+    }, {
+      "id": "lower_to_riser", "kind": "fluid_link",
+      "from": "lower_cell.cold_out", "to": "lower_riser.inlet"
+    }, {
+      "id": "riser_to_upper", "kind": "fluid_link",
+      "from": "lower_riser.outlet", "to": "upper_cell.cold_in"
+    }, {
+      "id": "upper_to_riser", "kind": "fluid_link",
+      "from": "upper_cell.cold_out", "to": "upper_riser.inlet"
+    }, {
+      "id": "riser_to_outlet", "kind": "fluid_link",
+      "from": "upper_riser.outlet", "to": "outlet.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "heatup_segment",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "exhaust_source.outlet.m_dot[N2]": 0.75316,
+      "exhaust_source.outlet.m_dot[O2]": 0.14897,
+      "exhaust_source.outlet.m_dot[H2O]": 0.04406,
+      "exhaust_source.outlet.m_dot[CO2]": 0.05381,
+      "exhaust_source.outlet.p": {"value": 1.2, "unit": "bar"},
+      "exhaust_source.outlet.h": {"value": -444.67, "unit": "kJ/kg"},
+      "feed.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "feed.outlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "outlet.inlet.m_dot": {"value": 0.0498, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "lower_cell.hot_in.m_dot[N2]": 0.75316,
+      "lower_cell.hot_in.m_dot[O2]": 0.14897,
+      "lower_cell.hot_in.m_dot[H2O]": 0.04406,
+      "lower_cell.hot_in.m_dot[CO2]": 0.05381,
+      "lower_cell.hot_in.p": {"value": 1.2, "unit": "bar"},
+      "lower_cell.hot_in.h": {"value": -444.67, "unit": "kJ/kg"},
+      "lower_cell.hot_out.m_dot[N2]": 0.75316,
+      "lower_cell.hot_out.m_dot[O2]": 0.14897,
+      "lower_cell.hot_out.m_dot[H2O]": 0.04406,
+      "lower_cell.hot_out.m_dot[CO2]": 0.05381,
+      "lower_cell.hot_out.p": {"value": 1.195, "unit": "bar"},
+      "lower_cell.hot_out.h": {"value": -500.0, "unit": "kJ/kg"},
+      "upper_cell.hot_in.m_dot[N2]": 0.75316,
+      "upper_cell.hot_in.m_dot[O2]": 0.14897,
+      "upper_cell.hot_in.m_dot[H2O]": 0.04406,
+      "upper_cell.hot_in.m_dot[CO2]": 0.05381,
+      "upper_cell.hot_in.p": {"value": 1.195, "unit": "bar"},
+      "upper_cell.hot_in.h": {"value": -500.0, "unit": "kJ/kg"},
+      "upper_cell.hot_out.m_dot[N2]": 0.75316,
+      "upper_cell.hot_out.m_dot[O2]": 0.14897,
+      "upper_cell.hot_out.m_dot[H2O]": 0.04406,
+      "upper_cell.hot_out.m_dot[CO2]": 0.05381,
+      "upper_cell.hot_out.p": {"value": 1.19, "unit": "bar"},
+      "upper_cell.hot_out.h": {"value": -550.0, "unit": "kJ/kg"},
+      "stack.inlet.m_dot[N2]": 0.75316,
+      "stack.inlet.m_dot[O2]": 0.14897,
+      "stack.inlet.m_dot[H2O]": 0.04406,
+      "stack.inlet.m_dot[CO2]": 0.05381,
+      "stack.inlet.p": {"value": 1.19, "unit": "bar"},
+      "stack.inlet.h": {"value": -550.0, "unit": "kJ/kg"},
+
+      "feed.outlet.p": {"value": 2.6, "unit": "bar"},
+      "lower_cell.cold_in.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "lower_cell.cold_in.p": {"value": 2.6, "unit": "bar"},
+      "lower_cell.cold_in.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "lower_cell.cold_out.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "lower_cell.cold_out.p": {"value": 2.6, "unit": "bar"},
+      "lower_cell.cold_out.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "lower_cell.fluid_mass": 3.2706715177775916,
+      "lower_cell.fluid_total_energy": 4646007.276666388,
+      "lower_cell.fluid_pressure": {"value": 2.6, "unit": "bar"},
+      "lower_cell.vapor_quality": 0.44048240505863,
+      "lower_cell.wall_temperature": {"value": 575.0, "unit": "K"},
+
+      "lower_riser.inlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "lower_riser.inlet.p": {"value": 2.6, "unit": "bar"},
+      "lower_riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "lower_riser.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "lower_riser.outlet.p": {"value": 2.58, "unit": "bar"},
+      "lower_riser.outlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+
+      "upper_cell.cold_in.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "upper_cell.cold_in.p": {"value": 2.58, "unit": "bar"},
+      "upper_cell.cold_in.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "upper_cell.cold_out.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "upper_cell.cold_out.p": {"value": 2.58, "unit": "bar"},
+      "upper_cell.cold_out.h": {"value": 1600.0, "unit": "kJ/kg"},
+      "upper_cell.fluid_mass": 2.939478878836972,
+      "upper_cell.fluid_total_energy": 4445166.206139155,
+      "upper_cell.fluid_pressure": {"value": 2.58, "unit": "bar"},
+      "upper_cell.vapor_quality": 0.486745390230474,
+      "upper_cell.wall_temperature": {"value": 550.0, "unit": "K"},
+
+      "upper_riser.inlet.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "upper_riser.inlet.p": {"value": 2.58, "unit": "bar"},
+      "upper_riser.inlet.h": {"value": 1600.0, "unit": "kJ/kg"},
+      "upper_riser.outlet.m_dot": {"value": 0.0498, "unit": "kg/s"},
+      "upper_riser.outlet.p": {"value": 2.56, "unit": "bar"},
+      "upper_riser.outlet.h": {"value": 1600.0, "unit": "kJ/kg"},
+      "outlet.inlet.p": {"value": 2.56, "unit": "bar"},
+      "outlet.inlet.h": {"value": 1600.0, "unit": "kJ/kg"}
+    }
+  }]
+}

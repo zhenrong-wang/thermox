@@ -204,6 +204,12 @@ if(TARGET thermox_cantera_backend)
             --case buoyancy_segment
             --end-time 0.1
     )
+    add_test(NAME platform_dynamic_distributed_two_phase_riser_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_distributed_two_phase_riser.json
+            --case heatup_segment
+            --end-time 0.1
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve
