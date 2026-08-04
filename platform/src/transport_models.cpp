@@ -65,7 +65,9 @@ public:
               "junction.fluid.mixer.two_inlet",
               {{"inlet_a", "fluid", "in"},
                {"inlet_b", "fluid", "in"},
-               {"outlet", "fluid", "out"}})) {}
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.supports_transient = true;
+    }
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -145,6 +147,85 @@ public:
             1.0e8);
     }
 
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet_a");
+        if (properties !=
+                require_property_package(context, "inlet_b") ||
+            properties !=
+                require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' mixer ports must use the same medium");
+        }
+        const auto mass_a =
+            require_port_variable(context, "inlet_a.m_dot");
+        const auto pressure_a =
+            require_port_variable(context, "inlet_a.p");
+        const auto enthalpy_a =
+            require_port_variable(context, "inlet_a.h");
+        const auto mass_b =
+            require_port_variable(context, "inlet_b.m_dot");
+        const auto pressure_b =
+            require_port_variable(context, "inlet_b.p");
+        const auto enthalpy_b =
+            require_port_variable(context, "inlet_b.h");
+        const auto mass_out =
+            require_port_variable(context, "outlet.m_dot");
+        const auto pressure_out =
+            require_port_variable(context, "outlet.p");
+        const auto enthalpy_out =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{mass_out, 1.0, 0.0}, {mass_a, -1.0, 0.0},
+             {mass_b, -1.0, 0.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_inlet_a",
+            {{pressure_out, 1.0, 0.0},
+             {pressure_a, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "pressure_inlet_b",
+            {{pressure_out, 1.0, 0.0},
+             {pressure_b, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_sparse_equation(
+            prefix + "energy_balance",
+            {mass_a, enthalpy_a, mass_b, enthalpy_b,
+             mass_out, enthalpy_out},
+            [mass_a, enthalpy_a, mass_b, enthalpy_b,
+             mass_out, enthalpy_out](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                residual =
+                    x.at(mass_out) * x.at(enthalpy_out) -
+                    x.at(mass_a) * x.at(enthalpy_a) -
+                    x.at(mass_b) * x.at(enthalpy_b);
+                jacobian.push_back(
+                    {mass_out, x.at(enthalpy_out), 0.0});
+                jacobian.push_back(
+                    {enthalpy_out, x.at(mass_out), 0.0});
+                jacobian.push_back(
+                    {mass_a, -x.at(enthalpy_a), 0.0});
+                jacobian.push_back(
+                    {enthalpy_a, -x.at(mass_a), 0.0});
+                jacobian.push_back(
+                    {mass_b, -x.at(enthalpy_b), 0.0});
+                jacobian.push_back(
+                    {enthalpy_b, -x.at(mass_b), 0.0});
+                return EvaluationStatus::success();
+            },
+            1.0e8);
+    }
+
 private:
     ComponentModelDescriptor descriptor_;
 };
@@ -156,7 +237,9 @@ public:
               "junction.fluid.splitter.two_outlet",
               {{"inlet", "fluid", "in"},
                {"outlet_a", "fluid", "out"},
-               {"outlet_b", "fluid", "out"}})) {}
+               {"outlet_b", "fluid", "out"}})) {
+        descriptor_.supports_transient = true;
+    }
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -216,6 +299,153 @@ public:
         system.add_linear_equation(
             prefix + "enthalpy_outlet_b",
             {{enthalpy_b, 1.0}, {enthalpy_in, -1.0}},
+            0.0, 100000.0);
+    }
+
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+                require_property_package(context, "outlet_a") ||
+            properties !=
+                require_property_package(context, "outlet_b")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' splitter ports must use the same medium");
+        }
+        const auto mass_in =
+            require_port_variable(context, "inlet.m_dot");
+        const auto pressure_in =
+            require_port_variable(context, "inlet.p");
+        const auto enthalpy_in =
+            require_port_variable(context, "inlet.h");
+        const auto mass_a =
+            require_port_variable(context, "outlet_a.m_dot");
+        const auto pressure_a =
+            require_port_variable(context, "outlet_a.p");
+        const auto enthalpy_a =
+            require_port_variable(context, "outlet_a.h");
+        const auto mass_b =
+            require_port_variable(context, "outlet_b.m_dot");
+        const auto pressure_b =
+            require_port_variable(context, "outlet_b.p");
+        const auto enthalpy_b =
+            require_port_variable(context, "outlet_b.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{mass_in, 1.0, 0.0}, {mass_a, -1.0, 0.0},
+             {mass_b, -1.0, 0.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_outlet_a",
+            {{pressure_a, 1.0, 0.0},
+             {pressure_in, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "pressure_outlet_b",
+            {{pressure_b, 1.0, 0.0},
+             {pressure_in, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "enthalpy_outlet_a",
+            {{enthalpy_a, 1.0, 0.0},
+             {enthalpy_in, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "enthalpy_outlet_b",
+            {{enthalpy_b, 1.0, 0.0},
+             {enthalpy_in, -1.0, 0.0}},
+            0.0, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class FluidHydraulicInertanceModel final : public ComponentModel {
+public:
+    FluidHydraulicInertanceModel()
+        : descriptor_(make_descriptor(
+              "pipe.fluid.hydraulic_inertance",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.template_kind = "pipe.fluid";
+        descriptor_.display_name = "Fluid hydraulic inertance";
+        descriptor_.category = "Fluid transport";
+        descriptor_.model_name = "Lumped one-dimensional momentum storage";
+        descriptor_.parameters = {
+            {"length", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"flow_diameter", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+        };
+        descriptor_.supports_steady = false;
+        descriptor_.supports_transient = true;
+        descriptor_.transient_variables = {
+            {"outlet", "m_dot", DaeVariableKind::differential, 1.0},
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext&,
+        EquationSystemBuilder&) const override {
+        throw std::logic_error(
+            "fluid hydraulic inertance is a transient-only component");
+    }
+
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const double length =
+            required_parameter(context.component, "length");
+        const double diameter =
+            required_parameter(context.component, "flow_diameter");
+        const double area = std::numbers::pi * diameter * diameter /
+            4.0;
+        const double inertance = length / area;
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0, 0.0}, {inlet_m, -1.0, 0.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "isenthalpic_transport",
+            {{outlet_h, 1.0, 0.0}, {inlet_h, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "momentum_accumulation",
+            {{inlet_p, 1.0, 0.0}, {outlet_p, -1.0, 0.0},
+             {outlet_m, 0.0, -inertance}},
             0.0, 100000.0);
     }
 
@@ -1762,6 +1992,8 @@ void register_transport_component_models(
         std::make_shared<TwoInletFluidMixerModel>());
     registry.register_model(
         std::make_shared<TwoOutletFluidSplitterModel>());
+    registry.register_model(
+        std::make_shared<FluidHydraulicInertanceModel>());
     registry.register_model(
         std::make_shared<
             IsenthalpicPressureRatioValveModel>());

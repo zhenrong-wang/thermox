@@ -1,0 +1,205 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_forced_circulation_evaporator",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "materials": [{
+      "id": "exhaust_gas",
+      "backend": "cantera",
+      "mechanism": "gri30.yaml",
+      "phase": "gri30",
+      "species": ["N2", "O2", "H2O", "CO2"]
+    }],
+    "components": [{
+      "id": "exhaust_source",
+      "kind": "source.material.boundary",
+      "materials": {"outlet": "exhaust_gas"}
+    }, {
+      "id": "evaporator",
+      "kind": "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
+      "parameters": {
+        "fluid_volume": {"value": 1.0, "unit": "m3"},
+        "wall_thermal_capacity": {"value": 100.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "cold_side_UA": {"value": 0.5, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 8.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "stack",
+      "kind": "sink.material.boundary",
+      "materials": {"inlet": "exhaust_gas"}
+    }, {
+      "id": "circulation_pump",
+      "kind": "pump.fluid.isentropic_efficiency",
+      "parameters": {"pressure_ratio": 1.0282776349614395, "eta_is": 0.75},
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "circulation_inertance",
+      "kind": "pipe.fluid.hydraulic_inertance",
+      "parameters": {
+        "length": {"value": 10.0, "unit": "m"},
+        "flow_diameter": {"value": 50.0, "unit": "mm"}
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "riser_loss",
+      "kind": "restriction.fluid.local_loss.homogeneous_two_phase",
+      "parameters": {
+        "flow_diameter": {"value": 50.0, "unit": "mm"},
+        "loss_coefficient": 10.5
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "separator_drum",
+      "kind": "drum.fluid.equilibrium_two_phase",
+      "parameters": {
+        "volume": {"value": 0.5, "unit": "m3"},
+        "vessel_height": {"value": 1.5, "unit": "m"}
+      },
+      "media": {
+        "inlet": "water",
+        "vapor_outlet": "water",
+        "liquid_outlet": "water"
+      }
+    }, {
+      "id": "steam_sink",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "gas_to_evaporator",
+      "kind": "material_link",
+      "from": "exhaust_source.outlet",
+      "to": "evaporator.hot_in"
+    }, {
+      "id": "gas_to_stack",
+      "kind": "material_link",
+      "from": "evaporator.hot_out",
+      "to": "stack.inlet"
+    }, {
+      "id": "drum_to_pump",
+      "kind": "fluid_link",
+      "from": "separator_drum.liquid_outlet",
+      "to": "circulation_pump.inlet"
+    }, {
+      "id": "pump_to_evaporator",
+      "kind": "fluid_link",
+      "from": "circulation_pump.outlet",
+      "to": "circulation_inertance.inlet"
+    }, {
+      "id": "inertance_to_evaporator",
+      "kind": "fluid_link",
+      "from": "circulation_inertance.outlet",
+      "to": "evaporator.cold_in"
+    }, {
+      "id": "evaporator_to_riser",
+      "kind": "fluid_link",
+      "from": "evaporator.cold_out",
+      "to": "riser_loss.inlet"
+    }, {
+      "id": "riser_to_drum",
+      "kind": "fluid_link",
+      "from": "riser_loss.outlet",
+      "to": "separator_drum.inlet"
+    }, {
+      "id": "drum_to_steam",
+      "kind": "fluid_link",
+      "from": "separator_drum.vapor_outlet",
+      "to": "steam_sink.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "circulation_segment",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "exhaust_source.outlet.m_dot[N2]": {"value": 0.75316, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[O2]": {"value": 0.14897, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[H2O]": {"value": 0.04406, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[CO2]": {"value": 0.05381, "unit": "kg/s"},
+      "exhaust_source.outlet.p": {"value": 1.2, "unit": "bar"},
+      "exhaust_source.outlet.h": {"value": -444.67, "unit": "kJ/kg"},
+      "steam_sink.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "circulation_pump.shaft.omega": 314.1592653589793,
+      "separator_drum.heat.Q_dot": {"value": 0.0, "unit": "kW"}
+    },
+    "initial_guesses": {
+      "evaporator.hot_in.m_dot[N2]": 0.75316,
+      "evaporator.hot_in.m_dot[O2]": 0.14897,
+      "evaporator.hot_in.m_dot[H2O]": 0.04406,
+      "evaporator.hot_in.m_dot[CO2]": 0.05381,
+      "evaporator.hot_in.p": {"value": 1.2, "unit": "bar"},
+      "evaporator.hot_in.h": {"value": -444.67, "unit": "kJ/kg"},
+      "evaporator.hot_out.m_dot[N2]": 0.75316,
+      "evaporator.hot_out.m_dot[O2]": 0.14897,
+      "evaporator.hot_out.m_dot[H2O]": 0.04406,
+      "evaporator.hot_out.m_dot[CO2]": 0.05381,
+      "evaporator.hot_out.p": {"value": 1.19, "unit": "bar"},
+      "evaporator.hot_out.h": {"value": -520.0, "unit": "kJ/kg"},
+      "evaporator.cold_in.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "evaporator.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "evaporator.cold_in.h": {"value": 505.0, "unit": "kJ/kg"},
+      "evaporator.cold_out.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "evaporator.cold_out.p": {"value": 2.0, "unit": "bar"},
+      "evaporator.cold_out.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "evaporator.fluid_mass": 2.4936494821191739,
+      "evaporator.fluid_total_energy": {"value": 3.540474223178761, "unit": "MJ"},
+      "evaporator.fluid_pressure": {"value": 2.0, "unit": "bar"},
+      "evaporator.vapor_quality": 0.45209637102333294,
+      "evaporator.wall_temperature": {"value": 550.0, "unit": "K"},
+
+      "circulation_pump.inlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "circulation_pump.inlet.p": {"value": 1.945, "unit": "bar"},
+      "circulation_pump.inlet.h": {"value": 504.7, "unit": "kJ/kg"},
+      "circulation_pump.outlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "circulation_pump.outlet.p": {"value": 2.0, "unit": "bar"},
+      "circulation_pump.outlet.h": {"value": 505.0, "unit": "kJ/kg"},
+      "circulation_pump.shaft.W_dot": {"value": 0.03, "unit": "kW"},
+
+      "circulation_inertance.inlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "circulation_inertance.inlet.p": {"value": 2.0, "unit": "bar"},
+      "circulation_inertance.inlet.h": {"value": 505.0, "unit": "kJ/kg"},
+      "circulation_inertance.outlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "circulation_inertance.outlet.p": {"value": 2.0, "unit": "bar"},
+      "circulation_inertance.outlet.h": {"value": 505.0, "unit": "kJ/kg"},
+
+      "riser_loss.inlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "riser_loss.inlet.p": {"value": 2.0, "unit": "bar"},
+      "riser_loss.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "riser_loss.outlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "riser_loss.outlet.p": {"value": 1.945, "unit": "bar"},
+      "riser_loss.outlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+
+      "separator_drum.inlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "separator_drum.inlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "separator_drum.vapor_outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "separator_drum.vapor_outlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.vapor_outlet.h": {"value": 2706.0, "unit": "kJ/kg"},
+      "separator_drum.liquid_outlet.m_dot": {"value": 0.10, "unit": "kg/s"},
+      "separator_drum.liquid_outlet.p": {"value": 1.945, "unit": "bar"},
+      "separator_drum.liquid_outlet.h": {"value": 504.7, "unit": "kJ/kg"},
+      "separator_drum.heat.T": {"value": 393.36, "unit": "K"},
+      "separator_drum.total_mass": 5.585,
+      "separator_drum.total_internal_energy": {"value": 3.90, "unit": "MJ"},
+      "separator_drum.pressure": {"value": 1.945, "unit": "bar"},
+      "separator_drum.vapor_quality": 0.10,
+      "separator_drum.liquid_level": {"value": 8.0, "unit": "mm"},
+
+      "stack.inlet.m_dot[N2]": 0.75316,
+      "stack.inlet.m_dot[O2]": 0.14897,
+      "stack.inlet.m_dot[H2O]": 0.04406,
+      "stack.inlet.m_dot[CO2]": 0.05381,
+      "stack.inlet.p": {"value": 1.19, "unit": "bar"},
+      "stack.inlet.h": {"value": -520.0, "unit": "kJ/kg"},
+      "steam_sink.inlet.p": {"value": 1.945, "unit": "bar"},
+      "steam_sink.inlet.h": {"value": 2706.0, "unit": "kJ/kg"}
+    }
+  }]
+}

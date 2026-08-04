@@ -133,6 +133,34 @@ void test_consistent_initial_conditions_for_ode() {
                  "ODE consistent initial derivative");
 }
 
+void test_singular_initialization_names_unresolved_unknown() {
+    thermox::DaeProblem problem;
+    problem.variable_names = {"pressure", "unresolved_flow"};
+    problem.residual_names = {"constraint_a", "constraint_b"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::algebraic,
+        thermox::DaeVariableKind::algebraic};
+    problem.initial_state = {1.0, 1.0};
+    problem.initial_derivative = {0.0, 0.0};
+    problem.residual = [](
+        double, const std::vector<double>& state,
+        const std::vector<double>&,
+        std::vector<double>& residual) {
+        residual[0] = state[0] + state[1] - 1.0;
+        residual[1] = 2.0 * state[0] + 2.0 * state[1] - 3.0;
+        return thermox::EvaluationStatus::success();
+    };
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(problem, 0.0);
+    require(!initialized.diagnostics.converged,
+            "dependent initialization equations must fail");
+    require(
+        initialized.diagnostics.message.find("unresolved_flow") !=
+            std::string::npos,
+        "singular initialization diagnostic must name the unresolved "
+        "unknown: " + initialized.diagnostics.message);
+}
+
 void test_adaptive_dae_integration() {
     auto problem = make_decay_problem();
     problem.events.push_back(thermox::DaeEvent{
@@ -239,6 +267,7 @@ int main() {
         test_dae_equation_system_builder();
         test_dae_equation_system_builder_rejects_non_square_system();
         test_consistent_initial_conditions_for_ode();
+        test_singular_initialization_names_unresolved_unknown();
         test_adaptive_dae_integration();
         test_index_one_dae_consistent_initialization_and_integration();
         test_terminal_event_stops_integration();

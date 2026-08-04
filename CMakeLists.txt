@@ -192,6 +192,12 @@ if(TARGET thermox_cantera_backend)
             --case startup_segment
             --end-time 0.1
     )
+    add_test(NAME platform_dynamic_forced_circulation_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_forced_circulation_evaporator.json
+            --case circulation_segment
+            --end-time 0.1
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve

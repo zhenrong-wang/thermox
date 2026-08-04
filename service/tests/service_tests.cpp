@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 66,
+        response.components.size() == 67,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -406,6 +406,39 @@ void test_catalog_discovery() {
             two_phase_loss->parameters.size() == 2,
         "catalog must expose the homogeneous two-phase hydraulic "
         "impedance contract");
+    const auto hydraulic_inertance = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "pipe.fluid.hydraulic_inertance";
+        });
+    require(
+        hydraulic_inertance != response.components.end() &&
+            !hydraulic_inertance->supports_steady &&
+            hydraulic_inertance->supports_transient &&
+            hydraulic_inertance->parameters.size() == 2,
+        "catalog must expose lumped hydraulic momentum storage");
+    const auto fluid_pump = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "pump.fluid.isentropic_efficiency";
+        });
+    const auto fluid_mixer = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "junction.fluid.mixer.two_inlet";
+        });
+    require(
+        fluid_pump != response.components.end() &&
+            fluid_pump->supports_steady &&
+            fluid_pump->supports_transient &&
+            fluid_mixer != response.components.end() &&
+            fluid_mixer->supports_steady &&
+            fluid_mixer->supports_transient,
+        "catalog must expose quasi-steady pump and mixer models "
+        "inside transient networks");
     const auto rotor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -1550,6 +1583,117 @@ void test_composed_dynamic_single_pressure_hrsg() {
         std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-2,
         "all HRSG fluid, drum, and wall storage rates must close "
         "against boundary enthalpy flow");
+}
+
+void test_dynamic_forced_circulation_evaporator() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/dynamic_forced_circulation_evaporator.json");
+    request.case_id = "circulation_segment";
+    request.solver.end_time = 0.1;
+    request.solver.max_step = 0.05;
+    const auto response = service.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.trajectory.size() > 1,
+        "forced-circulation evaporator must solve: " +
+            response.error.message);
+
+    const auto& final = response.trajectory.back().graph;
+    const auto& source = require_port_result(
+        final, "exhaust_source", "outlet");
+    const auto& stack = require_port_result(
+        final, "stack", "inlet");
+    require(
+        require_result_value(
+            source.derived_values, "T").value_si >
+            require_result_value(
+                stack.derived_values, "T").value_si,
+        "circulation evaporator must cool the exhaust stream");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        require(
+            std::abs(require_result_value(
+                source.primary_values, species).value_si -
+                require_result_value(
+                    stack.primary_values, species).value_si) <
+                1.0e-10,
+            "circulation evaporator must conserve each exhaust "
+            "species");
+    }
+
+    const auto& pump_in = require_port_result(
+        final, "circulation_pump", "inlet");
+    const auto& pump_out = require_port_result(
+        final, "circulation_pump", "outlet");
+    const auto& inertance_in = require_port_result(
+        final, "circulation_inertance", "inlet");
+    const auto& inertance_out = require_port_result(
+        final, "circulation_inertance", "outlet");
+    const auto& riser_in = require_port_result(
+        final, "riser_loss", "inlet");
+    const auto& riser_out = require_port_result(
+        final, "riser_loss", "outlet");
+    const auto& flow = require_result_value(
+        inertance_out.primary_values, "m_dot");
+    require(
+        require_result_value(
+            pump_out.primary_values, "p").value_si >
+            require_result_value(
+                pump_in.primary_values, "p").value_si &&
+            require_result_value(
+                inertance_in.primary_values, "p").value_si >
+            require_result_value(
+                inertance_out.primary_values, "p").value_si &&
+            require_result_value(
+                riser_in.primary_values, "p").value_si >
+            require_result_value(
+                riser_out.primary_values, "p").value_si &&
+            flow.value_si > 0.0 && flow.has_derivative &&
+            flow.derivative_si_s > 0.0,
+        "pump head must drive an accelerating positive loop flow "
+        "through momentum storage and two-phase resistance");
+    require(
+        pump_in.phase == "two_phase" || pump_in.phase == "liquid",
+        "drum liquid return must remain on the liquid saturation "
+        "boundary");
+    require(
+        riser_in.phase == "two_phase" &&
+            riser_out.phase == "two_phase",
+        "the evaporator riser must transport a two-phase mixture");
+
+    const auto& evaporator = require_component_result(
+        final, "evaporator");
+    const auto& drum = require_component_result(
+        final, "separator_drum");
+    const double stored_mass_rate = require_result_value(
+        evaporator.internal_values,
+        "fluid_mass").derivative_si_s + require_result_value(
+        drum.internal_values, "total_mass").derivative_si_s;
+    require(
+        std::abs(stored_mass_rate) < 2.0e-10 &&
+            std::abs(require_result_value(
+                final.system_balances,
+                "net_boundary_mass_flow").value_si) < 1.0e-12,
+        "closed circulation loop must conserve combined water mass");
+    const double stored_energy_rate = require_result_value(
+        evaporator.internal_values,
+        "fluid_total_energy").derivative_si_s +
+        100000.0 * require_result_value(
+            evaporator.internal_values,
+            "wall_temperature").derivative_si_s +
+        require_result_value(
+            drum.internal_values,
+            "total_internal_energy").derivative_si_s;
+    const double boundary_energy_rate = require_result_value(
+        final.system_balances,
+        "net_boundary_energy_flow").value_si;
+    require(
+        std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-2,
+        "circulation-loop fluid, drum, and wall storage must close "
+        "against exhaust heat and pump-work boundaries");
 }
 #endif
 
@@ -3254,6 +3398,7 @@ int main() {
         test_distributed_cantera_if97_counterflow_exchanger();
         test_dynamic_equilibrium_two_phase_material_fluid_cell();
         test_composed_dynamic_single_pressure_hrsg();
+        test_dynamic_forced_circulation_evaporator();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();

@@ -200,6 +200,9 @@ Delivered:
 17. Homogeneous-equilibrium two-phase hydraulic impedance plus a declaration-only dynamic
     single-pressure HRSG combining economizer, evaporator, separator drum, and superheater with
     whole-system mass/energy and exhaust-species audits. ✅
+18. Generic hydraulic-inertance momentum storage, quasi-steady fixed-efficiency fluid
+    turbomachinery and junctions in transient graphs, plus a declaration-only forced-circulation
+    drum/evaporator loop with hydraulic, phase, species, mass, and energy audits. ✅
 
 ## Component catalog and modularization foundation
 

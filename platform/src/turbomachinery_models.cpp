@@ -51,6 +51,7 @@ ComponentModelDescriptor make_descriptor(
     out.required_property_capabilities = {
         physics::PropertyCapability::state_ph,
         physics::PropertyCapability::state_ps};
+    out.supports_transient = true;
     return out;
 }
 
@@ -61,6 +62,7 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
     auto out = make_descriptor(
         std::move(kind), std::move(shaft_direction));
     out.version = "2.0.0";
+    out.supports_transient = false;
     out.model_name = variable_geometry
         ? "Variable-geometry performance map"
         : "Performance map";
@@ -436,6 +438,119 @@ void add_turbomachinery_equations(
         1.0e6);
 }
 
+void add_transient_turbomachinery_equations(
+    const ComponentCompileContext& context,
+    DaeEquationSystemBuilder& system,
+    bool compressor) {
+    const double pressure_ratio =
+        required_parameter(context.component, "pressure_ratio");
+    const double eta_is =
+        required_parameter(context.component, "eta_is");
+    const auto properties =
+        require_property_package(context, "inlet");
+    if (properties != require_property_package(context, "outlet")) {
+        throw std::invalid_argument(
+            "component '" + context.component.id +
+            "' inlet and outlet must use the same medium");
+    }
+
+    const auto inlet_m =
+        require_port_variable(context, "inlet.m_dot");
+    const auto inlet_p =
+        require_port_variable(context, "inlet.p");
+    const auto inlet_h =
+        require_port_variable(context, "inlet.h");
+    const auto outlet_m =
+        require_port_variable(context, "outlet.m_dot");
+    const auto outlet_p =
+        require_port_variable(context, "outlet.p");
+    const auto outlet_h =
+        require_port_variable(context, "outlet.h");
+    const auto shaft_w =
+        require_port_variable(context, "shaft.W_dot");
+    const std::string prefix =
+        "component." + context.component.id + ".";
+
+    system.add_linear_equation(
+        prefix + "mass_continuity",
+        {{outlet_m, 1.0, 0.0}, {inlet_m, -1.0, 0.0}},
+        0.0, 100.0);
+    system.add_linear_equation(
+        prefix + "pressure_ratio",
+        compressor
+            ? std::vector<DaeLinearTerm>{
+                  {outlet_p, 1.0, 0.0},
+                  {inlet_p, -pressure_ratio, 0.0}}
+            : std::vector<DaeLinearTerm>{
+                  {inlet_p, 1.0, 0.0},
+                  {outlet_p, -pressure_ratio, 0.0}},
+        0.0, 100000.0 * pressure_ratio);
+    const auto efficiency_variables = std::vector<std::size_t>{
+        inlet_p, inlet_h, outlet_p, outlet_h};
+    const auto evaluate_efficiency =
+        [properties, compressor, eta_is, inlet_p, inlet_h,
+         outlet_p, outlet_h](
+            const std::vector<double>& x, double& residual) {
+            const auto inlet = properties->state_ph(
+                x.at(inlet_p), x.at(inlet_h));
+            if (!inlet.ok()) return property_failure(inlet);
+            const auto isentropic = properties->state_ps(
+                x.at(outlet_p), inlet.state.entropy_j_kg_k);
+            if (!isentropic.ok()) return property_failure(isentropic);
+            const double ideal_change =
+                isentropic.state.enthalpy_j_kg - x.at(inlet_h);
+            residual = x.at(outlet_h) - x.at(inlet_h) -
+                (compressor ? ideal_change / eta_is
+                            : eta_is * ideal_change);
+            return EvaluationStatus::success();
+        };
+    system.add_sparse_equation(
+        prefix + "isentropic_efficiency",
+        efficiency_variables,
+        [evaluate_efficiency, efficiency_variables](
+            double, const std::vector<double>& x,
+            const std::vector<double>&, double& residual,
+            std::vector<DaeEquationPartial>& jacobian) {
+            auto status = evaluate_efficiency(x, residual);
+            if (!status.ok()) return status;
+            for (const auto variable : efficiency_variables) {
+                std::vector<double> perturbed = x;
+                const double step = 1.0e-6 *
+                    std::max(std::abs(x.at(variable)), 1.0);
+                perturbed.at(variable) += step;
+                double shifted = 0.0;
+                status = evaluate_efficiency(perturbed, shifted);
+                if (!status.ok()) return status;
+                jacobian.push_back(
+                    {variable, (shifted - residual) / step, 0.0});
+            }
+            return EvaluationStatus::success();
+        },
+        1.0e6);
+    system.add_sparse_equation(
+        prefix + "shaft_power",
+        {inlet_m, inlet_h, outlet_h, shaft_w},
+        [compressor, inlet_m, inlet_h, outlet_h, shaft_w](
+            double, const std::vector<double>& x,
+            const std::vector<double>&, double& residual,
+            std::vector<DaeEquationPartial>& jacobian) {
+            const double direction = compressor ? 1.0 : -1.0;
+            const double enthalpy_change =
+                x.at(outlet_h) - x.at(inlet_h);
+            residual = x.at(shaft_w) - direction *
+                x.at(inlet_m) * enthalpy_change;
+            jacobian.push_back({shaft_w, 1.0, 0.0});
+            jacobian.push_back(
+                {inlet_m, -direction * enthalpy_change, 0.0});
+            jacobian.push_back(
+                {inlet_h, direction * x.at(inlet_m), 0.0});
+            jacobian.push_back(
+                {outlet_h, -direction * x.at(inlet_m), 0.0});
+            return EvaluationStatus::success();
+        },
+        1.0e6);
+}
+
 class TurbomachineryModel final : public ComponentModel {
 public:
     TurbomachineryModel(
@@ -455,6 +570,13 @@ public:
         const ComponentCompileContext& context,
         EquationSystemBuilder& system) const override {
         add_turbomachinery_equations(
+            context, system, compressor_);
+    }
+
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        add_transient_turbomachinery_equations(
             context, system, compressor_);
     }
 

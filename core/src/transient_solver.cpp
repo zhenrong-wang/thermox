@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace thermox {
@@ -460,6 +461,28 @@ DaeInitializationResult make_consistent_initial_conditions(
     result.state = problem.initial_state;
     result.derivative = initial_derivative;
     result.diagnostics = std::move(solve.diagnostics);
+    if (!result.diagnostics.converged) {
+        constexpr std::string_view marker = "near column ";
+        const auto marker_position =
+            result.diagnostics.message.find(marker);
+        if (marker_position != std::string::npos) {
+            const auto number_position =
+                marker_position + marker.size();
+            try {
+                const auto column = static_cast<std::size_t>(
+                    std::stoull(result.diagnostics.message.substr(
+                        number_position)));
+                if (column < initialization.variable_names.size()) {
+                    result.diagnostics.message +=
+                        " ('" + initialization.variable_names[column] +
+                        "')";
+                }
+            } catch (const std::exception&) {
+                // Preserve the linear-solver diagnostic when its backend
+                // does not report a parseable numeric column.
+            }
+        }
+    }
     for (std::size_t i = 0; i < size; ++i) {
         if (kinds[i] == DaeVariableKind::differential) {
             result.derivative[i] = solve.x[i];

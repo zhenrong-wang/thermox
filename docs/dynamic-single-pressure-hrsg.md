@@ -58,8 +58,10 @@ prediction, or calibration benchmark.
 
 The model assumes lumped cells, quasi-steady exhaust flow, homogeneous equilibrium in the
 evaporator and connecting loss, perfect phase separation in the drum, and no ambient heat loss.
-It does not yet include natural/forced circulation loops, riser/downcomer slip, shrink/swell,
-pinch/approach design constraints, tube metal segmentation beyond one wall state per cell,
-radiation, fouling, attemperation, safety valves, or phase-regime switching. Those capabilities
-remain separate generic component or solver extensions rather than reasons to specialize the
-platform around this example.
+This particular declaration does not include a circulation loop. Generic forced-circulation
+momentum closure is validated separately in
+[Dynamic forced circulation](dynamic-forced-circulation.md). Elevation-driven natural
+circulation, riser/downcomer slip, shrink/swell, pinch/approach design constraints, tube metal
+segmentation beyond one wall state per cell, radiation, fouling, attemperation, safety valves,
+and phase-regime switching remain separate generic component or solver extensions rather than
+reasons to specialize the platform around this example.

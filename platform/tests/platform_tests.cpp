@@ -1008,6 +1008,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "turbine.material.variable_geometry_map",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",
+        "pipe.fluid.hydraulic_inertance",
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
@@ -2379,6 +2380,98 @@ void test_generic_model_solves_two_outlet_splitter() {
                  "splitter propagates pressure");
     require_near(outlet_b_enthalpy, 4.0e5, 1.0e-8,
                  "splitter propagates enthalpy");
+}
+
+void test_fluid_junctions_compile_in_transient_graphs() {
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto mixer_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_mixer",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "mixer",
+      "kind": "junction.fluid.mixer.two_inlet",
+      "media": {"inlet_a": "air", "inlet_b": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "dynamic",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "mixer.inlet_a.m_dot": 2.0,
+      "mixer.inlet_a.p": 100000.0,
+      "mixer.inlet_a.h": 300000.0,
+      "mixer.inlet_b.m_dot": 1.0,
+      "mixer.inlet_b.h": 600000.0
+    }
+  }]
+})json");
+    const auto mixer_graph =
+        thermox::platform::compile_transient_model_graph(
+            mixer_document, registry, "dynamic");
+    const auto mixer = thermox::make_consistent_initial_conditions(
+        mixer_graph.problem, 0.0);
+    require(mixer.diagnostics.converged,
+            "transient mixer initialization: " +
+                mixer.diagnostics.message);
+    require_near(
+        mixer.state.at(require_variable_index(
+            mixer_graph.problem.variable_names,
+            "mixer.outlet.h")),
+        400000.0, 1.0e-7,
+        "transient mixer conserves enthalpy flow");
+
+    const auto splitter_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_splitter",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "splitter",
+      "kind": "junction.fluid.splitter.two_outlet",
+      "media": {"inlet": "air", "outlet_a": "air", "outlet_b": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "dynamic",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "splitter.inlet.m_dot": 10.0,
+      "splitter.inlet.p": 100000.0,
+      "splitter.inlet.h": 400000.0,
+      "splitter.outlet_a.m_dot": 4.0
+    }
+  }]
+})json");
+    const auto splitter_graph =
+        thermox::platform::compile_transient_model_graph(
+            splitter_document, registry, "dynamic");
+    const auto splitter =
+        thermox::make_consistent_initial_conditions(
+            splitter_graph.problem, 0.0);
+    require(splitter.diagnostics.converged,
+            "transient splitter initialization: " +
+                splitter.diagnostics.message);
+    require_near(
+        splitter.state.at(require_variable_index(
+            splitter_graph.problem.variable_names,
+            "splitter.outlet_b.m_dot")),
+        6.0, 1.0e-10,
+        "transient splitter conserves mass");
 }
 
 void test_generic_model_solves_isenthalpic_valve() {
@@ -7062,6 +7155,7 @@ int main() {
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();
         test_generic_model_solves_two_outlet_splitter();
+        test_fluid_junctions_compile_in_transient_graphs();
         test_generic_model_solves_isenthalpic_valve();
         test_nonflashing_liquid_orifice_solves_flow_and_guards_flashing();
         test_compressible_orifice_transitions_to_choked_flow();

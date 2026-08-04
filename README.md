@@ -93,6 +93,10 @@ Implemented in this sprint:
   two-phase hydraulic loss, separator drum, and superheater models across counterflow Cantera
   exhaust and IF97 water paths. See
   [Dynamic single-pressure HRSG](docs/dynamic-single-pressure-hrsg.md).
+- A declaration-only forced-circulation evaporator closes drum liquid through a quasi-steady pump,
+  lumped hydraulic momentum storage, equilibrium boiling cell, and two-phase resistance. The
+  dynamic graph conserves combined inventory mass and energy while resolving loop-flow
+  acceleration. See [Dynamic forced circulation](docs/dynamic-forced-circulation.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
