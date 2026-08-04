@@ -5,6 +5,7 @@
 #include "thermox/physics/if97_package.hpp"
 #include "thermox/physics/humid_air.hpp"
 #include "thermox/physics/thermochemistry.hpp"
+#include "thermox/physics/water_heos_package.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -381,6 +382,23 @@ void verify_if97_derivatives_near_vapor_boundary(
         "IF97 one-sided boundary derivatives must remain finite");
 }
 
+void verify_heos_two_phase_derivative_fallback(
+    const thermox::physics::PropertyPackage& package) {
+    const auto saturation = package.saturation_p(1.0e6);
+    require(saturation.ok(), "HEOS saturation derivative reference");
+    const auto result =
+        thermox::physics::state_ph_derivatives_with_fallback(
+            package, 1.0e6,
+            0.5 * (saturation.liquid.enthalpy_j_kg +
+                   saturation.vapor.enthalpy_j_kg));
+    require(result.ok(),
+            "HEOS two-phase derivative fallback: " + result.message);
+    require(result.source ==
+                thermox::physics::PropertyDerivativeSource::finite_difference &&
+            result.state.phase == thermox::physics::Phase::two_phase,
+            "HEOS two-phase state must use the bounded derivative fallback");
+}
+
 void verify_water_reference_points(
     const thermox::physics::PropertyPackage& package) {
     const auto region_1 = package.state_pt(3e6, 300.0);
@@ -539,9 +557,11 @@ int main() {
     const thermox::physics::IdealGasPropertyPackage ideal_gas;
     const thermox::physics::Co2PropertyPackage co2;
     const thermox::physics::If97PropertyPackage if97;
+    const thermox::physics::WaterHeosPropertyPackage water_heos;
     verify_round_trip(ideal_gas, 2e5, 600.0, 1e-10);
     verify_round_trip(co2, 1e5, 320.0, 0.1);
     verify_round_trip(if97, 25e6, 873.0, 0.2);
+    verify_round_trip(water_heos, 25e6, 873.0, 0.2);
     verify_ph_derivatives(
         ideal_gas, 2e5, 600.0, 1.0e-8,
         thermox::physics::PropertyDerivativeSource::analytic);
@@ -552,6 +572,9 @@ int main() {
         if97, 6e6, 700.0, 2.0e-3,
         thermox::physics::PropertyDerivativeSource::
             finite_difference);
+    verify_ph_derivatives(
+        water_heos, 6e6, 700.0, 2.0e-4,
+        thermox::physics::PropertyDerivativeSource::analytic);
     verify_co2_cycle_points(co2);
     verify_thermochemistry_contracts();
     verify_humid_air_ambient_state();
@@ -564,7 +587,9 @@ int main() {
     verify_saturation_pairs(co2, 7.2e6);
     verify_saturation_pairs(if97, 1e5);
     verify_saturation_pairs(if97, 20e6);
+    verify_saturation_pairs(water_heos, 1e6);
     verify_if97_derivatives_near_vapor_boundary(if97);
+    verify_heos_two_phase_derivative_fallback(water_heos);
     require(!ideal_gas.supports(
                 thermox::physics::PropertyCapability::saturation_p),
             "ideal gas should not advertise saturation_p");

@@ -7,6 +7,7 @@ add_library(thermox_physics
     src/property_package.cpp
     src/property_registry.cpp
     src/thermochemistry.cpp
+    src/water_heos_package.cpp
 )
 add_library(thermox::physics ALIAS thermox_physics)
 set_target_properties(

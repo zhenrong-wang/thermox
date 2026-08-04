@@ -6,7 +6,7 @@
 
 namespace thermox::physics::detail {
 
-enum class CoolPropFluid { co2, water_if97 };
+enum class CoolPropFluid { co2, water_if97, water_heos };
 enum class CoolPropFlash { pt, ph, ps };
 
 [[nodiscard]] PropertyResult coolprop_state(

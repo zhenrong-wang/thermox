@@ -1,0 +1,127 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_bidirectional_regime_spanning_rigid_volume",
+    "media": [{
+      "id": "water",
+      "backend": "coolprop_heos",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "thermal_boundary",
+      "kind": "source.heat.boundary"
+    }, {
+      "id": "vessel",
+      "kind": "volume.fluid.rigid_heat_transfer",
+      "parameters": {"volume": {"value": 1.0, "unit": "L"}},
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": [{
+      "id": "vessel_heat_transfer",
+      "kind": "heat_link",
+      "from": "thermal_boundary.outlet",
+      "to": "vessel.heat"
+    }]
+  },
+  "cases": [{
+    "id": "liquid_to_two_phase",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "thermal_boundary.outlet.Q_dot": {"value": -1000.0, "unit": "W"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 760.0, "unit": "kJ/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "thermal_boundary.outlet.T": {"value": 452.5, "unit": "K"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 760.0, "unit": "kJ/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.outlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.outlet.h": {"value": 760.0, "unit": "kJ/kg"},
+      "vessel.heat.Q_dot": {"value": -1000.0, "unit": "W"},
+      "vessel.heat.T": {"value": 452.5, "unit": "K"},
+      "vessel.mass": 0.88774715307865222,
+      "vessel.total_energy": 673687.8363397771,
+      "vessel.pressure": {"value": 1.0, "unit": "MPa"},
+      "vessel.enthalpy": {"value": 760.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "two_phase_to_liquid",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "thermal_boundary.outlet.Q_dot": {"value": 1000.0, "unit": "W"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 981029.77881414222, "unit": "Pa"},
+      "vessel.inlet.h": {"value": 758852.18418594659, "unit": "J/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "thermal_boundary.outlet.T": {"value": 452.2, "unit": "K"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 981029.77881414222, "unit": "Pa"},
+      "vessel.inlet.h": {"value": 758852.18418594659, "unit": "J/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.outlet.p": {"value": 981029.77881414222, "unit": "Pa"},
+      "vessel.outlet.h": {"value": 758852.18418594659, "unit": "J/kg"},
+      "vessel.heat.Q_dot": {"value": 1000.0, "unit": "W"},
+      "vessel.heat.T": {"value": 452.2, "unit": "K"},
+      "vessel.mass": 0.88774715307865222,
+      "vessel.total_energy": 672687.8363397771,
+      "vessel.pressure": {"value": 981029.77881414222, "unit": "Pa"},
+      "vessel.enthalpy": {"value": 758852.18418594659, "unit": "J/kg"}
+    }
+  }, {
+    "id": "two_phase_to_vapor",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "thermal_boundary.outlet.Q_dot": {"value": 1.0, "unit": "W"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "thermal_boundary.outlet.T": {"value": 453.0, "unit": "K"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.inlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.outlet.p": {"value": 1.0, "unit": "MPa"},
+      "vessel.outlet.h": {"value": 2777.0, "unit": "kJ/kg"},
+      "vessel.heat.Q_dot": {"value": 1.0, "unit": "W"},
+      "vessel.heat.T": {"value": 453.0, "unit": "K"},
+      "vessel.mass": 0.0051453165484018717,
+      "vessel.total_energy": 13288.544054912041,
+      "vessel.pressure": {"value": 1.0, "unit": "MPa"},
+      "vessel.enthalpy": {"value": 2777.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "vapor_to_two_phase",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "thermal_boundary.outlet.Q_dot": {"value": -1.0, "unit": "W"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1002796.364351989, "unit": "Pa"},
+      "vessel.inlet.h": {"value": 2779486.9924528766, "unit": "J/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "thermal_boundary.outlet.T": {"value": 453.7, "unit": "K"},
+      "vessel.inlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.inlet.p": {"value": 1002796.364351989, "unit": "Pa"},
+      "vessel.inlet.h": {"value": 2779486.9924528766, "unit": "J/kg"},
+      "vessel.outlet.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "vessel.outlet.p": {"value": 1002796.364351989, "unit": "Pa"},
+      "vessel.outlet.h": {"value": 2779486.9924528766, "unit": "J/kg"},
+      "vessel.heat.Q_dot": {"value": -1.0, "unit": "W"},
+      "vessel.heat.T": {"value": 453.7, "unit": "K"},
+      "vessel.mass": 0.0051453165484018717,
+      "vessel.total_energy": 13298.544054911899,
+      "vessel.pressure": {"value": 1002796.364351989, "unit": "Pa"},
+      "vessel.enthalpy": {"value": 2779486.9924528766, "unit": "J/kg"}
+    }
+  }]
+}

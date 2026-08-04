@@ -3,6 +3,7 @@
 #include "thermox/physics/co2_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
+#include "thermox/physics/water_heos_package.hpp"
 
 #include <algorithm>
 #include <array>
@@ -117,6 +118,13 @@ PropertyPackageRegistry make_default_property_package_registry() {
             throw std::invalid_argument("IF97 backend requires substance Water or Steam");
         return std::make_shared<If97PropertyPackage>();
     };
+    const auto water_heos = [](std::string_view substance)
+        -> std::shared_ptr<const PropertyPackage> {
+        if (substance != "Water" && substance != "Steam")
+            throw std::invalid_argument(
+                "HEOS water backend requires substance Water or Steam");
+        return std::make_shared<WaterHeosPropertyPackage>();
+    };
     const std::vector all_flashes{
         PropertyCapability::state_pt,
         PropertyCapability::state_ph,
@@ -141,12 +149,15 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const auto ideal_identity = ideal_gas("Air");
     const auto co2_identity = co2("CO2");
     const auto if97_identity = if97("Water");
+    const auto water_heos_identity = water_heos("Water");
     const std::string ideal_name{ideal_identity->name()};
     const std::string ideal_version{ideal_identity->version()};
     const std::string co2_name{co2_identity->name()};
     const std::string co2_version{co2_identity->version()};
     const std::string if97_name{if97_identity->name()};
     const std::string if97_version{if97_identity->version()};
+    const std::string water_heos_name{water_heos_identity->name()};
+    const std::string water_heos_version{water_heos_identity->version()};
     registry.register_backend(
         {"ideal_gas", ideal_name, ideal_version, {"Air"},
          ideal_capabilities},
@@ -175,6 +186,10 @@ PropertyPackageRegistry make_default_property_package_registry() {
         {"coolprop_if97", if97_name, if97_version,
          {"Water", "Steam"}, if97_capabilities},
         if97);
+    registry.register_backend(
+        {"coolprop_heos", water_heos_name, water_heos_version,
+         {"Water", "Steam"}, all_flashes},
+        water_heos);
     return registry;
 }
 

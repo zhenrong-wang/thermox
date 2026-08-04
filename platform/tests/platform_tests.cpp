@@ -6601,6 +6601,7 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
     };
     const std::vector<BackendCase> cases = {
         {"water_steam_if97", "Water", 1.0e5, 300.0},
+        {"coolprop_heos", "Water", 1.0e5, 300.0},
         {"co2_span_wagner", "CO2", 8.0e6, 350.0}};
     const auto properties =
         thermox::physics::make_default_property_package_registry();
@@ -6703,6 +6704,136 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
                      1.0e-4,
                      backend_case.backend +
                          " volume has zero energy accumulation");
+    }
+}
+
+void test_heos_rigid_volume_crosses_both_saturation_boundaries() {
+    struct TransitionCase {
+        std::string id;
+        double pressure;
+        double enthalpy;
+        double mass;
+        double energy;
+        double heat_flow;
+        double duration;
+        thermox::physics::Phase initial_phase;
+        thermox::physics::Phase final_phase;
+    };
+    const std::vector<TransitionCase> cases = {
+        {"liquid_to_two_phase", 1.0e6, 760000.0,
+         0.88774715307865222, 673687.8363397771,
+         -1000.0, 1.0, thermox::physics::Phase::liquid,
+         thermox::physics::Phase::two_phase},
+        {"two_phase_to_liquid", 981029.77881414222,
+         758852.18418594659, 0.88774715307865222,
+         672687.8363397771, 1000.0, 1.0,
+         thermox::physics::Phase::two_phase,
+         thermox::physics::Phase::liquid},
+        {"two_phase_to_vapor", 1.0e6, 2777000.0,
+         0.0051453165484018717, 13288.544054912041,
+         1.0, 10.0, thermox::physics::Phase::two_phase,
+         thermox::physics::Phase::vapor},
+        {"vapor_to_two_phase", 1002796.364351989,
+         2779486.9924528766, 0.0051453165484018717,
+         13298.544054911899, -1.0, 10.0,
+         thermox::physics::Phase::vapor,
+         thermox::physics::Phase::two_phase}};
+
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto water = properties.create("coolprop_heos", "Water");
+
+    for (const auto& test_case : cases) {
+        std::ostringstream json;
+        json << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "heos_regime_transition",
+    "media": [{"id": "water", "backend": "coolprop_heos", "substance": "Water"}],
+    "components": [{
+      "id": "thermal_boundary", "kind": "source.heat.boundary"
+    }, {
+      "id": "vessel", "kind": "volume.fluid.rigid_heat_transfer",
+      "parameters": {"volume": {"value": 1.0, "unit": "L"}},
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": [{
+      "id": "heat", "kind": "heat_link",
+      "from": "thermal_boundary.outlet", "to": "vessel.heat"
+    }]
+  },
+  "cases": [{
+    "id": ")json" << test_case.id << R"json(",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "thermal_boundary.outlet.Q_dot": )json" << test_case.heat_flow << R"json(,
+      "vessel.inlet.m_dot": 0.0,
+      "vessel.inlet.p": )json" << test_case.pressure << R"json(,
+      "vessel.inlet.h": )json" << test_case.enthalpy << R"json(,
+      "vessel.outlet.m_dot": 0.0
+    },
+    "initial_guesses": {
+      "thermal_boundary.outlet.T": 453.0,
+      "vessel.inlet.m_dot": 0.0,
+      "vessel.inlet.p": )json" << test_case.pressure << R"json(,
+      "vessel.inlet.h": )json" << test_case.enthalpy << R"json(,
+      "vessel.outlet.m_dot": 0.0,
+      "vessel.outlet.p": )json" << test_case.pressure << R"json(,
+      "vessel.outlet.h": )json" << test_case.enthalpy << R"json(,
+      "vessel.heat.Q_dot": )json" << test_case.heat_flow << R"json(,
+      "vessel.heat.T": 453.0,
+      "vessel.mass": )json" << test_case.mass << R"json(,
+      "vessel.total_energy": )json" << test_case.energy << R"json(,
+      "vessel.pressure": )json" << test_case.pressure << R"json(,
+      "vessel.enthalpy": )json" << test_case.enthalpy << R"json(
+    }
+  }]
+})json";
+        const auto document =
+            thermox::platform::parse_model_document_text(json.str());
+        const auto graph =
+            thermox::platform::compile_transient_model_graph(
+                document, components, properties, test_case.id);
+        thermox::TimeIntegrationOptions options;
+        options.end_time = test_case.duration;
+        const auto result = thermox::integrate_dae(graph.problem, options);
+        require(result.diagnostics.success,
+                test_case.id + ": " + result.diagnostics.message);
+        require(result.diagnostics.rejected_steps == 0,
+                test_case.id + " must cross without rejected steps");
+
+        const auto mass = require_variable_index(
+            graph.problem.variable_names, "vessel.mass");
+        const auto energy = require_variable_index(
+            graph.problem.variable_names, "vessel.total_energy");
+        const auto pressure = require_variable_index(
+            graph.problem.variable_names, "vessel.pressure");
+        const auto enthalpy = require_variable_index(
+            graph.problem.variable_names, "vessel.enthalpy");
+        const auto& initial = result.trajectory.front();
+        const auto& final = result.trajectory.back();
+        const auto initial_properties = water->state_ph(
+            initial.state.at(pressure), initial.state.at(enthalpy));
+        const auto final_properties = water->state_ph(
+            final.state.at(pressure), final.state.at(enthalpy));
+        require(initial_properties.ok() && final_properties.ok(),
+                test_case.id + " transition states must evaluate");
+        require(initial_properties.state.phase == test_case.initial_phase &&
+                    final_properties.state.phase == test_case.final_phase,
+                test_case.id + " must reach the expected phases");
+        require_near(final.state.at(mass), initial.state.at(mass),
+                     1.0e-12, test_case.id + " conserves mass");
+        require_near(
+            final.state.at(energy) - initial.state.at(energy),
+            test_case.heat_flow * test_case.duration, 1.0e-6,
+            test_case.id + " integrates boundary heat exactly");
+        require_near(final.derivative.at(mass), 0.0, 1.0e-12,
+                     test_case.id + " has zero mass rate");
+        require_near(final.derivative.at(energy),
+                     test_case.heat_flow, 1.0e-8,
+                     test_case.id + " closes the energy rate");
     }
 }
 
@@ -7381,6 +7512,7 @@ int main() {
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();
+        test_heos_rigid_volume_crosses_both_saturation_boundaries();
         test_dynamic_equilibrium_drum_conserves_inventory();
         test_bounded_pi_controller_prevents_integrator_windup();
         test_closed_loop_drum_feed_control_composes_platform_domains();

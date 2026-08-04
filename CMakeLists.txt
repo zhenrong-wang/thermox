@@ -172,6 +172,37 @@ add_test(NAME platform_regime_spanning_rigid_volume_cli
 set_tests_properties(platform_regime_spanning_rigid_volume_cli PROPERTIES
     PASS_REGULAR_EXPRESSION "\"phase\": \"vapor\""
 )
+foreach(regime_case IN ITEMS
+        liquid_to_two_phase
+        two_phase_to_liquid
+        two_phase_to_vapor
+        vapor_to_two_phase)
+    if(regime_case MATCHES "liquid")
+        set(regime_end_time 1)
+    else()
+        set(regime_end_time 10)
+    endif()
+    add_test(NAME platform_bidirectional_regime_${regime_case}_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_bidirectional_regime_spanning_rigid_volume.json
+            --case ${regime_case}
+            --end-time ${regime_end_time}
+            --format json
+    )
+endforeach()
+set_tests_properties(
+    platform_bidirectional_regime_liquid_to_two_phase_cli
+    platform_bidirectional_regime_vapor_to_two_phase_cli
+    PROPERTIES PASS_REGULAR_EXPRESSION "\"phase\": \"two_phase\""
+)
+set_tests_properties(
+    platform_bidirectional_regime_two_phase_to_liquid_cli
+    PROPERTIES PASS_REGULAR_EXPRESSION "\"phase\": \"liquid\""
+)
+set_tests_properties(
+    platform_bidirectional_regime_two_phase_to_vapor_cli
+    PROPERTIES PASS_REGULAR_EXPRESSION "\"phase\": \"vapor\""
+)
 if(TARGET thermox_cantera_backend)
     add_test(NAME platform_dynamic_material_fluid_hrsg_cli
         COMMAND thermox_cli simulate

@@ -746,6 +746,22 @@ void test_catalog_discovery() {
                 if97->capabilities.end(),
                 "saturation_p") != if97->capabilities.end(),
         "catalog must expose property compatibility metadata");
+    const auto water_heos = std::find_if(
+        response.property_backends.begin(),
+        response.property_backends.end(),
+        [](const auto& backend) {
+            return backend.backend == "coolprop_heos";
+        });
+    require(
+        water_heos != response.property_backends.end() &&
+            water_heos->implementation_name ==
+                "coolprop-heos-water" &&
+            std::find(
+                water_heos->capabilities.begin(),
+                water_heos->capabilities.end(),
+                "state_ph_derivatives") !=
+                water_heos->capabilities.end(),
+        "catalog must expose regime-spanning HEOS water metadata");
     require(
         response.connector_domains.size() == 7,
         "catalog must expose connector contracts");

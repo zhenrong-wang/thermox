@@ -30,8 +30,12 @@ PhDerivativesResult state_ph_derivatives_with_fallback(
     double enthalpy) {
     if (properties.supports(
             PropertyCapability::state_ph_derivatives)) {
-        return properties.state_ph_derivatives(
+        auto analytic = properties.state_ph_derivatives(
             pressure, enthalpy);
+        if (analytic.ok() ||
+            analytic.status != PropertyStatus::saturation_boundary) {
+            return analytic;
+        }
     }
 
     const auto base = properties.state_ph(pressure, enthalpy);

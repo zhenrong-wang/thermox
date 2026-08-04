@@ -103,9 +103,11 @@ clients to reject unsupported backend/component combinations before simulation s
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only
 real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
-backend using its Span-Wagner formulation; water and steam use CoolProp IF97.
-Thermox keeps its property-package and backend-selection contracts, while no rejected
-CO2 or water/steam implementation or fallback path remains.
+backend using its Span-Wagner formulation. Water and steam can use either
+`coolprop_if97`/`water_steam_if97` for the industrial IF97 formulation or
+`coolprop_heos` for a smooth Helmholtz-energy formulation suitable for
+regime-spanning inventory transients. The backend choice is explicit and is
+preserved in run provenance.
 
 ## Verification
 
@@ -138,14 +140,19 @@ interface. Thermox therefore does not advertise analytic PH derivatives for IF97
 `state_ph_derivatives_with_fallback` utility evaluates a bounded central difference, with
 one-sided behavior at a property-domain boundary, and reports
 `PropertyDerivativeSource::finite_difference`. It evaluates the four neighboring PH states once
-and derives all six partials from them.
+and derives all six partials from them. Neighboring points are selected from the same phase where
+possible so a finite-difference stencil does not accidentally average two constitutive regimes.
+
+HEOS water advertises analytic PH derivatives in single-phase states. CoolProp does not define
+those analytic partials inside the saturation dome, so the shared wrapper uses the same bounded
+finite-difference contract there and records finite-difference provenance. This fallback is
+limited specifically to an analytic `saturation_boundary` result; other analytic backend failures
+remain visible.
 
 Components consume this shared contract. The rigid fluid volume uses density and internal-energy
 partials in its DAE closure, while map-based turbomachinery uses temperature partials in its
 corrected-coordinate chain rule. A third-party backend can replace the fallback simply by
-advertising and implementing the analytic capability; no component changes are required. An
-advertised analytic implementation that fails is surfaced directly and is never silently hidden
-by numerical differencing.
+advertising and implementing the analytic capability; no component changes are required.
 
 ## Saturation contract and next extensions
 

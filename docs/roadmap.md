@@ -215,6 +215,9 @@ Delivered:
 22. General rigid PH inventory with optional heat transfer, differential-state-only adaptive error
     control, and an end-to-end IF97 two-phase-to-vapor transition regression. Bidirectional
     liquid/two-phase traversal remains an explicit follow-up. ✅
+23. Registered HEOS water/steam backend with analytic single-phase and bounded two-phase PH
+    derivatives, plus four conserved bidirectional liquid/two-phase/vapor transition regressions.
+    ✅
 
 ## Component catalog and modularization foundation
 

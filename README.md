@@ -540,15 +540,15 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Complete bidirectional regime-spanning finite-volume cells and validated packaged
-   drift-flux/flow-regime correlations. The general rigid PH inventory and its
-   two-phase-to-vapor path are verified; liquid/two-phase traversal remains limited by the IF97
-   derivative boundary, while specialized equilibrium cells and two-phase pipes retain explicit
-   applicability guards.
+1. Extend regime-spanning finite-volume support with validated packaged drift-flux/flow-regime
+   correlations. The general rigid PH inventory now traverses both saturation boundaries in both
+   directions with HEOS water; IF97 retains a documented liquid-boundary limitation, while
+   specialized equilibrium cells and two-phase pipes retain explicit applicability guards.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
-3. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic
-   derivatives, while IF97 uses the shared provenance-marked bounded fallback.
+3. Add native analytic PH derivatives for IF97; ideal gas, HEOS CO2, and single-phase HEOS water
+   already provide analytic derivatives, while IF97 uses the shared provenance-marked bounded
+   fallback.
 4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
    production transient cases are introduced.
 5. Extend the delivered anchor-aware component homotopy hooks from fixed/fluid-map

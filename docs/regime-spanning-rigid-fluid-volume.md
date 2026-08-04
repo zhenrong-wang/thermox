@@ -46,6 +46,18 @@ The regression is intentionally small and CPU-bounded. It verifies the generic
 graph compiler, IF97 PH closure, heat-port energy term, hydraulic momentum
 state, consistent initialization, and adaptive DAE integration together.
 
+[`dynamic_bidirectional_regime_spanning_rigid_volume.json`](../core/examples/dynamic_bidirectional_regime_spanning_rigid_volume.json)
+uses the registered `coolprop_heos` water backend in a closed rigid vessel. Its
+four cases verify both directions at both saturation boundaries:
+
+- liquid to two-phase and two-phase to liquid over one second;
+- two-phase to vapor and vapor to two-phase over ten seconds.
+
+All four paths keep mass constant to machine precision and their total-energy
+derivative equals the declared heat rate. HEOS supplies analytic PH derivatives
+in single-phase states; inside the saturation dome Thermox uses its bounded,
+phase-aware finite-difference fallback.
+
 ## Validity and current limit
 
 The component represents one homogeneous equilibrium bulk state. It does not
@@ -53,10 +65,10 @@ model stratification, a resolved interface, nucleation hysteresis, metastable
 states, critical heat flux, dryout, or flow-regime switching. Those effects
 belong in specialized registered components and correlations.
 
-The IF97 bounded finite-difference PH derivative fallback is currently robust
-for the verified two-phase-to-vapor crossing. Liquid/two-phase crossings remain
-a declared limitation: the derivative surface at that boundary can make the
-current Newton/BDF1 path singular. Thermox reports solver failure rather than
-loosening conservation tolerances or silently selecting a phase branch. Native
-IF97 derivatives or a phase-aware state-variable transformation is required
-before claiming bidirectional saturation-dome traversal.
+The bidirectional claim applies to the HEOS water backend. CoolProp IF97 snaps
+a narrow liquid-side PH band to the saturated-liquid state, which can make the
+inventory closure Jacobian singular at the liquid boundary. IF97 remains
+verified for the two-phase-to-vapor reference path and remains appropriate for
+standards-oriented steam-cycle work that does not require that crossing.
+Thermox reports the unsupported IF97 trajectory as a solver failure rather than
+loosening conservation tolerances or silently selecting a phase branch.
