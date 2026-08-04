@@ -125,6 +125,21 @@ thermox::service::PerformanceMapArtifactInput unused_test_map() {
     return artifact;
 }
 
+thermox::service::CorrelationArtifactInput unused_correlation_family() {
+    thermox::service::CorrelationArtifactInput artifact;
+    artifact.id = "job-correlation-family";
+    artifact.schema_version = "thermox.correlation/v2";
+    artifact.revision = "job-family-1";
+    artifact.checksum_sha256 = std::string(64, 'd');
+    artifact.inputs = {{"x", "dimensionless"}};
+    artifact.output = {"y", "dimensionless"};
+    artifact.candidates = {
+        {"normal", "normal", 10, {{"factor", 1.0}},
+         "factor * x", {{"x", 0.0, 1.0, true, true}}},
+    };
+    return artifact;
+}
+
 thermox::service::EngineeringArtifactReference map_reference(
     const thermox::service::PerformanceMapArtifactInput& artifact) {
     return {
@@ -182,6 +197,23 @@ void test_submission_is_idempotent_and_conflict_safe() {
         "artifact payload must participate in the idempotency "
         "fingerprint and reusing its key "
         "must fail");
+
+    auto family_request = steady_request("correlation-family-submission");
+    family_request.artifacts.correlations.push_back(
+        unused_correlation_family());
+    (void)service.submit(family_request);
+    family_request.artifacts.correlations.front()
+        .candidates.front().priority = 11;
+    conflict = false;
+    try {
+        (void)service.submit(family_request);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "correlation candidates and selection metadata must "
+        "participate in the idempotency fingerprint");
 
     auto referenced = steady_request("reference-submission");
     referenced.artifacts.references.push_back(

@@ -94,6 +94,21 @@ void append_map_payload(
     append_string(stream, map.family_extrapolation);
 }
 
+void append_applicability(
+    std::ostringstream& stream,
+    const std::vector<CorrelationApplicabilityRangeInput>& ranges) {
+    stream << ranges.size() << '|';
+    for (const auto& range : ranges) {
+        append_string(stream, range.input);
+        stream << range.minimum.has_value() << '|';
+        if (range.minimum) stream << *range.minimum << '|';
+        stream << range.maximum.has_value() << '|';
+        if (range.maximum) stream << *range.maximum << '|';
+        stream << range.minimum_inclusive << '|'
+               << range.maximum_inclusive << '|';
+    }
+}
+
 void append_artifacts(
     std::ostringstream& stream,
     const SimulationArtifactBundle& artifacts) {
@@ -139,6 +154,20 @@ void append_artifacts(
             stream << value << '|';
         }
         append_string(stream, artifact.expression);
+        append_applicability(stream, artifact.applicability);
+        stream << artifact.candidates.size() << '|';
+        for (const auto& candidate : artifact.candidates) {
+            append_string(stream, candidate.id);
+            append_string(stream, candidate.regime);
+            stream << candidate.priority << '|'
+                   << candidate.coefficients.size() << '|';
+            for (const auto& [name, value] : candidate.coefficients) {
+                append_string(stream, name);
+                stream << value << '|';
+            }
+            append_string(stream, candidate.expression);
+            append_applicability(stream, candidate.applicability);
+        }
     }
     stream << artifacts.references.size() << '|';
     for (const auto& reference : artifacts.references) {

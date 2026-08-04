@@ -14,6 +14,8 @@ inline constexpr char correlation_artifact_type[] =
     "thermox.correlation";
 inline constexpr char correlation_artifact_schema_v1[] =
     "thermox.correlation/v1";
+inline constexpr char correlation_artifact_schema_v2[] =
+    "thermox.correlation/v2";
 
 struct CorrelationVariable {
     std::string name;
@@ -24,6 +26,8 @@ struct CorrelationEvaluation {
     double value{0.0};
     std::map<std::string, double> input_derivatives;
     std::string error;
+    std::string selected_candidate;
+    std::string selected_regime;
 };
 
 struct CorrelationApplicabilityRange {
@@ -39,6 +43,15 @@ struct CorrelationApplicabilityAssessment {
     std::vector<std::string> violations;
 };
 
+struct CorrelationCandidate {
+    std::string id;
+    std::string regime;
+    int priority{0};
+    std::map<std::string, double> coefficients;
+    std::string expression;
+    std::vector<CorrelationApplicabilityRange> applicability;
+};
+
 class CorrelationArtifact final : public EngineeringArtifact {
 public:
     CorrelationArtifact(
@@ -51,6 +64,15 @@ public:
         std::map<std::string, double> coefficients,
         std::string expression,
         std::vector<CorrelationApplicabilityRange> applicability = {});
+
+    CorrelationArtifact(
+        std::string artifact_id,
+        std::string artifact_schema_version,
+        std::string artifact_revision,
+        std::string artifact_checksum_sha256,
+        std::vector<CorrelationVariable> inputs,
+        CorrelationVariable output,
+        std::vector<CorrelationCandidate> candidates);
 
     [[nodiscard]] std::string_view artifact_type()
         const noexcept override {
@@ -67,6 +89,8 @@ public:
     [[nodiscard]] const std::string& expression() const noexcept;
     [[nodiscard]] const std::vector<CorrelationApplicabilityRange>&
     applicability() const noexcept;
+    [[nodiscard]] const std::vector<CorrelationCandidate>& candidates()
+        const noexcept;
     [[nodiscard]] CorrelationApplicabilityAssessment assess_applicability(
         const std::map<std::string, double>& inputs) const;
     [[nodiscard]] CorrelationEvaluation evaluate(
@@ -78,7 +102,9 @@ private:
     std::map<std::string, double> coefficients_;
     std::string expression_;
     std::vector<CorrelationApplicabilityRange> applicability_;
-    SafeExpression compiled_;
+    std::optional<SafeExpression> compiled_;
+    std::vector<CorrelationCandidate> candidates_;
+    std::vector<SafeExpression> compiled_candidates_;
 };
 
 }  // namespace thermox::platform

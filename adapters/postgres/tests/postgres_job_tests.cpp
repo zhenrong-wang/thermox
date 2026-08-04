@@ -181,7 +181,7 @@ SimulationJobRequest request(
     value.artifacts.performance_maps.push_back(std::move(map));
     thermox::service::CorrelationArtifactInput correlation;
     correlation.id = "bend-correlation";
-    correlation.schema_version = "thermox.correlation/v1";
+    correlation.schema_version = "thermox.correlation/v2";
     correlation.revision = "vendor-2";
     correlation.checksum_sha256 = std::string(64, 'c');
     correlation.inputs = {
@@ -189,11 +189,11 @@ SimulationJobRequest request(
         {"density", "density"},
     };
     correlation.output = {"pressure_loss", "pressure"};
-    correlation.coefficients = {{"coefficient", 1.5}};
-    correlation.expression =
-        "coefficient * mass_flow * abs(mass_flow) / density";
-    correlation.applicability = {
-        {"mass_flow", 0.0, 20.0, true, false},
+    correlation.candidates = {
+        {"normal_flow", "normal-flow", 10,
+         {{"coefficient", 1.5}},
+         "coefficient * mass_flow * abs(mass_flow) / density",
+         {{"mass_flow", 0.0, 20.0, true, false}}},
     };
     value.artifacts.correlations.push_back(
         std::move(correlation));
@@ -281,13 +281,18 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.performance_maps.size() == 1 &&
             repeated.request.artifacts.correlations.size() == 1 &&
             repeated.request.artifacts.correlations.front()
-                    .coefficients.at("coefficient") == 1.5 &&
+                    .candidates.size() == 1 &&
             repeated.request.artifacts.correlations.front()
-                    .applicability.size() == 1 &&
+                    .candidates.front().regime == "normal-flow" &&
             repeated.request.artifacts.correlations.front()
-                    .applicability.front().maximum == 20.0 &&
+                    .candidates.front().coefficients.at("coefficient") ==
+                1.5 &&
+            repeated.request.artifacts.correlations.front()
+                    .candidates.front().applicability.front().maximum ==
+                20.0 &&
             !repeated.request.artifacts.correlations.front()
-                    .applicability.front().maximum_inclusive &&
+                    .candidates.front().applicability.front()
+                    .maximum_inclusive &&
             repeated.request.components.expression_components
                     .size() == 1 &&
             repeated.request.components.expression_components

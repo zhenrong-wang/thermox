@@ -136,6 +136,31 @@ thermox::service::CorrelationArtifactInput bend_correlation() {
     return artifact;
 }
 
+thermox::service::CorrelationArtifactInput bend_correlation_family() {
+    thermox::service::CorrelationArtifactInput artifact;
+    artifact.id = "request-bend-correlation";
+    artifact.schema_version = "thermox.correlation/v2";
+    artifact.revision = "service-family-1";
+    artifact.checksum_sha256 = std::string(64, 'f');
+    artifact.inputs = {
+        {"mass_flow", "mass_flow"},
+        {"density", "density"},
+        {"area", "area"},
+    };
+    artifact.output = {"pressure_loss", "pressure"};
+    artifact.candidates = {
+        {"low_flow", "low-flow", 10, {{"coefficient", 1.0}},
+         "coefficient * mass_flow * abs(mass_flow) / "
+         "(2 * density * area * area)",
+         {{"mass_flow", 0.0, 2.0, true, true}}},
+        {"high_flow", "high-flow", 20, {{"coefficient", 1.5}},
+         "coefficient * mass_flow * abs(mass_flow) / "
+         "(2 * density * area * area)",
+         {{"mass_flow", 2.0, 20.0, true, true}}},
+    };
+    return artifact;
+}
+
 std::string correlated_bend_model() {
     return R"json({
   "schema_version": "thermox.model/v2",
@@ -341,6 +366,20 @@ void test_correlation_applicability_reaches_component_diagnostics() {
                 "[0, 1]") != std::string::npos,
         "component evaluation must surface the exact correlation "
         "applicability violation");
+}
+
+void test_request_scoped_correlation_family_selects_candidate() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = correlated_bend_model();
+    request.case_id = "design";
+    request.artifacts.correlations.push_back(
+        bend_correlation_family());
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "a v2 correlation family must execute through an unchanged "
+        "component artifact role: " + response.error.message);
 }
 
 void test_request_contract_validation() {
@@ -3574,6 +3613,7 @@ int main() {
         test_resolved_performance_map_artifacts();
         test_request_scoped_correlation_artifacts();
         test_correlation_applicability_reaches_component_diagnostics();
+        test_request_scoped_correlation_family_selects_candidate();
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_homogeneous_two_phase_local_loss();

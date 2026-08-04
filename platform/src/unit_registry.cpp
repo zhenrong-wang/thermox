@@ -306,6 +306,9 @@ UnitRegistry make_default_unit_registry() {
         "specific_heat_capacity", "J/kg/K",
         display("kJ/kg/K", 1.0e-3));
     display_only("density", "kg/m3", display("kg/m³"));
+    display_only("area", "m2", display("m²"));
+    display_only(
+        "mass_flux", "kg/m2/s", display("kg/(m²·s)"));
     display_only(
         "dynamic_viscosity", "Pa*s", display("Pa·s"));
     display_only(

@@ -115,6 +115,9 @@ Implemented in this sprint:
 - Correlation revisions can declare qualified SI ranges for individual inputs. Publication rejects
   malformed envelopes, while runtime diagnostics reject out-of-range component evaluations with
   the live value and exact qualified interval instead of silently extrapolating engineering data.
+- V2 correlation families select among named, regime-labelled candidate laws using qualified
+  envelopes and explicit priorities. Coverage gaps and equal-priority ambiguity are errors, while
+  the same artifact role works unchanged in pipes, inventories, and other generic consumers.
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

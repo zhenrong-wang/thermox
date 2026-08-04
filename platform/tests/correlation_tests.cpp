@@ -152,6 +152,70 @@ void test_correlation_enforces_qualified_operating_envelope() {
             "applicability must reference a declared correlation input");
 }
 
+void test_correlation_family_selects_deterministically() {
+    auto family = thermox::platform::CorrelationArtifact{
+        "void-fraction-family",
+        thermox::platform::correlation_artifact_schema_v2,
+        "revision-1",
+        std::string(64, 'f'),
+        {{"vapor_quality", "dimensionless"}},
+        {"void_fraction", "dimensionless"},
+        {
+            {"bubbly", "bubbly", 10, {{"factor", 1.0}},
+             "factor * vapor_quality",
+             {{"vapor_quality", 0.0, 0.5, true, true}}},
+            {"annular", "annular", 20, {{"factor", 2.0}},
+             "factor * vapor_quality",
+             {{"vapor_quality", 0.5, 1.0, true, true}}},
+        },
+    };
+    family.validate();
+    const auto low = family.evaluate({{"vapor_quality", 0.25}});
+    require(
+        low.error.empty() && low.selected_candidate == "bubbly" &&
+            low.selected_regime == "bubbly",
+        "family must select the only applicable candidate");
+    require_close(low.value, 0.25, 1.0e-12,
+                  "selected bubbly correlation value");
+    const auto overlap = family.evaluate({{"vapor_quality", 0.5}});
+    require(
+        overlap.error.empty() && overlap.selected_candidate == "annular",
+        "higher priority must deterministically resolve overlap");
+    require_close(overlap.value, 1.0, 1.0e-12,
+                  "selected annular correlation value");
+    const auto gap = family.evaluate({{"vapor_quality", 1.1}});
+    require(
+        gap.error.find("no correlation candidate is applicable") !=
+                std::string::npos &&
+            gap.error.find("bubbly") != std::string::npos &&
+            gap.error.find("annular") != std::string::npos,
+        "uncovered operating points must be rejected");
+    require(
+        !family.assess_applicability({{"vapor_quality", 1.1}})
+            .applicable,
+        "family applicability assessment must expose coverage gaps");
+
+    auto ambiguous = thermox::platform::CorrelationArtifact{
+        "ambiguous-family",
+        thermox::platform::correlation_artifact_schema_v2,
+        "revision-1",
+        std::string(64, 'a'),
+        {{"x", "dimensionless"}},
+        {"y", "dimensionless"},
+        {
+            {"first", "regime-a", 5, {}, "x",
+             {{"x", 0.0, 1.0, true, true}}},
+            {"second", "regime-b", 5, {}, "x",
+             {{"x", 0.0, 1.0, true, true}}},
+        },
+    };
+    ambiguous.validate();
+    require(
+        ambiguous.evaluate({{"x", 0.5}}).error.find("ambiguous") !=
+            std::string::npos,
+        "equal-priority overlap must be rejected as ambiguous");
+}
+
 void test_return_bend_uses_bound_correlation() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -523,6 +587,7 @@ int main() {
         test_correlation_evaluates_with_analytic_derivatives();
         test_correlation_contract_rejects_undeclared_symbols();
         test_correlation_enforces_qualified_operating_envelope();
+        test_correlation_family_selects_deterministically();
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
         test_two_phase_inventory_uses_correlation_for_outlet_quality();

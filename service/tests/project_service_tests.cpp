@@ -381,6 +381,31 @@ std::string correlation_payload() {
 })json";
 }
 
+std::string correlation_family_payload() {
+    return R"json({
+  "inputs": [{"name": "mass_flow", "dimension": "mass_flow"}],
+  "output": {"name": "pressure_loss", "dimension": "pressure"},
+  "candidates": [
+    {
+      "id": "low_flow",
+      "regime": "low-flow",
+      "priority": 10,
+      "coefficients": {"factor": 1.0},
+      "expression": "factor * mass_flow * abs(mass_flow)",
+      "applicability": [{"input": "mass_flow", "minimum": 0.0, "maximum": 2.0}]
+    },
+    {
+      "id": "high_flow",
+      "regime": "high-flow",
+      "priority": 20,
+      "coefficients": {"factor": 2.0},
+      "expression": "factor * mass_flow * abs(mass_flow)",
+      "applicability": [{"input": "mass_flow", "minimum": 2.0, "maximum": 20.0}]
+    }
+  ]
+})json";
+}
+
 void test_correlation_artifact_is_executable_input() {
     thermox::service::ProjectService projects{
         thermox::service::make_in_memory_project_repository()};
@@ -467,6 +492,32 @@ void test_correlation_artifact_is_executable_input() {
         invalid_envelope_rejected,
         "invalid applicability envelopes must be rejected before "
         "persistence");
+
+    const auto family_revision = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "return-bend-family",
+        {},
+        "thermox.correlation",
+        "thermox.correlation/v2",
+        correlation_family_payload(),
+    });
+    const auto resolved_family = projects.resolve_artifact_revisions(
+        team_a, project.project_id,
+        {family_revision.artifact_revision_id});
+    require(
+        resolved_family &&
+            resolved_family->snapshot.correlations.size() == 1U &&
+            resolved_family->snapshot.correlations.front()
+                    .schema_version == "thermox.correlation/v2" &&
+            resolved_family->snapshot.correlations.front()
+                    .candidates.size() == 2U &&
+            resolved_family->snapshot.correlations.front()
+                    .candidates.back().regime == "high-flow" &&
+            resolved_family->snapshot.correlations.front()
+                    .candidates.back().priority == 20,
+        "v2 correlation families must preserve ordered candidates, "
+        "regimes, priorities, and qualified ranges");
 }
 
 void test_expression_component_artifact_is_executable() {

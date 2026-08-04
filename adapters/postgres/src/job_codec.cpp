@@ -302,6 +302,43 @@ Tree correlation(
                     "maximum_inclusive", range.maximum_inclusive);
                 return encoded;
             }));
+    tree.add_child(
+        "candidates",
+        array(
+            value.candidates,
+            [](const service::CorrelationCandidateInput& candidate) {
+                Tree encoded;
+                encoded.put("id", candidate.id);
+                encoded.put("regime", candidate.regime);
+                encoded.put("priority", candidate.priority);
+                Tree coefficients;
+                for (const auto& [name, coefficient] :
+                     candidate.coefficients) {
+                    coefficients.put(name, coefficient);
+                }
+                encoded.add_child("coefficients", coefficients);
+                encoded.put("expression", candidate.expression);
+                encoded.add_child(
+                    "applicability",
+                    array(
+                        candidate.applicability,
+                        [](const auto& range) {
+                            Tree item;
+                            item.put("input", range.input);
+                            if (range.minimum) {
+                                item.put("minimum", *range.minimum);
+                            }
+                            if (range.maximum) {
+                                item.put("maximum", *range.maximum);
+                            }
+                            item.put("minimum_inclusive",
+                                     range.minimum_inclusive);
+                            item.put("maximum_inclusive",
+                                     range.maximum_inclusive);
+                            return item;
+                        }));
+                return encoded;
+            }));
     return tree;
 }
 
@@ -355,6 +392,42 @@ service::CorrelationArtifactInput decode_correlation(
                         encoded.get("maximum_inclusive", true),
                     };
                 });
+    }
+    if (const auto candidates = tree.get_child_optional("candidates")) {
+        value.candidates = decode_array<service::CorrelationCandidateInput>(
+            *candidates,
+            [](const Tree& encoded) {
+                service::CorrelationCandidateInput candidate;
+                candidate.id = encoded.get<std::string>("id");
+                candidate.regime = encoded.get<std::string>("regime");
+                candidate.priority = encoded.get("priority", 0);
+                for (const auto& [name, coefficient] :
+                     encoded.get_child("coefficients")) {
+                    candidate.coefficients.emplace(
+                        name, coefficient.get_value<double>());
+                }
+                candidate.expression =
+                    encoded.get<std::string>("expression");
+                candidate.applicability = decode_array<
+                    service::CorrelationApplicabilityRangeInput>(
+                    encoded.get_child("applicability"),
+                    [](const Tree& range) {
+                        const auto minimum =
+                            range.get_optional<double>("minimum");
+                        const auto maximum =
+                            range.get_optional<double>("maximum");
+                        return service::CorrelationApplicabilityRangeInput{
+                            range.get<std::string>("input"),
+                            minimum ? std::optional<double>{*minimum}
+                                    : std::nullopt,
+                            maximum ? std::optional<double>{*maximum}
+                                    : std::nullopt,
+                            range.get("minimum_inclusive", true),
+                            range.get("maximum_inclusive", true),
+                        };
+                    });
+                return candidate;
+            });
     }
     return value;
 }

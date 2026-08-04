@@ -100,10 +100,58 @@ selection remain engineering-data responsibilities. The v1 applicability contrac
 declared scalar operating ranges, but flow-regime classification and deterministic selection among
 multiple qualified artifacts remain separate platform capabilities.
 
+## Correlation families and regime selection
+
+`thermox.correlation/v2` keeps the same component-facing artifact type and typed input/output
+contract, but replaces the single expression with an ordered set of named candidates. Each
+candidate owns a regime label, explicit integer priority, coefficients, safe expression, and
+qualified applicability ranges:
+
+```json
+{
+  "inputs": [
+    {"name": "vapor_quality", "dimension": "dimensionless"},
+    {"name": "mass_flux", "dimension": "mass_flux"},
+    {"name": "liquid_density", "dimension": "density"},
+    {"name": "vapor_density", "dimension": "density"}
+  ],
+  "output": {"name": "void_fraction", "dimension": "dimensionless"},
+  "candidates": [{
+    "id": "bubbly_flow",
+    "regime": "bubbly",
+    "priority": 10,
+    "coefficients": {"slip_ratio": 1.2},
+    "expression": "1 / (1 + ((1 - vapor_quality) / vapor_quality) * (vapor_density / liquid_density) * slip_ratio)",
+    "applicability": [
+      {"input": "vapor_quality", "minimum": 0.01, "maximum": 0.35},
+      {"input": "mass_flux", "minimum": 0.0, "maximum": 500.0}
+    ]
+  }]
+}
+```
+
+Selection is deterministic and independent of component kind. Candidates whose complete envelope
+contains the live operating point are eligible; the unique candidate with the highest priority is
+evaluated. No eligible candidate is a coverage-gap error. Multiple eligible candidates at the same
+highest priority are an ambiguity error listing their IDs. Successful evaluation records the
+selected candidate and regime in the correlation evaluation result. Candidate IDs must be unique,
+and every candidate expression must exactly match the family inputs plus its own coefficients.
+
+Two-phase pipe and inventory consumers additionally supply nonnegative `mass_flux = |m_dot| / area`
+when requested, alongside quality, phase densities, signed mass flow, area, diameter, and pressure.
+This lets engineering data classify common operating regions without adding a pipe-specific
+selector to the platform. Regime labels remain declared engineering provenance; Thermox does not
+invent a universal flow-pattern map. Candidate expressions should be continuous across intended
+switch boundaries where possible because discontinuous switching creates a nonsmooth residual.
+
+The v2 payload is available through the declaration/service interface and durable job pipeline.
+The current visual correlation editor authors v1 single-law revisions; visual family authoring is
+a product-layer follow-up and does not limit direct project publication or execution.
+
 Project publication accepts `artifact_type=thermox.correlation` and
-`artifact_schema_version=thermox.correlation/v1`. Payload validation happens before immutable
-content persistence; selected revisions resolve into the calculation request with complete
-identity and checksum provenance.
+`artifact_schema_version=thermox.correlation/v1` or `thermox.correlation/v2`. Payload validation
+happens before immutable content persistence; selected revisions resolve into the calculation
+request with complete identity and checksum provenance.
 
 The Definition workspace exposes the same contract through a dedicated Engineering Data Registry
 form. It uses catalog unit dimensions for every input and output, supports immutable coefficient

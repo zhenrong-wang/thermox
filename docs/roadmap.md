@@ -224,6 +224,9 @@ Delivered:
 25. Immutable correlation applicability envelopes with typed per-input SI limits, inclusive or
     exclusive bounds, publication validation, durable execution persistence, authoring support,
     and explicit component-level out-of-range diagnostics. ✅
+26. V2 correlation families with named regime candidates, deterministic applicability/priority
+    selection, explicit coverage-gap and ambiguity diagnostics, mass-flux inputs for two-phase
+    consumers, immutable project publication, and durable job persistence. ✅
 
 ## Component catalog and modularization foundation
 

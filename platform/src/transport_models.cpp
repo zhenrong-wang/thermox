@@ -1418,6 +1418,7 @@ private:
                     {"liquid_density", "density"},
                     {"vapor_density", "density"},
                     {"mass_flow", "mass_flow"},
+                    {"mass_flux", "mass_flux"},
                     {"area", "area"},
                     {"diameter", "length"},
                     {"pressure", "pressure"},
@@ -1502,6 +1503,10 @@ private:
                     } else if (input.name == "mass_flow") {
                         inputs.emplace(
                             input.name, x.at(data.inlet_m));
+                    } else if (input.name == "mass_flux") {
+                        inputs.emplace(
+                            input.name,
+                            std::abs(x.at(data.inlet_m)) / data.area);
                     } else if (input.name == "area") {
                         inputs.emplace(input.name, data.area);
                     } else if (input.name == "diameter") {

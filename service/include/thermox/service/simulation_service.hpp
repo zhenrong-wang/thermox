@@ -319,6 +319,15 @@ struct CorrelationApplicabilityRangeInput {
     bool maximum_inclusive{true};
 };
 
+struct CorrelationCandidateInput {
+    std::string id;
+    std::string regime;
+    int priority{0};
+    std::map<std::string, double> coefficients;
+    std::string expression;
+    std::vector<CorrelationApplicabilityRangeInput> applicability;
+};
+
 struct CorrelationArtifactInput {
     std::string id;
     std::string schema_version;
@@ -329,6 +338,7 @@ struct CorrelationArtifactInput {
     std::map<std::string, double> coefficients;
     std::string expression;
     std::vector<CorrelationApplicabilityRangeInput> applicability;
+    std::vector<CorrelationCandidateInput> candidates;
 };
 
 struct EngineeringArtifactReference {
