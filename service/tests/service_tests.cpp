@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 67,
+        response.components.size() == 68,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -418,6 +418,19 @@ void test_catalog_discovery() {
             hydraulic_inertance->supports_transient &&
             hydraulic_inertance->parameters.size() == 2,
         "catalog must expose lumped hydraulic momentum storage");
+    const auto gravity_pipe = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "pipe.fluid.homogeneous_equilibrium_local_loss";
+        });
+    require(
+        gravity_pipe != response.components.end() &&
+            gravity_pipe->supports_steady &&
+            gravity_pipe->supports_transient &&
+            gravity_pipe->parameters.size() == 3,
+        "catalog must expose bidirectional homogeneous-equilibrium "
+        "gravity and local-loss closure");
     const auto fluid_pump = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1694,6 +1707,122 @@ void test_dynamic_forced_circulation_evaporator() {
         std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-2,
         "circulation-loop fluid, drum, and wall storage must close "
         "against exhaust heat and pump-work boundaries");
+}
+
+void test_dynamic_natural_circulation_evaporator() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/dynamic_natural_circulation_evaporator.json");
+    request.case_id = "buoyancy_segment";
+    request.solver.end_time = 0.1;
+    request.solver.max_step = 0.05;
+    const auto response = service.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.trajectory.size() > 1,
+        "natural-circulation evaporator must solve: " +
+            response.error.message);
+
+    const auto& final = response.trajectory.back().graph;
+    require(
+        std::none_of(
+            final.components.begin(), final.components.end(),
+            [](const auto& component) {
+                return component.kind.starts_with("pump.");
+            }),
+        "natural-circulation reference must contain no pump");
+    const auto& down_in = require_port_result(
+        final, "downcomer_gravity_loss", "inlet");
+    const auto& down_out = require_port_result(
+        final, "downcomer_gravity_loss", "outlet");
+    const auto& riser_in = require_port_result(
+        final, "riser_gravity_loss", "inlet");
+    const auto& riser_out = require_port_result(
+        final, "riser_gravity_loss", "outlet");
+    const auto& inertance_out = require_port_result(
+        final, "downcomer_inertance", "outlet");
+    const auto& circulation_flow = require_result_value(
+        inertance_out.primary_values, "m_dot");
+    const double down_density = require_result_value(
+        down_in.derived_values, "rho").value_si;
+    const double riser_density = require_result_value(
+        riser_in.derived_values, "rho").value_si;
+    require(
+        down_in.phase == "liquid" &&
+            riser_in.phase == "two_phase" &&
+            riser_out.phase == "two_phase" &&
+            down_density > 100.0 * riser_density,
+        "natural-circulation loop must resolve a dense liquid "
+        "downcomer and low-density two-phase riser");
+    require(
+        require_result_value(
+            down_out.primary_values, "p").value_si >
+            require_result_value(
+                down_in.primary_values, "p").value_si &&
+            require_result_value(
+                riser_in.primary_values, "p").value_si >
+            require_result_value(
+                riser_out.primary_values, "p").value_si &&
+            circulation_flow.value_si > 0.10 &&
+            circulation_flow.has_derivative &&
+            circulation_flow.derivative_si_s > 0.0,
+        "density-head imbalance must raise downcomer pressure and "
+        "accelerate positive circulation without mechanical drive");
+
+    const auto& source = require_port_result(
+        final, "exhaust_source", "outlet");
+    const auto& stack = require_port_result(
+        final, "stack", "inlet");
+    require(
+        require_result_value(source.derived_values, "T").value_si >
+            require_result_value(
+                stack.derived_values, "T").value_si,
+        "natural-circulation evaporator must cool the exhaust");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        require(
+            std::abs(require_result_value(
+                source.primary_values, species).value_si -
+                require_result_value(
+                    stack.primary_values, species).value_si) <
+                1.0e-10,
+            "natural-circulation evaporator must conserve each "
+            "exhaust species");
+    }
+
+    const auto& evaporator = require_component_result(
+        final, "evaporator");
+    const auto& drum = require_component_result(
+        final, "separator_drum");
+    const double stored_mass_rate = require_result_value(
+        evaporator.internal_values,
+        "fluid_mass").derivative_si_s + require_result_value(
+        drum.internal_values, "total_mass").derivative_si_s;
+    require(
+        std::abs(stored_mass_rate) < 2.0e-10 &&
+            std::abs(require_result_value(
+                final.system_balances,
+                "net_boundary_mass_flow").value_si) < 1.0e-12,
+        "natural-circulation inventories must conserve combined "
+        "water mass");
+    const double stored_energy_rate = require_result_value(
+        evaporator.internal_values,
+        "fluid_total_energy").derivative_si_s +
+        100000.0 * require_result_value(
+            evaporator.internal_values,
+            "wall_temperature").derivative_si_s +
+        require_result_value(
+            drum.internal_values,
+            "total_internal_energy").derivative_si_s;
+    const double boundary_energy_rate = require_result_value(
+        final.system_balances,
+        "net_boundary_energy_flow").value_si;
+    require(
+        std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-2,
+        "natural-circulation storage must close against the exhaust "
+        "heat boundary without hidden pump work");
 }
 #endif
 
@@ -3399,6 +3528,7 @@ int main() {
         test_dynamic_equilibrium_two_phase_material_fluid_cell();
         test_composed_dynamic_single_pressure_hrsg();
         test_dynamic_forced_circulation_evaporator();
+        test_dynamic_natural_circulation_evaporator();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();

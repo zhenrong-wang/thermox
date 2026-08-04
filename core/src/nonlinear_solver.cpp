@@ -1134,7 +1134,21 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
             diagnostics.iterations = iteration + 1;
             diagnostics.final_residual_norm = residual_norm;
             diagnostics.final_step_norm = 0.0;
-            diagnostics.message = "line search failed to reduce residual";
+            std::size_t dominant = 0;
+            double dominant_magnitude = 0.0;
+            for (std::size_t row = 0; row < residual.size(); ++row) {
+                const double magnitude =
+                    std::abs(residual[row] / residual_scales[row]);
+                if (magnitude > dominant_magnitude) {
+                    dominant = row;
+                    dominant_magnitude = magnitude;
+                }
+            }
+            diagnostics.message =
+                "line search failed to reduce residual; dominant "
+                "scaled residual '" +
+                problem.residual_names.at(dominant) + "'=" +
+                std::to_string(dominant_magnitude);
             return {x, diagnostics};
         }
 

@@ -72,6 +72,8 @@ coefficient, and heat-transfer parameters are illustrative, not calibrated equip
 The model uses lumped one-dimensional momentum, a fixed pump pressure ratio and efficiency,
 homogeneous two-phase resistance, equilibrium phase storage, and no vapor withdrawal during the
 short closed-loop segment. Consistent with the platform's current stream convention, kinetic
-energy storage is neglected in the thermal-energy audit. It does not yet model elevation-driven natural circulation,
-two-fluid slip, flow-regime transitions, pump performance maps in transient mode, cavitation,
-check-valve behavior, or shrink/swell. Those remain generic capability extensions.
+energy storage is neglected in the thermal-energy audit. A separate
+[natural-circulation reference](dynamic-natural-circulation.md) validates generic elevation head;
+this forced-circulation declaration does not use it. Two-fluid slip, flow-regime transitions, pump
+performance maps in transient mode, cavitation, check-valve behavior, and shrink/swell remain
+generic capability extensions.

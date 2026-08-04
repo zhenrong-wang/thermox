@@ -97,6 +97,10 @@ Implemented in this sprint:
   lumped hydraulic momentum storage, equilibrium boiling cell, and two-phase resistance. The
   dynamic graph conserves combined inventory mass and energy while resolving loop-flow
   acceleration. See [Dynamic forced circulation](docs/dynamic-forced-circulation.md).
+- A pump-free natural-circulation reference combines signed elevation/local-loss segments with
+  hydraulic inertance, resolving dense-liquid downcomer pressure recovery and low-density
+  two-phase riser head from registered properties. See
+  [Dynamic natural circulation](docs/dynamic-natural-circulation.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

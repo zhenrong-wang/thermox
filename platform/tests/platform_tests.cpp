@@ -1016,6 +1016,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "restriction.fluid.orifice.nonflashing_liquid",
         "restriction.fluid.orifice.perfect_gas",
         "restriction.fluid.local_loss.homogeneous_two_phase",
+        "pipe.fluid.homogeneous_equilibrium_local_loss",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",
@@ -2911,6 +2912,78 @@ void test_return_bend_fixed_loss_uses_fluid_density() {
             graph.problem.variable_names, "bend.outlet.p")),
         2.0e5 - expected_loss, 1.0e-7,
         "return bend applies K rho v squared pressure loss");
+}
+
+void test_homogeneous_gravity_pipe_supports_reverse_flow_and_transient() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "bidirectional_gravity_pipe",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "pipe",
+      "kind": "pipe.fluid.homogeneous_equilibrium_local_loss",
+      "parameters": {
+        "flow_diameter": {"value": 0.5, "unit": "m"},
+        "loss_coefficient": 2.0,
+        "elevation_change": {"value": -3.0, "unit": "m"}
+      },
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "reverse",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "pipe.inlet.m_dot": {"value": -1.0, "unit": "kg/s"},
+      "pipe.inlet.p": {"value": 1.0, "unit": "bar"},
+      "pipe.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "reverse_dynamic",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "pipe.inlet.m_dot": {"value": -1.0, "unit": "kg/s"},
+      "pipe.inlet.p": {"value": 1.0, "unit": "bar"},
+      "pipe.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto steady = thermox::platform::compile_model_graph(
+        document, registry, "reverse");
+    const auto solved = thermox::solve_newton(steady.problem);
+    require(solved.diagnostics.converged,
+            solved.diagnostics.message);
+    require_near(
+        solved.x.at(require_variable_index(
+            steady.problem.variable_names,
+            "pipe.outlet.m_dot")),
+        -1.0, 1.0e-10,
+        "gravity pipe conserves signed reverse flow");
+    require(
+        solved.x.at(require_variable_index(
+            steady.problem.variable_names, "pipe.outlet.p")) >
+            1.0e5,
+        "signed friction and downward elevation produce a reverse-flow "
+        "outlet pressure above the declared inlet");
+
+    const auto transient =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "reverse_dynamic");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            transient.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            "transient gravity-pipe initialization: " +
+                initialized.diagnostics.message);
 }
 
 void test_darcy_weisbach_pipe_uses_transport_properties() {
@@ -7162,6 +7235,7 @@ int main() {
         test_actuated_liquid_valve_scales_area_with_command();
         test_actuated_valve_composes_with_dynamic_control_lag();
         test_return_bend_fixed_loss_uses_fluid_density();
+        test_homogeneous_gravity_pipe_supports_reverse_flow_and_transient();
         test_darcy_weisbach_pipe_uses_transport_properties();
         test_darcy_weisbach_pipe_exposes_ambient_heat_boundary();
         test_equilibrium_flash_separator_closes_phase_split();

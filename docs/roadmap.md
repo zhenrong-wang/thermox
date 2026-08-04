@@ -203,6 +203,9 @@ Delivered:
 18. Generic hydraulic-inertance momentum storage, quasi-steady fixed-efficiency fluid
     turbomachinery and junctions in transient graphs, plus a declaration-only forced-circulation
     drum/evaporator loop with hydraulic, phase, species, mass, and energy audits. ✅
+19. Signed homogeneous-equilibrium gravity/local-loss transport plus a declaration-only pump-free
+    natural-circulation drum/evaporator loop with density-head, reverse-flow contract, momentum,
+    phase, species, mass, and energy verification. ✅
 
 ## Component catalog and modularization foundation
 

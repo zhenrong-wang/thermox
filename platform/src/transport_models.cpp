@@ -1033,6 +1033,210 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class HomogeneousEquilibriumGravityPipeModel final
+    : public ComponentModel {
+public:
+    HomogeneousEquilibriumGravityPipeModel()
+        : descriptor_(make_descriptor(
+              "pipe.fluid.homogeneous_equilibrium_local_loss",
+              {{"inlet", "fluid", "in"},
+               {"outlet", "fluid", "out"}})) {
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "pipe.fluid";
+        descriptor_.display_name =
+            "Homogeneous-equilibrium gravity pipe";
+        descriptor_.category = "Fluid transport";
+        descriptor_.model_name =
+            "Density-based local loss with elevation head";
+        descriptor_.parameters = {
+            {"flow_diameter", "length", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"loss_coefficient", "dimensionless", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), true, true},
+            {"elevation_change", "length", false, 0.0,
+             -std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::infinity(), true, true},
+        };
+        descriptor_.required_property_capabilities = {
+            physics::PropertyCapability::state_ph};
+        descriptor_.supports_steady = true;
+        descriptor_.supports_transient = true;
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto data = compile_data(context);
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{data.outlet_m, 1.0}, {data.inlet_m, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "isenthalpic_transport",
+            {{data.outlet_h, 1.0}, {data.inlet_h, -1.0}},
+            0.0, 100000.0);
+        const auto evaluate = evaluator(data);
+        const auto derivatives = derivative_variables(data);
+        system.add_checked_sparse_equation(
+            prefix + "gravity_friction_pressure_balance",
+            [evaluate](const std::vector<double>& x,
+                       double& residual) {
+                const auto result = evaluate(x);
+                residual = result.residual;
+                return result.status;
+            },
+            variable_pattern(derivatives),
+            [evaluate, derivatives](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                return assemble_restriction_numerical_row(
+                    evaluate, derivatives, x, jacobian);
+            },
+            100000.0);
+    }
+
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        const auto data = compile_data(context);
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{data.outlet_m, 1.0, 0.0},
+             {data.inlet_m, -1.0, 0.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "isenthalpic_transport",
+            {{data.outlet_h, 1.0, 0.0},
+             {data.inlet_h, -1.0, 0.0}},
+            0.0, 100000.0);
+        const auto evaluate = evaluator(data);
+        const auto derivatives = derivative_variables(data);
+        system.add_sparse_equation(
+            prefix + "gravity_friction_pressure_balance",
+            variable_pattern(derivatives),
+            [evaluate, derivatives](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                return assemble_restriction_numerical_dae_row(
+                    evaluate, derivatives, x, residual, jacobian);
+            },
+            100000.0);
+    }
+
+private:
+    struct Data {
+        std::shared_ptr<const physics::PropertyPackage> properties;
+        std::size_t inlet_m{}, inlet_p{}, inlet_h{};
+        std::size_t outlet_m{}, outlet_p{}, outlet_h{};
+        double loss_scale{};
+        double elevation_change{};
+    };
+
+    static Data compile_data(
+        const ComponentCompileContext& context) {
+        Data data;
+        data.properties = require_property_package(context, "inlet");
+        if (data.properties !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        data.inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        data.inlet_p = require_port_variable(context, "inlet.p");
+        data.inlet_h = require_port_variable(context, "inlet.h");
+        data.outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        data.outlet_p = require_port_variable(context, "outlet.p");
+        data.outlet_h = require_port_variable(context, "outlet.h");
+        const double diameter =
+            required_parameter(context.component, "flow_diameter");
+        const double area = std::numbers::pi * diameter * diameter /
+            4.0;
+        data.loss_scale = required_parameter(
+            context.component, "loss_coefficient") /
+            (2.0 * area * area);
+        data.elevation_change = parameter_or(
+            context.component, "elevation_change", 0.0);
+        return data;
+    }
+
+    static RestrictionEvaluator evaluator(const Data& data) {
+        return [data](const std::vector<double>& x) {
+            constexpr double gravity = 9.80665;
+            const double inlet_pressure = x.at(data.inlet_p);
+            const double outlet_pressure = x.at(data.outlet_p);
+            const double mean_pressure =
+                0.5 * (inlet_pressure + outlet_pressure);
+            if (!std::isfinite(mean_pressure) ||
+                mean_pressure <= 0.0) {
+                return RestrictionEvaluation{
+                    EvaluationStatus::recoverable(
+                        "homogeneous-equilibrium gravity pipe requires "
+                        "positive finite mean pressure")};
+            }
+            const auto state = data.properties->state_ph(
+                mean_pressure, x.at(data.inlet_h));
+            if (!state.ok()) {
+                return RestrictionEvaluation{property_failure(state)};
+            }
+            const double density = state.state.density_kg_m3;
+            if (!std::isfinite(density) || density <= 0.0) {
+                return RestrictionEvaluation{
+                    EvaluationStatus::recoverable(
+                        "homogeneous-equilibrium gravity pipe requires "
+                        "positive finite mixture density")};
+            }
+            const double mass_flow = x.at(data.inlet_m);
+            if (!std::isfinite(mass_flow)) {
+                return RestrictionEvaluation{
+                    EvaluationStatus::recoverable(
+                        "homogeneous-equilibrium gravity pipe requires "
+                        "finite mass flow")};
+            }
+            return RestrictionEvaluation{
+                EvaluationStatus::success(),
+                inlet_pressure - outlet_pressure -
+                    data.loss_scale * mass_flow *
+                        std::abs(mass_flow) / density -
+                    density * gravity * data.elevation_change};
+        };
+    }
+
+    static std::vector<std::pair<std::size_t, double>>
+    derivative_variables(const Data& data) {
+        return {
+            {data.inlet_m, 1.0e-7},
+            {data.inlet_p, 0.1},
+            {data.inlet_h, 0.1},
+            {data.outlet_p, 0.1},
+        };
+    }
+
+    static std::vector<std::size_t> variable_pattern(
+        const std::vector<std::pair<std::size_t, double>>& variables) {
+        std::vector<std::size_t> pattern;
+        pattern.reserve(variables.size());
+        for (const auto& [variable, _] : variables) {
+            pattern.push_back(variable);
+        }
+        return pattern;
+    }
+
+    ComponentModelDescriptor descriptor_;
+};
+
 class ReturnBendFixedLossModel final : public ComponentModel {
 public:
     ReturnBendFixedLossModel()
@@ -2003,6 +2207,8 @@ void register_transport_component_models(
         std::make_shared<FlowAreaRestrictionModel>(true));
     registry.register_model(
         std::make_shared<HomogeneousTwoPhaseLocalLossModel>());
+    registry.register_model(
+        std::make_shared<HomogeneousEquilibriumGravityPipeModel>());
     registry.register_model(
         std::make_shared<ReturnBendFixedLossModel>());
     registry.register_model(

@@ -777,6 +777,33 @@ void test_newton_solver_rejects_invalid_linear_solver_step() {
                      "invalid linear solver step message");
 }
 
+void test_line_search_failure_names_dominant_residual() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x", "y"};
+    problem.residual_names = {"minor_balance", "dominant_balance"};
+    problem.initial_guess = {0.0, 0.0};
+    problem.residual = [](
+        const std::vector<double>&,
+        std::vector<double>& residual) {
+        residual[0] = 1.0;
+        residual[1] = 3.0;
+    };
+    problem.jacobian = [](
+        const std::vector<double>&,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = 1.0;
+        jacobian[1][1] = 1.0;
+    };
+    thermox::SolverOptions options;
+    options.max_line_search_steps = 3;
+    const auto result = thermox::solve_newton(problem, options);
+    require(!result.diagnostics.converged,
+            "constant residual must fail line search");
+    require_contains(
+        result.diagnostics.message, "dominant_balance",
+        "line-search diagnostic names dominant scaled residual");
+}
+
 void test_newton_solver_uses_residual_scales_for_convergence() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"x"};
@@ -1256,6 +1283,7 @@ int main() {
         test_newton_solver_uses_custom_linear_solver();
         test_newton_solver_reports_linear_solver_failure();
         test_newton_solver_rejects_invalid_linear_solver_step();
+        test_line_search_failure_names_dominant_residual();
         test_newton_solver_uses_residual_scales_for_convergence();
         test_newton_solver_scales_linear_system_rows();
         test_newton_solver_scales_columns_and_returns_physical_step();
