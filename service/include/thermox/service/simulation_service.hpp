@@ -311,6 +311,14 @@ struct CorrelationVariableInput {
     std::string dimension;
 };
 
+struct CorrelationApplicabilityRangeInput {
+    std::string input;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
 struct CorrelationArtifactInput {
     std::string id;
     std::string schema_version;
@@ -320,6 +328,7 @@ struct CorrelationArtifactInput {
     CorrelationVariableInput output;
     std::map<std::string, double> coefficients;
     std::string expression;
+    std::vector<CorrelationApplicabilityRangeInput> applicability;
 };
 
 struct EngineeringArtifactReference {

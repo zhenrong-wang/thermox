@@ -349,6 +349,12 @@ inventory void fraction, closing a distinct outlet quality and enthalpy. Keeping
 transport qualities separate preserves the conservative finite-volume contract under phase slip.
 See [Engineering correlations](engineering-correlations.md#two-phase-void-fraction).
 
+Correlation artifact inputs may carry qualified SI operating ranges. These constraints travel with
+the immutable artifact through project publication, execution snapshots, and durable job payloads;
+the evaluator rejects an out-of-envelope operating point before component residual evaluation.
+They qualify engineering data without placing OEM- or correlation-specific ranges in registered
+component code.
+
 Before producing a solver problem, each compiler compares the number of unknowns and residual
 equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched
 variable or equation candidates from bipartite incidence matching. Equations without declared

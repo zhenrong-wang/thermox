@@ -4,6 +4,7 @@
 #include "thermox/platform/safe_expression.hpp"
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,19 @@ struct CorrelationEvaluation {
     std::string error;
 };
 
+struct CorrelationApplicabilityRange {
+    std::string input;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
+struct CorrelationApplicabilityAssessment {
+    bool applicable{true};
+    std::vector<std::string> violations;
+};
+
 class CorrelationArtifact final : public EngineeringArtifact {
 public:
     CorrelationArtifact(
@@ -35,7 +49,8 @@ public:
         std::vector<CorrelationVariable> inputs,
         CorrelationVariable output,
         std::map<std::string, double> coefficients,
-        std::string expression);
+        std::string expression,
+        std::vector<CorrelationApplicabilityRange> applicability = {});
 
     [[nodiscard]] std::string_view artifact_type()
         const noexcept override {
@@ -50,6 +65,10 @@ public:
     [[nodiscard]] const std::map<std::string, double>& coefficients()
         const noexcept;
     [[nodiscard]] const std::string& expression() const noexcept;
+    [[nodiscard]] const std::vector<CorrelationApplicabilityRange>&
+    applicability() const noexcept;
+    [[nodiscard]] CorrelationApplicabilityAssessment assess_applicability(
+        const std::map<std::string, double>& inputs) const;
     [[nodiscard]] CorrelationEvaluation evaluate(
         const std::map<std::string, double>& inputs) const;
 
@@ -58,6 +77,7 @@ private:
     CorrelationVariable output_;
     std::map<std::string, double> coefficients_;
     std::string expression_;
+    std::vector<CorrelationApplicabilityRange> applicability_;
     SafeExpression compiled_;
 };
 

@@ -221,6 +221,9 @@ Delivered:
 24. Correlation-driven transient two-phase inventory separating thermodynamic holdup quality,
     observable void fraction, and transported outlet quality while retaining exact mass and
     internal-energy accumulation. ✅
+25. Immutable correlation applicability envelopes with typed per-input SI limits, inclusive or
+    exclusive bounds, publication validation, durable execution persistence, authoring support,
+    and explicit component-level out-of-range diagnostics. ✅
 
 ## Component catalog and modularization foundation
 

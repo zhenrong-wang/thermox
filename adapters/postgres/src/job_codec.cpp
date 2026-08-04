@@ -287,6 +287,21 @@ Tree correlation(
     }
     tree.add_child("coefficients", coefficients);
     tree.put("expression", value.expression);
+    tree.add_child(
+        "applicability",
+        array(
+            value.applicability,
+            [](const service::CorrelationApplicabilityRangeInput& range) {
+                Tree encoded;
+                encoded.put("input", range.input);
+                if (range.minimum) encoded.put("minimum", *range.minimum);
+                if (range.maximum) encoded.put("maximum", *range.maximum);
+                encoded.put(
+                    "minimum_inclusive", range.minimum_inclusive);
+                encoded.put(
+                    "maximum_inclusive", range.maximum_inclusive);
+                return encoded;
+            }));
     return tree;
 }
 
@@ -318,6 +333,29 @@ service::CorrelationArtifactInput decode_correlation(
             name, encoded.get_value<double>());
     }
     value.expression = tree.get<std::string>("expression");
+    if (const auto applicability =
+            tree.get_child_optional("applicability")) {
+        value.applicability =
+            decode_array<service::CorrelationApplicabilityRangeInput>(
+                *applicability,
+                [](const Tree& encoded) {
+                    const auto minimum =
+                        encoded.get_optional<double>("minimum");
+                    const auto maximum =
+                        encoded.get_optional<double>("maximum");
+                    return service::CorrelationApplicabilityRangeInput{
+                        encoded.get<std::string>("input"),
+                        minimum
+                            ? std::optional<double>{*minimum}
+                            : std::nullopt,
+                        maximum
+                            ? std::optional<double>{*maximum}
+                            : std::nullopt,
+                        encoded.get("minimum_inclusive", true),
+                        encoded.get("maximum_inclusive", true),
+                    };
+                });
+    }
     return value;
 }
 

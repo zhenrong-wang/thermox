@@ -105,6 +105,53 @@ void test_correlation_contract_rejects_undeclared_symbols() {
             "correlation must reject undeclared expression symbols");
 }
 
+void test_correlation_enforces_qualified_operating_envelope() {
+    auto bounded = thermox::platform::CorrelationArtifact{
+        "bounded-correlation",
+        thermox::platform::correlation_artifact_schema_v1,
+        "revision-1",
+        std::string(64, 'a'),
+        {{"vapor_quality", "dimensionless"}},
+        {"void_fraction", "dimensionless"},
+        {},
+        "vapor_quality",
+        {{"vapor_quality", 0.1, 0.8, true, false}},
+    };
+    bounded.validate();
+    require(
+        bounded.assess_applicability({{"vapor_quality", 0.1}})
+            .applicable,
+        "inclusive applicability boundary must be accepted");
+    const auto inside = bounded.evaluate({{"vapor_quality", 0.5}});
+    require(inside.error.empty(), inside.error);
+    const auto outside = bounded.evaluate({{"vapor_quality", 0.8}});
+    require(
+        outside.error.find("vapor_quality=0.8") != std::string::npos &&
+            outside.error.find("[0.1, 0.8)") != std::string::npos,
+        "exclusive applicability violation must report input, value, "
+        "and qualified range");
+
+    auto invalid = thermox::platform::CorrelationArtifact{
+        "invalid-envelope",
+        thermox::platform::correlation_artifact_schema_v1,
+        "revision-1",
+        std::string(64, 'b'),
+        {{"vapor_quality", "dimensionless"}},
+        {"void_fraction", "dimensionless"},
+        {},
+        "vapor_quality",
+        {{"unknown_input", 0.0, 1.0, true, true}},
+    };
+    bool rejected = false;
+    try {
+        invalid.validate();
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected,
+            "applicability must reference a declared correlation input");
+}
+
 void test_return_bend_uses_bound_correlation() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -475,6 +522,7 @@ int main() {
     try {
         test_correlation_evaluates_with_analytic_derivatives();
         test_correlation_contract_rejects_undeclared_symbols();
+        test_correlation_enforces_qualified_operating_envelope();
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
         test_two_phase_inventory_uses_correlation_for_outlet_quality();

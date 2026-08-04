@@ -112,6 +112,9 @@ Implemented in this sprint:
 - Transient two-phase inventories can use the same artifact contract to distinguish conserved
   thermodynamic holdup quality from correlation-driven transported outlet quality. Pressure,
   mass, total energy, void fraction, and outlet enthalpy remain coupled in one conservative DAE.
+- Correlation revisions can declare qualified SI ranges for individual inputs. Publication rejects
+  malformed envelopes, while runtime diagnostics reject out-of-range component evaluations with
+  the live value and exact qualified interval instead of silently extrapolating engineering data.
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

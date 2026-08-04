@@ -370,7 +370,14 @@ std::string correlation_payload() {
     "dimension": "pressure"
   },
   "coefficients": {"loss_coefficient": 1.5},
-  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)"
+  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
+  "applicability": [{
+    "input": "mass_flow",
+    "minimum": 0.0,
+    "maximum": 25.0,
+    "minimum_inclusive": true,
+    "maximum_inclusive": false
+  }]
 })json";
 }
 
@@ -399,7 +406,13 @@ void test_correlation_artifact_is_executable_input() {
             resolved->snapshot.correlations.front().expression.find(
                 "mass_flow") != std::string::npos &&
             resolved->snapshot.correlations.front()
-                    .coefficients.at("loss_coefficient") == 1.5,
+                    .coefficients.at("loss_coefficient") == 1.5 &&
+            resolved->snapshot.correlations.front()
+                    .applicability.size() == 1U &&
+            resolved->snapshot.correlations.front()
+                    .applicability.front().maximum == 25.0 &&
+            !resolved->snapshot.correlations.front()
+                    .applicability.front().maximum_inclusive,
         "correlation revisions must resolve into an immutable "
         "executable artifact snapshot");
 
@@ -425,6 +438,35 @@ void test_correlation_artifact_is_executable_input() {
     require(unsafe_rejected,
             "unsafe correlation expressions must be rejected before "
             "persistence");
+
+    bool invalid_envelope_rejected = false;
+    try {
+        (void)projects.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "invalid-envelope-correlation",
+            {},
+            "thermox.correlation",
+            "thermox.correlation/v1",
+            R"json({
+              "inputs": [{"name": "x", "dimension": "dimensionless"}],
+              "output": {"name": "y", "dimension": "dimensionless"},
+              "coefficients": {},
+              "expression": "x",
+              "applicability": [{
+                "input": "unknown",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }]
+            })json",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        invalid_envelope_rejected = true;
+    }
+    require(
+        invalid_envelope_rejected,
+        "invalid applicability envelopes must be rejected before "
+        "persistence");
 }
 
 void test_expression_component_artifact_is_executable() {

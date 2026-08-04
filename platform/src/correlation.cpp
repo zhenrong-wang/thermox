@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -33,11 +34,13 @@ CorrelationArtifact::CorrelationArtifact(
     std::vector<CorrelationVariable> inputs,
     CorrelationVariable output,
     std::map<std::string, double> coefficients,
-    std::string expression)
+    std::string expression,
+    std::vector<CorrelationApplicabilityRange> applicability)
     : inputs_(std::move(inputs)),
       output_(std::move(output)),
       coefficients_(std::move(coefficients)),
       expression_(std::move(expression)),
+      applicability_(std::move(applicability)),
       compiled_(SafeExpression::parse(expression_)) {
     id = std::move(artifact_id);
     schema_version = std::move(artifact_schema_version);
@@ -83,6 +86,30 @@ void CorrelationArtifact::validate() const {
                 name);
         }
     }
+    std::set<std::string> ranged_inputs;
+    for (const auto& range : applicability_) {
+        if (!declared.contains(range.input) ||
+            coefficients_.contains(range.input) ||
+            !ranged_inputs.insert(range.input).second) {
+            throw std::invalid_argument(
+                "correlation artifact '" + id +
+                "' has an unknown or duplicate applicability input: " +
+                range.input);
+        }
+        if ((!range.minimum && !range.maximum) ||
+            (range.minimum && !std::isfinite(*range.minimum)) ||
+            (range.maximum && !std::isfinite(*range.maximum)) ||
+            (range.minimum && range.maximum &&
+             (*range.minimum > *range.maximum ||
+              (*range.minimum == *range.maximum &&
+               (!range.minimum_inclusive ||
+                !range.maximum_inclusive))))) {
+            throw std::invalid_argument(
+                "correlation artifact '" + id +
+                "' has an invalid applicability range for input: " +
+                range.input);
+        }
+    }
     if (compiled_.symbols() != declared) {
         throw std::invalid_argument(
             "correlation artifact '" + id +
@@ -111,6 +138,48 @@ const std::string& CorrelationArtifact::expression()
     return expression_;
 }
 
+const std::vector<CorrelationApplicabilityRange>&
+CorrelationArtifact::applicability() const noexcept {
+    return applicability_;
+}
+
+CorrelationApplicabilityAssessment
+CorrelationArtifact::assess_applicability(
+    const std::map<std::string, double>& inputs) const {
+    CorrelationApplicabilityAssessment result;
+    for (const auto& range : applicability_) {
+        const auto found = inputs.find(range.input);
+        if (found == inputs.end() || !std::isfinite(found->second)) {
+            result.applicable = false;
+            result.violations.push_back(
+                "applicability input is missing or non-finite: " +
+                range.input);
+            continue;
+        }
+        const double value = found->second;
+        const bool below = range.minimum &&
+            (value < *range.minimum ||
+             (value == *range.minimum && !range.minimum_inclusive));
+        const bool above = range.maximum &&
+            (value > *range.maximum ||
+             (value == *range.maximum && !range.maximum_inclusive));
+        if (!below && !above) continue;
+        result.applicable = false;
+        std::ostringstream message;
+        message << "correlation input outside applicability: "
+                << range.input << '=' << value << " expected "
+                << (range.minimum_inclusive ? '[' : '(');
+        if (range.minimum) message << *range.minimum;
+        else message << "-inf";
+        message << ", ";
+        if (range.maximum) message << *range.maximum;
+        else message << "+inf";
+        message << (range.maximum_inclusive ? ']' : ')');
+        result.violations.push_back(message.str());
+    }
+    return result;
+}
+
 CorrelationEvaluation CorrelationArtifact::evaluate(
     const std::map<std::string, double>& inputs) const {
     std::map<std::string, double> values = coefficients_;
@@ -126,6 +195,15 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     }
     if (inputs.size() != inputs_.size()) {
         return {0.0, {}, "correlation received unknown inputs"};
+    }
+    const auto applicability = assess_applicability(inputs);
+    if (!applicability.applicable) {
+        std::string error;
+        for (const auto& violation : applicability.violations) {
+            if (!error.empty()) error += "; ";
+            error += violation;
+        }
+        return {0.0, {}, std::move(error)};
     }
     const auto evaluated = compiled_.evaluate(values);
     CorrelationEvaluation result;

@@ -350,6 +350,29 @@ CorrelationArtifactInput decode_correlation(
     }
     artifact.expression =
         tree.get<std::string>("expression");
+    if (const auto applicability =
+            tree.get_child_optional("applicability")) {
+        artifact.applicability =
+            decode_array<CorrelationApplicabilityRangeInput>(
+                *applicability,
+                [](const Tree& encoded) {
+                    const auto minimum =
+                        encoded.get_optional<double>("minimum");
+                    const auto maximum =
+                        encoded.get_optional<double>("maximum");
+                    return CorrelationApplicabilityRangeInput{
+                        encoded.get<std::string>("input"),
+                        minimum
+                            ? std::optional<double>{*minimum}
+                            : std::nullopt,
+                        maximum
+                            ? std::optional<double>{*maximum}
+                            : std::nullopt,
+                        encoded.get("minimum_inclusive", true),
+                        encoded.get("maximum_inclusive", true),
+                    };
+                });
+    }
     return artifact;
 }
 
@@ -376,6 +399,27 @@ Tree encode_correlation(
     }
     tree.add_child("coefficients", coefficients);
     tree.put("expression", artifact.expression);
+    if (!artifact.applicability.empty()) {
+        tree.add_child(
+            "applicability",
+            array(
+                artifact.applicability,
+                [](const CorrelationApplicabilityRangeInput& range) {
+                    Tree encoded;
+                    encoded.put("input", range.input);
+                    if (range.minimum) {
+                        encoded.put("minimum", *range.minimum);
+                    }
+                    if (range.maximum) {
+                        encoded.put("maximum", *range.maximum);
+                    }
+                    encoded.put(
+                        "minimum_inclusive", range.minimum_inclusive);
+                    encoded.put(
+                        "maximum_inclusive", range.maximum_inclusive);
+                    return encoded;
+                }));
+    }
     return tree;
 }
 
@@ -386,6 +430,13 @@ platform::CorrelationArtifact correlation(
     for (const auto& variable : input.inputs) {
         variables.push_back({variable.name, variable.dimension});
     }
+    std::vector<platform::CorrelationApplicabilityRange> applicability;
+    applicability.reserve(input.applicability.size());
+    for (const auto& range : input.applicability) {
+        applicability.push_back({
+            range.input, range.minimum, range.maximum,
+            range.minimum_inclusive, range.maximum_inclusive});
+    }
     return {
         input.id,
         input.schema_version,
@@ -395,6 +446,7 @@ platform::CorrelationArtifact correlation(
         {input.output.name, input.output.dimension},
         input.coefficients,
         input.expression,
+        std::move(applicability),
     };
 }
 

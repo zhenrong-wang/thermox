@@ -221,6 +221,14 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             variables.push_back(
                 {variable.name, variable.dimension});
         }
+        std::vector<platform::CorrelationApplicabilityRange>
+            applicability;
+        applicability.reserve(input.applicability.size());
+        for (const auto& range : input.applicability) {
+            applicability.push_back({
+                range.input, range.minimum, range.maximum,
+                range.minimum_inclusive, range.maximum_inclusive});
+        }
         artifacts.register_artifact(platform::CorrelationArtifact{
             input.id,
             input.schema_version,
@@ -230,6 +238,7 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             {input.output.name, input.output.dimension},
             input.coefficients,
             input.expression,
+            std::move(applicability),
         });
     }
     return artifacts;

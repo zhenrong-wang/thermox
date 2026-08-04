@@ -756,6 +756,13 @@ export interface CorrelationArtifactDefinition {
   }
   coefficients: Record<string, number>
   expression: string
+  applicability?: Array<{
+    input: string
+    minimum?: number
+    maximum?: number
+    minimum_inclusive: boolean
+    maximum_inclusive: boolean
+  }>
 }
 
 export type MapExtrapolationPolicy = 'reject' | 'clamp' | 'linear'

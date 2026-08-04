@@ -2,9 +2,9 @@
 
 `thermox.correlation/v1` stores a bounded algebraic engineering correlation independently from a
 component instance. Its payload declares typed inputs, one typed output, immutable coefficients,
-and a safe expression. Expressions use the same bounded grammar and analytic differentiation
-engine as declarative expression components; they cannot perform I/O, assignment, loops, or call
-arbitrary code.
+a safe expression, and optional qualified operating ranges. Expressions use the same bounded
+grammar and analytic differentiation engine as declarative expression components; they cannot
+perform I/O, assignment, loops, or call arbitrary code.
 
 ```json
 {
@@ -15,9 +15,24 @@ arbitrary code.
   ],
   "output": {"name": "pressure_loss", "dimension": "pressure"},
   "coefficients": {"loss_coefficient": 1.5},
-  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)"
+  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
+  "applicability": [{
+    "input": "mass_flow",
+    "minimum": 0.0,
+    "maximum": 25.0,
+    "minimum_inclusive": true,
+    "maximum_inclusive": false
+  }]
 }
 ```
+
+Applicability limits are expressed in the declared input's SI dimension. Each range must reference
+one declared input, may provide either or both finite bounds, and explicitly controls whether each
+present bound is inclusive. Duplicate inputs, empty ranges, and unknown inputs are rejected when
+the immutable artifact revision is published. At runtime, evaluation outside a qualified range is
+rejected before the expression is evaluated; the diagnostic identifies the artifact input, live
+value, and qualified interval. Omitting `applicability` means that the artifact owner has declared
+no machine-readable operating envelope—it does not imply universal physical validity.
 
 The initial consumer is the `fitting.fluid.return_bend.correlation` calculation model under the
 existing `fitting.fluid.return_bend` physical template. A component instance supplies its diameter
@@ -81,8 +96,9 @@ For this inventory consumer, `vapor_quality` means transported outlet quality, d
 pressure are evaluated at the live inventory pressure, `mass_flow` is outlet flow, and geometry
 comes from `flow_diameter`. It is transient-only, requires `saturation_p`, and rejects
 nonphysical correlation outputs explicitly. Correlation validity envelopes and flow-regime
-selection remain engineering-data responsibilities; the current v1 artifact contract does not
-claim a correlation is valid outside the range for which its owner qualified it.
+selection remain engineering-data responsibilities. The v1 applicability contract enforces
+declared scalar operating ranges, but flow-regime classification and deterministic selection among
+multiple qualified artifacts remain separate platform capabilities.
 
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation happens before immutable

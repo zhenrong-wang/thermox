@@ -322,6 +322,27 @@ void test_request_scoped_correlation_artifacts() {
         "correlation execution must retain immutable provenance");
 }
 
+void test_correlation_applicability_reaches_component_diagnostics() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = correlated_bend_model();
+    request.case_id = "design";
+    auto artifact = bend_correlation();
+    artifact.applicability = {
+        {"mass_flow", 0.0, 1.0, true, true},
+    };
+    request.artifacts.correlations.push_back(std::move(artifact));
+    const auto response = service.run_steady(request);
+    require(
+        !response.succeeded() &&
+            response.error.message.find(
+                "mass_flow=2") != std::string::npos &&
+            response.error.message.find(
+                "[0, 1]") != std::string::npos,
+        "component evaluation must surface the exact correlation "
+        "applicability violation");
+}
+
 void test_request_contract_validation() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -3552,6 +3573,7 @@ int main() {
         test_request_scoped_performance_map_artifacts();
         test_resolved_performance_map_artifacts();
         test_request_scoped_correlation_artifacts();
+        test_correlation_applicability_reaches_component_diagnostics();
         test_catalog_discovery();
         test_validation_and_canonicalization();
         test_homogeneous_two_phase_local_loss();

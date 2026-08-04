@@ -22,6 +22,13 @@ interface CorrelationArtifactFormProps {
 
 type VariableDraft = CorrelationArtifactDefinition['inputs'][number]
 type CoefficientDraft = { name: string; value: string }
+type ApplicabilityDraft = {
+  input: string
+  minimum: string
+  maximum: string
+  minimum_inclusive: boolean
+  maximum_inclusive: boolean
+}
 
 const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -52,6 +59,34 @@ export function validateCorrelationDefinition(
   }
   if (!definition.output.dimension) issues.push('Output needs a dimension.')
   if (!definition.expression.trim()) issues.push('Expression is required.')
+  const rangedInputs = new Set<string>()
+  for (const range of definition.applicability ?? []) {
+    if (!definition.inputs.some((input) => input.name === range.input)) {
+      issues.push(`Applicability input "${range.input}" is not declared.`)
+    }
+    if (rangedInputs.has(range.input)) {
+      issues.push(`Applicability input "${range.input}" is duplicated.`)
+    }
+    rangedInputs.add(range.input)
+    if (range.minimum === undefined && range.maximum === undefined) {
+      issues.push(`Applicability input "${range.input}" needs a minimum or maximum.`)
+    }
+    if (range.minimum !== undefined && !Number.isFinite(range.minimum)) {
+      issues.push(`Applicability minimum for "${range.input}" must be finite.`)
+    }
+    if (range.maximum !== undefined && !Number.isFinite(range.maximum)) {
+      issues.push(`Applicability maximum for "${range.input}" must be finite.`)
+    }
+    if (
+      range.minimum !== undefined &&
+      range.maximum !== undefined &&
+      (range.minimum > range.maximum ||
+        (range.minimum === range.maximum &&
+          (!range.minimum_inclusive || !range.maximum_inclusive)))
+    ) {
+      issues.push(`Applicability range for "${range.input}" is empty.`)
+    }
+  }
   return issues
 }
 
@@ -98,6 +133,15 @@ export function CorrelationArtifactForm({
     base?.definition.expression ??
       'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
   )
+  const [applicability, setApplicability] = useState<ApplicabilityDraft[]>(
+    (base?.definition.applicability ?? []).map((range) => ({
+      input: range.input,
+      minimum: range.minimum === undefined ? '' : String(range.minimum),
+      maximum: range.maximum === undefined ? '' : String(range.maximum),
+      minimum_inclusive: range.minimum_inclusive,
+      maximum_inclusive: range.maximum_inclusive,
+    })),
+  )
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -137,6 +181,13 @@ export function CorrelationArtifactForm({
         },
         coefficients: coefficientValues,
         expression: expression.trim(),
+        applicability: applicability.map((range) => ({
+          input: range.input,
+          ...(range.minimum.trim() === '' ? {} : { minimum: Number(range.minimum) }),
+          ...(range.maximum.trim() === '' ? {} : { maximum: Number(range.maximum) }),
+          minimum_inclusive: range.minimum_inclusive,
+          maximum_inclusive: range.maximum_inclusive,
+        })),
       }
       const issues = validateCorrelationDefinition(definition)
       if (issues.length) throw new Error(issues.join('\n'))
@@ -216,6 +267,36 @@ export function CorrelationArtifactForm({
             </div>
           ))}
           <button type="button" className="add-row-button" onClick={() => setInputs((current) => [...current, { name: `input_${current.length + 1}`, dimension: defaultDimension }])}>+ Add input</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Qualified operating envelope</legend>
+          <p className="registry-note">
+            Optional SI limits reject evaluation outside the range qualified by the correlation owner.
+          </p>
+          {applicability.map((range, index) => (
+            <div className="repeatable-row correlation-variable-row" key={`${range.input}-${index}`}>
+              <label>
+                <span>Input</span>
+                <select value={range.input} required onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, input: event.target.value } : item))}>
+                  <option value="">Select input</option>
+                  {inputs.map((input) => <option key={input.name} value={input.name}>{input.name}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Minimum (SI)</span>
+                <input type="number" step="any" value={range.minimum} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimum: event.target.value } : item))} />
+                <small><input type="checkbox" checked={range.minimum_inclusive} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimum_inclusive: event.target.checked } : item))} /> Inclusive</small>
+              </label>
+              <label>
+                <span>Maximum (SI)</span>
+                <input type="number" step="any" value={range.maximum} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximum: event.target.value } : item))} />
+                <small><input type="checkbox" checked={range.maximum_inclusive} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximum_inclusive: event.target.checked } : item))} /> Inclusive</small>
+              </label>
+              <button type="button" className="row-remove-button" aria-label={`Remove applicability range ${range.input || index + 1}`} onClick={() => setApplicability((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+            </div>
+          ))}
+          <button type="button" className="add-row-button" disabled={!inputs.length} onClick={() => setApplicability((current) => [...current, { input: inputs[0]?.name ?? '', minimum: '', maximum: '', minimum_inclusive: true, maximum_inclusive: true }])}>+ Add qualified range</button>
         </fieldset>
 
         <fieldset>

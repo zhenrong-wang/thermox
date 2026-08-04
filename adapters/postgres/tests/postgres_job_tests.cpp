@@ -192,6 +192,9 @@ SimulationJobRequest request(
     correlation.coefficients = {{"coefficient", 1.5}};
     correlation.expression =
         "coefficient * mass_flow * abs(mass_flow) / density";
+    correlation.applicability = {
+        {"mass_flow", 0.0, 20.0, true, false},
+    };
     value.artifacts.correlations.push_back(
         std::move(correlation));
     value.artifacts.references.push_back({
@@ -279,6 +282,12 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.correlations.size() == 1 &&
             repeated.request.artifacts.correlations.front()
                     .coefficients.at("coefficient") == 1.5 &&
+            repeated.request.artifacts.correlations.front()
+                    .applicability.size() == 1 &&
+            repeated.request.artifacts.correlations.front()
+                    .applicability.front().maximum == 20.0 &&
+            !repeated.request.artifacts.correlations.front()
+                    .applicability.front().maximum_inclusive &&
             repeated.request.components.expression_components
                     .size() == 1 &&
             repeated.request.components.expression_components

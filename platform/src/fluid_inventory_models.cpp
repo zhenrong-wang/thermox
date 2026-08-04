@@ -55,9 +55,16 @@ void add_numeric_sparse_dae_equation(
                 perturbed.at(variable) += step;
                 double shifted = 0.0;
                 status = evaluate(perturbed, shifted);
+                if (status.ok()) {
+                    jacobian.push_back(
+                        {variable, (shifted - residual) / step, 0.0});
+                    continue;
+                }
+                perturbed.at(variable) = x.at(variable) - step;
+                status = evaluate(perturbed, shifted);
                 if (!status.ok()) return status;
                 jacobian.push_back(
-                    {variable, (shifted - residual) / step, 0.0});
+                    {variable, (residual - shifted) / step, 0.0});
             }
             return EvaluationStatus::success();
         },
