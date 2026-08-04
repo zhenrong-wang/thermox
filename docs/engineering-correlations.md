@@ -29,6 +29,45 @@ The artifact registry and evaluator are component-neutral. Other component model
 `thermox.correlation` role and define which physical quantities they supply. This keeps the
 correlation dataset separate from topology, component parameters, and fluid-property providers.
 
+## Two-phase void fraction
+
+`pipe.fluid.void_fraction_correlation_local_loss` binds the artifact role
+`void_fraction_correlation`. The output must be dimensionless and the evaluated value must satisfy
+`0 < alpha < 1`. A correlation may declare any subset of these component-supplied inputs:
+
+| Input | Dimension | Meaning |
+| --- | --- | --- |
+| `vapor_quality` | `dimensionless` | Vapor mass quality at mean endpoint pressure and transported enthalpy |
+| `liquid_density` | `density` | Saturated-liquid density at mean pressure |
+| `vapor_density` | `density` | Saturated-vapor density at mean pressure |
+| `mass_flow` | `mass_flow` | Signed component mass flow |
+| `area` | `area` | Pipe flow area |
+| `diameter` | `length` | Pipe flow diameter |
+| `pressure` | `pressure` | Mean endpoint pressure |
+
+For example, the constant-slip closure can be supplied as engineering data rather than compiled
+component logic:
+
+```json
+{
+  "inputs": [
+    {"name": "vapor_quality", "dimension": "dimensionless"},
+    {"name": "liquid_density", "dimension": "density"},
+    {"name": "vapor_density", "dimension": "density"}
+  ],
+  "output": {"name": "void_fraction", "dimension": "dimensionless"},
+  "coefficients": {"slip_ratio": 2.0},
+  "expression": "1 / (1 + ((1 - vapor_quality) / vapor_quality) * (vapor_density / liquid_density) * slip_ratio)"
+}
+```
+
+The component uses the resulting void fraction to calculate volume-weighted mixture density and
+then applies its declared local-loss and elevation-head equation. It requires registered
+`state_ph` and `saturation_p` capabilities and a strictly two-phase mean state. Missing artifacts,
+unsupported input names, wrong dimensions, unsafe expressions, evaluation failures, and
+nonphysical outputs are rejected explicitly. The same contract compiles in steady and transient
+graphs.
+
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation happens before immutable
 content persistence; selected revisions resolve into the calculation request with complete

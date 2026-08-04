@@ -1237,21 +1237,27 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
-class ConstantSlipTwoPhaseGravityPipeModel final
+class SlipAwareTwoPhaseGravityPipeModel final
     : public ComponentModel {
 public:
-    ConstantSlipTwoPhaseGravityPipeModel()
+    explicit SlipAwareTwoPhaseGravityPipeModel(
+        bool correlation_driven)
         : descriptor_(make_descriptor(
-              "pipe.fluid.constant_slip_two_phase_local_loss",
+              correlation_driven
+                  ? "pipe.fluid.void_fraction_correlation_local_loss"
+                  : "pipe.fluid.constant_slip_two_phase_local_loss",
               {{"inlet", "fluid", "in"},
-               {"outlet", "fluid", "out"}})) {
+               {"outlet", "fluid", "out"}})),
+          correlation_driven_(correlation_driven) {
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "pipe.fluid";
-        descriptor_.display_name =
-            "Constant-slip two-phase gravity pipe";
+        descriptor_.display_name = correlation_driven_
+            ? "Correlated-void-fraction two-phase gravity pipe"
+            : "Constant-slip two-phase gravity pipe";
         descriptor_.category = "Fluid transport";
-        descriptor_.model_name =
-            "Separated-flow mixture density with elevation head";
+        descriptor_.model_name = correlation_driven_
+            ? "Correlation-driven mixture density with elevation head"
+            : "Separated-flow mixture density with elevation head";
         descriptor_.parameters = {
             {"flow_diameter", "length", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -1261,9 +1267,18 @@ public:
             {"elevation_change", "length", false, 0.0,
              -std::numeric_limits<double>::infinity(),
              std::numeric_limits<double>::infinity(), true, true},
-            {"slip_ratio", "dimensionless", true, std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
         };
+        if (correlation_driven_) {
+            descriptor_.artifacts = {
+                {"void_fraction_correlation",
+                 correlation_artifact_type, true},
+            };
+        } else {
+            descriptor_.parameters.push_back(
+                {"slip_ratio", "dimensionless", true, std::nullopt,
+                 0.0, std::numeric_limits<double>::infinity(),
+                 false, true});
+        }
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph,
             physics::PropertyCapability::saturation_p};
@@ -1278,7 +1293,7 @@ public:
     void add_equations(
         const ComponentCompileContext& context,
         EquationSystemBuilder& system) const override {
-        const auto data = compile_data(context);
+        const auto data = compile_data(context, correlation_driven_);
         const std::string prefix =
             "component." + context.component.id + ".";
         system.add_linear_equation(
@@ -1292,7 +1307,9 @@ public:
         const auto evaluate = evaluator(data);
         const auto derivatives = derivative_variables(data);
         system.add_checked_sparse_equation(
-            prefix + "constant_slip_pressure_balance",
+            prefix + (correlation_driven_
+                ? "correlated_void_fraction_pressure_balance"
+                : "constant_slip_pressure_balance"),
             [evaluate](const std::vector<double>& x,
                        double& residual) {
                 const auto result = evaluate(x);
@@ -1312,7 +1329,7 @@ public:
     void add_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system) const override {
-        const auto data = compile_data(context);
+        const auto data = compile_data(context, correlation_driven_);
         const std::string prefix =
             "component." + context.component.id + ".";
         system.add_linear_equation(
@@ -1328,7 +1345,9 @@ public:
         const auto evaluate = evaluator(data);
         const auto derivatives = derivative_variables(data);
         system.add_sparse_equation(
-            prefix + "constant_slip_pressure_balance",
+            prefix + (correlation_driven_
+                ? "correlated_void_fraction_pressure_balance"
+                : "constant_slip_pressure_balance"),
             variable_pattern(derivatives),
             [evaluate, derivatives](
                 double, const std::vector<double>& x,
@@ -1346,12 +1365,17 @@ private:
         std::size_t inlet_m{}, inlet_p{}, inlet_h{};
         std::size_t outlet_m{}, outlet_p{}, outlet_h{};
         double loss_scale{};
+        double area{};
+        double diameter{};
         double elevation_change{};
         double slip_ratio{};
+        std::shared_ptr<const CorrelationArtifact>
+            void_fraction_correlation;
     };
 
     static Data compile_data(
-        const ComponentCompileContext& context) {
+        const ComponentCompileContext& context,
+        bool correlation_driven) {
         Data data;
         data.properties = require_property_package(context, "inlet");
         if (data.properties !=
@@ -1368,17 +1392,56 @@ private:
             require_port_variable(context, "outlet.m_dot");
         data.outlet_p = require_port_variable(context, "outlet.p");
         data.outlet_h = require_port_variable(context, "outlet.h");
-        const double diameter =
+        data.diameter =
             required_parameter(context.component, "flow_diameter");
-        const double area = std::numbers::pi * diameter * diameter /
-            4.0;
+        data.area = std::numbers::pi * data.diameter *
+            data.diameter / 4.0;
         data.loss_scale = required_parameter(
             context.component, "loss_coefficient") /
-            (2.0 * area * area);
+            (2.0 * data.area * data.area);
         data.elevation_change = parameter_or(
             context.component, "elevation_change", 0.0);
-        data.slip_ratio =
-            required_parameter(context.component, "slip_ratio");
+        if (correlation_driven) {
+            data.void_fraction_correlation = require_correlation(
+                context, "void_fraction_correlation");
+            if (data.void_fraction_correlation->output().name !=
+                    "void_fraction" ||
+                data.void_fraction_correlation->output().dimension !=
+                    "dimensionless") {
+                throw std::invalid_argument(
+                    "void-fraction correlation output must be named "
+                    "'void_fraction' with dimensionless dimension");
+            }
+            const std::map<std::string, std::string>
+                supported_inputs{
+                    {"vapor_quality", "dimensionless"},
+                    {"liquid_density", "density"},
+                    {"vapor_density", "density"},
+                    {"mass_flow", "mass_flow"},
+                    {"area", "area"},
+                    {"diameter", "length"},
+                    {"pressure", "pressure"},
+                };
+            for (const auto& input :
+                 data.void_fraction_correlation->inputs()) {
+                const auto supported =
+                    supported_inputs.find(input.name);
+                if (supported == supported_inputs.end()) {
+                    throw std::invalid_argument(
+                        "void-fraction correlation has unsupported "
+                        "input: " + input.name);
+                }
+                if (input.dimension != supported->second) {
+                    throw std::invalid_argument(
+                        "void-fraction correlation input '" +
+                        input.name + "' must have dimension '" +
+                        supported->second + "'");
+                }
+            }
+        } else {
+            data.slip_ratio =
+                required_parameter(context.component, "slip_ratio");
+        }
         return data;
     }
 
@@ -1425,9 +1488,48 @@ private:
                         "finite saturation densities")};
             }
             const double quality = state.state.vapor_quality;
-            const double void_fraction = 1.0 /
-                (1.0 + ((1.0 - quality) / quality) *
-                    (rho_v / rho_l) * data.slip_ratio);
+            double void_fraction = 0.0;
+            if (data.void_fraction_correlation) {
+                std::map<std::string, double> inputs;
+                for (const auto& input :
+                     data.void_fraction_correlation->inputs()) {
+                    if (input.name == "vapor_quality") {
+                        inputs.emplace(input.name, quality);
+                    } else if (input.name == "liquid_density") {
+                        inputs.emplace(input.name, rho_l);
+                    } else if (input.name == "vapor_density") {
+                        inputs.emplace(input.name, rho_v);
+                    } else if (input.name == "mass_flow") {
+                        inputs.emplace(
+                            input.name, x.at(data.inlet_m));
+                    } else if (input.name == "area") {
+                        inputs.emplace(input.name, data.area);
+                    } else if (input.name == "diameter") {
+                        inputs.emplace(input.name, data.diameter);
+                    } else if (input.name == "pressure") {
+                        inputs.emplace(input.name, mean_pressure);
+                    }
+                }
+                const auto evaluated =
+                    data.void_fraction_correlation->evaluate(inputs);
+                if (!evaluated.error.empty()) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            evaluated.error)};
+                }
+                void_fraction = evaluated.value;
+            } else {
+                void_fraction = 1.0 /
+                    (1.0 + ((1.0 - quality) / quality) *
+                        (rho_v / rho_l) * data.slip_ratio);
+            }
+            if (!std::isfinite(void_fraction) ||
+                void_fraction <= 0.0 || void_fraction >= 1.0) {
+                return RestrictionEvaluation{
+                    EvaluationStatus::recoverable(
+                        "two-phase pipe void-fraction closure must "
+                        "produce 0 < alpha < 1")};
+            }
             const double mixture_density =
                 void_fraction * rho_v +
                 (1.0 - void_fraction) * rho_l;
@@ -1471,6 +1573,7 @@ private:
     }
 
     ComponentModelDescriptor descriptor_;
+    bool correlation_driven_{false};
 };
 
 class ReturnBendFixedLossModel final : public ComponentModel {
@@ -2446,7 +2549,9 @@ void register_transport_component_models(
     registry.register_model(
         std::make_shared<HomogeneousEquilibriumGravityPipeModel>());
     registry.register_model(
-        std::make_shared<ConstantSlipTwoPhaseGravityPipeModel>());
+        std::make_shared<SlipAwareTwoPhaseGravityPipeModel>(false));
+    registry.register_model(
+        std::make_shared<SlipAwareTwoPhaseGravityPipeModel>(true));
     registry.register_model(
         std::make_shared<ReturnBendFixedLossModel>());
     registry.register_model(

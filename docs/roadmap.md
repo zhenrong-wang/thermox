@@ -209,6 +209,9 @@ Delivered:
 20. Constant-slip two-phase gravity/local-loss transport plus a declaration-only distributed
     two-cell boiling riser with independent inventory states, inter-cell flow, phase, species,
     mass, and energy verification. ✅
+21. Correlation-driven two-phase void-fraction transport using immutable engineering artifacts,
+    dimension-checked live phase/flow/geometry inputs, physical output guards, and shared
+    steady/transient component contracts. ✅
 
 ## Component catalog and modularization foundation
 

@@ -105,6 +105,10 @@ Implemented in this sprint:
   constant-slip elevation/loss segments. Vapor quality, cell pressure, inter-cell flow, exhaust
   cooling, and storage closure evolve together without a boiler-specific solver. See
   [Distributed two-phase riser](docs/dynamic-distributed-two-phase-riser.md).
+- Two-phase pipe instances can replace the baseline slip parameter with a versioned engineering
+  correlation that consumes dimension-checked live quality, saturation densities, flow, geometry,
+  and pressure. Nonphysical void-fraction outputs are rejected before they can enter the pressure
+  balance. See [Engineering correlations](docs/engineering-correlations.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.
@@ -533,9 +537,9 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Add regime-spanning finite-volume cells and replaceable drift-flux/flow-regime correlations;
-   the current equilibrium cells and constant-slip pipe deliberately reject phase-boundary
-   crossings.
+1. Add regime-spanning finite-volume cells, applicability envelopes, and validated packaged
+   drift-flux/flow-regime correlations; the generic correlation binding now exists, while current
+   equilibrium cells and two-phase pipes deliberately reject phase-boundary crossings.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
 3. Add native analytic PH derivatives for IF97; ideal gas and HEOS CO2 already provide analytic

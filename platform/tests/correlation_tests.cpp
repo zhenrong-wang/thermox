@@ -45,6 +45,24 @@ thermox::platform::CorrelationArtifact bend_correlation() {
     };
 }
 
+thermox::platform::CorrelationArtifact void_fraction_correlation() {
+    return {
+        "void-fraction-correlation",
+        thermox::platform::correlation_artifact_schema_v1,
+        "constant-slip-reference-1",
+        std::string(64, 'e'),
+        {
+            {"vapor_quality", "dimensionless"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+        },
+        {"void_fraction", "dimensionless"},
+        {{"slip_ratio", 2.0}},
+        "1 / (1 + ((1 - vapor_quality) / vapor_quality) * "
+        "(vapor_density / liquid_density) * slip_ratio)",
+    };
+}
+
 void test_correlation_evaluates_with_analytic_derivatives() {
     auto artifact = bend_correlation();
     artifact.validate();
@@ -154,6 +172,165 @@ void test_return_bend_uses_bound_correlation() {
         "bound correlation pressure loss");
 }
 
+void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "correlated_two_phase_riser",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "riser",
+      "kind": "pipe.fluid.void_fraction_correlation_local_loss",
+      "parameters": {
+        "flow_diameter": {"value": 0.1, "unit": "m"},
+        "loss_coefficient": 2.0,
+        "elevation_change": {"value": 5.0, "unit": "m"}
+      },
+      "artifacts": {
+        "void_fraction_correlation": "void-fraction-correlation"
+      },
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "steady",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "dynamic",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(void_fraction_correlation());
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto registry =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, properties, artifacts, "steady");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(solved.diagnostics.converged,
+            solved.diagnostics.message);
+    const auto variable = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(found != graph.problem.variable_names.end(),
+                "compiled variable must exist: " + name);
+        return solved.x.at(static_cast<std::size_t>(
+            found - graph.problem.variable_names.begin()));
+    };
+    const double outlet_pressure = variable("riser.outlet.p");
+    const double mean_pressure = 0.5 * (1.0e6 + outlet_pressure);
+    const auto water = properties.create(
+        "water_steam_if97", "Water");
+    const auto state = water->state_ph(mean_pressure, 1.5e6);
+    const auto saturation = water->saturation_p(mean_pressure);
+    require(state.ok() && saturation.ok(),
+            "correlated-riser properties must evaluate");
+    const auto alpha = void_fraction_correlation().evaluate({
+        {"vapor_quality", state.state.vapor_quality},
+        {"liquid_density", saturation.liquid.density_kg_m3},
+        {"vapor_density", saturation.vapor.density_kg_m3},
+    });
+    require(alpha.error.empty() && alpha.value > 0.0 &&
+                alpha.value < 1.0,
+            "bound correlation must produce physical void fraction");
+    const double density =
+        alpha.value * saturation.vapor.density_kg_m3 +
+        (1.0 - alpha.value) *
+            saturation.liquid.density_kg_m3;
+    const double area = std::numbers::pi * 0.1 * 0.1 / 4.0;
+    const double expected_drop =
+        2.0 * 0.2 * 0.2 /
+            (2.0 * density * area * area) +
+        density * 9.80665 * 5.0;
+    require_close(
+        1.0e6 - outlet_pressure, expected_drop, 1.0e-5,
+        "correlated void fraction closes riser pressure balance");
+    require_close(variable("riser.outlet.m_dot"), 0.2, 1.0e-12,
+                  "correlated riser conserves mass");
+    require_close(variable("riser.outlet.h"), 1.5e6, 1.0e-8,
+                  "correlated riser transports enthalpy");
+
+    const auto transient =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, properties, artifacts, "dynamic");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            transient.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            "correlated riser DAE initialization: " +
+                initialized.diagnostics.message);
+
+    auto nonphysical_document = document;
+    nonphysical_document.components.at(0)
+        .artifact_bindings["void_fraction_correlation"] =
+        "nonphysical-void-fraction";
+    thermox::platform::EngineeringArtifactRegistry
+        nonphysical_artifacts;
+    nonphysical_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "nonphysical-void-fraction",
+            thermox::platform::correlation_artifact_schema_v1,
+            "invalid-range-1", std::string(64, 'f'),
+            {{"vapor_quality", "dimensionless"}},
+            {"void_fraction", "dimensionless"},
+            {{"invalid_alpha", 1.2}},
+            "invalid_alpha + 0 * vapor_quality"});
+    const auto nonphysical_graph =
+        thermox::platform::compile_model_graph(
+            nonphysical_document, registry, properties,
+            nonphysical_artifacts, "steady");
+    const auto nonphysical_result =
+        thermox::solve_newton(nonphysical_graph.problem);
+    require(!nonphysical_result.diagnostics.converged,
+            "component must reject correlation output outside "
+            "0 < alpha < 1");
+
+    auto wrong_dimension_document = document;
+    wrong_dimension_document.components.at(0)
+        .artifact_bindings["void_fraction_correlation"] =
+        "wrong-dimension-void-fraction";
+    thermox::platform::EngineeringArtifactRegistry
+        wrong_dimension_artifacts;
+    wrong_dimension_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "wrong-dimension-void-fraction",
+            thermox::platform::correlation_artifact_schema_v1,
+            "wrong-dimension-1", std::string(64, 'a'),
+            {{"vapor_quality", "dimensionless"}},
+            {"void_fraction", "pressure"}, {},
+            "vapor_quality"});
+    bool wrong_dimension_rejected = false;
+    try {
+        (void)thermox::platform::compile_model_graph(
+            wrong_dimension_document, registry, properties,
+            wrong_dimension_artifacts, "steady");
+    } catch (const std::invalid_argument&) {
+        wrong_dimension_rejected = true;
+    }
+    require(wrong_dimension_rejected,
+            "component must reject dimensionally incompatible "
+            "void-fraction correlation");
+}
+
 }  // namespace
 
 int main() {
@@ -161,6 +338,7 @@ int main() {
         test_correlation_evaluates_with_analytic_derivatives();
         test_correlation_contract_rejects_undeclared_symbols();
         test_return_bend_uses_bound_correlation();
+        test_two_phase_pipe_uses_bound_void_fraction_correlation();
     } catch (const std::exception& error) {
         std::cerr << "correlation tests failed: "
                   << error.what() << '\n';

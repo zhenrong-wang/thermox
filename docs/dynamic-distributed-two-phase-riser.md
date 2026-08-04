@@ -64,5 +64,10 @@ Constant slip is a transparent baseline closure, not a universal two-phase corre
 does not yet include drift flux, flow-regime maps, two-phase friction multipliers, acceleration
 pressure drop, boiling crisis, dryout, flashing fronts, or regime switching. The equilibrium cells
 also assume one saturated state per cell. Engineering prediction requires selecting validated
-correlations for the geometry and operating regime; the existing versioned correlation-artifact
-contract is the intended extension point rather than hard-coded plant logic.
+correlations for the geometry and operating regime.
+
+`pipe.fluid.void_fraction_correlation_local_loss` now provides the versioned, immutable
+correlation-artifact extension point for engineer-supplied void-fraction laws. It consumes live
+quality, phase-density, geometry, pressure, and flow inputs through a dimension-checked contract.
+Supplying the correlation does not by itself add regime selection, applicability limits, or
+validation data; those remain explicit engineering responsibilities and future platform work.
