@@ -67,6 +67,7 @@ transport, and whole-system steady/transient energy closure.
 
 The hot gas has no inventory or pressure-wave dynamics; axial conduction, radiation, ambient loss,
 fouling evolution, and flow reversal are outside this first model. A distributed single-pressure
-HRSG can be declared by composing cells in counterflow. Credible evaporator dynamics additionally
-need an appropriate two-phase cell or drum/circulation topology with void-fraction and phase-change
-correlations. Those belong in registered generic component models, not in case-specific code.
+HRSG can be declared by composing cells in counterflow. The registered
+[`equilibrium_two_phase_cell`](dynamic-two-phase-heat-transfer-cell.md) adds a variable-mass rigid
+saturated inventory for evaporating sections. Drum circulation, slip, and flow-regime correlations
+remain separate generic component concerns rather than case-specific code.

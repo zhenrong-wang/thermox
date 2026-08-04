@@ -1028,6 +1028,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",
         "heat_exchanger.material_fluid.dynamic_cell",
+        "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
         "heater.material.fixed_duty",
         "cooler.material.fixed_duty",
         "evaporator.fluid.fixed_outlet_quality",

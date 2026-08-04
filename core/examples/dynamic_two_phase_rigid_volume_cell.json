@@ -1,0 +1,117 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "dynamic_two_phase_rigid_volume_cell",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "materials": [{
+      "id": "exhaust_gas",
+      "backend": "cantera",
+      "mechanism": "gri30.yaml",
+      "phase": "gri30",
+      "species": ["N2", "O2", "H2O", "CO2"]
+    }],
+    "components": [{
+      "id": "exhaust_source",
+      "kind": "source.material.boundary",
+      "materials": {"outlet": "exhaust_gas"}
+    }, {
+      "id": "evaporating_cell",
+      "kind": "heat_exchanger.material_fluid.equilibrium_two_phase_cell",
+      "parameters": {
+        "fluid_volume": {"value": 1.0, "unit": "m3"},
+        "wall_thermal_capacity": {"value": 50.0, "unit": "kJ/K"},
+        "hot_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "cold_side_UA": {"value": 1.0, "unit": "kW/K"},
+        "hot_flow_diameter": {"value": 0.35, "unit": "m"},
+        "hot_loss_coefficient": 10.0
+      },
+      "materials": {"hot_in": "exhaust_gas", "hot_out": "exhaust_gas"},
+      "media": {"cold_in": "water", "cold_out": "water"}
+    }, {
+      "id": "stack",
+      "kind": "sink.material.boundary",
+      "materials": {"inlet": "exhaust_gas"}
+    }, {
+      "id": "feedwater",
+      "kind": "source.fluid.boundary",
+      "media": {"outlet": "water"}
+    }, {
+      "id": "steam_water_outlet",
+      "kind": "sink.fluid.boundary",
+      "media": {"inlet": "water"}
+    }],
+    "connections": [{
+      "id": "exhaust_feed",
+      "kind": "material_link",
+      "from": "exhaust_source.outlet",
+      "to": "evaporating_cell.hot_in"
+    }, {
+      "id": "stack_discharge",
+      "kind": "material_link",
+      "from": "evaporating_cell.hot_out",
+      "to": "stack.inlet"
+    }, {
+      "id": "feedwater_inlet",
+      "kind": "fluid_link",
+      "from": "feedwater.outlet",
+      "to": "evaporating_cell.cold_in"
+    }, {
+      "id": "two_phase_discharge",
+      "kind": "fluid_link",
+      "from": "evaporating_cell.cold_out",
+      "to": "steam_water_outlet.inlet"
+    }]
+  },
+  "cases": [{
+    "id": "boil",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "exhaust_source.outlet.m_dot[N2]": {"value": 0.75316, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[O2]": {"value": 0.14897, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[H2O]": {"value": 0.04406, "unit": "kg/s"},
+      "exhaust_source.outlet.m_dot[CO2]": {"value": 0.05381, "unit": "kg/s"},
+      "exhaust_source.outlet.p": {"value": 1.2, "unit": "bar"},
+      "exhaust_source.outlet.h": {"value": -444.67, "unit": "kJ/kg"},
+      "feedwater.outlet.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "feedwater.outlet.h": {"value": 112.75, "unit": "kJ/kg"},
+      "steam_water_outlet.inlet.m_dot": {"value": 0.0499, "unit": "kg/s"}
+    },
+    "initial_guesses": {
+      "evaporating_cell.hot_in.m_dot[N2]": 0.75316,
+      "evaporating_cell.hot_in.m_dot[O2]": 0.14897,
+      "evaporating_cell.hot_in.m_dot[H2O]": 0.04406,
+      "evaporating_cell.hot_in.m_dot[CO2]": 0.05381,
+      "evaporating_cell.hot_in.p": {"value": 1.2, "unit": "bar"},
+      "evaporating_cell.hot_in.h": {"value": -444.67, "unit": "kJ/kg"},
+      "evaporating_cell.hot_out.m_dot[N2]": 0.75316,
+      "evaporating_cell.hot_out.m_dot[O2]": 0.14897,
+      "evaporating_cell.hot_out.m_dot[H2O]": 0.04406,
+      "evaporating_cell.hot_out.m_dot[CO2]": 0.05381,
+      "evaporating_cell.hot_out.p": {"value": 1.19, "unit": "bar"},
+      "evaporating_cell.hot_out.h": {"value": -570.0, "unit": "kJ/kg"},
+      "stack.inlet.m_dot[N2]": 0.75316,
+      "stack.inlet.m_dot[O2]": 0.14897,
+      "stack.inlet.m_dot[H2O]": 0.04406,
+      "stack.inlet.m_dot[CO2]": 0.05381,
+      "stack.inlet.p": {"value": 1.19, "unit": "bar"},
+      "stack.inlet.h": {"value": -570.0, "unit": "kJ/kg"},
+      "evaporating_cell.cold_in.m_dot": {"value": 0.05, "unit": "kg/s"},
+      "evaporating_cell.cold_in.p": {"value": 2.0, "unit": "bar"},
+      "evaporating_cell.cold_in.h": {"value": 112.75, "unit": "kJ/kg"},
+      "evaporating_cell.cold_out.m_dot": {"value": 0.0499, "unit": "kg/s"},
+      "evaporating_cell.cold_out.p": {"value": 1.99, "unit": "bar"},
+      "evaporating_cell.cold_out.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "steam_water_outlet.inlet.m_dot": {"value": 0.0499, "unit": "kg/s"},
+      "steam_water_outlet.inlet.h": {"value": 1500.0, "unit": "kJ/kg"},
+      "evaporating_cell.fluid_mass": 2.4936494821191739,
+      "evaporating_cell.fluid_total_energy": {"value": 3.540474223178761, "unit": "MJ"},
+      "evaporating_cell.fluid_pressure": {"value": 2.0, "unit": "bar"},
+      "evaporating_cell.vapor_quality": 0.45209637102333294,
+      "evaporating_cell.wall_temperature": {"value": 650.0, "unit": "K"}
+    }
+  }]
+}

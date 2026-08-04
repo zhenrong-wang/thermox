@@ -1057,6 +1057,7 @@ ComponentRegistry make_default_component_registry() {
     register_heat_transfer_component_models(registry);
     register_dynamic_heat_transfer_component_models(registry);
     register_dynamic_material_heat_transfer_component_models(registry);
+    register_dynamic_material_rigid_volume_component_models(registry);
     register_fluid_inventory_component_models(registry);
     register_drum_component_models(registry);
     register_storage_component_models(registry);

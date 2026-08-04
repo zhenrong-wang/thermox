@@ -195,6 +195,8 @@ Delivered:
 15. Declared two-cell counterflow Cantera-exhaust/IF97-water exchanger proving mixed-domain spatial
     composition, exact species transport, cumulative pressure loss, and steady/transient energy
     closure. ✅
+16. Transient material-to-fluid equilibrium two-phase cell with rigid-volume mass/energy storage,
+    pressure-quality saturation closure, wall capacitance, and graph-audited conservation. ✅
 
 ## Component catalog and modularization foundation
 

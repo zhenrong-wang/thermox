@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 64,
+        response.components.size() == 65,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -380,6 +380,19 @@ void test_catalog_discovery() {
             material_fluid_cell->internal_variables.size() == 3,
         "catalog must expose the composition-aware dynamic "
         "material-to-fluid cell");
+    const auto two_phase_cell = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "heat_exchanger.material_fluid.equilibrium_two_phase_cell";
+        });
+    require(
+        two_phase_cell != response.components.end() &&
+            !two_phase_cell->supports_steady &&
+            two_phase_cell->supports_transient &&
+            two_phase_cell->internal_variables.size() == 5,
+        "catalog must expose the equilibrium two-phase inventory "
+        "cell");
     const auto rotor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -1193,6 +1206,120 @@ void test_distributed_cantera_if97_counterflow_exchanger() {
             require_result_value(
                 final_water_source.primary_values, "h").value_si,
         "distributed transient must heat the counterflow water path");
+}
+
+void test_dynamic_equilibrium_two_phase_material_fluid_cell() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/dynamic_two_phase_rigid_volume_cell.json");
+    request.case_id = "boil";
+    request.solver.end_time = 1.0;
+    request.solver.max_step = 0.1;
+    const auto response = service.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.trajectory.size() > 1,
+        "dynamic equilibrium two-phase cell must solve: " +
+            response.error.message);
+
+    const auto& initial_graph = response.trajectory.front().graph;
+    const auto& final_graph = response.trajectory.back().graph;
+    const auto& initial_cell = require_component_result(
+        initial_graph, "evaporating_cell");
+    const auto& final_cell = require_component_result(
+        final_graph, "evaporating_cell");
+    const auto& initial_mass = require_result_value(
+        initial_cell.internal_values, "fluid_mass");
+    const auto& final_mass = require_result_value(
+        final_cell.internal_values, "fluid_mass");
+    const auto& initial_quality = require_result_value(
+        initial_cell.internal_values, "vapor_quality");
+    const auto& final_quality = require_result_value(
+        final_cell.internal_values, "vapor_quality");
+    const auto& initial_pressure = require_result_value(
+        initial_cell.internal_values, "fluid_pressure");
+    const auto& final_pressure = require_result_value(
+        final_cell.internal_values, "fluid_pressure");
+    require(
+        std::abs(final_mass.value_si - initial_mass.value_si -
+                 1.0e-4) < 1.0e-9 &&
+            final_mass.has_derivative &&
+            std::abs(final_mass.derivative_si_s - 1.0e-4) < 1.0e-12,
+        "two-phase inventory mass must integrate inlet minus outlet "
+        "flow");
+    require(
+        initial_quality.value_si > 0.0 &&
+            final_quality.value_si < 1.0 &&
+            final_quality.value_si > initial_quality.value_si,
+        "heated equilibrium inventory must remain inside the dome "
+        "and increase vapor quality");
+    require(
+        final_pressure.value_si > initial_pressure.value_si,
+        "heated rigid two-phase inventory must develop pressure");
+
+    const auto& initial_outlet = require_port_result(
+        initial_graph, "evaporating_cell", "cold_out");
+    const auto& final_outlet = require_port_result(
+        final_graph, "evaporating_cell", "cold_out");
+    require(
+        initial_outlet.phase == "two_phase" &&
+            final_outlet.phase == "two_phase" &&
+            std::abs(require_result_value(
+                final_outlet.derived_values,
+                "vapor_quality").value_si -
+                final_quality.value_si) < 1.0e-10,
+        "two-phase outlet result must expose the equilibrium quality");
+    require(
+        std::abs(final_mass.value_si /
+            require_result_value(
+                final_outlet.derived_values, "rho").value_si -
+            1.0) < 1.0e-10,
+        "two-phase mass and density must close the declared rigid "
+        "volume");
+
+    const auto& hot_in = require_port_result(
+        final_graph, "evaporating_cell", "hot_in");
+    const auto& hot_out = require_port_result(
+        final_graph, "evaporating_cell", "hot_out");
+    for (const auto* species : {
+             "m_dot[N2]", "m_dot[O2]", "m_dot[H2O]",
+             "m_dot[CO2]"}) {
+        require(
+            std::abs(require_result_value(
+                hot_in.primary_values, species).value_si -
+                require_result_value(
+                    hot_out.primary_values, species).value_si) <
+                1.0e-10,
+            "two-phase cell must conserve each hot-gas species");
+    }
+
+    const auto& fluid_energy = require_result_value(
+        final_cell.internal_values, "fluid_total_energy");
+    const auto& wall_temperature = require_result_value(
+        final_cell.internal_values, "wall_temperature");
+    require(
+        fluid_energy.has_derivative &&
+            wall_temperature.has_derivative,
+        "two-phase cell must expose fluid and wall storage rates");
+    const double stored_energy_rate =
+        fluid_energy.derivative_si_s +
+        50000.0 * wall_temperature.derivative_si_s;
+    const double boundary_energy_rate = require_result_value(
+        final_graph.system_balances,
+        "net_boundary_energy_flow").value_si;
+    const double boundary_mass_rate = require_result_value(
+        final_graph.system_balances,
+        "net_boundary_mass_flow").value_si;
+    require(
+        std::abs(stored_energy_rate - boundary_energy_rate) < 1.0e-3,
+        "two-phase fluid and wall storage must close against net "
+        "boundary energy flow");
+    require(
+        std::abs(boundary_mass_rate -
+                 final_mass.derivative_si_s) < 1.0e-12,
+        "two-phase inventory accumulation must close against net "
+        "boundary mass flow");
 }
 #endif
 
@@ -2894,6 +3021,7 @@ int main() {
         test_netl_b31a_hrsg_boundary_benchmark();
         test_dynamic_cantera_if97_hrsg_cell();
         test_distributed_cantera_if97_counterflow_exchanger();
+        test_dynamic_equilibrium_two_phase_material_fluid_cell();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();

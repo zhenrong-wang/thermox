@@ -20,6 +20,8 @@ void register_dynamic_heat_transfer_component_models(
     ComponentRegistry& registry);
 void register_dynamic_material_heat_transfer_component_models(
     ComponentRegistry& registry);
+void register_dynamic_material_rigid_volume_component_models(
+    ComponentRegistry& registry);
 void register_fluid_inventory_component_models(
     ComponentRegistry& registry);
 void register_drum_component_models(ComponentRegistry& registry);

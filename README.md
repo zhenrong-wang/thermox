@@ -84,6 +84,9 @@ Implemented in this sprint:
 - A declared two-cell counterflow reference composes those mixed-domain cells into a distributed
   Cantera-exhaust/IF97-water exchanger with cumulative pressure loss and whole-system energy
   closure. See [Distributed heat exchanger](docs/distributed-heat-exchanger.md).
+- A transient equilibrium two-phase cell couples composition-aware hot gas to a rigid saturated
+  fluid inventory, resolving mass, energy, pressure, vapor quality, and wall storage. See
+  [Dynamic two-phase heat-transfer cell](docs/dynamic-two-phase-heat-transfer-cell.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

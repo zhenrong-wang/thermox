@@ -180,6 +180,12 @@ if(TARGET thermox_cantera_backend)
             --case heat_up
             --end-time 0.1
     )
+    add_test(NAME platform_dynamic_two_phase_cell_cli
+        COMMAND thermox_cli simulate
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_two_phase_rigid_volume_cell.json
+            --case boil
+            --end-time 1.0
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve
