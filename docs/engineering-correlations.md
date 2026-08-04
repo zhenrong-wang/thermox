@@ -61,12 +61,28 @@ component logic:
 }
 ```
 
-The component uses the resulting void fraction to calculate volume-weighted mixture density and
-then applies its declared local-loss and elevation-head equation. It requires registered
+The pipe component uses the resulting void fraction to calculate volume-weighted mixture density
+and then applies its declared local-loss and elevation-head equation. It requires registered
 `state_ph` and `saturation_p` capabilities and a strictly two-phase mean state. Missing artifacts,
 unsupported input names, wrong dimensions, unsafe expressions, evaluation failures, and
 nonphysical outputs are rejected explicitly. The same contract compiles in steady and transient
 graphs.
+
+`volume.fluid.equilibrium_two_phase_correlated_outlet` applies the same artifact contract to a
+transient rigid inventory. Conserved total mass and internal energy determine pressure and
+thermodynamic holdup quality. Those states determine the observable holdup void fraction, while
+the bound correlation solves the transported outlet quality that reproduces that void fraction.
+This distinction lets a slip or drift-flux law affect phase transport without replacing or
+overconstraining the thermodynamic inventory closure. Outlet enthalpy is the saturated-mixture
+enthalpy at the correlated transported quality. The component therefore exposes separate
+`holdup_quality`, `void_fraction`, and `outlet_quality` results.
+
+For this inventory consumer, `vapor_quality` means transported outlet quality, densities and
+pressure are evaluated at the live inventory pressure, `mass_flow` is outlet flow, and geometry
+comes from `flow_diameter`. It is transient-only, requires `saturation_p`, and rejects
+nonphysical correlation outputs explicitly. Correlation validity envelopes and flow-regime
+selection remain engineering-data responsibilities; the current v1 artifact contract does not
+claim a correlation is valid outside the range for which its owner qualified it.
 
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation happens before immutable

@@ -341,6 +341,14 @@ includes `Q_dot` in the energy accumulation equation. Their `volume` parameter a
 [Regime-spanning rigid fluid volume](regime-spanning-rigid-fluid-volume.md) for the verified phase
 boundary and current applicability limits.
 
+`volume.fluid.equilibrium_two_phase_correlated_outlet` is the correlation-aware specialization
+for separated phase transport. It retains differential `mass` and `total_energy`; pressure and
+holdup quality follow from rigid-volume saturation closures. A bound `void_fraction_correlation`
+then maps live saturation properties, outlet flow, geometry, and transported quality to the
+inventory void fraction, closing a distinct outlet quality and enthalpy. Keeping inventory and
+transport qualities separate preserves the conservative finite-volume contract under phase slip.
+See [Engineering correlations](engineering-correlations.md#two-phase-void-fraction).
+
 Before producing a solver problem, each compiler compares the number of unknowns and residual
 equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched
 variable or equation candidates from bipartite incidence matching. Equations without declared

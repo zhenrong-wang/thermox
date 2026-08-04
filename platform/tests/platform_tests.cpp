@@ -1041,6 +1041,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "drum.fluid.equilibrium_two_phase",
         "volume.fluid.rigid_adiabatic",
         "volume.fluid.rigid_heat_transfer",
+        "volume.fluid.equilibrium_two_phase_correlated_outlet",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
         "shaft.train.two_load",

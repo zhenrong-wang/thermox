@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <numbers>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -331,6 +333,142 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             "void-fraction correlation");
 }
 
+void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
+    constexpr double pressure = 1.0e6;
+    constexpr double volume = 0.01;
+    constexpr double holdup_quality = 0.2;
+    constexpr double slip_ratio = 2.0;
+    constexpr double outlet_quality =
+        holdup_quality * slip_ratio /
+        (1.0 - holdup_quality + holdup_quality * slip_ratio);
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create(
+        "water_steam_if97", "Water");
+    const auto saturation = water->saturation_p(pressure);
+    require(saturation.ok(),
+            "correlated inventory saturation must evaluate");
+    const double specific_volume =
+        (1.0 - holdup_quality) /
+            saturation.liquid.density_kg_m3 +
+        holdup_quality / saturation.vapor.density_kg_m3;
+    const double void_fraction =
+        (holdup_quality / saturation.vapor.density_kg_m3) /
+        specific_volume;
+    const double mass = volume / specific_volume;
+    const double internal_energy =
+        (1.0 - holdup_quality) *
+            saturation.liquid.internal_energy_j_kg +
+        holdup_quality * saturation.vapor.internal_energy_j_kg;
+    const double energy = mass * internal_energy;
+    const double outlet_enthalpy =
+        (1.0 - outlet_quality) *
+            saturation.liquid.enthalpy_j_kg +
+        outlet_quality * saturation.vapor.enthalpy_j_kg;
+
+    std::ostringstream json;
+    json << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "correlated_two_phase_inventory",
+    "media": [{"id": "water", "backend": "water_steam_if97", "substance": "Water"}],
+    "components": [{
+      "id": "volume",
+      "kind": "volume.fluid.equilibrium_two_phase_correlated_outlet",
+      "parameters": {
+        "volume": {"value": 0.01, "unit": "m3"},
+        "flow_diameter": {"value": 0.1, "unit": "m"}
+      },
+      "artifacts": {"void_fraction_correlation": "void-fraction-correlation"},
+      "media": {"inlet": "water", "outlet": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "hold",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "volume.inlet.m_dot": 0.1,
+      "volume.inlet.p": )json" << pressure << R"json(,
+      "volume.inlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.outlet.m_dot": 0.1,
+      "volume.heat.Q_dot": 0.0
+    },
+    "initial_guesses": {
+      "volume.outlet.p": )json" << pressure << R"json(,
+      "volume.outlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.heat.T": )json" << saturation.liquid.temperature_k << R"json(,
+      "volume.mass": )json" << mass << R"json(,
+      "volume.total_energy": )json" << energy << R"json(,
+      "volume.pressure": )json" << pressure << R"json(,
+      "volume.holdup_quality": )json" << holdup_quality << R"json(,
+      "volume.void_fraction": )json" << void_fraction << R"json(,
+      "volume.outlet_quality": )json" << outlet_quality << R"json(
+    }
+  }]
+})json";
+    const auto document =
+        thermox::platform::parse_model_document_text(json.str());
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(void_fraction_correlation());
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, components, properties, artifacts, "hold");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(found != graph.problem.variable_names.end(),
+                "compiled inventory variable must exist: " + name);
+        return initialized.state.at(static_cast<std::size_t>(
+            found - graph.problem.variable_names.begin()));
+    };
+    require_close(value("volume.holdup_quality"),
+                  holdup_quality, 1.0e-8,
+                  "inventory thermodynamics retain holdup quality");
+    require_close(value("volume.void_fraction"),
+                  void_fraction, 1.0e-8,
+                  "inventory exposes thermodynamic void fraction");
+    require_close(value("volume.outlet_quality"),
+                  outlet_quality, 1.0e-8,
+                  "void-fraction correlation closes outlet quality");
+    require_close(value("volume.outlet.h"),
+                  outlet_enthalpy, 1.0e-5,
+                  "outlet enthalpy follows correlated flow quality");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.01;
+    options.max_step = 0.02;
+    const auto integrated = thermox::integrate_dae(
+        graph.problem, options);
+    require(integrated.diagnostics.success,
+            integrated.diagnostics.message);
+    const auto mass_index = static_cast<std::size_t>(
+        std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), "volume.mass") -
+        graph.problem.variable_names.begin());
+    const auto energy_index = static_cast<std::size_t>(
+        std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), "volume.total_energy") -
+        graph.problem.variable_names.begin());
+    require_close(
+        integrated.trajectory.back().state.at(mass_index), mass,
+        1.0e-10, "balanced flow preserves correlated inventory mass");
+    require_close(
+        integrated.trajectory.back().state.at(energy_index), energy,
+        1.0e-6, "balanced enthalpy flow preserves inventory energy");
+}
+
 }  // namespace
 
 int main() {
@@ -339,6 +477,7 @@ int main() {
         test_correlation_contract_rejects_undeclared_symbols();
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
+        test_two_phase_inventory_uses_correlation_for_outlet_quality();
     } catch (const std::exception& error) {
         std::cerr << "correlation tests failed: "
                   << error.what() << '\n';

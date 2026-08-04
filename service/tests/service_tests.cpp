@@ -353,7 +353,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 71,
+        response.components.size() == 72,
         "service must expose the complete component registry");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
@@ -406,6 +406,25 @@ void test_catalog_discovery() {
             two_phase_loss->parameters.size() == 2,
         "catalog must expose the homogeneous two-phase hydraulic "
         "impedance contract");
+    const auto correlated_inventory = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "volume.fluid.equilibrium_two_phase_correlated_outlet";
+        });
+    require(
+        correlated_inventory != response.components.end() &&
+            !correlated_inventory->supports_steady &&
+            correlated_inventory->supports_transient &&
+            correlated_inventory->parameters.size() == 2 &&
+            correlated_inventory->internal_variables.size() == 6 &&
+            correlated_inventory->artifacts.size() == 1 &&
+            correlated_inventory->artifacts.front().role ==
+                "void_fraction_correlation" &&
+            correlated_inventory->artifacts.front().artifact_type ==
+                "thermox.correlation",
+        "catalog must expose correlated two-phase inventory and "
+        "outlet-slip contracts");
     const auto hydraulic_inertance = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

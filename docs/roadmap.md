@@ -218,6 +218,9 @@ Delivered:
 23. Registered HEOS water/steam backend with analytic single-phase and bounded two-phase PH
     derivatives, plus four conserved bidirectional liquid/two-phase/vapor transition regressions.
     ✅
+24. Correlation-driven transient two-phase inventory separating thermodynamic holdup quality,
+    observable void fraction, and transported outlet quality while retaining exact mass and
+    internal-energy accumulation. ✅
 
 ## Component catalog and modularization foundation
 
