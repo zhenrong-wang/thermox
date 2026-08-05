@@ -1,8 +1,9 @@
 # Engineering correlation artifacts
 
-`thermox.correlation/v1` stores a bounded algebraic engineering correlation independently from a
-component instance. Its payload declares typed inputs, one typed output, immutable coefficients,
-a safe expression, and optional qualified operating ranges. Expressions use the same bounded
+`thermox.correlation/v1` stores a bounded algebraic engineering correlation family independently
+from a component instance. Its payload declares shared typed inputs, one typed output, and one or
+more candidate laws. Each candidate owns its regime, priority, immutable coefficients, safe
+expression, and optional qualified operating ranges. Expressions use the same bounded
 grammar and analytic differentiation engine as declarative expression components; they cannot
 perform I/O, assignment, loops, or call arbitrary code.
 
@@ -14,24 +15,29 @@ perform I/O, assignment, loops, or call arbitrary code.
     {"name": "area", "dimension": "area"}
   ],
   "output": {"name": "pressure_loss", "dimension": "pressure"},
-  "coefficients": {"loss_coefficient": 1.5},
-  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
-  "applicability": [{
-    "input": "mass_flow",
-    "minimum": 0.0,
-    "maximum": 25.0,
-    "minimum_inclusive": true,
-    "maximum_inclusive": false
+  "candidates": [{
+    "id": "default",
+    "regime": "general",
+    "priority": 0,
+    "coefficients": {"loss_coefficient": 1.5},
+    "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
+    "applicability": [{
+      "input": "mass_flow",
+      "minimum": 0.0,
+      "maximum": 25.0,
+      "minimum_inclusive": true,
+      "maximum_inclusive": false
+    }]
   }]
 }
 ```
 
 Applicability limits are expressed in the declared input's SI dimension. Each range must reference
-one declared input, may provide either or both finite bounds, and explicitly controls whether each
+one shared input, may provide either or both finite bounds, and explicitly controls whether each
 present bound is inclusive. Duplicate inputs, empty ranges, and unknown inputs are rejected when
 the immutable artifact revision is published. At runtime, evaluation outside a qualified range is
 rejected before the expression is evaluated; the diagnostic identifies the artifact input, live
-value, and qualified interval. Omitting `applicability` means that the artifact owner has declared
+value, and qualified interval. Omitting a candidate's `applicability` means that the artifact owner has declared
 no machine-readable operating envelope—it does not imply universal physical validity.
 
 The initial consumer is the `fitting.fluid.return_bend.correlation` calculation model under the
@@ -71,8 +77,13 @@ component logic:
     {"name": "vapor_density", "dimension": "density"}
   ],
   "output": {"name": "void_fraction", "dimension": "dimensionless"},
-  "coefficients": {"slip_ratio": 2.0},
-  "expression": "1 / (1 + ((1 - vapor_quality) / vapor_quality) * (vapor_density / liquid_density) * slip_ratio)"
+  "candidates": [{
+    "id": "constant_slip",
+    "regime": "general",
+    "priority": 0,
+    "coefficients": {"slip_ratio": 2.0},
+    "expression": "1 / (1 + ((1 - vapor_quality) / vapor_quality) * (vapor_density / liquid_density) * slip_ratio)"
+  }]
 }
 ```
 
@@ -96,16 +107,14 @@ For this inventory consumer, `vapor_quality` means transported outlet quality, d
 pressure are evaluated at the live inventory pressure, `mass_flow` is outlet flow, and geometry
 comes from `flow_diameter`. It is transient-only, requires `saturation_p`, and rejects
 nonphysical correlation outputs explicitly. Correlation validity envelopes and flow-regime
-selection remain engineering-data responsibilities. The v1 applicability contract enforces
-declared scalar operating ranges, but flow-regime classification and deterministic selection among
-multiple qualified artifacts remain separate platform capabilities.
+selection remain engineering-data responsibilities. The candidate applicability contract enforces
+declared scalar operating ranges and deterministic selection among the laws in the bound artifact.
 
 ## Correlation families and regime selection
 
-`thermox.correlation/v2` keeps the same component-facing artifact type and typed input/output
-contract, but replaces the single expression with an ordered set of named candidates. Each
-candidate owns a regime label, explicit integer priority, coefficients, safe expression, and
-qualified applicability ranges:
+The same `thermox.correlation/v1` contract represents both a one-law correlation and a regime
+family. A one-law correlation contains one candidate; a regime family contains multiple named
+candidates:
 
 ```json
 {
@@ -144,18 +153,14 @@ selector to the platform. Regime labels remain declared engineering provenance; 
 invent a universal flow-pattern map. Candidate expressions should be continuous across intended
 switch boundaries where possible because discontinuous switching creates a nonsmooth residual.
 
-The v2 payload is available through the declaration/service interface and durable job pipeline.
-The current visual correlation editor authors v1 single-law revisions; visual family authoring is
-a product-layer follow-up and does not limit direct project publication or execution.
-
 Project publication accepts `artifact_type=thermox.correlation` and
-`artifact_schema_version=thermox.correlation/v1` or `thermox.correlation/v2`. Payload validation
+`artifact_schema_version=thermox.correlation/v1`. Payload validation
 happens before immutable content persistence; selected revisions resolve into the calculation
 request with complete identity and checksum provenance.
 
 The Definition workspace exposes the same contract through a dedicated Engineering Data Registry
-form. It uses catalog unit dimensions for every input and output, supports immutable coefficient
-sets, and separates creation from revision. Revising retrieves the exact immutable parent payload
+form. It uses catalog unit dimensions for every input and output, authors one or more candidates,
+supports candidate-local immutable coefficient sets, and separates creation from revision. Revising retrieves the exact immutable parent payload
 through the tenant-scoped service API, verifies its stored size and checksum, and preloads the
 authoring form before publishing a child revision. Component forms do not treat correlations as
 equipment: they offer a correlation only when the selected calculation model declares a compatible

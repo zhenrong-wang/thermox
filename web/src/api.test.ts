@@ -55,8 +55,11 @@ describe('correlation artifact authoring API', () => {
       schema_version: 'thermox.correlation/v1',
       inputs: [{ name: 'mass_flow', dimension: 'mass_flow' }],
       output: { name: 'pressure_loss', dimension: 'pressure' },
-      coefficients: { coefficient: 1.5 },
-      expression: 'coefficient * mass_flow * abs(mass_flow)',
+      candidates: [{
+        id: 'default', regime: 'general', priority: 0,
+        coefficients: { coefficient: 1.5 },
+        expression: 'coefficient * mass_flow * abs(mass_flow)',
+      }],
     }
     const revision = {
       schema_version: 'thermox.artifact_revision/v1',

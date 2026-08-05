@@ -318,8 +318,7 @@ CorrelationArtifactInput decode_correlation(
     const std::string& revision,
     const std::string& checksum,
     const Tree& tree) {
-    if (schema_version != platform::correlation_artifact_schema_v1 &&
-        schema_version != platform::correlation_artifact_schema_v2) {
+    if (schema_version != platform::correlation_artifact_schema_v1) {
         throw std::invalid_argument(
             "unsupported correlation schema: " +
             schema_version);
@@ -341,41 +340,9 @@ CorrelationArtifactInput decode_correlation(
         tree.get<std::string>("output.name"),
         tree.get<std::string>("output.dimension"),
     };
-    if (const auto coefficients =
-            tree.get_child_optional("coefficients")) {
-        for (const auto& [name, encoded] : *coefficients) {
-            artifact.coefficients.emplace(
-                name, encoded.get_value<double>());
-        }
-    }
-    artifact.expression = tree.get("expression", "");
-    if (const auto applicability =
-            tree.get_child_optional("applicability")) {
-        artifact.applicability =
-            decode_array<CorrelationApplicabilityRangeInput>(
-                *applicability,
-                [](const Tree& encoded) {
-                    const auto minimum =
-                        encoded.get_optional<double>("minimum");
-                    const auto maximum =
-                        encoded.get_optional<double>("maximum");
-                    return CorrelationApplicabilityRangeInput{
-                        encoded.get<std::string>("input"),
-                        minimum
-                            ? std::optional<double>{*minimum}
-                            : std::nullopt,
-                        maximum
-                            ? std::optional<double>{*maximum}
-                            : std::nullopt,
-                        encoded.get("minimum_inclusive", true),
-                        encoded.get("maximum_inclusive", true),
-                    };
-                });
-    }
-    if (const auto candidates = tree.get_child_optional("candidates")) {
-        artifact.candidates = decode_array<CorrelationCandidateInput>(
-            *candidates,
-            [](const Tree& encoded) {
+    artifact.candidates = decode_array<CorrelationCandidateInput>(
+        tree.get_child("candidates"),
+        [](const Tree& encoded) {
                 CorrelationCandidateInput candidate;
                 candidate.id = encoded.get<std::string>("id");
                 candidate.regime =
@@ -409,9 +376,8 @@ CorrelationArtifactInput decode_correlation(
                             };
                         });
                 }
-                return candidate;
-            });
-    }
+            return candidate;
+        });
     return artifact;
 }
 
@@ -432,40 +398,9 @@ Tree encode_correlation(
     output.put("name", artifact.output.name);
     output.put("dimension", artifact.output.dimension);
     tree.add_child("output", output);
-    Tree coefficients;
-    for (const auto& [name, value] : artifact.coefficients) {
-        coefficients.put(name, value);
-    }
-    if (artifact.schema_version ==
-        platform::correlation_artifact_schema_v1) {
-        tree.add_child("coefficients", coefficients);
-        tree.put("expression", artifact.expression);
-    }
-    if (!artifact.applicability.empty()) {
-        tree.add_child(
-            "applicability",
-            array(
-                artifact.applicability,
-                [](const CorrelationApplicabilityRangeInput& range) {
-                    Tree encoded;
-                    encoded.put("input", range.input);
-                    if (range.minimum) {
-                        encoded.put("minimum", *range.minimum);
-                    }
-                    if (range.maximum) {
-                        encoded.put("maximum", *range.maximum);
-                    }
-                    encoded.put(
-                        "minimum_inclusive", range.minimum_inclusive);
-                    encoded.put(
-                        "maximum_inclusive", range.maximum_inclusive);
-                    return encoded;
-                }));
-    }
-    if (!artifact.candidates.empty()) {
-        tree.add_child(
-            "candidates",
-            array(
+    tree.add_child(
+        "candidates",
+        array(
                 artifact.candidates,
                 [](const CorrelationCandidateInput& candidate) {
                     Tree encoded;
@@ -499,8 +434,7 @@ Tree encode_correlation(
                                 return value;
                             }));
                     return encoded;
-                }));
-    }
+            }));
     return tree;
 }
 
@@ -511,45 +445,25 @@ platform::CorrelationArtifact correlation(
     for (const auto& variable : input.inputs) {
         variables.push_back({variable.name, variable.dimension});
     }
-    std::vector<platform::CorrelationApplicabilityRange> applicability;
-    applicability.reserve(input.applicability.size());
-    for (const auto& range : input.applicability) {
-        applicability.push_back({
-            range.input, range.minimum, range.maximum,
-            range.minimum_inclusive, range.maximum_inclusive});
-    }
-    if (input.schema_version ==
-        platform::correlation_artifact_schema_v2) {
-        std::vector<platform::CorrelationCandidate> candidates;
-        candidates.reserve(input.candidates.size());
-        for (const auto& candidate : input.candidates) {
-            std::vector<platform::CorrelationApplicabilityRange> ranges;
-            for (const auto& range : candidate.applicability) {
-                ranges.push_back({
-                    range.input, range.minimum, range.maximum,
-                    range.minimum_inclusive, range.maximum_inclusive});
-            }
-            candidates.push_back({
-                candidate.id, candidate.regime, candidate.priority,
-                candidate.coefficients, candidate.expression,
-                std::move(ranges)});
+    std::vector<platform::CorrelationCandidate> candidates;
+    candidates.reserve(input.candidates.size());
+    for (const auto& candidate : input.candidates) {
+        std::vector<platform::CorrelationApplicabilityRange> ranges;
+        for (const auto& range : candidate.applicability) {
+            ranges.push_back({
+                range.input, range.minimum, range.maximum,
+                range.minimum_inclusive, range.maximum_inclusive});
         }
-        return {
-            input.id, input.schema_version, input.revision,
-            input.checksum_sha256, std::move(variables),
-            {input.output.name, input.output.dimension},
-            std::move(candidates)};
+        candidates.push_back({
+            candidate.id, candidate.regime, candidate.priority,
+            candidate.coefficients, candidate.expression,
+            std::move(ranges)});
     }
     return {
-        input.id,
-        input.schema_version,
-        input.revision,
-        input.checksum_sha256,
-        std::move(variables),
+        input.id, input.schema_version, input.revision,
+        input.checksum_sha256, std::move(variables),
         {input.output.name, input.output.dimension},
-        input.coefficients,
-        input.expression,
-        std::move(applicability),
+        std::move(candidates),
     };
 }
 

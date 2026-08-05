@@ -10,14 +10,16 @@ function definition(): CorrelationArtifactDefinition {
       { name: 'density', dimension: 'density' },
     ],
     output: { name: 'pressure_loss', dimension: 'pressure' },
-    coefficients: { coefficient: 1.5 },
-    expression: 'coefficient * mass_flow * abs(mass_flow) / density',
-    applicability: [{
-      input: 'mass_flow',
-      minimum: 0,
-      maximum: 20,
-      minimum_inclusive: true,
-      maximum_inclusive: false,
+    candidates: [{
+      id: 'default',
+      regime: 'general',
+      priority: 0,
+      coefficients: { coefficient: 1.5 },
+      expression: 'coefficient * mass_flow * abs(mass_flow) / density',
+      applicability: [{
+        input: 'mass_flow', minimum: 0, maximum: 20,
+        minimum_inclusive: true, maximum_inclusive: false,
+      }],
     }],
   }
 }
@@ -30,7 +32,7 @@ describe('correlation authoring validation', () => {
   it('rejects duplicate or invalid symbols before publication', () => {
     const invalid = definition()
     invalid.inputs[1].name = 'mass_flow'
-    invalid.coefficients = { 'unsafe-name': Number.NaN }
+    invalid.candidates[0].coefficients = { 'unsafe-name': Number.NaN }
     expect(validateCorrelationDefinition(invalid)).toEqual(
       expect.arrayContaining([
         'Symbol "mass_flow" is duplicated.',
@@ -42,7 +44,7 @@ describe('correlation authoring validation', () => {
 
   it('rejects unknown, duplicate, or empty applicability ranges', () => {
     const invalid = definition()
-    invalid.applicability = [
+    invalid.candidates[0].applicability = [
       {
         input: 'unknown',
         minimum_inclusive: true,

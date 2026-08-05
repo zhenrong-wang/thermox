@@ -41,9 +41,10 @@ thermox::platform::CorrelationArtifact bend_correlation() {
             {"area", "area"},
         },
         {"pressure_loss", "pressure"},
-        {{"loss_coefficient", 1.5}},
-        "loss_coefficient * mass_flow * abs(mass_flow) / "
-        "(2 * density * area * area)",
+        {{"default", "general", 0,
+          {{"loss_coefficient", 1.5}},
+          "loss_coefficient * mass_flow * abs(mass_flow) / "
+          "(2 * density * area * area)", {}}},
     };
 }
 
@@ -59,9 +60,9 @@ thermox::platform::CorrelationArtifact void_fraction_correlation() {
             {"vapor_density", "density"},
         },
         {"void_fraction", "dimensionless"},
-        {{"slip_ratio", 2.0}},
-        "1 / (1 + ((1 - vapor_quality) / vapor_quality) * "
-        "(vapor_density / liquid_density) * slip_ratio)",
+        {{"default", "general", 0, {{"slip_ratio", 2.0}},
+          "1 / (1 + ((1 - vapor_quality) / vapor_quality) * "
+          "(vapor_density / liquid_density) * slip_ratio)", {}}},
     };
 }
 
@@ -92,8 +93,8 @@ void test_correlation_contract_rejects_undeclared_symbols() {
         std::string(64, 'd'),
         {{"mass_flow", "mass_flow"}},
         {"pressure_loss", "pressure"},
-        {},
-        "mass_flow * undeclared_coefficient",
+        {{"default", "general", 0, {},
+          "mass_flow * undeclared_coefficient", {}}},
     };
     bool rejected = false;
     try {
@@ -113,9 +114,8 @@ void test_correlation_enforces_qualified_operating_envelope() {
         std::string(64, 'a'),
         {{"vapor_quality", "dimensionless"}},
         {"void_fraction", "dimensionless"},
-        {},
-        "vapor_quality",
-        {{"vapor_quality", 0.1, 0.8, true, false}},
+        {{"default", "general", 0, {}, "vapor_quality",
+          {{"vapor_quality", 0.1, 0.8, true, false}}}},
     };
     bounded.validate();
     require(
@@ -138,9 +138,8 @@ void test_correlation_enforces_qualified_operating_envelope() {
         std::string(64, 'b'),
         {{"vapor_quality", "dimensionless"}},
         {"void_fraction", "dimensionless"},
-        {},
-        "vapor_quality",
-        {{"unknown_input", 0.0, 1.0, true, true}},
+        {{"default", "general", 0, {}, "vapor_quality",
+          {{"unknown_input", 0.0, 1.0, true, true}}}},
     };
     bool rejected = false;
     try {
@@ -155,7 +154,7 @@ void test_correlation_enforces_qualified_operating_envelope() {
 void test_correlation_family_selects_deterministically() {
     auto family = thermox::platform::CorrelationArtifact{
         "void-fraction-family",
-        thermox::platform::correlation_artifact_schema_v2,
+        thermox::platform::correlation_artifact_schema_v1,
         "revision-1",
         std::string(64, 'f'),
         {{"vapor_quality", "dimensionless"}},
@@ -197,7 +196,7 @@ void test_correlation_family_selects_deterministically() {
 
     auto ambiguous = thermox::platform::CorrelationArtifact{
         "ambiguous-family",
-        thermox::platform::correlation_artifact_schema_v2,
+        thermox::platform::correlation_artifact_schema_v1,
         "revision-1",
         std::string(64, 'a'),
         {{"x", "dimensionless"}},
@@ -405,8 +404,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             "invalid-range-1", std::string(64, 'f'),
             {{"vapor_quality", "dimensionless"}},
             {"void_fraction", "dimensionless"},
-            {{"invalid_alpha", 1.2}},
-            "invalid_alpha + 0 * vapor_quality"});
+            {{"default", "general", 0, {{"invalid_alpha", 1.2}},
+              "invalid_alpha + 0 * vapor_quality", {}}}});
     const auto nonphysical_graph =
         thermox::platform::compile_model_graph(
             nonphysical_document, registry, properties,
@@ -429,8 +428,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             thermox::platform::correlation_artifact_schema_v1,
             "wrong-dimension-1", std::string(64, 'a'),
             {{"vapor_quality", "dimensionless"}},
-            {"void_fraction", "pressure"}, {},
-            "vapor_quality"});
+            {"void_fraction", "pressure"},
+            {{"default", "general", 0, {}, "vapor_quality", {}}}});
     bool wrong_dimension_rejected = false;
     try {
         (void)thermox::platform::compile_model_graph(

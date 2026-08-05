@@ -71,28 +71,6 @@ CorrelationArtifact::CorrelationArtifact(
     std::string artifact_checksum_sha256,
     std::vector<CorrelationVariable> inputs,
     CorrelationVariable output,
-    std::map<std::string, double> coefficients,
-    std::string expression,
-    std::vector<CorrelationApplicabilityRange> applicability)
-    : inputs_(std::move(inputs)),
-      output_(std::move(output)),
-      coefficients_(std::move(coefficients)),
-      expression_(std::move(expression)),
-      applicability_(std::move(applicability)),
-      compiled_(SafeExpression::parse(expression_)) {
-    id = std::move(artifact_id);
-    schema_version = std::move(artifact_schema_version);
-    revision = std::move(artifact_revision);
-    checksum_sha256 = std::move(artifact_checksum_sha256);
-}
-
-CorrelationArtifact::CorrelationArtifact(
-    std::string artifact_id,
-    std::string artifact_schema_version,
-    std::string artifact_revision,
-    std::string artifact_checksum_sha256,
-    std::vector<CorrelationVariable> inputs,
-    CorrelationVariable output,
     std::vector<CorrelationCandidate> candidates)
     : inputs_(std::move(inputs)),
       output_(std::move(output)),
@@ -109,8 +87,7 @@ CorrelationArtifact::CorrelationArtifact(
 }
 
 void CorrelationArtifact::validate() const {
-    if (schema_version != correlation_artifact_schema_v1 &&
-        schema_version != correlation_artifact_schema_v2) {
+    if (schema_version != correlation_artifact_schema_v1) {
         throw std::invalid_argument(
             "correlation artifact '" + id +
             "' has unsupported schema version: " +
@@ -138,20 +115,10 @@ void CorrelationArtifact::validate() const {
                 input.name);
         }
     }
-    for (const auto& [name, value] : coefficients_) {
-        if (!valid_identifier(name) || !std::isfinite(value) ||
-            !declared.insert(name).second) {
-            throw std::invalid_argument(
-                "correlation artifact '" + id +
-                "' has an invalid or duplicate coefficient: " +
-                name);
-        }
-    }
     const auto validate_ranges = [&](const auto& ranges) {
         std::set<std::string> ranged_inputs;
         for (const auto& range : ranges) {
             if (!declared.contains(range.input) ||
-                coefficients_.contains(range.input) ||
                 !ranged_inputs.insert(range.input).second) {
                 throw std::invalid_argument(
                     "correlation artifact '" + id +
@@ -173,16 +140,6 @@ void CorrelationArtifact::validate() const {
             }
         }
     };
-    if (schema_version == correlation_artifact_schema_v1) {
-        validate_ranges(applicability_);
-        if (!compiled_ || compiled_->symbols() != declared) {
-            throw std::invalid_argument(
-                "correlation artifact '" + id +
-                "' expression symbols must exactly match its inputs "
-                "and coefficients");
-        }
-        return;
-    }
     if (candidates_.empty()) {
         throw std::invalid_argument(
             "correlation family artifact '" + id +
@@ -229,21 +186,6 @@ CorrelationArtifact::output() const noexcept {
     return output_;
 }
 
-const std::map<std::string, double>&
-CorrelationArtifact::coefficients() const noexcept {
-    return coefficients_;
-}
-
-const std::string& CorrelationArtifact::expression()
-    const noexcept {
-    return expression_;
-}
-
-const std::vector<CorrelationApplicabilityRange>&
-CorrelationArtifact::applicability() const noexcept {
-    return applicability_;
-}
-
 const std::vector<CorrelationCandidate>&
 CorrelationArtifact::candidates() const noexcept {
     return candidates_;
@@ -252,25 +194,22 @@ CorrelationArtifact::candidates() const noexcept {
 CorrelationApplicabilityAssessment
 CorrelationArtifact::assess_applicability(
     const std::map<std::string, double>& inputs) const {
-    if (schema_version == correlation_artifact_schema_v2) {
-        CorrelationApplicabilityAssessment family;
-        family.applicable = false;
-        for (const auto& candidate : candidates_) {
-            const auto assessment = assess_ranges(
-                candidate.applicability, inputs);
-            if (assessment.applicable) {
-                family.applicable = true;
-                family.violations.clear();
-                return family;
-            }
-            for (const auto& violation : assessment.violations) {
-                family.violations.push_back(
-                    candidate.id + ": " + violation);
-            }
+    CorrelationApplicabilityAssessment family;
+    family.applicable = false;
+    for (const auto& candidate : candidates_) {
+        const auto assessment = assess_ranges(
+            candidate.applicability, inputs);
+        if (assessment.applicable) {
+            family.applicable = true;
+            family.violations.clear();
+            return family;
         }
-        return family;
+        for (const auto& violation : assessment.violations) {
+            family.violations.push_back(
+                candidate.id + ": " + violation);
+        }
     }
-    return assess_ranges(applicability_, inputs);
+    return family;
 }
 
 CorrelationEvaluation CorrelationArtifact::evaluate(
@@ -287,91 +226,63 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     if (inputs.size() != inputs_.size()) {
         return {0.0, {}, "correlation received unknown inputs", {}, {}};
     }
-    if (schema_version == correlation_artifact_schema_v2) {
-        std::vector<std::size_t> applicable;
-        int best_priority = std::numeric_limits<int>::min();
-        std::vector<std::string> exclusions;
-        for (std::size_t index = 0; index < candidates_.size(); ++index) {
-            const auto assessment = assess_ranges(
-                candidates_[index].applicability, inputs);
-            if (!assessment.applicable) {
-                std::string exclusion = candidates_[index].id + ": ";
-                for (std::size_t item = 0;
-                     item < assessment.violations.size(); ++item) {
-                    if (item != 0U) exclusion += "; ";
-                    exclusion += assessment.violations[item];
-                }
-                exclusions.push_back(std::move(exclusion));
-                continue;
+    std::vector<std::size_t> applicable;
+    int best_priority = std::numeric_limits<int>::min();
+    std::vector<std::string> exclusions;
+    for (std::size_t index = 0; index < candidates_.size(); ++index) {
+        const auto assessment = assess_ranges(
+            candidates_[index].applicability, inputs);
+        if (!assessment.applicable) {
+            std::string exclusion = candidates_[index].id + ": ";
+            for (std::size_t item = 0;
+                 item < assessment.violations.size(); ++item) {
+                if (item != 0U) exclusion += "; ";
+                exclusion += assessment.violations[item];
             }
-            if (candidates_[index].priority > best_priority) {
-                applicable.clear();
-                best_priority = candidates_[index].priority;
-            }
-            if (candidates_[index].priority == best_priority) {
-                applicable.push_back(index);
-            }
+            exclusions.push_back(std::move(exclusion));
+            continue;
         }
-        if (applicable.empty()) {
-            std::string error = "no correlation candidate is applicable";
-            for (const auto& exclusion : exclusions) {
-                error += "; " + exclusion;
-            }
-            return {0.0, {}, std::move(error), {}, {}};
+        if (candidates_[index].priority > best_priority) {
+            applicable.clear();
+            best_priority = candidates_[index].priority;
         }
-        if (applicable.size() != 1U) {
-            std::string error =
-                "correlation candidate selection is ambiguous at priority " +
-                std::to_string(best_priority) + ": ";
-            for (std::size_t item = 0; item < applicable.size(); ++item) {
-                if (item != 0U) error += ", ";
-                error += candidates_[applicable[item]].id;
-            }
-            return {0.0, {}, std::move(error), {}, {}};
+        if (candidates_[index].priority == best_priority) {
+            applicable.push_back(index);
         }
-        const auto index = applicable.front();
-        const auto& candidate = candidates_[index];
-        std::map<std::string, double> values = candidate.coefficients;
-        values.insert(inputs.begin(), inputs.end());
-        const auto evaluated = compiled_candidates_[index].evaluate(values);
-        CorrelationEvaluation result;
-        result.value = evaluated.value;
-        result.error = evaluated.error;
-        result.selected_candidate = candidate.id;
-        result.selected_regime = candidate.regime;
-        if (!result.error.empty()) return result;
-        for (const auto& input : inputs_) {
-            const auto derivative = evaluated.derivatives.find(input.name);
-            result.input_derivatives.emplace(
-                input.name, derivative == evaluated.derivatives.end()
-                    ? 0.0 : derivative->second);
-        }
-        return result;
     }
-    const auto applicability = assess_applicability(inputs);
-    if (!applicability.applicable) {
-        std::string error;
-        for (const auto& violation : applicability.violations) {
-            if (!error.empty()) error += "; ";
-            error += violation;
+    if (applicable.empty()) {
+        std::string error = "no correlation candidate is applicable";
+        for (const auto& exclusion : exclusions) {
+            error += "; " + exclusion;
         }
         return {0.0, {}, std::move(error), {}, {}};
     }
-    std::map<std::string, double> values = coefficients_;
+    if (applicable.size() != 1U) {
+        std::string error =
+            "correlation candidate selection is ambiguous at priority " +
+            std::to_string(best_priority) + ": ";
+        for (std::size_t item = 0; item < applicable.size(); ++item) {
+            if (item != 0U) error += ", ";
+            error += candidates_[applicable[item]].id;
+        }
+        return {0.0, {}, std::move(error), {}, {}};
+    }
+    const auto index = applicable.front();
+    const auto& candidate = candidates_[index];
+    std::map<std::string, double> values = candidate.coefficients;
     values.insert(inputs.begin(), inputs.end());
-    const auto evaluated = compiled_->evaluate(values);
+    const auto evaluated = compiled_candidates_[index].evaluate(values);
     CorrelationEvaluation result;
     result.value = evaluated.value;
     result.error = evaluated.error;
+    result.selected_candidate = candidate.id;
+    result.selected_regime = candidate.regime;
     if (!result.error.empty()) return result;
     for (const auto& input : inputs_) {
-        const auto derivative =
-            evaluated.derivatives.find(input.name);
+        const auto derivative = evaluated.derivatives.find(input.name);
         result.input_derivatives.emplace(
-            input.name,
-            derivative == evaluated.derivatives.end()
-                ? 0.0
-                : derivative->second);
+            input.name, derivative == evaluated.derivatives.end()
+                ? 0.0 : derivative->second);
     }
     return result;
 }

@@ -129,17 +129,17 @@ thermox::service::CorrelationArtifactInput bend_correlation() {
         {"area", "area"},
     };
     artifact.output = {"pressure_loss", "pressure"};
-    artifact.coefficients = {{"loss_coefficient", 1.5}};
-    artifact.expression =
-        "loss_coefficient * mass_flow * abs(mass_flow) / "
-        "(2 * density * area * area)";
+    artifact.candidates = {
+        {"default", "general", 0, {{"loss_coefficient", 1.5}},
+         "loss_coefficient * mass_flow * abs(mass_flow) / "
+         "(2 * density * area * area)", {}}};
     return artifact;
 }
 
 thermox::service::CorrelationArtifactInput bend_correlation_family() {
     thermox::service::CorrelationArtifactInput artifact;
     artifact.id = "request-bend-correlation";
-    artifact.schema_version = "thermox.correlation/v2";
+    artifact.schema_version = "thermox.correlation/v1";
     artifact.revision = "service-family-1";
     artifact.checksum_sha256 = std::string(64, 'f');
     artifact.inputs = {
@@ -353,7 +353,7 @@ void test_correlation_applicability_reaches_component_diagnostics() {
     request.model_json = correlated_bend_model();
     request.case_id = "design";
     auto artifact = bend_correlation();
-    artifact.applicability = {
+    artifact.candidates.front().applicability = {
         {"mass_flow", 0.0, 1.0, true, true},
     };
     request.artifacts.correlations.push_back(std::move(artifact));

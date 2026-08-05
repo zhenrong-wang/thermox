@@ -221,49 +221,25 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             variables.push_back(
                 {variable.name, variable.dimension});
         }
-        std::vector<platform::CorrelationApplicabilityRange>
-            applicability;
-        applicability.reserve(input.applicability.size());
-        for (const auto& range : input.applicability) {
-            applicability.push_back({
-                range.input, range.minimum, range.maximum,
-                range.minimum_inclusive, range.maximum_inclusive});
-        }
-        if (input.schema_version ==
-            platform::correlation_artifact_schema_v2) {
-            std::vector<platform::CorrelationCandidate> candidates;
-            for (const auto& candidate : input.candidates) {
-                std::vector<platform::CorrelationApplicabilityRange>
-                    ranges;
-                for (const auto& range : candidate.applicability) {
-                    ranges.push_back({
-                        range.input, range.minimum, range.maximum,
-                        range.minimum_inclusive,
-                        range.maximum_inclusive});
-                }
-                candidates.push_back({
-                    candidate.id, candidate.regime, candidate.priority,
-                    candidate.coefficients, candidate.expression,
-                    std::move(ranges)});
+        std::vector<platform::CorrelationCandidate> candidates;
+        for (const auto& candidate : input.candidates) {
+            std::vector<platform::CorrelationApplicabilityRange> ranges;
+            for (const auto& range : candidate.applicability) {
+                ranges.push_back({
+                    range.input, range.minimum, range.maximum,
+                    range.minimum_inclusive,
+                    range.maximum_inclusive});
             }
-            artifacts.register_artifact(platform::CorrelationArtifact{
-                input.id, input.schema_version, input.revision,
-                input.checksum_sha256, std::move(variables),
-                {input.output.name, input.output.dimension},
-                std::move(candidates)});
-        } else {
-            artifacts.register_artifact(platform::CorrelationArtifact{
-                input.id,
-                input.schema_version,
-                input.revision,
-                input.checksum_sha256,
-                std::move(variables),
-                {input.output.name, input.output.dimension},
-                input.coefficients,
-                input.expression,
-                std::move(applicability),
-            });
+            candidates.push_back({
+                candidate.id, candidate.regime, candidate.priority,
+                candidate.coefficients, candidate.expression,
+                std::move(ranges)});
         }
+        artifacts.register_artifact(platform::CorrelationArtifact{
+            input.id, input.schema_version, input.revision,
+            input.checksum_sha256, std::move(variables),
+            {input.output.name, input.output.dimension},
+            std::move(candidates)});
     }
     return artifacts;
 }

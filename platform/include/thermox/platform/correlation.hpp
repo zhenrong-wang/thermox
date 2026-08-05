@@ -14,8 +14,6 @@ inline constexpr char correlation_artifact_type[] =
     "thermox.correlation";
 inline constexpr char correlation_artifact_schema_v1[] =
     "thermox.correlation/v1";
-inline constexpr char correlation_artifact_schema_v2[] =
-    "thermox.correlation/v2";
 
 struct CorrelationVariable {
     std::string name;
@@ -61,17 +59,6 @@ public:
         std::string artifact_checksum_sha256,
         std::vector<CorrelationVariable> inputs,
         CorrelationVariable output,
-        std::map<std::string, double> coefficients,
-        std::string expression,
-        std::vector<CorrelationApplicabilityRange> applicability = {});
-
-    CorrelationArtifact(
-        std::string artifact_id,
-        std::string artifact_schema_version,
-        std::string artifact_revision,
-        std::string artifact_checksum_sha256,
-        std::vector<CorrelationVariable> inputs,
-        CorrelationVariable output,
         std::vector<CorrelationCandidate> candidates);
 
     [[nodiscard]] std::string_view artifact_type()
@@ -84,11 +71,6 @@ public:
         const noexcept;
     [[nodiscard]] const CorrelationVariable& output()
         const noexcept;
-    [[nodiscard]] const std::map<std::string, double>& coefficients()
-        const noexcept;
-    [[nodiscard]] const std::string& expression() const noexcept;
-    [[nodiscard]] const std::vector<CorrelationApplicabilityRange>&
-    applicability() const noexcept;
     [[nodiscard]] const std::vector<CorrelationCandidate>& candidates()
         const noexcept;
     [[nodiscard]] CorrelationApplicabilityAssessment assess_applicability(
@@ -99,10 +81,6 @@ public:
 private:
     std::vector<CorrelationVariable> inputs_;
     CorrelationVariable output_;
-    std::map<std::string, double> coefficients_;
-    std::string expression_;
-    std::vector<CorrelationApplicabilityRange> applicability_;
-    std::optional<SafeExpression> compiled_;
     std::vector<CorrelationCandidate> candidates_;
     std::vector<SafeExpression> compiled_candidates_;
 };

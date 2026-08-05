@@ -335,9 +335,6 @@ struct CorrelationArtifactInput {
     std::string checksum_sha256;
     std::vector<CorrelationVariableInput> inputs;
     CorrelationVariableInput output;
-    std::map<std::string, double> coefficients;
-    std::string expression;
-    std::vector<CorrelationApplicabilityRangeInput> applicability;
     std::vector<CorrelationCandidateInput> candidates;
 };
 

@@ -148,13 +148,6 @@ void append_artifacts(
         }
         append_string(stream, artifact.output.name);
         append_string(stream, artifact.output.dimension);
-        stream << artifact.coefficients.size() << '|';
-        for (const auto& [name, value] : artifact.coefficients) {
-            append_string(stream, name);
-            stream << value << '|';
-        }
-        append_string(stream, artifact.expression);
-        append_applicability(stream, artifact.applicability);
         stream << artifact.candidates.size() << '|';
         for (const auto& candidate : artifact.candidates) {
             append_string(stream, candidate.id);

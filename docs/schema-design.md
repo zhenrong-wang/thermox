@@ -355,7 +355,7 @@ the evaluator rejects an out-of-envelope operating point before component residu
 They qualify engineering data without placing OEM- or correlation-specific ranges in registered
 component code.
 
-`thermox.correlation/v2` packages multiple named, regime-labelled candidates behind that same
+`thermox.correlation/v1` packages one or more named, regime-labelled candidates behind that same
 typed artifact role. Applicability determines eligibility, integer priority resolves intentional
 overlap, and equal-priority ambiguity or zero-candidate coverage gaps fail explicitly. Components
 continue to bind one immutable artifact ID and therefore require no regime-specific schema.

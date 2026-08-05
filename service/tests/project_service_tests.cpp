@@ -369,14 +369,19 @@ std::string correlation_payload() {
     "name": "pressure_loss",
     "dimension": "pressure"
   },
-  "coefficients": {"loss_coefficient": 1.5},
-  "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
-  "applicability": [{
-    "input": "mass_flow",
-    "minimum": 0.0,
-    "maximum": 25.0,
-    "minimum_inclusive": true,
-    "maximum_inclusive": false
+  "candidates": [{
+    "id": "default",
+    "regime": "general",
+    "priority": 0,
+    "coefficients": {"loss_coefficient": 1.5},
+    "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
+    "applicability": [{
+      "input": "mass_flow",
+      "minimum": 0.0,
+      "maximum": 25.0,
+      "minimum_inclusive": true,
+      "maximum_inclusive": false
+    }]
   }]
 })json";
 }
@@ -428,16 +433,20 @@ void test_correlation_artifact_is_executable_input() {
         resolved && resolved->snapshot.correlations.size() == 1U &&
             resolved->snapshot.correlations.front().id ==
                 "return-bend-pressure-loss" &&
-            resolved->snapshot.correlations.front().expression.find(
+            resolved->snapshot.correlations.front().candidates.front()
+                    .expression.find(
                 "mass_flow") != std::string::npos &&
             resolved->snapshot.correlations.front()
-                    .coefficients.at("loss_coefficient") == 1.5 &&
+                    .candidates.front().coefficients.at(
+                        "loss_coefficient") == 1.5 &&
             resolved->snapshot.correlations.front()
-                    .applicability.size() == 1U &&
+                    .candidates.front().applicability.size() == 1U &&
             resolved->snapshot.correlations.front()
-                    .applicability.front().maximum == 25.0 &&
+                    .candidates.front().applicability.front().maximum ==
+                25.0 &&
             !resolved->snapshot.correlations.front()
-                    .applicability.front().maximum_inclusive,
+                    .candidates.front().applicability.front()
+                    .maximum_inclusive,
         "correlation revisions must resolve into an immutable "
         "executable artifact snapshot");
 
@@ -453,8 +462,10 @@ void test_correlation_artifact_is_executable_input() {
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "output": {"name": "y", "dimension": "dimensionless"},
-              "coefficients": {},
-              "expression": "system(x)"
+              "candidates": [{
+                "id": "default", "regime": "general", "priority": 0,
+                "coefficients": {}, "expression": "system(x)"
+              }]
             })json",
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -463,6 +474,29 @@ void test_correlation_artifact_is_executable_input() {
     require(unsafe_rejected,
             "unsafe correlation expressions must be rejected before "
             "persistence");
+
+    bool removed_shape_rejected = false;
+    try {
+        (void)projects.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "removed-correlation-shape",
+            {},
+            "thermox.correlation",
+            "thermox.correlation/v1",
+            R"json({
+              "inputs": [{"name": "x", "dimension": "dimensionless"}],
+              "output": {"name": "y", "dimension": "dimensionless"},
+              "coefficients": {},
+              "expression": "x"
+            })json",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        removed_shape_rejected = true;
+    }
+    require(
+        removed_shape_rejected,
+        "the removed single-law payload shape must not be adapted");
 
     bool invalid_envelope_rejected = false;
     try {
@@ -476,12 +510,14 @@ void test_correlation_artifact_is_executable_input() {
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "output": {"name": "y", "dimension": "dimensionless"},
-              "coefficients": {},
-              "expression": "x",
-              "applicability": [{
-                "input": "unknown",
-                "minimum": 0.0,
-                "maximum": 1.0
+              "candidates": [{
+                "id": "default", "regime": "general", "priority": 0,
+                "coefficients": {}, "expression": "x",
+                "applicability": [{
+                  "input": "unknown",
+                  "minimum": 0.0,
+                  "maximum": 1.0
+                }]
               }]
             })json",
         });
@@ -499,7 +535,7 @@ void test_correlation_artifact_is_executable_input() {
         "return-bend-family",
         {},
         "thermox.correlation",
-        "thermox.correlation/v2",
+        "thermox.correlation/v1",
         correlation_family_payload(),
     });
     const auto resolved_family = projects.resolve_artifact_revisions(
@@ -509,14 +545,14 @@ void test_correlation_artifact_is_executable_input() {
         resolved_family &&
             resolved_family->snapshot.correlations.size() == 1U &&
             resolved_family->snapshot.correlations.front()
-                    .schema_version == "thermox.correlation/v2" &&
+                    .schema_version == "thermox.correlation/v1" &&
             resolved_family->snapshot.correlations.front()
                     .candidates.size() == 2U &&
             resolved_family->snapshot.correlations.front()
                     .candidates.back().regime == "high-flow" &&
             resolved_family->snapshot.correlations.front()
                     .candidates.back().priority == 20,
-        "v2 correlation families must preserve ordered candidates, "
+        "correlation families must preserve ordered candidates, "
         "regimes, priorities, and qualified ranges");
 }
 

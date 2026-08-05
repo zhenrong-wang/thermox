@@ -128,7 +128,7 @@ thermox::service::PerformanceMapArtifactInput unused_test_map() {
 thermox::service::CorrelationArtifactInput unused_correlation_family() {
     thermox::service::CorrelationArtifactInput artifact;
     artifact.id = "job-correlation-family";
-    artifact.schema_version = "thermox.correlation/v2";
+    artifact.schema_version = "thermox.correlation/v1";
     artifact.revision = "job-family-1";
     artifact.checksum_sha256 = std::string(64, 'd');
     artifact.inputs = {{"x", "dimensionless"}};

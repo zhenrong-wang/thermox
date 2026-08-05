@@ -281,27 +281,6 @@ Tree correlation(
     output.put("name", value.output.name);
     output.put("dimension", value.output.dimension);
     tree.add_child("output", output);
-    Tree coefficients;
-    for (const auto& [name, coefficient] : value.coefficients) {
-        coefficients.put(name, coefficient);
-    }
-    tree.add_child("coefficients", coefficients);
-    tree.put("expression", value.expression);
-    tree.add_child(
-        "applicability",
-        array(
-            value.applicability,
-            [](const service::CorrelationApplicabilityRangeInput& range) {
-                Tree encoded;
-                encoded.put("input", range.input);
-                if (range.minimum) encoded.put("minimum", *range.minimum);
-                if (range.maximum) encoded.put("maximum", *range.maximum);
-                encoded.put(
-                    "minimum_inclusive", range.minimum_inclusive);
-                encoded.put(
-                    "maximum_inclusive", range.maximum_inclusive);
-                return encoded;
-            }));
     tree.add_child(
         "candidates",
         array(
@@ -364,38 +343,8 @@ service::CorrelationArtifactInput decode_correlation(
         tree.get<std::string>("output.name"),
         tree.get<std::string>("output.dimension"),
     };
-    for (const auto& [name, encoded] :
-         tree.get_child("coefficients")) {
-        value.coefficients.emplace(
-            name, encoded.get_value<double>());
-    }
-    value.expression = tree.get<std::string>("expression");
-    if (const auto applicability =
-            tree.get_child_optional("applicability")) {
-        value.applicability =
-            decode_array<service::CorrelationApplicabilityRangeInput>(
-                *applicability,
-                [](const Tree& encoded) {
-                    const auto minimum =
-                        encoded.get_optional<double>("minimum");
-                    const auto maximum =
-                        encoded.get_optional<double>("maximum");
-                    return service::CorrelationApplicabilityRangeInput{
-                        encoded.get<std::string>("input"),
-                        minimum
-                            ? std::optional<double>{*minimum}
-                            : std::nullopt,
-                        maximum
-                            ? std::optional<double>{*maximum}
-                            : std::nullopt,
-                        encoded.get("minimum_inclusive", true),
-                        encoded.get("maximum_inclusive", true),
-                    };
-                });
-    }
-    if (const auto candidates = tree.get_child_optional("candidates")) {
-        value.candidates = decode_array<service::CorrelationCandidateInput>(
-            *candidates,
+    value.candidates = decode_array<service::CorrelationCandidateInput>(
+            tree.get_child("candidates"),
             [](const Tree& encoded) {
                 service::CorrelationCandidateInput candidate;
                 candidate.id = encoded.get<std::string>("id");
@@ -428,7 +377,6 @@ service::CorrelationArtifactInput decode_correlation(
                     });
                 return candidate;
             });
-    }
     return value;
 }
 

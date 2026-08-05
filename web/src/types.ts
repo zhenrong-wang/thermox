@@ -754,14 +754,19 @@ export interface CorrelationArtifactDefinition {
     name: string
     dimension: string
   }
-  coefficients: Record<string, number>
-  expression: string
-  applicability?: Array<{
-    input: string
-    minimum?: number
-    maximum?: number
-    minimum_inclusive: boolean
-    maximum_inclusive: boolean
+  candidates: Array<{
+    id: string
+    regime: string
+    priority: number
+    coefficients: Record<string, number>
+    expression: string
+    applicability?: Array<{
+      input: string
+      minimum?: number
+      maximum?: number
+      minimum_inclusive: boolean
+      maximum_inclusive: boolean
+    }>
   }>
 }
 

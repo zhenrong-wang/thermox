@@ -29,6 +29,14 @@ type ApplicabilityDraft = {
   minimum_inclusive: boolean
   maximum_inclusive: boolean
 }
+type CandidateDraft = {
+  id: string
+  regime: string
+  priority: string
+  coefficients: CoefficientDraft[]
+  expression: string
+  applicability: ApplicabilityDraft[]
+}
 
 const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -37,57 +45,112 @@ export function validateCorrelationDefinition(
 ): string[] {
   const issues: string[] = []
   if (!definition.inputs.length) issues.push('Define at least one input.')
-  const names = new Set<string>()
+  const inputNames = new Set<string>()
   for (const input of definition.inputs) {
     if (!identifierPattern.test(input.name)) {
       issues.push(`Input "${input.name}" is not a valid expression identifier.`)
     }
     if (!input.dimension) issues.push(`Input "${input.name}" needs a dimension.`)
-    if (names.has(input.name)) issues.push(`Symbol "${input.name}" is duplicated.`)
-    names.add(input.name)
-  }
-  for (const [name, value] of Object.entries(definition.coefficients)) {
-    if (!identifierPattern.test(name)) {
-      issues.push(`Coefficient "${name}" is not a valid expression identifier.`)
-    }
-    if (!Number.isFinite(value)) issues.push(`Coefficient "${name}" must be finite.`)
-    if (names.has(name)) issues.push(`Symbol "${name}" is duplicated.`)
-    names.add(name)
+    if (inputNames.has(input.name)) issues.push(`Symbol "${input.name}" is duplicated.`)
+    inputNames.add(input.name)
   }
   if (!identifierPattern.test(definition.output.name)) {
     issues.push('Output name must be a valid expression identifier.')
   }
   if (!definition.output.dimension) issues.push('Output needs a dimension.')
-  if (!definition.expression.trim()) issues.push('Expression is required.')
-  const rangedInputs = new Set<string>()
-  for (const range of definition.applicability ?? []) {
-    if (!definition.inputs.some((input) => input.name === range.input)) {
-      issues.push(`Applicability input "${range.input}" is not declared.`)
+  if (!definition.candidates.length) issues.push('Define at least one candidate law.')
+
+  const candidateIds = new Set<string>()
+  for (const candidate of definition.candidates) {
+    const label = candidate.id || '(unnamed)'
+    if (!identifierPattern.test(candidate.id)) {
+      issues.push(`Candidate "${label}" does not have a valid identifier.`)
     }
-    if (rangedInputs.has(range.input)) {
-      issues.push(`Applicability input "${range.input}" is duplicated.`)
+    if (candidateIds.has(candidate.id)) {
+      issues.push(`Candidate "${label}" is duplicated.`)
     }
-    rangedInputs.add(range.input)
-    if (range.minimum === undefined && range.maximum === undefined) {
-      issues.push(`Applicability input "${range.input}" needs a minimum or maximum.`)
+    candidateIds.add(candidate.id)
+    if (!candidate.regime.trim()) issues.push(`Candidate "${label}" needs a regime.`)
+    if (!Number.isInteger(candidate.priority)) {
+      issues.push(`Candidate "${label}" priority must be an integer.`)
     }
-    if (range.minimum !== undefined && !Number.isFinite(range.minimum)) {
-      issues.push(`Applicability minimum for "${range.input}" must be finite.`)
+    if (!candidate.expression.trim()) {
+      issues.push(`Candidate "${label}" expression is required.`)
     }
-    if (range.maximum !== undefined && !Number.isFinite(range.maximum)) {
-      issues.push(`Applicability maximum for "${range.input}" must be finite.`)
+
+    const symbols = new Set(inputNames)
+    for (const [name, value] of Object.entries(candidate.coefficients)) {
+      if (!identifierPattern.test(name)) {
+        issues.push(`Coefficient "${name}" is not a valid expression identifier.`)
+      }
+      if (!Number.isFinite(value)) issues.push(`Coefficient "${name}" must be finite.`)
+      if (symbols.has(name)) issues.push(`Symbol "${name}" is duplicated.`)
+      symbols.add(name)
     }
-    if (
-      range.minimum !== undefined &&
-      range.maximum !== undefined &&
-      (range.minimum > range.maximum ||
-        (range.minimum === range.maximum &&
-          (!range.minimum_inclusive || !range.maximum_inclusive)))
-    ) {
-      issues.push(`Applicability range for "${range.input}" is empty.`)
+
+    const rangedInputs = new Set<string>()
+    for (const range of candidate.applicability ?? []) {
+      if (!inputNames.has(range.input)) {
+        issues.push(`Applicability input "${range.input}" is not declared.`)
+      }
+      if (rangedInputs.has(range.input)) {
+        issues.push(`Applicability input "${range.input}" is duplicated.`)
+      }
+      rangedInputs.add(range.input)
+      if (range.minimum === undefined && range.maximum === undefined) {
+        issues.push(`Applicability input "${range.input}" needs a minimum or maximum.`)
+      }
+      if (range.minimum !== undefined && !Number.isFinite(range.minimum)) {
+        issues.push(`Applicability minimum for "${range.input}" must be finite.`)
+      }
+      if (range.maximum !== undefined && !Number.isFinite(range.maximum)) {
+        issues.push(`Applicability maximum for "${range.input}" must be finite.`)
+      }
+      if (
+        range.minimum !== undefined && range.maximum !== undefined &&
+        (range.minimum > range.maximum ||
+          (range.minimum === range.maximum &&
+            (!range.minimum_inclusive || !range.maximum_inclusive)))
+      ) {
+        issues.push(`Applicability range for "${range.input}" is empty.`)
+      }
     }
   }
   return issues
+}
+
+function draftCandidate(
+  candidate: CorrelationArtifactDefinition['candidates'][number],
+): CandidateDraft {
+  return {
+    id: candidate.id,
+    regime: candidate.regime,
+    priority: String(candidate.priority),
+    coefficients: Object.entries(candidate.coefficients).map(([name, value]) => ({
+      name,
+      value: String(value),
+    })),
+    expression: candidate.expression,
+    applicability: (candidate.applicability ?? []).map((range) => ({
+      input: range.input,
+      minimum: range.minimum === undefined ? '' : String(range.minimum),
+      maximum: range.maximum === undefined ? '' : String(range.maximum),
+      minimum_inclusive: range.minimum_inclusive,
+      maximum_inclusive: range.maximum_inclusive,
+    })),
+  }
+}
+
+function defaultCandidate(): CandidateDraft {
+  return {
+    id: 'default',
+    regime: 'general',
+    priority: '0',
+    coefficients: [{ name: 'loss_coefficient', value: '1.5' }],
+    expression:
+      'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
+    applicability: [],
+  }
 }
 
 export function CorrelationArtifactForm({
@@ -102,10 +165,9 @@ export function CorrelationArtifactForm({
     ? 'dimensionless'
     : dimensions[0] ?? ''
   const correlationArtifactIds = useMemo(
-    () =>
-      new Set(artifactRevisions
-        .filter((revision) => revision.artifact_type === 'thermox.correlation')
-        .map((revision) => revision.artifact_id)),
+    () => new Set(artifactRevisions
+      .filter((revision) => revision.artifact_type === 'thermox.correlation')
+      .map((revision) => revision.artifact_id)),
     [artifactRevisions],
   )
   const [artifactId, setArtifactId] = useState(
@@ -121,29 +183,16 @@ export function CorrelationArtifactForm({
     base?.definition.output.dimension ??
       (dimensions.includes('pressure') ? 'pressure' : defaultDimension),
   )
-  const [coefficients, setCoefficients] = useState<CoefficientDraft[]>(
-    base
-      ? Object.entries(base.definition.coefficients).map(([name, value]) => ({
-          name,
-          value: String(value),
-        }))
-      : [{ name: 'loss_coefficient', value: '1.5' }],
-  )
-  const [expression, setExpression] = useState(
-    base?.definition.expression ??
-      'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
-  )
-  const [applicability, setApplicability] = useState<ApplicabilityDraft[]>(
-    (base?.definition.applicability ?? []).map((range) => ({
-      input: range.input,
-      minimum: range.minimum === undefined ? '' : String(range.minimum),
-      maximum: range.maximum === undefined ? '' : String(range.maximum),
-      minimum_inclusive: range.minimum_inclusive,
-      maximum_inclusive: range.maximum_inclusive,
-    })),
+  const [candidates, setCandidates] = useState<CandidateDraft[]>(
+    base ? base.definition.candidates.map(draftCandidate) : [defaultCandidate()],
   )
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
+
+  function updateCandidate(index: number, update: (candidate: CandidateDraft) => CandidateDraft) {
+    setCandidates((current) => current.map((candidate, itemIndex) =>
+      itemIndex === index ? update(candidate) : candidate))
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -151,56 +200,43 @@ export function CorrelationArtifactForm({
     try {
       if (!artifactId.trim()) throw new Error('Artifact ID is required.')
       if (!base && correlationArtifactIds.has(artifactId.trim())) {
-        throw new Error(
-          'That artifact ID already exists. Use its Revise action to create a child revision.',
-        )
-      }
-      const coefficientValues: Record<string, number> = {}
-      const coefficientNames = new Set<string>()
-      for (const coefficient of coefficients) {
-        const value = Number(coefficient.value)
-        const name = coefficient.name.trim()
-        if (!name || !Number.isFinite(value)) {
-          throw new Error('Every coefficient needs a name and finite SI value.')
-        }
-        if (coefficientNames.has(name)) {
-          throw new Error(`Coefficient "${name}" is duplicated.`)
-        }
-        coefficientNames.add(name)
-        coefficientValues[name] = value
+        throw new Error('That artifact ID already exists. Use Revise to create a child revision.')
       }
       const definition: CorrelationArtifactDefinition = {
         schema_version: 'thermox.correlation/v1',
         inputs: inputs.map((input) => ({
-          name: input.name.trim(),
-          dimension: input.dimension,
+          name: input.name.trim(), dimension: input.dimension,
         })),
-        output: {
-          name: outputName.trim(),
-          dimension: outputDimension,
-        },
-        coefficients: coefficientValues,
-        expression: expression.trim(),
-        applicability: applicability.map((range) => ({
-          input: range.input,
-          ...(range.minimum.trim() === '' ? {} : { minimum: Number(range.minimum) }),
-          ...(range.maximum.trim() === '' ? {} : { maximum: Number(range.maximum) }),
-          minimum_inclusive: range.minimum_inclusive,
-          maximum_inclusive: range.maximum_inclusive,
-        })),
+        output: { name: outputName.trim(), dimension: outputDimension },
+        candidates: candidates.map((candidate) => {
+          const coefficients: Record<string, number> = {}
+          for (const coefficient of candidate.coefficients) {
+            coefficients[coefficient.name.trim()] = Number(coefficient.value)
+          }
+          return {
+            id: candidate.id.trim(),
+            regime: candidate.regime.trim(),
+            priority: Number(candidate.priority),
+            coefficients,
+            expression: candidate.expression.trim(),
+            applicability: candidate.applicability.map((range) => ({
+              input: range.input,
+              ...(range.minimum.trim() === '' ? {} : { minimum: Number(range.minimum) }),
+              ...(range.maximum.trim() === '' ? {} : { maximum: Number(range.maximum) }),
+              minimum_inclusive: range.minimum_inclusive,
+              maximum_inclusive: range.maximum_inclusive,
+            })),
+          }
+        }),
       }
       const issues = validateCorrelationDefinition(definition)
       if (issues.length) throw new Error(issues.join('\n'))
       setSubmitting(true)
       await onSubmit(
-        artifactId.trim(),
-        base?.source.artifact_revision_id ?? '',
-        definition,
+        artifactId.trim(), base?.source.artifact_revision_id ?? '', definition,
       )
     } catch (reason) {
-      setFormError(
-        reason instanceof Error ? reason.message : 'The correlation was rejected.',
-      )
+      setFormError(reason instanceof Error ? reason.message : 'The correlation was rejected.')
     } finally {
       setSubmitting(false)
     }
@@ -217,25 +253,14 @@ export function CorrelationArtifactForm({
           <button type="button" className="icon-button" onClick={onCancel}>×</button>
         </header>
         <p className="registry-note">
-          <strong>Typed immutable correlation</strong>
-          Declare the physical inputs and output separately from the component that consumes them.
-          Values and coefficients are SI. The service validates the bounded expression and derives
-          its analytic first derivatives before persistence.
+          <strong>Typed immutable correlation family</strong>
+          Declare shared physical inputs and output, then one or more qualified candidate laws.
+          At runtime the applicable candidate with the highest priority is selected deterministically.
         </p>
         <div className="form-grid">
           <label>
             <span>Artifact ID</span>
-            <input
-              value={artifactId}
-              required
-              disabled={Boolean(base)}
-              onChange={(event) => setArtifactId(event.target.value)}
-            />
-            <small>
-              {base
-                ? `Publishes an immutable child of r${base.source.revision_number}.`
-                : 'Creates a new logical engineering artifact. Use Revise for an existing ID.'}
-            </small>
+            <input value={artifactId} required disabled={Boolean(base)} onChange={(event) => setArtifactId(event.target.value)} />
           </label>
           <label>
             <span>Output name</span>
@@ -253,87 +278,56 @@ export function CorrelationArtifactForm({
           <legend>Typed inputs</legend>
           {inputs.map((input, index) => (
             <div className="repeatable-row correlation-variable-row" key={index}>
-              <label>
-                <span>Name</span>
-                <input value={input.name} required onChange={(event) => setInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-              </label>
-              <label>
-                <span>Dimension</span>
-                <select value={input.dimension} required onChange={(event) => setInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value } : item))}>
-                  {dimensions.map((dimension) => <option key={dimension} value={dimension}>{dimension}</option>)}
-                </select>
-              </label>
+              <label><span>Name</span><input value={input.name} required onChange={(event) => setInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label>
+              <label><span>Dimension</span><select value={input.dimension} required onChange={(event) => setInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value } : item))}>{dimensions.map((dimension) => <option key={dimension} value={dimension}>{dimension}</option>)}</select></label>
               <button type="button" className="row-remove-button" aria-label={`Remove input ${input.name || index + 1}`} onClick={() => setInputs((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
             </div>
           ))}
           <button type="button" className="add-row-button" onClick={() => setInputs((current) => [...current, { name: `input_${current.length + 1}`, dimension: defaultDimension }])}>+ Add input</button>
         </fieldset>
 
-        <fieldset>
-          <legend>Qualified operating envelope</legend>
-          <p className="registry-note">
-            Optional SI limits reject evaluation outside the range qualified by the correlation owner.
-          </p>
-          {applicability.map((range, index) => (
-            <div className="repeatable-row correlation-variable-row" key={`${range.input}-${index}`}>
-              <label>
-                <span>Input</span>
-                <select value={range.input} required onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, input: event.target.value } : item))}>
-                  <option value="">Select input</option>
-                  {inputs.map((input) => <option key={input.name} value={input.name}>{input.name}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Minimum (SI)</span>
-                <input type="number" step="any" value={range.minimum} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimum: event.target.value } : item))} />
-                <small><input type="checkbox" checked={range.minimum_inclusive} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimum_inclusive: event.target.checked } : item))} /> Inclusive</small>
-              </label>
-              <label>
-                <span>Maximum (SI)</span>
-                <input type="number" step="any" value={range.maximum} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximum: event.target.value } : item))} />
-                <small><input type="checkbox" checked={range.maximum_inclusive} onChange={(event) => setApplicability((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximum_inclusive: event.target.checked } : item))} /> Inclusive</small>
-              </label>
-              <button type="button" className="row-remove-button" aria-label={`Remove applicability range ${range.input || index + 1}`} onClick={() => setApplicability((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+        {candidates.map((candidate, candidateIndex) => (
+          <fieldset key={`${candidate.id}-${candidateIndex}`}>
+            <legend>Candidate law {candidateIndex + 1}</legend>
+            <div className="form-grid">
+              <label><span>Candidate ID</span><input value={candidate.id} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, id: event.target.value }))} /></label>
+              <label><span>Regime</span><input value={candidate.regime} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, regime: event.target.value }))} /></label>
+              <label><span>Priority</span><input type="number" step="1" value={candidate.priority} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, priority: event.target.value }))} /></label>
             </div>
-          ))}
-          <button type="button" className="add-row-button" disabled={!inputs.length} onClick={() => setApplicability((current) => [...current, { input: inputs[0]?.name ?? '', minimum: '', maximum: '', minimum_inclusive: true, maximum_inclusive: true }])}>+ Add qualified range</button>
-        </fieldset>
 
-        <fieldset>
-          <legend>Immutable coefficients</legend>
-          {coefficients.map((coefficient, index) => (
-            <div className="repeatable-row correlation-variable-row" key={index}>
-              <label>
-                <span>Name</span>
-                <input value={coefficient.name} required onChange={(event) => setCoefficients((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-              </label>
-              <label>
-                <span>SI value</span>
-                <input type="number" step="any" value={coefficient.value} required onChange={(event) => setCoefficients((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
-              </label>
-              <button type="button" className="row-remove-button" aria-label={`Remove coefficient ${coefficient.name || index + 1}`} onClick={() => setCoefficients((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+            <p className="registry-note">Coefficients are immutable SI values local to this candidate.</p>
+            {candidate.coefficients.map((coefficient, index) => (
+              <div className="repeatable-row correlation-variable-row" key={index}>
+                <label><span>Coefficient</span><input value={coefficient.name} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, coefficients: item.coefficients.map((entry, itemIndex) => itemIndex === index ? { ...entry, name: event.target.value } : entry) }))} /></label>
+                <label><span>SI value</span><input type="number" step="any" value={coefficient.value} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, coefficients: item.coefficients.map((entry, itemIndex) => itemIndex === index ? { ...entry, value: event.target.value } : entry) }))} /></label>
+                <button type="button" className="row-remove-button" aria-label={`Remove coefficient ${coefficient.name || index + 1}`} onClick={() => updateCandidate(candidateIndex, (item) => ({ ...item, coefficients: item.coefficients.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
+              </div>
+            ))}
+            <button type="button" className="add-row-button" onClick={() => updateCandidate(candidateIndex, (item) => ({ ...item, coefficients: [...item.coefficients, { name: `coefficient_${item.coefficients.length + 1}`, value: '1' }] }))}>+ Add coefficient</button>
+
+            <div className="repeatable-row correlation-expression-row">
+              <label><span>Output equation</span><textarea rows={4} value={candidate.expression} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, expression: event.target.value }))} /><small>Available functions: abs, sqrt, exp, log, and pow.</small></label>
             </div>
-          ))}
-          <button type="button" className="add-row-button" onClick={() => setCoefficients((current) => [...current, { name: `coefficient_${current.length + 1}`, value: '1' }])}>+ Add coefficient</button>
-        </fieldset>
 
-        <fieldset>
-          <legend>Safe expression</legend>
-          <div className="repeatable-row correlation-expression-row">
-            <label>
-              <span>Output equation</span>
-              <textarea rows={4} value={expression} required onChange={(event) => setExpression(event.target.value)} />
-              <small>Available functions: abs, sqrt, exp, log, and pow. The expression returns the declared output.</small>
-            </label>
-          </div>
-        </fieldset>
+            <p className="registry-note">Optional SI limits define where this candidate is qualified.</p>
+            {candidate.applicability.map((range, index) => (
+              <div className="repeatable-row correlation-variable-row" key={`${range.input}-${index}`}>
+                <label><span>Input</span><select value={range.input} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.map((entry, itemIndex) => itemIndex === index ? { ...entry, input: event.target.value } : entry) }))}><option value="">Select input</option>{inputs.map((input) => <option key={input.name} value={input.name}>{input.name}</option>)}</select></label>
+                <label><span>Minimum (SI)</span><input type="number" step="any" value={range.minimum} onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.map((entry, itemIndex) => itemIndex === index ? { ...entry, minimum: event.target.value } : entry) }))} /><small><input type="checkbox" checked={range.minimum_inclusive} onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.map((entry, itemIndex) => itemIndex === index ? { ...entry, minimum_inclusive: event.target.checked } : entry) }))} /> Inclusive</small></label>
+                <label><span>Maximum (SI)</span><input type="number" step="any" value={range.maximum} onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.map((entry, itemIndex) => itemIndex === index ? { ...entry, maximum: event.target.value } : entry) }))} /><small><input type="checkbox" checked={range.maximum_inclusive} onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.map((entry, itemIndex) => itemIndex === index ? { ...entry, maximum_inclusive: event.target.checked } : entry) }))} /> Inclusive</small></label>
+                <button type="button" className="row-remove-button" aria-label={`Remove applicability range ${range.input || index + 1}`} onClick={() => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: item.applicability.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
+              </div>
+            ))}
+            <button type="button" className="add-row-button" disabled={!inputs.length} onClick={() => updateCandidate(candidateIndex, (item) => ({ ...item, applicability: [...item.applicability, { input: inputs[0]?.name ?? '', minimum: '', maximum: '', minimum_inclusive: true, maximum_inclusive: true }] }))}>+ Add qualified range</button>
+            {candidates.length > 1 && <button type="button" className="secondary-button" onClick={() => setCandidates((current) => current.filter((_, index) => index !== candidateIndex))}>Remove candidate</button>}
+          </fieldset>
+        ))}
+        <button type="button" className="add-row-button" onClick={() => setCandidates((current) => [...current, { ...defaultCandidate(), id: `candidate_${current.length + 1}`, coefficients: [], expression: '' }])}>+ Add candidate law</button>
 
         {formError && <p className="form-error">{formError}</p>}
         <footer>
           <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="primary-button" disabled={submitting}>
-            {submitting ? 'Publishing…' : base ? 'Publish revision' : 'Publish correlation'}
-          </button>
+          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? 'Publishing…' : base ? 'Publish revision' : 'Publish correlation'}</button>
         </footer>
       </form>
     </div>
