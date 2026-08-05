@@ -109,6 +109,8 @@ aggregates descendant definition readiness. This is a projection of the same dec
 second execution model. The topology workspace can group selected top-level components into an
 assembly as one immutable edit: internal connections move into the hierarchy, connected boundary
 ports are exported, and external connections are rewritten. Ungrouping, expanded internal editing,
+and the reverse connection rewrite are also published atomically; identifier collisions are
+rejected rather than silently renamed or overwritten. Expanded in-place internal editing,
 public-parameter selection, and publishing reusable assembly templates into the library remain
 product-layer capabilities and do not change the compiler contract.
 

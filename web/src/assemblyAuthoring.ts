@@ -163,3 +163,113 @@ export function buildAssemblyGroupingOperations(
     ),
   ]
 }
+
+export function buildAssemblyUngroupingOperations(
+  topology: TopologyDocument,
+  assemblyId: string,
+): GraphEditOperation[] {
+  const assembly = (topology.model.assemblies ?? []).find(
+    (candidate) => candidate.id === assemblyId,
+  )
+  if (!assembly) {
+    throw new Error(`Top-level assembly ${assemblyId} does not exist.`)
+  }
+
+  const occupiedEntityIds = new Set([
+    ...topology.model.components.map((component) => component.id),
+    ...(topology.model.assemblies ?? [])
+      .filter((candidate) => candidate.id !== assemblyId)
+      .map((candidate) => candidate.id),
+  ])
+  const promotedEntityIds = [
+    ...assembly.components.map((component) => component.id),
+    ...(assembly.assemblies ?? []).map((nested) => nested.id),
+  ]
+  for (const id of promotedEntityIds) {
+    if (occupiedEntityIds.has(id)) {
+      throw new Error(
+        `Cannot ungroup ${assemblyId}: topology entity ${id} already exists.`,
+      )
+    }
+    occupiedEntityIds.add(id)
+  }
+
+  const topConnectionIds = new Set(
+    topology.model.connections.map((connection) => connection.id),
+  )
+  for (const connection of assembly.connections) {
+    if (topConnectionIds.has(connection.id)) {
+      throw new Error(
+        `Cannot ungroup ${assemblyId}: connection ${connection.id} already exists.`,
+      )
+    }
+    topConnectionIds.add(connection.id)
+  }
+
+  const exports = new Map(
+    assembly.ports.map((port) => [port.name, port.endpoint]),
+  )
+  const rewriteEndpoint = (value: string) => {
+    const [entityId, portName] = endpoint(value)
+    if (entityId !== assemblyId) return value
+    const resolved = exports.get(portName)
+    if (!resolved) {
+      throw new Error(
+        `Cannot ungroup ${assemblyId}: public port ${portName} is not declared.`,
+      )
+    }
+    return resolved
+  }
+  const boundaryConnections = topology.model.connections
+    .filter((connection) => {
+      const [from] = endpoint(connection.from)
+      const [to] = endpoint(connection.to)
+      return from === assemblyId || to === assemblyId
+    })
+    .map((connection) => ({
+      ...connection,
+      from: rewriteEndpoint(connection.from),
+      to: rewriteEndpoint(connection.to),
+    }))
+
+  return [
+    ...assembly.components.map(
+      (component): GraphEditOperation => ({
+        action: 'upsert',
+        entity_type: 'component',
+        entity_id: component.id,
+        entity: { ...component },
+      }),
+    ),
+    ...(assembly.assemblies ?? []).map(
+      (nested): GraphEditOperation => ({
+        action: 'upsert',
+        entity_type: 'assembly',
+        entity_id: nested.id,
+        entity: { ...nested },
+      }),
+    ),
+    ...assembly.connections.map(
+      (connection): GraphEditOperation => ({
+        action: 'upsert',
+        entity_type: 'connection',
+        entity_id: connection.id,
+        entity: { ...connection },
+      }),
+    ),
+    ...boundaryConnections.map(
+      (connection): GraphEditOperation => ({
+        action: 'upsert',
+        entity_type: 'connection',
+        entity_id: connection.id,
+        entity: { ...connection },
+      }),
+    ),
+    {
+      action: 'remove',
+      entity_type: 'assembly',
+      entity_id: assemblyId,
+      cascade: true,
+    },
+  ]
+}

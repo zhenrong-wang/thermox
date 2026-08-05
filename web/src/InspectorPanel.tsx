@@ -23,6 +23,7 @@ interface InspectorPanelProps {
   onEditConnection: (connection: ConnectionDefinition) => void
   onRemoveComponent: (component: ComponentDefinition) => void
   onRemoveAssembly: (assembly: AssemblyDefinition) => void
+  onUngroupAssembly: (assembly: AssemblyDefinition) => void
   onRemoveConnection: (connection: ConnectionDefinition) => void
   onClose: () => void
 }
@@ -51,6 +52,7 @@ export function InspectorPanel({
   onEditConnection,
   onRemoveComponent,
   onRemoveAssembly,
+  onUngroupAssembly,
   onRemoveConnection,
   onClose,
 }: InspectorPanelProps) {
@@ -254,6 +256,14 @@ export function InspectorPanel({
             onClick={() => onRemoveAssembly(assembly)}
           >
             Remove
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={publishing}
+            onClick={() => onUngroupAssembly(assembly)}
+          >
+            Ungroup for editing
           </button>
         </footer>
       </div>

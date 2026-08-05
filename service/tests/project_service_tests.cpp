@@ -1523,6 +1523,44 @@ void test_graph_edits_publish_valid_child_revisions() {
                 "compressor",
         "one graph-edit transaction must atomically promote top-level "
         "components into an assembly");
+
+    assembly_edit.base_model_revision_id = grouped.model_revision_id;
+    assembly_edit.operations = {
+        {
+            thermox::service::GraphEditAction::upsert,
+            thermox::service::GraphEntityType::component,
+            "compressor",
+            R"json({
+              "schema_version": "thermox.component_definition/v1",
+              "component": {
+                "id": "compressor",
+                "label": "Main compressor",
+                "kind": "compressor.fluid.isentropic_efficiency",
+                "version": "1.0.0",
+                "media": {"inlet": "air", "outlet": "air"},
+                "parameters": {"pressure_ratio": 14.0, "eta_is": 0.87}
+              }
+            })json",
+            false,
+        },
+        {
+            thermox::service::GraphEditAction::remove,
+            thermox::service::GraphEntityType::assembly,
+            "compressor_train",
+            {},
+            true,
+        },
+    };
+    const auto ungrouped = service.apply_graph_edits(assembly_edit);
+    const auto ungrouped_document =
+        thermox::platform::parse_topology_document_text(
+            ungrouped.canonical_model_json);
+    require(
+        ungrouped_document.assemblies.empty() &&
+            ungrouped_document.components.size() == 1U &&
+            ungrouped_document.components.front().id == "compressor",
+        "one graph-edit transaction must atomically restore assembly "
+        "children for direct editing");
 }
 
 void test_case_edits_publish_atomic_child_revisions() {

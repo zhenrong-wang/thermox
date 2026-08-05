@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assemblyPorts,
   buildAssemblyGroupingOperations,
+  buildAssemblyUngroupingOperations,
 } from './assemblyAuthoring'
 import type {
   AssemblyDefinition,
@@ -150,5 +151,112 @@ describe('assembly authoring projection', () => {
     expect(() =>
       buildAssemblyGroupingOperations(topology, 'stage', '', ['stage']),
     ).toThrow('already exists')
+  })
+
+  it('ungroups children and restores internal and boundary connections', () => {
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '2',
+        media: [],
+        components: [
+          { id: 'source', kind: 'boundary' },
+          { id: 'sink', kind: 'boundary' },
+        ],
+        assemblies: [{
+          id: 'compressor_train',
+          components: [
+            { id: 'stage_1', kind: compressor.kind },
+            { id: 'stage_2', kind: compressor.kind },
+          ],
+          connections: [{
+            id: 'interstage',
+            from: 'stage_1.outlet',
+            to: 'stage_2.inlet',
+            kind: 'fluid_link',
+          }],
+          ports: [
+            { name: 'stage_1_inlet', endpoint: 'stage_1.inlet' },
+            { name: 'stage_2_outlet', endpoint: 'stage_2.outlet' },
+          ],
+        }],
+        connections: [
+          {
+            id: 'feed',
+            from: 'source.outlet',
+            to: 'compressor_train.stage_1_inlet',
+            kind: 'fluid_link',
+          },
+          {
+            id: 'delivery',
+            from: 'compressor_train.stage_2_outlet',
+            to: 'sink.inlet',
+            kind: 'fluid_link',
+          },
+        ],
+      },
+    }
+
+    const operations = buildAssemblyUngroupingOperations(
+      topology,
+      'compressor_train',
+    )
+    expect(
+      operations.map((operation) => [operation.action, operation.entity_type]),
+    ).toEqual([
+      ['upsert', 'component'],
+      ['upsert', 'component'],
+      ['upsert', 'connection'],
+      ['upsert', 'connection'],
+      ['upsert', 'connection'],
+      ['remove', 'assembly'],
+    ])
+    expect(
+      operations.flatMap((operation) =>
+        operation.action === 'upsert' &&
+        operation.entity_type === 'connection' &&
+        operation.entity_id !== 'interstage'
+          ? [operation.entity]
+          : [],
+      ),
+    ).toEqual([
+      {
+        id: 'feed',
+        from: 'source.outlet',
+        to: 'stage_1.inlet',
+        kind: 'fluid_link',
+      },
+      {
+        id: 'delivery',
+        from: 'stage_2.outlet',
+        to: 'sink.inlet',
+        kind: 'fluid_link',
+      },
+    ])
+  })
+
+  it('refuses to overwrite a top-level entity while ungrouping', () => {
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '2',
+        media: [],
+        components: [{ id: 'stage', kind: 'outside.kind' }],
+        assemblies: [{
+          id: 'train',
+          components: [{ id: 'stage', kind: compressor.kind }],
+          connections: [],
+          ports: [],
+        }],
+        connections: [],
+      },
+    }
+    expect(() =>
+      buildAssemblyUngroupingOperations(topology, 'train'),
+    ).toThrow('topology entity stage already exists')
   })
 })

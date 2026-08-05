@@ -19,6 +19,7 @@ import { useDisplayUnits } from './DisplayUnitsContext'
 import { ExpressionComponentForm } from './ExpressionComponentForm'
 import {
   buildAssemblyGroupingOperations,
+  buildAssemblyUngroupingOperations,
 } from './assemblyAuthoring'
 import {
   buildConnectionOperation,
@@ -1579,6 +1580,27 @@ function App() {
     setAddingAssembly(false)
   }
 
+  async function ungroupAssembly(assembly: AssemblyDefinition) {
+    if (!topology) return
+    if (
+      !window.confirm(
+        `Ungroup ${assembly.id}? Its direct children and internal connections will return to the top-level canvas. Cases using assembly public parameters may need a new revision.`,
+      )
+    ) {
+      return
+    }
+    try {
+      await publishEdits(
+        buildAssemblyUngroupingOperations(topology, assembly.id),
+        `Ungrouped ${assembly.id} for direct editing.`,
+      )
+      setSelection(undefined)
+      setTopologySidebar('library')
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
+    }
+  }
+
   async function removeConnection(connection: ConnectionDefinition) {
     if (!window.confirm(`Remove connection ${connection.id}?`)) return
     try {
@@ -1996,6 +2018,9 @@ function App() {
                     }}
                     onRemoveAssembly={(assembly) => {
                       void removeAssembly(assembly)
+                    }}
+                    onUngroupAssembly={(assembly) => {
+                      void ungroupAssembly(assembly)
                     }}
                     onRemoveConnection={(connection) => {
                       void removeConnection(connection)
