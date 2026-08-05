@@ -108,11 +108,13 @@ collapsed meta-component, resolves its exported connector contracts through nest
 aggregates descendant definition readiness. This is a projection of the same declaration—not a
 second execution model. The topology workspace can group selected top-level components into an
 assembly as one immutable edit: internal connections move into the hierarchy, connected boundary
-ports are exported, and external connections are rewritten. Ungrouping, expanded internal editing,
-and the reverse connection rewrite are also published atomically; identifier collisions are
+ports are exported, external connections are rewritten, and engineers may deliberately expose
+explicitly defined child-instance parameters under unique public names. Catalog defaults are not
+silently promoted into the assembly API. Ungrouping and the reverse connection rewrite are also
+published atomically; identifier collisions are
 rejected rather than silently renamed or overwritten. Expanded in-place internal editing,
-public-parameter selection, and publishing reusable assembly templates into the library remain
-product-layer capabilities and do not change the compiler contract.
+and publishing reusable assembly templates into the library remain product-layer capabilities and
+do not change the compiler contract.
 
 ## Engineering limits
 

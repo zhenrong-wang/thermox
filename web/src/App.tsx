@@ -1565,6 +1565,7 @@ function App() {
     assemblyId: string,
     label: string,
     componentIds: string[],
+    parameterExports: NonNullable<AssemblyDefinition['parameters']>,
   ) {
     if (!topology) throw new Error('Select a topology revision first.')
     const operations = buildAssemblyGroupingOperations(
@@ -1572,6 +1573,7 @@ function App() {
       assemblyId,
       label,
       componentIds,
+      parameterExports,
     )
     await publishEdits(
       operations,

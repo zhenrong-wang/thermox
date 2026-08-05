@@ -153,6 +153,88 @@ describe('assembly authoring projection', () => {
     ).toThrow('already exists')
   })
 
+  it('exports only explicitly defined child parameters under public names', () => {
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '1',
+        media: [],
+        components: [{
+          id: 'stage',
+          kind: compressor.kind,
+          parameters: { pressure_ratio: 3, efficiency: 0.88 },
+        }],
+        connections: [],
+      },
+    }
+    const operations = buildAssemblyGroupingOperations(
+      topology,
+      'train',
+      '',
+      ['stage'],
+      [{ name: 'design_pressure_ratio', target: 'stage.pressure_ratio' }],
+    )
+    const assembly = operations[0].action === 'upsert'
+      ? operations[0].entity as unknown as AssemblyDefinition
+      : undefined
+    expect(assembly?.parameters).toEqual([
+      { name: 'design_pressure_ratio', target: 'stage.pressure_ratio' },
+    ])
+    expect(() =>
+      buildAssemblyGroupingOperations(
+        topology,
+        'train',
+        '',
+        ['stage'],
+        [{ name: 'map_scale', target: 'stage.map_scale' }],
+      ),
+    ).toThrow('must target a defined parameter')
+  })
+
+  it('rejects duplicate public parameter names and targets', () => {
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '1',
+        media: [],
+        components: [{
+          id: 'stage',
+          kind: compressor.kind,
+          parameters: { pressure_ratio: 3, efficiency: 0.88 },
+        }],
+        connections: [],
+      },
+    }
+    expect(() =>
+      buildAssemblyGroupingOperations(
+        topology,
+        'train',
+        '',
+        ['stage'],
+        [
+          { name: 'setting', target: 'stage.pressure_ratio' },
+          { name: 'setting', target: 'stage.efficiency' },
+        ],
+      ),
+    ).toThrow('name setting is duplicated')
+    expect(() =>
+      buildAssemblyGroupingOperations(
+        topology,
+        'train',
+        '',
+        ['stage'],
+        [
+          { name: 'ratio_a', target: 'stage.pressure_ratio' },
+          { name: 'ratio_b', target: 'stage.pressure_ratio' },
+        ],
+      ),
+    ).toThrow('exported more than once')
+  })
+
   it('ungroups children and restores internal and boundary connections', () => {
     const topology: TopologyDocument = {
       schema_version: 'thermox.topology/v1',

@@ -69,6 +69,7 @@ export function buildAssemblyGroupingOperations(
   assemblyId: string,
   label: string,
   componentIds: string[],
+  parameterExports: NonNullable<AssemblyDefinition['parameters']> = [],
 ): GraphEditOperation[] {
   const id = assemblyId.trim()
   if (!id || id.includes('.') || id.includes('/')) {
@@ -90,6 +91,44 @@ export function buildAssemblyGroupingOperations(
   )
   if (components.length !== selected.size) {
     throw new Error('Every selected component must be a top-level component.')
+  }
+
+  const publicParameters: NonNullable<AssemblyDefinition['parameters']> = []
+  const publicParameterNames = new Set<string>()
+  const publicParameterTargets = new Set<string>()
+  for (const exported of parameterExports) {
+    const name = exported.name.trim()
+    const target = exported.target.trim()
+    const [componentId, parameterName] = endpoint(target)
+    const component = components.find(
+      (candidate) => candidate.id === componentId,
+    )
+    if (!name || name.includes('.') || name.includes('/')) {
+      throw new Error(
+        "Public parameter names are required and cannot contain '.' or '/'.",
+      )
+    }
+    if (
+      !component ||
+      !parameterName ||
+      !Object.prototype.hasOwnProperty.call(
+        component.parameters ?? {},
+        parameterName,
+      )
+    ) {
+      throw new Error(
+        `Public parameter ${name} must target a defined parameter on a selected component.`,
+      )
+    }
+    if (publicParameterNames.has(name)) {
+      throw new Error(`Public parameter name ${name} is duplicated.`)
+    }
+    if (publicParameterTargets.has(target)) {
+      throw new Error(`Child parameter ${target} is exported more than once.`)
+    }
+    publicParameterNames.add(name)
+    publicParameterTargets.add(target)
+    publicParameters.push({ name, target })
   }
 
   const internalConnections: ConnectionDefinition[] = []
@@ -134,7 +173,7 @@ export function buildAssemblyGroupingOperations(
     components,
     connections: internalConnections,
     ports,
-    parameters: [],
+    parameters: publicParameters,
   }
   if (label.trim()) assembly.label = label.trim()
 

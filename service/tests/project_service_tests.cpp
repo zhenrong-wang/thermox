@@ -1498,7 +1498,10 @@ void test_graph_edits_publish_valid_child_revisions() {
                   {"name": "compressor_inlet", "endpoint": "compressor.inlet"},
                   {"name": "compressor_outlet", "endpoint": "compressor.outlet"}
                 ],
-                "parameters": []
+                "parameters": [{
+                  "name": "design_pressure_ratio",
+                  "target": "compressor.pressure_ratio"
+                }]
               }
             })json",
             false,
@@ -1519,6 +1522,9 @@ void test_graph_edits_publish_valid_child_revisions() {
         grouped_document.components.empty() &&
             grouped_document.assemblies.size() == 1U &&
             grouped_document.assemblies.front().components.size() == 1U &&
+            grouped_document.assemblies.front().parameters.size() == 1U &&
+            grouped_document.assemblies.front().parameters.front().name ==
+                "design_pressure_ratio" &&
             grouped_document.assemblies.front().components.front().id ==
                 "compressor",
         "one graph-edit transaction must atomically promote top-level "

@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import type { TopologyDocument } from './types'
+import { useMemo, useState, type FormEvent } from 'react'
+import type { AssemblyDefinition, TopologyDocument } from './types'
 
 interface AssemblyFormProps {
   topology: TopologyDocument
@@ -8,6 +8,7 @@ interface AssemblyFormProps {
     assemblyId: string,
     label: string,
     componentIds: string[],
+    parameterExports: NonNullable<AssemblyDefinition['parameters']>,
   ) => Promise<void>
 }
 
@@ -29,8 +30,24 @@ export function AssemblyForm({
   const [assemblyId, setAssemblyId] = useState(() => suggestedId(topology))
   const [label, setLabel] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  const [parameterExports, setParameterExports] = useState<
+    Record<string, string>
+  >({})
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
+  const availableParameters = useMemo(
+    () =>
+      topology.model.components.flatMap((component) =>
+        selected.includes(component.id)
+          ? Object.keys(component.parameters ?? {})
+              .sort()
+              .map((name) => ({
+                target: `${component.id}.${name}`,
+              }))
+          : [],
+      ),
+    [selected, topology],
+  )
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -41,7 +58,15 @@ export function AssemblyForm({
     }
     setSubmitting(true)
     try {
-      await onSubmit(assemblyId, label, selected)
+      await onSubmit(
+        assemblyId,
+        label,
+        selected,
+        Object.entries(parameterExports).map(([target, name]) => ({
+          name,
+          target,
+        })),
+      )
     } catch (reason) {
       setFormError(
         reason instanceof Error ? reason.message : 'Assembly was rejected.',
@@ -90,13 +115,23 @@ export function AssemblyForm({
                 <input
                   type="checkbox"
                   checked={selected.includes(component.id)}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setSelected((current) =>
                       event.target.checked
                         ? [...current, component.id]
                         : current.filter((id) => id !== component.id),
                     )
-                  }
+                    if (!event.target.checked) {
+                      setParameterExports((current) =>
+                        Object.fromEntries(
+                          Object.entries(current).filter(
+                            ([target]) =>
+                              !target.startsWith(`${component.id}.`),
+                          ),
+                        ),
+                      )
+                    }
+                  }}
                 />
                 <span>
                   <strong>{component.label || component.id}</strong>
@@ -105,6 +140,67 @@ export function AssemblyForm({
               </label>
             ))}
           </div>
+        </fieldset>
+        <fieldset>
+          <legend>Public parameters</legend>
+          <p className="fieldset-guidance">
+            Expose only parameters that system cases should control without opening the assembly.
+          </p>
+          {availableParameters.length === 0 ? (
+            <p className="library-empty">
+              Selected components have no explicitly defined parameters.
+            </p>
+          ) : (
+            <div className="assembly-parameter-list">
+              {availableParameters.map((parameter) => {
+                const checked = Object.hasOwn(
+                  parameterExports,
+                  parameter.target,
+                )
+                return (
+                  <div key={parameter.target}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setParameterExports((current) => {
+                            if (!event.target.checked) {
+                              const next = { ...current }
+                              delete next[parameter.target]
+                              return next
+                            }
+                            return {
+                              ...current,
+                              [parameter.target]: parameter.target.replace(
+                                '.',
+                                '_',
+                              ),
+                            }
+                          })
+                        }
+                      />
+                      <code>{parameter.target}</code>
+                    </label>
+                    {checked && (
+                      <input
+                        aria-label={`Public name for ${parameter.target}`}
+                        value={parameterExports[parameter.target]}
+                        onChange={(event) =>
+                          setParameterExports((current) => ({
+                            ...current,
+                            [parameter.target]: event.target.value,
+                          }))
+                        }
+                        placeholder="Public parameter name"
+                        required
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </fieldset>
         {formError && <p className="form-error">{formError}</p>}
         <footer>
