@@ -1473,6 +1473,56 @@ void test_graph_edits_publish_valid_child_revisions() {
         without_assembly.canonical_model_json.find(
             "\"id\": \"booster\"") == std::string::npos,
         "assembly removal must publish a child revision without the hierarchy");
+
+    assembly_edit.base_model_revision_id =
+        without_assembly.model_revision_id;
+    assembly_edit.operations = {
+        {
+            thermox::service::GraphEditAction::upsert,
+            thermox::service::GraphEntityType::assembly,
+            "compressor_train",
+            R"json({
+              "schema_version": "thermox.assembly_definition/v1",
+              "assembly": {
+                "id": "compressor_train",
+                "components": [{
+                  "id": "compressor",
+                  "label": "Main compressor",
+                  "kind": "compressor.fluid.isentropic_efficiency",
+                  "version": "1.0.0",
+                  "media": {"inlet": "air", "outlet": "air"},
+                  "parameters": {"pressure_ratio": 14.0, "eta_is": 0.87}
+                }],
+                "connections": [],
+                "ports": [
+                  {"name": "compressor_inlet", "endpoint": "compressor.inlet"},
+                  {"name": "compressor_outlet", "endpoint": "compressor.outlet"}
+                ],
+                "parameters": []
+              }
+            })json",
+            false,
+        },
+        {
+            thermox::service::GraphEditAction::remove,
+            thermox::service::GraphEntityType::component,
+            "compressor",
+            {},
+            true,
+        },
+    };
+    const auto grouped = service.apply_graph_edits(assembly_edit);
+    const auto grouped_document =
+        thermox::platform::parse_topology_document_text(
+            grouped.canonical_model_json);
+    require(
+        grouped_document.components.empty() &&
+            grouped_document.assemblies.size() == 1U &&
+            grouped_document.assemblies.front().components.size() == 1U &&
+            grouped_document.assemblies.front().components.front().id ==
+                "compressor",
+        "one graph-edit transaction must atomically promote top-level "
+        "components into an assembly");
 }
 
 void test_case_edits_publish_atomic_child_revisions() {

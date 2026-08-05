@@ -16,6 +16,7 @@ interface ComponentLibraryProps {
   onAddFluid: () => void
   onAddMaterial: () => void
   onAddCorrelation: () => void
+  onGroupComponents: () => void
   onCreateTopology?: () => void
   onDefine: () => void
   onRevise: (component: CatalogComponent) => void
@@ -32,6 +33,7 @@ export function ComponentLibrary({
   onAddFluid,
   onAddMaterial,
   onAddCorrelation,
+  onGroupComponents,
   onCreateTopology,
   onDefine,
   onRevise,
@@ -125,6 +127,14 @@ export function ComponentLibrary({
             </button>
           </div>
         </div>
+        <button
+          type="button"
+          className="library-start-button"
+          disabled={disabled}
+          onClick={onGroupComponents}
+        >
+          Group components into assembly
+        </button>
       </div>
       <label className="search">
         <span>⌕</span>

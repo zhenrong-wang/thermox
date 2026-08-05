@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
+import { AssemblyForm } from './AssemblyForm'
 import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
@@ -16,6 +17,9 @@ import {
 import { componentDefinitionReadiness } from './definitionReadiness'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { ExpressionComponentForm } from './ExpressionComponentForm'
+import {
+  buildAssemblyGroupingOperations,
+} from './assemblyAuthoring'
 import {
   buildConnectionOperation,
   type ConnectionIntent,
@@ -121,6 +125,7 @@ function App() {
   const [selection, setSelection] = useState<GraphSelection>()
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
+  const [addingAssembly, setAddingAssembly] = useState(false)
   const [addingCorrelation, setAddingCorrelation] = useState(false)
   const [loadingArtifactRevision, setLoadingArtifactRevision] =
     useState(false)
@@ -1555,6 +1560,25 @@ function App() {
     }
   }
 
+  async function groupComponents(
+    assemblyId: string,
+    label: string,
+    componentIds: string[],
+  ) {
+    if (!topology) throw new Error('Select a topology revision first.')
+    const operations = buildAssemblyGroupingOperations(
+      topology,
+      assemblyId,
+      label,
+      componentIds,
+    )
+    await publishEdits(
+      operations,
+      `Grouped ${componentIds.length} component${componentIds.length === 1 ? '' : 's'} into ${assemblyId}.`,
+    )
+    setAddingAssembly(false)
+  }
+
   async function removeConnection(connection: ConnectionDefinition) {
     if (!window.confirm(`Remove connection ${connection.id}?`)) return
     try {
@@ -1997,6 +2021,7 @@ function App() {
                     onAddFluid={() => setAddingMedium(true)}
                     onAddMaterial={() => setAddingMaterial(true)}
                     onAddCorrelation={() => setAddingCorrelation(true)}
+                    onGroupComponents={() => setAddingAssembly(true)}
                     onCreateTopology={
                       selectedProjectId && !selectedRevisionId
                         ? () => {
@@ -2078,6 +2103,13 @@ function App() {
           artifactRevisions={artifactRevisions}
           onCancel={() => setNewComponentType(undefined)}
           onSubmit={addComponent}
+        />
+      )}
+      {workspaceView === 'topology' && addingAssembly && topology && (
+        <AssemblyForm
+          topology={topology}
+          onCancel={() => setAddingAssembly(false)}
+          onSubmit={groupComponents}
         />
       )}
       {(workspaceView === 'topology' || workspaceView === 'definition') &&

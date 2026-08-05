@@ -106,9 +106,11 @@ service clients can atomically upsert and remove assemblies with the
 `thermox.assembly_definition/v1` fragment contract. The canvas presents a top-level assembly as a
 collapsed meta-component, resolves its exported connector contracts through nested children, and
 aggregates descendant definition readiness. This is a projection of the same declaration—not a
-second execution model. Interactive group/ungroup authoring, expanded internal editing, and
-publishing reusable assembly templates into the library remain product-layer capabilities and do
-not change the compiler contract.
+second execution model. The topology workspace can group selected top-level components into an
+assembly as one immutable edit: internal connections move into the hierarchy, connected boundary
+ports are exported, and external connections are rewritten. Ungrouping, expanded internal editing,
+public-parameter selection, and publishing reusable assembly templates into the library remain
+product-layer capabilities and do not change the compiler contract.
 
 ## Engineering limits
 

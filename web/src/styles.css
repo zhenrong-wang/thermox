@@ -1581,6 +1581,56 @@ code {
   background: rgba(251, 252, 252, 0.97);
 }
 
+.assembly-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.dialog-guidance {
+  margin: 0;
+  padding: 0 20px 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.assembly-choice-list {
+  display: grid;
+  max-height: 320px;
+  overflow: auto;
+  gap: 7px;
+}
+
+.assembly-choice-list > label {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid #dce4e8;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.assembly-choice-list input {
+  width: 14px;
+  height: 14px;
+}
+
+.assembly-choice-list span {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assembly-choice-list code {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .primary-button,
 .secondary-button {
   padding: 8px 12px;
