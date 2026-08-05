@@ -11,6 +11,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { COMPONENT_DRAG_TYPE } from './componentLibrary'
+import { assemblyPorts } from './assemblyAuthoring'
 import { TopologyNode, type TopologyNodeData } from './TopologyNode'
 import type { GraphSelection } from './InspectorPanel'
 import type { ResultNodeValue } from './resultPresentation'
@@ -46,12 +47,27 @@ function layoutNodes(
   selection?: GraphSelection,
   componentReadiness: Record<string, ComponentDefinitionReadiness> = {},
 ): Node<TopologyNodeData>[] {
-  const columns = Math.max(1, Math.ceil(Math.sqrt(topology.model.components.length)))
+  const entities = [
+    ...topology.model.components.map((component) => ({
+      component,
+      assembly: undefined,
+    })),
+    ...(topology.model.assemblies ?? []).map((assembly) => ({
+      assembly,
+      component: {
+        id: assembly.id,
+        label: assembly.label,
+        kind: 'assembly.meta',
+      },
+    })),
+  ]
+  const columns = Math.max(1, Math.ceil(Math.sqrt(entities.length)))
   const rowHeight = Object.keys(resultValues).length > 0 ? 310 : 230
-  return topology.model.components.map((component, index) => ({
+  return entities.map(({ component, assembly }, index) => ({
     id: component.id,
     selected:
-      selection?.type === 'component' && selection.id === component.id,
+      (selection?.type === 'component' || selection?.type === 'assembly') &&
+      selection.id === component.id,
     type: 'topology',
     position: {
       x: (index % columns) * 330,
@@ -59,7 +75,10 @@ function layoutNodes(
     },
     data: {
       component,
-      ports: catalog.get(component.kind)?.ports ?? [],
+      assembly,
+      ports: assembly
+        ? assemblyPorts(assembly, catalog)
+        : catalog.get(component.kind)?.ports ?? [],
       resultValues: resultValues[component.id] ?? [],
       definition: componentReadiness[component.id],
     },
@@ -144,16 +163,25 @@ export function TopologyCanvas({
   const componentsById = new Map(
     topology.model.components.map((component) => [component.id, component]),
   )
+  const assemblyPortsById = new Map(
+    (topology.model.assemblies ?? []).map((assembly) => [
+      assembly.id,
+      assemblyPorts(assembly, catalogByKind),
+    ]),
+  )
   const connectionDomain = (
     componentId: string | null,
     handleId: string | null,
   ) => {
     if (!componentId || !handleId) return undefined
     const component = componentsById.get(componentId)
-    if (!component) return undefined
-    return catalogByKind
-      .get(component.kind)
-      ?.ports.find((port) => port.name === handleId)?.domain
+    return component
+      ? catalogByKind
+          .get(component.kind)
+          ?.ports.find((port) => port.name === handleId)?.domain
+      : assemblyPortsById
+          .get(componentId)
+          ?.find((port) => port.name === handleId)?.domain
   }
   const validConnection = (connection: Connection | Edge) => {
     if (
@@ -188,7 +216,12 @@ export function TopologyCanvas({
         if (!readOnly) void onConnect(connection)
       }}
       onNodeClick={(_, node) =>
-        onSelect({ type: 'component', id: node.id })
+        onSelect({
+          type: (node.data as TopologyNodeData).assembly
+            ? 'assembly'
+            : 'component',
+          id: node.id,
+        })
       }
       onEdgeClick={(_, edge) =>
         onSelect({ type: 'connection', id: edge.id })

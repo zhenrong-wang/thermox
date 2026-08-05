@@ -3,6 +3,7 @@ import { displayValue } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
 import type {
   Catalog,
+  AssemblyDefinition,
   ComponentDefinition,
   ConnectionDefinition,
   TopologyDocument,
@@ -10,6 +11,7 @@ import type {
 
 export type GraphSelection =
   | { type: 'component'; id: string }
+  | { type: 'assembly'; id: string }
   | { type: 'connection'; id: string }
 
 interface InspectorPanelProps {
@@ -20,6 +22,7 @@ interface InspectorPanelProps {
   onEditComponent: (component: ComponentDefinition) => void
   onEditConnection: (connection: ConnectionDefinition) => void
   onRemoveComponent: (component: ComponentDefinition) => void
+  onRemoveAssembly: (assembly: AssemblyDefinition) => void
   onRemoveConnection: (connection: ConnectionDefinition) => void
   onClose: () => void
 }
@@ -47,6 +50,7 @@ export function InspectorPanel({
   onEditComponent,
   onEditConnection,
   onRemoveComponent,
+  onRemoveAssembly,
   onRemoveConnection,
   onClose,
 }: InspectorPanelProps) {
@@ -58,6 +62,12 @@ export function InspectorPanel({
   const connection =
     selection.type === 'connection'
       ? topology.model.connections.find((item) => item.id === selection.id)
+      : undefined
+  const assembly =
+    selection.type === 'assembly'
+      ? (topology.model.assemblies ?? []).find(
+          (item) => item.id === selection.id,
+        )
       : undefined
 
   if (component) {
@@ -205,6 +215,45 @@ export function InspectorPanel({
             onClick={() => onEditConnection(connection)}
           >
             Edit endpoints
+          </button>
+        </footer>
+      </div>
+    )
+  }
+
+  if (assembly) {
+    return (
+      <div className="inspector-panel">
+        <header>
+          <div>
+            <span className="eyebrow">Assembly instance</span>
+            <h2>{assembly.label || assembly.id}</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose}>×</button>
+        </header>
+        <section>
+          <DetailRow label="ID" value={assembly.id} />
+          <DetailRow
+            label="Contents"
+            value={`${assembly.components.length} components, ${(assembly.assemblies ?? []).length} assemblies`}
+          />
+          <DetailRow
+            label="Public ports"
+            value={assembly.ports.map((port) => port.name).join(', ')}
+          />
+          <DetailRow
+            label="Public parameters"
+            value={(assembly.parameters ?? []).map((parameter) => parameter.name).join(', ')}
+          />
+        </section>
+        <footer>
+          <button
+            type="button"
+            className="danger-button"
+            disabled={publishing}
+            onClick={() => onRemoveAssembly(assembly)}
+          >
+            Remove
           </button>
         </footer>
       </div>

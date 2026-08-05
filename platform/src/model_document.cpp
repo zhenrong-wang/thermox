@@ -673,6 +673,11 @@ AssemblyDefinition parse_assembly(
         throw std::invalid_argument(
             "assemblies entries must be objects");
     }
+    require_only_members(
+        value,
+        {"id", "label", "components", "connections",
+         "assemblies", "ports", "parameters"},
+        "assembly");
     AssemblyDefinition assembly;
     assembly.id = require_string(value, "id");
     assembly.label = optional_string(value, "label");
@@ -1410,6 +1415,41 @@ ComponentDefinition parse_component_definition_text(
     const UnitRegistry& units) {
     const UnitRegistryScope scope{units};
     return parse_component_definition_text(text, context);
+}
+
+AssemblyDefinition parse_assembly_definition_text(
+    const std::string& text,
+    const ModelDocument& context) {
+    const auto root =
+        require_object_root(JsonParser{text}.parse_document());
+    require_only_members(
+        root, {"schema_version", "assembly"},
+        "assembly definition");
+    if (require_string(root, "schema_version") !=
+        "thermox.assembly_definition/v1") {
+        throw std::invalid_argument(
+            "unsupported assembly definition schema_version");
+    }
+    std::set<std::string> medium_ids;
+    for (const auto& medium : context.media) {
+        medium_ids.insert(medium.id);
+    }
+    std::set<std::string> material_ids;
+    for (const auto& material : context.materials) {
+        material_ids.insert(material.id);
+    }
+    const std::string assembly_key{"assembly"};
+    const auto& assembly =
+        require_object_member(root, assembly_key);
+    return parse_assembly(assembly, medium_ids, material_ids);
+}
+
+AssemblyDefinition parse_assembly_definition_text(
+    const std::string& text,
+    const ModelDocument& context,
+    const UnitRegistry& units) {
+    const UnitRegistryScope scope{units};
+    return parse_assembly_definition_text(text, context);
 }
 
 ConnectionDefinition parse_connection_definition_text(

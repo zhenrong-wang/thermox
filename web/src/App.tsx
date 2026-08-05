@@ -48,6 +48,7 @@ import {
 } from './workflow'
 import type {
   ArtifactRevision,
+  AssemblyDefinition,
   CalibrationRevision,
   Catalog,
   CatalogComponent,
@@ -1531,6 +1532,29 @@ function App() {
     }
   }
 
+  async function removeAssembly(assembly: AssemblyDefinition) {
+    if (
+      !window.confirm(
+        `Remove ${assembly.id}? Its complete hierarchy and attached connections will be removed in the new revision.`,
+      )
+    ) {
+      return
+    }
+    try {
+      await publishEdits(
+        [{
+          action: 'remove',
+          entity_type: 'assembly',
+          entity_id: assembly.id,
+          cascade: true,
+        }],
+        `Removed ${assembly.id}.`,
+      )
+    } catch {
+      // publishEdits exposes the service diagnostic in the workspace.
+    }
+  }
+
   async function removeConnection(connection: ConnectionDefinition) {
     if (!window.confirm(`Remove connection ${connection.id}?`)) return
     try {
@@ -1945,6 +1969,9 @@ function App() {
                     onEditConnection={setEditingConnection}
                     onRemoveComponent={(component) => {
                       void removeComponent(component)
+                    }}
+                    onRemoveAssembly={(assembly) => {
+                      void removeAssembly(assembly)
                     }}
                     onRemoveConnection={(connection) => {
                       void removeConnection(connection)

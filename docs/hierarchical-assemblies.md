@@ -102,9 +102,13 @@ or nuclear-system semantics. Nested assemblies use the same rules recursively.
 
 Project model revisions preserve the hierarchy in canonical topology JSON. Execution expands an
 immutable model/case composition without mutating the persisted definition. Direct declaration and
-service clients can author assemblies now. The web type contract recognizes assemblies; visual
-collapse/expand editing and publishing reusable assembly templates into the component library are
-separate product-layer capabilities and do not change the compiler contract.
+service clients can atomically upsert and remove assemblies with the
+`thermox.assembly_definition/v1` fragment contract. The canvas presents a top-level assembly as a
+collapsed meta-component, resolves its exported connector contracts through nested children, and
+aggregates descendant definition readiness. This is a projection of the same declaration—not a
+second execution model. Interactive group/ungroup authoring, expanded internal editing, and
+publishing reusable assembly templates into the library remain product-layer capabilities and do
+not change the compiler contract.
 
 ## Engineering limits
 

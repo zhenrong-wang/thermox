@@ -108,7 +108,28 @@ describe('definition readiness hints', () => {
           parameters: { efficiency: 0.88 },
         }),
         catalog,
-      ).c1.state,
+    ).c1.state,
     ).toBe('incomplete')
+  })
+
+  it('projects descendant readiness onto a collapsed assembly', () => {
+    const document = topology({ id: 'outside', kind: 'missing.kind' })
+    document.model.components = []
+    document.model.assemblies = [{
+      id: 'compressor_train',
+      components: [{
+        id: 'stage_1',
+        kind: 'test.compressor',
+        media: { inlet: 'air' },
+        parameters: { efficiency: 0.88 },
+        artifacts: { map: 'stage-map' },
+      }],
+      connections: [],
+      ports: [{ name: 'inlet', endpoint: 'stage_1.inlet' }],
+    }]
+
+    const readiness = componentDefinitionReadiness(document, catalog)
+    expect(readiness['compressor_train/stage_1'].state).toBe('defined')
+    expect(readiness.compressor_train.state).toBe('defined')
   })
 })

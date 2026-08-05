@@ -572,6 +572,16 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                                     units_),
                             operation.entity_id);
                         break;
+                    case GraphEntityType::assembly:
+                        upsert_entity(
+                            document.assemblies,
+                            platform::
+                                parse_assembly_definition_text(
+                                    operation.entity_json,
+                                    document,
+                                    units_),
+                            operation.entity_id);
+                        break;
                     case GraphEntityType::connection:
                         upsert_entity(
                             document.connections,
@@ -675,6 +685,41 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                         "component");
                     break;
                 }
+                case GraphEntityType::assembly: {
+                    const auto attached = std::count_if(
+                        document.connections.begin(),
+                        document.connections.end(),
+                        [&](const auto& connection) {
+                            return endpoint_component_id(
+                                       connection.from) ==
+                                    operation.entity_id ||
+                                endpoint_component_id(
+                                    connection.to) ==
+                                    operation.entity_id;
+                        });
+                    if (attached != 0 && !operation.cascade) {
+                        throw ProjectRequestError(
+                            "assembly removal requires cascade "
+                            "when connections are attached");
+                    }
+                    if (operation.cascade) {
+                        std::erase_if(
+                            document.connections,
+                            [&](const auto& connection) {
+                                return endpoint_component_id(
+                                           connection.from) ==
+                                        operation.entity_id ||
+                                    endpoint_component_id(
+                                           connection.to) ==
+                                        operation.entity_id;
+                            });
+                    }
+                    remove_entity(
+                        document.assemblies,
+                        operation.entity_id,
+                        "assembly");
+                    break;
+                }
                 case GraphEntityType::connection:
                     remove_entity(
                         document.connections,
@@ -684,6 +729,10 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
             }
         }
 
+        // Graph edits publish executable topology, not merely parseable
+        // JSON. Expansion validates shared namespaces and every assembly
+        // export without changing the persisted hierarchical document.
+        (void)platform::flatten_model_document(document);
         const auto canonical =
             detail::serialize_topology_document_json(document);
         document = platform::parse_topology_document_text(

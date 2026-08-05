@@ -173,6 +173,13 @@ ComponentDefinition parse_component_definition_text(
     const std::string& text,
     const ModelDocument& context,
     const UnitRegistry& units);
+AssemblyDefinition parse_assembly_definition_text(
+    const std::string& text,
+    const ModelDocument& context);
+AssemblyDefinition parse_assembly_definition_text(
+    const std::string& text,
+    const ModelDocument& context,
+    const UnitRegistry& units);
 ConnectionDefinition parse_connection_definition_text(
     const std::string& text);
 ConnectionDefinition parse_connection_definition_text(

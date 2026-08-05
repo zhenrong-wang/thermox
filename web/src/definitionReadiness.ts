@@ -1,8 +1,35 @@
 import type {
+  AssemblyDefinition,
   Catalog,
   ComponentDefinition,
   TopologyDocument,
 } from './types'
+
+interface DeclaredComponent {
+  component: ComponentDefinition
+  id: string
+}
+
+function declaredComponents(
+  topology: TopologyDocument,
+): DeclaredComponent[] {
+  const result = topology.model.components.map((component) => ({
+    component,
+    id: component.id,
+  }))
+  const visit = (assembly: AssemblyDefinition, prefix: string) => {
+    const assemblyId = prefix ? `${prefix}/${assembly.id}` : assembly.id
+    for (const component of assembly.components) {
+      result.push({
+        component,
+        id: `${assemblyId}/${component.id}`,
+      })
+    }
+    for (const nested of assembly.assemblies ?? []) visit(nested, assemblyId)
+  }
+  for (const assembly of topology.model.assemblies ?? []) visit(assembly, '')
+  return result
+}
 
 export type DefinitionIssueKind =
   | 'catalog'
@@ -50,15 +77,17 @@ export function definitionIssues(
   )
   const issues: DefinitionIssue[] = []
 
-  for (const component of topology.model.components) {
+  for (const declared of declaredComponents(topology)) {
+    const { component } = declared
+    const componentId = declared.id
     const descriptor = catalog.components.find(
       (candidate) => candidate.kind === component.kind,
     )
     if (!descriptor) {
       issues.push({
-        id: `${component.id}:catalog`,
+        id: `${componentId}:catalog`,
         kind: 'catalog',
-        componentId: component.id,
+        componentId,
         message: `Component type ${component.kind} is unavailable in the selected catalog.`,
       })
       continue
@@ -76,9 +105,9 @@ export function definitionIssues(
           : Boolean(binding && materialIds.has(binding))
       if (!known) {
         issues.push({
-          id: `${component.id}:binding:${port.name}`,
+          id: `${componentId}:binding:${port.name}`,
           kind: 'binding',
-          componentId: component.id,
+          componentId,
           message: `${port.name} needs a registered ${port.domain} binding.`,
         })
       }
@@ -91,9 +120,9 @@ export function definitionIssues(
         !hasParameter(component, parameter.name)
       ) {
         issues.push({
-          id: `${component.id}:parameter:${parameter.name}`,
+          id: `${componentId}:parameter:${parameter.name}`,
           kind: 'parameter',
-          componentId: component.id,
+          componentId,
           message: `Required parameter ${parameter.name} is missing.`,
         })
       }
@@ -102,9 +131,9 @@ export function definitionIssues(
     for (const artifact of descriptor.artifacts) {
       if (artifact.required && !component.artifacts?.[artifact.role]?.trim()) {
         issues.push({
-          id: `${component.id}:artifact:${artifact.role}`,
+          id: `${componentId}:artifact:${artifact.role}`,
           kind: 'artifact',
-          componentId: component.id,
+          componentId,
           message: `Required artifact ${artifact.role} is not bound.`,
         })
       }
@@ -120,10 +149,11 @@ export function componentDefinitionReadiness(
 ): Record<string, ComponentDefinitionReadiness> {
   if (!topology || !catalog) return {}
   const allIssues = definitionIssues(topology, catalog)
-  return Object.fromEntries(
-    topology.model.components.map((component) => {
+  const components = declaredComponents(topology)
+  const readiness: Record<string, ComponentDefinitionReadiness> = Object.fromEntries(
+    components.map(({ component, id }) => {
       const issues = allIssues.filter(
-        (issue) => issue.componentId === component.id,
+        (issue) => issue.componentId === id,
       )
       const hasPhysicalDefinition =
         Object.keys(component.media ?? {}).length > 0 ||
@@ -131,7 +161,7 @@ export function componentDefinitionReadiness(
         Object.keys(component.artifacts ?? {}).length > 0 ||
         Object.keys(component.parameters ?? {}).length > 0
       return [
-        component.id,
+        id,
         {
           state:
             issues.length === 0
@@ -144,4 +174,23 @@ export function componentDefinitionReadiness(
       ]
     }),
   )
+  const addAssembly = (assembly: AssemblyDefinition, prefix: string) => {
+    const id = prefix ? `${prefix}/${assembly.id}` : assembly.id
+    for (const nested of assembly.assemblies ?? []) addAssembly(nested, id)
+    const descendants = Object.entries(readiness).filter(
+      ([candidate]) => candidate.startsWith(`${id}/`),
+    )
+    const issues = descendants.flatMap(([, value]) => value.issues)
+    readiness[id] = {
+      state:
+        issues.length === 0
+          ? 'defined'
+          : descendants.some(([, value]) => value.state !== 'draft')
+            ? 'incomplete'
+            : 'draft',
+      issues,
+    }
+  }
+  for (const assembly of topology.model.assemblies ?? []) addAssembly(assembly, '')
+  return readiness
 }

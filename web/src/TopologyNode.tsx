@@ -2,11 +2,16 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue, type ResultNodeValue } from './resultPresentation'
-import type { CatalogPort, ComponentDefinition } from './types'
+import type {
+  AssemblyDefinition,
+  CatalogPort,
+  ComponentDefinition,
+} from './types'
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
 
 export interface TopologyNodeData extends Record<string, unknown> {
   component: ComponentDefinition
+  assembly?: AssemblyDefinition
   ports: CatalogPort[]
   resultValues?: ResultNodeValue[]
   definition?: ComponentDefinitionReadiness
@@ -44,7 +49,9 @@ export function TopologyNode({ data, selected }: NodeProps) {
         </span>
         <span className="node-id">{nodeData.component.id}</span>
       </header>
-      <div className="node-kind">{nodeData.component.kind}</div>
+      <div className="node-kind">
+        {nodeData.assembly ? 'assembly · collapsed' : nodeData.component.kind}
+      </div>
       {nodeData.definition && (
         <div className={`node-definition-state ${nodeData.definition.state}`}>
           <span>{nodeData.definition.state}</span>

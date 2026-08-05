@@ -751,6 +751,12 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
             fragment_key = "component";
             fragment_schema =
                 "thermox.component_definition/v1";
+        } else if (entity_type == "assembly") {
+            operation.entity_type =
+                service::GraphEntityType::assembly;
+            fragment_key = "assembly";
+            fragment_schema =
+                "thermox.assembly_definition/v1";
         } else if (entity_type == "connection") {
             operation.entity_type =
                 service::GraphEntityType::connection;
@@ -796,10 +802,12 @@ service::ApplyGraphEditsRequest parse_graph_edit_request(
             }
             if (operation.cascade &&
                 operation.entity_type !=
-                    service::GraphEntityType::component) {
+                    service::GraphEntityType::component &&
+                operation.entity_type !=
+                    service::GraphEntityType::assembly) {
                 throw std::invalid_argument(
-                    "cascade is only valid for component "
-                    "removal");
+                    "cascade is only valid for component or "
+                    "assembly removal");
             }
         }
         command.operations.push_back(std::move(operation));

@@ -1418,6 +1418,61 @@ void test_graph_edits_publish_valid_child_revisions() {
         rejected,
         "graph edits must not reveal or modify another Team's "
         "base revision");
+
+    thermox::service::ApplyGraphEditsRequest assembly_edit;
+    assembly_edit.identity = team_a;
+    assembly_edit.project_id = project.project_id;
+    assembly_edit.base_model_revision_id = child.model_revision_id;
+    assembly_edit.operations = {{
+        thermox::service::GraphEditAction::upsert,
+        thermox::service::GraphEntityType::assembly,
+        "booster",
+        R"json({
+          "schema_version": "thermox.assembly_definition/v1",
+          "assembly": {
+            "id": "booster",
+            "label": "Two-stage booster",
+            "components": [{
+              "id": "stage_1",
+              "kind": "compressor.fluid.isentropic_efficiency",
+              "media": {"inlet": "air", "outlet": "air"},
+              "parameters": {"pressure_ratio": 2.0, "eta_is": 0.84}
+            }],
+            "connections": [],
+            "ports": [
+              {"name": "inlet", "endpoint": "stage_1.inlet"},
+              {"name": "outlet", "endpoint": "stage_1.outlet"}
+            ],
+            "parameters": []
+          }
+        })json",
+        false,
+    }};
+    const auto with_assembly =
+        service.apply_graph_edits(assembly_edit);
+    require(
+        with_assembly.canonical_model_json.find(
+            "\"id\": \"booster\"") != std::string::npos &&
+            with_assembly.canonical_model_json.find(
+                "\"endpoint\": \"stage_1.inlet\"") !=
+                std::string::npos,
+        "assemblies must be first-class atomic graph-edit entities");
+
+    assembly_edit.base_model_revision_id =
+        with_assembly.model_revision_id;
+    assembly_edit.operations = {{
+        thermox::service::GraphEditAction::remove,
+        thermox::service::GraphEntityType::assembly,
+        "booster",
+        {},
+        true,
+    }};
+    const auto without_assembly =
+        service.apply_graph_edits(assembly_edit);
+    require(
+        without_assembly.canonical_model_json.find(
+            "\"id\": \"booster\"") == std::string::npos,
+        "assembly removal must publish a child revision without the hierarchy");
 }
 
 void test_case_edits_publish_atomic_child_revisions() {

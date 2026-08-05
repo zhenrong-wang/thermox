@@ -347,6 +347,7 @@ enum class GraphEntityType {
     medium,
     material,
     component,
+    assembly,
     connection,
 };
 

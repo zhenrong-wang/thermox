@@ -1217,6 +1217,25 @@ void test_team_scoped_projects_and_model_revisions() {
                 "eta_is": 0.87
               }
             }
+          }, {
+            "action": "upsert",
+            "entity_type": "assembly",
+            "entity_id": "booster",
+            "entity": {
+              "id": "booster",
+              "components": [{
+                "id": "stage_1",
+                "kind": "compressor.fluid.isentropic_efficiency",
+                "media": {"inlet": "air", "outlet": "air"},
+                "parameters": {"pressure_ratio": 2.0, "eta_is": 0.84}
+              }],
+              "connections": [],
+              "ports": [
+                {"name": "inlet", "endpoint": "stage_1.inlet"},
+                {"name": "outlet", "endpoint": "stage_1.outlet"}
+              ],
+              "parameters": []
+            }
           }]
         })json"));
     const auto edited = api.handle(edit_request);
@@ -1233,6 +1252,9 @@ void test_team_scoped_projects_and_model_revisions() {
                 std::string::npos &&
             edited.body.find(
                 "\"pressure_ratio\": 14") !=
+                std::string::npos &&
+            edited.body.find(
+                "\"endpoint\": \"stage_1.inlet\"") !=
                 std::string::npos,
         "graph edits must publish a typed immutable child "
         "revision without losing JSON numeric types");

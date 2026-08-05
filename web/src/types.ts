@@ -978,6 +978,7 @@ export type GraphEntityType =
   | 'medium'
   | 'material'
   | 'component'
+  | 'assembly'
   | 'connection'
 
 export interface GraphUpsertOperation {
