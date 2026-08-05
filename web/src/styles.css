@@ -1667,6 +1667,43 @@ code {
   white-space: nowrap;
 }
 
+.assembly-template-list {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #dce4e8;
+  background: #f5f8f8;
+}
+
+.assembly-template-card {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #cbd8d8;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.assembly-template-card:hover:not(:disabled) {
+  border-color: #438277;
+  box-shadow: 0 2px 8px rgba(32, 76, 69, 0.12);
+}
+
+.assembly-template-card > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assembly-template-card small,
+.assembly-template-card code {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
 .primary-button,
 .secondary-button {
   padding: 8px 12px;

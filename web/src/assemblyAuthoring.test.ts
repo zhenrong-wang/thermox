@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   assemblyPorts,
   buildAssemblyGroupingOperations,
+  buildAssemblyTemplateDocument,
+  buildAssemblyTemplateInstantiationOperations,
   buildAssemblyUngroupingOperations,
 } from './assemblyAuthoring'
 import type {
@@ -340,5 +342,125 @@ describe('assembly authoring projection', () => {
     expect(() =>
       buildAssemblyUngroupingOperations(topology, 'train'),
     ).toThrow('topology entity stage already exists')
+  })
+
+  it('packages one assembly with only its registry dependencies', () => {
+    const assembly: AssemblyDefinition = {
+      id: 'train',
+      components: [{
+        id: 'stage',
+        kind: compressor.kind,
+        media: { inlet: 'air', outlet: 'air' },
+      }],
+      connections: [],
+      ports: [],
+    }
+    const topology: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '1',
+        media: [
+          { id: 'air', backend: 'ideal', substance: 'Air' },
+          { id: 'water', backend: 'coolprop', substance: 'Water' },
+        ],
+        components: [],
+        assemblies: [assembly],
+        connections: [],
+      },
+    }
+    const template = buildAssemblyTemplateDocument(topology, assembly)
+    expect(template.model.media.map((medium) => medium.id)).toEqual(['air'])
+    expect(template.model.assemblies).toEqual([assembly])
+    expect(template.model.components).toEqual([])
+  })
+
+  it('instantiates a template and atomically adds missing dependencies', () => {
+    const target: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '1',
+        media: [],
+        components: [],
+        connections: [],
+      },
+    }
+    const template: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'train_template',
+        name: 'Train',
+        revision: '1',
+        media: [{ id: 'air', backend: 'ideal', substance: 'Air' }],
+        components: [],
+        assemblies: [{
+          id: 'train',
+          label: 'Compressor train',
+          components: [{
+            id: 'stage',
+            kind: compressor.kind,
+            media: { inlet: 'air', outlet: 'air' },
+          }],
+          connections: [],
+          ports: [],
+        }],
+        connections: [],
+      },
+    }
+    const operations = buildAssemblyTemplateInstantiationOperations(
+      target,
+      template,
+      'main_compressor',
+      'Main compressor',
+    )
+    expect(operations.map((operation) => operation.entity_type)).toEqual([
+      'medium',
+      'assembly',
+    ])
+    expect(
+      operations[1].action === 'upsert' ? operations[1].entity : undefined,
+    ).toMatchObject({ id: 'main_compressor', label: 'Main compressor' })
+  })
+
+  it('rejects incompatible template dependencies', () => {
+    const target: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'cycle',
+        name: 'Cycle',
+        revision: '1',
+        media: [{ id: 'air', backend: 'coolprop', substance: 'Air' }],
+        components: [],
+        connections: [],
+      },
+    }
+    const template: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'template',
+        name: 'Template',
+        revision: '1',
+        media: [{ id: 'air', backend: 'ideal', substance: 'Air' }],
+        components: [],
+        assemblies: [{
+          id: 'train',
+          components: [{ id: 'stage', kind: compressor.kind }],
+          connections: [],
+          ports: [],
+        }],
+        connections: [],
+      },
+    }
+    expect(() =>
+      buildAssemblyTemplateInstantiationOperations(
+        target,
+        template,
+        'train',
+        '',
+      ),
+    ).toThrow('conflicts with the template dependency')
   })
 })

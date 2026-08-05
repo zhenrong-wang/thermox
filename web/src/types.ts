@@ -761,6 +761,11 @@ export interface ArtifactRevisionContent<T = unknown> {
   artifact: T
 }
 
+export interface AssemblyTemplateCatalogEntry {
+  source: ArtifactRevision
+  definition: TopologyDocument
+}
+
 export interface CorrelationArtifactDefinition {
   schema_version: 'thermox.correlation/v1'
   inputs: Array<{

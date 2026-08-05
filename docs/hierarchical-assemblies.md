@@ -113,8 +113,23 @@ explicitly defined child-instance parameters under unique public names. Catalog 
 silently promoted into the assembly API. Ungrouping and the reverse connection rewrite are also
 published atomically; identifier collisions are
 rejected rather than silently renamed or overwritten. Expanded in-place internal editing,
-and publishing reusable assembly templates into the library remain product-layer capabilities and
-do not change the compiler contract.
+remains a product-layer capability and does not change the compiler contract.
+
+## Reusable project templates
+
+An existing assembly can be published to the Team-scoped project registry as a
+`thermox.assembly_template` artifact. Its payload is an ordinary canonical
+`thermox.topology/v1` document containing exactly one top-level assembly, no top-level leaf
+components or connections, and only the fluid/material definitions referenced by descendants.
+The standard artifact revision chain supplies immutable versions, checksums, tenant isolation, and
+object-store persistence without creating a parallel template database.
+
+The component library discovers the latest revision of each logical template artifact. Creating an
+instance publishes one atomic graph edit. Missing fluid/material dependencies are added from the
+template; an existing dependency with the same ID must have a compatible definition or
+instantiation is rejected. The assembly receives a new top-level instance ID while child IDs remain
+scoped inside it. Earlier template revisions remain addressable through the artifact API even when
+the library presents the latest revision by default.
 
 ## Engineering limits
 

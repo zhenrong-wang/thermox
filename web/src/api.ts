@@ -2,6 +2,7 @@ import type {
   ArtifactRevision,
   ArtifactRevisionContent,
   ArtifactRevisionList,
+  AssemblyTemplateCatalogEntry,
   ProjectComponentCatalog,
   Catalog,
   CaseDocument,
@@ -216,6 +217,27 @@ export const api = {
       artifact_id: artifactId,
       artifact_type: 'thermox.expression_component',
       artifact_schema_version: 'thermox.expression_component/v2',
+    })
+    if (parentArtifactRevisionId) {
+      query.set('parent_revision_id', parentArtifactRevisionId)
+    }
+    return postJson<ArtifactRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
+      definition,
+      signal,
+    )
+  },
+  createAssemblyTemplateRevision: (
+    projectId: string,
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: AssemblyTemplateCatalogEntry['definition'],
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      artifact_id: artifactId,
+      artifact_type: 'thermox.assembly_template',
+      artifact_schema_version: 'thermox.topology/v1',
     })
     if (parentArtifactRevisionId) {
       query.set('parent_revision_id', parentArtifactRevisionId)

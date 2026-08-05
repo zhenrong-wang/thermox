@@ -5,10 +5,63 @@ import type {
   CorrelationArtifactDefinition,
   ExpressionComponentDefinition,
   PerformanceMapArtifactDefinition,
+  TopologyDocument,
 } from './types'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('assembly template authoring API', () => {
+  it('publishes a versioned topology artifact', async () => {
+    const definition: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'train_template',
+        name: 'Train template',
+        revision: '1',
+        media: [],
+        components: [],
+        assemblies: [{
+          id: 'train',
+          components: [{ id: 'stage', kind: 'compressor.test' }],
+          connections: [],
+          ports: [],
+        }],
+        connections: [],
+      },
+    }
+    const revision = {
+      artifact_revision_id: 'template-r2',
+      revision_number: 2,
+    } as ArtifactRevision
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(revision), { status: 201 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.createAssemblyTemplateRevision(
+      'project-a',
+      'compressor-train',
+      'template-r1',
+      definition,
+    )
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.searchParams.get('artifact_type')).toBe(
+      'thermox.assembly_template',
+    )
+    expect(url.searchParams.get('artifact_schema_version')).toBe(
+      'thermox.topology/v1',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe('template-r1')
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(definition),
+    })
+  })
 })
 
 describe('correlation artifact authoring API', () => {

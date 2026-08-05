@@ -2,6 +2,7 @@ import type {
   AssemblyDefinition,
   CatalogComponent,
   CatalogPort,
+  ComponentDefinition,
   ConnectionDefinition,
   GraphEditOperation,
   TopologyDocument,
@@ -311,4 +312,143 @@ export function buildAssemblyUngroupingOperations(
       cascade: true,
     },
   ]
+}
+
+function nestedComponents(
+  assembly: AssemblyDefinition,
+): ComponentDefinition[] {
+  return [
+    ...assembly.components,
+    ...(assembly.assemblies ?? []).flatMap(nestedComponents),
+  ]
+}
+
+export function buildAssemblyTemplateDocument(
+  topology: TopologyDocument,
+  assembly: AssemblyDefinition,
+): TopologyDocument {
+  const components = nestedComponents(assembly)
+  const mediumIds = new Set(
+    components.flatMap((component) => Object.values(component.media ?? {})),
+  )
+  const materialIds = new Set(
+    components.flatMap((component) =>
+      Object.values(component.materials ?? {}),
+    ),
+  )
+  const media = topology.model.media.filter((medium) => mediumIds.has(medium.id))
+  const materials = (topology.model.materials ?? []).filter((material) =>
+    materialIds.has(material.id),
+  )
+  if (media.length !== mediumIds.size || materials.length !== materialIds.size) {
+    throw new Error(
+      `Assembly ${assembly.id} references a fluid or material missing from the topology registry.`,
+    )
+  }
+  return {
+    schema_version: 'thermox.topology/v1',
+    model: {
+      id: `${assembly.id}_template`,
+      name: assembly.label || assembly.id,
+      revision: '1',
+      media,
+      materials,
+      components: [],
+      assemblies: [{ ...assembly }],
+      connections: [],
+    },
+  }
+}
+
+function sameMedium(
+  left: TopologyDocument['model']['media'][number],
+  right: TopologyDocument['model']['media'][number],
+) {
+  return left.backend === right.backend &&
+    left.substance === right.substance &&
+    (left.package_version ?? '') === (right.package_version ?? '')
+}
+
+function sameMaterial(
+  left: NonNullable<TopologyDocument['model']['materials']>[number],
+  right: NonNullable<TopologyDocument['model']['materials']>[number],
+) {
+  return left.backend === right.backend &&
+    left.mechanism === right.mechanism &&
+    left.phase === right.phase &&
+    (left.package_version ?? '') === (right.package_version ?? '') &&
+    JSON.stringify(left.species) === JSON.stringify(right.species)
+}
+
+export function buildAssemblyTemplateInstantiationOperations(
+  topology: TopologyDocument,
+  template: TopologyDocument,
+  instanceId: string,
+  label: string,
+): GraphEditOperation[] {
+  if (
+    template.model.components.length !== 0 ||
+    template.model.connections.length !== 0 ||
+    (template.model.assemblies ?? []).length !== 1
+  ) {
+    throw new Error('Assembly template must contain exactly one assembly.')
+  }
+  const id = instanceId.trim()
+  if (!id || id.includes('.') || id.includes('/')) {
+    throw new Error("Assembly ID is required and cannot contain '.' or '/'.")
+  }
+  if (
+    topology.model.components.some((component) => component.id === id) ||
+    (topology.model.assemblies ?? []).some((assembly) => assembly.id === id)
+  ) {
+    throw new Error(`Topology entity ${id} already exists.`)
+  }
+  const operations: GraphEditOperation[] = []
+  for (const medium of template.model.media) {
+    const existing = topology.model.media.find((item) => item.id === medium.id)
+    if (existing && !sameMedium(existing, medium)) {
+      throw new Error(
+        `Fluid ${medium.id} conflicts with the template dependency.`,
+      )
+    }
+    if (!existing) {
+      operations.push({
+        action: 'upsert',
+        entity_type: 'medium',
+        entity_id: medium.id,
+        entity: { ...medium },
+      })
+    }
+  }
+  for (const material of template.model.materials ?? []) {
+    const existing = (topology.model.materials ?? []).find(
+      (item) => item.id === material.id,
+    )
+    if (existing && !sameMaterial(existing, material)) {
+      throw new Error(
+        `Material ${material.id} conflicts with the template dependency.`,
+      )
+    }
+    if (!existing) {
+      operations.push({
+        action: 'upsert',
+        entity_type: 'material',
+        entity_id: material.id,
+        entity: { ...material },
+      })
+    }
+  }
+  const source = template.model.assemblies![0]
+  const assembly = {
+    ...source,
+    id,
+    label: label.trim() || source.label || id,
+  }
+  operations.push({
+    action: 'upsert',
+    entity_type: 'assembly',
+    entity_id: id,
+    entity: { ...assembly },
+  })
+  return operations
 }

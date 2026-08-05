@@ -36,4 +36,8 @@ ExpressionComponentInput expression_component_from_payload(
     const std::string& schema_version,
     const std::string& payload_json);
 
+std::string canonicalize_assembly_template_payload(
+    const std::string& schema_version,
+    const std::string& payload_json);
+
 }  // namespace thermox::service::detail

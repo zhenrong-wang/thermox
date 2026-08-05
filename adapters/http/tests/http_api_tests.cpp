@@ -426,6 +426,66 @@ void test_tenant_scoped_asynchronous_jobs() {
                 .status == 404,
         "project component catalog must hide cross-Team "
         "project existence");
+    auto template_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions"
+            "?artifact_id=http-compressor-template"
+            "&artifact_type=thermox.assembly_template"
+            "&artifact_schema_version=thermox.topology%2Fv1",
+        R"json({
+          "schema_version": "thermox.topology/v1",
+          "model": {
+            "id": "compressor_template",
+            "media": [{
+              "id": "air",
+              "backend": "ideal_gas_mixture",
+              "substance": "Air"
+            }],
+            "components": [],
+            "assemblies": [{
+              "id": "compressor_train",
+              "components": [{
+                "id": "stage",
+                "kind": "compressor.fluid.isentropic_efficiency",
+                "media": {"inlet": "air", "outlet": "air"},
+                "parameters": {"pressure_ratio": 2.0, "eta_is": 0.86}
+              }],
+              "ports": [
+                {"name": "inlet", "endpoint": "stage.inlet"},
+                {"name": "outlet", "endpoint": "stage.outlet"}
+              ],
+              "parameters": [],
+              "connections": []
+            }],
+            "connections": []
+          }
+        })json");
+    const auto template_uploaded = api.handle(
+        authenticated(std::move(template_upload)));
+    require(
+        template_uploaded.status == 201 &&
+            template_uploaded.body.find(
+                "thermox.assembly_template") != std::string::npos,
+        "HTTP artifact authoring must accept canonical assembly "
+        "templates");
+    const auto template_revision_id =
+        template_uploaded.headers.at("Location").substr(
+            template_uploaded.headers.at("Location").find_last_of('/') +
+            1U);
+    const auto template_detail = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions/" + template_revision_id,
+        {},
+        {},
+    }));
+    require(
+        template_detail.status == 200 &&
+            template_detail.body.find(
+                "\"id\": \"compressor_train\"") !=
+                std::string::npos,
+        "assembly-template revisions must be discoverable through "
+        "the standard artifact registry");
     auto study_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/study-revisions",

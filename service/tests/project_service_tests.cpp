@@ -880,6 +880,122 @@ void test_expression_component_artifact_is_executable() {
         "project existence");
 }
 
+void test_assembly_templates_are_versioned_topology_artifacts() {
+    auto projects = std::make_shared<thermox::service::ProjectService>(
+        thermox::service::make_in_memory_project_repository());
+    const auto project = projects->create_project({
+        team_a, "Assembly templates", {},
+    });
+    const std::string payload = R"json({
+      "schema_version": "thermox.topology/v1",
+      "model": {
+        "id": "compressor_train_template",
+        "name": "Two-stage compressor template",
+        "revision": "1.0.0",
+        "media": [{
+          "id": "air",
+          "backend": "ideal_gas_mixture",
+          "substance": "Air"
+        }],
+        "components": [],
+        "assemblies": [{
+          "id": "compressor_train",
+          "label": "Two-stage compressor",
+          "components": [{
+            "id": "stage_1",
+            "kind": "compressor.fluid.isentropic_efficiency",
+            "media": {"inlet": "air", "outlet": "air"},
+            "parameters": {"pressure_ratio": 2.0, "eta_is": 0.86}
+          }, {
+            "id": "stage_2",
+            "kind": "compressor.fluid.isentropic_efficiency",
+            "media": {"inlet": "air", "outlet": "air"},
+            "parameters": {"pressure_ratio": 3.0, "eta_is": 0.84}
+          }],
+          "ports": [
+            {"name": "inlet", "endpoint": "stage_1.inlet"},
+            {"name": "outlet", "endpoint": "stage_2.outlet"}
+          ],
+          "parameters": [{
+            "name": "hp_pressure_ratio",
+            "target": "stage_2.pressure_ratio"
+          }],
+          "connections": [{
+            "id": "interstage",
+            "from": "stage_1.outlet",
+            "to": "stage_2.inlet",
+            "kind": "fluid_link"
+          }]
+        }],
+        "connections": []
+      }
+    })json";
+    const auto first = projects->create_artifact_revision({
+        team_a,
+        project.project_id,
+        "two-stage-compressor",
+        {},
+        thermox::service::assembly_template_artifact_type,
+        thermox::service::assembly_template_schema_v1,
+        payload,
+    });
+    const auto content = projects->get_artifact_revision_content(
+        team_a, project.project_id, first.artifact_revision_id);
+    require(
+        content && first.revision_number == 1U &&
+            first.artifact_type ==
+                thermox::service::assembly_template_artifact_type &&
+            content->canonical_artifact_json.find(
+                "\"id\": \"compressor_train\"") !=
+                std::string::npos &&
+            content->canonical_artifact_json.find(
+                "\"hp_pressure_ratio\"") != std::string::npos,
+        "assembly templates must persist as canonical immutable "
+        "topology artifacts");
+    const auto second = projects->create_artifact_revision({
+        team_a,
+        project.project_id,
+        "two-stage-compressor",
+        first.artifact_revision_id,
+        thermox::service::assembly_template_artifact_type,
+        thermox::service::assembly_template_schema_v1,
+        payload,
+    });
+    require(
+        second.revision_number == 2U &&
+            second.parent_artifact_revision_id ==
+                first.artifact_revision_id,
+        "assembly templates must use the standard immutable artifact "
+        "revision chain");
+
+    bool rejected = false;
+    try {
+        (void)projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "invalid-template",
+            {},
+            thermox::service::assembly_template_artifact_type,
+            thermox::service::assembly_template_schema_v1,
+            R"json({
+              "schema_version": "thermox.topology/v1",
+              "model": {
+                "id": "empty-template",
+                "media": [],
+                "components": [],
+                "assemblies": [],
+                "connections": []
+              }
+            })json",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        rejected = true;
+    }
+    require(rejected,
+            "invalid assembly-template topology must be rejected before "
+            "persistence");
+}
+
 void test_artifact_revisions_are_snapshotted_and_scoped() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -1771,6 +1887,7 @@ int main() {
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
         test_expression_component_artifact_is_executable();
+        test_assembly_templates_are_versioned_topology_artifacts();
         test_correlation_artifact_is_executable_input();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();

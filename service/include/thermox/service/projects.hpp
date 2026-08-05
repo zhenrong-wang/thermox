@@ -35,6 +35,10 @@ inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
 inline constexpr char project_component_catalog_schema_v1[] =
     "thermox.project_component_catalog/v1";
+inline constexpr char assembly_template_artifact_type[] =
+    "thermox.assembly_template";
+inline constexpr char assembly_template_schema_v1[] =
+    "thermox.topology/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};

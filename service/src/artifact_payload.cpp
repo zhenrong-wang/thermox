@@ -1,9 +1,12 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 #include "artifact_payload.hpp"
+#include "serialization_internal.hpp"
 
+#include "thermox/service/projects.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/expression_component.hpp"
+#include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
 
 #include <boost/property_tree/json_parser.hpp>
@@ -736,6 +739,28 @@ ExpressionComponentInput expression_component_from_payload(
     const std::string& payload_json) {
     return decode_expression_component(
         schema_version, read(payload_json));
+}
+
+std::string canonicalize_assembly_template_payload(
+    const std::string& schema_version,
+    const std::string& payload_json) {
+    if (schema_version != assembly_template_schema_v1) {
+        throw std::invalid_argument(
+            "unsupported assembly-template schema: " +
+            schema_version);
+    }
+    auto document =
+        platform::parse_topology_document_text(payload_json);
+    if (!document.components.empty() ||
+        !document.connections.empty() ||
+        document.assemblies.size() != 1U) {
+        throw std::invalid_argument(
+            "assembly template must contain exactly one "
+            "top-level assembly and no top-level components "
+            "or connections");
+    }
+    (void)platform::flatten_model_document(document);
+    return serialize_topology_document_json(document);
 }
 
 }  // namespace thermox::service::detail

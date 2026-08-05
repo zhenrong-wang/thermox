@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
 import { AssemblyForm } from './AssemblyForm'
+import { AssemblyTemplateForm } from './AssemblyTemplateForm'
+import { AssemblyTemplateInstanceForm } from './AssemblyTemplateInstanceForm'
 import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
@@ -19,6 +21,7 @@ import { useDisplayUnits } from './DisplayUnitsContext'
 import { ExpressionComponentForm } from './ExpressionComponentForm'
 import {
   buildAssemblyGroupingOperations,
+  buildAssemblyTemplateInstantiationOperations,
   buildAssemblyUngroupingOperations,
 } from './assemblyAuthoring'
 import {
@@ -53,6 +56,7 @@ import {
 } from './workflow'
 import type {
   ArtifactRevision,
+  AssemblyTemplateCatalogEntry,
   AssemblyDefinition,
   CalibrationRevision,
   Catalog,
@@ -127,6 +131,13 @@ function App() {
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
   const [addingAssembly, setAddingAssembly] = useState(false)
+  const [assemblyTemplates, setAssemblyTemplates] = useState<
+    AssemblyTemplateCatalogEntry[]
+  >([])
+  const [publishingAssemblyTemplate, setPublishingAssemblyTemplate] =
+    useState<AssemblyDefinition>()
+  const [instantiatingAssemblyTemplate, setInstantiatingAssemblyTemplate] =
+    useState<AssemblyTemplateCatalogEntry>()
   const [addingCorrelation, setAddingCorrelation] = useState(false)
   const [loadingArtifactRevision, setLoadingArtifactRevision] =
     useState(false)
@@ -235,6 +246,42 @@ function App() {
       })
     return () => controller.abort()
   }, [selectedProjectId])
+
+  useEffect(() => {
+    setAssemblyTemplates([])
+    if (!selectedProjectId) return
+    const latest = new Map<string, ArtifactRevision>()
+    for (const revision of artifactRevisions) {
+      if (revision.artifact_type !== 'thermox.assembly_template') continue
+      const current = latest.get(revision.artifact_id)
+      if (!current || revision.revision_number > current.revision_number) {
+        latest.set(revision.artifact_id, revision)
+      }
+    }
+    if (latest.size === 0) return
+    const controller = new AbortController()
+    Promise.all(
+      [...latest.values()].map(async (source) => {
+        const content = await api.artifactRevision<TopologyDocument>(
+          selectedProjectId,
+          source.artifact_revision_id,
+          controller.signal,
+        )
+        return { source, definition: content.artifact }
+      }),
+    )
+      .then((templates) =>
+        setAssemblyTemplates(
+          templates.sort((left, right) =>
+            left.source.artifact_id.localeCompare(right.source.artifact_id),
+          ),
+        ),
+      )
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [artifactRevisions, selectedProjectId])
 
   useEffect(() => {
     setCalibrationRevisions([])
@@ -1603,6 +1650,45 @@ function App() {
     }
   }
 
+  async function publishAssemblyTemplate(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: TopologyDocument,
+  ) {
+    if (!selectedProjectId) throw new Error('Select a project first.')
+    const revision = await api.createAssemblyTemplateRevision(
+      selectedProjectId,
+      artifactId,
+      parentArtifactRevisionId,
+      definition,
+    )
+    const artifacts = await api.artifactRevisions(selectedProjectId)
+    setArtifactRevisions(artifacts.artifact_revisions)
+    setPublishingAssemblyTemplate(undefined)
+    setOperationStatus(
+      `Published assembly template ${artifactId} revision ${revision.revision_number}.`,
+    )
+  }
+
+  async function instantiateAssemblyTemplate(
+    instanceId: string,
+    label: string,
+  ) {
+    if (!topology || !instantiatingAssemblyTemplate) {
+      throw new Error('Select a topology and assembly template first.')
+    }
+    await publishEdits(
+      buildAssemblyTemplateInstantiationOperations(
+        topology,
+        instantiatingAssemblyTemplate.definition,
+        instanceId,
+        label,
+      ),
+      `Instantiated ${instantiatingAssemblyTemplate.source.artifact_id} as ${instanceId}.`,
+    )
+    setInstantiatingAssemblyTemplate(undefined)
+  }
+
   async function removeConnection(connection: ConnectionDefinition) {
     if (!window.confirm(`Remove connection ${connection.id}?`)) return
     try {
@@ -2024,6 +2110,7 @@ function App() {
                     onUngroupAssembly={(assembly) => {
                       void ungroupAssembly(assembly)
                     }}
+                    onPublishAssemblyTemplate={setPublishingAssemblyTemplate}
                     onRemoveConnection={(connection) => {
                       void removeConnection(connection)
                     }}
@@ -2049,6 +2136,8 @@ function App() {
                     onAddMaterial={() => setAddingMaterial(true)}
                     onAddCorrelation={() => setAddingCorrelation(true)}
                     onGroupComponents={() => setAddingAssembly(true)}
+                    assemblyTemplates={assemblyTemplates}
+                    onInstantiateAssembly={setInstantiatingAssemblyTemplate}
                     onCreateTopology={
                       selectedProjectId && !selectedRevisionId
                         ? () => {
@@ -2139,6 +2228,27 @@ function App() {
           onSubmit={groupComponents}
         />
       )}
+      {workspaceView === 'topology' &&
+        publishingAssemblyTemplate &&
+        topology && (
+          <AssemblyTemplateForm
+            assembly={publishingAssemblyTemplate}
+            topology={topology}
+            artifactRevisions={artifactRevisions}
+            onCancel={() => setPublishingAssemblyTemplate(undefined)}
+            onSubmit={publishAssemblyTemplate}
+          />
+        )}
+      {workspaceView === 'topology' &&
+        instantiatingAssemblyTemplate &&
+        topology && (
+          <AssemblyTemplateInstanceForm
+            template={instantiatingAssemblyTemplate}
+            topology={topology}
+            onCancel={() => setInstantiatingAssemblyTemplate(undefined)}
+            onSubmit={instantiateAssemblyTemplate}
+          />
+        )}
       {(workspaceView === 'topology' || workspaceView === 'definition') &&
         editingComponent &&
         topology &&

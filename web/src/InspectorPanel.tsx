@@ -24,6 +24,7 @@ interface InspectorPanelProps {
   onRemoveComponent: (component: ComponentDefinition) => void
   onRemoveAssembly: (assembly: AssemblyDefinition) => void
   onUngroupAssembly: (assembly: AssemblyDefinition) => void
+  onPublishAssemblyTemplate: (assembly: AssemblyDefinition) => void
   onRemoveConnection: (connection: ConnectionDefinition) => void
   onClose: () => void
 }
@@ -53,6 +54,7 @@ export function InspectorPanel({
   onRemoveComponent,
   onRemoveAssembly,
   onUngroupAssembly,
+  onPublishAssemblyTemplate,
   onRemoveConnection,
   onClose,
 }: InspectorPanelProps) {
@@ -256,6 +258,14 @@ export function InspectorPanel({
             onClick={() => onRemoveAssembly(assembly)}
           >
             Remove
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={publishing}
+            onClick={() => onPublishAssemblyTemplate(assembly)}
+          >
+            Publish template
           </button>
           <button
             type="button"

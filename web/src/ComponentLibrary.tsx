@@ -3,7 +3,10 @@ import {
   COMPONENT_DRAG_TYPE,
   componentMatchesFilter,
 } from './componentLibrary'
-import type { CatalogComponent } from './types'
+import type {
+  AssemblyTemplateCatalogEntry,
+  CatalogComponent,
+} from './types'
 
 interface ComponentLibraryProps {
   components: CatalogComponent[]
@@ -17,6 +20,8 @@ interface ComponentLibraryProps {
   onAddMaterial: () => void
   onAddCorrelation: () => void
   onGroupComponents: () => void
+  assemblyTemplates: AssemblyTemplateCatalogEntry[]
+  onInstantiateAssembly: (template: AssemblyTemplateCatalogEntry) => void
   onCreateTopology?: () => void
   onDefine: () => void
   onRevise: (component: CatalogComponent) => void
@@ -34,6 +39,8 @@ export function ComponentLibrary({
   onAddMaterial,
   onAddCorrelation,
   onGroupComponents,
+  assemblyTemplates,
+  onInstantiateAssembly,
   onCreateTopology,
   onDefine,
   onRevise,
@@ -145,6 +152,32 @@ export function ComponentLibrary({
           aria-label="Filter component library"
         />
       </label>
+      {assemblyTemplates.length > 0 && (
+        <div className="assembly-template-list">
+          <span className="eyebrow">Project assemblies</span>
+          {assemblyTemplates.map((template) => {
+            const assembly = template.definition.model.assemblies?.[0]
+            return (
+              <button
+                type="button"
+                className="assembly-template-card"
+                disabled={disabled}
+                key={template.source.artifact_revision_id}
+                onClick={() => onInstantiateAssembly(template)}
+              >
+                <span>
+                  <strong>{assembly?.label || template.source.artifact_id}</strong>
+                  <small>revision {template.source.revision_number}</small>
+                </span>
+                <code>
+                  {assembly?.components.length ?? 0} components ·{' '}
+                  {assembly?.ports.length ?? 0} ports
+                </code>
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="component-list">
         {templates.length === 0 ? (
           <p className="library-empty">No registered types match this filter.</p>

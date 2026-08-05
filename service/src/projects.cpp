@@ -1017,7 +1017,9 @@ ProjectService::create_artifact_revision(
         request.artifact_type !=
             platform::correlation_artifact_type &&
         request.artifact_type !=
-            platform::expression_component_artifact_type) {
+            platform::expression_component_artifact_type &&
+        request.artifact_type !=
+            assembly_template_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
             request.artifact_type);
@@ -1043,9 +1045,15 @@ ProjectService::create_artifact_revision(
             canonical = detail::canonicalize_correlation_payload(
                 request.artifact_schema_version,
                 request.artifact_json);
-        } else {
+        } else if (request.artifact_type ==
+                   platform::expression_component_artifact_type) {
             canonical =
                 detail::canonicalize_expression_component_payload(
+                    request.artifact_schema_version,
+                    request.artifact_json);
+        } else {
+            canonical =
+                detail::canonicalize_assembly_template_payload(
                     request.artifact_schema_version,
                     request.artifact_json);
         }
