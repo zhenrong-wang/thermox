@@ -118,6 +118,10 @@ Implemented in this sprint:
 - Correlation families select among named, regime-labelled candidate laws using qualified
   envelopes and explicit priorities. Coverage gaps and equal-priority ambiguity are errors, while
   the same artifact role works unchanged in pipes, inventories, and other generic consumers.
+- Recursive hierarchical assemblies expose public ports and parameters while expanding into
+  ordinary registered components before compilation. The same contract supports one-machine,
+  section-level, or stage-level modeling without machine-specific solver logic. See
+  [Hierarchical component assemblies](docs/hierarchical-assemblies.md).
 - Fixed-composition material sources use sparse species-keyed, bounds-checked mass fractions
   (omitted mechanism species are zero) while leaving total flow available for the connected
   equipment graph to solve.

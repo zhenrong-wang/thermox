@@ -73,6 +73,7 @@ struct GraphResultEvaluator::Impl {
         const physics::ThermochemistryPackageRegistry*
             thermochemistry_registry,
         bool include_boundary_audit) {
+        const auto executable = flatten_model_document(document);
         variable_count = count;
         boundary_audit = include_boundary_audit;
         port_variables = compiled_ports;
@@ -91,10 +92,10 @@ struct GraphResultEvaluator::Impl {
                     variable.system_boundary_sign);
             }
         }
-        for (const auto& component : document.components) {
+        for (const auto& component : executable.components) {
             components.push_back({component.id, component.kind});
         }
-        for (const auto& medium : document.media) {
+        for (const auto& medium : executable.media) {
             auto package = property_registry.create(
                 medium.backend, medium.substance);
             if (!medium.package_version.empty() &&
@@ -106,7 +107,7 @@ struct GraphResultEvaluator::Impl {
             properties.emplace(medium.id, std::move(package));
         }
         if (thermochemistry_registry != nullptr) {
-            for (const auto& material : document.materials) {
+            for (const auto& material : executable.materials) {
                 if (!thermochemistry_registry->contains(
                         material.backend)) {
                     continue;

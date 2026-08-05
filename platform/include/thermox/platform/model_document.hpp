@@ -51,6 +51,31 @@ struct ConnectionDefinition {
     std::map<std::string, ScalarValue> parameters;
 };
 
+// Assemblies are declaration-time hierarchy. They own no equations; before
+// compilation they are deterministically expanded into ordinary components
+// and connections. A public port resolves to one child component or nested
+// assembly port, preserving the component registry as the physics boundary.
+struct AssemblyPortDefinition {
+    std::string name;
+    std::string endpoint;
+};
+
+struct AssemblyParameterDefinition {
+    std::string name;
+    // child.parameter, where child may be a component or nested assembly.
+    std::string target;
+};
+
+struct AssemblyDefinition {
+    std::string id;
+    std::string label;
+    std::vector<ComponentDefinition> components;
+    std::vector<ConnectionDefinition> connections;
+    std::vector<AssemblyDefinition> assemblies;
+    std::vector<AssemblyPortDefinition> ports;
+    std::vector<AssemblyParameterDefinition> parameters;
+};
+
 struct CaseDefinition {
     std::string id;
     std::string label;
@@ -98,9 +123,15 @@ struct ModelDocument {
     std::vector<MaterialDefinition> materials;
     std::vector<ComponentDefinition> components;
     std::vector<ConnectionDefinition> connections;
+    std::vector<AssemblyDefinition> assemblies;
     std::vector<CaseDefinition> cases;
     std::vector<CalibrationDefinition> calibrations;
 };
+
+// Returns the executable, hierarchy-free document used by steady and
+// transient compilers. Flattened child IDs use '/' as a stable hierarchy
+// separator (for example compressor/stage_01).
+ModelDocument flatten_model_document(const ModelDocument& document);
 
 ModelDocument load_model_document(const std::string& path);
 ModelDocument parse_model_document_text(const std::string& text);

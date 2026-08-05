@@ -1565,6 +1565,183 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
         "outside its declared bounds");
 }
 
+void test_hierarchical_assembly_composes_compressor_stages() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "segmented_compressor",
+    "media": [{
+      "id": "air", "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [],
+    "assemblies": [{
+      "id": "compressor",
+      "label": "Two-stage compressor assembly",
+      "ports": [
+        {"name": "inlet", "endpoint": "stage_01.inlet"},
+        {"name": "outlet", "endpoint": "stage_02.outlet"}
+      ],
+      "parameters": [{
+        "name": "high_stage_pressure_ratio",
+        "target": "stage_02.pressure_ratio"
+      }],
+      "components": [{
+        "id": "stage_01",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {"pressure_ratio": 3.0, "eta_is": 0.88},
+        "media": {"inlet": "air", "outlet": "air"}
+      }, {
+        "id": "stage_02",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "parameters": {"pressure_ratio": 4.0, "eta_is": 0.86},
+        "media": {"inlet": "air", "outlet": "air"}
+      }],
+      "connections": [{
+        "id": "stage_01_to_stage_02",
+        "kind": "fluid_link",
+        "from": "stage_01.outlet",
+        "to": "stage_02.inlet"
+      }]
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "parameter_overrides": {
+      "components.compressor.parameters.high_stage_pressure_ratio": 5.0
+    },
+    "fixed_values": {
+      "compressor.inlet.m_dot": {"value": 100.0, "unit": "kg/s"},
+      "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+      "compressor/stage_01.shaft.omega": 314.1592653589793,
+      "compressor/stage_02.shaft.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "compressor/stage_01.outlet.p": {"value": 300.0, "unit": "kPa"},
+      "compressor/stage_01.outlet.h": {"value": 400.0, "unit": "kJ/kg"},
+      "compressor/stage_01.shaft.W_dot": {"value": 10.0, "unit": "MW"},
+      "compressor/stage_02.outlet.p": {"value": 1.2, "unit": "MPa"},
+      "compressor/stage_02.outlet.h": {"value": 550.0, "unit": "kJ/kg"},
+      "compressor/stage_02.shaft.W_dot": {"value": 15.0, "unit": "MW"}
+    }
+  }]
+})json");
+
+    require(document.assemblies.size() == 1U &&
+                document.components.empty(),
+            "parser must preserve declaration-time hierarchy");
+    const auto flattened =
+        thermox::platform::flatten_model_document(document);
+    require(flattened.assemblies.empty() &&
+                flattened.components.size() == 2U &&
+                flattened.components.front().id ==
+                    "compressor/stage_01" &&
+                flattened.connections.front().id ==
+                    "compressor/stage_01_to_stage_02" &&
+                flattened.cases.front().fixed_values.contains(
+                    "compressor/stage_01.inlet.p") &&
+                flattened.cases.front().parameter_overrides.contains(
+                    "components.compressor/stage_02.parameters.pressure_ratio"),
+            "assembly expansion must namespace children and resolve "
+            "public case references deterministically");
+
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names,
+            "compressor/stage_02.outlet.p")),
+        15.0 * 101325.0, 1.0e-5,
+        "stage pressure ratios must compose through the ordinary graph");
+    const thermox::platform::GraphResultEvaluator evaluator(
+        document, graph,
+        thermox::physics::make_default_property_package_registry());
+    const auto graph_result = evaluator.evaluate(result.x);
+    require(
+        graph_result.components.size() == 2U &&
+            require_component_result(
+                graph_result, "compressor/stage_02").kind ==
+                "compressor.fluid.isentropic_efficiency",
+        "result evaluation must retain every expanded stage");
+
+    const auto nested =
+        thermox::platform::parse_topology_document_text(R"json({
+      "schema_version": "thermox.topology/v1",
+      "model": {
+        "id": "nested_assembly",
+        "media": [{
+          "id": "air", "backend": "ideal_gas_mixture",
+          "substance": "Air"
+        }],
+        "components": [{
+          "id": "source", "kind": "source.fluid.boundary",
+          "media": {"outlet": "air"}
+        }],
+        "assemblies": [{
+          "id": "machine",
+          "ports": [{"name": "inlet", "endpoint": "section.inlet"}],
+          "components": [],
+          "assemblies": [{
+            "id": "section",
+            "ports": [{"name": "inlet", "endpoint": "stage.inlet"}],
+            "components": [{
+              "id": "stage",
+              "kind": "compressor.fluid.isentropic_efficiency",
+              "parameters": {"pressure_ratio": 2.0, "eta_is": 0.9},
+              "media": {"inlet": "air", "outlet": "air"}
+            }],
+            "connections": []
+          }],
+          "connections": []
+        }],
+        "connections": [{
+          "id": "source_to_machine", "kind": "fluid_link",
+          "from": "source.outlet", "to": "machine.inlet"
+        }]
+      }
+    })json");
+    const auto nested_flat =
+        thermox::platform::flatten_model_document(nested);
+    require(
+        nested_flat.components.back().id ==
+                "machine/section/stage" &&
+            nested_flat.connections.front().to ==
+                "machine/section/stage.inlet",
+        "nested assembly ports must resolve recursively into ordinary "
+        "connections");
+
+    require_throws(
+        [&]() {
+            (void)thermox::platform::parse_topology_document_text(
+                R"json({
+                  "schema_version": "thermox.topology/v1",
+                  "model": {
+                    "id": "invalid_assembly", "media": [],
+                    "components": [],
+                    "assemblies": [{
+                      "id": "broken",
+                      "ports": [{"name": "inlet", "endpoint": "missing.inlet"}],
+                      "components": [{
+                        "id": "present", "kind": "source.fluid.boundary"
+                      }],
+                      "connections": []
+                    }],
+                    "connections": []
+                  }
+                })json");
+        },
+        "unknown child");
+}
+
 void test_map_driven_compressor_solves_bound_operating_point() {
     auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -7411,6 +7588,52 @@ void test_shaft_train_and_generator_close_power_balance() {
         "system boundary energy equals attributed conversion losses");
 }
 
+void test_transient_compiler_expands_assemblies() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "assembled_storage",
+    "media": [],
+    "components": [{"id": "heater", "kind": "source.heat.boundary"}],
+    "assemblies": [{
+      "id": "storage_module",
+      "ports": [{"name": "heat", "endpoint": "store.thermal"}],
+      "components": [{
+        "id": "store", "kind": "storage.thermal.lumped",
+        "parameters": {"thermal_capacity": {"value": 2.0, "unit": "MJ/K"}}
+      }],
+      "connections": []
+    }],
+    "connections": [{
+      "id": "charging_heat", "kind": "heat_link",
+      "from": "heater.outlet", "to": "storage_module.heat"
+    }]
+  },
+  "cases": [{
+    "id": "charge", "mode": "dynamic_transient",
+    "fixed_values": {
+      "heater.outlet.Q_dot": {"value": 1.0, "unit": "MW"}
+    },
+    "initial_guesses": {
+      "storage_module/store.temperature": {"value": 300.0, "unit": "K"}
+    }
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            "charge");
+    require(
+        std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(),
+            "storage_module/store.temperature") !=
+            graph.problem.variable_names.end(),
+        "transient compilation must expand assembly hierarchy");
+}
+
 void test_transient_compiler_rejects_fixed_differential_state() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -7468,6 +7691,7 @@ int main() {
         test_component_parameter_contracts_are_enforced();
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
+        test_hierarchical_assembly_composes_compressor_stages();
         test_map_driven_compressor_solves_bound_operating_point();
         test_map_continuation_recovers_out_of_domain_flow_guess();
         test_map_driven_turbine_solves_bound_operating_point();
@@ -7518,6 +7742,7 @@ int main() {
         test_bounded_pi_controller_prevents_integrator_windup();
         test_closed_loop_drum_feed_control_composes_platform_domains();
         test_shaft_train_and_generator_close_power_balance();
+        test_transient_compiler_expands_assemblies();
         test_transient_compiler_rejects_steady_only_components();
         test_transient_compiler_rejects_fixed_differential_state();
     } catch (const std::exception& ex) {

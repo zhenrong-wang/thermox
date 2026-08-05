@@ -586,10 +586,12 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
             }
 
             switch (operation.entity_type) {
-                case GraphEntityType::medium:
+                case GraphEntityType::medium: {
+                    const auto executable =
+                        platform::flatten_model_document(document);
                     if (std::any_of(
-                            document.components.begin(),
-                            document.components.end(),
+                            executable.components.begin(),
+                            executable.components.end(),
                             [&](const auto& component) {
                                 return std::any_of(
                                     component.medium_bindings
@@ -610,10 +612,13 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                         operation.entity_id,
                         "medium");
                     break;
-                case GraphEntityType::material:
+                }
+                case GraphEntityType::material: {
+                    const auto executable =
+                        platform::flatten_model_document(document);
                     if (std::any_of(
-                            document.components.begin(),
-                            document.components.end(),
+                            executable.components.begin(),
+                            executable.components.end(),
                             [&](const auto& component) {
                                 return std::any_of(
                                     component.material_bindings
@@ -634,6 +639,7 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
                         operation.entity_id,
                         "material");
                     break;
+                }
                 case GraphEntityType::component: {
                     const auto attached = std::count_if(
                         document.connections.begin(),

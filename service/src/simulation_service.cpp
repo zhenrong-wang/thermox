@@ -611,16 +611,18 @@ void set_layer_state(
 void initialize_entity_readiness(
     ReadinessSummary& readiness,
     const platform::ModelDocument& document) {
+    const auto executable =
+        platform::flatten_model_document(document);
     readiness.entities.clear();
     readiness.entities.push_back({
         "system", document.model_id,
         ReadinessState::not_evaluated, {}});
-    for (const auto& component : document.components) {
+    for (const auto& component : executable.components) {
         readiness.entities.push_back({
             "component", component.id,
             ReadinessState::not_evaluated, {}});
     }
-    for (const auto& connection : document.connections) {
+    for (const auto& connection : executable.connections) {
         readiness.entities.push_back({
             "connection", connection.id,
             ReadinessState::not_evaluated, {}});
@@ -637,6 +639,8 @@ void attribute_diagnostic(
     Diagnostic& diagnostic,
     ReadinessSummary& readiness,
     const platform::ModelDocument& document) {
+    const auto executable =
+        platform::flatten_model_document(document);
     diagnostic.stage = readiness_layer_for(diagnostic.code);
     diagnostic.component_id =
         quoted_value_after(diagnostic.message, "component '");
@@ -653,7 +657,7 @@ void attribute_diagnostic(
     }
     if (diagnostic.code == "unknown_component_type" &&
         diagnostic.component_id.empty()) {
-        for (const auto& component : document.components) {
+        for (const auto& component : executable.components) {
             if (diagnostic.message.find(component.kind) !=
                 std::string::npos) {
                 diagnostic.component_id = component.id;
@@ -662,24 +666,26 @@ void attribute_diagnostic(
         }
     }
     const auto component = std::find_if(
-        document.components.begin(), document.components.end(),
+        executable.components.begin(), executable.components.end(),
         [&](const platform::ComponentDefinition& candidate) {
             return candidate.id == diagnostic.component_id;
         });
-    if (component != document.components.end()) {
-        diagnostic.json_path = "/model/components/" +
-            std::to_string(std::distance(
-                document.components.begin(), component));
+    if (component != executable.components.end()) {
+        diagnostic.json_path = document.assemblies.empty()
+            ? "/model/components/" + std::to_string(std::distance(
+                  executable.components.begin(), component))
+            : "/model/assemblies";
     }
     const auto connection = std::find_if(
-        document.connections.begin(), document.connections.end(),
+        executable.connections.begin(), executable.connections.end(),
         [&](const platform::ConnectionDefinition& candidate) {
             return candidate.id == diagnostic.connection_id;
         });
-    if (connection != document.connections.end()) {
-        diagnostic.json_path = "/model/connections/" +
-            std::to_string(std::distance(
-                document.connections.begin(), connection));
+    if (connection != executable.connections.end()) {
+        diagnostic.json_path = document.assemblies.empty()
+            ? "/model/connections/" + std::to_string(std::distance(
+                  executable.connections.begin(), connection))
+            : "/model/assemblies";
     }
     for (auto& entity : readiness.entities) {
         const bool matches =
@@ -856,6 +862,8 @@ ExecutionMetadata execution_metadata(
     const std::string& catalog_fingerprint,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties) {
+    const auto executable =
+        platform::flatten_model_document(document);
     ExecutionMetadata metadata;
     metadata.command_schema_version = command_schema;
     metadata.platform_version = THERMOX_PLATFORM_VERSION;
@@ -863,7 +871,7 @@ ExecutionMetadata execution_metadata(
     metadata.solver = std::move(solver);
     metadata.catalog_fingerprint = catalog_fingerprint;
     metadata.model = model_metadata(document, case_id);
-    for (const auto& component : document.components) {
+    for (const auto& component : executable.components) {
         metadata.components.push_back({
             component.id,
             component.kind,

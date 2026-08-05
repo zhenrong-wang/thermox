@@ -482,6 +482,125 @@ void graph_result_json(
 
 namespace detail {
 
+namespace {
+
+void assembly_component_json(
+    std::ostream& out,
+    const platform::ComponentDefinition& component,
+    const std::string& indent) {
+    out << indent << "{\n" << indent << "  \"id\": ";
+    json_string(out, component.id);
+    if (!component.label.empty()) {
+        out << ",\n" << indent << "  \"label\": ";
+        json_string(out, component.label);
+    }
+    out << ",\n" << indent << "  \"kind\": ";
+    json_string(out, component.kind);
+    if (!component.version.empty()) {
+        out << ",\n" << indent << "  \"version\": ";
+        json_string(out, component.version);
+    }
+    const auto bindings = [&](const char* key, const auto& values) {
+        if (values.empty()) return;
+        out << ",\n" << indent << "  \"" << key << "\": {";
+        std::size_t index = 0;
+        for (const auto& [name, value] : values) {
+            if (index++ != 0U) out << ", ";
+            json_string(out, name);
+            out << ": ";
+            json_string(out, value);
+        }
+        out << "}";
+    };
+    bindings("media", component.medium_bindings);
+    bindings("materials", component.material_bindings);
+    bindings("artifacts", component.artifact_bindings);
+    if (!component.parameters.empty()) {
+        out << ",\n" << indent << "  \"parameters\": ";
+        scalar_map(out, component.parameters, indent + "    ");
+    }
+    out << "\n" << indent << "}";
+}
+
+void assembly_connection_json(
+    std::ostream& out,
+    const platform::ConnectionDefinition& connection,
+    const std::string& indent) {
+    out << indent << "{\"id\": ";
+    json_string(out, connection.id);
+    out << ", \"from\": ";
+    json_string(out, connection.from);
+    out << ", \"to\": ";
+    json_string(out, connection.to);
+    out << ", \"kind\": ";
+    json_string(out, connection.kind);
+    if (!connection.contract_version.empty()) {
+        out << ", \"contract_version\": ";
+        json_string(out, connection.contract_version);
+    }
+    if (!connection.parameters.empty()) {
+        out << ", \"parameters\": ";
+        scalar_map(out, connection.parameters, indent + "  ");
+    }
+    out << "}";
+}
+
+void assembly_json(
+    std::ostream& out,
+    const platform::AssemblyDefinition& assembly,
+    const std::string& indent) {
+    const auto child = indent + "  ";
+    const auto item = child + "  ";
+    out << indent << "{\n" << child << "\"id\": ";
+    json_string(out, assembly.id);
+    if (!assembly.label.empty()) {
+        out << ",\n" << child << "\"label\": ";
+        json_string(out, assembly.label);
+    }
+    out << ",\n" << child << "\"ports\": [";
+    if (!assembly.ports.empty()) out << "\n";
+    for (std::size_t index = 0; index < assembly.ports.size(); ++index) {
+        out << item << "{\"name\": ";
+        json_string(out, assembly.ports[index].name);
+        out << ", \"endpoint\": ";
+        json_string(out, assembly.ports[index].endpoint);
+        out << "}" << (index + 1U == assembly.ports.size() ? "\n" : ",\n");
+    }
+    out << child << "],\n" << child << "\"parameters\": [";
+    if (!assembly.parameters.empty()) out << "\n";
+    for (std::size_t index = 0;
+         index < assembly.parameters.size(); ++index) {
+        out << item << "{\"name\": ";
+        json_string(out, assembly.parameters[index].name);
+        out << ", \"target\": ";
+        json_string(out, assembly.parameters[index].target);
+        out << "}"
+            << (index + 1U == assembly.parameters.size()
+                    ? "\n" : ",\n");
+    }
+    out << child << "],\n" << child << "\"components\": [";
+    if (!assembly.components.empty()) out << "\n";
+    for (std::size_t index = 0; index < assembly.components.size(); ++index) {
+        assembly_component_json(out, assembly.components[index], item);
+        out << (index + 1U == assembly.components.size() ? "\n" : ",\n");
+    }
+    out << child << "],\n" << child << "\"assemblies\": [";
+    if (!assembly.assemblies.empty()) out << "\n";
+    for (std::size_t index = 0; index < assembly.assemblies.size(); ++index) {
+        assembly_json(out, assembly.assemblies[index], item);
+        out << (index + 1U == assembly.assemblies.size() ? "\n" : ",\n");
+    }
+    out << child << "],\n" << child << "\"connections\": [";
+    if (!assembly.connections.empty()) out << "\n";
+    for (std::size_t index = 0; index < assembly.connections.size(); ++index) {
+        assembly_connection_json(out, assembly.connections[index], item);
+        out << (index + 1U == assembly.connections.size() ? "\n" : ",\n");
+    }
+    out << child << "]\n" << indent << "}";
+}
+
+}  // namespace
+
 void serialize_topology(
     std::ostringstream& out,
     const platform::ModelDocument& document,
@@ -600,6 +719,12 @@ void serialize_topology(
         }
         out << "\n      }"
             << (i + 1 == document.components.size() ? "\n" : ",\n");
+    }
+    out << "    ],\n    \"assemblies\": [";
+    if (!document.assemblies.empty()) out << "\n";
+    for (std::size_t i = 0; i < document.assemblies.size(); ++i) {
+        assembly_json(out, document.assemblies[i], "      ");
+        out << (i + 1U == document.assemblies.size() ? "\n" : ",\n");
     }
     out << "    ],\n    \"connections\": [";
     if (!document.connections.empty()) out << "\n";

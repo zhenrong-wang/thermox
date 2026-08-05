@@ -694,8 +694,25 @@ export interface TopologyDocument {
     media: MediumDefinition[]
     materials?: MaterialDefinition[]
     components: ComponentDefinition[]
+    assemblies?: AssemblyDefinition[]
     connections: ConnectionDefinition[]
   }
+}
+
+export interface AssemblyDefinition {
+  id: string
+  label?: string
+  ports: Array<{
+    name: string
+    endpoint: string
+  }>
+  parameters?: Array<{
+    name: string
+    target: string
+  }>
+  components: ComponentDefinition[]
+  assemblies?: AssemblyDefinition[]
+  connections: ConnectionDefinition[]
 }
 
 export interface MediumDefinition {

@@ -518,24 +518,6 @@ void require_unique_id(const std::string& id, std::set<std::string>& ids, const 
     }
 }
 
-std::string endpoint_component(const std::string& endpoint) {
-    const std::size_t dot = endpoint.find('.');
-    if (dot == std::string::npos || dot == 0 || dot + 1 >= endpoint.size() ||
-        endpoint.find('.', dot + 1) != std::string::npos) {
-        throw std::invalid_argument("connection endpoint must use component.port: " + endpoint);
-    }
-    return endpoint.substr(0, dot);
-}
-
-std::string endpoint_port(const std::string& endpoint) {
-    const std::size_t dot = endpoint.find('.');
-    if (dot == std::string::npos || dot == 0 || dot + 1 >= endpoint.size() ||
-        endpoint.find('.', dot + 1) != std::string::npos) {
-        throw std::invalid_argument("connection endpoint must use component.port: " + endpoint);
-    }
-    return endpoint.substr(dot + 1);
-}
-
 MediumDefinition parse_medium(const JsonValue& value) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("media entries must be objects");
@@ -681,6 +663,66 @@ ConnectionDefinition parse_connection(const JsonValue& value) {
         connection.parameters = parse_scalar_map(*parameters, "connection '" + connection.id + "'.parameters", true);
     }
     return connection;
+}
+
+AssemblyDefinition parse_assembly(
+    const JsonValue& value,
+    const std::set<std::string>& medium_ids,
+    const std::set<std::string>& material_ids) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "assemblies entries must be objects");
+    }
+    AssemblyDefinition assembly;
+    assembly.id = require_string(value, "id");
+    assembly.label = optional_string(value, "label");
+    if (const auto* components =
+            optional_array_member(value, "components")) {
+        for (const auto& component : components->array) {
+            assembly.components.push_back(parse_component(
+                component, medium_ids, material_ids));
+        }
+    }
+    if (const auto* connections =
+            optional_array_member(value, "connections")) {
+        for (const auto& connection : connections->array) {
+            assembly.connections.push_back(
+                parse_connection(connection));
+        }
+    }
+    if (const auto* assemblies =
+            optional_array_member(value, "assemblies")) {
+        for (const auto& nested : assemblies->array) {
+            assembly.assemblies.push_back(parse_assembly(
+                nested, medium_ids, material_ids));
+        }
+    }
+    if (const auto* ports = optional_array_member(value, "ports")) {
+        for (const auto& port : ports->array) {
+            if (port.type != JsonValue::Type::Object) {
+                throw std::invalid_argument(
+                    "assembly ports entries must be objects");
+            }
+            assembly.ports.push_back({
+                require_string(port, "name"),
+                require_string(port, "endpoint"),
+            });
+        }
+    }
+    if (const auto* parameters =
+            optional_array_member(value, "parameters")) {
+        for (const auto& parameter : parameters->array) {
+            if (parameter.type != JsonValue::Type::Object) {
+                throw std::invalid_argument(
+                    "assembly parameters entries must be objects");
+            }
+            assembly.parameters.push_back({
+                require_string(parameter, "name"),
+                require_string(parameter, "target"),
+            });
+        }
+    }
+    return assembly;
 }
 
 CaseDefinition parse_case(const JsonValue& value) {
@@ -1048,33 +1090,6 @@ void validate_calibrations(ModelDocument& document) {
     }
 }
 
-void require_endpoint_component(
-    const ModelDocument& document,
-    const std::string& endpoint) {
-    const std::string component_id = endpoint_component(endpoint);
-    (void)endpoint_port(endpoint);
-    for (const ComponentDefinition& component : document.components) {
-        if (component.id == component_id) {
-            return;
-        }
-    }
-    throw std::invalid_argument("unknown component in connection endpoint: " + endpoint);
-}
-
-void validate_connections(const ModelDocument& document) {
-    std::set<std::string> connection_ids;
-    for (const ConnectionDefinition& connection : document.connections) {
-        require_unique_id(connection.id, connection_ids, "connection");
-        require_endpoint_component(document, connection.from);
-        require_endpoint_component(document, connection.to);
-        if (connection.from == connection.to) {
-            throw std::invalid_argument(
-                "connection '" + connection.id +
-                "' cannot connect a port to itself");
-        }
-    }
-}
-
 ModelDocument parse_topology(
     const JsonValue& object,
     const std::string& schema_version) {
@@ -1122,8 +1137,18 @@ ModelDocument parse_topology(
     for (const JsonValue& connection_value : require_array_member(model, "connections").array) {
         document.connections.push_back(parse_connection(connection_value));
     }
+    if (const auto* assemblies =
+            optional_array_member(model, "assemblies")) {
+        for (const auto& assembly : assemblies->array) {
+            document.assemblies.push_back(parse_assembly(
+                assembly, medium_ids, material_ids));
+        }
+    }
 
-    validate_connections(document);
+    // Expansion is also the hierarchy validator: it checks child namespace,
+    // public ports, nested endpoints, and connection identity without
+    // discarding the declaration-time assembly structure.
+    (void)flatten_model_document(document);
     return document;
 }
 
@@ -1158,7 +1183,8 @@ ModelDocument parse_model_document_root(const JsonValue& root) {
         }
     }
 
-    validate_calibrations(document);
+    auto executable = flatten_model_document(document);
+    validate_calibrations(executable);
     return document;
 }
 

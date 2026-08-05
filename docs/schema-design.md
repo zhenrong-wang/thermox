@@ -222,6 +222,12 @@ joining, or distribution uses explicit registered mixer, splitter, or junction c
 contracts only equate the canonical variables of their domain; pressure loss, heat transfer,
 mixing, and other physical behavior belongs to components.
 
+Topology documents may also declare recursive `assemblies`. Assemblies expose selected child ports
+and parameters as a meta-component interface, but own no equations. The compiler expands them into
+stable `/`-namespaced component and connection IDs before applying these connector, component,
+property, artifact, case, and degree-of-freedom rules. See
+[Hierarchical component assemblies](hierarchical-assemblies.md).
+
 ## 7. Case document
 
 ```yaml

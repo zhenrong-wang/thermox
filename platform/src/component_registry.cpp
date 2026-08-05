@@ -1097,7 +1097,7 @@ CompiledModelGraph compile_model_graph(
         physics::ThermochemistryPackageRegistry{}, case_id);
 }
 
-CompiledModelGraph compile_model_graph(
+CompiledModelGraph compile_flat_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
@@ -1652,6 +1652,20 @@ CompiledModelGraph compile_model_graph(
     return graph;
 }
 
+CompiledModelGraph compile_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const std::string& case_id) {
+    return compile_flat_model_graph(
+        flatten_model_document(document), registry,
+        property_registry, artifact_registry,
+        thermochemistry_registry, case_id);
+}
+
 CompiledTransientModelGraph compile_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
@@ -1682,7 +1696,7 @@ CompiledTransientModelGraph compile_transient_model_graph(
         physics::ThermochemistryPackageRegistry{}, case_id);
 }
 
-CompiledTransientModelGraph compile_transient_model_graph(
+CompiledTransientModelGraph compile_flat_transient_model_graph(
     const ModelDocument& document,
     const ComponentRegistry& registry,
     const physics::PropertyPackageRegistry& property_registry,
@@ -1946,6 +1960,20 @@ CompiledTransientModelGraph compile_transient_model_graph(
     validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     return graph;
+}
+
+CompiledTransientModelGraph compile_transient_model_graph(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const std::string& case_id) {
+    return compile_flat_transient_model_graph(
+        flatten_model_document(document), registry,
+        property_registry, artifact_registry,
+        thermochemistry_registry, case_id);
 }
 
 }  // namespace thermox::platform

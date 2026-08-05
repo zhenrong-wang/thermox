@@ -2,6 +2,7 @@
 #include "thermox/service/projects.hpp"
 #include "thermox/service/simulation_runtime.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/platform/model_document.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -129,6 +130,63 @@ void test_model_revisions_are_immutable_and_scoped() {
     require(
         hidden_parent,
         "a parent revision must belong to the same project");
+}
+
+void test_assembly_hierarchy_survives_model_revision_persistence() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project = service.create_project({
+        team_a, "Assembly persistence", {},
+    });
+    const auto revision = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        R"json({
+          "schema_version": "thermox.topology/v1",
+          "model": {
+            "id": "stage_assembly",
+            "media": [{
+              "id": "air", "backend": "ideal_gas_mixture",
+              "substance": "Air"
+            }],
+            "components": [],
+            "assemblies": [{
+              "id": "compressor",
+              "ports": [
+                {"name": "inlet", "endpoint": "stage.inlet"},
+                {"name": "outlet", "endpoint": "stage.outlet"}
+              ],
+              "parameters": [{
+                "name": "pressure_ratio",
+                "target": "stage.pressure_ratio"
+              }],
+              "components": [{
+                "id": "stage",
+                "kind": "compressor.fluid.isentropic_efficiency",
+                "parameters": {"pressure_ratio": 2.0, "eta_is": 0.9},
+                "media": {"inlet": "air", "outlet": "air"}
+              }],
+              "connections": []
+            }],
+            "connections": []
+          }
+        })json",
+    });
+    require(
+        revision.canonical_model_json.find("\"assemblies\"") !=
+            std::string::npos,
+        "canonical topology must retain assembly hierarchy");
+    const auto reparsed =
+        thermox::platform::parse_topology_document_text(
+            revision.canonical_model_json);
+    require(
+        reparsed.assemblies.size() == 1U &&
+            reparsed.assemblies.front().components.size() == 1U &&
+            reparsed.assemblies.front().parameters.size() == 1U &&
+            thermox::platform::flatten_model_document(reparsed)
+                    .components.front().id == "compressor/stage",
+        "persisted assembly must round-trip and expand deterministically");
 }
 
 void test_invalid_input_is_rejected_before_persistence() {
@@ -1559,6 +1617,7 @@ int main() {
     try {
         test_projects_are_team_scoped_logical_partitions();
         test_model_revisions_are_immutable_and_scoped();
+        test_assembly_hierarchy_survives_model_revision_persistence();
         test_invalid_input_is_rejected_before_persistence();
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
