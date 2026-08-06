@@ -1705,6 +1705,40 @@ CatalogResponse SimulationService::get_catalog(
         return response;
     }
     response.fingerprint = runtime->impl_->fingerprint;
+    for (const auto& descriptor :
+         runtime->impl_->correlation_templates.descriptors()) {
+        CatalogCorrelationTemplateType value;
+        value.id = descriptor.id;
+        value.version = descriptor.version;
+        value.display_name = descriptor.display_name;
+        value.category = descriptor.category;
+        value.reference = descriptor.reference;
+        value.expression = descriptor.expression;
+        value.regime = descriptor.regime;
+        for (const auto& input : descriptor.inputs) {
+            value.inputs.push_back({input.name, input.dimension});
+        }
+        value.output = {
+            descriptor.output.name, descriptor.output.dimension};
+        for (const auto& coefficient : descriptor.coefficients) {
+            value.coefficients.push_back({
+                coefficient.name, coefficient.dimension,
+                coefficient.default_value.has_value(),
+                coefficient.default_value.value_or(0.0),
+                coefficient.lower_bound, coefficient.upper_bound,
+                coefficient.lower_inclusive,
+                coefficient.upper_inclusive});
+        }
+        for (const auto& range : descriptor.applicability) {
+            value.applicability.push_back({
+                range.input, range.minimum.has_value(),
+                range.minimum.value_or(0.0),
+                range.maximum.has_value(),
+                range.maximum.value_or(0.0),
+                range.minimum_inclusive, range.maximum_inclusive});
+        }
+        response.correlation_templates.push_back(std::move(value));
+    }
     for (const auto& extension :
          runtime->impl_->components
              .runtime_extension_descriptors()) {

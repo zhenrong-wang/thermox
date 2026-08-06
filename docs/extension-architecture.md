@@ -28,9 +28,10 @@ An installed Thermox SDK provides these CMake targets:
 
 Native extensions normally include `thermox/service/native_extension_sdk.hpp` and link
 `thermox::service_native`. `NativeExtensionPackage` gives each source-level package an ID, version,
-and optional registration callbacks for components/connectors, properties, units, performance
-maps, and thermochemistry. `apply_native_extension` validates the package envelope and applies
-its callbacks before `make_simulation_runtime` freezes the composed registries. A successfully
+and optional registration callbacks for components/connectors, properties, engineering artifacts,
+correlation templates, units, and thermochemistry. `apply_native_extension` validates the package
+envelope and applies its callbacks before `make_simulation_runtime` freezes the composed
+registries. A successfully
 applied package retains its ID and version in catalog discovery; duplicate package IDs are
 rejected.
 
@@ -68,11 +69,13 @@ the component's entire target and continuation contract.
 
 ## Runtime identity
 
-Connector and unit descriptors plus native-extension package identities participate in the
-runtime catalog fingerprint alongside components, properties, thermochemistry packages, and
+Connector, correlation-template, and unit descriptors plus native-extension package identities
+participate in the runtime catalog fingerprint alongside components, properties, thermochemistry
+packages, and
 deployment-default artifacts. Catalog discovery and execution provenance enumerate the same
 registered contracts. A change to an extension version, connector variable, unit transform or
-alias, scale, dimension, connection kind, or contract version therefore changes runtime identity.
+alias, correlation equation or bounds, scale, dimension, connection kind, or contract version
+therefore changes runtime identity.
 
 ## Conformance path
 
@@ -84,6 +87,7 @@ containing:
 - a custom `thermal_bus` connector domain;
 - a custom component with ports in that domain;
 - a custom property backend;
+- a custom correlation template;
 - a custom unit dimension and accepted alias;
 - a connected graph using the injected link kind and contract;
 - fixed case values expressed with built-in and extension-defined units.

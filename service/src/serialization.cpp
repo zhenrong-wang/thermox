@@ -1222,6 +1222,84 @@ std::string serialize_catalog_response_json(
         }
         out << "]}";
     }
+    out << "],\n  \"correlation_templates\": [";
+    for (std::size_t i = 0;
+         i < response.correlation_templates.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& descriptor = response.correlation_templates[i];
+        out << "{\"id\": ";
+        json_string(out, descriptor.id);
+        out << ", \"version\": ";
+        json_string(out, descriptor.version);
+        out << ", \"display_name\": ";
+        json_string(out, descriptor.display_name);
+        out << ", \"category\": ";
+        json_string(out, descriptor.category);
+        out << ", \"reference\": ";
+        json_string(out, descriptor.reference);
+        out << ", \"inputs\": [";
+        for (std::size_t j = 0; j < descriptor.inputs.size(); ++j) {
+            if (j != 0) out << ", ";
+            out << "{\"name\": ";
+            json_string(out, descriptor.inputs[j].name);
+            out << ", \"dimension\": ";
+            json_string(out, descriptor.inputs[j].dimension);
+            out << '}';
+        }
+        out << "], \"output\": {\"name\": ";
+        json_string(out, descriptor.output.name);
+        out << ", \"dimension\": ";
+        json_string(out, descriptor.output.dimension);
+        out << "}, \"coefficients\": [";
+        for (std::size_t j = 0;
+             j < descriptor.coefficients.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& coefficient = descriptor.coefficients[j];
+            out << "{\"name\": ";
+            json_string(out, coefficient.name);
+            out << ", \"dimension\": ";
+            json_string(out, coefficient.dimension);
+            out << ", \"has_default\": "
+                << (coefficient.has_default ? "true" : "false");
+            out << ", \"default_value_si\": ";
+            json_number(out, coefficient.default_value_si);
+            out << ", \"lower_bound\": ";
+            json_number(out, coefficient.lower_bound);
+            out << ", \"upper_bound\": ";
+            json_number(out, coefficient.upper_bound);
+            out << ", \"lower_inclusive\": "
+                << (coefficient.lower_inclusive ? "true" : "false");
+            out << ", \"upper_inclusive\": "
+                << (coefficient.upper_inclusive ? "true" : "false")
+                << '}';
+        }
+        out << "], \"expression\": ";
+        json_string(out, descriptor.expression);
+        out << ", \"regime\": ";
+        json_string(out, descriptor.regime);
+        out << ", \"applicability\": [";
+        for (std::size_t j = 0;
+             j < descriptor.applicability.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& range = descriptor.applicability[j];
+            out << "{\"input\": ";
+            json_string(out, range.input);
+            out << ", \"has_minimum\": "
+                << (range.has_minimum ? "true" : "false");
+            out << ", \"minimum_si\": ";
+            json_number(out, range.minimum_si);
+            out << ", \"has_maximum\": "
+                << (range.has_maximum ? "true" : "false");
+            out << ", \"maximum_si\": ";
+            json_number(out, range.maximum_si);
+            out << ", \"minimum_inclusive\": "
+                << (range.minimum_inclusive ? "true" : "false");
+            out << ", \"maximum_inclusive\": "
+                << (range.maximum_inclusive ? "true" : "false")
+                << '}';
+        }
+        out << "]}";
+    }
     out << "]\n}\n";
     return out.str();
 }

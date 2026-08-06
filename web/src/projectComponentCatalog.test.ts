@@ -110,7 +110,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v5',
+  schema_version: 'thermox.catalog/v6',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],
@@ -118,6 +118,7 @@ const catalog: Catalog = {
   property_backends: [],
   thermochemistry_backends: [],
   connector_domains: [],
+  correlation_templates: [],
 }
 
 describe('project component catalog', () => {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/unit_registry.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/physics/thermochemistry.hpp"
@@ -21,6 +22,8 @@ struct NativeExtensionPackage {
         register_properties;
     std::function<void(platform::EngineeringArtifactRegistry&)>
         register_engineering_artifacts;
+    std::function<void(platform::CorrelationTemplateRegistry&)>
+        register_correlation_templates;
     std::function<void(
         physics::ThermochemistryPackageRegistry&)>
         register_thermochemistry;
@@ -33,6 +36,7 @@ void apply_native_extension(
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
     platform::EngineeringArtifactRegistry& engineering_artifacts,
+    platform::CorrelationTemplateRegistry& correlation_templates,
     physics::ThermochemistryPackageRegistry& thermochemistry,
     platform::UnitRegistry& units);
 
@@ -42,6 +46,8 @@ std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::EngineeringArtifactRegistry engineering_artifacts = {},
+    platform::CorrelationTemplateRegistry correlation_templates =
+        platform::make_default_correlation_template_registry(),
     physics::ThermochemistryPackageRegistry thermochemistry = {},
     platform::UnitRegistry units =
         platform::make_default_unit_registry());

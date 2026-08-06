@@ -66,6 +66,94 @@ thermox::platform::CorrelationArtifact void_fraction_correlation() {
     };
 }
 
+thermox::platform::CorrelationArtifact
+zuber_findlay_void_fraction_correlation() {
+    const auto templates = thermox::platform::
+        make_default_correlation_template_registry();
+    return thermox::platform::instantiate_correlation_template(
+        templates.require_template(
+            "zuber_findlay_kinematic_void_fraction"),
+        {"zuber-findlay-void-fraction", "test-1",
+         std::string(64, '9')},
+        {{"distribution_parameter", 1.2},
+         {"drift_velocity", 0.5}});
+}
+
+void test_packaged_zuber_findlay_template_has_physical_limits() {
+    const auto templates = thermox::platform::
+        make_default_correlation_template_registry();
+    const auto& descriptor = templates.require_template(
+        "zuber_findlay_kinematic_void_fraction");
+    require(
+        descriptor.reference.find("10.1115/1.3689137") !=
+            std::string::npos,
+        "packaged drift-flux template retains its primary reference");
+
+    const auto homogeneous = thermox::platform::
+        instantiate_correlation_template(
+            descriptor,
+            {"zf-homogeneous", "test-1", std::string(64, '1')},
+            {{"distribution_parameter", 1.0},
+             {"drift_velocity", 0.0}});
+    const std::map<std::string, double> inputs{
+        {"vapor_quality", 0.2},
+        {"liquid_density", 900.0},
+        {"vapor_density", 5.0},
+        {"mass_flux", 100.0},
+    };
+    const auto homogeneous_result = homogeneous.evaluate(inputs);
+    require(homogeneous_result.error.empty(),
+            homogeneous_result.error);
+    const double expected =
+        (0.2 / 5.0) / (0.2 / 5.0 + 0.8 / 900.0);
+    require_close(homogeneous_result.value, expected, 1.0e-12,
+                  "zero-drift uniform-distribution limit");
+
+    const auto drifting = thermox::platform::
+        instantiate_correlation_template(
+            descriptor,
+            {"zf-drifting", "test-1", std::string(64, '2')},
+            {{"distribution_parameter", 1.2},
+             {"drift_velocity", 0.5}});
+    const auto drifting_result = drifting.evaluate(inputs);
+    require(drifting_result.error.empty(), drifting_result.error);
+    require(
+        drifting_result.value > 0.0 &&
+            drifting_result.value < homogeneous_result.value &&
+            drifting_result.input_derivatives.at("vapor_quality") > 0.0,
+        "positive distribution and drift terms produce a physical, "
+        "quality-responsive void fraction");
+
+    bool missing_coefficient_rejected = false;
+    try {
+        (void)thermox::platform::instantiate_correlation_template(
+            descriptor,
+            {"zf-invalid", "test-1", std::string(64, '3')},
+            {{"distribution_parameter", 1.2}});
+    } catch (const std::invalid_argument& error) {
+        missing_coefficient_rejected =
+            std::string(error.what()).find("drift_velocity") !=
+            std::string::npos;
+    }
+    require(missing_coefficient_rejected,
+            "packaged template must not invent missing empirical coefficients");
+
+    bool nonphysical_coefficient_rejected = false;
+    try {
+        (void)thermox::platform::instantiate_correlation_template(
+            descriptor,
+            {"zf-invalid", "test-2", std::string(64, '4')},
+            {{"distribution_parameter", 0.0},
+             {"drift_velocity", 0.5}});
+    } catch (const std::invalid_argument& error) {
+        nonphysical_coefficient_rejected =
+            std::string(error.what()).find(
+                "distribution_parameter") != std::string::npos;
+    }
+    require(nonphysical_coefficient_rejected,
+            "packaged template must enforce coefficient bounds");
+}
+
 void test_correlation_evaluates_with_analytic_derivatives() {
     auto artifact = bend_correlation();
     artifact.validate();
@@ -304,7 +392,7 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
         "elevation_change": {"value": 5.0, "unit": "m"}
       },
       "artifacts": {
-        "void_fraction_correlation": "void-fraction-correlation"
+        "void_fraction_correlation": "zuber-findlay-void-fraction"
       },
       "media": {"inlet": "water", "outlet": "water"}
     }],
@@ -329,7 +417,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
   }]
 })json");
     thermox::platform::EngineeringArtifactRegistry artifacts;
-    artifacts.register_artifact(void_fraction_correlation());
+    artifacts.register_artifact(
+        zuber_findlay_void_fraction_correlation());
     const auto properties =
         thermox::physics::make_default_property_package_registry();
     const auto registry =
@@ -356,10 +445,13 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     const auto saturation = water->saturation_p(mean_pressure);
     require(state.ok() && saturation.ok(),
             "correlated-riser properties must evaluate");
-    const auto alpha = void_fraction_correlation().evaluate({
+    const double area = std::numbers::pi * 0.1 * 0.1 / 4.0;
+    const auto alpha =
+        zuber_findlay_void_fraction_correlation().evaluate({
         {"vapor_quality", state.state.vapor_quality},
         {"liquid_density", saturation.liquid.density_kg_m3},
         {"vapor_density", saturation.vapor.density_kg_m3},
+        {"mass_flux", 0.2 / area},
     });
     require(alpha.error.empty() && alpha.value > 0.0 &&
                 alpha.value < 1.0,
@@ -368,7 +460,6 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
         alpha.value * saturation.vapor.density_kg_m3 +
         (1.0 - alpha.value) *
             saturation.liquid.density_kg_m3;
-    const double area = std::numbers::pi * 0.1 * 0.1 / 4.0;
     const double expected_drop =
         2.0 * 0.2 * 0.2 /
             (2.0 * density * area * area) +
@@ -584,6 +675,7 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
 int main() {
     try {
         test_correlation_evaluates_with_analytic_derivatives();
+        test_packaged_zuber_findlay_template_has_physical_limits();
         test_correlation_contract_rejects_undeclared_symbols();
         test_correlation_enforces_qualified_operating_envelope();
         test_correlation_family_selects_deterministically();

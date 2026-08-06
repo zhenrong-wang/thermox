@@ -3,6 +3,7 @@
 #include "thermox/platform/engineering_artifact.hpp"
 #include "thermox/platform/safe_expression.hpp"
 
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -50,6 +51,48 @@ struct CorrelationCandidate {
     std::vector<CorrelationApplicabilityRange> applicability;
 };
 
+struct CorrelationCoefficientDescriptor {
+    std::string name;
+    std::string dimension{"dimensionless"};
+    std::optional<double> default_value;
+    double lower_bound{-std::numeric_limits<double>::infinity()};
+    double upper_bound{std::numeric_limits<double>::infinity()};
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
+struct CorrelationTemplateDescriptor {
+    std::string id;
+    std::string version;
+    std::string display_name;
+    std::string category;
+    std::string reference;
+    std::vector<CorrelationVariable> inputs;
+    CorrelationVariable output;
+    std::vector<CorrelationCoefficientDescriptor> coefficients;
+    std::string expression;
+    std::string regime;
+    std::vector<CorrelationApplicabilityRange> applicability;
+};
+
+struct CorrelationArtifactIdentity {
+    std::string id;
+    std::string revision;
+    std::string checksum_sha256;
+};
+
+class CorrelationTemplateRegistry {
+public:
+    void register_template(CorrelationTemplateDescriptor descriptor);
+    [[nodiscard]] const CorrelationTemplateDescriptor& require_template(
+        const std::string& id) const;
+    [[nodiscard]] std::vector<CorrelationTemplateDescriptor>
+        descriptors() const;
+
+private:
+    std::map<std::string, CorrelationTemplateDescriptor> templates_;
+};
+
 class CorrelationArtifact final : public EngineeringArtifact {
 public:
     CorrelationArtifact(
@@ -84,5 +127,15 @@ private:
     std::vector<CorrelationCandidate> candidates_;
     std::vector<SafeExpression> compiled_candidates_;
 };
+
+[[nodiscard]] CorrelationTemplateRegistry
+make_default_correlation_template_registry();
+
+[[nodiscard]] CorrelationArtifact instantiate_correlation_template(
+    const CorrelationTemplateDescriptor& descriptor,
+    CorrelationArtifactIdentity identity,
+    std::map<std::string, double> coefficients,
+    std::string candidate_id = "default",
+    int priority = 0);
 
 }  // namespace thermox::platform

@@ -62,7 +62,202 @@ CorrelationApplicabilityAssessment assess_ranges(
     return result;
 }
 
+void validate_template_descriptor(
+    const CorrelationTemplateDescriptor& descriptor) {
+    if (!valid_identifier(descriptor.id) || descriptor.version.empty() ||
+        descriptor.display_name.empty() || descriptor.category.empty() ||
+        descriptor.reference.empty() || descriptor.inputs.empty() ||
+        !valid_identifier(descriptor.output.name) ||
+        descriptor.output.dimension.empty() ||
+        descriptor.expression.empty() || descriptor.regime.empty()) {
+        throw std::invalid_argument(
+            "correlation template has incomplete identity, physics, or presentation metadata: " +
+            descriptor.id);
+    }
+    std::set<std::string> symbols;
+    for (const auto& input : descriptor.inputs) {
+        if (!valid_identifier(input.name) || input.dimension.empty() ||
+            !symbols.insert(input.name).second) {
+            throw std::invalid_argument(
+                "correlation template has an invalid or duplicate input: " +
+                input.name);
+        }
+    }
+    for (const auto& coefficient : descriptor.coefficients) {
+        const bool default_below = coefficient.default_value &&
+            (*coefficient.default_value < coefficient.lower_bound ||
+             (*coefficient.default_value == coefficient.lower_bound &&
+              !coefficient.lower_inclusive));
+        const bool default_above = coefficient.default_value &&
+            (*coefficient.default_value > coefficient.upper_bound ||
+             (*coefficient.default_value == coefficient.upper_bound &&
+              !coefficient.upper_inclusive));
+        if (!valid_identifier(coefficient.name) ||
+            coefficient.dimension.empty() ||
+            !symbols.insert(coefficient.name).second ||
+            (coefficient.default_value &&
+             !std::isfinite(*coefficient.default_value)) ||
+            std::isnan(coefficient.lower_bound) ||
+            std::isnan(coefficient.upper_bound) ||
+            coefficient.lower_bound > coefficient.upper_bound ||
+            (coefficient.lower_bound == coefficient.upper_bound &&
+             (!coefficient.lower_inclusive ||
+              !coefficient.upper_inclusive)) ||
+            default_below || default_above) {
+            throw std::invalid_argument(
+                "correlation template has an invalid coefficient descriptor: " +
+                coefficient.name);
+        }
+    }
+    const auto expression = SafeExpression::parse(descriptor.expression);
+    if (expression.symbols() != symbols) {
+        throw std::invalid_argument(
+            "correlation template expression symbols must exactly match inputs and coefficients: " +
+            descriptor.id);
+    }
+    std::set<std::string> ranged_inputs;
+    for (const auto& range : descriptor.applicability) {
+        if (!symbols.contains(range.input) ||
+            std::none_of(
+                descriptor.inputs.begin(), descriptor.inputs.end(),
+                [&](const auto& input) {
+                    return input.name == range.input;
+                }) ||
+            !ranged_inputs.insert(range.input).second ||
+            (!range.minimum && !range.maximum) ||
+            (range.minimum && !std::isfinite(*range.minimum)) ||
+            (range.maximum && !std::isfinite(*range.maximum)) ||
+            (range.minimum && range.maximum &&
+             (*range.minimum > *range.maximum ||
+              (*range.minimum == *range.maximum &&
+               (!range.minimum_inclusive ||
+                !range.maximum_inclusive))))) {
+            throw std::invalid_argument(
+                "correlation template has invalid applicability for input: " +
+                range.input);
+        }
+    }
+}
+
 }  // namespace
+
+void CorrelationTemplateRegistry::register_template(
+    CorrelationTemplateDescriptor descriptor) {
+    validate_template_descriptor(descriptor);
+    const auto id = descriptor.id;
+    if (!templates_.emplace(id, std::move(descriptor)).second) {
+        throw std::invalid_argument(
+            "duplicate correlation template id: " + id);
+    }
+}
+
+const CorrelationTemplateDescriptor&
+CorrelationTemplateRegistry::require_template(
+    const std::string& id) const {
+    const auto found = templates_.find(id);
+    if (found == templates_.end()) {
+        throw std::invalid_argument(
+            "unknown correlation template: " + id);
+    }
+    return found->second;
+}
+
+std::vector<CorrelationTemplateDescriptor>
+CorrelationTemplateRegistry::descriptors() const {
+    std::vector<CorrelationTemplateDescriptor> result;
+    result.reserve(templates_.size());
+    for (const auto& [_, descriptor] : templates_) {
+        result.push_back(descriptor);
+    }
+    return result;
+}
+
+CorrelationTemplateRegistry
+make_default_correlation_template_registry() {
+    CorrelationTemplateRegistry registry;
+    registry.register_template({
+        "zuber_findlay_kinematic_void_fraction",
+        "1.0.0",
+        "Zuber-Findlay kinematic void fraction",
+        "Two-phase drift flux",
+        "Zuber and Findlay, Journal of Heat Transfer 87(4), 1965, DOI 10.1115/1.3689137",
+        {
+            {"vapor_quality", "dimensionless"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"mass_flux", "mass_flux"},
+        },
+        {"void_fraction", "dimensionless"},
+        {
+            {"distribution_parameter", "dimensionless", std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"drift_velocity", "speed", std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), true, true},
+        },
+        "(vapor_quality * mass_flux / vapor_density) / "
+        "(distribution_parameter * mass_flux * "
+        "(vapor_quality / vapor_density + "
+        "(1 - vapor_quality) / liquid_density) + drift_velocity)",
+        "upward_cocurrent_user_parameterized",
+        {
+            {"vapor_quality", 0.0, 1.0, false, false},
+            {"mass_flux", 0.0, std::nullopt, false, true},
+        },
+    });
+    return registry;
+}
+
+CorrelationArtifact instantiate_correlation_template(
+    const CorrelationTemplateDescriptor& descriptor,
+    CorrelationArtifactIdentity identity,
+    std::map<std::string, double> coefficients,
+    std::string candidate_id,
+    int priority) {
+    validate_template_descriptor(descriptor);
+    std::map<std::string, double> resolved;
+    for (const auto& coefficient : descriptor.coefficients) {
+        const auto supplied = coefficients.find(coefficient.name);
+        if (supplied != coefficients.end()) {
+            resolved.emplace(coefficient.name, supplied->second);
+            coefficients.erase(supplied);
+        } else if (coefficient.default_value) {
+            resolved.emplace(
+                coefficient.name, *coefficient.default_value);
+        } else {
+            throw std::invalid_argument(
+                "correlation template requires coefficient: " +
+                coefficient.name);
+        }
+        const double value = resolved.at(coefficient.name);
+        const bool below = value < coefficient.lower_bound ||
+            (value == coefficient.lower_bound &&
+             !coefficient.lower_inclusive);
+        const bool above = value > coefficient.upper_bound ||
+            (value == coefficient.upper_bound &&
+             !coefficient.upper_inclusive);
+        if (!std::isfinite(value) || below || above) {
+            throw std::invalid_argument(
+                "correlation template coefficient is outside its bounds: " +
+                coefficient.name);
+        }
+    }
+    if (!coefficients.empty()) {
+        throw std::invalid_argument(
+            "correlation template received unknown coefficient: " +
+            coefficients.begin()->first);
+    }
+    CorrelationArtifact artifact{
+        std::move(identity.id), correlation_artifact_schema_v1,
+        std::move(identity.revision),
+        std::move(identity.checksum_sha256), descriptor.inputs,
+        descriptor.output,
+        {{std::move(candidate_id), descriptor.regime, priority,
+          std::move(resolved), descriptor.expression,
+          descriptor.applicability}},
+    };
+    artifact.validate();
+    return artifact;
+}
 
 CorrelationArtifact::CorrelationArtifact(
     std::string artifact_id,

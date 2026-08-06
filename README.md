@@ -555,8 +555,9 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Extend regime-spanning finite-volume support with validated packaged drift-flux/flow-regime
-   correlations. The general rigid PH inventory now traverses both saturation boundaries in both
+1. Extend the delivered, referenced Zuber–Findlay kinematic template with validated
+   geometry/regime-specific coefficient correlations and flow-pattern maps. The general rigid PH
+   inventory now traverses both saturation boundaries in both
    directions with HEOS water; IF97 retains a documented liquid-boundary limitation, while
    specialized equilibrium cells and two-phase pipes retain explicit applicability guards.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for

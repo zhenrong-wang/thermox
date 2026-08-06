@@ -407,7 +407,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v5,
+            thermox::service::catalog_schema_v6,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -844,6 +844,19 @@ void test_catalog_discovery() {
     require(
         response.connector_domains.size() == 7,
         "catalog must expose connector contracts");
+    const auto zuber_findlay = std::find_if(
+        response.correlation_templates.begin(),
+        response.correlation_templates.end(),
+        [](const auto& descriptor) {
+            return descriptor.id ==
+                "zuber_findlay_kinematic_void_fraction";
+        });
+    require(
+        zuber_findlay != response.correlation_templates.end() &&
+            zuber_findlay->coefficients.size() == 2 &&
+            zuber_findlay->reference.find("10.1115/1.3689137") !=
+                std::string::npos,
+        "catalog must expose the referenced, parameterized drift-flux template");
     const auto pressure_units = std::find_if(
         response.unit_dimensions.begin(),
         response.unit_dimensions.end(),
@@ -860,13 +873,18 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v5\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v6\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
         json.find("\"unit_dimensions\": [") !=
             std::string::npos,
         "catalog JSON must serialize unit dimensions");
+    require(
+        json.find("\"correlation_templates\": [") !=
+                std::string::npos &&
+            json.find("10.1115/1.3689137") != std::string::npos,
+        "catalog JSON must serialize correlation templates and provenance");
 }
 
 void test_validation_and_canonicalization() {
@@ -2825,7 +2843,9 @@ void test_injectable_native_runtime() {
         std::move(components),
         thermox::physics::
             make_default_property_package_registry(),
-        {}, std::move(chemistry));
+        {}, thermox::platform::
+                make_default_correlation_template_registry(),
+        std::move(chemistry));
     thermox::service::SimulationService service(runtime);
     const auto catalog = service.get_catalog();
     require(

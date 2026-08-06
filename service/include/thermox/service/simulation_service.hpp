@@ -15,7 +15,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v5[] = "thermox.catalog/v5";
+inline constexpr char catalog_schema_v6[] = "thermox.catalog/v6";
 
 enum class OperationStatus {
     succeeded,
@@ -169,6 +169,46 @@ struct CatalogDimensionUnitType {
     std::vector<CatalogAcceptedUnitType> accepted_units;
 };
 
+struct CatalogCorrelationVariableType {
+    std::string name;
+    std::string dimension;
+};
+
+struct CatalogCorrelationCoefficientType {
+    std::string name;
+    std::string dimension;
+    bool has_default{false};
+    double default_value_si{0.0};
+    double lower_bound{-std::numeric_limits<double>::infinity()};
+    double upper_bound{std::numeric_limits<double>::infinity()};
+    bool lower_inclusive{true};
+    bool upper_inclusive{true};
+};
+
+struct CatalogCorrelationApplicabilityType {
+    std::string input;
+    bool has_minimum{false};
+    double minimum_si{0.0};
+    bool has_maximum{false};
+    double maximum_si{0.0};
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
+struct CatalogCorrelationTemplateType {
+    std::string id;
+    std::string version;
+    std::string display_name;
+    std::string category;
+    std::string reference;
+    std::vector<CatalogCorrelationVariableType> inputs;
+    CatalogCorrelationVariableType output;
+    std::vector<CatalogCorrelationCoefficientType> coefficients;
+    std::string expression;
+    std::string regime;
+    std::vector<CatalogCorrelationApplicabilityType> applicability;
+};
+
 struct CatalogRequest {
     std::string schema_version{command_schema_v1};
 };
@@ -176,7 +216,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v5};
+    std::string schema_version{catalog_schema_v6};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;
@@ -185,6 +225,7 @@ struct CatalogResponse {
     std::vector<ThermochemistryBackendType>
         thermochemistry_backends;
     std::vector<ConnectorDomainType> connector_domains;
+    std::vector<CatalogCorrelationTemplateType> correlation_templates;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

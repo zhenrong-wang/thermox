@@ -46,6 +46,7 @@ std::string catalog_fingerprint(
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
     const platform::EngineeringArtifactRegistry& engineering_artifacts,
+    const platform::CorrelationTemplateRegistry& correlation_templates,
     const physics::ThermochemistryPackageRegistry&
         thermochemistry,
     const platform::UnitRegistry& units) {
@@ -167,6 +168,42 @@ std::string catalog_fingerprint(
         hash_text(hash, artifact->revision);
         hash_text(hash, artifact->checksum_sha256);
     }
+    for (const auto& descriptor : correlation_templates.descriptors()) {
+        hash_text(hash, descriptor.id);
+        hash_text(hash, descriptor.version);
+        hash_text(hash, descriptor.display_name);
+        hash_text(hash, descriptor.category);
+        hash_text(hash, descriptor.reference);
+        for (const auto& input : descriptor.inputs) {
+            hash_text(hash, input.name);
+            hash_text(hash, input.dimension);
+        }
+        hash_text(hash, descriptor.output.name);
+        hash_text(hash, descriptor.output.dimension);
+        for (const auto& coefficient : descriptor.coefficients) {
+            hash_text(hash, coefficient.name);
+            hash_text(hash, coefficient.dimension);
+            hash_number(hash, coefficient.default_value.has_value());
+            if (coefficient.default_value) {
+                hash_number(hash, *coefficient.default_value);
+            }
+            hash_number(hash, coefficient.lower_bound);
+            hash_number(hash, coefficient.upper_bound);
+            hash_number(hash, coefficient.lower_inclusive);
+            hash_number(hash, coefficient.upper_inclusive);
+        }
+        hash_text(hash, descriptor.expression);
+        hash_text(hash, descriptor.regime);
+        for (const auto& range : descriptor.applicability) {
+            hash_text(hash, range.input);
+            hash_number(hash, range.minimum.has_value());
+            if (range.minimum) hash_number(hash, *range.minimum);
+            hash_number(hash, range.maximum.has_value());
+            if (range.maximum) hash_number(hash, *range.maximum);
+            hash_number(hash, range.minimum_inclusive);
+            hash_number(hash, range.maximum_inclusive);
+        }
+    }
     for (const auto& descriptor :
          thermochemistry.descriptors()) {
         hash_text(hash, descriptor.backend);
@@ -238,6 +275,7 @@ void apply_native_extension(
     platform::ComponentRegistry& components,
     physics::PropertyPackageRegistry& properties,
     platform::EngineeringArtifactRegistry& engineering_artifacts,
+    platform::CorrelationTemplateRegistry& correlation_templates,
     physics::ThermochemistryPackageRegistry& thermochemistry,
     platform::UnitRegistry& units) {
     if (extension.package_id.empty() ||
@@ -249,6 +287,7 @@ void apply_native_extension(
     if (!extension.register_components &&
         !extension.register_properties &&
         !extension.register_engineering_artifacts &&
+        !extension.register_correlation_templates &&
         !extension.register_thermochemistry &&
         !extension.register_units) {
         throw std::invalid_argument(
@@ -264,6 +303,9 @@ void apply_native_extension(
     if (extension.register_engineering_artifacts) {
         extension.register_engineering_artifacts(
             engineering_artifacts);
+    }
+    if (extension.register_correlation_templates) {
+        extension.register_correlation_templates(correlation_templates);
     }
     if (extension.register_thermochemistry) {
         extension.register_thermochemistry(thermochemistry);
@@ -282,11 +324,13 @@ std::shared_ptr<const SimulationRuntime> make_simulation_runtime(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::EngineeringArtifactRegistry engineering_artifacts,
+    platform::CorrelationTemplateRegistry correlation_templates,
     physics::ThermochemistryPackageRegistry thermochemistry,
     platform::UnitRegistry units) {
     return detail::NativeRuntimeFactory::create(
         std::move(components), std::move(properties),
         std::move(engineering_artifacts),
+        std::move(correlation_templates),
         std::move(thermochemistry), std::move(units));
 }
 
@@ -295,17 +339,19 @@ detail::NativeRuntimeFactory::create(
     platform::ComponentRegistry components,
     physics::PropertyPackageRegistry properties,
     platform::EngineeringArtifactRegistry engineering_artifacts,
+    platform::CorrelationTemplateRegistry correlation_templates,
     physics::ThermochemistryPackageRegistry thermochemistry,
     platform::UnitRegistry units) {
     auto impl = std::make_unique<SimulationRuntime::Impl>();
     impl->fingerprint =
         catalog_fingerprint(
             components, properties, engineering_artifacts,
-            thermochemistry, units);
+            correlation_templates, thermochemistry, units);
     impl->components = std::move(components);
     impl->properties = std::move(properties);
     impl->engineering_artifacts =
         std::move(engineering_artifacts);
+    impl->correlation_templates = std::move(correlation_templates);
     impl->thermochemistry = std::move(thermochemistry);
     impl->units = std::move(units);
     return std::shared_ptr<const SimulationRuntime>(
@@ -331,6 +377,7 @@ detail::NativeRuntimeFactory::overlay(
         std::move(components),
         base->impl_->properties,
         base->impl_->engineering_artifacts,
+        base->impl_->correlation_templates,
         base->impl_->thermochemistry,
         base->impl_->units);
 }
@@ -340,7 +387,8 @@ make_default_simulation_runtime() {
     return make_simulation_runtime(
         platform::make_default_component_registry(),
         physics::make_default_property_package_registry(),
-        {}, make_default_thermochemistry_registry(),
+        {}, platform::make_default_correlation_template_registry(),
+        make_default_thermochemistry_registry(),
         platform::make_default_unit_registry());
 }
 

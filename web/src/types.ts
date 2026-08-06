@@ -970,8 +970,39 @@ export interface CatalogUnitDimension {
   }>
 }
 
+export interface CatalogCorrelationTemplate {
+  id: string
+  version: string
+  display_name: string
+  category: string
+  reference: string
+  inputs: Array<{ name: string; dimension: string }>
+  output: { name: string; dimension: string }
+  coefficients: Array<{
+    name: string
+    dimension: string
+    has_default: boolean
+    default_value_si: number | null
+    lower_bound: number | null
+    upper_bound: number | null
+    lower_inclusive: boolean
+    upper_inclusive: boolean
+  }>
+  expression: string
+  regime: string
+  applicability: Array<{
+    input: string
+    has_minimum: boolean
+    minimum_si: number | null
+    has_maximum: boolean
+    maximum_si: number | null
+    minimum_inclusive: boolean
+    maximum_inclusive: boolean
+  }>
+}
+
 export interface Catalog {
-  schema_version: 'thermox.catalog/v5'
+  schema_version: 'thermox.catalog/v6'
   status: string
   fingerprint: string
   components: CatalogComponent[]
@@ -979,6 +1010,7 @@ export interface Catalog {
   property_backends: PropertyBackend[]
   thermochemistry_backends: ThermochemistryBackend[]
   connector_domains: ConnectorDomain[]
+  correlation_templates: CatalogCorrelationTemplate[]
 }
 
 export type GraphEntityType =

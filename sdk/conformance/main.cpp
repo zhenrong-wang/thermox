@@ -78,6 +78,8 @@ int main() {
     auto properties =
         physics::make_default_property_package_registry();
     platform::EngineeringArtifactRegistry engineering_artifacts;
+    auto correlation_templates =
+        platform::make_default_correlation_template_registry();
     physics::ThermochemistryPackageRegistry thermochemistry;
     auto units = platform::make_default_unit_registry();
 
@@ -124,6 +126,22 @@ int main() {
                         const ConformancePropertyPackage>();
                 });
         };
+    extension.register_correlation_templates =
+        [](platform::CorrelationTemplateRegistry& registry) {
+            registry.register_template({
+                "example_linear_response",
+                "1.0.0",
+                "Example linear response",
+                "SDK conformance",
+                "example extension-owned reference",
+                {{"input", "dimensionless"}},
+                {"output", "dimensionless"},
+                {{"gain", "dimensionless", 1.0}},
+                "gain * input",
+                "extension_test",
+                {{"input", 0.0, 1.0, true, true}},
+            });
+        };
     extension.register_units =
         [](platform::UnitRegistry& registry) {
             registry.register_dimension({
@@ -142,6 +160,7 @@ int main() {
         components,
         properties,
         engineering_artifacts,
+        correlation_templates,
         thermochemistry,
         units);
 
@@ -149,6 +168,7 @@ int main() {
         std::move(components),
         std::move(properties),
         std::move(engineering_artifacts),
+        std::move(correlation_templates),
         std::move(thermochemistry),
         std::move(units));
     service::SimulationService simulation{runtime};
@@ -165,6 +185,14 @@ int main() {
                         "bus_MW";
             }),
         "extension unit dimension missing from catalog");
+    require(
+        std::any_of(
+            catalog.correlation_templates.begin(),
+            catalog.correlation_templates.end(),
+            [](const auto& descriptor) {
+                return descriptor.id == "example_linear_response";
+            }),
+        "extension correlation template missing from catalog");
     require(
         std::any_of(
             catalog.native_extensions.begin(),

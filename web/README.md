@@ -12,7 +12,7 @@ The workspace currently provides:
 - an explicit five-stage Build, Define, Study, Calculate, and Analyze workflow;
 - draft component placement without prematurely requiring physical parameters, media, or maps;
 - per-component draft/incomplete/defined authoring states on the graph and definition workspace;
-- a persistent, searchable component library generated from `thermox.catalog/v5`, with
+- a persistent, searchable component library generated from `thermox.catalog/v6`, with
   click-to-configure and drag-to-canvas instance creation;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;

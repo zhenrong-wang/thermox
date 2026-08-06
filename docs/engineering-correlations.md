@@ -153,6 +153,38 @@ selector to the platform. Regime labels remain declared engineering provenance; 
 invent a universal flow-pattern map. Candidate expressions should be continuous across intended
 switch boundaries where possible because discontinuous switching creates a nonsmooth residual.
 
+## Packaged correlation templates
+
+The runtime catalog publishes versioned, provider-extensible correlation templates separately
+from immutable engineering-artifact revisions. A template is a referenced equation shape with
+typed inputs, typed coefficients, coefficient bounds, and an applicability envelope. Instantiating
+one requires an artifact identity and all coefficients that do not have explicit defaults. The
+result is an ordinary `thermox.correlation/v1` artifact, so topology and component consumers remain
+independent of the template registry.
+
+The first packaged template is the Zuber–Findlay kinematic drift-flux relation, based on
+G. E. Zuber and J. A. Findlay, *Average Volumetric Concentration in Two-Phase Flow Systems*,
+Journal of Heat Transfer 87(4), 1965, DOI
+[10.1115/1.3689137](https://doi.org/10.1115/1.3689137). In superficial-velocity form,
+
+`v_g = C0 j + V_gj` and `alpha = j_g / v_g`,
+
+where
+
+`j_g = x G / rho_g` and `j = G (x / rho_g + (1 - x) / rho_l)`.
+
+The template therefore consumes vapor quality, saturated phase densities, and positive mass flux.
+It requires the engineer to supply the distribution parameter `C0` and drift velocity `V_gj`;
+Thermox does not guess them. Its declared envelope is `0 < x < 1` and `G > 0`, and its regime is
+explicitly `upward_cocurrent_user_parameterized`. Those mathematical limits do not establish that
+the supplied coefficients are valid for a particular diameter, orientation, pressure, fluid, or
+flow pattern. Geometry- and regime-specific coefficient correlations and flow-pattern maps remain
+separate engineering data that must carry their own provenance and applicability.
+
+The limiting case `C0 = 1`, `V_gj = 0` exactly recovers homogeneous void fraction. Tests cover that
+limit, coefficient rejection, analytic quality sensitivity, catalog serialization, and a connected
+two-phase riser pressure balance using an instantiated template.
+
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation
 happens before immutable content persistence; selected revisions resolve into the calculation

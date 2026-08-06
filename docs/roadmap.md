@@ -541,10 +541,15 @@ Work items:
      definition-revision binding during validation and run authoring; ✅
    - approval policy, compound dimension analysis, property functions, and transient-state
      contracts remain follow-ons.
-8. Map validation and interpolation quality controls.
-9. Multi-user auth, authorization, project isolation, audit logs.
-9. Scalable job workers and deployment automation.
-10. Extended benchmark suite against published/reference examples.
+8. Referenced, provider-extensible correlation templates.
+   - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
+     bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe
+     verification; ✅
+   - geometry/regime-specific coefficient correlations and flow-pattern maps remain follow-ons.
+9. Map validation and interpolation quality controls.
+10. Multi-user auth, authorization, project isolation, audit logs.
+11. Scalable job workers and deployment automation.
+12. Extended benchmark suite against published/reference examples.
    - NETL 2025 Case B31A aggregate HRSG boundary audit with independently reconstructed
      water/steam duty, Cantera exhaust properties, explicit numerical/external tolerances, and a
      service-level regression test; ✅

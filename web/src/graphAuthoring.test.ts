@@ -25,12 +25,13 @@ const topology: TopologyDocument = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v5',
+  schema_version: 'thermox.catalog/v6',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],
   property_backends: [],
   thermochemistry_backends: [],
+  correlation_templates: [],
   components: [
     {
       kind: 'source.test',

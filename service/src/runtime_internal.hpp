@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/unit_registry.hpp"
 #include "thermox/physics/property_registry.hpp"
@@ -16,6 +17,7 @@ struct SimulationRuntime::Impl {
     platform::ComponentRegistry components;
     physics::PropertyPackageRegistry properties;
     platform::EngineeringArtifactRegistry engineering_artifacts;
+    platform::CorrelationTemplateRegistry correlation_templates;
     physics::ThermochemistryPackageRegistry thermochemistry;
     platform::UnitRegistry units;
     std::string fingerprint;
@@ -28,6 +30,7 @@ struct NativeRuntimeFactory {
         platform::ComponentRegistry components,
         physics::PropertyPackageRegistry properties,
         platform::EngineeringArtifactRegistry engineering_artifacts,
+        platform::CorrelationTemplateRegistry correlation_templates,
         physics::ThermochemistryPackageRegistry thermochemistry,
         platform::UnitRegistry units);
     static std::shared_ptr<const SimulationRuntime> overlay(
