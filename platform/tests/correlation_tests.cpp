@@ -492,12 +492,43 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
         alpha.value * saturation.vapor.density_kg_m3 +
         (1.0 - alpha.value) *
             saturation.liquid.density_kg_m3;
+    const auto momentum_flux = [&](double pressure) {
+        const auto endpoint_state = water->state_ph(
+            pressure, 1.5e6);
+        const auto endpoint_saturation = water->saturation_p(
+            pressure);
+        require(endpoint_state.ok() && endpoint_saturation.ok(),
+                "riser endpoint properties must evaluate");
+        const auto endpoint_alpha =
+            zuber_findlay_void_fraction_correlation().evaluate({
+                {"vapor_quality",
+                 endpoint_state.state.vapor_quality},
+                {"liquid_density",
+                 endpoint_saturation.liquid.density_kg_m3},
+                {"vapor_density",
+                 endpoint_saturation.vapor.density_kg_m3},
+                {"mass_flux", 0.2 / area},
+            });
+        require(endpoint_alpha.error.empty(), endpoint_alpha.error);
+        const double quality = endpoint_state.state.vapor_quality;
+        const double liquid_fraction = 1.0 - quality;
+        return std::pow(0.2 / area, 2.0) *
+            (quality * quality /
+                 (endpoint_saturation.vapor.density_kg_m3 *
+                  endpoint_alpha.value) +
+             liquid_fraction * liquid_fraction /
+                 (endpoint_saturation.liquid.density_kg_m3 *
+                  (1.0 - endpoint_alpha.value)));
+    };
+    const double acceleration_pressure_drop =
+        momentum_flux(outlet_pressure) - momentum_flux(1.0e6);
     const double expected_drop =
         2.0 * 0.2 * 0.2 /
             (2.0 * density * area * area) +
         0.04 * std::pow(0.2 / area, 2.0) /
             (2.0 * density * 0.1) * 10.0 +
-        density * 9.80665 * 5.0;
+        density * 9.80665 * 5.0 +
+        acceleration_pressure_drop;
     require_close(
         1.0e6 - outlet_pressure, expected_drop, 1.0e-5,
         "correlated void fraction closes riser pressure balance");
@@ -556,10 +587,16 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             (2.0 * reverse_density * area * area) +
         0.04 * std::pow(0.2 / area, 2.0) /
             (2.0 * reverse_density * 0.1) * 10.0;
+    const double reverse_acceleration_pressure_drop =
+        momentum_flux(reverse_outlet_pressure) -
+        momentum_flux(1.0e6);
     require_close(
         1.0e6 - reverse_outlet_pressure,
-        -reverse_loss_magnitude, 1.0e-5,
-        "correlated pipe reverses friction sign with mass flow");
+        -reverse_loss_magnitude +
+            reverse_acceleration_pressure_drop,
+        1.0e-5,
+        "correlated pipe reverses friction while retaining oriented "
+        "momentum-flux balance");
 
     const auto transient =
         thermox::platform::compile_transient_model_graph(

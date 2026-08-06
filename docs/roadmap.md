@@ -236,8 +236,10 @@ Delivered:
     consumers, immutable project publication, and durable job persistence. ✅
 27. Correlation-driven two-phase pipe pressure drop with independent void-fraction and distributed
     friction-gradient artifacts, typed phase/flow/geometry inputs, signed reverse-flow assembly,
-    zero-flow handling, and shared steady/transient compilation. Acceleration pressure drop remains
-    a separate follow-on closure. ✅
+    friction zero-flow handling, and shared steady/transient compilation. ✅
+28. Constant-area separated-flow acceleration pressure drop from independently evaluated inlet and
+    outlet momentum flux, using property-backed endpoint qualities/densities and the bound
+    void-fraction closure, with forward/reverse and steady/transient verification. ✅
 
 ## Component catalog and modularization foundation
 

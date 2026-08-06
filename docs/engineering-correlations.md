@@ -99,13 +99,30 @@ nonnegative pressure-gradient magnitude by pipe length and applies the sign of m
 keeps reverse-flow behavior in the component balance without requiring every engineering law to
 reimplement it.
 
-The full algebraic balance combines signed distributed friction, signed local loss, and elevation
-head. The pipe requires registered `state_ph` and `saturation_p` capabilities and a strictly
-two-phase mean state. At exactly zero flow both friction terms are zero and the friction artifact
-is not evaluated. Missing artifacts, unsupported input names, wrong dimensions, unsafe
-expressions, evaluation failures, and nonphysical outputs are rejected explicitly. The same
-contract compiles in steady and transient graphs. Acceleration pressure drop is not silently
-folded into the friction term; it remains a distinct follow-on closure.
+The full algebraic balance combines signed distributed friction, signed local loss, elevation head,
+and a distinct reversible acceleration term. For a constant-area separated flow, Thermox uses the
+endpoint momentum-flux relation documented in
+[IAEA-TECDOC-1474](https://www-pub.iaea.org/MTCD/Publications/PDF/TE_1474_web.pdf), *Natural
+Circulation in Water Cooled Nuclear Power Plants* (2005), equations 40–41:
+
+`v_m = x^2 / (rho_v alpha) + (1-x)^2 / (rho_l (1-alpha))`
+
+`delta_p_acc = G^2 (v_m,out - v_m,in)`
+
+where `G = mass_flow / area`. Each endpoint quality and phase density comes from the selected
+property backend, and each endpoint void fraction comes from the same bound artifact used at the
+mean section. This is an oriented momentum balance: unlike irreversible friction, its sign is not
+changed merely because mass flow reverses. The formulation assumes one uniform velocity in each
+phase at a cross section and constant area; area-change losses and momentum-flux correction factors
+are outside this component contract. Fluid-port enthalpy remains isenthalpic across the component;
+kinetic-energy feedback into the energy equation is not represented by this lumped transport model.
+
+The pipe requires registered `state_ph` and `saturation_p` capabilities, a strictly two-phase mean
+state, and—when acceleration is active through this comprehensive correlated model—strictly
+two-phase endpoint states. At exactly zero flow both friction terms and acceleration are zero, and
+the friction artifact is not evaluated. Missing artifacts, unsupported input names, wrong
+dimensions, unsafe expressions, evaluation failures, and nonphysical outputs are rejected
+explicitly. The same contract compiles in steady and transient graphs.
 
 `volume.fluid.equilibrium_two_phase_correlated_outlet` applies the same artifact contract to a
 transient rigid inventory. Conserved total mass and internal energy determine pressure and

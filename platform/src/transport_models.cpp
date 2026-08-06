@@ -1385,6 +1385,7 @@ private:
         double roughness{};
         double elevation_change{};
         double slip_ratio{};
+        bool include_acceleration{false};
         std::shared_ptr<const CorrelationArtifact>
             void_fraction_correlation;
         std::shared_ptr<const CorrelationArtifact>
@@ -1420,6 +1421,7 @@ private:
         data.elevation_change = parameter_or(
             context.component, "elevation_change", 0.0);
         if (correlation_driven) {
+            data.include_acceleration = true;
             data.length = required_parameter(
                 context.component, "length");
             data.roughness = parameter_or(
@@ -1521,12 +1523,63 @@ private:
             const double outlet_pressure = x.at(data.outlet_p);
             const double mean_pressure =
                 0.5 * (inlet_pressure + outlet_pressure);
+            const double mass_flow = x.at(data.inlet_m);
             if (!std::isfinite(mean_pressure) || mean_pressure <= 0.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
                         "two-phase pressure-drop pipe requires positive "
                         "finite mean pressure")};
             }
+            if (!std::isfinite(mass_flow)) {
+                return RestrictionEvaluation{
+                    EvaluationStatus::recoverable(
+                        "two-phase pressure-drop pipe requires finite "
+                        "mass flow")};
+            }
+            const auto evaluate_void_fraction =
+                [&](double quality, double rho_l, double rho_v,
+                    double pressure) {
+                    if (!data.void_fraction_correlation) {
+                        const double value = 1.0 /
+                            (1.0 + ((1.0 - quality) / quality) *
+                                (rho_v / rho_l) * data.slip_ratio);
+                        return std::pair{
+                            EvaluationStatus::success(), value};
+                    }
+                    std::map<std::string, double> inputs;
+                    for (const auto& input :
+                         data.void_fraction_correlation->inputs()) {
+                        if (input.name == "vapor_quality") {
+                            inputs.emplace(input.name, quality);
+                        } else if (input.name == "liquid_density") {
+                            inputs.emplace(input.name, rho_l);
+                        } else if (input.name == "vapor_density") {
+                            inputs.emplace(input.name, rho_v);
+                        } else if (input.name == "mass_flow") {
+                            inputs.emplace(input.name, mass_flow);
+                        } else if (input.name == "mass_flux") {
+                            inputs.emplace(
+                                input.name,
+                                std::abs(mass_flow) / data.area);
+                        } else if (input.name == "area") {
+                            inputs.emplace(input.name, data.area);
+                        } else if (input.name == "diameter") {
+                            inputs.emplace(input.name, data.diameter);
+                        } else if (input.name == "pressure") {
+                            inputs.emplace(input.name, pressure);
+                        }
+                    }
+                    const auto evaluated =
+                        data.void_fraction_correlation->evaluate(inputs);
+                    if (!evaluated.error.empty()) {
+                        return std::pair{
+                            EvaluationStatus::recoverable(
+                                evaluated.error),
+                            0.0};
+                    }
+                    return std::pair{
+                        EvaluationStatus::success(), evaluated.value};
+                };
             const auto state = data.properties->state_ph(
                 mean_pressure, x.at(data.inlet_h));
             if (!state.ok()) {
@@ -1557,44 +1610,11 @@ private:
                         "finite saturation densities")};
             }
             const double quality = state.state.vapor_quality;
-            double void_fraction = 0.0;
-            if (data.void_fraction_correlation) {
-                std::map<std::string, double> inputs;
-                for (const auto& input :
-                     data.void_fraction_correlation->inputs()) {
-                    if (input.name == "vapor_quality") {
-                        inputs.emplace(input.name, quality);
-                    } else if (input.name == "liquid_density") {
-                        inputs.emplace(input.name, rho_l);
-                    } else if (input.name == "vapor_density") {
-                        inputs.emplace(input.name, rho_v);
-                    } else if (input.name == "mass_flow") {
-                        inputs.emplace(
-                            input.name, x.at(data.inlet_m));
-                    } else if (input.name == "mass_flux") {
-                        inputs.emplace(
-                            input.name,
-                            std::abs(x.at(data.inlet_m)) / data.area);
-                    } else if (input.name == "area") {
-                        inputs.emplace(input.name, data.area);
-                    } else if (input.name == "diameter") {
-                        inputs.emplace(input.name, data.diameter);
-                    } else if (input.name == "pressure") {
-                        inputs.emplace(input.name, mean_pressure);
-                    }
-                }
-                const auto evaluated =
-                    data.void_fraction_correlation->evaluate(inputs);
-                if (!evaluated.error.empty()) {
-                    return RestrictionEvaluation{
-                        EvaluationStatus::recoverable(
-                            evaluated.error)};
-                }
-                void_fraction = evaluated.value;
-            } else {
-                void_fraction = 1.0 /
-                    (1.0 + ((1.0 - quality) / quality) *
-                        (rho_v / rho_l) * data.slip_ratio);
+            const auto [void_status, void_fraction] =
+                evaluate_void_fraction(
+                    quality, rho_l, rho_v, mean_pressure);
+            if (!void_status.ok()) {
+                return RestrictionEvaluation{void_status};
             }
             if (!std::isfinite(void_fraction) ||
                 void_fraction <= 0.0 || void_fraction >= 1.0) {
@@ -1606,9 +1626,7 @@ private:
             const double mixture_density =
                 void_fraction * rho_v +
                 (1.0 - void_fraction) * rho_l;
-            const double mass_flow = x.at(data.inlet_m);
-            if (!std::isfinite(mass_flow) ||
-                !std::isfinite(mixture_density) ||
+            if (!std::isfinite(mixture_density) ||
                 mixture_density <= 0.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
@@ -1675,12 +1693,104 @@ private:
                 distributed_friction_loss = std::copysign(
                     evaluated.value * data.length, mass_flow);
             }
+            double acceleration_pressure_drop = 0.0;
+            if (data.include_acceleration &&
+                std::abs(mass_flow) > 1.0e-14) {
+                const auto momentum_flux =
+                    [&](double pressure, double& value) {
+                        const auto endpoint_state =
+                            data.properties->state_ph(
+                                pressure, x.at(data.inlet_h));
+                        if (!endpoint_state.ok()) {
+                            return property_failure(endpoint_state);
+                        }
+                        const double endpoint_quality =
+                            endpoint_state.state.vapor_quality;
+                        if (endpoint_state.state.phase !=
+                                physics::Phase::two_phase ||
+                            !std::isfinite(endpoint_quality) ||
+                            endpoint_quality <= 0.0 ||
+                            endpoint_quality >= 1.0) {
+                            return EvaluationStatus::recoverable(
+                                "two-phase acceleration closure requires "
+                                "both endpoint states to satisfy "
+                                "0 < vapor quality < 1");
+                        }
+                        const auto endpoint_saturation =
+                            data.properties->saturation_p(pressure);
+                        if (!endpoint_saturation.ok()) {
+                            return property_failure(
+                                endpoint_saturation);
+                        }
+                        const double endpoint_rho_l =
+                            endpoint_saturation.liquid.density_kg_m3;
+                        const double endpoint_rho_v =
+                            endpoint_saturation.vapor.density_kg_m3;
+                        if (!std::isfinite(endpoint_rho_l) ||
+                            !std::isfinite(endpoint_rho_v) ||
+                            endpoint_rho_l <= 0.0 ||
+                            endpoint_rho_v <= 0.0) {
+                            return EvaluationStatus::recoverable(
+                                "two-phase acceleration closure requires "
+                                "positive finite endpoint densities");
+                        }
+                        const auto [endpoint_void_status,
+                                    endpoint_void_fraction] =
+                            evaluate_void_fraction(
+                                endpoint_quality, endpoint_rho_l,
+                                endpoint_rho_v, pressure);
+                        if (!endpoint_void_status.ok()) {
+                            return endpoint_void_status;
+                        }
+                        if (!std::isfinite(endpoint_void_fraction) ||
+                            endpoint_void_fraction <= 0.0 ||
+                            endpoint_void_fraction >= 1.0) {
+                            return EvaluationStatus::recoverable(
+                                "two-phase acceleration closure requires "
+                                "0 < endpoint void fraction < 1");
+                        }
+                        const double liquid_fraction =
+                            1.0 - endpoint_quality;
+                        const double momentum_specific_volume =
+                            endpoint_quality * endpoint_quality /
+                                (endpoint_rho_v *
+                                 endpoint_void_fraction) +
+                            liquid_fraction * liquid_fraction /
+                                (endpoint_rho_l *
+                                 (1.0 - endpoint_void_fraction));
+                        const double mass_flux =
+                            mass_flow / data.area;
+                        value = mass_flux * mass_flux *
+                            momentum_specific_volume;
+                        if (!std::isfinite(value) || value < 0.0) {
+                            return EvaluationStatus::recoverable(
+                                "two-phase acceleration closure produced "
+                                "nonphysical momentum flux");
+                        }
+                        return EvaluationStatus::success();
+                    };
+                double inlet_momentum_flux = 0.0;
+                double outlet_momentum_flux = 0.0;
+                const auto inlet_status = momentum_flux(
+                    inlet_pressure, inlet_momentum_flux);
+                if (!inlet_status.ok()) {
+                    return RestrictionEvaluation{inlet_status};
+                }
+                const auto outlet_status = momentum_flux(
+                    outlet_pressure, outlet_momentum_flux);
+                if (!outlet_status.ok()) {
+                    return RestrictionEvaluation{outlet_status};
+                }
+                acceleration_pressure_drop =
+                    outlet_momentum_flux - inlet_momentum_flux;
+            }
             return RestrictionEvaluation{
                 EvaluationStatus::success(),
                 inlet_pressure - outlet_pressure -
                     data.loss_scale * mass_flow *
                         std::abs(mass_flow) / mixture_density -
                     distributed_friction_loss -
+                    acceleration_pressure_drop -
                     mixture_density * gravity *
                         data.elevation_change};
         };
