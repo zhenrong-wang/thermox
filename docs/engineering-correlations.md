@@ -235,6 +235,14 @@ artifact. The resulting family selects from live liquid and vapor Reynolds numbe
 deterministic `Re = 2000` boundary, and flows through the same component, persistence, and
 diagnostic contracts as user-authored engineering data.
 
+Direct C++ callers may use that platform function. Service and remote clients use
+`SimulationService::instantiate_correlation` or
+`POST /api/v1/correlation-artifacts/instantiate`. The request names an artifact identity and one
+or more catalog template bindings with optional bounded coefficient overrides, candidate IDs, and
+priorities. The response contains the ordinary `thermox.correlation/v1` payload, the exact runtime
+catalog fingerprint, and a SHA-256 computed from the canonical payload. Publishing that payload as
+a Team/project artifact revision is intentionally a separate storage operation.
+
 This classical family is a transparent baseline, not a universal friction model. Its original
 isothermal, two-component, smooth-pipe basis does not establish validity for heated boiling,
 condensation, rough pipes, rod bundles, microchannels, or every fluid and orientation. Such uses

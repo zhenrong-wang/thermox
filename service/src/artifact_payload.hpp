@@ -28,6 +28,9 @@ CorrelationArtifactInput correlation_from_payload(
     const std::string& checksum,
     const std::string& payload_json);
 
+std::string correlation_payload_json(
+    const CorrelationArtifactInput& artifact);
+
 std::string canonicalize_expression_component_payload(
     const std::string& schema_version,
     const std::string& payload_json);

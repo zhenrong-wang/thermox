@@ -2,6 +2,7 @@
 
 #include "serialization_internal.hpp"
 #include "runtime_internal.hpp"
+#include "artifact_payload.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/continuation_solver.hpp"
@@ -14,13 +15,17 @@
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/transient_solver.hpp"
 
+#include <openssl/evp.h>
+
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -43,6 +48,63 @@ ServiceError make_error(
 
 bool valid_schema(const std::string& schema) {
     return schema == command_schema_v1;
+}
+
+std::string sha256_hex(std::string_view value) {
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>
+        context{EVP_MD_CTX_new(), EVP_MD_CTX_free};
+    if (!context ||
+        EVP_DigestInit_ex(
+            context.get(), EVP_sha256(), nullptr) != 1 ||
+        EVP_DigestUpdate(
+            context.get(), value.data(), value.size()) != 1) {
+        throw std::runtime_error(
+            "could not initialize correlation SHA-256 checksum");
+    }
+    unsigned char digest[EVP_MAX_MD_SIZE]{};
+    unsigned int digest_size = 0;
+    if (EVP_DigestFinal_ex(
+            context.get(), digest, &digest_size) != 1) {
+        throw std::runtime_error(
+            "could not finalize correlation SHA-256 checksum");
+    }
+    std::ostringstream encoded;
+    for (unsigned int index = 0; index < digest_size; ++index) {
+        encoded << std::hex << std::setfill('0')
+                << std::setw(2)
+                << static_cast<unsigned int>(digest[index]);
+    }
+    return encoded.str();
+}
+
+CorrelationArtifactInput correlation_input(
+    const platform::CorrelationArtifact& artifact) {
+    CorrelationArtifactInput input;
+    input.id = artifact.id;
+    input.schema_version = artifact.schema_version;
+    input.revision = artifact.revision;
+    input.checksum_sha256 = artifact.checksum_sha256;
+    for (const auto& variable : artifact.inputs()) {
+        input.inputs.push_back({variable.name, variable.dimension});
+    }
+    input.output = {
+        artifact.output().name, artifact.output().dimension};
+    for (const auto& candidate : artifact.candidates()) {
+        CorrelationCandidateInput value;
+        value.id = candidate.id;
+        value.regime = candidate.regime;
+        value.priority = candidate.priority;
+        value.coefficients = candidate.coefficients;
+        value.expression = candidate.expression;
+        for (const auto& range : candidate.applicability) {
+            value.applicability.push_back({
+                range.input, range.minimum, range.maximum,
+                range.minimum_inclusive,
+                range.maximum_inclusive});
+        }
+        input.candidates.push_back(std::move(value));
+    }
+    return input;
 }
 
 std::vector<platform::ExpressionComponentDefinition>
@@ -1898,6 +1960,67 @@ CatalogResponse SimulationService::get_catalog(
             std::move(domain));
     }
     response.status = OperationStatus::succeeded;
+    return response;
+}
+
+InstantiateCorrelationResponse
+SimulationService::instantiate_correlation(
+    const InstantiateCorrelationRequest& request) const {
+    InstantiateCorrelationResponse response;
+    response.catalog_fingerprint = impl_->runtime->impl_->fingerprint;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema", "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.artifact_id.empty() || request.revision.empty()) {
+        response.error = make_error(
+            "invalid_correlation_identity", "request",
+            "correlation artifact_id and revision must not be empty");
+        return response;
+    }
+    constexpr std::size_t maximum_bindings = 32;
+    if (request.bindings.empty() ||
+        request.bindings.size() > maximum_bindings) {
+        response.error = make_error(
+            "invalid_correlation_bindings", "request",
+            "correlation instantiation requires between 1 and 32 "
+            "template bindings");
+        return response;
+    }
+    try {
+        std::vector<platform::CorrelationTemplateCandidateBinding>
+            bindings;
+        bindings.reserve(request.bindings.size());
+        for (const auto& binding : request.bindings) {
+            bindings.push_back({
+                binding.template_id,
+                binding.coefficients,
+                binding.candidate_id,
+                binding.priority,
+            });
+        }
+        auto artifact = platform::instantiate_correlation_family(
+            impl_->runtime->impl_->correlation_templates,
+            {
+                request.artifact_id,
+                request.revision,
+                std::string(64, '0'),
+            },
+            std::move(bindings));
+        response.artifact = correlation_input(artifact);
+        response.canonical_payload_json =
+            detail::correlation_payload_json(response.artifact);
+        response.artifact.checksum_sha256 =
+            sha256_hex(response.canonical_payload_json);
+        response.status = OperationStatus::succeeded;
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "correlation_instantiation_failed",
+            "correlation_template", ex.what());
+    }
     return response;
 }
 

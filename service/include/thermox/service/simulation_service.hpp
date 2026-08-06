@@ -16,6 +16,8 @@ inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
 inline constexpr char catalog_schema_v6[] = "thermox.catalog/v6";
+inline constexpr char correlation_instantiation_schema_v1[] =
+    "thermox.correlation_instantiation/v1";
 
 enum class OperationStatus {
     succeeded,
@@ -377,6 +379,33 @@ struct CorrelationArtifactInput {
     std::vector<CorrelationVariableInput> inputs;
     CorrelationVariableInput output;
     std::vector<CorrelationCandidateInput> candidates;
+};
+
+struct CorrelationTemplateBindingInput {
+    std::string template_id;
+    std::map<std::string, double> coefficients;
+    std::string candidate_id;
+    int priority{0};
+};
+
+struct InstantiateCorrelationRequest {
+    std::string schema_version{command_schema_v1};
+    std::string artifact_id;
+    std::string revision;
+    std::vector<CorrelationTemplateBindingInput> bindings;
+};
+
+struct InstantiateCorrelationResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    std::string schema_version{correlation_instantiation_schema_v1};
+    std::string catalog_fingerprint;
+    CorrelationArtifactInput artifact;
+    std::string canonical_payload_json;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
 };
 
 struct EngineeringArtifactReference {
@@ -845,6 +874,9 @@ public:
     [[nodiscard]] CatalogResponse get_catalog(
         const SimulationComponentBundle& components,
         const CatalogRequest& request = {}) const;
+    [[nodiscard]] InstantiateCorrelationResponse
+    instantiate_correlation(
+        const InstantiateCorrelationRequest& request) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
     [[nodiscard]] CalibrationResponse run_calibration(

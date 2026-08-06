@@ -1304,6 +1304,38 @@ std::string serialize_catalog_response_json(
     return out.str();
 }
 
+std::string serialize_correlation_instantiation_response_json(
+    const InstantiateCorrelationResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, response.schema_version);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"catalog_fingerprint\": ";
+    json_string(out, response.catalog_fingerprint);
+    out << ",\n  \"artifact\": ";
+    if (!response.succeeded()) {
+        out << "null";
+    } else {
+        out << "{\"id\": ";
+        json_string(out, response.artifact.id);
+        out << ", \"artifact_type\": ";
+        json_string(out, platform::correlation_artifact_type);
+        out << ", \"schema_version\": ";
+        json_string(out, response.artifact.schema_version);
+        out << ", \"revision\": ";
+        json_string(out, response.artifact.revision);
+        out << ", \"checksum_sha256\": ";
+        json_string(out, response.artifact.checksum_sha256);
+        out << ", \"payload\": "
+            << response.canonical_payload_json << '}';
+    }
+    out << "\n}\n";
+    return out.str();
+}
+
 std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;

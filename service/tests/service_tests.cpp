@@ -923,6 +923,67 @@ void test_catalog_discovery() {
         "catalog JSON must serialize correlation templates and provenance");
 }
 
+void test_correlation_template_instantiation() {
+    thermox::service::SimulationService service;
+    thermox::service::InstantiateCorrelationRequest request;
+    request.artifact_id = "smooth-pipe-two-phase-friction";
+    request.revision = "engineering-baseline-1";
+    request.bindings = {
+        {
+            "chisholm_laminar_laminar_friction_gradient",
+            {}, "laminar_laminar", 0,
+        },
+        {
+            "chisholm_laminar_turbulent_friction_gradient",
+            {}, "laminar_turbulent", 0,
+        },
+        {
+            "chisholm_turbulent_laminar_friction_gradient",
+            {}, "turbulent_laminar", 0,
+        },
+        {
+            "chisholm_turbulent_turbulent_friction_gradient",
+            {}, "turbulent_turbulent", 0,
+        },
+    };
+    const auto response = service.instantiate_correlation(request);
+    require(
+        response.succeeded() &&
+            response.schema_version ==
+                thermox::service::
+                    correlation_instantiation_schema_v1 &&
+            response.artifact.id == request.artifact_id &&
+            response.artifact.schema_version ==
+                "thermox.correlation/v1" &&
+            response.artifact.candidates.size() == 4U &&
+            response.artifact.checksum_sha256.size() == 64U &&
+            !response.canonical_payload_json.empty() &&
+            !response.catalog_fingerprint.empty(),
+        "service must instantiate a content-addressed correlation "
+        "family from catalog templates");
+
+    const auto repeated = service.instantiate_correlation(request);
+    require(
+        repeated.succeeded() &&
+            repeated.artifact.checksum_sha256 ==
+                response.artifact.checksum_sha256 &&
+            repeated.canonical_payload_json ==
+                response.canonical_payload_json,
+        "correlation instantiation must be deterministic");
+
+    auto incompatible = request;
+    incompatible.bindings.push_back({
+        "zuber_findlay_kinematic_void_fraction", {}, "void", 0,
+    });
+    const auto rejected =
+        service.instantiate_correlation(incompatible);
+    require(
+        !rejected.succeeded() &&
+            rejected.error.code ==
+                "correlation_instantiation_failed",
+        "service must reject templates with incompatible contracts");
+}
+
 void test_validation_and_canonicalization() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -3746,6 +3807,7 @@ int main() {
         test_correlation_applicability_reaches_component_diagnostics();
         test_request_scoped_correlation_family_selects_candidate();
         test_catalog_discovery();
+        test_correlation_template_instantiation();
         test_validation_and_canonicalization();
         test_homogeneous_two_phase_local_loss();
 #ifdef THERMOX_TEST_HAS_CANTERA

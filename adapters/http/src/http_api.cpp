@@ -14,6 +14,7 @@
 #include <charconv>
 #include <cmath>
 #include <cctype>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -625,6 +626,116 @@ std::string require_json_string(
             std::string(name));
     }
     return std::string(value.as_string());
+}
+
+double require_json_number(
+    const boost::json::value& value,
+    std::string_view name) {
+    if (value.is_double()) return value.as_double();
+    if (value.is_int64()) {
+        return static_cast<double>(value.as_int64());
+    }
+    if (value.is_uint64()) {
+        return static_cast<double>(value.as_uint64());
+    }
+    throw std::invalid_argument(
+        "JSON field must be a number: " + std::string(name));
+}
+
+service::InstantiateCorrelationRequest
+parse_correlation_instantiation_request(const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid correlation instantiation JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "correlation instantiation request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "artifact_id" &&
+            field.key() != "revision" &&
+            field.key() != "bindings") {
+            throw std::invalid_argument(
+                "unknown correlation instantiation field: " +
+                std::string(field.key()));
+        }
+    }
+    service::InstantiateCorrelationRequest command;
+    command.schema_version =
+        require_json_string(root, "schema_version");
+    command.artifact_id =
+        require_json_string(root, "artifact_id");
+    command.revision = require_json_string(root, "revision");
+    const auto& bindings = require_json_field(root, "bindings");
+    if (!bindings.is_array()) {
+        throw std::invalid_argument(
+            "correlation template bindings must be an array");
+    }
+    for (const auto& item : bindings.as_array()) {
+        if (!item.is_object()) {
+            throw std::invalid_argument(
+                "each correlation template binding must be an object");
+        }
+        const auto& object = item.as_object();
+        for (const auto& field : object) {
+            if (field.key() != "template_id" &&
+                field.key() != "coefficients" &&
+                field.key() != "candidate_id" &&
+                field.key() != "priority") {
+                throw std::invalid_argument(
+                    "unknown correlation template binding field: " +
+                    std::string(field.key()));
+            }
+        }
+        service::CorrelationTemplateBindingInput binding;
+        binding.template_id =
+            require_json_string(object, "template_id");
+        if (const auto* candidate =
+                object.if_contains("candidate_id")) {
+            if (!candidate->is_string()) {
+                throw std::invalid_argument(
+                    "correlation candidate_id must be a string");
+            }
+            binding.candidate_id =
+                std::string(candidate->as_string());
+        }
+        if (const auto* priority = object.if_contains("priority")) {
+            if (!priority->is_int64()) {
+                throw std::invalid_argument(
+                    "correlation priority must be an integer");
+            }
+            const auto parsed = priority->as_int64();
+            if (parsed < std::numeric_limits<int>::min() ||
+                parsed > std::numeric_limits<int>::max()) {
+                throw std::invalid_argument(
+                    "correlation priority is outside integer range");
+            }
+            binding.priority = static_cast<int>(parsed);
+        }
+        if (const auto* coefficients =
+                object.if_contains("coefficients")) {
+            if (!coefficients->is_object()) {
+                throw std::invalid_argument(
+                    "correlation coefficients must be an object");
+            }
+            for (const auto& coefficient :
+                 coefficients->as_object()) {
+                binding.coefficients.emplace(
+                    std::string(coefficient.key()),
+                    require_json_number(
+                        coefficient.value(), coefficient.key()));
+            }
+        }
+        command.bindings.push_back(std::move(binding));
+    }
+    return command;
 }
 
 std::pair<std::string, std::string>
@@ -1643,6 +1754,29 @@ Response Api::handle(const Request& request) const {
             return json_response(
                 operation_status(result.status),
                 service::serialize_catalog_response_json(result));
+        }
+
+        if (target.path ==
+            "/api/v1/correlation-artifacts/instantiate") {
+            reject_unknown_query(target.query, {});
+            if (method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "correlation instantiation only supports POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
+            require_json_request(
+                request, impl_->options.maximum_body_bytes);
+            const auto result = impl_->simulation
+                .instantiate_correlation(
+                    parse_correlation_instantiation_request(
+                        request));
+            return json_response(
+                operation_status(result.status),
+                service::
+                    serialize_correlation_instantiation_response_json(
+                        result));
         }
 
         if (target.path == "/api/v1/projects") {

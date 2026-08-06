@@ -554,6 +554,11 @@ Work items:
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe
      verification; ✅
+   - generic multi-template family instantiation through the platform, service, and thin HTTP
+     adapter, returning a deterministic canonical payload, runtime-catalog fingerprint, and
+     content SHA-256 suitable for separate Team/project publication; ✅
+   - classical four-regime Lockhart–Martinelli/Chisholm smooth-pipe friction family with live
+     phase flux/Reynolds inputs and connected two-phase transport verification; ✅
    - geometry/regime-specific coefficient correlations and flow-pattern maps remain follow-ons.
 9. Map validation and interpolation quality controls.
 10. Multi-user auth, authorization, project isolation, audit logs.
