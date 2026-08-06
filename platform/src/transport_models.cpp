@@ -1487,6 +1487,10 @@ private:
                     {"vapor_viscosity", "dynamic_viscosity"},
                     {"mass_flow", "mass_flow"},
                     {"mass_flux", "mass_flux"},
+                    {"liquid_mass_flux", "mass_flux"},
+                    {"vapor_mass_flux", "mass_flux"},
+                    {"liquid_reynolds_number", "dimensionless"},
+                    {"vapor_reynolds_number", "dimensionless"},
                     {"area", "area"},
                     {"diameter", "length"},
                     {"length", "length"},
@@ -1663,6 +1667,28 @@ private:
                         inputs.emplace(
                             input.name,
                             std::abs(mass_flow) / data.area);
+                    } else if (input.name == "liquid_mass_flux") {
+                        inputs.emplace(
+                            input.name, (1.0 - quality) *
+                                std::abs(mass_flow) / data.area);
+                    } else if (input.name == "vapor_mass_flux") {
+                        inputs.emplace(
+                            input.name, quality *
+                                std::abs(mass_flow) / data.area);
+                    } else if (
+                        input.name == "liquid_reynolds_number") {
+                        inputs.emplace(
+                            input.name, (1.0 - quality) *
+                                std::abs(mass_flow) * data.diameter /
+                                (data.area *
+                                 saturation.liquid.viscosity_pa_s));
+                    } else if (
+                        input.name == "vapor_reynolds_number") {
+                        inputs.emplace(
+                            input.name, quality *
+                                std::abs(mass_flow) * data.diameter /
+                                (data.area *
+                                 saturation.vapor.viscosity_pa_s));
                     } else if (input.name == "area") {
                         inputs.emplace(input.name, data.area);
                     } else if (input.name == "diameter") {

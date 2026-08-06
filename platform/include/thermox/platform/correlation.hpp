@@ -81,6 +81,13 @@ struct CorrelationArtifactIdentity {
     std::string checksum_sha256;
 };
 
+struct CorrelationTemplateCandidateBinding {
+    std::string template_id;
+    std::map<std::string, double> coefficients;
+    std::string candidate_id;
+    int priority{0};
+};
+
 class CorrelationTemplateRegistry {
 public:
     void register_template(CorrelationTemplateDescriptor descriptor);
@@ -137,5 +144,10 @@ make_default_correlation_template_registry();
     std::map<std::string, double> coefficients,
     std::string candidate_id = "default",
     int priority = 0);
+
+[[nodiscard]] CorrelationArtifact instantiate_correlation_family(
+    const CorrelationTemplateRegistry& registry,
+    CorrelationArtifactIdentity identity,
+    std::vector<CorrelationTemplateCandidateBinding> bindings);
 
 }  // namespace thermox::platform

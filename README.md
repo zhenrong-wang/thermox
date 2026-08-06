@@ -560,8 +560,8 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Extend the delivered, referenced Zuber–Findlay kinematic template with validated
-   geometry/regime-specific coefficient correlations and flow-pattern maps. The general rigid PH
+1. Extend the delivered Zuber–Findlay and classical Lockhart–Martinelli/Chisholm baselines with
+   validated geometry-specific coefficient correlations and flow-pattern maps. The general rigid PH
    inventory now traverses both saturation boundaries in both
    directions with HEOS water; IF97 retains a documented liquid-boundary limitation, while
    specialized equilibrium cells and two-phase pipes retain explicit applicability guards.

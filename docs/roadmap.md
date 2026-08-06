@@ -240,6 +240,9 @@ Delivered:
 28. Constant-area separated-flow acceleration pressure drop from independently evaluated inlet and
     outlet momentum flux, using property-backed endpoint qualities/densities and the bound
     void-fraction closure, with forward/reverse and steady/transient verification. ✅
+29. Referenced Lockhart–Martinelli/Chisholm smooth-pipe friction templates for all four phase
+    Reynolds-number combinations, plus generic compatible-template family instantiation,
+    deterministic regime boundaries, immutable constants, and connected pipe verification. ✅
 
 ## Component catalog and modularization foundation
 

@@ -81,22 +81,22 @@ zuber_findlay_void_fraction_correlation() {
 
 thermox::platform::CorrelationArtifact
 two_phase_friction_pressure_gradient_correlation() {
-    return {
-        "two-phase-friction-gradient",
-        thermox::platform::correlation_artifact_schema_v1,
-        "test-1", std::string(64, '8'),
+    const auto templates = thermox::platform::
+        make_default_correlation_template_registry();
+    return thermox::platform::instantiate_correlation_family(
+        templates,
+        {"two-phase-friction-gradient", "test-1",
+         std::string(64, '8')},
         {
-            {"mass_flux", "mass_flux"},
-            {"mixture_density", "density"},
-            {"diameter", "length"},
-        },
-        {"friction_pressure_gradient", "pressure_gradient"},
-        {{"darcy_baseline", "test_only", 0,
-          {{"darcy_friction_factor", 0.04}},
-          "darcy_friction_factor * mass_flux * mass_flux / "
-          "(2 * mixture_density * diameter)",
-          {{"mass_flux", 0.0, std::nullopt, false, true}}}},
-    };
+            {"chisholm_laminar_laminar_friction_gradient",
+             {}, "laminar_laminar", 0},
+            {"chisholm_laminar_turbulent_friction_gradient",
+             {}, "laminar_turbulent", 0},
+            {"chisholm_turbulent_laminar_friction_gradient",
+             {}, "turbulent_laminar", 0},
+            {"chisholm_turbulent_turbulent_friction_gradient",
+             {}, "turbulent_turbulent", 0},
+        });
 }
 
 void test_packaged_zuber_findlay_template_has_physical_limits() {
@@ -172,6 +172,96 @@ void test_packaged_zuber_findlay_template_has_physical_limits() {
     }
     require(nonphysical_coefficient_rejected,
             "packaged template must enforce coefficient bounds");
+}
+
+void test_packaged_chisholm_family_selects_phase_regimes() {
+    const auto family =
+        two_phase_friction_pressure_gradient_correlation();
+    const auto evaluate = [&](double liquid_reynolds,
+                              double vapor_reynolds) {
+        return family.evaluate({
+            {"liquid_mass_flux", 20.0},
+            {"vapor_mass_flux", 5.0},
+            {"liquid_density", 900.0},
+            {"vapor_density", 5.0},
+            {"liquid_reynolds_number", liquid_reynolds},
+            {"vapor_reynolds_number", vapor_reynolds},
+            {"diameter", 0.1},
+        });
+    };
+    const auto turbulent = evaluate(5000.0, 10000.0);
+    require(
+        turbulent.error.empty() &&
+            turbulent.selected_candidate == "turbulent_turbulent" &&
+            turbulent.selected_regime ==
+                "liquid_turbulent_vapor_turbulent",
+        "packaged Chisholm family must select turbulent/turbulent");
+    const double liquid_gradient =
+        2.0 * 0.079 * std::pow(5000.0, -0.25) * 20.0 * 20.0 /
+        (0.1 * 900.0);
+    const double vapor_gradient =
+        2.0 * 0.079 * std::pow(10000.0, -0.25) * 5.0 * 5.0 /
+        (0.1 * 5.0);
+    require_close(
+        turbulent.value,
+        liquid_gradient +
+            20.0 * std::sqrt(liquid_gradient * vapor_gradient) +
+            vapor_gradient,
+        1.0e-12, "packaged Chisholm turbulent pressure gradient");
+
+    const auto boundary = evaluate(2000.0, 2000.0);
+    require(
+        boundary.error.empty() &&
+            boundary.selected_candidate == "laminar_laminar",
+        "Re=2000 boundary must belong deterministically to the "
+        "laminar/laminar candidate");
+    const auto mixed = evaluate(1000.0, 5000.0);
+    require(
+        mixed.error.empty() &&
+            mixed.selected_candidate == "laminar_turbulent",
+        "packaged Chisholm family must select mixed phase regimes");
+
+    const auto templates = thermox::platform::
+        make_default_correlation_template_registry();
+    require(
+        templates.require_template(
+            "chisholm_turbulent_turbulent_friction_gradient")
+                .reference.find("10.1016/0017-9310(67)90047-6") !=
+            std::string::npos,
+        "packaged Chisholm template retains its primary reference");
+    bool fixed_constants_rejected = false;
+    try {
+        (void)thermox::platform::instantiate_correlation_template(
+            templates.require_template(
+                "chisholm_turbulent_turbulent_friction_gradient"),
+            {"modified-chisholm", "test-1", std::string(64, '6')},
+            {{"chisholm_parameter", 21.0}});
+    } catch (const std::invalid_argument&) {
+        fixed_constants_rejected = true;
+    }
+    require(
+        fixed_constants_rejected,
+        "packaged referenced constants must not be silently overridden");
+
+    bool incompatible_family_rejected = false;
+    try {
+        (void)thermox::platform::instantiate_correlation_family(
+            templates,
+            {"incompatible-family", "test-1", std::string(64, '5')},
+            {
+                {"zuber_findlay_kinematic_void_fraction",
+                 {{"distribution_parameter", 1.2},
+                  {"drift_velocity", 0.5}},
+                 "void", 0},
+                {"chisholm_turbulent_turbulent_friction_gradient",
+                 {}, "friction", 0},
+            });
+    } catch (const std::invalid_argument&) {
+        incompatible_family_rejected = true;
+    }
+    require(
+        incompatible_family_rejected,
+        "family instantiation must reject incompatible contracts");
 }
 
 void test_correlation_evaluates_with_analytic_derivatives() {
@@ -492,6 +582,41 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
         alpha.value * saturation.vapor.density_kg_m3 +
         (1.0 - alpha.value) *
             saturation.liquid.density_kg_m3;
+    const auto chisholm_gradient =
+        [&](double quality, const auto& phase_saturation) {
+            const double total_mass_flux = 0.2 / area;
+            const double liquid_mass_flux =
+                (1.0 - quality) * total_mass_flux;
+            const double vapor_mass_flux =
+                quality * total_mass_flux;
+            const double liquid_reynolds =
+                liquid_mass_flux * 0.1 /
+                phase_saturation.liquid.viscosity_pa_s;
+            const double vapor_reynolds =
+                vapor_mass_flux * 0.1 /
+                phase_saturation.vapor.viscosity_pa_s;
+            const auto fanning = [](double reynolds) {
+                return reynolds <= 2000.0
+                    ? 16.0 / reynolds
+                    : 0.079 * std::pow(reynolds, -0.25);
+            };
+            const double liquid_gradient =
+                2.0 * fanning(liquid_reynolds) *
+                liquid_mass_flux * liquid_mass_flux /
+                (0.1 *
+                 phase_saturation.liquid.density_kg_m3);
+            const double vapor_gradient =
+                2.0 * fanning(vapor_reynolds) *
+                vapor_mass_flux * vapor_mass_flux /
+                (0.1 * phase_saturation.vapor.density_kg_m3);
+            const double chisholm_parameter =
+                liquid_reynolds <= 2000.0
+                ? (vapor_reynolds <= 2000.0 ? 5.0 : 12.0)
+                : (vapor_reynolds <= 2000.0 ? 10.0 : 20.0);
+            return liquid_gradient + vapor_gradient +
+                chisholm_parameter *
+                    std::sqrt(liquid_gradient * vapor_gradient);
+        };
     const auto momentum_flux = [&](double pressure) {
         const auto endpoint_state = water->state_ph(
             pressure, 1.5e6);
@@ -525,8 +650,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     const double expected_drop =
         2.0 * 0.2 * 0.2 /
             (2.0 * density * area * area) +
-        0.04 * std::pow(0.2 / area, 2.0) /
-            (2.0 * density * 0.1) * 10.0 +
+        chisholm_gradient(
+            state.state.vapor_quality, saturation) * 10.0 +
         density * 9.80665 * 5.0 +
         acceleration_pressure_drop;
     require_close(
@@ -585,8 +710,9 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     const double reverse_loss_magnitude =
         2.0 * 0.2 * 0.2 /
             (2.0 * reverse_density * area * area) +
-        0.04 * std::pow(0.2 / area, 2.0) /
-            (2.0 * reverse_density * 0.1) * 10.0;
+        chisholm_gradient(
+            reverse_state.state.vapor_quality,
+            reverse_saturation) * 10.0;
     const double reverse_acceleration_pressure_drop =
         momentum_flux(reverse_outlet_pressure) -
         momentum_flux(1.0e6);
@@ -834,6 +960,7 @@ int main() {
     try {
         test_correlation_evaluates_with_analytic_derivatives();
         test_packaged_zuber_findlay_template_has_physical_limits();
+        test_packaged_chisholm_family_selects_phase_regimes();
         test_correlation_contract_rejects_undeclared_symbols();
         test_correlation_enforces_qualified_operating_envelope();
         test_correlation_family_selects_deterministically();

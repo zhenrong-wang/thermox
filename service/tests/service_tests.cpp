@@ -878,6 +878,21 @@ void test_catalog_discovery() {
             zuber_findlay->reference.find("10.1115/1.3689137") !=
                 std::string::npos,
         "catalog must expose the referenced, parameterized drift-flux template");
+    const auto chisholm = std::find_if(
+        response.correlation_templates.begin(),
+        response.correlation_templates.end(),
+        [](const auto& descriptor) {
+            return descriptor.id ==
+                "chisholm_turbulent_turbulent_friction_gradient";
+        });
+    require(
+        response.correlation_templates.size() == 5 &&
+            chisholm != response.correlation_templates.end() &&
+            chisholm->coefficients.size() == 5 &&
+            chisholm->reference.find(
+                "10.1016/0017-9310(67)90047-6") !=
+                std::string::npos,
+        "catalog must expose all referenced Chisholm regime templates");
     const auto pressure_units = std::find_if(
         response.unit_dimensions.begin(),
         response.unit_dimensions.end(),

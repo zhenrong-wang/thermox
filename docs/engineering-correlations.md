@@ -93,8 +93,9 @@ component logic:
 ```
 
 The friction correlation may additionally request `void_fraction`, `mixture_density`, saturated
-`liquid_viscosity` and `vapor_viscosity`, `length`, or `roughness`. It owns the selected friction
-law, flow-regime dependence, and qualified operating envelope. The component multiplies its
+`liquid_viscosity` and `vapor_viscosity`, phase mass fluxes, phase Reynolds numbers, `length`, or
+`roughness`. Phase values use `G_l = (1-x) G`, `G_v = x G`, and `Re_k = G_k D / mu_k`. The artifact
+owns the selected friction law, flow-regime dependence, and qualified operating envelope. The component multiplies its
 nonnegative pressure-gradient magnitude by pipe length and applies the sign of mass flow. This
 keeps reverse-flow behavior in the component balance without requiring every engineering law to
 reimplement it.
@@ -214,6 +215,31 @@ separate engineering data that must carry their own provenance and applicability
 The limiting case `C0 = 1`, `V_gj = 0` exactly recovers homogeneous void fraction. Tests cover that
 limit, coefficient rejection, analytic quality sensitivity, catalog serialization, and a connected
 two-phase riser pressure balance using an instantiated template.
+
+Four additional packaged templates implement the classical Lockhart–Martinelli/Chisholm friction
+gradient family. Lockhart and Martinelli introduced the two-phase multiplier framework for
+isothermal two-component pipe flow in 1949; Chisholm supplied its analytical basis in
+[DOI 10.1016/0017-9310(67)90047-6](https://doi.org/10.1016/0017-9310(67)90047-6). Thermox writes
+the equivalent pressure-gradient form as
+
+`gradient_tp = gradient_l + C sqrt(gradient_l gradient_v) + gradient_v`,
+
+with `gradient_k = 2 f_k G_k^2 / (D rho_k)`. The packaged smooth-pipe Fanning factors are
+`f = 16/Re` for `Re <= 2000` and `f = 0.079 Re^-0.25` for `Re > 2000`. Four disjoint candidates
+cover liquid/vapor laminar–laminar, laminar–turbulent, turbulent–laminar, and
+turbulent–turbulent combinations with the referenced Chisholm parameters 5, 12, 10, and 20.
+The constants are fixed in the packaged templates rather than exposed as silent tuning knobs.
+
+`instantiate_correlation_family` combines compatible single-candidate templates into one ordinary
+artifact. The resulting family selects from live liquid and vapor Reynolds numbers, including a
+deterministic `Re = 2000` boundary, and flows through the same component, persistence, and
+diagnostic contracts as user-authored engineering data.
+
+This classical family is a transparent baseline, not a universal friction model. Its original
+isothermal, two-component, smooth-pipe basis does not establish validity for heated boiling,
+condensation, rough pipes, rod bundles, microchannels, or every fluid and orientation. Such uses
+require validation or a more appropriate registered artifact; Thermox does not infer that scope
+from numerical convergence.
 
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation
