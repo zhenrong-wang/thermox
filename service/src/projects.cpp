@@ -218,7 +218,8 @@ void validate_transient_solver(
         !std::isfinite(value.relative_tolerance) ||
         value.relative_tolerance <= 0.0 ||
         value.max_steps <= 0 ||
-        value.max_consecutive_rejections <= 0) {
+        value.max_consecutive_rejections <= 0 ||
+        value.maximum_order < 1 || value.maximum_order > 2) {
         throw ProjectRequestError(
             "invalid transient solver settings");
     }
@@ -260,6 +261,7 @@ std::string run_configuration_identity(
         << '|' << transient.relative_tolerance
         << '|' << transient.max_steps
         << '|' << transient.max_consecutive_rejections
+        << '|' << transient.maximum_order
         << '|' <<
             transient.compute_consistent_initial_conditions
         << '|';

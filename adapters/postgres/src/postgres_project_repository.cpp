@@ -143,6 +143,7 @@ Tree transient_solver_tree(
     tree.put(
         "max_consecutive_rejections",
         value.max_consecutive_rejections);
+    tree.put("maximum_order", value.maximum_order);
     tree.put(
         "compute_consistent_initial_conditions",
         value.compute_consistent_initial_conditions);
@@ -167,6 +168,7 @@ service::TransientSolverSettings decode_transient_solver(
     value.max_steps = tree.get<int>("max_steps");
     value.max_consecutive_rejections =
         tree.get<int>("max_consecutive_rejections");
+    value.maximum_order = tree.get<int>("maximum_order");
     value.compute_consistent_initial_conditions =
         tree.get<bool>(
             "compute_consistent_initial_conditions");

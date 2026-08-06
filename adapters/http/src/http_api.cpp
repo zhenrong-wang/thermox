@@ -1084,6 +1084,7 @@ void parse_transient_solver(
         "relative_tolerance",
         "max_steps",
         "max_consecutive_rejections",
+        "maximum_order",
         "compute_consistent_initial_conditions",
         "nonlinear_solver",
     };
@@ -1110,6 +1111,8 @@ void parse_transient_solver(
     solver.max_consecutive_rejections = tree.get(
         "max_consecutive_rejections",
         solver.max_consecutive_rejections);
+    solver.maximum_order = tree.get(
+        "maximum_order", solver.maximum_order);
     solver.compute_consistent_initial_conditions = tree.get(
         "compute_consistent_initial_conditions",
         solver.compute_consistent_initial_conditions);

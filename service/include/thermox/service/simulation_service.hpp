@@ -504,6 +504,7 @@ struct TimeIntegrationDiagnostics {
     bool success{false};
     int accepted_steps{0};
     int rejected_steps{0};
+    int maximum_order_used{0};
     int nonlinear_solves{0};
     int nonlinear_iterations{0};
     int symbolic_factorizations{0};
@@ -750,6 +751,7 @@ struct TransientSolverSettings {
     double relative_tolerance{1.0e-5};
     int max_steps{100000};
     int max_consecutive_rejections{20};
+    int maximum_order{2};
     bool compute_consistent_initial_conditions{true};
     SteadySolverSettings nonlinear_solver = [] {
         SteadySolverSettings settings;

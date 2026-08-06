@@ -273,6 +273,7 @@ std::string request_fingerprint(
            << request.transient_solver.relative_tolerance << '|'
            << request.transient_solver.max_steps << '|'
            << request.transient_solver.max_consecutive_rejections << '|'
+           << request.transient_solver.maximum_order << '|'
            << request.transient_solver
                   .compute_consistent_initial_conditions
            << '|';

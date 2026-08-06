@@ -58,6 +58,7 @@ export const defaultTransientSolver: TransientSolverSettings = {
   relative_tolerance: 1e-5,
   max_steps: 100000,
   max_consecutive_rejections: 20,
+  maximum_order: 2,
   compute_consistent_initial_conditions: true,
   nonlinear_solver: { ...defaultSteadySolver },
 }

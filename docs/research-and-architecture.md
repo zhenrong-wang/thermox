@@ -396,11 +396,11 @@ Where:
 - `z`: algebraic variables, e.g., port pressures/enthalpies/flows.
 - `p`: parameters and boundary inputs.
 
-The core now includes a dependency-free implicit backward-Euler backend with consistent
-initialization, adaptive step doubling, and event detection for index-1 DAEs. SUNDIALS IDA or an
-equivalent higher-order DAE backend should still be considered for production dynamic simulation;
-it can implement the same DAE callback contract while adding mature BDF order control and
-Newton/Krylov methods.
+The core now includes a dependency-free implicit variable-step BDF1/BDF2 backend with consistent
+initialization, order-aware adaptive step doubling, safe BDF1 restart, and event detection for
+index-1 DAEs. SUNDIALS IDA or an equivalent DAE backend should still be considered for demanding
+production dynamic simulation; it can implement the same DAE callback contract while adding
+mature order 1-5 control and Newton/Krylov methods.
 
 ### 8.3 Solver diagnostics
 

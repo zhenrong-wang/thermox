@@ -73,6 +73,7 @@ const transientFields: Array<{
     label: 'Max rejected steps',
     integer: true,
   },
+  { key: 'maximum_order', label: 'Maximum BDF order', integer: true },
 ]
 
 function suggestedId(

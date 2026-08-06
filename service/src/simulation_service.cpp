@@ -851,7 +851,9 @@ TimeIntegrationOptions to_core(
         !std::isfinite(settings.relative_tolerance) ||
         settings.relative_tolerance <= 0.0 ||
         settings.max_steps <= 0 ||
-        settings.max_consecutive_rejections <= 0) {
+        settings.max_consecutive_rejections <= 0 ||
+        settings.maximum_order < 1 ||
+        settings.maximum_order > 2) {
         throw std::invalid_argument("invalid transient solver settings");
     }
     TimeIntegrationOptions options;
@@ -865,6 +867,7 @@ TimeIntegrationOptions to_core(
     options.max_steps = settings.max_steps;
     options.max_consecutive_rejections =
         settings.max_consecutive_rejections;
+    options.maximum_order = settings.maximum_order;
     options.compute_consistent_initial_conditions =
         settings.compute_consistent_initial_conditions;
     options.nonlinear_options = to_core(settings.nonlinear_solver);
@@ -994,7 +997,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf1/v1",
+        "thermox.dae-bdf/v2",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1007,6 +1010,8 @@ SolverProvenance solver_provenance(
             {"max_consecutive_rejections",
              static_cast<double>(
                  settings.max_consecutive_rejections)},
+            {"maximum_order",
+             static_cast<double>(settings.maximum_order)},
             {"compute_consistent_initial_conditions",
              settings.compute_consistent_initial_conditions
                  ? 1.0
@@ -1071,6 +1076,7 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.success,
         source.accepted_steps,
         source.rejected_steps,
+        source.maximum_order_used,
         source.nonlinear_solves,
         source.nonlinear_iterations,
         source.symbolic_factorizations,

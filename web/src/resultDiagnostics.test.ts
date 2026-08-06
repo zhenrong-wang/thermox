@@ -61,6 +61,7 @@ describe('resultDiagnosticSummary', () => {
         success: true,
         accepted_steps: 12,
         rejected_steps: 1,
+        maximum_order_used: 2,
         nonlinear_solves: 12,
         nonlinear_iterations: 20,
         symbolic_factorizations: 1,

@@ -190,6 +190,51 @@ void test_adaptive_dae_integration() {
                  "event time is interpolated");
 }
 
+void test_variable_order_bdf2_improves_smooth_accuracy() {
+    const auto problem = make_decay_problem();
+    thermox::TimeIntegrationOptions first_order;
+    first_order.end_time = 1.0;
+    first_order.initial_step = 0.1;
+    first_order.max_step = 0.1;
+    first_order.absolute_tolerance = 1.0;
+    first_order.relative_tolerance = 1.0;
+    first_order.maximum_order = 1;
+    const auto bdf1 = thermox::integrate_dae(problem, first_order);
+    require(bdf1.diagnostics.success, bdf1.diagnostics.message);
+
+    auto second_order = first_order;
+    second_order.maximum_order = 2;
+    const auto bdf2 = thermox::integrate_dae(problem, second_order);
+    require(bdf2.diagnostics.success, bdf2.diagnostics.message);
+    require(bdf1.diagnostics.maximum_order_used == 1,
+            "BDF1-only execution reports order one");
+    require(bdf2.diagnostics.maximum_order_used == 2,
+            "variable-order execution advances to BDF2 after startup");
+    const double exact = std::exp(-1.0);
+    const double first_error = std::abs(
+        bdf1.trajectory.back().state[0] - exact);
+    const double second_error = std::abs(
+        bdf2.trajectory.back().state[0] - exact);
+    require(second_error < 0.5 * first_error,
+            "BDF2 materially improves smooth transient accuracy: bdf1=" +
+                std::to_string(first_error) + " bdf2=" +
+                std::to_string(second_error));
+}
+
+void test_native_bdf_rejects_unsupported_order() {
+    auto options = thermox::TimeIntegrationOptions{};
+    options.maximum_order = 3;
+    try {
+        (void)thermox::integrate_dae(make_decay_problem(), options);
+    } catch (const std::invalid_argument& error) {
+        require(std::string(error.what()).find("maximum_order") !=
+                    std::string::npos,
+                "unsupported BDF order diagnostic names maximum_order");
+        return;
+    }
+    throw std::runtime_error("native BDF must reject orders above two");
+}
+
 void test_index_one_dae_consistent_initialization_and_integration() {
     thermox::DaeProblem problem;
     problem.variable_names = {"inventory", "algebraic_flow"};
@@ -316,6 +361,8 @@ int main() {
         test_consistent_initial_conditions_for_ode();
         test_singular_initialization_names_unresolved_unknown();
         test_adaptive_dae_integration();
+        test_variable_order_bdf2_improves_smooth_accuracy();
+        test_native_bdf_rejects_unsupported_order();
         test_index_one_dae_consistent_initialization_and_integration();
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();

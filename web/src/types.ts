@@ -178,6 +178,7 @@ export interface TransientSolverSettings {
   relative_tolerance: number
   max_steps: number
   max_consecutive_rejections: number
+  maximum_order: number
   compute_consistent_initial_conditions: boolean
   nonlinear_solver: SteadySolverSettings
 }
@@ -637,6 +638,7 @@ export interface TransientSimulationResult {
     success: boolean
     accepted_steps: number
     rejected_steps: number
+    maximum_order_used: number
     nonlinear_solves: number
     nonlinear_iterations: number
     symbolic_factorizations: number

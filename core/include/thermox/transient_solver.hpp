@@ -87,6 +87,8 @@ struct TimeIntegrationOptions {
     double relative_tolerance{1.0e-5};
     int max_steps{100000};
     int max_consecutive_rejections{20};
+    // Native variable-order BDF currently supports orders 1 and 2.
+    int maximum_order{2};
     bool compute_consistent_initial_conditions{true};
     SolverOptions nonlinear_options = [] {
         SolverOptions options;
@@ -112,6 +114,7 @@ struct TimeIntegrationDiagnostics {
     bool success{false};
     int accepted_steps{0};
     int rejected_steps{0};
+    int maximum_order_used{0};
     int nonlinear_solves{0};
     int nonlinear_iterations{0};
     int symbolic_factorizations{0};

@@ -1841,10 +1841,14 @@ void test_dynamic_natural_circulation_evaporator() {
         inertance_out.primary_values, "m_dot");
     const double down_density = require_result_value(
         down_in.derived_values, "rho").value_si;
+    const double down_quality = require_result_value(
+        down_in.derived_values, "vapor_quality").value_si;
     const double riser_density = require_result_value(
         riser_in.derived_values, "rho").value_si;
     require(
-        down_in.phase == "liquid" &&
+        (down_in.phase == "liquid" ||
+         (down_in.phase == "two_phase" &&
+          down_quality >= 0.0 && down_quality < 1.0e-10)) &&
             riser_in.phase == "two_phase" &&
             riser_out.phase == "two_phase" &&
             down_density > 100.0 * riser_density,
@@ -3441,8 +3445,11 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf1/v1",
+            "thermox.dae-bdf/v2",
         "transient result must record solver contract");
+    require(
+        response.diagnostics.maximum_order_used == 2,
+        "native transient service must advance from BDF1 startup to BDF2");
     const auto end_time_setting = std::find_if(
         response.metadata.solver.settings.begin(),
         response.metadata.solver.settings.end(),

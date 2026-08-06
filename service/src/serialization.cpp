@@ -1529,6 +1529,8 @@ std::string serialize_transient_response_json(
         << response.diagnostics.accepted_steps
         << ", \"rejected_steps\": "
         << response.diagnostics.rejected_steps
+        << ", \"maximum_order_used\": "
+        << response.diagnostics.maximum_order_used
         << ", \"nonlinear_solves\": "
         << response.diagnostics.nonlinear_solves
         << ", \"nonlinear_iterations\": "

@@ -119,6 +119,10 @@ void validate_integration_options(const TimeIntegrationOptions& options) {
     if (options.max_steps <= 0 || options.max_consecutive_rejections <= 0) {
         throw std::invalid_argument("time integration step limits must be positive");
     }
+    if (options.maximum_order < 1 || options.maximum_order > 2) {
+        throw std::invalid_argument(
+            "native BDF maximum_order must be 1 or 2");
+    }
 }
 
 struct ImplicitStepResult {
@@ -128,35 +132,38 @@ struct ImplicitStepResult {
     SolverDiagnostics diagnostics;
 };
 
-ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
-                                             double next_time,
-                                             double step,
-                                             const std::vector<double>& previous_state,
-                                             const std::vector<double>& previous_derivative,
-                                             const std::vector<double>& variable_scales,
-                                             const std::vector<double>& residual_scales,
-                                             const std::vector<double>& lower_bounds,
-                                             const std::vector<double>& upper_bounds,
-                                             const SolverOptions& options) {
-    const std::size_t size = previous_state.size();
+ImplicitStepResult solve_implicit_bdf_step(
+    const DaeProblem& problem,
+    double next_time,
+    const std::vector<double>& predicted_state,
+    double derivative_coefficient,
+    const std::vector<double>& derivative_offset,
+    const std::vector<double>& variable_scales,
+    const std::vector<double>& residual_scales,
+    const std::vector<double>& lower_bounds,
+    const std::vector<double>& upper_bounds,
+    const SolverOptions& options) {
+    const std::size_t size = predicted_state.size();
     NonlinearProblem nonlinear;
     nonlinear.variable_names = problem.variable_names;
     nonlinear.residual_names = problem.residual_names;
     nonlinear.initial_guess.resize(size);
     for (std::size_t i = 0; i < size; ++i) {
-        const double predicted = previous_state[i] + step * previous_derivative[i];
-        nonlinear.initial_guess[i] = std::clamp(predicted, lower_bounds[i], upper_bounds[i]);
+        nonlinear.initial_guess[i] = std::clamp(
+            predicted_state[i], lower_bounds[i], upper_bounds[i]);
     }
     nonlinear.variable_scales = variable_scales;
     nonlinear.residual_scales = residual_scales;
     nonlinear.lower_bounds = lower_bounds;
     nonlinear.upper_bounds = upper_bounds;
     nonlinear.checked_residual =
-        [&problem, next_time, step, previous_state](const std::vector<double>& state,
-                                                    std::vector<double>& residual) {
+        [&problem, next_time, derivative_coefficient,
+         derivative_offset](const std::vector<double>& state,
+                            std::vector<double>& residual) {
             std::vector<double> derivative(state.size(), 0.0);
             for (std::size_t i = 0; i < state.size(); ++i) {
-                derivative[i] = (state[i] - previous_state[i]) / step;
+                derivative[i] = derivative_coefficient * state[i] +
+                                derivative_offset[i];
             }
             return problem.residual(next_time, state, derivative, residual);
         };
@@ -164,16 +171,19 @@ ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
     if (problem.sparse_jacobian_pattern.has_value()) {
         nonlinear.sparse_jacobian_pattern = problem.sparse_jacobian_pattern;
         nonlinear.sparse_jacobian_values =
-            [&problem, next_time, step, previous_state](
+            [&problem, next_time, derivative_coefficient,
+             derivative_offset](
                 const std::vector<double>& state,
                 std::vector<double>& values) {
                 std::vector<double> derivative(state.size(), 0.0);
                 for (std::size_t i = 0; i < state.size(); ++i) {
-                    derivative[i] = (state[i] - previous_state[i]) / step;
+                    derivative[i] = derivative_coefficient * state[i] +
+                                    derivative_offset[i];
                 }
                 const EvaluationStatus status =
                     problem.sparse_jacobian_values(next_time, state, derivative,
-                                                   1.0 / step, values);
+                                                   derivative_coefficient,
+                                                   values);
                 if (!status.ok()) {
                     throw std::runtime_error(
                         status.message.empty()
@@ -183,15 +193,18 @@ ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
             };
     } else if (problem.sparse_jacobian) {
         nonlinear.sparse_jacobian =
-            [&problem, next_time, step, previous_state](
+            [&problem, next_time, derivative_coefficient,
+             derivative_offset](
                 const std::vector<double>& state,
                 std::vector<SparseTriplet>& jacobian) {
                 std::vector<double> derivative(state.size(), 0.0);
                 for (std::size_t i = 0; i < state.size(); ++i) {
-                    derivative[i] = (state[i] - previous_state[i]) / step;
+                    derivative[i] = derivative_coefficient * state[i] +
+                                    derivative_offset[i];
                 }
-                const EvaluationStatus status =
-                    problem.sparse_jacobian(next_time, state, derivative, 1.0 / step, jacobian);
+                const EvaluationStatus status = problem.sparse_jacobian(
+                    next_time, state, derivative,
+                    derivative_coefficient, jacobian);
                 if (!status.ok()) {
                     throw std::runtime_error(status.message.empty()
                                                  ? "DAE sparse Jacobian evaluation failed"
@@ -200,14 +213,17 @@ ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
             };
     } else if (problem.jacobian) {
         nonlinear.jacobian =
-            [&problem, next_time, step, previous_state](const std::vector<double>& state,
-                                                        Matrix& jacobian) {
+            [&problem, next_time, derivative_coefficient,
+             derivative_offset](const std::vector<double>& state,
+                                Matrix& jacobian) {
                 std::vector<double> derivative(state.size(), 0.0);
                 for (std::size_t i = 0; i < state.size(); ++i) {
-                    derivative[i] = (state[i] - previous_state[i]) / step;
+                    derivative[i] = derivative_coefficient * state[i] +
+                                    derivative_offset[i];
                 }
                 const EvaluationStatus status =
-                    problem.jacobian(next_time, state, derivative, 1.0 / step, jacobian);
+                    problem.jacobian(next_time, state, derivative,
+                                     derivative_coefficient, jacobian);
                 if (!status.ok()) {
                     throw std::runtime_error(status.message.empty()
                                                  ? "DAE Jacobian evaluation failed"
@@ -223,9 +239,66 @@ ImplicitStepResult solve_backward_euler_step(const DaeProblem& problem,
     result.diagnostics = std::move(solve.diagnostics);
     result.derivative.resize(size, 0.0);
     for (std::size_t i = 0; i < size; ++i) {
-        result.derivative[i] = (result.state[i] - previous_state[i]) / step;
+        result.derivative[i] =
+            derivative_coefficient * result.state[i] +
+            derivative_offset[i];
     }
     return result;
+}
+
+ImplicitStepResult solve_backward_euler_step(
+    const DaeProblem& problem,
+    double next_time,
+    double step,
+    const std::vector<double>& previous_state,
+    const std::vector<double>& previous_derivative,
+    const std::vector<double>& variable_scales,
+    const std::vector<double>& residual_scales,
+    const std::vector<double>& lower_bounds,
+    const std::vector<double>& upper_bounds,
+    const SolverOptions& options) {
+    std::vector<double> predicted(previous_state.size());
+    std::vector<double> offset(previous_state.size());
+    for (std::size_t i = 0; i < previous_state.size(); ++i) {
+        predicted[i] = previous_state[i] + step * previous_derivative[i];
+        offset[i] = -previous_state[i] / step;
+    }
+    return solve_implicit_bdf_step(
+        problem, next_time, predicted, 1.0 / step, offset,
+        variable_scales, residual_scales, lower_bounds,
+        upper_bounds, options);
+}
+
+ImplicitStepResult solve_bdf2_step(
+    const DaeProblem& problem,
+    double next_time,
+    double step,
+    const std::vector<double>& current_state,
+    const std::vector<double>& older_state,
+    double previous_step,
+    const std::vector<double>& variable_scales,
+    const std::vector<double>& residual_scales,
+    const std::vector<double>& lower_bounds,
+    const std::vector<double>& upper_bounds,
+    const SolverOptions& options) {
+    const double ratio = step / previous_step;
+    const double derivative_coefficient =
+        (1.0 + 2.0 * ratio) / (step * (1.0 + ratio));
+    const double current_coefficient = -(1.0 + ratio) / step;
+    const double older_coefficient =
+        ratio * ratio / (step * (1.0 + ratio));
+    std::vector<double> predicted(current_state.size());
+    std::vector<double> offset(current_state.size());
+    for (std::size_t i = 0; i < current_state.size(); ++i) {
+        predicted[i] = current_state[i] +
+            ratio * (current_state[i] - older_state[i]);
+        offset[i] = current_coefficient * current_state[i] +
+                    older_coefficient * older_state[i];
+    }
+    return solve_implicit_bdf_step(
+        problem, next_time, predicted, derivative_coefficient,
+        offset, variable_scales, residual_scales, lower_bounds,
+        upper_bounds, options);
 }
 
 double integration_error_norm(const std::vector<double>& coarse,
@@ -571,11 +644,24 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     for (const auto& event : problem.events) {
         previous_event_values.push_back(event.evaluate(time, state));
     }
+    std::vector<double> older_state;
+    double previous_accepted_step = 0.0;
+    bool has_bdf2_history = false;
 
     int consecutive_rejections = 0;
     std::string last_rejection_message;
     while (time < options.end_time &&
            result.diagnostics.accepted_steps < options.max_steps) {
+        const double time_roundoff =
+            16.0 * std::numeric_limits<double>::epsilon() *
+            std::max({1.0, std::abs(time), std::abs(options.end_time)});
+        if (options.end_time - time <= time_roundoff) {
+            time = options.end_time;
+            if (!result.trajectory.empty()) {
+                result.trajectory.back().time = time;
+            }
+            break;
+        }
         step = std::min(step, options.end_time - time);
         if (step < options.min_step && options.end_time - time > options.min_step) {
             result.diagnostics.message = "time step fell below min_step";
@@ -583,27 +669,49 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             return result;
         }
 
-        auto full = solve_backward_euler_step(
-            problem, time + step, step, state, derivative, variable_scales,
-            residual_scales, lower_bounds, upper_bounds,
-            nonlinear_options);
+        const int trial_order =
+            options.maximum_order >= 2 && has_bdf2_history ? 2 : 1;
+        auto full = trial_order == 2
+            ? solve_bdf2_step(
+                  problem, time + step, step, state, older_state,
+                  previous_accepted_step, variable_scales,
+                  residual_scales, lower_bounds, upper_bounds,
+                  nonlinear_options)
+            : solve_backward_euler_step(
+                  problem, time + step, step, state, derivative,
+                  variable_scales, residual_scales, lower_bounds,
+                  upper_bounds, nonlinear_options);
         accumulate_nonlinear_diagnostics(full.diagnostics);
 
         ImplicitStepResult first_half;
         ImplicitStepResult second_half;
         if (full.success) {
-            first_half = solve_backward_euler_step(
-                problem, time + 0.5 * step, 0.5 * step, state, derivative,
-                variable_scales, residual_scales, lower_bounds, upper_bounds,
-                nonlinear_options);
+            first_half = trial_order == 2
+                ? solve_bdf2_step(
+                      problem, time + 0.5 * step, 0.5 * step,
+                      state, older_state, previous_accepted_step,
+                      variable_scales, residual_scales, lower_bounds,
+                      upper_bounds, nonlinear_options)
+                : solve_backward_euler_step(
+                      problem, time + 0.5 * step, 0.5 * step,
+                      state, derivative, variable_scales,
+                      residual_scales, lower_bounds, upper_bounds,
+                      nonlinear_options);
             accumulate_nonlinear_diagnostics(
                 first_half.diagnostics);
         }
         if (full.success && first_half.success) {
-            second_half = solve_backward_euler_step(
-                problem, time + step, 0.5 * step, first_half.state,
-                first_half.derivative, variable_scales, residual_scales,
-                lower_bounds, upper_bounds, nonlinear_options);
+            second_half = trial_order == 2
+                ? solve_bdf2_step(
+                      problem, time + step, 0.5 * step,
+                      first_half.state, state, 0.5 * step,
+                      variable_scales, residual_scales, lower_bounds,
+                      upper_bounds, nonlinear_options)
+                : solve_backward_euler_step(
+                      problem, time + step, 0.5 * step,
+                      first_half.state, first_half.derivative,
+                      variable_scales, residual_scales, lower_bounds,
+                      upper_bounds, nonlinear_options);
             accumulate_nonlinear_diagnostics(
                 second_half.diagnostics);
         }
@@ -614,6 +722,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                                            problem.variable_kinds,
                                            options.absolute_tolerance,
                                            options.relative_tolerance);
+            error /= std::pow(2.0, trial_order) - 1.0;
         }
 
         if (!std::isfinite(error) || error > 1.0) {
@@ -635,6 +744,12 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             }
             ++result.diagnostics.rejected_steps;
             ++consecutive_rejections;
+            if (trial_order == 2) {
+                // A failed or inaccurate multistep trial must not poison
+                // subsequent retries. Restart safely at BDF1, then rebuild
+                // order-two history from the next accepted state.
+                has_bdf2_history = false;
+            }
             if (consecutive_rejections > options.max_consecutive_rejections) {
                 result.diagnostics.message =
                     "maximum consecutive rejected time steps reached: " +
@@ -644,7 +759,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             }
             const double factor =
                 std::isfinite(error)
-                    ? std::clamp(0.9 / std::sqrt(std::max(error, 1.0e-12)), 0.1, 0.5)
+                    ? std::clamp(
+                          0.9 / std::pow(
+                              std::max(error, 1.0e-12),
+                              1.0 / static_cast<double>(trial_order + 1)),
+                          0.1, 0.5)
                     : 0.5;
             step *= factor;
             if (step < options.min_step) {
@@ -661,9 +780,17 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         const double previous_time = time;
         const std::vector<double> previous_state = state;
         time += step;
+        if (std::abs(options.end_time - time) <= time_roundoff) {
+            time = options.end_time;
+        }
+        older_state = previous_state;
+        previous_accepted_step = step;
+        has_bdf2_history = true;
         state = std::move(second_half.state);
         derivative = std::move(second_half.derivative);
         ++result.diagnostics.accepted_steps;
+        result.diagnostics.maximum_order_used = std::max(
+            result.diagnostics.maximum_order_used, trial_order);
         result.diagnostics.last_step = step;
         result.trajectory.push_back(DaeState{time, state, derivative});
 
@@ -718,7 +845,12 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
 
         const double factor =
             error <= 1.0e-12 ? 2.0
-                             : std::clamp(0.9 / std::sqrt(error), 0.5, 2.0);
+                             : std::clamp(
+                                   0.9 / std::pow(
+                                       error,
+                                       1.0 / static_cast<double>(
+                                           trial_order + 1)),
+                                   0.5, 2.0);
         step = std::clamp(step * factor, options.min_step, options.max_step);
     }
 

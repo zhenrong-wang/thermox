@@ -228,6 +228,8 @@ void transient_solver_json(
         << ", \"max_steps\": " << solver.max_steps
         << ", \"max_consecutive_rejections\": "
         << solver.max_consecutive_rejections
+        << ", \"maximum_order\": "
+        << solver.maximum_order
         << ", \"compute_consistent_initial_conditions\": "
         << (solver.compute_consistent_initial_conditions
                 ? "true"

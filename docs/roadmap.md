@@ -84,7 +84,9 @@ Delivered:
 
 Production follow-ons:
 
-- higher-order BDF/IDA-style integration backend;
+- optional IDA-class integration backend with mature order 1-5 and Newton/Krylov support; the
+  dependency-free native backend now provides adaptive variable-step BDF1/BDF2 with safe order
+  restart;
 - graph/block tearing and richer rank/conditioning diagnostics.
 
 Runtime extensibility now includes the safe `thermox.expression_component/v3` contract for

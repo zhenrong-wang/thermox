@@ -93,17 +93,18 @@ targets index-1 systems.
 
 `integrate_dae` currently provides:
 
-- fully implicit backward Euler;
-- adaptive error control using one full step versus two half steps;
+- fully implicit variable-step BDF1/BDF2 integration;
+- backward-Euler startup and automatic BDF1 restart after an unsuccessful BDF2 trial;
+- order-aware adaptive error control using one full step versus two half steps;
 - bounded Newton solves at every implicit stage;
 - rejected-step recovery;
 - trajectory and nonlinear-work diagnostics;
 - rising, falling, and direction-independent events;
 - terminal events with an interpolated terminal state.
 
-The first-order integrator is the dependency-free reference backend. The DAE callback and metadata
-contract is designed so a higher-order BDF or IDA-style backend can be added without changing
-physics components.
+The variable-order integrator is the dependency-free native backend. The DAE callback and metadata
+contract remains independent of the stepper so an IDA-style backend with mature order 1-5 control
+and Newton/Krylov facilities can be added without changing physics components.
 
 ## Sparse and linear-solver policy
 
@@ -150,10 +151,10 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 ## Current limits
 
 - Newton systems must be square.
-- The native transient backend is first-order and intended for index-1 DAEs.
+- The native transient backend supports BDF orders 1-2 and is intended for index-1 DAEs.
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
 - Structural incidence analysis classifies connected underdetermined, overdetermined, and
   well-determined regions; block ordering and solver tearing are not yet enabled.
-- Component-informed homotopy paths, a higher-order transient backend, and broader
+- Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.

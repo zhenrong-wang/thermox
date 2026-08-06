@@ -136,7 +136,7 @@ Implemented in this sprint:
 - Damped Newton with dimensionless row/column scaling, bounds, recoverable model-evaluation
   failures, backtracking line search, structural matching, and iteration diagnostics.
 - Implicit index-1 DAE path for `F(t, y, y_dot) = 0` with differential/algebraic variables,
-  consistent initial conditions, analytic dense/sparse Jacobians, adaptive backward-Euler step
+  consistent initial conditions, analytic dense/sparse Jacobians, adaptive variable-step BDF1/BDF2
   doubling, event detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
@@ -564,8 +564,9 @@ service rather than the browser. See
 3. Add native analytic PH derivatives for IF97; ideal gas, HEOS CO2, and single-phase HEOS water
    already provide analytic derivatives, while IF97 uses the shared provenance-marked bounded
    fallback.
-4. Add a higher-order BDF/IDA-style DAE backend behind the transient problem contract when
-   production transient cases are introduced.
+4. Add an optional IDA-class DAE backend behind the transient problem contract for mature BDF
+   order 1-5 and Newton/Krylov operation. The dependency-free native backend now provides
+   adaptive variable-step BDF1/BDF2 with robust order restart.
 5. Extend the delivered anchor-aware component homotopy hooks from fixed/fluid-map
    turbomachinery, heat exchangers, and the equilibrium combustor to
    composition-coupled material maps and future finite-rate reactor models.
