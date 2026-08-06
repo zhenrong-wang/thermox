@@ -466,6 +466,27 @@ void test_catalog_discovery() {
             two_phase_loss->parameters.size() == 2,
         "catalog must expose the homogeneous two-phase hydraulic "
         "impedance contract");
+    const auto correlated_pipe = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "pipe.fluid.correlated_two_phase_pressure_drop";
+        });
+    require(
+        correlated_pipe != response.components.end() &&
+            correlated_pipe->supports_steady &&
+            correlated_pipe->supports_transient &&
+            correlated_pipe->artifacts.size() == 2 &&
+            std::any_of(
+                correlated_pipe->artifacts.begin(),
+                correlated_pipe->artifacts.end(),
+                [](const auto& artifact) {
+                    return artifact.role ==
+                        "friction_pressure_gradient_correlation" &&
+                        artifact.required;
+                }),
+        "catalog must expose independent required two-phase void and "
+        "friction correlation roles");
     const auto correlated_inventory = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

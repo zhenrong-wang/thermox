@@ -1244,7 +1244,7 @@ public:
         bool correlation_driven)
         : descriptor_(make_descriptor(
               correlation_driven
-                  ? "pipe.fluid.void_fraction_correlation_local_loss"
+                  ? "pipe.fluid.correlated_two_phase_pressure_drop"
                   : "pipe.fluid.constant_slip_two_phase_local_loss",
               {{"inlet", "fluid", "in"},
                {"outlet", "fluid", "out"}})),
@@ -1252,25 +1252,39 @@ public:
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "pipe.fluid";
         descriptor_.display_name = correlation_driven_
-            ? "Correlated-void-fraction two-phase gravity pipe"
+            ? "Correlation-driven two-phase pressure-drop pipe"
             : "Constant-slip two-phase gravity pipe";
         descriptor_.category = "Fluid transport";
         descriptor_.model_name = correlation_driven_
-            ? "Correlation-driven mixture density with elevation head"
+            ? "Correlated void fraction and distributed friction"
             : "Separated-flow mixture density with elevation head";
         descriptor_.parameters = {
             {"flow_diameter", "length", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
-            {"loss_coefficient", "dimensionless", true,
-             std::nullopt, 0.0,
+            {"loss_coefficient", "dimensionless",
+             !correlation_driven_,
+             correlation_driven_
+                 ? std::optional<double>{0.0}
+                 : std::nullopt,
+             0.0,
              std::numeric_limits<double>::infinity(), true, true},
             {"elevation_change", "length", false, 0.0,
              -std::numeric_limits<double>::infinity(),
              std::numeric_limits<double>::infinity(), true, true},
         };
         if (correlation_driven_) {
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin() + 1,
+                {"length", "length", true, std::nullopt, 0.0,
+                 std::numeric_limits<double>::infinity(), false, true});
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin() + 2,
+                {"roughness", "length", false, 0.0, 0.0,
+                 std::numeric_limits<double>::infinity(), true, true});
             descriptor_.artifacts = {
                 {"void_fraction_correlation",
+                 correlation_artifact_type, true},
+                {"friction_pressure_gradient_correlation",
                  correlation_artifact_type, true},
             };
         } else {
@@ -1308,7 +1322,7 @@ public:
         const auto derivatives = derivative_variables(data);
         system.add_checked_sparse_equation(
             prefix + (correlation_driven_
-                ? "correlated_void_fraction_pressure_balance"
+                ? "correlated_two_phase_pressure_balance"
                 : "constant_slip_pressure_balance"),
             [evaluate](const std::vector<double>& x,
                        double& residual) {
@@ -1346,7 +1360,7 @@ public:
         const auto derivatives = derivative_variables(data);
         system.add_sparse_equation(
             prefix + (correlation_driven_
-                ? "correlated_void_fraction_pressure_balance"
+                ? "correlated_two_phase_pressure_balance"
                 : "constant_slip_pressure_balance"),
             variable_pattern(derivatives),
             [evaluate, derivatives](
@@ -1367,10 +1381,14 @@ private:
         double loss_scale{};
         double area{};
         double diameter{};
+        double length{};
+        double roughness{};
         double elevation_change{};
         double slip_ratio{};
         std::shared_ptr<const CorrelationArtifact>
             void_fraction_correlation;
+        std::shared_ptr<const CorrelationArtifact>
+            friction_pressure_gradient_correlation;
     };
 
     static Data compile_data(
@@ -1396,12 +1414,16 @@ private:
             required_parameter(context.component, "flow_diameter");
         data.area = std::numbers::pi * data.diameter *
             data.diameter / 4.0;
-        data.loss_scale = required_parameter(
-            context.component, "loss_coefficient") /
+        data.loss_scale = parameter_or(
+            context.component, "loss_coefficient", 0.0) /
             (2.0 * data.area * data.area);
         data.elevation_change = parameter_or(
             context.component, "elevation_change", 0.0);
         if (correlation_driven) {
+            data.length = required_parameter(
+                context.component, "length");
+            data.roughness = parameter_or(
+                context.component, "roughness", 0.0);
             data.void_fraction_correlation = require_correlation(
                 context, "void_fraction_correlation");
             if (data.void_fraction_correlation->output().name !=
@@ -1439,6 +1461,52 @@ private:
                         supported->second + "'");
                 }
             }
+            data.friction_pressure_gradient_correlation =
+                require_correlation(
+                    context,
+                    "friction_pressure_gradient_correlation");
+            if (data.friction_pressure_gradient_correlation->output().name !=
+                    "friction_pressure_gradient" ||
+                data.friction_pressure_gradient_correlation->output()
+                        .dimension != "pressure_gradient") {
+                throw std::invalid_argument(
+                    "friction correlation output must be named "
+                    "'friction_pressure_gradient' with "
+                    "pressure_gradient dimension");
+            }
+            const std::map<std::string, std::string>
+                supported_friction_inputs{
+                    {"vapor_quality", "dimensionless"},
+                    {"void_fraction", "dimensionless"},
+                    {"mixture_density", "density"},
+                    {"liquid_density", "density"},
+                    {"vapor_density", "density"},
+                    {"liquid_viscosity", "dynamic_viscosity"},
+                    {"vapor_viscosity", "dynamic_viscosity"},
+                    {"mass_flow", "mass_flow"},
+                    {"mass_flux", "mass_flux"},
+                    {"area", "area"},
+                    {"diameter", "length"},
+                    {"length", "length"},
+                    {"roughness", "length"},
+                    {"pressure", "pressure"},
+                };
+            for (const auto& input :
+                 data.friction_pressure_gradient_correlation->inputs()) {
+                const auto supported =
+                    supported_friction_inputs.find(input.name);
+                if (supported == supported_friction_inputs.end()) {
+                    throw std::invalid_argument(
+                        "friction pressure-gradient correlation has "
+                        "unsupported input: " + input.name);
+                }
+                if (input.dimension != supported->second) {
+                    throw std::invalid_argument(
+                        "friction pressure-gradient correlation input '" +
+                        input.name + "' must have dimension '" +
+                        supported->second + "'");
+                }
+            }
         } else {
             data.slip_ratio =
                 required_parameter(context.component, "slip_ratio");
@@ -1456,7 +1524,7 @@ private:
             if (!std::isfinite(mean_pressure) || mean_pressure <= 0.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
-                        "constant-slip two-phase pipe requires positive "
+                        "two-phase pressure-drop pipe requires positive "
                         "finite mean pressure")};
             }
             const auto state = data.properties->state_ph(
@@ -1470,7 +1538,7 @@ private:
                 state.state.vapor_quality >= 1.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
-                        "constant-slip two-phase pipe requires a mean "
+                        "two-phase pressure-drop pipe requires a mean "
                         "state with 0 < vapor quality < 1")};
             }
             const auto saturation =
@@ -1485,7 +1553,7 @@ private:
                 rho_l <= 0.0 || rho_v <= 0.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
-                        "constant-slip two-phase pipe requires positive "
+                        "two-phase pressure-drop pipe requires positive "
                         "finite saturation densities")};
             }
             const double quality = state.state.vapor_quality;
@@ -1544,14 +1612,75 @@ private:
                 mixture_density <= 0.0) {
                 return RestrictionEvaluation{
                     EvaluationStatus::recoverable(
-                        "constant-slip two-phase pipe requires finite "
+                        "two-phase pressure-drop pipe requires finite "
                         "flow and positive mixture density")};
+            }
+            double distributed_friction_loss = 0.0;
+            if (data.friction_pressure_gradient_correlation &&
+                std::abs(mass_flow) > 1.0e-14) {
+                std::map<std::string, double> inputs;
+                for (const auto& input :
+                     data.friction_pressure_gradient_correlation->inputs()) {
+                    if (input.name == "vapor_quality") {
+                        inputs.emplace(input.name, quality);
+                    } else if (input.name == "void_fraction") {
+                        inputs.emplace(input.name, void_fraction);
+                    } else if (input.name == "mixture_density") {
+                        inputs.emplace(input.name, mixture_density);
+                    } else if (input.name == "liquid_density") {
+                        inputs.emplace(input.name, rho_l);
+                    } else if (input.name == "vapor_density") {
+                        inputs.emplace(input.name, rho_v);
+                    } else if (input.name == "liquid_viscosity") {
+                        inputs.emplace(
+                            input.name,
+                            saturation.liquid.viscosity_pa_s);
+                    } else if (input.name == "vapor_viscosity") {
+                        inputs.emplace(
+                            input.name,
+                            saturation.vapor.viscosity_pa_s);
+                    } else if (input.name == "mass_flow") {
+                        inputs.emplace(input.name, mass_flow);
+                    } else if (input.name == "mass_flux") {
+                        inputs.emplace(
+                            input.name,
+                            std::abs(mass_flow) / data.area);
+                    } else if (input.name == "area") {
+                        inputs.emplace(input.name, data.area);
+                    } else if (input.name == "diameter") {
+                        inputs.emplace(input.name, data.diameter);
+                    } else if (input.name == "length") {
+                        inputs.emplace(input.name, data.length);
+                    } else if (input.name == "roughness") {
+                        inputs.emplace(input.name, data.roughness);
+                    } else if (input.name == "pressure") {
+                        inputs.emplace(input.name, mean_pressure);
+                    }
+                }
+                const auto evaluated =
+                    data.friction_pressure_gradient_correlation->evaluate(
+                        inputs);
+                if (!evaluated.error.empty()) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            evaluated.error)};
+                }
+                if (!std::isfinite(evaluated.value) ||
+                    evaluated.value < 0.0) {
+                    return RestrictionEvaluation{
+                        EvaluationStatus::recoverable(
+                            "two-phase friction correlation must produce "
+                            "a finite nonnegative pressure gradient")};
+                }
+                distributed_friction_loss = std::copysign(
+                    evaluated.value * data.length, mass_flow);
             }
             return RestrictionEvaluation{
                 EvaluationStatus::success(),
                 inlet_pressure - outlet_pressure -
                     data.loss_scale * mass_flow *
                         std::abs(mass_flow) / mixture_density -
+                    distributed_friction_loss -
                     mixture_density * gravity *
                         data.elevation_change};
         };

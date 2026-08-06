@@ -310,6 +310,8 @@ UnitRegistry make_default_unit_registry() {
     display_only(
         "mass_flux", "kg/m2/s", display("kg/(m²·s)"));
     display_only(
+        "pressure_gradient", "Pa/m", display("kPa/m", 1.0e-3));
+    display_only(
         "dynamic_viscosity", "Pa*s", display("Pa·s"));
     display_only(
         "thermal_conductivity", "W/m/K", display("W/m/K"));

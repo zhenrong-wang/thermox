@@ -234,6 +234,10 @@ Delivered:
 26. Unified correlation artifacts with named regime candidates, deterministic applicability/priority
     selection, explicit coverage-gap and ambiguity diagnostics, mass-flux inputs for two-phase
     consumers, immutable project publication, and durable job persistence. ✅
+27. Correlation-driven two-phase pipe pressure drop with independent void-fraction and distributed
+    friction-gradient artifacts, typed phase/flow/geometry inputs, signed reverse-flow assembly,
+    zero-flow handling, and shared steady/transient compilation. Acceleration pressure drop remains
+    a separate follow-on closure. ✅
 
 ## Component catalog and modularization foundation
 

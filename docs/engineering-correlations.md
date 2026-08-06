@@ -50,11 +50,15 @@ The artifact registry and evaluator are component-neutral. Other component model
 `thermox.correlation` role and define which physical quantities they supply. This keeps the
 correlation dataset separate from topology, component parameters, and fluid-property providers.
 
-## Two-phase void fraction
+## Two-phase pressure drop
 
-`pipe.fluid.void_fraction_correlation_local_loss` binds the artifact role
-`void_fraction_correlation`. The output must be dimensionless and the evaluated value must satisfy
-`0 < alpha < 1`. A correlation may declare any subset of these component-supplied inputs:
+`pipe.fluid.correlated_two_phase_pressure_drop` separates two independent engineering closures:
+`void_fraction_correlation` and `friction_pressure_gradient_correlation`. The first output must be
+dimensionless and satisfy `0 < alpha < 1`. The second must be named
+`friction_pressure_gradient`, carry dimension `pressure_gradient` (`Pa/m`), and evaluate to a
+finite nonnegative magnitude. Both roles use immutable `thermox.correlation/v1` artifacts.
+
+A void-fraction correlation may declare any subset of these component-supplied inputs:
 
 | Input | Dimension | Meaning |
 | --- | --- | --- |
@@ -62,6 +66,7 @@ correlation dataset separate from topology, component parameters, and fluid-prop
 | `liquid_density` | `density` | Saturated-liquid density at mean pressure |
 | `vapor_density` | `density` | Saturated-vapor density at mean pressure |
 | `mass_flow` | `mass_flow` | Signed component mass flow |
+| `mass_flux` | `mass_flux` | Nonnegative `abs(mass_flow) / area` |
 | `area` | `area` | Pipe flow area |
 | `diameter` | `length` | Pipe flow diameter |
 | `pressure` | `pressure` | Mean endpoint pressure |
@@ -87,12 +92,20 @@ component logic:
 }
 ```
 
-The pipe component uses the resulting void fraction to calculate volume-weighted mixture density
-and then applies its declared local-loss and elevation-head equation. It requires registered
-`state_ph` and `saturation_p` capabilities and a strictly two-phase mean state. Missing artifacts,
-unsupported input names, wrong dimensions, unsafe expressions, evaluation failures, and
-nonphysical outputs are rejected explicitly. The same contract compiles in steady and transient
-graphs.
+The friction correlation may additionally request `void_fraction`, `mixture_density`, saturated
+`liquid_viscosity` and `vapor_viscosity`, `length`, or `roughness`. It owns the selected friction
+law, flow-regime dependence, and qualified operating envelope. The component multiplies its
+nonnegative pressure-gradient magnitude by pipe length and applies the sign of mass flow. This
+keeps reverse-flow behavior in the component balance without requiring every engineering law to
+reimplement it.
+
+The full algebraic balance combines signed distributed friction, signed local loss, and elevation
+head. The pipe requires registered `state_ph` and `saturation_p` capabilities and a strictly
+two-phase mean state. At exactly zero flow both friction terms are zero and the friction artifact
+is not evaluated. Missing artifacts, unsupported input names, wrong dimensions, unsafe
+expressions, evaluation failures, and nonphysical outputs are rejected explicitly. The same
+contract compiles in steady and transient graphs. Acceleration pressure drop is not silently
+folded into the friction term; it remains a distinct follow-on closure.
 
 `volume.fluid.equilibrium_two_phase_correlated_outlet` applies the same artifact contract to a
 transient rigid inventory. Conserved total mass and internal energy determine pressure and

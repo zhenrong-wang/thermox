@@ -52,6 +52,15 @@ int main() {
                 std::abs(speed.value_si -
                     2.0 * std::acos(-1.0)) < 1.0e-12,
             "rotational speed must normalize to radians per second");
+        const auto& pressure_gradient =
+            units.require_dimension("pressure_gradient");
+        require(
+            pressure_gradient.canonical_unit == "Pa/m" &&
+                pressure_gradient.engineering_display.symbol ==
+                    "kPa/m" &&
+                pressure_gradient.engineering_display.scale_from_si ==
+                    1.0e-3,
+            "pressure-gradient engineering metadata must be registered");
 
         thermox::platform::DimensionUnitDescriptor custom{
             "custom_flux",

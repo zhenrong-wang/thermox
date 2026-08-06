@@ -1018,7 +1018,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "restriction.fluid.local_loss.homogeneous_two_phase",
         "pipe.fluid.homogeneous_equilibrium_local_loss",
         "pipe.fluid.constant_slip_two_phase_local_loss",
-        "pipe.fluid.void_fraction_correlation_local_loss",
+        "pipe.fluid.correlated_two_phase_pressure_drop",
         "fitting.fluid.return_bend.fixed_loss_coefficient",
         "fitting.fluid.return_bend.correlation",
         "pipe.fluid.darcy_weisbach",

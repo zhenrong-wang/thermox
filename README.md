@@ -52,6 +52,10 @@ Implemented in this sprint:
   friction, roughness, local losses, and elevation head; the heat-transfer variant exposes its
   ambient duty through a typed heat port so whole-system energy audits remain explicit. See
   [Single-phase pipe models](docs/single-phase-pipe-models.md).
+- Correlation-driven two-phase pipes bind independent void-fraction and distributed-friction
+  artifacts, then assemble signed friction, local loss, and elevation head in steady or transient
+  graphs. Correlation coefficients and applicability remain engineer-owned data. See
+  [Engineering correlations](docs/engineering-correlations.md#two-phase-pressure-drop).
 - Flow-area restriction models cover non-flashing liquids and perfect-gas subcritical/choked
   flow, while a separate homogeneous-equilibrium local-loss model supplies hydraulic impedance
   between two-phase inventories. Their validity checks reject incompatible phase states instead

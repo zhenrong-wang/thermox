@@ -353,7 +353,7 @@ holdup quality follow from rigid-volume saturation closures. A bound `void_fract
 then maps live saturation properties, outlet flow, geometry, and transported quality to the
 inventory void fraction, closing a distinct outlet quality and enthalpy. Keeping inventory and
 transport qualities separate preserves the conservative finite-volume contract under phase slip.
-See [Engineering correlations](engineering-correlations.md#two-phase-void-fraction).
+See [Engineering correlations](engineering-correlations.md#two-phase-pressure-drop).
 
 Correlation artifact inputs may carry qualified SI operating ranges. These constraints travel with
 the immutable artifact through project publication, execution snapshots, and durable job payloads;

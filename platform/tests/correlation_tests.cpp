@@ -79,6 +79,26 @@ zuber_findlay_void_fraction_correlation() {
          {"drift_velocity", 0.5}});
 }
 
+thermox::platform::CorrelationArtifact
+two_phase_friction_pressure_gradient_correlation() {
+    return {
+        "two-phase-friction-gradient",
+        thermox::platform::correlation_artifact_schema_v1,
+        "test-1", std::string(64, '8'),
+        {
+            {"mass_flux", "mass_flux"},
+            {"mixture_density", "density"},
+            {"diameter", "length"},
+        },
+        {"friction_pressure_gradient", "pressure_gradient"},
+        {{"darcy_baseline", "test_only", 0,
+          {{"darcy_friction_factor", 0.04}},
+          "darcy_friction_factor * mass_flux * mass_flux / "
+          "(2 * mixture_density * diameter)",
+          {{"mass_flux", 0.0, std::nullopt, false, true}}}},
+    };
+}
+
 void test_packaged_zuber_findlay_template_has_physical_limits() {
     const auto templates = thermox::platform::
         make_default_correlation_template_registry();
@@ -385,14 +405,16 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     }],
     "components": [{
       "id": "riser",
-      "kind": "pipe.fluid.void_fraction_correlation_local_loss",
+      "kind": "pipe.fluid.correlated_two_phase_pressure_drop",
       "parameters": {
         "flow_diameter": {"value": 0.1, "unit": "m"},
+        "length": {"value": 10.0, "unit": "m"},
         "loss_coefficient": 2.0,
         "elevation_change": {"value": 5.0, "unit": "m"}
       },
       "artifacts": {
-        "void_fraction_correlation": "zuber-findlay-void-fraction"
+        "void_fraction_correlation": "zuber-findlay-void-fraction",
+        "friction_pressure_gradient_correlation": "two-phase-friction-gradient"
       },
       "media": {"inlet": "water", "outlet": "water"}
     }],
@@ -403,6 +425,14 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     "mode": "steady_state_design",
     "fixed_values": {
       "riser.inlet.m_dot": {"value": 0.2, "unit": "kg/s"},
+      "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }, {
+    "id": "reverse",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "riser.inlet.m_dot": {"value": -0.2, "unit": "kg/s"},
       "riser.inlet.p": {"value": 1.0, "unit": "MPa"},
       "riser.inlet.h": {"value": 1500.0, "unit": "kJ/kg"}
     }
@@ -419,6 +449,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     thermox::platform::EngineeringArtifactRegistry artifacts;
     artifacts.register_artifact(
         zuber_findlay_void_fraction_correlation());
+    artifacts.register_artifact(
+        two_phase_friction_pressure_gradient_correlation());
     const auto properties =
         thermox::physics::make_default_property_package_registry();
     const auto registry =
@@ -463,6 +495,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     const double expected_drop =
         2.0 * 0.2 * 0.2 /
             (2.0 * density * area * area) +
+        0.04 * std::pow(0.2 / area, 2.0) /
+            (2.0 * density * 0.1) * 10.0 +
         density * 9.80665 * 5.0;
     require_close(
         1.0e6 - outlet_pressure, expected_drop, 1.0e-5,
@@ -471,6 +505,61 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
                   "correlated riser conserves mass");
     require_close(variable("riser.outlet.h"), 1.5e6, 1.0e-8,
                   "correlated riser transports enthalpy");
+
+    auto reverse_document = document;
+    reverse_document.components.at(0)
+        .parameters.at("elevation_change").value_si = 0.0;
+    const auto reverse_graph =
+        thermox::platform::compile_model_graph(
+            reverse_document, registry, properties, artifacts,
+            "reverse");
+    const auto reverse_solved =
+        thermox::solve_newton(reverse_graph.problem);
+    require(reverse_solved.diagnostics.converged,
+            reverse_solved.diagnostics.message);
+    const auto reverse_variable = [&](const std::string& name) {
+        const auto found = std::find(
+            reverse_graph.problem.variable_names.begin(),
+            reverse_graph.problem.variable_names.end(), name);
+        require(found != reverse_graph.problem.variable_names.end(),
+                "reverse-flow variable must exist: " + name);
+        return reverse_solved.x.at(static_cast<std::size_t>(
+            found - reverse_graph.problem.variable_names.begin()));
+    };
+    const double reverse_outlet_pressure =
+        reverse_variable("riser.outlet.p");
+    const double reverse_mean_pressure =
+        0.5 * (1.0e6 + reverse_outlet_pressure);
+    const auto reverse_state = water->state_ph(
+        reverse_mean_pressure, 1.5e6);
+    const auto reverse_saturation = water->saturation_p(
+        reverse_mean_pressure);
+    require(reverse_state.ok() && reverse_saturation.ok(),
+            "reverse correlated-riser properties must evaluate");
+    const auto reverse_alpha =
+        zuber_findlay_void_fraction_correlation().evaluate({
+            {"vapor_quality", reverse_state.state.vapor_quality},
+            {"liquid_density",
+             reverse_saturation.liquid.density_kg_m3},
+            {"vapor_density",
+             reverse_saturation.vapor.density_kg_m3},
+            {"mass_flux", 0.2 / area},
+        });
+    require(reverse_alpha.error.empty(), reverse_alpha.error);
+    const double reverse_density =
+        reverse_alpha.value *
+            reverse_saturation.vapor.density_kg_m3 +
+        (1.0 - reverse_alpha.value) *
+            reverse_saturation.liquid.density_kg_m3;
+    const double reverse_loss_magnitude =
+        2.0 * 0.2 * 0.2 /
+            (2.0 * reverse_density * area * area) +
+        0.04 * std::pow(0.2 / area, 2.0) /
+            (2.0 * reverse_density * 0.1) * 10.0;
+    require_close(
+        1.0e6 - reverse_outlet_pressure,
+        -reverse_loss_magnitude, 1.0e-5,
+        "correlated pipe reverses friction sign with mass flow");
 
     const auto transient =
         thermox::platform::compile_transient_model_graph(
@@ -497,6 +586,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             {"void_fraction", "dimensionless"},
             {{"default", "general", 0, {{"invalid_alpha", 1.2}},
               "invalid_alpha + 0 * vapor_quality", {}}}});
+    nonphysical_artifacts.register_artifact(
+        two_phase_friction_pressure_gradient_correlation());
     const auto nonphysical_graph =
         thermox::platform::compile_model_graph(
             nonphysical_document, registry, properties,
@@ -521,6 +612,8 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
             {{"vapor_quality", "dimensionless"}},
             {"void_fraction", "pressure"},
             {{"default", "general", 0, {}, "vapor_quality", {}}}});
+    wrong_dimension_artifacts.register_artifact(
+        two_phase_friction_pressure_gradient_correlation());
     bool wrong_dimension_rejected = false;
     try {
         (void)thermox::platform::compile_model_graph(
@@ -532,6 +625,34 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     require(wrong_dimension_rejected,
             "component must reject dimensionally incompatible "
             "void-fraction correlation");
+
+    auto negative_friction_document = document;
+    negative_friction_document.components.at(0)
+        .artifact_bindings["friction_pressure_gradient_correlation"] =
+        "negative-friction-gradient";
+    thermox::platform::EngineeringArtifactRegistry
+        negative_friction_artifacts;
+    negative_friction_artifacts.register_artifact(
+        zuber_findlay_void_fraction_correlation());
+    negative_friction_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "negative-friction-gradient",
+            thermox::platform::correlation_artifact_schema_v1,
+            "invalid-range-1", std::string(64, '7'),
+            {{"mass_flux", "mass_flux"}},
+            {"friction_pressure_gradient", "pressure_gradient"},
+            {{"default", "invalid", 0,
+              {{"negative_gradient", -1.0}},
+              "negative_gradient + 0 * mass_flux", {}}}});
+    const auto negative_friction_graph =
+        thermox::platform::compile_model_graph(
+            negative_friction_document, registry, properties,
+            negative_friction_artifacts, "steady");
+    const auto negative_friction_result =
+        thermox::solve_newton(negative_friction_graph.problem);
+    require(
+        !negative_friction_result.diagnostics.converged,
+        "component must reject a negative friction pressure gradient");
 }
 
 void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
