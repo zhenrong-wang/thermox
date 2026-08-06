@@ -57,6 +57,10 @@ Implemented in this sprint:
   acceleration in steady or transient graphs. Correlation coefficients and applicability remain
   engineer-owned data. See
   [Engineering correlations](docs/engineering-correlations.md#two-phase-pressure-drop).
+- Typed regime-map artifacts classify bounded safe-expression regions with deterministic boundary
+  and priority semantics, while treating gaps and ambiguous overlap as engineering errors. No
+  universal physical map is assumed. See
+  [Regime-map architecture](docs/regime-map-architecture.md).
 - Flow-area restriction models cover non-flashing liquids and perfect-gas subcritical/choked
   flow, while a separate homogeneous-equilibrium local-loss model supplies hydraulic impedance
   between two-phase inventories. Their validity checks reject incompatible phase states instead
@@ -560,11 +564,9 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Extend the delivered Zuber–Findlay and classical Lockhart–Martinelli/Chisholm baselines with
-   validated geometry-specific coefficient correlations and flow-pattern maps. The general rigid PH
-   inventory now traverses both saturation boundaries in both
-   directions with HEOS water; IF97 retains a documented liquid-boundary limitation, while
-   specialized equilibrium cells and two-phase pipes retain explicit applicability guards.
+1. Connect the delivered regime-map artifact through service persistence and optional component
+   bindings, add surface-tension properties and derived nondimensional inputs, then package cited
+   geometry-specific flow maps and closures.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
 3. Add native analytic PH derivatives for IF97; ideal gas, HEOS CO2, and single-phase HEOS water

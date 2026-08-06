@@ -560,10 +560,16 @@ Work items:
    - classical four-regime Lockhart–Martinelli/Chisholm smooth-pipe friction family with live
      phase flux/Reynolds inputs and connected two-phase transport verification; ✅
    - geometry/regime-specific coefficient correlations and flow-pattern maps remain follow-ons.
-9. Map validation and interpolation quality controls.
-10. Multi-user auth, authorization, project isolation, audit logs.
-11. Scalable job workers and deployment automation.
-12. Extended benchmark suite against published/reference examples.
+9. Typed physical-regime classification.
+   - provider-neutral `thermox.regime_map/v1` engineering artifact with typed inputs, bounded safe
+     expression criteria, explicit boundary inclusion, deterministic priority, and hard failures
+     for gaps or ambiguous overlaps; ✅
+   - request/persistence serialization, optional component binding, surface-tension property
+     capability, derived dimensionless groups, and cited geometry-specific maps remain follow-ons.
+10. Map validation and interpolation quality controls.
+11. Multi-user auth, authorization, project isolation, audit logs.
+12. Scalable job workers and deployment automation.
+13. Extended benchmark suite against published/reference examples.
    - NETL 2025 Case B31A aggregate HRSG boundary audit with independently reconstructed
      water/steam duty, Cantera exhaust properties, explicit numerical/external tolerances, and a
      service-level regression test; ✅

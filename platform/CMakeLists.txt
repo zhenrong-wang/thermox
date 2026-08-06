@@ -20,6 +20,7 @@ add_library(thermox_platform
     src/phase_separation_models.cpp
     src/performance_map.cpp
     src/power_models.cpp
+    src/regime_map.cpp
     src/results.cpp
     src/storage_models.cpp
     src/turbomachinery_models.cpp

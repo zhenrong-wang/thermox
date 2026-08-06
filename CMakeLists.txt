@@ -86,6 +86,17 @@ add_test(
     COMMAND thermox_correlation_tests
 )
 
+add_executable(thermox_regime_map_tests
+    platform/tests/regime_map_tests.cpp
+)
+target_link_libraries(thermox_regime_map_tests PRIVATE
+    thermox_platform
+)
+add_test(
+    NAME thermox_regime_map_tests
+    COMMAND thermox_regime_map_tests
+)
+
 add_executable(
     thermox_expression_component_tests
     platform/tests/expression_component_tests.cpp)
