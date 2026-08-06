@@ -3118,6 +3118,74 @@ void test_expression_component_is_request_scoped() {
         "compilation");
 }
 
+void test_transient_expression_component_flows_through_service() {
+    thermox::service::SimulationService service;
+    thermox::service::TransientSimulationRequest request;
+    request.case_id = "step";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "request_dynamic_expression",
+    "media": [],
+    "components": [{
+      "id": "lag",
+      "kind": "custom.signal.request_lag",
+      "parameters": {"tau": {"value": 2.0, "unit": "s"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "step",
+    "mode": "dynamic_transient",
+    "fixed_values": {"lag.input.value": 1.0},
+    "initial_guesses": {"lag.filtered": 0.0}
+  }]
+})json";
+    thermox::service::ExpressionComponentInput component;
+    component.schema_version = "thermox.expression_component/v3";
+    component.kind = "custom.signal.request_lag";
+    component.version = "1.0.0";
+    component.template_kind = "control.first_order_lag";
+    component.display_name = "First-order lag";
+    component.category = "Project controls";
+    component.model_name = "Safe transient expression";
+    component.supports_steady = false;
+    component.supports_transient = true;
+    component.ports = {
+        {"input", "signal", "in", 1},
+        {"output", "signal", "out", 1},
+    };
+    component.parameters = {{
+        "tau", "time", true, std::nullopt, 0.0,
+        std::numeric_limits<double>::infinity(), false, true}};
+    component.internal_variables = {{
+        "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
+        -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity(), "dimensionless"}};
+    component.transient_equations = {
+        {"state_balance",
+         "parameter.tau * derivative.internal.filtered + "
+         "internal.filtered - input.value", 1.0},
+        {"output", "output.value - internal.filtered", 1.0},
+    };
+    request.components.expression_components.push_back(component);
+    request.solver.end_time = 1.0;
+    request.solver.initial_step = 0.1;
+    request.solver.max_step = 0.2;
+
+    const auto response = service.run_transient(request);
+    require(response.succeeded(),
+            "request-scoped transient expression must solve: " +
+                response.error.message);
+    const auto& lag = require_component_result(
+        response.trajectory.back().graph, "lag");
+    require(lag.internal_values.size() == 1 &&
+                lag.internal_values.front().name == "filtered" &&
+                lag.internal_values.front().value_si > 0.35 &&
+                lag.internal_values.front().value_si < 0.45,
+            "service must expose the integrated declared internal state");
+}
+
 void test_steady_service() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -3642,6 +3710,7 @@ int main() {
         test_injectable_native_runtime();
         test_expression_component_flows_through_service_runtime();
         test_expression_component_is_request_scoped();
+        test_transient_expression_component_flows_through_service();
         test_steady_service();
         test_steady_continuation_service();
         test_explicit_system_boundary_balance();

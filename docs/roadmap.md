@@ -87,6 +87,11 @@ Production follow-ons:
 - higher-order BDF/IDA-style integration backend;
 - graph/block tearing and richer rank/conditioning diagnostics.
 
+Runtime extensibility now includes the safe `thermox.expression_component/v3` contract for
+index-1 transient residuals, internal algebraic/differential states, state rates, time, bounds,
+scales, and sparse analytic DAE Jacobians. Constrained property functions, thermochemistry,
+species-expanded variables, and discrete events remain follow-ons.
+
 ## System-agnostic transient platform milestone
 
 Goal: bridge registered dynamic components into the cycle-independent DAE kernel. ✅

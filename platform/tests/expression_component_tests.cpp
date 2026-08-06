@@ -2,6 +2,7 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/transient_solver.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -249,6 +250,126 @@ void test_expression_implementation_identity_covers_equations() {
         "equation content participates in implementation identity");
 }
 
+void test_transient_expression_component_integrates_internal_state() {
+    auto registry = thermox::platform::make_default_component_registry();
+    thermox::platform::ExpressionComponentDefinition definition;
+    definition.schema_version =
+        thermox::platform::expression_component_schema_v3;
+    definition.descriptor.kind = "custom.signal.first_order_lag";
+    definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind = "control.first_order_lag";
+    definition.descriptor.display_name = "First-order lag";
+    definition.descriptor.category = "Project controls";
+    definition.descriptor.model_name = "Safe transient expression";
+    definition.descriptor.supports_steady = false;
+    definition.descriptor.supports_transient = true;
+    definition.descriptor.ports = {
+        {"input", "signal", "in"},
+        {"output", "signal", "out"},
+    };
+    definition.descriptor.parameters = {
+        {"time_constant", "time", true, std::nullopt, 0.0,
+         std::numeric_limits<double>::infinity(), false, true},
+    };
+    definition.descriptor.internal_variables = {
+        {"filtered", thermox::DaeVariableKind::differential,
+         0.0, 1.0, 0.0, 1.0,
+         -std::numeric_limits<double>::infinity(),
+         std::numeric_limits<double>::infinity(), "dimensionless"},
+    };
+    definition.transient_equations = {
+        {"state_balance",
+         "parameter.time_constant * derivative.internal.filtered + "
+         "internal.filtered - input.value", 1.0},
+        {"output", "output.value - internal.filtered", 1.0},
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "transient_expression",
+    "media": [],
+    "components": [{
+      "id": "lag",
+      "kind": "custom.signal.first_order_lag",
+      "parameters": {"time_constant": {"value": 2.0, "unit": "s"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "step",
+    "mode": "dynamic_transient",
+    "fixed_values": {"lag.input.value": 1.0},
+    "initial_guesses": {"lag.filtered": 0.0}
+  }]
+})json");
+    const auto graph = thermox::platform::compile_transient_model_graph(
+        document, registry, "step");
+    require(graph.problem.sparse_jacobian_pattern.has_value(),
+            "transient expressions declare a fixed sparse DAE pattern");
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 2.0;
+    options.initial_step = 0.1;
+    options.max_step = 0.2;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    const auto filtered = [&]() {
+        for (std::size_t i = 0; i < graph.problem.variable_names.size(); ++i) {
+            if (graph.problem.variable_names[i] == "lag.filtered") return i;
+        }
+        throw std::runtime_error("missing lag.filtered");
+    }();
+    const double expected = 1.0 - std::exp(-1.0);
+    require(std::abs(result.trajectory.back().state.at(filtered) - expected) <
+                2.0e-2,
+            "safe transient expression integrates its declared state");
+}
+
+void test_transient_expression_validation_rejects_unknown_symbols() {
+    auto registry = thermox::platform::make_default_component_registry();
+    thermox::platform::ExpressionComponentDefinition definition;
+    definition.schema_version =
+        thermox::platform::expression_component_schema_v3;
+    definition.descriptor.kind = "custom.signal.invalid_dynamic";
+    definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind = "control.invalid";
+    definition.descriptor.display_name = "Invalid dynamic component";
+    definition.descriptor.category = "Project controls";
+    definition.descriptor.model_name = "Safe transient expression";
+    definition.descriptor.supports_steady = false;
+    definition.descriptor.supports_transient = true;
+    definition.descriptor.ports = {{"output", "signal", "out"}};
+    definition.transient_equations = {
+        {"invalid", "output.value - secret.state", 1.0}};
+    auto algebraic_rate = definition;
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(definition));
+        },
+        "references unknown symbol: secret.state");
+
+    algebraic_rate.descriptor.kind =
+        "custom.signal.invalid_algebraic_rate";
+    algebraic_rate.descriptor.internal_variables = {{
+        "state", thermox::DaeVariableKind::algebraic,
+        0.0, 1.0, 0.0, 1.0,
+        -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity(), "dimensionless"}};
+    algebraic_rate.transient_equations = {{
+        "invalid_rate", "output.value - derivative.internal.state", 1.0}};
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(algebraic_rate));
+        },
+        "references unknown symbol: derivative.internal.state");
+}
+
 }  // namespace
 
 int main() {
@@ -256,6 +377,8 @@ int main() {
         test_expression_component_compiles_and_solves();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
+        test_transient_expression_component_integrates_internal_state();
+        test_transient_expression_validation_rejects_unknown_symbols();
     } catch (const std::exception& error) {
         std::cerr << "test failure: " << error.what() << '\n';
         return 1;

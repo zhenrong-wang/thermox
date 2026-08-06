@@ -70,8 +70,8 @@ expression_component_definitions(
         definition.descriptor.model_name = input.model_name;
         definition.descriptor.system_boundary_role =
             input.system_boundary_role;
-        definition.descriptor.supports_steady = true;
-        definition.descriptor.supports_transient = false;
+        definition.descriptor.supports_steady = input.supports_steady;
+        definition.descriptor.supports_transient = input.supports_transient;
         for (const auto& port : input.ports) {
             definition.descriptor.ports.push_back({
                 port.name,
@@ -98,6 +98,35 @@ expression_component_definitions(
                 equation.expression,
                 equation.residual_scale,
             });
+        }
+        const auto dae_kind = [](const std::string& kind) {
+            if (kind == "differential") {
+                return DaeVariableKind::differential;
+            }
+            if (kind == "algebraic") {
+                return DaeVariableKind::algebraic;
+            }
+            throw std::invalid_argument(
+                "expression component DAE variable kind must be algebraic or differential: " +
+                kind);
+        };
+        for (const auto& variable : input.transient_variables) {
+            definition.descriptor.transient_variables.push_back({
+                variable.port_name, variable.variable_name,
+                dae_kind(variable.kind), variable.derivative_scale});
+        }
+        for (const auto& variable : input.internal_variables) {
+            definition.descriptor.internal_variables.push_back({
+                variable.name, dae_kind(variable.kind),
+                variable.initial_value_si, variable.state_scale,
+                variable.initial_derivative_si_s,
+                variable.derivative_scale, variable.lower_bound,
+                variable.upper_bound, variable.dimension});
+        }
+        for (const auto& equation : input.transient_equations) {
+            definition.transient_equations.push_back({
+                equation.name, equation.expression,
+                equation.residual_scale});
         }
         definitions.push_back(std::move(definition));
     }

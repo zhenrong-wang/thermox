@@ -371,6 +371,10 @@ void expression_component_json(
     json_string(out, definition.model_name);
     out << ", \"system_boundary_role\": ";
     json_string(out, definition.system_boundary_role);
+    out << ", \"supports_steady\": "
+        << (definition.supports_steady ? "true" : "false");
+    out << ", \"supports_transient\": "
+        << (definition.supports_transient ? "true" : "false");
     out << ", \"ports\": [";
     for (std::size_t index = 0;
          index < definition.ports.size(); ++index) {
@@ -417,6 +421,59 @@ void expression_component_json(
          index < definition.equations.size(); ++index) {
         if (index != 0U) out << ", ";
         const auto& equation = definition.equations[index];
+        out << "{\"name\": ";
+        json_string(out, equation.name);
+        out << ", \"expression\": ";
+        json_string(out, equation.expression);
+        out << ", \"residual_scale\": ";
+        json_number(out, equation.residual_scale);
+        out << '}';
+    }
+    out << "], \"transient_variables\": [";
+    for (std::size_t index = 0;
+         index < definition.transient_variables.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& variable = definition.transient_variables[index];
+        out << "{\"port_name\": ";
+        json_string(out, variable.port_name);
+        out << ", \"variable_name\": ";
+        json_string(out, variable.variable_name);
+        out << ", \"kind\": ";
+        json_string(out, variable.kind);
+        out << ", \"derivative_scale\": ";
+        json_number(out, variable.derivative_scale);
+        out << '}';
+    }
+    out << "], \"internal_variables\": [";
+    for (std::size_t index = 0;
+         index < definition.internal_variables.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& variable = definition.internal_variables[index];
+        out << "{\"name\": ";
+        json_string(out, variable.name);
+        out << ", \"kind\": ";
+        json_string(out, variable.kind);
+        out << ", \"initial_value_si\": ";
+        json_number(out, variable.initial_value_si);
+        out << ", \"state_scale\": ";
+        json_number(out, variable.state_scale);
+        out << ", \"initial_derivative_si_s\": ";
+        json_number(out, variable.initial_derivative_si_s);
+        out << ", \"derivative_scale\": ";
+        json_number(out, variable.derivative_scale);
+        out << ", \"lower_bound\": ";
+        json_number(out, variable.lower_bound);
+        out << ", \"upper_bound\": ";
+        json_number(out, variable.upper_bound);
+        out << ", \"dimension\": ";
+        json_string(out, variable.dimension);
+        out << '}';
+    }
+    out << "], \"transient_equations\": [";
+    for (std::size_t index = 0;
+         index < definition.transient_equations.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& equation = definition.transient_equations[index];
         out << "{\"name\": ";
         json_string(out, equation.name);
         out << ", \"expression\": ";

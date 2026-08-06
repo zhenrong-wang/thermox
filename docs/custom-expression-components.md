@@ -1,7 +1,8 @@
 # Safe expression components
 
-Thermox supports deployment-composed steady algebraic components through the versioned
-`thermox.expression_component/v2` contract. The component descriptor remains authoritative for
+Thermox supports deployment-composed steady algebraic and index-1 transient components through
+the versioned `thermox.expression_component/v2` and `thermox.expression_component/v3` contracts.
+The component descriptor remains authoritative for
 physical-template identity, executable kind/version, typed ports, parameter dimensions, defaults,
 and bounds. Equations add residual
 behavior without loading executable user code.
@@ -61,12 +62,32 @@ provenance even if its public descriptor is unchanged. `thermox.job/v10` also sn
 request-scoped bundle and includes it in the idempotency fingerprint. A worker therefore
 reconstructs exactly the submitted component implementation after a process restart.
 
+## Version 3 transient equations
+
+Version 3 preserves the safe grammar and adds solver-owned DAE declarations. A definition can
+declare transient connector variables, bounded internal algebraic or differential variables, and
+transient residual equations. Transient residuals can reference:
+
+- ordinary connector states, such as `input.value`;
+- internal states, such as `internal.filtered_temperature`;
+- the rate of a declared differential state, such as
+  `derivative.internal.filtered_temperature`;
+- the rate of a connector variable explicitly declared differential, such as
+  `derivative.inventory.mass`;
+- SI parameters and the independent variable `time`.
+
+Registration rejects rate references to algebraic variables. Evaluation supplies an exact sparse
+DAE row with separate derivatives with respect to state and state rate, so the native integrator
+and future IDA-class backends use the same immutable component contract. Internal initial values,
+initial rates, scales, bounds, and dimensions are part of the implementation fingerprint and are
+carried through request bundles, artifact revisions, and durable-job serialization.
+
 ## Version 2 boundary
 
-Version 2 adds required physical-template presentation metadata while remaining deliberately
-limited to steady algebraic equations over fixed-shape connector
-domains. It does not expose property-package calls, thermochemistry calls, artifact access,
-internal/transient states, parameter templates, or species-expanded material variables.
+Version 2 remains deliberately limited to steady algebraic equations over fixed-shape connector
+domains. Version 3 removes the internal/transient-state restriction, but neither safe contract
+currently exposes property-package calls, thermochemistry calls, artifact access, parameter
+templates, or species-expanded material variables.
 Deployment code can register definitions at the trusted composition root through
 `register_expression_component`; application code can supply the same safe definition through a
 request bundle.
@@ -74,8 +95,8 @@ request bundle.
 ## Team-owned revisions
 
 The generic engineering-artifact revision API accepts
-`artifact_type=thermox.expression_component` with
-`artifact_schema_version=thermox.expression_component/v2`. The JSON payload contains physical
+`artifact_type=thermox.expression_component` with an expression-component v2 or v3 schema. The
+JSON payload contains physical
 template metadata (`template_kind`, `display_name`, and `category`), executable `kind`, `version`,
 `model_name`, `ports`, `parameters`, and `equations`; schema identity remains revision metadata.
 Creation canonicalizes the payload, validates the descriptor and safe grammar, stores it through
@@ -103,6 +124,6 @@ the topology instance's exact kind/version rather than substituting the newest p
 The browser only enables new run authoring after the service compiler has validated that exact
 topology, case, and artifact-revision set.
 
-Approval policy, dimension algebra across compound expressions, transient equations, constrained
-property functions, and richer equation syntax assistance require later versioned contracts.
+Approval policy, dimension algebra across compound expressions, constrained property functions,
+events/discrete modes, and richer equation syntax assistance require later versioned contracts.
 Arbitrary Python is not part of this path.

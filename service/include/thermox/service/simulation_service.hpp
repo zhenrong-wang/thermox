@@ -376,6 +376,25 @@ struct ExpressionComponentEquationInput {
     double residual_scale{1.0};
 };
 
+struct ExpressionComponentTransientVariableInput {
+    std::string port_name;
+    std::string variable_name;
+    std::string kind{"algebraic"};
+    double derivative_scale{1.0};
+};
+
+struct ExpressionComponentInternalVariableInput {
+    std::string name;
+    std::string kind{"algebraic"};
+    double initial_value_si{0.0};
+    double state_scale{1.0};
+    double initial_derivative_si_s{0.0};
+    double derivative_scale{1.0};
+    double lower_bound{-std::numeric_limits<double>::infinity()};
+    double upper_bound{std::numeric_limits<double>::infinity()};
+    std::string dimension{"unspecified"};
+};
+
 struct ExpressionComponentInput {
     std::string schema_version{
         "thermox.expression_component/v2"};
@@ -386,9 +405,16 @@ struct ExpressionComponentInput {
     std::string category;
     std::string model_name;
     std::string system_boundary_role;
+    bool supports_steady{true};
+    bool supports_transient{false};
     std::vector<ExpressionComponentPortInput> ports;
     std::vector<ExpressionComponentParameterInput> parameters;
     std::vector<ExpressionComponentEquationInput> equations;
+    std::vector<ExpressionComponentTransientVariableInput>
+        transient_variables;
+    std::vector<ExpressionComponentInternalVariableInput>
+        internal_variables;
+    std::vector<ExpressionComponentEquationInput> transient_equations;
 };
 
 struct SimulationComponentBundle {

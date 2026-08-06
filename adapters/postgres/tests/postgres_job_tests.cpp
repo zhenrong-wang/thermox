@@ -205,12 +205,14 @@ SimulationJobRequest request(
         std::string(64, 'b'),
     });
     thermox::service::ExpressionComponentInput component;
+    component.schema_version = "thermox.expression_component/v3";
     component.kind = "custom.signal.persisted_gain";
     component.version = "1.0.0";
     component.template_kind = "custom.signal.gain";
     component.display_name = "Signal gain";
     component.category = "Project components";
     component.model_name = "Algebraic gain";
+    component.supports_transient = true;
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},
@@ -228,6 +230,16 @@ SimulationJobRequest request(
             "output.value - parameter.gain * input.value",
             1.0,
         },
+    };
+    component.internal_variables = {{
+        "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
+        -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity(), "dimensionless"}};
+    component.transient_equations = {
+        {"state_balance",
+         "derivative.internal.filtered + internal.filtered - input.value",
+         1.0},
+        {"transient_output", "output.value - internal.filtered", 1.0},
     };
     value.components.expression_components.push_back(
         std::move(component));
@@ -305,6 +317,14 @@ void test_idempotency_and_tenant_scope(
             repeated.request.components.expression_components
                     .front().equations.front().expression ==
                 "output.value - parameter.gain * input.value" &&
+            repeated.request.components.expression_components
+                    .front().supports_transient &&
+            repeated.request.components.expression_components
+                    .front().internal_variables.front().kind ==
+                "differential" &&
+            repeated.request.components.expression_components
+                    .front().transient_equations.front().name ==
+                "state_balance" &&
             std::isinf(
                 repeated.request.components.expression_components
                     .front().parameters.front().lower_bound) &&

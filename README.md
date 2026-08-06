@@ -542,7 +542,9 @@ See `web/README.md` for alternate API ports and bounded verification commands. P
 is intentionally deferred until gateway identity and a public API endpoint exist.
 
 Trusted deployments and request-scoped simulations can compose safe steady algebraic component
-definitions through `thermox.expression_component/v2`. Expressions use registered connector
+definitions through `thermox.expression_component/v2` for steady algebraic models and
+`thermox.expression_component/v3` for safe index-1 transient residuals with declared internal
+states and analytic sparse DAE derivatives. Expressions use registered connector
 variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
 arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v10`. Project-owned
 definitions are discovered from the project component catalog and appear directly in the canvas

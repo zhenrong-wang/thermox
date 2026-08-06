@@ -453,6 +453,10 @@ Tree component_bundle(
                 encoded.put(
                     "system_boundary_role",
                     component.system_boundary_role);
+                encoded.put(
+                    "supports_steady", component.supports_steady);
+                encoded.put(
+                    "supports_transient", component.supports_transient);
                 encoded.add_child(
                     "ports",
                     array(
@@ -531,6 +535,56 @@ Tree component_bundle(
                                 equation.residual_scale);
                             return value;
                         }));
+                encoded.add_child(
+                    "transient_variables",
+                    array(component.transient_variables,
+                          [](const auto& variable) {
+                              Tree value;
+                              value.put("port_name", variable.port_name);
+                              value.put("variable_name", variable.variable_name);
+                              value.put("kind", variable.kind);
+                              value.put("derivative_scale",
+                                        variable.derivative_scale);
+                              return value;
+                          }));
+                encoded.add_child(
+                    "internal_variables",
+                    array(component.internal_variables,
+                          [](const auto& variable) {
+                              Tree value;
+                              value.put("name", variable.name);
+                              value.put("kind", variable.kind);
+                              value.put("initial_value_si",
+                                        variable.initial_value_si);
+                              value.put("state_scale", variable.state_scale);
+                              value.put("initial_derivative_si_s",
+                                        variable.initial_derivative_si_s);
+                              value.put("derivative_scale",
+                                        variable.derivative_scale);
+                              const bool has_lower =
+                                  std::isfinite(variable.lower_bound);
+                              const bool has_upper =
+                                  std::isfinite(variable.upper_bound);
+                              value.put("has_lower_bound", has_lower);
+                              value.put("has_upper_bound", has_upper);
+                              if (has_lower) value.put(
+                                  "lower_bound", variable.lower_bound);
+                              if (has_upper) value.put(
+                                  "upper_bound", variable.upper_bound);
+                              value.put("dimension", variable.dimension);
+                              return value;
+                          }));
+                encoded.add_child(
+                    "transient_equations",
+                    array(component.transient_equations,
+                          [](const auto& equation) {
+                              Tree value;
+                              value.put("name", equation.name);
+                              value.put("expression", equation.expression);
+                              value.put("residual_scale",
+                                        equation.residual_scale);
+                              return value;
+                          }));
                 return encoded;
             }));
     return tree;
@@ -561,6 +615,10 @@ service::SimulationComponentBundle decode_component_bundle(
                 component.system_boundary_role =
                     encoded.get<std::string>(
                         "system_boundary_role");
+                component.supports_steady =
+                    encoded.get<bool>("supports_steady", true);
+                component.supports_transient =
+                    encoded.get<bool>("supports_transient", false);
                 component.ports =
                     decode_array<
                         service::ExpressionComponentPortInput>(
@@ -636,6 +694,60 @@ service::SimulationComponentBundle decode_component_bundle(
                                         "residual_scale"),
                                 };
                         });
+                if (const auto variables = encoded.get_child_optional(
+                        "transient_variables")) {
+                    component.transient_variables = decode_array<
+                        service::ExpressionComponentTransientVariableInput>(
+                        *variables, [](const Tree& variable) {
+                            service::ExpressionComponentTransientVariableInput value;
+                            value.port_name = variable.get<std::string>("port_name");
+                            value.variable_name = variable.get<std::string>("variable_name");
+                            value.kind = variable.get<std::string>("kind");
+                            value.derivative_scale =
+                                variable.get<double>("derivative_scale");
+                            return value;
+                        });
+                }
+                if (const auto variables = encoded.get_child_optional(
+                        "internal_variables")) {
+                    component.internal_variables = decode_array<
+                        service::ExpressionComponentInternalVariableInput>(
+                        *variables, [](const Tree& variable) {
+                            service::ExpressionComponentInternalVariableInput value;
+                            value.name = variable.get<std::string>("name");
+                            value.kind = variable.get<std::string>("kind");
+                            value.initial_value_si =
+                                variable.get<double>("initial_value_si");
+                            value.state_scale =
+                                variable.get<double>("state_scale");
+                            value.initial_derivative_si_s = variable.get<double>(
+                                "initial_derivative_si_s");
+                            value.derivative_scale =
+                                variable.get<double>("derivative_scale");
+                            value.lower_bound = variable.get<bool>(
+                                "has_lower_bound")
+                                ? variable.get<double>("lower_bound")
+                                : -std::numeric_limits<double>::infinity();
+                            value.upper_bound = variable.get<bool>(
+                                "has_upper_bound")
+                                ? variable.get<double>("upper_bound")
+                                : std::numeric_limits<double>::infinity();
+                            value.dimension =
+                                variable.get<std::string>("dimension");
+                            return value;
+                        });
+                }
+                if (const auto equations = encoded.get_child_optional(
+                        "transient_equations")) {
+                    component.transient_equations = decode_array<
+                        service::ExpressionComponentEquationInput>(
+                        *equations, [](const Tree& equation) {
+                            return service::ExpressionComponentEquationInput{
+                                equation.get<std::string>("name"),
+                                equation.get<std::string>("expression"),
+                                equation.get<double>("residual_scale")};
+                        });
+                }
                 return component;
             });
     return value;

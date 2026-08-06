@@ -11,6 +11,8 @@ namespace thermox::platform {
 
 inline constexpr char expression_component_schema_v2[] =
     "thermox.expression_component/v2";
+inline constexpr char expression_component_schema_v3[] =
+    "thermox.expression_component/v3";
 inline constexpr char expression_component_artifact_type[] =
     "thermox.expression_component";
 
@@ -24,6 +26,10 @@ struct ExpressionComponentDefinition {
     std::string schema_version{expression_component_schema_v2};
     ComponentModelDescriptor descriptor;
     std::vector<AlgebraicExpressionEquation> equations;
+    // Version 3 transient residuals may reference ordinary port symbols,
+    // internal.<name>, derivative.<port>.<variable>,
+    // derivative.internal.<name>, parameters, and time.
+    std::vector<AlgebraicExpressionEquation> transient_equations;
 };
 
 std::shared_ptr<const ComponentModel>

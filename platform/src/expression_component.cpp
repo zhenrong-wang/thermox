@@ -512,6 +512,35 @@ std::string definition_fingerprint(
               << equation.residual_scale;
         hash_text(scale.str());
     }
+    for (const auto& variable : definition.descriptor.transient_variables) {
+        hash_text(variable.port_name);
+        hash_text(variable.variable_name);
+        hash_text(variable.kind == DaeVariableKind::differential
+                      ? "differential" : "algebraic");
+        std::ostringstream scale;
+        scale << std::setprecision(17) << variable.derivative_scale;
+        hash_text(scale.str());
+    }
+    for (const auto& variable : definition.descriptor.internal_variables) {
+        hash_text(variable.name);
+        hash_text(variable.kind == DaeVariableKind::differential
+                      ? "differential" : "algebraic");
+        std::ostringstream values;
+        values << std::setprecision(17) << variable.initial_value
+               << ':' << variable.state_scale << ':'
+               << variable.initial_derivative << ':'
+               << variable.derivative_scale << ':'
+               << variable.lower_bound << ':' << variable.upper_bound;
+        hash_text(values.str());
+        hash_text(variable.dimension);
+    }
+    for (const auto& equation : definition.transient_equations) {
+        hash_text(equation.name);
+        hash_text(equation.expression);
+        std::ostringstream scale;
+        scale << std::setprecision(17) << equation.residual_scale;
+        hash_text(scale.str());
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;
@@ -525,9 +554,13 @@ public:
         std::vector<std::pair<
             AlgebraicExpressionEquation,
             ParsedExpression>> equations,
+        std::vector<std::pair<
+            AlgebraicExpressionEquation,
+            ParsedExpression>> transient_equations,
         std::string fingerprint)
         : descriptor_(std::move(descriptor)),
           equations_(std::move(equations)),
+          transient_equations_(std::move(transient_equations)),
           fingerprint_(std::move(fingerprint)) {}
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -623,11 +656,113 @@ public:
         }
     }
 
+    void add_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system) const override {
+        struct Binding {
+            std::string symbol;
+            std::size_t variable{0};
+            bool derivative{false};
+        };
+
+        std::vector<Binding> bindings;
+        std::map<std::string, std::size_t> expression_variables;
+        const auto bind = [&](std::string symbol, std::size_t variable,
+                              bool derivative) {
+            const auto local = bindings.size();
+            expression_variables.emplace(symbol, local);
+            bindings.push_back({std::move(symbol), variable, derivative});
+        };
+        for (const auto& [name, index] : context.port_variables) {
+            bind(name, index, false);
+            bind("derivative." + name, index, true);
+        }
+        for (const auto& [name, index] : context.internal_variables) {
+            bind("internal." + name, index, false);
+            bind("derivative.internal." + name, index, true);
+        }
+
+        std::map<std::string, double> parameters;
+        for (const auto& descriptor : descriptor_.parameters) {
+            const auto supplied = context.component.parameters.find(
+                descriptor.name);
+            if (supplied != context.component.parameters.end()) {
+                parameters.emplace("parameter." + descriptor.name,
+                                   supplied->second.value_si);
+            } else if (descriptor.default_value.has_value()) {
+                parameters.emplace("parameter." + descriptor.name,
+                                   *descriptor.default_value);
+            }
+        }
+
+        for (const auto& [definition, expression] : transient_equations_) {
+            std::vector<std::size_t> sparsity;
+            for (const auto& symbol : expression.symbols) {
+                const auto found = expression_variables.find(symbol);
+                if (found != expression_variables.end()) {
+                    sparsity.push_back(bindings.at(found->second).variable);
+                }
+            }
+            std::sort(sparsity.begin(), sparsity.end());
+            sparsity.erase(std::unique(sparsity.begin(), sparsity.end()),
+                           sparsity.end());
+            const auto root = expression.root;
+            const auto bound_variables = expression_variables;
+            const auto bound_bindings = bindings;
+            const auto bound_parameters = parameters;
+            const std::string equation_name =
+                "component." + context.component.id +
+                ".expression_transient." + definition.name;
+            system.add_sparse_equation(
+                equation_name, std::move(sparsity),
+                [root, bound_variables, bound_bindings, bound_parameters](
+                    double time, const std::vector<double>& state,
+                    const std::vector<double>& derivative, double& residual,
+                    std::vector<DaeEquationPartial>& partials) {
+                    std::vector<double> local_values(bound_bindings.size());
+                    for (std::size_t i = 0; i < bound_bindings.size(); ++i) {
+                        const auto& binding = bound_bindings[i];
+                        local_values[i] = binding.derivative
+                            ? derivative.at(binding.variable)
+                            : state.at(binding.variable);
+                    }
+                    auto dynamic_parameters = bound_parameters;
+                    dynamic_parameters.emplace("time", time);
+                    const auto result = evaluate(
+                        *root, local_values, bound_variables,
+                        dynamic_parameters);
+                    if (!result.error.empty()) {
+                        return EvaluationStatus::recoverable(result.error);
+                    }
+                    residual = result.value;
+                    std::map<std::size_t, DaeEquationPartial> combined;
+                    for (const auto& [local, value] : result.derivatives) {
+                        const auto& binding = bound_bindings.at(local);
+                        auto& partial = combined[binding.variable];
+                        partial.variable = binding.variable;
+                        if (binding.derivative) {
+                            partial.state_rate_derivative += value;
+                        } else {
+                            partial.state_derivative += value;
+                        }
+                    }
+                    for (const auto& [_, partial] : combined) {
+                        partials.push_back(partial);
+                    }
+                    return EvaluationStatus::success();
+                },
+                definition.residual_scale);
+        }
+    }
+
 private:
     ComponentModelDescriptor descriptor_;
     std::vector<std::pair<
         AlgebraicExpressionEquation,
         ParsedExpression>> equations_;
+    std::vector<std::pair<
+        AlgebraicExpressionEquation,
+        ParsedExpression>> transient_equations_;
     std::string fingerprint_;
 };
 
@@ -687,8 +822,11 @@ std::shared_ptr<const ComponentModel>
 make_expression_component_model(
     const ComponentRegistry& registry,
     ExpressionComponentDefinition definition) {
-    if (definition.schema_version !=
-        expression_component_schema_v2) {
+    const bool version_2 = definition.schema_version ==
+        expression_component_schema_v2;
+    const bool version_3 = definition.schema_version ==
+        expression_component_schema_v3;
+    if (!version_2 && !version_3) {
         throw std::invalid_argument(
             "unsupported expression component schema: " +
             definition.schema_version);
@@ -702,10 +840,11 @@ make_expression_component_model(
             "expression component v2 requires physical template "
             "kind, display name, category, and calculation model name");
     }
-    if (!descriptor.supports_steady ||
+    if (version_2 && (!descriptor.supports_steady ||
         descriptor.supports_transient ||
         !descriptor.transient_variables.empty() ||
-        !descriptor.internal_variables.empty()) {
+        !descriptor.internal_variables.empty() ||
+        !definition.transient_equations.empty())) {
         throw std::invalid_argument(
             "expression component v2 supports steady algebraic "
             "components only");
@@ -717,12 +856,36 @@ make_expression_component_model(
             "expression component v2 cannot access artifacts or "
             "property/thermochemistry callbacks");
     }
-    if (definition.equations.empty()) {
+    if (version_3 && descriptor.supports_transient &&
+        definition.transient_equations.empty()) {
+        throw std::invalid_argument(
+            "expression component v3 transient models require at least one transient equation");
+    }
+    if (version_3 && !descriptor.supports_transient &&
+        (!descriptor.transient_variables.empty() ||
+         !descriptor.internal_variables.empty() ||
+         !definition.transient_equations.empty())) {
+        throw std::invalid_argument(
+            "expression component v3 transient declarations require supports_transient");
+    }
+    if (descriptor.supports_steady && definition.equations.empty()) {
         throw std::invalid_argument(
             "expression component requires at least one equation");
     }
+    if (!descriptor.supports_steady && !descriptor.supports_transient) {
+        throw std::invalid_argument(
+            "expression component must support steady or transient execution");
+    }
 
     std::set<std::string> allowed_symbols;
+    std::set<std::string> transient_symbols;
+    std::set<std::string> differential_ports;
+    for (const auto& variable : descriptor.transient_variables) {
+        if (variable.kind == DaeVariableKind::differential) {
+            differential_ports.insert(
+                variable.port_name + "." + variable.variable_name);
+        }
+    }
     for (const auto& port : descriptor.ports) {
         const auto& domain =
             registry.require_connector_domain(port.domain);
@@ -741,6 +904,47 @@ make_expression_component_model(
                     "valid DSL symbol: " + symbol);
             }
             allowed_symbols.insert(symbol);
+            transient_symbols.insert(symbol);
+            if (differential_ports.contains(symbol)) {
+                transient_symbols.insert("derivative." + symbol);
+            }
+        }
+    }
+    if (version_3) {
+        std::set<std::string> declared_transient_variables;
+        for (const auto& variable : descriptor.transient_variables) {
+            const std::string symbol =
+                variable.port_name + "." + variable.variable_name;
+            if (!allowed_symbols.contains(symbol)) {
+                throw std::invalid_argument(
+                    "expression component transient variable references unknown port variable: " +
+                    symbol);
+            }
+            if (!declared_transient_variables.insert(symbol).second) {
+                throw std::invalid_argument(
+                    "expression component transient variable is duplicated: " + symbol);
+            }
+            if (!std::isfinite(variable.derivative_scale) ||
+                variable.derivative_scale <= 0.0) {
+                throw std::invalid_argument(
+                    "expression component transient derivative scale must be positive and finite: " +
+                    symbol);
+            }
+        }
+        for (const auto& variable : descriptor.internal_variables) {
+            if (!std::isfinite(variable.initial_value) ||
+                !std::isfinite(variable.initial_derivative) ||
+                !std::isfinite(variable.state_scale) ||
+                variable.state_scale <= 0.0 ||
+                !std::isfinite(variable.derivative_scale) ||
+                variable.derivative_scale <= 0.0 ||
+                std::isnan(variable.lower_bound) ||
+                std::isnan(variable.upper_bound) ||
+                variable.lower_bound > variable.upper_bound) {
+                throw std::invalid_argument(
+                    "expression component internal variable has invalid initial value, scale, or bounds: " +
+                    variable.name);
+            }
         }
     }
     for (const auto& parameter : descriptor.parameters) {
@@ -758,6 +962,25 @@ make_expression_component_model(
                 "DSL symbol: " + symbol);
         }
         allowed_symbols.insert(symbol);
+        transient_symbols.insert(symbol);
+    }
+
+    if (version_3) {
+        transient_symbols.insert("time");
+        std::set<std::string> internal_names;
+        for (const auto& variable : descriptor.internal_variables) {
+            if (!valid_symbol(variable.name) ||
+                !internal_names.insert(variable.name).second) {
+                throw std::invalid_argument(
+                    "expression component internal variable names must be unique valid symbols: " +
+                    variable.name);
+            }
+            transient_symbols.insert("internal." + variable.name);
+            if (variable.kind == DaeVariableKind::differential) {
+                transient_symbols.insert(
+                    "derivative.internal." + variable.name);
+            }
+        }
     }
 
     std::set<std::string> equation_names;
@@ -808,8 +1031,49 @@ make_expression_component_model(
             std::move(equation), std::move(parsed));
     }
 
+    std::vector<std::pair<
+        AlgebraicExpressionEquation,
+        ParsedExpression>> transient_equations;
+    transient_equations.reserve(definition.transient_equations.size());
+    for (auto& equation : definition.transient_equations) {
+        if (!valid_name(equation.name) ||
+            !equation_names.insert("transient:" + equation.name).second) {
+            throw std::invalid_argument(
+                "transient expression equation names must be unique and contain only letters, digits, '_' or '-': " +
+                equation.name);
+        }
+        if (!std::isfinite(equation.residual_scale) ||
+            equation.residual_scale <= 0.0) {
+            throw std::invalid_argument(
+                "transient expression equation residual scale must be positive and finite: " +
+                equation.name);
+        }
+        auto parsed = ExpressionParser{equation.expression}.parse();
+        for (const auto& symbol : parsed.symbols) {
+            if (transient_symbols.find(symbol) == transient_symbols.end()) {
+                throw std::invalid_argument(
+                    "transient expression equation '" + equation.name +
+                    "' references unknown symbol: " + symbol);
+            }
+        }
+        const bool has_variable = std::any_of(
+            parsed.symbols.begin(), parsed.symbols.end(),
+            [&](const auto& symbol) {
+                return symbol != "time" &&
+                    symbol.rfind("parameter.", 0) != 0;
+            });
+        if (!has_variable) {
+            throw std::invalid_argument(
+                "transient expression equation '" + equation.name +
+                "' must reference at least one state or state rate");
+        }
+        transient_equations.emplace_back(
+            std::move(equation), std::move(parsed));
+    }
+
     return std::make_shared<ExpressionComponentModel>(
         std::move(descriptor), std::move(equations),
+        std::move(transient_equations),
         fingerprint);
 }
 
