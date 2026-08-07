@@ -1,6 +1,6 @@
 # Engineering correlation artifacts
 
-`thermox.correlation/v1` stores a bounded algebraic engineering correlation family independently
+`thermox.correlation/v2` stores a bounded algebraic engineering correlation family independently
 from a component instance. Its payload declares shared typed inputs, one typed output, and one or
 more candidate laws. Each candidate owns its regime, priority, immutable coefficients, safe
 expression, and optional qualified operating ranges. Expressions use the same bounded
@@ -56,7 +56,7 @@ correlation dataset separate from topology, component parameters, and fluid-prop
 `void_fraction_correlation` and `friction_pressure_gradient_correlation`. The first output must be
 dimensionless and satisfy `0 < alpha < 1`. The second must be named
 `friction_pressure_gradient`, carry dimension `pressure_gradient` (`Pa/m`), and evaluate to a
-finite nonnegative magnitude. Both roles use immutable `thermox.correlation/v1` artifacts.
+finite nonnegative magnitude. Both roles use immutable `thermox.correlation/v2` artifacts.
 
 A void-fraction correlation may declare any subset of these component-supplied inputs:
 
@@ -143,7 +143,7 @@ declared scalar operating ranges and deterministic selection among the laws in t
 
 ## Correlation families and regime selection
 
-The same `thermox.correlation/v1` contract represents both a one-law correlation and a regime
+The same `thermox.correlation/v2` contract represents both a one-law correlation and a regime
 family. A one-law correlation contains one candidate; a regime family contains multiple named
 candidates:
 
@@ -190,7 +190,7 @@ The runtime catalog publishes versioned, provider-extensible correlation templat
 from immutable engineering-artifact revisions. A template is a referenced equation shape with
 typed inputs, typed coefficients, coefficient bounds, and an applicability envelope. Instantiating
 one requires an artifact identity and all coefficients that do not have explicit defaults. The
-result is an ordinary `thermox.correlation/v1` artifact, so topology and component consumers remain
+result is an ordinary `thermox.correlation/v2` artifact, so topology and component consumers remain
 independent of the template registry.
 
 The first packaged template is the Zuber–Findlay kinematic drift-flux relation, based on
@@ -238,8 +238,9 @@ diagnostic contracts as user-authored engineering data.
 Direct C++ callers may use that platform function. Service and remote clients use
 `SimulationService::instantiate_correlation` or
 `POST /api/v1/correlation-artifacts/instantiate`. The request names an artifact identity and one
-or more catalog template bindings with optional bounded coefficient overrides, candidate IDs, and
-priorities. The response contains the ordinary `thermox.correlation/v1` payload, the exact runtime
+or more catalog template bindings with optional bounded coefficient overrides, candidate IDs,
+priorities, physical flow-regime routes, and an explicit unmapped-regime fallback declaration.
+The response contains the ordinary `thermox.correlation/v2` payload, the exact runtime
 catalog fingerprint, and a SHA-256 computed from the canonical payload. Publishing that payload as
 a Team/project artifact revision is intentionally a separate storage operation.
 
@@ -250,14 +251,19 @@ require validation or a more appropriate registered artifact; Thermox does not i
 from numerical convergence.
 
 For flow-pattern-dependent friction families, the correlated two-phase pipe may additionally bind
-a `thermox.regime_map/v2` artifact as `friction_regime_map`. Candidate `regime` labels then form an
-explicit join contract: every map region must resolve to a correlation candidate at compile time.
-The map consumes live property and flow quantities, including the delivered superficial-velocity,
-Reynolds, Froude, Weber, Bond, and phase-ratio groups. See
+a `thermox.regime_map/v2` artifact as `friction_regime_map`. A candidate's `regime` remains the
+correlation's native applicability label (for example, a phase-Reynolds combination). Its separate
+`flow_regimes` routes identify physical map outputs such as bubbly or annular. A candidate may
+instead opt into `fallback_for_unmapped_flow_regime`; fallback candidates are considered only when
+no exact route is declared, then retain their own applicability and priority selection. This avoids
+duplicating one general law under several misleading flow-pattern names. Compile time requires
+every map region to have an exact route or a declared fallback. The map consumes live property and
+flow quantities, including the delivered superficial-velocity, Reynolds, Froude, Weber, Bond, and
+phase-ratio groups. See
 [Regime-map architecture](regime-map-architecture.md).
 
 Project publication accepts `artifact_type=thermox.correlation` and
-`artifact_schema_version=thermox.correlation/v1`. Payload validation
+`artifact_schema_version=thermox.correlation/v2`. Payload validation
 happens before immutable content persistence; selected revisions resolve into the calculation
 request with complete identity and checksum provenance.
 

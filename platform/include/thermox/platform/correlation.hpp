@@ -14,8 +14,8 @@ namespace thermox::platform {
 
 inline constexpr char correlation_artifact_type[] =
     "thermox.correlation";
-inline constexpr char correlation_artifact_schema_v1[] =
-    "thermox.correlation/v1";
+inline constexpr char correlation_artifact_schema_v2[] =
+    "thermox.correlation/v2";
 
 struct CorrelationVariable {
     std::string name;
@@ -28,6 +28,7 @@ struct CorrelationEvaluation {
     std::string error;
     std::string selected_candidate;
     std::string selected_regime;
+    bool used_flow_regime_fallback{false};
 };
 
 struct CorrelationApplicabilityRange {
@@ -50,6 +51,10 @@ struct CorrelationCandidate {
     std::map<std::string, double> coefficients;
     std::string expression;
     std::vector<CorrelationApplicabilityRange> applicability;
+    // Physical flow regimes emitted by a RegimeMapArtifact are a
+    // different taxonomy from the candidate's native correlation regime.
+    std::vector<std::string> flow_regimes;
+    bool fallback_for_unmapped_flow_regime{false};
 };
 
 struct CorrelationCoefficientDescriptor {
@@ -87,6 +92,8 @@ struct CorrelationTemplateCandidateBinding {
     std::map<std::string, double> coefficients;
     std::string candidate_id;
     int priority{0};
+    std::vector<std::string> flow_regimes;
+    bool fallback_for_unmapped_flow_regime{false};
 };
 
 class CorrelationTemplateRegistry {

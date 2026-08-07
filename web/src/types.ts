@@ -399,7 +399,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v12'
+  schema_version: 'thermox.job/v13'
   job_id: string
   owner: {
     team_id: string
@@ -409,7 +409,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v12'
+    schema_version: 'thermox.job/v13'
     mode: 'steady' | 'transient' | 'calibration'
     case_id: string
     calibration_id: string
@@ -769,7 +769,7 @@ export interface AssemblyTemplateCatalogEntry {
 }
 
 export interface CorrelationArtifactDefinition {
-  schema_version: 'thermox.correlation/v1'
+  schema_version: 'thermox.correlation/v2'
   inputs: Array<{
     name: string
     dimension: string
@@ -784,6 +784,8 @@ export interface CorrelationArtifactDefinition {
     priority: number
     coefficients: Record<string, number>
     expression: string
+    flow_regimes: string[]
+    fallback_for_unmapped_flow_regime: boolean
     applicability?: Array<{
       input: string
       minimum?: number
@@ -1002,7 +1004,7 @@ export interface CatalogCorrelationTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v8'
+  schema_version: 'thermox.catalog/v9'
   status: string
   fingerprint: string
   components: CatalogComponent[]

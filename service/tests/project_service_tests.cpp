@@ -433,6 +433,8 @@ std::string correlation_payload() {
     "priority": 0,
     "coefficients": {"loss_coefficient": 1.5},
     "expression": "loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)",
+    "flow_regimes": ["slug"],
+    "fallback_for_unmapped_flow_regime": false,
     "applicability": [{
       "input": "mass_flow",
       "minimum": 0.0,
@@ -455,6 +457,8 @@ std::string correlation_family_payload() {
       "priority": 10,
       "coefficients": {"factor": 1.0},
       "expression": "factor * mass_flow * abs(mass_flow)",
+      "flow_regimes": [],
+      "fallback_for_unmapped_flow_regime": false,
       "applicability": [{"input": "mass_flow", "minimum": 0.0, "maximum": 2.0}]
     },
     {
@@ -463,6 +467,8 @@ std::string correlation_family_payload() {
       "priority": 20,
       "coefficients": {"factor": 2.0},
       "expression": "factor * mass_flow * abs(mass_flow)",
+      "flow_regimes": [],
+      "fallback_for_unmapped_flow_regime": false,
       "applicability": [{"input": "mass_flow", "minimum": 2.0, "maximum": 20.0}]
     }
   ]
@@ -584,7 +590,7 @@ void test_correlation_artifact_is_executable_input() {
         "return-bend-pressure-loss",
         {},
         "thermox.correlation",
-        "thermox.correlation/v1",
+        "thermox.correlation/v2",
         correlation_payload(),
     });
     const auto resolved = projects.resolve_artifact_revisions(
@@ -607,9 +613,15 @@ void test_correlation_artifact_is_executable_input() {
                 25.0 &&
             !resolved->snapshot.correlations.front()
                     .candidates.front().applicability.front()
-                    .maximum_inclusive,
+                    .maximum_inclusive &&
+            resolved->snapshot.correlations.front()
+                    .candidates.front().flow_regimes ==
+                std::vector<std::string>{"slug"} &&
+            !resolved->snapshot.correlations.front()
+                    .candidates.front()
+                    .fallback_for_unmapped_flow_regime,
         "correlation revisions must resolve into an immutable "
-        "executable artifact snapshot");
+        "executable artifact snapshot including flow routing");
 
     bool unsafe_rejected = false;
     try {
@@ -619,13 +631,15 @@ void test_correlation_artifact_is_executable_input() {
             "unsafe-correlation",
             {},
             "thermox.correlation",
-            "thermox.correlation/v1",
+            "thermox.correlation/v2",
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "output": {"name": "y", "dimension": "dimensionless"},
               "candidates": [{
                 "id": "default", "regime": "general", "priority": 0,
-                "coefficients": {}, "expression": "system(x)"
+                "coefficients": {}, "expression": "system(x)",
+                "flow_regimes": [],
+                "fallback_for_unmapped_flow_regime": false
               }]
             })json",
         });
@@ -644,7 +658,7 @@ void test_correlation_artifact_is_executable_input() {
             "removed-correlation-shape",
             {},
             "thermox.correlation",
-            "thermox.correlation/v1",
+            "thermox.correlation/v2",
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "output": {"name": "y", "dimension": "dimensionless"},
@@ -667,13 +681,15 @@ void test_correlation_artifact_is_executable_input() {
             "invalid-envelope-correlation",
             {},
             "thermox.correlation",
-            "thermox.correlation/v1",
+            "thermox.correlation/v2",
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "output": {"name": "y", "dimension": "dimensionless"},
               "candidates": [{
                 "id": "default", "regime": "general", "priority": 0,
                 "coefficients": {}, "expression": "x",
+                "flow_regimes": [],
+                "fallback_for_unmapped_flow_regime": false,
                 "applicability": [{
                   "input": "unknown",
                   "minimum": 0.0,
@@ -696,7 +712,7 @@ void test_correlation_artifact_is_executable_input() {
         "return-bend-family",
         {},
         "thermox.correlation",
-        "thermox.correlation/v1",
+        "thermox.correlation/v2",
         correlation_family_payload(),
     });
     const auto resolved_family = projects.resolve_artifact_revisions(
@@ -706,7 +722,7 @@ void test_correlation_artifact_is_executable_input() {
         resolved_family &&
             resolved_family->snapshot.correlations.size() == 1U &&
             resolved_family->snapshot.correlations.front()
-                    .schema_version == "thermox.correlation/v1" &&
+                    .schema_version == "thermox.correlation/v2" &&
             resolved_family->snapshot.correlations.front()
                     .candidates.size() == 2U &&
             resolved_family->snapshot.correlations.front()

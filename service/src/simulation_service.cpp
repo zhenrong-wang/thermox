@@ -97,6 +97,9 @@ CorrelationArtifactInput correlation_input(
         value.priority = candidate.priority;
         value.coefficients = candidate.coefficients;
         value.expression = candidate.expression;
+        value.flow_regimes = candidate.flow_regimes;
+        value.fallback_for_unmapped_flow_regime =
+            candidate.fallback_for_unmapped_flow_regime;
         for (const auto& range : candidate.applicability) {
             value.applicability.push_back({
                 range.input, range.minimum, range.maximum,
@@ -359,7 +362,8 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             candidates.push_back({
                 candidate.id, candidate.regime, candidate.priority,
                 candidate.coefficients, candidate.expression,
-                std::move(ranges)});
+                std::move(ranges), candidate.flow_regimes,
+                candidate.fallback_for_unmapped_flow_regime});
         }
         artifacts.register_artifact(platform::CorrelationArtifact{
             input.id, input.schema_version, input.revision,
@@ -2119,6 +2123,8 @@ SimulationService::instantiate_correlation(
                 binding.coefficients,
                 binding.candidate_id,
                 binding.priority,
+                binding.flow_regimes,
+                binding.fallback_for_unmapped_flow_regime,
             });
         }
         auto artifact = platform::instantiate_correlation_family(

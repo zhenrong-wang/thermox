@@ -1577,7 +1577,13 @@ private:
                         data.friction_pressure_gradient_correlation
                             ->candidates().end(),
                         [&](const auto& candidate) {
-                            return candidate.regime == region.regime;
+                            return std::find(
+                                candidate.flow_regimes.begin(),
+                                candidate.flow_regimes.end(),
+                                region.regime) !=
+                                    candidate.flow_regimes.end() ||
+                                candidate
+                                    .fallback_for_unmapped_flow_regime;
                         });
                     if (!covered) {
                         throw std::invalid_argument(

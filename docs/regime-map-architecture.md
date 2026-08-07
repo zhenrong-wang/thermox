@@ -45,15 +45,18 @@ publication accepts `artifact_type=thermox.regime_map` and
 `artifact_schema_version=thermox.regime_map/v2`, canonicalizes and validates the payload before
 content-addressed persistence, and resolves an exact revision into job snapshots. Regions,
 branches, priorities, and criteria participate in job idempotency fingerprints and PostgreSQL job
-encoding. The containing job contract is `thermox.job/v12`.
+encoding. The containing job contract is `thermox.job/v13`.
 
 The generic `pipe.fluid.correlated_two_phase_pressure_drop` model exposes the optional
 `friction_regime_map` artifact role. When bound, compilation verifies the property backend's
 surface-tension capability, validates every requested live input, and requires every map regime to
-have a same-named friction-correlation candidate. Runtime derives the groups from the current
-two-phase state, classifies the regime, and evaluates only that candidate. A map gap, ambiguous
-region, missing closure, or invalid derived quantity is an explicit error. Without this optional
-binding, existing correlation-family selection remains independent.
+have an exact candidate `flow_regimes` route or an explicitly declared general fallback. Candidate
+`regime` labels describe the correlation's own applicability taxonomy and are not overloaded as
+flow-pattern names. Runtime derives the groups from the current two-phase state, classifies the
+physical regime, prefers exact routes, and uses fallback candidates only where no exact route was
+declared. The selected fallback is reported in the evaluation provenance. A map gap, ambiguous
+region, missing route, or invalid derived quantity is an explicit error. Without this optional
+binding, correlation-family selection remains independent.
 
 ## Physical data requirements
 
@@ -86,7 +89,7 @@ part of the model provenance. This is a cited, limited engineering map—not a u
 the catalog repeats the weak slug/churn evidence warning.
 
 Outside a declared domain, classification returns no applicable region rather than extrapolating.
-Every template exposes its citation and scope through `thermox.catalog/v8`.
+Every template exposes its citation and scope through `thermox.catalog/v9`.
 Direct callers use `instantiate_regime_map_template`; service and remote callers use
 `SimulationService::instantiate_regime_map` or
 `POST /api/v1/regime-map-artifacts/instantiate`. The result is an ordinary canonical

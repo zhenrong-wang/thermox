@@ -365,7 +365,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v12) {
+    if (request.schema_version != job_schema_v13) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

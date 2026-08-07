@@ -15,7 +15,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v8[] = "thermox.catalog/v8";
+inline constexpr char catalog_schema_v9[] = "thermox.catalog/v9";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
@@ -255,7 +255,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v8};
+    std::string schema_version{catalog_schema_v9};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;
@@ -407,6 +407,8 @@ struct CorrelationCandidateInput {
     std::map<std::string, double> coefficients;
     std::string expression;
     std::vector<CorrelationApplicabilityRangeInput> applicability;
+    std::vector<std::string> flow_regimes;
+    bool fallback_for_unmapped_flow_regime{false};
 };
 
 struct CorrelationArtifactInput {
@@ -460,6 +462,8 @@ struct CorrelationTemplateBindingInput {
     std::map<std::string, double> coefficients;
     std::string candidate_id;
     int priority{0};
+    std::vector<std::string> flow_regimes;
+    bool fallback_for_unmapped_flow_regime{false};
 };
 
 struct InstantiateCorrelationRequest {

@@ -4,7 +4,7 @@ import type { CorrelationArtifactDefinition } from './types'
 
 function definition(): CorrelationArtifactDefinition {
   return {
-    schema_version: 'thermox.correlation/v1',
+    schema_version: 'thermox.correlation/v2',
     inputs: [
       { name: 'mass_flow', dimension: 'mass_flow' },
       { name: 'density', dimension: 'density' },
@@ -16,6 +16,8 @@ function definition(): CorrelationArtifactDefinition {
       priority: 0,
       coefficients: { coefficient: 1.5 },
       expression: 'coefficient * mass_flow * abs(mass_flow) / density',
+      flow_regimes: ['slug'],
+      fallback_for_unmapped_flow_regime: false,
       applicability: [{
         input: 'mass_flow', minimum: 0, maximum: 20,
         minimum_inclusive: true, maximum_inclusive: false,

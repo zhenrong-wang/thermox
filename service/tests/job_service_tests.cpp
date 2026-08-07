@@ -128,7 +128,7 @@ thermox::service::PerformanceMapArtifactInput unused_test_map() {
 thermox::service::CorrelationArtifactInput unused_correlation_family() {
     thermox::service::CorrelationArtifactInput artifact;
     artifact.id = "job-correlation-family";
-    artifact.schema_version = "thermox.correlation/v1";
+    artifact.schema_version = "thermox.correlation/v2";
     artifact.revision = "job-family-1";
     artifact.checksum_sha256 = std::string(64, 'd');
     artifact.inputs = {{"x", "dimensionless"}};
@@ -466,7 +466,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v12\"") != std::string::npos &&
+                  "\"thermox.job/v13\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=

@@ -110,7 +110,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v8',
+  schema_version: 'thermox.catalog/v9',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],

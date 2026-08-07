@@ -361,13 +361,13 @@ CorrelationArtifact instantiate_correlation_template(
             coefficients.begin()->first);
     }
     CorrelationArtifact artifact{
-        std::move(identity.id), correlation_artifact_schema_v1,
+        std::move(identity.id), correlation_artifact_schema_v2,
         std::move(identity.revision),
         std::move(identity.checksum_sha256), descriptor.inputs,
         descriptor.output,
         {{std::move(candidate_id), descriptor.regime, priority,
           std::move(resolved), descriptor.expression,
-          descriptor.applicability}},
+          descriptor.applicability, {}, false}},
     };
     artifact.validate();
     return artifact;
@@ -415,9 +415,13 @@ CorrelationArtifact instantiate_correlation_family(
             }
         }
         candidates.push_back(artifact.candidates().front());
+        candidates.back().flow_regimes =
+            std::move(binding.flow_regimes);
+        candidates.back().fallback_for_unmapped_flow_regime =
+            binding.fallback_for_unmapped_flow_regime;
     }
     CorrelationArtifact artifact{
-        std::move(identity.id), correlation_artifact_schema_v1,
+        std::move(identity.id), correlation_artifact_schema_v2,
         std::move(identity.revision),
         std::move(identity.checksum_sha256), std::move(inputs),
         std::move(output), std::move(candidates)};
@@ -448,7 +452,7 @@ CorrelationArtifact::CorrelationArtifact(
 }
 
 void CorrelationArtifact::validate() const {
-    if (schema_version != correlation_artifact_schema_v1) {
+    if (schema_version != correlation_artifact_schema_v2) {
         throw std::invalid_argument(
             "correlation artifact '" + id +
             "' has unsupported schema version: " +
@@ -527,6 +531,15 @@ void CorrelationArtifact::validate() const {
             }
         }
         validate_ranges(candidate.applicability);
+        std::set<std::string> routed_regimes;
+        for (const auto& regime : candidate.flow_regimes) {
+            if (regime.empty() ||
+                !routed_regimes.insert(regime).second) {
+                throw std::invalid_argument(
+                    "correlation candidate '" + candidate.id +
+                    "' has an empty or duplicate flow-regime route");
+            }
+        }
         if (compiled_candidates_.at(index).symbols() !=
             candidate_symbols) {
             throw std::invalid_argument(
@@ -588,14 +601,42 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     if (inputs.size() != inputs_.size()) {
         return {0.0, {}, "correlation received unknown inputs", {}, {}};
     }
+    std::vector<std::size_t> routed;
+    bool using_flow_regime_fallback = false;
+    if (required_regime.empty()) {
+        for (std::size_t index = 0; index < candidates_.size(); ++index) {
+            routed.push_back(index);
+        }
+    } else {
+        for (std::size_t index = 0; index < candidates_.size(); ++index) {
+            const auto& routes = candidates_[index].flow_regimes;
+            if (std::find(routes.begin(), routes.end(), required_regime) !=
+                routes.end()) {
+                routed.push_back(index);
+            }
+        }
+        if (routed.empty()) {
+            using_flow_regime_fallback = true;
+            for (std::size_t index = 0; index < candidates_.size(); ++index) {
+                if (candidates_[index]
+                        .fallback_for_unmapped_flow_regime) {
+                    routed.push_back(index);
+                }
+            }
+        }
+        if (routed.empty()) {
+            return {
+                0.0, {},
+                "no correlation route is declared for flow regime '" +
+                    std::string(required_regime) + "'",
+                {}, {}, false};
+        }
+    }
+
     std::vector<std::size_t> applicable;
     int best_priority = std::numeric_limits<int>::min();
     std::vector<std::string> exclusions;
-    for (std::size_t index = 0; index < candidates_.size(); ++index) {
-        if (!required_regime.empty() &&
-            candidates_[index].regime != required_regime) {
-            continue;
-        }
+    for (const auto index : routed) {
         const auto assessment = assess_ranges(
             candidates_[index].applicability, inputs);
         if (!assessment.applicable) {
@@ -646,6 +687,7 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     result.error = evaluated.error;
     result.selected_candidate = candidate.id;
     result.selected_regime = candidate.regime;
+    result.used_flow_regime_fallback = using_flow_regime_fallback;
     if (!result.error.empty()) return result;
     for (const auto& input : inputs_) {
         const auto derivative = evaluated.derivatives.find(input.name);

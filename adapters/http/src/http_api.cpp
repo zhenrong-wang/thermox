@@ -688,7 +688,10 @@ parse_correlation_instantiation_request(const Request& request) {
             if (field.key() != "template_id" &&
                 field.key() != "coefficients" &&
                 field.key() != "candidate_id" &&
-                field.key() != "priority") {
+                field.key() != "priority" &&
+                field.key() != "flow_regimes" &&
+                field.key() !=
+                    "fallback_for_unmapped_flow_regime") {
                 throw std::invalid_argument(
                     "unknown correlation template binding field: " +
                     std::string(field.key()));
@@ -718,6 +721,29 @@ parse_correlation_instantiation_request(const Request& request) {
                     "correlation priority is outside integer range");
             }
             binding.priority = static_cast<int>(parsed);
+        }
+        if (const auto* routes = object.if_contains("flow_regimes")) {
+            if (!routes->is_array()) {
+                throw std::invalid_argument(
+                    "correlation flow_regimes must be an array");
+            }
+            for (const auto& route : routes->as_array()) {
+                if (!route.is_string()) {
+                    throw std::invalid_argument(
+                        "correlation flow_regimes entries must be strings");
+                }
+                binding.flow_regimes.emplace_back(route.as_string());
+            }
+        }
+        if (const auto* fallback = object.if_contains(
+                "fallback_for_unmapped_flow_regime")) {
+            if (!fallback->is_bool()) {
+                throw std::invalid_argument(
+                    "correlation fallback_for_unmapped_flow_regime must "
+                    "be boolean");
+            }
+            binding.fallback_for_unmapped_flow_regime =
+                fallback->as_bool();
         }
         if (const auto* coefficients =
                 object.if_contains("coefficients")) {

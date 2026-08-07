@@ -181,7 +181,7 @@ SimulationJobRequest request(
     value.artifacts.performance_maps.push_back(std::move(map));
     thermox::service::CorrelationArtifactInput correlation;
     correlation.id = "bend-correlation";
-    correlation.schema_version = "thermox.correlation/v1";
+    correlation.schema_version = "thermox.correlation/v2";
     correlation.revision = "vendor-2";
     correlation.checksum_sha256 = std::string(64, 'c');
     correlation.inputs = {

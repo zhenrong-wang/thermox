@@ -258,7 +258,7 @@ export const api = {
     const query = new URLSearchParams({
       artifact_id: artifactId,
       artifact_type: 'thermox.correlation',
-      artifact_schema_version: 'thermox.correlation/v1',
+      artifact_schema_version: 'thermox.correlation/v2',
     })
     if (parentArtifactRevisionId) {
       query.set('parent_revision_id', parentArtifactRevisionId)

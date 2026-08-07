@@ -120,7 +120,7 @@ thermox::service::EngineeringArtifactReference map_reference(
 thermox::service::CorrelationArtifactInput bend_correlation() {
     thermox::service::CorrelationArtifactInput artifact;
     artifact.id = "request-bend-correlation";
-    artifact.schema_version = "thermox.correlation/v1";
+    artifact.schema_version = "thermox.correlation/v2";
     artifact.revision = "service-correlation-1";
     artifact.checksum_sha256 = std::string(64, 'c');
     artifact.inputs = {
@@ -139,7 +139,7 @@ thermox::service::CorrelationArtifactInput bend_correlation() {
 thermox::service::CorrelationArtifactInput bend_correlation_family() {
     thermox::service::CorrelationArtifactInput artifact;
     artifact.id = "request-bend-correlation";
-    artifact.schema_version = "thermox.correlation/v1";
+    artifact.schema_version = "thermox.correlation/v2";
     artifact.revision = "service-family-1";
     artifact.checksum_sha256 = std::string(64, 'f');
     artifact.inputs = {
@@ -407,7 +407,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v8,
+            thermox::service::catalog_schema_v9,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -953,7 +953,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v8\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v9\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -981,19 +981,19 @@ void test_correlation_template_instantiation() {
     request.bindings = {
         {
             "chisholm_laminar_laminar_friction_gradient",
-            {}, "laminar_laminar", 0,
+            {}, "laminar_laminar", 0, {}, true,
         },
         {
             "chisholm_laminar_turbulent_friction_gradient",
-            {}, "laminar_turbulent", 0,
+            {}, "laminar_turbulent", 0, {}, true,
         },
         {
             "chisholm_turbulent_laminar_friction_gradient",
-            {}, "turbulent_laminar", 0,
+            {}, "turbulent_laminar", 0, {}, true,
         },
         {
             "chisholm_turbulent_turbulent_friction_gradient",
-            {}, "turbulent_turbulent", 0,
+            {}, "turbulent_turbulent", 0, {}, true,
         },
     };
     const auto response = service.instantiate_correlation(request);
@@ -1004,8 +1004,13 @@ void test_correlation_template_instantiation() {
                     correlation_instantiation_schema_v1 &&
             response.artifact.id == request.artifact_id &&
             response.artifact.schema_version ==
-                "thermox.correlation/v1" &&
+                "thermox.correlation/v2" &&
             response.artifact.candidates.size() == 4U &&
+            response.artifact.candidates.front()
+                .fallback_for_unmapped_flow_regime &&
+            response.canonical_payload_json.find(
+                "fallback_for_unmapped_flow_regime") !=
+                std::string::npos &&
             response.artifact.checksum_sha256.size() == 64U &&
             !response.canonical_payload_json.empty() &&
             !response.catalog_fingerprint.empty(),

@@ -1024,7 +1024,7 @@ function App() {
       )
       if (
         content.revision.artifact_type !== 'thermox.correlation' ||
-        content.artifact.schema_version !== 'thermox.correlation/v1'
+        content.artifact.schema_version !== 'thermox.correlation/v2'
       ) {
         throw new Error('The selected revision is not a supported correlation artifact.')
       }

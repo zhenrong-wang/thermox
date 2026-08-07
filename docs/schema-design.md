@@ -304,7 +304,7 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v8`, including physical-template identity, calculation-model labels,
+`thermox.catalog/v9`, including physical-template identity, calculation-model labels,
 internal-state names, dimensions, kinds, connector link contracts,
 numerical connector metadata, and a deterministic
 runtime fingerprint. Optional model behavior reads
@@ -361,10 +361,12 @@ the evaluator rejects an out-of-envelope operating point before component residu
 They qualify engineering data without placing OEM- or correlation-specific ranges in registered
 component code.
 
-`thermox.correlation/v1` packages one or more named, regime-labelled candidates behind that same
-typed artifact role. Applicability determines eligibility, integer priority resolves intentional
-overlap, and equal-priority ambiguity or zero-candidate coverage gaps fail explicitly. Components
-continue to bind one immutable artifact ID and therefore require no regime-specific schema.
+`thermox.correlation/v2` packages one or more named candidates behind that same typed artifact
+role. A candidate's `regime` describes its native engineering applicability taxonomy, while
+`flow_regimes` explicitly routes physical labels emitted by a regime map. A separately declared
+fallback may serve only map regimes with no exact route. Applicability determines eligibility,
+integer priority resolves intentional overlap, and equal-priority ambiguity or zero-candidate
+coverage gaps fail explicitly. Components continue to bind one immutable artifact ID.
 
 Before producing a solver problem, each compiler compares the number of unknowns and residual
 equations. Under- and over-specified graphs are rejected with model-level counts plus unmatched

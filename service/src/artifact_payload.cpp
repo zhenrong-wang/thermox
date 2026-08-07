@@ -322,7 +322,7 @@ CorrelationArtifactInput decode_correlation(
     const std::string& revision,
     const std::string& checksum,
     const Tree& tree) {
-    if (schema_version != platform::correlation_artifact_schema_v1) {
+    if (schema_version != platform::correlation_artifact_schema_v2) {
         throw std::invalid_argument(
             "unsupported correlation schema: " +
             schema_version);
@@ -359,6 +359,14 @@ CorrelationArtifactInput decode_correlation(
                 }
                 candidate.expression =
                     encoded.get<std::string>("expression");
+                candidate.flow_regimes = decode_array<std::string>(
+                    encoded.get_child("flow_regimes"),
+                    [](const Tree& value) {
+                        return value.get_value<std::string>();
+                    });
+                candidate.fallback_for_unmapped_flow_regime =
+                    encoded.get<bool>(
+                        "fallback_for_unmapped_flow_regime");
                 if (const auto ranges =
                         encoded.get_child_optional("applicability")) {
                     candidate.applicability = decode_array<
@@ -419,6 +427,18 @@ Tree encode_correlation(
                     encoded.add_child("coefficients", coefficients);
                     encoded.put("expression", candidate.expression);
                     encoded.add_child(
+                        "flow_regimes",
+                        array(
+                            candidate.flow_regimes,
+                            [](const std::string& regime) {
+                                Tree value;
+                                value.put_value(regime);
+                                return value;
+                            }));
+                    encoded.put(
+                        "fallback_for_unmapped_flow_regime",
+                        candidate.fallback_for_unmapped_flow_regime);
+                    encoded.add_child(
                         "applicability",
                         array(
                             candidate.applicability,
@@ -461,7 +481,8 @@ platform::CorrelationArtifact correlation(
         candidates.push_back({
             candidate.id, candidate.regime, candidate.priority,
             candidate.coefficients, candidate.expression,
-            std::move(ranges)});
+            std::move(ranges), candidate.flow_regimes,
+            candidate.fallback_for_unmapped_flow_regime});
     }
     return {
         input.id, input.schema_version, input.revision,

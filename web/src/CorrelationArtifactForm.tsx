@@ -36,6 +36,8 @@ type CandidateDraft = {
   coefficients: CoefficientDraft[]
   expression: string
   applicability: ApplicabilityDraft[]
+  flow_regimes: string
+  fallback_for_unmapped_flow_regime: boolean
 }
 
 const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -76,6 +78,10 @@ export function validateCorrelationDefinition(
     }
     if (!candidate.expression.trim()) {
       issues.push(`Candidate "${label}" expression is required.`)
+    }
+    if (new Set(candidate.flow_regimes).size !== candidate.flow_regimes.length ||
+      candidate.flow_regimes.some((regime) => !regime.trim())) {
+      issues.push(`Candidate "${label}" has an empty or duplicate flow-regime route.`)
     }
 
     const symbols = new Set(inputNames)
@@ -138,6 +144,9 @@ function draftCandidate(
       minimum_inclusive: range.minimum_inclusive,
       maximum_inclusive: range.maximum_inclusive,
     })),
+    flow_regimes: candidate.flow_regimes.join(', '),
+    fallback_for_unmapped_flow_regime:
+      candidate.fallback_for_unmapped_flow_regime,
   }
 }
 
@@ -150,6 +159,8 @@ function defaultCandidate(): CandidateDraft {
     expression:
       'loss_coefficient * mass_flow * abs(mass_flow) / (2 * density * area * area)',
     applicability: [],
+    flow_regimes: '',
+    fallback_for_unmapped_flow_regime: false,
   }
 }
 
@@ -203,7 +214,7 @@ export function CorrelationArtifactForm({
         throw new Error('That artifact ID already exists. Use Revise to create a child revision.')
       }
       const definition: CorrelationArtifactDefinition = {
-        schema_version: 'thermox.correlation/v1',
+        schema_version: 'thermox.correlation/v2',
         inputs: inputs.map((input) => ({
           name: input.name.trim(), dimension: input.dimension,
         })),
@@ -219,6 +230,12 @@ export function CorrelationArtifactForm({
             priority: Number(candidate.priority),
             coefficients,
             expression: candidate.expression.trim(),
+            flow_regimes: candidate.flow_regimes
+              .split(',')
+              .map((regime) => regime.trim())
+              .filter(Boolean),
+            fallback_for_unmapped_flow_regime:
+              candidate.fallback_for_unmapped_flow_regime,
             applicability: candidate.applicability.map((range) => ({
               input: range.input,
               ...(range.minimum.trim() === '' ? {} : { minimum: Number(range.minimum) }),
@@ -293,6 +310,8 @@ export function CorrelationArtifactForm({
               <label><span>Candidate ID</span><input value={candidate.id} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, id: event.target.value }))} /></label>
               <label><span>Regime</span><input value={candidate.regime} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, regime: event.target.value }))} /></label>
               <label><span>Priority</span><input type="number" step="1" value={candidate.priority} required onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, priority: event.target.value }))} /></label>
+              <label><span>Flow-pattern routes</span><input value={candidate.flow_regimes} placeholder="bubbly, slug" onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, flow_regimes: event.target.value }))} /><small>Comma-separated regimes emitted by a bound regime map.</small></label>
+              <label><span>General fallback</span><small><input type="checkbox" checked={candidate.fallback_for_unmapped_flow_regime} onChange={(event) => updateCandidate(candidateIndex, (item) => ({ ...item, fallback_for_unmapped_flow_regime: event.target.checked }))} /> Use only when no exact flow-pattern route exists</small></label>
             </div>
 
             <p className="registry-note">Coefficients are immutable SI values local to this candidate.</p>

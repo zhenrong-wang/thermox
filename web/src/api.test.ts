@@ -74,7 +74,7 @@ describe('correlation artifact authoring API', () => {
         artifact_type: 'thermox.correlation',
       },
       artifact: {
-        schema_version: 'thermox.correlation/v1',
+        schema_version: 'thermox.correlation/v2',
         inputs: [],
         output: { name: 'loss', dimension: 'pressure' },
         coefficients: {},
@@ -105,13 +105,15 @@ describe('correlation artifact authoring API', () => {
 
   it('publishes a typed immutable correlation revision', async () => {
     const definition: CorrelationArtifactDefinition = {
-      schema_version: 'thermox.correlation/v1',
+      schema_version: 'thermox.correlation/v2',
       inputs: [{ name: 'mass_flow', dimension: 'mass_flow' }],
       output: { name: 'pressure_loss', dimension: 'pressure' },
       candidates: [{
         id: 'default', regime: 'general', priority: 0,
         coefficients: { coefficient: 1.5 },
         expression: 'coefficient * mass_flow * abs(mass_flow)',
+        flow_regimes: [],
+        fallback_for_unmapped_flow_regime: true,
       }],
     }
     const revision = {
@@ -141,7 +143,7 @@ describe('correlation artifact authoring API', () => {
     const url = new URL(String(path), 'http://thermox.local')
     expect(url.searchParams.get('artifact_type')).toBe('thermox.correlation')
     expect(url.searchParams.get('artifact_schema_version')).toBe(
-      'thermox.correlation/v1',
+      'thermox.correlation/v2',
     )
     expect(url.searchParams.get('parent_revision_id')).toBe(
       'correlation-revision-1',

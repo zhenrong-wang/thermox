@@ -33,7 +33,7 @@ void require_close(
 thermox::platform::CorrelationArtifact bend_correlation() {
     return {
         "bend-correlation",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "vendor-revision-1",
         std::string(64, 'c'),
         {
@@ -52,7 +52,7 @@ thermox::platform::CorrelationArtifact bend_correlation() {
 thermox::platform::CorrelationArtifact void_fraction_correlation() {
     return {
         "void-fraction-correlation",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "constant-slip-reference-1",
         std::string(64, 'e'),
         {
@@ -90,13 +90,13 @@ two_phase_friction_pressure_gradient_correlation() {
          std::string(64, '8')},
         {
             {"chisholm_laminar_laminar_friction_gradient",
-             {}, "laminar_laminar", 0},
+             {}, "laminar_laminar", 0, {}, true},
             {"chisholm_laminar_turbulent_friction_gradient",
-             {}, "laminar_turbulent", 0},
+             {}, "laminar_turbulent", 0, {}, true},
             {"chisholm_turbulent_laminar_friction_gradient",
-             {}, "turbulent_laminar", 0},
+             {}, "turbulent_laminar", 0, {}, true},
             {"chisholm_turbulent_turbulent_friction_gradient",
-             {}, "turbulent_turbulent", 0},
+             {}, "turbulent_turbulent", 0, {}, true},
         });
 }
 
@@ -287,7 +287,7 @@ void test_correlation_evaluates_with_analytic_derivatives() {
 void test_correlation_contract_rejects_undeclared_symbols() {
     auto invalid = thermox::platform::CorrelationArtifact{
         "invalid-correlation",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "revision-1",
         std::string(64, 'd'),
         {{"mass_flow", "mass_flow"}},
@@ -308,7 +308,7 @@ void test_correlation_contract_rejects_undeclared_symbols() {
 void test_correlation_enforces_qualified_operating_envelope() {
     auto bounded = thermox::platform::CorrelationArtifact{
         "bounded-correlation",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "revision-1",
         std::string(64, 'a'),
         {{"vapor_quality", "dimensionless"}},
@@ -332,7 +332,7 @@ void test_correlation_enforces_qualified_operating_envelope() {
 
     auto invalid = thermox::platform::CorrelationArtifact{
         "invalid-envelope",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "revision-1",
         std::string(64, 'b'),
         {{"vapor_quality", "dimensionless"}},
@@ -353,7 +353,7 @@ void test_correlation_enforces_qualified_operating_envelope() {
 void test_correlation_family_selects_deterministically() {
     auto family = thermox::platform::CorrelationArtifact{
         "void-fraction-family",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "revision-1",
         std::string(64, 'f'),
         {{"vapor_quality", "dimensionless"}},
@@ -395,7 +395,7 @@ void test_correlation_family_selects_deterministically() {
 
     auto ambiguous = thermox::platform::CorrelationArtifact{
         "ambiguous-family",
-        thermox::platform::correlation_artifact_schema_v1,
+        thermox::platform::correlation_artifact_schema_v2,
         "revision-1",
         std::string(64, 'a'),
         {{"x", "dimensionless"}},
@@ -412,6 +412,52 @@ void test_correlation_family_selects_deterministically() {
         ambiguous.evaluate({{"x", 0.5}}).error.find("ambiguous") !=
             std::string::npos,
         "equal-priority overlap must be rejected as ambiguous");
+}
+
+void test_flow_regime_routing_separates_physical_taxonomies() {
+    const auto family = thermox::platform::CorrelationArtifact{
+        "flow-routed-family",
+        thermox::platform::correlation_artifact_schema_v2,
+        "revision-1", std::string(64, '4'),
+        {{"x", "dimensionless"}},
+        {"y", "dimensionless"},
+        {
+            {"slug_law", "high_reynolds", 0, {{"factor", 2.0}},
+             "factor * x", {}, {"slug"}, false},
+            {"general_low", "low_reynolds", 0, {{"factor", 3.0}},
+             "factor * x", {{"x", 0.0, 0.5, true, true}}, {}, true},
+            {"general_high", "high_reynolds", 0, {{"factor", 4.0}},
+             "factor * x", {{"x", 0.5, 1.0, false, true}}, {}, true},
+        }};
+    family.validate();
+
+    const auto exact = family.evaluate({{"x", 0.25}}, "slug");
+    require(
+        exact.error.empty() && exact.selected_candidate == "slug_law" &&
+            exact.selected_regime == "high_reynolds" &&
+            !exact.used_flow_regime_fallback,
+        "an exact physical flow-regime route must override general laws");
+
+    const auto fallback = family.evaluate({{"x", 0.25}}, "bubbly");
+    require(
+        fallback.error.empty() &&
+            fallback.selected_candidate == "general_low" &&
+            fallback.used_flow_regime_fallback,
+        "an explicitly declared general family must serve an unmapped "
+        "physical flow regime using its own applicability taxonomy");
+
+    const auto unrouted = thermox::platform::CorrelationArtifact{
+        "unrouted-family",
+        thermox::platform::correlation_artifact_schema_v2,
+        "revision-1", std::string(64, '5'),
+        {{"x", "dimensionless"}}, {"y", "dimensionless"},
+        {{"native", "high_reynolds", 0, {}, "x", {}, {}, false}}};
+    unrouted.validate();
+    require(
+        unrouted.evaluate({{"x", 0.25}}, "annular").error.find(
+            "no correlation route is declared") != std::string::npos,
+        "a candidate native regime must never be mistaken for a physical "
+        "flow-pattern route");
 }
 
 void test_return_bend_uses_bound_correlation() {
@@ -747,17 +793,17 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     regime_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
             "regime-friction-gradient",
-            thermox::platform::correlation_artifact_schema_v1,
+            thermox::platform::correlation_artifact_schema_v2,
             "regime-test-1", std::string(64, '8'),
             {{"mass_flux", "mass_flux"}},
             {"friction_pressure_gradient", "pressure_gradient"},
             {
                 {"stratified", "stratified", 0,
                  {{"gradient", 10.0}},
-                 "gradient + 0 * mass_flux", {}},
+                 "gradient + 0 * mass_flux", {}, {"stratified"}, false},
                 {"annular", "annular", 0,
                  {{"gradient", 20.0}},
-                 "gradient + 0 * mass_flux", {}},
+                 "gradient + 0 * mass_flux", {}, {"annular"}, false},
             }});
     regime_artifacts.register_artifact(
         thermox::platform::RegimeMapArtifact{
@@ -787,12 +833,12 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     missing_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
             "regime-friction-gradient",
-            thermox::platform::correlation_artifact_schema_v1,
+            thermox::platform::correlation_artifact_schema_v2,
             "regime-test-1", std::string(64, '8'),
             {{"mass_flux", "mass_flux"}},
             {"friction_pressure_gradient", "pressure_gradient"},
             {{"annular", "annular", 0, {{"gradient", 20.0}},
-              "gradient + 0 * mass_flux", {}}}});
+              "gradient + 0 * mass_flux", {}, {"annular"}, false}}});
     missing_artifacts.register_artifact(
         thermox::platform::RegimeMapArtifact{
             "flow-pattern-map",
@@ -824,7 +870,7 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     nonphysical_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
             "nonphysical-void-fraction",
-            thermox::platform::correlation_artifact_schema_v1,
+            thermox::platform::correlation_artifact_schema_v2,
             "invalid-range-1", std::string(64, 'f'),
             {{"vapor_quality", "dimensionless"}},
             {"void_fraction", "dimensionless"},
@@ -851,7 +897,7 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     wrong_dimension_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
             "wrong-dimension-void-fraction",
-            thermox::platform::correlation_artifact_schema_v1,
+            thermox::platform::correlation_artifact_schema_v2,
             "wrong-dimension-1", std::string(64, 'a'),
             {{"vapor_quality", "dimensionless"}},
             {"void_fraction", "pressure"},
@@ -881,7 +927,7 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     negative_friction_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
             "negative-friction-gradient",
-            thermox::platform::correlation_artifact_schema_v1,
+            thermox::platform::correlation_artifact_schema_v2,
             "invalid-range-1", std::string(64, '7'),
             {{"mass_flux", "mass_flux"}},
             {"friction_pressure_gradient", "pressure_gradient"},
@@ -1045,6 +1091,7 @@ int main() {
         test_correlation_contract_rejects_undeclared_symbols();
         test_correlation_enforces_qualified_operating_envelope();
         test_correlation_family_selects_deterministically();
+        test_flow_regime_routing_separates_physical_taxonomies();
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
         test_two_phase_inventory_uses_correlation_for_outlet_quality();
