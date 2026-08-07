@@ -60,14 +60,14 @@ std::string sha256_hex(std::string_view value) {
         EVP_DigestUpdate(
             context.get(), value.data(), value.size()) != 1) {
         throw std::runtime_error(
-            "could not initialize correlation SHA-256 checksum");
+            "could not initialize artifact SHA-256 checksum");
     }
     unsigned char digest[EVP_MAX_MD_SIZE]{};
     unsigned int digest_size = 0;
     if (EVP_DigestFinal_ex(
             context.get(), digest, &digest_size) != 1) {
         throw std::runtime_error(
-            "could not finalize correlation SHA-256 checksum");
+            "could not finalize artifact SHA-256 checksum");
     }
     std::ostringstream encoded;
     for (unsigned int index = 0; index < digest_size; ++index) {
@@ -104,6 +104,34 @@ CorrelationArtifactInput correlation_input(
                 range.maximum_inclusive});
         }
         input.candidates.push_back(std::move(value));
+    }
+    return input;
+}
+
+RegimeMapArtifactInput regime_map_input(
+    const platform::RegimeMapArtifact& artifact) {
+    RegimeMapArtifactInput input;
+    input.id = artifact.id;
+    input.schema_version = artifact.schema_version;
+    input.revision = artifact.revision;
+    input.checksum_sha256 = artifact.checksum_sha256;
+    for (const auto& variable : artifact.inputs()) {
+        input.inputs.push_back({variable.name, variable.dimension});
+    }
+    for (const auto& region : artifact.regions()) {
+        RegimeMapRegionInput value;
+        value.id = region.id;
+        value.regime = region.regime;
+        value.priority = region.priority;
+        for (const auto& criterion : region.criteria) {
+            value.criteria.push_back({
+                criterion.expression, criterion.dimension,
+                criterion.minimum, criterion.maximum,
+                criterion.minimum_inclusive,
+                criterion.maximum_inclusive,
+            });
+        }
+        input.regions.push_back(std::move(value));
     }
     return input;
 }
@@ -2092,6 +2120,50 @@ SimulationService::instantiate_correlation(
         response.error = make_error(
             "correlation_instantiation_failed",
             "correlation_template", ex.what());
+    }
+    return response;
+}
+
+InstantiateRegimeMapResponse SimulationService::instantiate_regime_map(
+    const InstantiateRegimeMapRequest& request) const {
+    InstantiateRegimeMapResponse response;
+    response.catalog_fingerprint = impl_->runtime->impl_->fingerprint;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema", "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.artifact_id.empty() || request.revision.empty() ||
+        request.template_id.empty()) {
+        response.error = make_error(
+            "invalid_regime_map_instantiation", "request",
+            "regime-map artifact_id, revision, and template_id must "
+            "not be empty");
+        return response;
+    }
+    try {
+        const auto& descriptor =
+            impl_->runtime->impl_->regime_map_templates
+                .require_template(request.template_id);
+        auto artifact = platform::instantiate_regime_map_template(
+            descriptor,
+            {
+                request.artifact_id,
+                request.revision,
+                std::string(64, '0'),
+            });
+        response.artifact = regime_map_input(artifact);
+        response.canonical_payload_json =
+            detail::regime_map_payload_json(response.artifact);
+        response.artifact.checksum_sha256 =
+            sha256_hex(response.canonical_payload_json);
+        response.status = OperationStatus::succeeded;
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "regime_map_instantiation_failed",
+            "regime_map_template", ex.what());
     }
     return response;
 }

@@ -18,6 +18,8 @@ inline constexpr char error_schema_v1[] = "thermox.error/v1";
 inline constexpr char catalog_schema_v7[] = "thermox.catalog/v7";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
+inline constexpr char regime_map_instantiation_schema_v1[] =
+    "thermox.regime_map_instantiation/v1";
 
 enum class OperationStatus {
     succeeded,
@@ -461,6 +463,26 @@ struct InstantiateCorrelationResponse {
     std::string schema_version{correlation_instantiation_schema_v1};
     std::string catalog_fingerprint;
     CorrelationArtifactInput artifact;
+    std::string canonical_payload_json;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
+struct InstantiateRegimeMapRequest {
+    std::string schema_version{command_schema_v1};
+    std::string artifact_id;
+    std::string revision;
+    std::string template_id;
+};
+
+struct InstantiateRegimeMapResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    std::string schema_version{regime_map_instantiation_schema_v1};
+    std::string catalog_fingerprint;
+    RegimeMapArtifactInput artifact;
     std::string canonical_payload_json;
 
     [[nodiscard]] bool succeeded() const {
@@ -938,6 +960,8 @@ public:
     [[nodiscard]] InstantiateCorrelationResponse
     instantiate_correlation(
         const InstantiateCorrelationRequest& request) const;
+    [[nodiscard]] InstantiateRegimeMapResponse instantiate_regime_map(
+        const InstantiateRegimeMapRequest& request) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
     [[nodiscard]] CalibrationResponse run_calibration(

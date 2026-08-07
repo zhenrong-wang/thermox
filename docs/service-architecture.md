@@ -159,8 +159,9 @@ The application boundary needed by a thin network adapter is now complete:
 
 | Intended operation | Application call | Wire representation |
 | --- | --- | --- |
-| Discover component and correlation templates | `SimulationService::get_catalog` | `thermox.catalog/v7` JSON |
+| Discover component, correlation, and regime-map templates | `SimulationService::get_catalog` | `thermox.catalog/v7` JSON |
 | Instantiate a correlation artifact from compatible templates | `SimulationService::instantiate_correlation` | `thermox.correlation_instantiation/v1` JSON with canonical payload and SHA-256 |
+| Instantiate a regime-map artifact from a template | `SimulationService::instantiate_regime_map` | `thermox.regime_map_instantiation/v1` JSON with canonical payload and SHA-256 |
 | Validate readiness and compile a model | `SimulationService::validate_model` | result-v3 validation JSON with layered readiness and an authoritative calculation gate |
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
 | Publish/read topology revisions | `ProjectService` | `thermox.model_revision/v1` JSON |
@@ -219,6 +220,7 @@ The initial routes are:
 | `GET` | `/healthz` | Process-level liveness |
 | `GET` | `/api/v1/catalog` | Runtime catalog discovery |
 | `POST` | `/api/v1/correlation-artifacts/instantiate` | Materialize one template or a compatible regime family as a canonical, content-addressed correlation payload |
+| `POST` | `/api/v1/regime-map-artifacts/instantiate` | Materialize one physical regime-map template as a canonical, content-addressed payload |
 | `GET`, `POST` | `/api/v1/projects` | List/create Team-owned logical workspaces |
 | `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions` | List/publish immutable model revisions |

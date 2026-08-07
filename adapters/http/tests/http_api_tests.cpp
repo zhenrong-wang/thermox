@@ -198,6 +198,60 @@ void test_correlation_template_instantiation() {
         "correlation instantiation must reject unsupported methods");
 }
 
+void test_regime_map_template_instantiation() {
+    thermox::http::Api api;
+    const auto response = api.handle(json_post(
+        "/api/v1/regime-map-artifacts/instantiate",
+        R"json({
+          "schema_version": "thermox.command/v1",
+          "artifact_id": "http-vertical-annular-boundary",
+          "revision": "1",
+          "template_id":
+            "mishima_ishii_vertical_upflow_annular_entrainment"
+        })json"));
+    require(
+        response.status == 200,
+        "regime-map instantiation endpoint must succeed");
+    const auto parsed = boost::json::parse(response.body);
+    const auto& root = parsed.as_object();
+    const auto& artifact = root.at("artifact").as_object();
+    require(
+        root.at("schema_version").as_string() ==
+                "thermox.regime_map_instantiation/v1" &&
+            artifact.at("artifact_type").as_string() ==
+                "thermox.regime_map" &&
+            artifact.at("checksum_sha256").as_string().size() ==
+                64U &&
+            artifact.at("payload")
+                    .as_object()
+                    .at("regions")
+                    .as_array()
+                    .size() == 2U,
+        "HTTP operation must return a typed, content-addressed "
+        "regime-map payload");
+
+    const auto invalid = api.handle(json_post(
+        "/api/v1/regime-map-artifacts/instantiate",
+        R"json({
+          "schema_version": "thermox.command/v1",
+          "artifact_id": "invalid",
+          "revision": "1",
+          "template_id": "unknown"
+        })json"));
+    require(
+        invalid.status == 400 &&
+            invalid.body.find("regime_map_instantiation_failed") !=
+                std::string::npos,
+        "unknown regime-map templates must return a structured 400");
+
+    const auto method = api.handle({
+        "GET", "/api/v1/regime-map-artifacts/instantiate", {}, {},
+    });
+    require(
+        method.status == 405 && method.headers.at("Allow") == "POST",
+        "regime-map instantiation must reject unsupported methods");
+}
+
 void test_simulation_routes() {
     thermox::http::Api api{
         thermox::service::make_default_simulation_runtime(),
@@ -1624,6 +1678,7 @@ int main() {
         test_health_and_routing();
         test_catalog_and_validation();
         test_correlation_template_instantiation();
+        test_regime_map_template_instantiation();
         test_simulation_routes();
         test_production_api_disables_synchronous_execution();
         test_transport_guards();

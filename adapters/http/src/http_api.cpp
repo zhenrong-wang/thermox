@@ -738,6 +738,42 @@ parse_correlation_instantiation_request(const Request& request) {
     return command;
 }
 
+service::InstantiateRegimeMapRequest
+parse_regime_map_instantiation_request(const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid regime-map instantiation JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "regime-map instantiation request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "artifact_id" &&
+            field.key() != "revision" &&
+            field.key() != "template_id") {
+            throw std::invalid_argument(
+                "unknown regime-map instantiation field: " +
+                std::string(field.key()));
+        }
+    }
+    service::InstantiateRegimeMapRequest command;
+    command.schema_version =
+        require_json_string(root, "schema_version");
+    command.artifact_id =
+        require_json_string(root, "artifact_id");
+    command.revision = require_json_string(root, "revision");
+    command.template_id =
+        require_json_string(root, "template_id");
+    return command;
+}
+
 std::pair<std::string, std::string>
 parse_job_comparison_request(const Request& request) {
     boost::json::value value;
@@ -1776,6 +1812,28 @@ Response Api::handle(const Request& request) const {
                 operation_status(result.status),
                 service::
                     serialize_correlation_instantiation_response_json(
+                        result));
+        }
+
+        if (target.path ==
+            "/api/v1/regime-map-artifacts/instantiate") {
+            reject_unknown_query(target.query, {});
+            if (method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "regime-map instantiation only supports POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
+            require_json_request(
+                request, impl_->options.maximum_body_bytes);
+            const auto result = impl_->simulation
+                .instantiate_regime_map(
+                    parse_regime_map_instantiation_request(request));
+            return json_response(
+                operation_status(result.status),
+                service::
+                    serialize_regime_map_instantiation_response_json(
                         result));
         }
 

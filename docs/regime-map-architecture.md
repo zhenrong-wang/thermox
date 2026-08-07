@@ -67,9 +67,14 @@ vertical upward gas–liquid flow in a round tube. It implements the published p
 gas-superficial-velocity boundary and its liquid-viscosity-number and liquid-Reynolds limits. It
 classifies only `pre_annular` versus `annular`; it is not presented as the complete Mishima–Ishii
 flow-pattern map. Outside its declared domain, classification returns no applicable region rather
-than extrapolating. The template exposes its citation and scope through `thermox.catalog/v7` and
-can be instantiated into an immutable project artifact. Native extension packages can register
-additional templates without changing the solver or service contract.
+than extrapolating. The template exposes its citation and scope through `thermox.catalog/v7`.
+Direct callers use `instantiate_regime_map_template`; service and remote callers use
+`SimulationService::instantiate_regime_map` or
+`POST /api/v1/regime-map-artifacts/instantiate`. The result is an ordinary canonical
+`thermox.regime_map/v1` payload, a deterministic content SHA-256, and the runtime-catalog
+fingerprint. Publishing it as an immutable Team/project artifact remains a separate operation.
+Native extension packages can register additional templates without changing the solver or
+service contract.
 
 Synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
 physical claim. The packaged Mishima–Ishii transition has separate equation, boundary-side, and

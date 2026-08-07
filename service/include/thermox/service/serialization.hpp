@@ -11,6 +11,8 @@ std::string serialize_catalog_response_json(
     const CatalogResponse& response);
 std::string serialize_correlation_instantiation_response_json(
     const InstantiateCorrelationResponse& response);
+std::string serialize_regime_map_instantiation_response_json(
+    const InstantiateRegimeMapResponse& response);
 std::string serialize_validate_response_json(
     const ValidateModelResponse& response);
 std::string serialize_steady_response_json(

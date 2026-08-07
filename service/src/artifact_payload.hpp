@@ -42,6 +42,9 @@ RegimeMapArtifactInput regime_map_from_payload(
     const std::string& checksum,
     const std::string& payload_json);
 
+std::string regime_map_payload_json(
+    const RegimeMapArtifactInput& artifact);
+
 std::string canonicalize_expression_component_payload(
     const std::string& schema_version,
     const std::string& payload_json);

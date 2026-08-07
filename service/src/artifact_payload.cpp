@@ -1008,6 +1008,12 @@ RegimeMapArtifactInput regime_map_from_payload(
         read(payload_json));
 }
 
+std::string regime_map_payload_json(
+    const RegimeMapArtifactInput& artifact) {
+    regime_map(artifact).validate();
+    return write(encode_regime_map(artifact));
+}
+
 std::string canonicalize_expression_component_payload(
     const std::string& schema_version,
     const std::string& payload_json) {

@@ -1017,6 +1017,47 @@ void test_correlation_template_instantiation() {
         "service must reject templates with incompatible contracts");
 }
 
+void test_regime_map_template_instantiation() {
+    thermox::service::SimulationService service;
+    thermox::service::InstantiateRegimeMapRequest request;
+    request.artifact_id = "vertical-upflow-annular-boundary";
+    request.revision = "engineering-baseline-1";
+    request.template_id =
+        "mishima_ishii_vertical_upflow_annular_entrainment";
+    const auto response = service.instantiate_regime_map(request);
+    require(
+        response.succeeded() &&
+            response.schema_version ==
+                thermox::service::
+                    regime_map_instantiation_schema_v1 &&
+            response.artifact.id == request.artifact_id &&
+            response.artifact.schema_version ==
+                "thermox.regime_map/v1" &&
+            response.artifact.regions.size() == 2U &&
+            response.artifact.checksum_sha256.size() == 64U &&
+            !response.canonical_payload_json.empty() &&
+            !response.catalog_fingerprint.empty(),
+        "service must instantiate a content-addressed regime map "
+        "from a catalog template");
+    const auto repeated = service.instantiate_regime_map(request);
+    require(
+        repeated.succeeded() &&
+            repeated.artifact.checksum_sha256 ==
+                response.artifact.checksum_sha256 &&
+            repeated.canonical_payload_json ==
+                response.canonical_payload_json,
+        "regime-map instantiation must be deterministic");
+
+    auto unknown = request;
+    unknown.template_id = "unknown";
+    const auto rejected = service.instantiate_regime_map(unknown);
+    require(
+        !rejected.succeeded() &&
+            rejected.error.code ==
+                "regime_map_instantiation_failed",
+        "service must reject unknown regime-map templates");
+}
+
 void test_validation_and_canonicalization() {
     thermox::service::SimulationService service;
     thermox::service::ValidateModelRequest request;
@@ -3843,6 +3884,7 @@ int main() {
         test_request_scoped_correlation_family_selects_candidate();
         test_catalog_discovery();
         test_correlation_template_instantiation();
+        test_regime_map_template_instantiation();
         test_validation_and_canonicalization();
         test_homogeneous_two_phase_local_loss();
 #ifdef THERMOX_TEST_HAS_CANTERA
