@@ -87,6 +87,100 @@ RegimeMapTemplateRegistry::descriptors() const {
 RegimeMapTemplateRegistry
 make_default_regime_map_template_registry() {
     RegimeMapTemplateRegistry registry;
+    registry.register_template({
+        "mishima_ishii_vertical_upflow_bubbly_to_slug",
+        "1.0.0",
+        "Mishima-Ishii vertical-upflow bubbly-to-slug boundary",
+        "Two-phase flow-pattern transition",
+        "Mishima and Ishii, International Journal of Heat and Mass "
+        "Transfer 27(5) (1984) 723-737, DOI "
+        "10.1016/0017-9310(84)90142-X",
+        "Co-current vertical upward gas-liquid flow; classifies only "
+        "the Mishima-Ishii bubble-coalescence boundary at void "
+        "fraction alpha = 0.30. It does not distinguish dispersed "
+        "bubbly, churn, or annular subregions on the high-alpha side.",
+        {{"void_fraction", "dimensionless"}},
+        {
+            {"bubbly_side", "bubbly", 10,
+             {{"void_fraction", "dimensionless", 0.0, 0.3,
+               false, false}}},
+            {"slug_side", "slug_side", 10,
+             {{"void_fraction", "dimensionless", 0.3, 1.0,
+               true, false}}},
+        },
+    });
+
+    const std::string mixture_superficial_velocity =
+        "(liquid_superficial_velocity + vapor_superficial_velocity)";
+    const std::string distribution_parameter =
+        "(1.2 - 0.2 * sqrt(vapor_density / liquid_density))";
+    const std::string slug_drift_velocity =
+        "(0.35 * sqrt((liquid_density - vapor_density) * gravity * "
+        "diameter / liquid_density))";
+    const std::string churn_velocity =
+        "(0.75 * sqrt((liquid_density - vapor_density) * gravity * "
+        "diameter / liquid_density) * pow((liquid_density - "
+        "vapor_density) * gravity * diameter * diameter * diameter / "
+        "(liquid_density * pow(liquid_viscosity / liquid_density, 2)), "
+        "1.0 / 18.0))";
+    const std::string slug_churn_coordinate =
+        "void_fraction - (1 - 0.813 * pow(((" +
+        distribution_parameter + " - 1) * " +
+        mixture_superficial_velocity + " + " + slug_drift_velocity +
+        ") / (" + mixture_superficial_velocity + " + " +
+        churn_velocity + "), 0.75))";
+    const auto slug_churn_common = []() {
+        return std::vector<RegimeMapCriterion>{
+            {"void_fraction", "dimensionless", 0.3, 1.0,
+             true, false},
+            {"liquid_density - vapor_density", "density", 0.0,
+             std::nullopt, false, true},
+            {"liquid_viscosity", "dynamic_viscosity", 0.0,
+             std::nullopt, false, true},
+            {"diameter", "length", 0.0, std::nullopt, false, true},
+            {"gravity", "acceleration", 0.0, std::nullopt,
+             false, true},
+        };
+    };
+    auto slug = slug_churn_common();
+    slug.push_back({
+        slug_churn_coordinate, "dimensionless", std::nullopt, 0.0,
+        true, false});
+    auto churn = slug_churn_common();
+    churn.push_back({
+        slug_churn_coordinate, "dimensionless", 0.0, std::nullopt,
+        true, true});
+    registry.register_template({
+        "mishima_ishii_vertical_upflow_slug_to_churn",
+        "1.0.0",
+        "Mishima-Ishii vertical-upflow slug-to-churn boundary",
+        "Two-phase flow-pattern transition",
+        "Mishima and Ishii, International Journal of Heat and Mass "
+        "Transfer 27(5) (1984) 723-737, DOI "
+        "10.1016/0017-9310(84)90142-X; assessment: Khare et al., "
+        "BARC/1997/E/010 (1997)",
+        "Co-current vertical upward gas-liquid flow in a round tube; "
+        "implements the Mishima-Ishii mean-void-fraction transition "
+        "with the round-tube distribution parameter. The cited "
+        "independent assessment reports insufficient churn data to "
+        "validate this boundary and poor overall slug-flow "
+        "characterization; use requires case-specific validation.",
+        {
+            {"void_fraction", "dimensionless"},
+            {"liquid_superficial_velocity", "speed"},
+            {"vapor_superficial_velocity", "speed"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"liquid_viscosity", "dynamic_viscosity"},
+            {"diameter", "length"},
+            {"gravity", "acceleration"},
+        },
+        {
+            {"slug_side", "slug", 10, std::move(slug)},
+            {"churn_side", "churn", 10, std::move(churn)},
+        },
+    });
+
     const std::string viscosity_number =
         "liquid_viscosity / sqrt(liquid_density * surface_tension * "
         "sqrt(surface_tension / (gravity * "

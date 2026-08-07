@@ -268,6 +268,86 @@ void test_packaged_mishima_ishii_annular_boundary() {
         "declared liquid-Reynolds applicability domain");
 }
 
+void test_packaged_mishima_ishii_void_fraction_boundaries() {
+    const auto registry =
+        thermox::platform::make_default_regime_map_template_registry();
+    require(
+        registry.descriptors().size() == 3U,
+        "default registry must expose each independently auditable "
+        "Mishima-Ishii transition template");
+    const auto bubbly =
+        thermox::platform::instantiate_regime_map_template(
+            registry.require_template(
+                "mishima_ishii_vertical_upflow_bubbly_to_slug"),
+            {"bubbly-slug-test", "test-1", std::string(64, '1')});
+    require(
+        bubbly.classify({{"void_fraction", 0.299}})
+                .selected_regime == "bubbly" &&
+            bubbly.classify({{"void_fraction", 0.3}})
+                .selected_regime == "slug_side",
+        "bubbly-to-slug template must implement a deterministic "
+        "alpha=0.30 boundary");
+
+    const auto& descriptor = registry.require_template(
+        "mishima_ishii_vertical_upflow_slug_to_churn");
+    require(
+        descriptor.scope.find("insufficient churn data") !=
+            std::string::npos,
+        "weak validation evidence must be visible in template scope");
+    const auto slug_churn =
+        thermox::platform::instantiate_regime_map_template(
+            descriptor,
+            {"slug-churn-test", "test-1", std::string(64, '2')});
+    constexpr double j_l = 0.5;
+    constexpr double j_g = 0.2;
+    constexpr double rho_l = 1000.0;
+    constexpr double rho_g = 1.2;
+    constexpr double mu_l = 1.0e-3;
+    constexpr double diameter = 0.05;
+    constexpr double gravity = 9.80665;
+    const double delta_rho = rho_l - rho_g;
+    const double mixture_velocity = j_l + j_g;
+    const double distribution_parameter =
+        1.2 - 0.2 * std::sqrt(rho_g / rho_l);
+    const double a =
+        0.35 * std::sqrt(delta_rho * gravity * diameter / rho_l);
+    const double nu_l = mu_l / rho_l;
+    const double b =
+        0.75 * std::sqrt(delta_rho * gravity * diameter / rho_l) *
+        std::pow(
+            delta_rho * gravity * std::pow(diameter, 3) /
+                (rho_l * nu_l * nu_l),
+            1.0 / 18.0);
+    const double transition_alpha = 1.0 - 0.813 * std::pow(
+        ((distribution_parameter - 1.0) * mixture_velocity + a) /
+            (mixture_velocity + b),
+        0.75);
+    const auto classify = [&](double alpha) {
+        return slug_churn.classify({
+            {"void_fraction", alpha},
+            {"liquid_superficial_velocity", j_l},
+            {"vapor_superficial_velocity", j_g},
+            {"liquid_density", rho_l},
+            {"vapor_density", rho_g},
+            {"liquid_viscosity", mu_l},
+            {"diameter", diameter},
+            {"gravity", gravity},
+        });
+    };
+    require(
+        transition_alpha > 0.3 && transition_alpha < 1.0 &&
+            classify(transition_alpha - 1.0e-4).selected_regime ==
+                "slug" &&
+            classify(transition_alpha + 1.0e-4).selected_regime ==
+                "churn",
+        "slug-to-churn template must reproduce both sides of the "
+        "published mechanistic boundary");
+    require(
+        !classify(0.2).succeeded(),
+        "slug-to-churn template must refuse void fractions below its "
+        "declared slug-side domain");
+}
+
 }  // namespace
 
 int main() {
@@ -277,6 +357,7 @@ int main() {
         test_contract_validation_and_registry();
         test_two_phase_dimensionless_groups();
         test_packaged_mishima_ishii_annular_boundary();
+        test_packaged_mishima_ishii_void_fraction_boundaries();
         std::cout << "thermox regime-map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

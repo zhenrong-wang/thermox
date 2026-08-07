@@ -570,9 +570,9 @@ Work items:
    - canonical request and Team/project persistence payloads, immutable job snapshots and
      fingerprints, thin HTTP publication, plus optional correlated-pipe friction-map binding with
      compile-time closure coverage and live regime selection; ✅
-   - cited Mishima–Ishii vertical-upflow annular-entrainment transition template, explicit scope
-     and applicability refusal, catalog discovery, artifact instantiation, and native-extension
-     registration; ✅
+   - separately auditable cited Mishima–Ishii vertical-upflow bubbly/slug, slug/churn, and
+     annular-entrainment transition templates, explicit evidence/applicability limits, catalog
+     discovery, artifact instantiation, and native-extension registration; ✅
    - complete flow-pattern maps and matched regime-specific closure families remain follow-ons.
 10. Map validation and interpolation quality controls.
 11. Multi-user auth, authorization, project isolation, audit logs.

@@ -914,7 +914,7 @@ void test_catalog_discovery() {
                 "mishima_ishii_vertical_upflow_annular_entrainment";
         });
     require(
-        response.regime_map_templates.size() == 1 &&
+        response.regime_map_templates.size() == 3 &&
             mishima_ishii != response.regime_map_templates.end() &&
             mishima_ishii->regions.size() == 2 &&
             mishima_ishii->scope.find("vertical upward") !=
