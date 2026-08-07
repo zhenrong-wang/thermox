@@ -480,7 +480,10 @@ std::string regime_map_payload() {
       "id": "low_weber",
       "regime": "stratified",
       "priority": 10,
-      "criteria": [
+      "branches": [{
+        "id": "weber_and_bond",
+        "priority": 0,
+        "criteria": [
         {
           "expression": "vapor_weber_number",
           "dimension": "dimensionless",
@@ -493,17 +496,22 @@ std::string regime_map_payload() {
           "minimum": 0.0,
           "minimum_inclusive": false
         }
-      ]
+        ]
+      }]
     },
     {
       "id": "high_weber",
       "regime": "annular",
       "priority": 10,
-      "criteria": [{
-        "expression": "vapor_weber_number",
-        "dimension": "dimensionless",
-        "minimum": 20.0,
-        "minimum_inclusive": false
+      "branches": [{
+        "id": "weber",
+        "priority": 0,
+        "criteria": [{
+          "expression": "vapor_weber_number",
+          "dimension": "dimensionless",
+          "minimum": 20.0,
+          "minimum_inclusive": false
+        }]
       }]
     }
   ]
@@ -518,7 +526,7 @@ void test_regime_map_artifact_is_executable_input() {
     });
     const auto revision = projects.create_artifact_revision({
         team_a, project.project_id, "two-phase-flow-pattern", {},
-        "thermox.regime_map", "thermox.regime_map/v1",
+        "thermox.regime_map", "thermox.regime_map/v2",
         regime_map_payload(),
     });
     const auto resolved = projects.resolve_artifact_revisions(
@@ -533,7 +541,7 @@ void test_regime_map_artifact_is_executable_input() {
             resolved->snapshot.regime_maps.front().regions.back()
                     .regime == "annular" &&
             resolved->snapshot.regime_maps.front().regions.front()
-                    .criteria.front().maximum == 20.0,
+                    .branches.front().criteria.front().maximum == 20.0,
         "regime-map revisions must resolve into immutable executable "
         "artifact snapshots");
 
@@ -541,13 +549,16 @@ void test_regime_map_artifact_is_executable_input() {
     try {
         (void)projects.create_artifact_revision({
             team_a, project.project_id, "unsafe-regime-map", {},
-            "thermox.regime_map", "thermox.regime_map/v1",
+            "thermox.regime_map", "thermox.regime_map/v2",
             R"json({
               "inputs": [{"name": "x", "dimension": "dimensionless"}],
               "regions": [{
                 "id": "bad", "regime": "bad", "priority": 0,
-                "criteria": [{
-                  "expression": "system(x)", "maximum": 1.0
+                "branches": [{
+                  "id": "unsafe", "priority": 0,
+                  "criteria": [{
+                    "expression": "system(x)", "maximum": 1.0
+                  }]
                 }]
               }]
             })json",

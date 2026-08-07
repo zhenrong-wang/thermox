@@ -399,7 +399,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v11'
+  schema_version: 'thermox.job/v12'
   job_id: string
   owner: {
     team_id: string
@@ -409,7 +409,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v11'
+    schema_version: 'thermox.job/v12'
     mode: 'steady' | 'transient' | 'calibration'
     case_id: string
     calibration_id: string
@@ -1002,7 +1002,7 @@ export interface CatalogCorrelationTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v7'
+  schema_version: 'thermox.catalog/v8'
   status: string
   fingerprint: string
   components: CatalogComponent[]
@@ -1026,15 +1026,19 @@ export interface CatalogRegimeMapTemplate {
     id: string
     regime: string
     priority: number
-    criteria: Array<{
-      expression: string
-      dimension: string
-      has_minimum: boolean
-      minimum_si: number | null
-      has_maximum: boolean
-      maximum_si: number | null
-      minimum_inclusive: boolean
-      maximum_inclusive: boolean
+    branches: Array<{
+      id: string
+      priority: number
+      criteria: Array<{
+        expression: string
+        dimension: string
+        has_minimum: boolean
+        minimum_si: number | null
+        has_maximum: boolean
+        maximum_si: number | null
+        minimum_inclusive: boolean
+        maximum_inclusive: boolean
+      }>
     }>
   }>
 }

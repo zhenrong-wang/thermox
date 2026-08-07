@@ -1336,27 +1336,38 @@ std::string serialize_catalog_response_json(
             out << ", \"regime\": ";
             json_string(out, region.regime);
             out << ", \"priority\": " << region.priority;
-            out << ", \"criteria\": [";
-            for (std::size_t k = 0; k < region.criteria.size(); ++k) {
+            out << ", \"branches\": [";
+            for (std::size_t k = 0; k < region.branches.size(); ++k) {
                 if (k != 0) out << ", ";
-                const auto& criterion = region.criteria[k];
-                out << "{\"expression\": ";
-                json_string(out, criterion.expression);
-                out << ", \"dimension\": ";
-                json_string(out, criterion.dimension);
-                out << ", \"has_minimum\": "
-                    << (criterion.has_minimum ? "true" : "false");
-                out << ", \"minimum_si\": ";
-                json_number(out, criterion.minimum_si);
-                out << ", \"has_maximum\": "
-                    << (criterion.has_maximum ? "true" : "false");
-                out << ", \"maximum_si\": ";
-                json_number(out, criterion.maximum_si);
-                out << ", \"minimum_inclusive\": "
-                    << (criterion.minimum_inclusive ? "true" : "false");
-                out << ", \"maximum_inclusive\": "
-                    << (criterion.maximum_inclusive ? "true" : "false")
-                    << '}';
+                const auto& branch = region.branches[k];
+                out << "{\"id\": ";
+                json_string(out, branch.id);
+                out << ", \"priority\": " << branch.priority;
+                out << ", \"criteria\": [";
+                for (std::size_t m = 0;
+                     m < branch.criteria.size(); ++m) {
+                    if (m != 0) out << ", ";
+                    const auto& criterion = branch.criteria[m];
+                    out << "{\"expression\": ";
+                    json_string(out, criterion.expression);
+                    out << ", \"dimension\": ";
+                    json_string(out, criterion.dimension);
+                    out << ", \"has_minimum\": "
+                        << (criterion.has_minimum ? "true" : "false");
+                    out << ", \"minimum_si\": ";
+                    json_number(out, criterion.minimum_si);
+                    out << ", \"has_maximum\": "
+                        << (criterion.has_maximum ? "true" : "false");
+                    out << ", \"maximum_si\": ";
+                    json_number(out, criterion.maximum_si);
+                    out << ", \"minimum_inclusive\": "
+                        << (criterion.minimum_inclusive
+                                ? "true" : "false");
+                    out << ", \"maximum_inclusive\": "
+                        << (criterion.maximum_inclusive
+                                ? "true" : "false") << '}';
+                }
+                out << "]}";
             }
             out << "]}";
         }

@@ -123,13 +123,19 @@ RegimeMapArtifactInput regime_map_input(
         value.id = region.id;
         value.regime = region.regime;
         value.priority = region.priority;
-        for (const auto& criterion : region.criteria) {
-            value.criteria.push_back({
-                criterion.expression, criterion.dimension,
-                criterion.minimum, criterion.maximum,
-                criterion.minimum_inclusive,
-                criterion.maximum_inclusive,
-            });
+        for (const auto& branch : region.branches) {
+            RegimeMapBranchInput mapped_branch;
+            mapped_branch.id = branch.id;
+            mapped_branch.priority = branch.priority;
+            for (const auto& criterion : branch.criteria) {
+                mapped_branch.criteria.push_back({
+                    criterion.expression, criterion.dimension,
+                    criterion.minimum, criterion.maximum,
+                    criterion.minimum_inclusive,
+                    criterion.maximum_inclusive,
+                });
+            }
+            value.branches.push_back(std::move(mapped_branch));
         }
         input.regions.push_back(std::move(value));
     }
@@ -368,18 +374,24 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
         }
         std::vector<platform::RegimeMapRegion> regions;
         for (const auto& region : input.regions) {
-            std::vector<platform::RegimeMapCriterion> criteria;
-            for (const auto& criterion : region.criteria) {
-                criteria.push_back({
-                    criterion.expression, criterion.dimension,
-                    criterion.minimum, criterion.maximum,
-                    criterion.minimum_inclusive,
-                    criterion.maximum_inclusive,
+            std::vector<platform::RegimeMapBranch> branches;
+            for (const auto& branch : region.branches) {
+                std::vector<platform::RegimeMapCriterion> criteria;
+                for (const auto& criterion : branch.criteria) {
+                    criteria.push_back({
+                        criterion.expression, criterion.dimension,
+                        criterion.minimum, criterion.maximum,
+                        criterion.minimum_inclusive,
+                        criterion.maximum_inclusive,
+                    });
+                }
+                branches.push_back({
+                    branch.id, branch.priority, std::move(criteria),
                 });
             }
             regions.push_back({
                 region.id, region.regime, region.priority,
-                std::move(criteria),
+                std::move(branches),
             });
         }
         artifacts.register_artifact(platform::RegimeMapArtifact{
@@ -1886,16 +1898,23 @@ CatalogResponse SimulationService::get_catalog(
             mapped_region.id = region.id;
             mapped_region.regime = region.regime;
             mapped_region.priority = region.priority;
-            for (const auto& criterion : region.criteria) {
-                mapped_region.criteria.push_back({
-                    criterion.expression, criterion.dimension,
-                    criterion.minimum.has_value(),
-                    criterion.minimum.value_or(0.0),
-                    criterion.maximum.has_value(),
-                    criterion.maximum.value_or(0.0),
-                    criterion.minimum_inclusive,
-                    criterion.maximum_inclusive,
-                });
+            for (const auto& branch : region.branches) {
+                CatalogRegimeMapBranchType mapped_branch;
+                mapped_branch.id = branch.id;
+                mapped_branch.priority = branch.priority;
+                for (const auto& criterion : branch.criteria) {
+                    mapped_branch.criteria.push_back({
+                        criterion.expression, criterion.dimension,
+                        criterion.minimum.has_value(),
+                        criterion.minimum.value_or(0.0),
+                        criterion.maximum.has_value(),
+                        criterion.maximum.value_or(0.0),
+                        criterion.minimum_inclusive,
+                        criterion.maximum_inclusive,
+                    });
+                }
+                mapped_region.branches.push_back(
+                    std::move(mapped_branch));
             }
             value.regions.push_back(std::move(mapped_region));
         }

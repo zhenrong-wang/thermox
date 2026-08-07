@@ -220,15 +220,23 @@ std::string catalog_fingerprint(
             hash_text(hash, region.id);
             hash_text(hash, region.regime);
             hash_text(hash, std::to_string(region.priority));
-            for (const auto& criterion : region.criteria) {
-                hash_text(hash, criterion.expression);
-                hash_text(hash, criterion.dimension);
-                hash_number(hash, criterion.minimum.has_value());
-                if (criterion.minimum) hash_number(hash, *criterion.minimum);
-                hash_number(hash, criterion.maximum.has_value());
-                if (criterion.maximum) hash_number(hash, *criterion.maximum);
-                hash_number(hash, criterion.minimum_inclusive);
-                hash_number(hash, criterion.maximum_inclusive);
+            for (const auto& branch : region.branches) {
+                hash_text(hash, branch.id);
+                hash_text(hash, std::to_string(branch.priority));
+                for (const auto& criterion : branch.criteria) {
+                    hash_text(hash, criterion.expression);
+                    hash_text(hash, criterion.dimension);
+                    hash_number(hash, criterion.minimum.has_value());
+                    if (criterion.minimum) {
+                        hash_number(hash, *criterion.minimum);
+                    }
+                    hash_number(hash, criterion.maximum.has_value());
+                    if (criterion.maximum) {
+                        hash_number(hash, *criterion.maximum);
+                    }
+                    hash_number(hash, criterion.minimum_inclusive);
+                    hash_number(hash, criterion.maximum_inclusive);
+                }
             }
         }
     }

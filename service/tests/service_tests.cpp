@@ -407,7 +407,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v7,
+            thermox::service::catalog_schema_v8,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -917,6 +917,9 @@ void test_catalog_discovery() {
         response.regime_map_templates.size() == 3 &&
             mishima_ishii != response.regime_map_templates.end() &&
             mishima_ishii->regions.size() == 2 &&
+            mishima_ishii->regions.front().branches.size() == 1 &&
+            mishima_ishii->regions.front().branches.front().id ==
+                "wave_entrainment" &&
             mishima_ishii->scope.find("vertical upward") !=
                 std::string::npos,
         "catalog must expose cited regime-map templates with explicit scope");
@@ -936,7 +939,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v7\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v8\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -1032,7 +1035,7 @@ void test_regime_map_template_instantiation() {
                     regime_map_instantiation_schema_v1 &&
             response.artifact.id == request.artifact_id &&
             response.artifact.schema_version ==
-                "thermox.regime_map/v1" &&
+                "thermox.regime_map/v2" &&
             response.artifact.regions.size() == 2U &&
             response.artifact.checksum_sha256.size() == 64U &&
             !response.canonical_payload_json.empty() &&

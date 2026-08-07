@@ -762,12 +762,13 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     regime_artifacts.register_artifact(
         thermox::platform::RegimeMapArtifact{
             "flow-pattern-map",
-            thermox::platform::regime_map_artifact_schema_v1,
+            thermox::platform::regime_map_artifact_schema_v2,
             "regime-test-1", std::string(64, '9'),
             {{"vapor_weber_number", "dimensionless"}},
             {{"positive_weber", "annular", 0,
-              {{"vapor_weber_number", "dimensionless", 0.0,
-                std::nullopt, false, true}}}}});
+              {{"positive", 0,
+                {{"vapor_weber_number", "dimensionless", 0.0,
+                  std::nullopt, false, true}}}}}}});
     const auto regime_graph =
         thermox::platform::compile_model_graph(
             regime_document, registry, properties,
@@ -795,12 +796,13 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     missing_artifacts.register_artifact(
         thermox::platform::RegimeMapArtifact{
             "flow-pattern-map",
-            thermox::platform::regime_map_artifact_schema_v1,
+            thermox::platform::regime_map_artifact_schema_v2,
             "regime-test-2", std::string(64, 'a'),
             {{"vapor_weber_number", "dimensionless"}},
             {{"uncovered", "slug", 0,
-              {{"vapor_weber_number", "dimensionless", 0.0,
-                std::nullopt, false, true}}}}});
+              {{"positive", 0,
+                {{"vapor_weber_number", "dimensionless", 0.0,
+                  std::nullopt, false, true}}}}}}});
     bool uncovered_rejected = false;
     try {
         (void)thermox::platform::compile_model_graph(

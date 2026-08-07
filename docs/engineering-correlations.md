@@ -250,7 +250,7 @@ require validation or a more appropriate registered artifact; Thermox does not i
 from numerical convergence.
 
 For flow-pattern-dependent friction families, the correlated two-phase pipe may additionally bind
-a `thermox.regime_map/v1` artifact as `friction_regime_map`. Candidate `regime` labels then form an
+a `thermox.regime_map/v2` artifact as `friction_regime_map`. Candidate `regime` labels then form an
 explicit join contract: every map region must resolve to a correlation candidate at compile time.
 The map consumes live property and flow quantities, including the delivered superficial-velocity,
 Reynolds, Froude, Weber, Bond, and phase-ratio groups. See

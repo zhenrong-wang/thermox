@@ -304,7 +304,7 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v7`, including physical-template identity, calculation-model labels,
+`thermox.catalog/v8`, including physical-template identity, calculation-model labels,
 internal-state names, dimensions, kinds, connector link contracts,
 numerical connector metadata, and a deterministic
 runtime fingerprint. Optional model behavior reads

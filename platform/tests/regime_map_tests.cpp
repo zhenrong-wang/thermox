@@ -32,10 +32,16 @@ thermox::platform::RegimeMapCriterion above(
     };
 }
 
+std::vector<thermox::platform::RegimeMapBranch> one_branch(
+    std::vector<thermox::platform::RegimeMapCriterion> criteria,
+    std::string id = "default") {
+    return {{std::move(id), 0, std::move(criteria)}};
+}
+
 thermox::platform::RegimeMapArtifact test_map() {
     return {
         "synthetic-flow-pattern-map",
-        thermox::platform::regime_map_artifact_schema_v1,
+        thermox::platform::regime_map_artifact_schema_v2,
         "test-1", std::string(64, 'a'),
         {
             {"gas_froude", "dimensionless"},
@@ -44,17 +50,17 @@ thermox::platform::RegimeMapArtifact test_map() {
         {
             {
                 "low_gas", "stratified", 10,
-                {
+                one_branch({
                     below_or_equal("gas_froude", 1.0),
                     above("liquid_loading", 0.0),
-                },
+                }),
             },
             {
                 "high_gas", "annular", 10,
-                {
+                one_branch({
                     above("gas_froude", 1.0),
                     above("liquid_loading", 0.0),
-                },
+                }),
             },
         },
     };
@@ -87,14 +93,14 @@ void test_classification_and_boundary() {
 
 void test_priority_gap_and_ambiguity() {
     auto prioritized = thermox::platform::RegimeMapArtifact{
-        "priority", thermox::platform::regime_map_artifact_schema_v1,
+        "priority", thermox::platform::regime_map_artifact_schema_v2,
         "1", std::string(64, 'b'),
         {{"coordinate", "dimensionless"}},
         {
             {"fallback", "unknown", 0,
-             {below_or_equal("abs(coordinate)", 100.0)}},
+             one_branch({below_or_equal("abs(coordinate)", 100.0)})},
             {"specific", "preferred", 20,
-             {below_or_equal("abs(coordinate)", 1.0)}},
+             one_branch({below_or_equal("abs(coordinate)", 1.0)})},
         },
     };
     prioritized.validate();
@@ -105,14 +111,14 @@ void test_priority_gap_and_ambiguity() {
         "higher-priority regions must resolve intentional overlap");
 
     auto ambiguous = thermox::platform::RegimeMapArtifact{
-        "ambiguous", thermox::platform::regime_map_artifact_schema_v1,
+        "ambiguous", thermox::platform::regime_map_artifact_schema_v2,
         "1", std::string(64, 'c'),
         {{"coordinate", "dimensionless"}},
         {
             {"first", "a", 0,
-             {below_or_equal("abs(coordinate)", 1.0)}},
+             one_branch({below_or_equal("abs(coordinate)", 1.0)})},
             {"second", "b", 0,
-             {below_or_equal("abs(coordinate)", 2.0)}},
+             one_branch({below_or_equal("abs(coordinate)", 2.0)})},
         },
     };
     ambiguous.validate();
@@ -124,6 +130,56 @@ void test_priority_gap_and_ambiguity() {
         prioritized.classify({{"coordinate", 101.0}}).error.find(
             "no regime-map region") != std::string::npos,
         "classification gaps must fail explicitly");
+}
+
+void test_alternative_branch_selection() {
+    const thermox::platform::RegimeMapArtifact map{
+        "alternative-mechanisms",
+        thermox::platform::regime_map_artifact_schema_v2,
+        "1", std::string(64, '3'),
+        {
+            {"film_reversal_coordinate", "dimensionless"},
+            {"entrainment_coordinate", "dimensionless"},
+        },
+        {{
+            "annular", "annular", 10,
+            {
+                {"film_reversal", 10,
+                 {above("film_reversal_coordinate", 0.0)}},
+                {"wave_entrainment", 20,
+                 {above("entrainment_coordinate", 0.0)}},
+            },
+        }},
+    };
+    map.validate();
+    const auto film = map.classify({
+        {"film_reversal_coordinate", 1.0},
+        {"entrainment_coordinate", -1.0},
+    });
+    const auto entrainment = map.classify({
+        {"film_reversal_coordinate", -1.0},
+        {"entrainment_coordinate", 1.0},
+    });
+    const auto overlap = map.classify({
+        {"film_reversal_coordinate", 1.0},
+        {"entrainment_coordinate", 1.0},
+    });
+    require(
+        film.succeeded() &&
+            film.selected_branch == "film_reversal" &&
+            entrainment.succeeded() &&
+            entrainment.selected_branch == "wave_entrainment" &&
+            overlap.succeeded() &&
+            overlap.selected_branch == "wave_entrainment",
+        "named OR branches must select either physical mechanism and "
+        "use explicit branch priority when mechanisms overlap");
+    require(
+        !map.classify({
+            {"film_reversal_coordinate", -1.0},
+            {"entrainment_coordinate", -1.0},
+        }).succeeded(),
+        "a region must not match when none of its alternative branches "
+        "is satisfied");
 }
 
 void test_contract_validation_and_registry() {
@@ -140,11 +196,11 @@ void test_contract_validation_and_registry() {
     bool rejected = false;
     try {
         thermox::platform::RegimeMapArtifact invalid{
-            "invalid", thermox::platform::regime_map_artifact_schema_v1,
+            "invalid", thermox::platform::regime_map_artifact_schema_v2,
             "1", std::string(64, 'd'),
             {{"coordinate", "dimensionless"}},
             {{"region", "regime", 0,
-              {below_or_equal("undeclared", 1.0)}}},
+              one_branch({below_or_equal("undeclared", 1.0)})}},
         };
         invalid.validate();
     } catch (const std::invalid_argument&) {
@@ -354,6 +410,7 @@ int main() {
     try {
         test_classification_and_boundary();
         test_priority_gap_and_ambiguity();
+        test_alternative_branch_selection();
         test_contract_validation_and_registry();
         test_two_phase_dimensionless_groups();
         test_packaged_mishima_ishii_annular_boundary();

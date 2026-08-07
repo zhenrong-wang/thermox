@@ -80,7 +80,7 @@ void test_catalog_and_validation() {
         api.handle({"GET", "/api/v1/catalog", {}, {}});
     require(catalog.status == 200, "catalog endpoint must succeed");
     require(
-        catalog.body.find("thermox.catalog/v7") != std::string::npos,
+        catalog.body.find("thermox.catalog/v8") != std::string::npos,
         "catalog endpoint must preserve the service schema");
     const auto parsed_catalog = boost::json::parse(catalog.body);
     require(
@@ -469,7 +469,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/artifact-revisions"
             "?artifact_id=http-flow-pattern-map"
             "&artifact_type=thermox.regime_map"
-            "&artifact_schema_version=thermox.regime_map%2Fv1",
+            "&artifact_schema_version=thermox.regime_map%2Fv2",
         R"json({
           "inputs": [{
             "name": "vapor_weber_number",
@@ -479,11 +479,15 @@ void test_tenant_scoped_asynchronous_jobs() {
             "id": "annular",
             "regime": "annular",
             "priority": 10,
-            "criteria": [{
-              "expression": "vapor_weber_number",
-              "dimension": "dimensionless",
-              "minimum": 20.0,
-              "minimum_inclusive": false
+            "branches": [{
+              "id": "weber",
+              "priority": 0,
+              "criteria": [{
+                "expression": "vapor_weber_number",
+                "dimension": "dimensionless",
+                "minimum": 20.0,
+                "minimum_inclusive": false
+              }]
             }]
           }]
         })json");

@@ -294,7 +294,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v11` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v12` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -561,9 +561,10 @@ Work items:
      phase flux/Reynolds inputs and connected two-phase transport verification; ✅
    - geometry/regime-specific coefficient correlations and flow-pattern maps remain follow-ons.
 9. Typed physical-regime classification.
-   - provider-neutral `thermox.regime_map/v1` engineering artifact with typed inputs, bounded safe
-     expression criteria, explicit boundary inclusion, deterministic priority, and hard failures
-     for gaps or ambiguous overlaps; ✅
+   - provider-neutral `thermox.regime_map/v2` engineering artifact with typed inputs, bounded safe
+     expression criteria, named OR branches for alternative physical mechanisms, explicit boundary
+     inclusion, deterministic region/branch priority, selected-mechanism reporting, and hard
+     failures for gaps or ambiguous overlaps; ✅
    - CoolProp-backed saturation surface tension as an explicit capability, authoritative N/m and
      mN/m units, and reusable phase flux, superficial velocity, Reynolds, Froude, Weber, Bond, and
      property-ratio evaluation; ✅

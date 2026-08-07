@@ -53,7 +53,7 @@ void RegimeMapTemplateRegistry::register_template(
             descriptor.id);
     }
     RegimeMapArtifact validation{
-        descriptor.id, regime_map_artifact_schema_v1, descriptor.version,
+        descriptor.id, regime_map_artifact_schema_v2, descriptor.version,
         std::string(64, '0'), descriptor.inputs, descriptor.regions};
     validation.validate();
     const auto id = descriptor.id;
@@ -102,11 +102,13 @@ make_default_regime_map_template_registry() {
         {{"void_fraction", "dimensionless"}},
         {
             {"bubbly_side", "bubbly", 10,
-             {{"void_fraction", "dimensionless", 0.0, 0.3,
-               false, false}}},
+             {{"bubble_coalescence", 0,
+               {{"void_fraction", "dimensionless", 0.0, 0.3,
+                 false, false}}}}},
             {"slug_side", "slug_side", 10,
-             {{"void_fraction", "dimensionless", 0.3, 1.0,
-               true, false}}},
+             {{"bubble_coalescence", 0,
+               {{"void_fraction", "dimensionless", 0.3, 1.0,
+                 true, false}}}}},
         },
     });
 
@@ -176,8 +178,10 @@ make_default_regime_map_template_registry() {
             {"gravity", "acceleration"},
         },
         {
-            {"slug_side", "slug", 10, std::move(slug)},
-            {"churn_side", "churn", 10, std::move(churn)},
+            {"slug_side", "slug", 10,
+             {{"mean_void_fraction", 0, std::move(slug)}}},
+            {"churn_side", "churn", 10,
+             {{"mean_void_fraction", 0, std::move(churn)}}},
         },
     });
 
@@ -232,9 +236,9 @@ make_default_regime_map_template_registry() {
         },
         {
             {"below_annular_entrainment_boundary", "pre_annular", 10,
-             std::move(below)},
+             {{"wave_entrainment", 0, std::move(below)}}},
             {"annular_entrainment", "annular", 10,
-             std::move(annular)},
+             {{"wave_entrainment", 0, std::move(annular)}}},
         },
     });
     return registry;
@@ -244,7 +248,7 @@ RegimeMapArtifact instantiate_regime_map_template(
     const RegimeMapTemplateDescriptor& descriptor,
     RegimeMapArtifactIdentity identity) {
     RegimeMapArtifact artifact{
-        std::move(identity.id), regime_map_artifact_schema_v1,
+        std::move(identity.id), regime_map_artifact_schema_v2,
         std::move(identity.revision),
         std::move(identity.checksum_sha256), descriptor.inputs,
         descriptor.regions};
@@ -267,18 +271,23 @@ RegimeMapArtifact::RegimeMapArtifact(
     checksum_sha256 = std::move(artifact_checksum_sha256);
     compiled_criteria_.reserve(regions_.size());
     for (const auto& region : regions_) {
-        std::vector<SafeExpression> criteria;
-        criteria.reserve(region.criteria.size());
-        for (const auto& criterion : region.criteria) {
-            criteria.push_back(
-                SafeExpression::parse(criterion.expression));
+        std::vector<std::vector<SafeExpression>> branches;
+        branches.reserve(region.branches.size());
+        for (const auto& branch : region.branches) {
+            std::vector<SafeExpression> criteria;
+            criteria.reserve(branch.criteria.size());
+            for (const auto& criterion : branch.criteria) {
+                criteria.push_back(
+                    SafeExpression::parse(criterion.expression));
+            }
+            branches.push_back(std::move(criteria));
         }
-        compiled_criteria_.push_back(std::move(criteria));
+        compiled_criteria_.push_back(std::move(branches));
     }
 }
 
 void RegimeMapArtifact::validate() const {
-    if (schema_version != regime_map_artifact_schema_v1) {
+    if (schema_version != regime_map_artifact_schema_v2) {
         throw std::invalid_argument(
             "regime map '" + id +
             "' has unsupported schema version: " +
@@ -286,6 +295,7 @@ void RegimeMapArtifact::validate() const {
     }
     constexpr std::size_t maximum_inputs = 64;
     constexpr std::size_t maximum_regions = 128;
+    constexpr std::size_t maximum_branches_per_region = 32;
     constexpr std::size_t maximum_criteria_per_region = 32;
     if (inputs_.empty() || inputs_.size() > maximum_inputs) {
         throw std::invalid_argument(
@@ -315,43 +325,57 @@ void RegimeMapArtifact::validate() const {
                 "regime map '" + id +
                 "' has an invalid or duplicate region: " + region.id);
         }
-        if (region.criteria.empty() ||
-            region.criteria.size() > maximum_criteria_per_region) {
+        if (region.branches.empty() ||
+            region.branches.size() > maximum_branches_per_region) {
             throw std::invalid_argument(
                 "regime-map region '" + region.id +
-                "' requires between 1 and 32 criteria");
+                "' requires between 1 and 32 alternative branches");
         }
-        for (std::size_t criterion_index = 0;
-             criterion_index < region.criteria.size();
-             ++criterion_index) {
-            const auto& criterion = region.criteria[criterion_index];
-            if (criterion.expression.empty() ||
-                criterion.dimension.empty() ||
-                (!criterion.minimum && !criterion.maximum) ||
-                (criterion.minimum &&
-                 !std::isfinite(*criterion.minimum)) ||
-                (criterion.maximum &&
-                 !std::isfinite(*criterion.maximum)) ||
-                (criterion.minimum && criterion.maximum &&
-                 (*criterion.minimum > *criterion.maximum ||
-                  (*criterion.minimum == *criterion.maximum &&
-                   (!criterion.minimum_inclusive ||
-                    !criterion.maximum_inclusive))))) {
+        std::set<std::string> branch_ids;
+        for (std::size_t branch_index = 0;
+             branch_index < region.branches.size(); ++branch_index) {
+            const auto& branch = region.branches[branch_index];
+            if (!valid_identifier(branch.id) ||
+                !branch_ids.insert(branch.id).second ||
+                branch.criteria.empty() ||
+                branch.criteria.size() > maximum_criteria_per_region) {
                 throw std::invalid_argument(
                     "regime-map region '" + region.id +
-                    "' has an invalid criterion interval");
+                    "' has an invalid branch: " + branch.id);
             }
-            const auto& symbols =
-                compiled_criteria_[index][criterion_index].symbols();
-            if (symbols.empty() ||
-                !std::all_of(
-                    symbols.begin(), symbols.end(),
-                    [&](const auto& symbol) {
-                        return declared_inputs.contains(symbol);
-                    })) {
-                throw std::invalid_argument(
-                    "regime-map region '" + region.id +
-                    "' criterion must reference only declared inputs");
+            for (std::size_t criterion_index = 0;
+                 criterion_index < branch.criteria.size();
+                 ++criterion_index) {
+                const auto& criterion =
+                    branch.criteria[criterion_index];
+                if (criterion.expression.empty() ||
+                    criterion.dimension.empty() ||
+                    (!criterion.minimum && !criterion.maximum) ||
+                    (criterion.minimum &&
+                     !std::isfinite(*criterion.minimum)) ||
+                    (criterion.maximum &&
+                     !std::isfinite(*criterion.maximum)) ||
+                    (criterion.minimum && criterion.maximum &&
+                     (*criterion.minimum > *criterion.maximum ||
+                      (*criterion.minimum == *criterion.maximum &&
+                       (!criterion.minimum_inclusive ||
+                        !criterion.maximum_inclusive))))) {
+                    throw std::invalid_argument(
+                        "regime-map branch '" + branch.id +
+                        "' has an invalid criterion interval");
+                }
+                const auto& symbols = compiled_criteria_[index]
+                    [branch_index][criterion_index].symbols();
+                if (symbols.empty() ||
+                    !std::all_of(
+                        symbols.begin(), symbols.end(),
+                        [&](const auto& symbol) {
+                            return declared_inputs.contains(symbol);
+                        })) {
+                    throw std::invalid_argument(
+                        "regime-map branch '" + branch.id +
+                        "' criterion must reference only declared inputs");
+                }
             }
         }
     }
@@ -372,56 +396,77 @@ RegimeMapEvaluation RegimeMapArtifact::classify(
     for (const auto& input : inputs_) {
         const auto found = inputs.find(input.name);
         if (found == inputs.end() || !std::isfinite(found->second)) {
-            return {{}, {},
+            return {{}, {}, {},
                 "regime-map input is missing or non-finite: " +
                     input.name};
         }
     }
     if (inputs.size() != inputs_.size()) {
-        return {{}, {}, "regime map received unknown inputs"};
+        return {{}, {}, {}, "regime map received unknown inputs"};
     }
 
-    std::vector<std::size_t> applicable;
+    struct Match {
+        std::size_t region;
+        std::size_t branch;
+        bool ambiguous_branch;
+    };
+    std::vector<Match> applicable;
     int best_priority = std::numeric_limits<int>::min();
     for (std::size_t region_index = 0;
          region_index < regions_.size(); ++region_index) {
-        bool matches = true;
         const auto& region = regions_[region_index];
-        for (std::size_t criterion_index = 0;
-             criterion_index < region.criteria.size();
-             ++criterion_index) {
-            std::map<std::string, double> criterion_inputs;
-            for (const auto& symbol :
-                 compiled_criteria_[region_index][criterion_index]
-                     .symbols()) {
-                criterion_inputs.emplace(symbol, inputs.at(symbol));
+        std::vector<std::size_t> matching_branches;
+        int best_branch_priority = std::numeric_limits<int>::min();
+        for (std::size_t branch_index = 0;
+             branch_index < region.branches.size(); ++branch_index) {
+            const auto& branch = region.branches[branch_index];
+            bool branch_matches = true;
+            for (std::size_t criterion_index = 0;
+                 criterion_index < branch.criteria.size();
+                 ++criterion_index) {
+                std::map<std::string, double> criterion_inputs;
+                for (const auto& symbol :
+                     compiled_criteria_[region_index][branch_index]
+                         [criterion_index].symbols()) {
+                    criterion_inputs.emplace(symbol, inputs.at(symbol));
+                }
+                const auto evaluated = compiled_criteria_[region_index]
+                    [branch_index][criterion_index]
+                        .evaluate(criterion_inputs);
+                if (!evaluated.error.empty()) {
+                    return {{}, {}, {},
+                        "regime-map branch '" + branch.id +
+                            "' criterion failed: " + evaluated.error};
+                }
+                if (!inside(
+                        evaluated.value,
+                        branch.criteria[criterion_index])) {
+                    branch_matches = false;
+                    break;
+                }
             }
-            const auto evaluated =
-                compiled_criteria_[region_index][criterion_index]
-                    .evaluate(criterion_inputs);
-            if (!evaluated.error.empty()) {
-                return {{}, {},
-                    "regime-map region '" + region.id +
-                        "' criterion failed: " + evaluated.error};
+            if (!branch_matches) continue;
+            if (branch.priority > best_branch_priority) {
+                matching_branches.clear();
+                best_branch_priority = branch.priority;
             }
-            if (!inside(
-                    evaluated.value,
-                    region.criteria[criterion_index])) {
-                matches = false;
-                break;
+            if (branch.priority == best_branch_priority) {
+                matching_branches.push_back(branch_index);
             }
         }
-        if (!matches) continue;
+        if (matching_branches.empty()) continue;
         if (region.priority > best_priority) {
             applicable.clear();
             best_priority = region.priority;
         }
         if (region.priority == best_priority) {
-            applicable.push_back(region_index);
+            applicable.push_back({
+                region_index, matching_branches.front(),
+                matching_branches.size() != 1U});
         }
     }
     if (applicable.empty()) {
-        return {{}, {}, "no regime-map region is applicable"};
+        return {{}, {}, {}, "no regime-map region is applicable"};
     }
     if (applicable.size() != 1U) {
         std::string error =
@@ -429,12 +474,19 @@ RegimeMapEvaluation RegimeMapArtifact::classify(
             std::to_string(best_priority) + ": ";
         for (std::size_t index = 0; index < applicable.size(); ++index) {
             if (index != 0U) error += ", ";
-            error += regions_[applicable[index]].id;
+            error += regions_[applicable[index].region].id;
         }
-        return {{}, {}, std::move(error)};
+        return {{}, {}, {}, std::move(error)};
     }
-    const auto& selected = regions_[applicable.front()];
-    return {selected.id, selected.regime, {}};
+    const auto match = applicable.front();
+    const auto& selected = regions_[match.region];
+    if (match.ambiguous_branch) {
+        return {{}, {}, {},
+            "regime-map branch selection is ambiguous in region '" +
+                selected.id + "'"};
+    }
+    const auto& branch = selected.branches[match.branch];
+    return {selected.id, branch.id, selected.regime, {}};
 }
 
 }  // namespace thermox::platform

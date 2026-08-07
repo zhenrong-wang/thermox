@@ -14,8 +14,8 @@ namespace thermox::platform {
 
 inline constexpr char regime_map_artifact_type[] =
     "thermox.regime_map";
-inline constexpr char regime_map_artifact_schema_v1[] =
-    "thermox.regime_map/v1";
+inline constexpr char regime_map_artifact_schema_v2[] =
+    "thermox.regime_map/v2";
 
 struct RegimeMapVariable {
     std::string name;
@@ -33,11 +33,17 @@ struct RegimeMapCriterion {
     bool maximum_inclusive{true};
 };
 
+struct RegimeMapBranch {
+    std::string id;
+    int priority{0};
+    std::vector<RegimeMapCriterion> criteria;
+};
+
 struct RegimeMapRegion {
     std::string id;
     std::string regime;
     int priority{0};
-    std::vector<RegimeMapCriterion> criteria;
+    std::vector<RegimeMapBranch> branches;
 };
 
 // A packaged, cited map definition. Templates remain separate from immutable
@@ -74,6 +80,7 @@ private:
 
 struct RegimeMapEvaluation {
     std::string selected_region;
+    std::string selected_branch;
     std::string selected_regime;
     std::string error;
 
@@ -108,7 +115,8 @@ public:
 private:
     std::vector<RegimeMapVariable> inputs_;
     std::vector<RegimeMapRegion> regions_;
-    std::vector<std::vector<SafeExpression>> compiled_criteria_;
+    std::vector<std::vector<std::vector<SafeExpression>>>
+        compiled_criteria_;
 };
 
 [[nodiscard]] RegimeMapTemplateRegistry

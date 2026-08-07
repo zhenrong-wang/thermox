@@ -199,7 +199,7 @@ SimulationJobRequest request(
         std::move(correlation));
     thermox::service::RegimeMapArtifactInput regime_map;
     regime_map.id = "flow-pattern-map";
-    regime_map.schema_version = "thermox.regime_map/v1";
+    regime_map.schema_version = "thermox.regime_map/v2";
     regime_map.revision = "vendor-3";
     regime_map.checksum_sha256 = std::string(64, 'd');
     regime_map.inputs = {
@@ -207,8 +207,9 @@ SimulationJobRequest request(
     };
     regime_map.regions = {
         {"annular", "annular", 10,
-         {{"vapor_weber_number", "dimensionless", 20.0,
-           std::nullopt, false, true}}},
+         {{"weber", 0,
+           {{"vapor_weber_number", "dimensionless", 20.0,
+             std::nullopt, false, true}}}}},
     };
     value.artifacts.regime_maps.push_back(std::move(regime_map));
     value.artifacts.references.push_back({
@@ -323,9 +324,10 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.regime_maps.front()
                     .regions.front().regime == "annular" &&
             repeated.request.artifacts.regime_maps.front()
-                    .regions.front().criteria.front().minimum == 20.0 &&
+                    .regions.front().branches.front()
+                    .criteria.front().minimum == 20.0 &&
             !repeated.request.artifacts.regime_maps.front()
-                    .regions.front().criteria.front()
+                    .regions.front().branches.front().criteria.front()
                     .minimum_inclusive &&
             repeated.request.components.expression_components
                     .size() == 1 &&

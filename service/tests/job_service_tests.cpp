@@ -143,17 +143,19 @@ thermox::service::CorrelationArtifactInput unused_correlation_family() {
 thermox::service::RegimeMapArtifactInput unused_regime_map() {
     thermox::service::RegimeMapArtifactInput artifact;
     artifact.id = "job-regime-map";
-    artifact.schema_version = "thermox.regime_map/v1";
+    artifact.schema_version = "thermox.regime_map/v2";
     artifact.revision = "job-regime-1";
     artifact.checksum_sha256 = std::string(64, 'e');
     artifact.inputs = {{"vapor_weber_number", "dimensionless"}};
     artifact.regions = {
         {"low", "stratified", 10,
-         {{"vapor_weber_number", "dimensionless", std::nullopt,
-           20.0, true, true}}},
+         {{"weber", 0,
+           {{"vapor_weber_number", "dimensionless", std::nullopt,
+             20.0, true, true}}}}},
         {"high", "annular", 10,
-         {{"vapor_weber_number", "dimensionless", 20.0,
-           std::nullopt, false, true}}},
+         {{"weber", 0,
+           {{"vapor_weber_number", "dimensionless", 20.0,
+             std::nullopt, false, true}}}}},
     };
     return artifact;
 }
@@ -238,7 +240,7 @@ void test_submission_is_idempotent_and_conflict_safe() {
         unused_regime_map());
     (void)service.submit(regime_request);
     regime_request.artifacts.regime_maps.front()
-        .regions.front().criteria.front().maximum = 21.0;
+        .regions.front().branches.front().criteria.front().maximum = 21.0;
     conflict = false;
     try {
         (void)service.submit(regime_request);
@@ -464,7 +466,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v11\"") != std::string::npos &&
+                  "\"thermox.job/v12\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=

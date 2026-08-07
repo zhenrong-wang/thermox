@@ -15,7 +15,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v7[] = "thermox.catalog/v7";
+inline constexpr char catalog_schema_v8[] = "thermox.catalog/v8";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
@@ -224,11 +224,17 @@ struct CatalogRegimeMapCriterionType {
     bool maximum_inclusive{true};
 };
 
+struct CatalogRegimeMapBranchType {
+    std::string id;
+    int priority{0};
+    std::vector<CatalogRegimeMapCriterionType> criteria;
+};
+
 struct CatalogRegimeMapRegionType {
     std::string id;
     std::string regime;
     int priority{0};
-    std::vector<CatalogRegimeMapCriterionType> criteria;
+    std::vector<CatalogRegimeMapBranchType> branches;
 };
 
 struct CatalogRegimeMapTemplateType {
@@ -249,7 +255,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v7};
+    std::string schema_version{catalog_schema_v8};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;
@@ -427,11 +433,17 @@ struct RegimeMapCriterionInput {
     bool maximum_inclusive{true};
 };
 
+struct RegimeMapBranchInput {
+    std::string id;
+    int priority{0};
+    std::vector<RegimeMapCriterionInput> criteria;
+};
+
 struct RegimeMapRegionInput {
     std::string id;
     std::string regime;
     int priority{0};
-    std::vector<RegimeMapCriterionInput> criteria;
+    std::vector<RegimeMapBranchInput> branches;
 };
 
 struct RegimeMapArtifactInput {

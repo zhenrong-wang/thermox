@@ -402,24 +402,38 @@ Tree regime_map(const service::RegimeMapArtifactInput& value) {
             encoded.put("regime", region.regime);
             encoded.put("priority", region.priority);
             encoded.add_child(
-                "criteria",
-                array(region.criteria, [](const auto& criterion) {
-                    Tree item;
-                    item.put("expression", criterion.expression);
-                    item.put("dimension", criterion.dimension);
-                    if (criterion.minimum) {
-                        item.put("minimum", *criterion.minimum);
-                    }
-                    if (criterion.maximum) {
-                        item.put("maximum", *criterion.maximum);
-                    }
-                    item.put(
-                        "minimum_inclusive",
-                        criterion.minimum_inclusive);
-                    item.put(
-                        "maximum_inclusive",
-                        criterion.maximum_inclusive);
-                    return item;
+                "branches",
+                array(region.branches, [](const auto& branch) {
+                    Tree encoded_branch;
+                    encoded_branch.put("id", branch.id);
+                    encoded_branch.put("priority", branch.priority);
+                    encoded_branch.add_child(
+                        "criteria",
+                        array(
+                            branch.criteria,
+                            [](const auto& criterion) {
+                                Tree item;
+                                item.put(
+                                    "expression", criterion.expression);
+                                item.put(
+                                    "dimension", criterion.dimension);
+                                if (criterion.minimum) {
+                                    item.put(
+                                        "minimum", *criterion.minimum);
+                                }
+                                if (criterion.maximum) {
+                                    item.put(
+                                        "maximum", *criterion.maximum);
+                                }
+                                item.put(
+                                    "minimum_inclusive",
+                                    criterion.minimum_inclusive);
+                                item.put(
+                                    "maximum_inclusive",
+                                    criterion.maximum_inclusive);
+                                return item;
+                            }));
+                    return encoded_branch;
                 }));
             return encoded;
         }));
@@ -447,27 +461,44 @@ service::RegimeMapArtifactInput decode_regime_map(
             decoded.id = region.get<std::string>("id");
             decoded.regime = region.get<std::string>("regime");
             decoded.priority = region.get("priority", 0);
-            decoded.criteria =
-                decode_array<service::RegimeMapCriterionInput>(
-                    region.get_child("criteria"),
-                    [](const Tree& criterion) {
-                        const auto minimum =
-                            criterion.get_optional<double>("minimum");
-                        const auto maximum =
-                            criterion.get_optional<double>("maximum");
-                        return service::RegimeMapCriterionInput{
-                            criterion.get<std::string>("expression"),
-                            criterion.get<std::string>(
-                                "dimension", "dimensionless"),
-                            minimum
-                                ? std::optional<double>{*minimum}
-                                : std::nullopt,
-                            maximum
-                                ? std::optional<double>{*maximum}
-                                : std::nullopt,
-                            criterion.get("minimum_inclusive", true),
-                            criterion.get("maximum_inclusive", true),
-                        };
+            decoded.branches =
+                decode_array<service::RegimeMapBranchInput>(
+                    region.get_child("branches"),
+                    [](const Tree& branch) {
+                        service::RegimeMapBranchInput decoded_branch;
+                        decoded_branch.id =
+                            branch.get<std::string>("id");
+                        decoded_branch.priority =
+                            branch.get("priority", 0);
+                        decoded_branch.criteria = decode_array<
+                            service::RegimeMapCriterionInput>(
+                                branch.get_child("criteria"),
+                                [](const Tree& criterion) {
+                                    const auto minimum = criterion
+                                        .get_optional<double>("minimum");
+                                    const auto maximum = criterion
+                                        .get_optional<double>("maximum");
+                                    return service::RegimeMapCriterionInput{
+                                        criterion.get<std::string>(
+                                            "expression"),
+                                        criterion.get<std::string>(
+                                            "dimension",
+                                            "dimensionless"),
+                                        minimum
+                                            ? std::optional<double>{
+                                                  *minimum}
+                                            : std::nullopt,
+                                        maximum
+                                            ? std::optional<double>{
+                                                  *maximum}
+                                            : std::nullopt,
+                                        criterion.get(
+                                            "minimum_inclusive", true),
+                                        criterion.get(
+                                            "maximum_inclusive", true),
+                                    };
+                                });
+                        return decoded_branch;
                     });
             return decoded;
         });

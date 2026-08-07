@@ -178,20 +178,25 @@ void append_artifacts(
             append_string(stream, region.id);
             append_string(stream, region.regime);
             stream << region.priority << '|'
-                   << region.criteria.size() << '|';
-            for (const auto& criterion : region.criteria) {
-                append_string(stream, criterion.expression);
-                append_string(stream, criterion.dimension);
-                stream << criterion.minimum.has_value() << '|';
-                if (criterion.minimum) {
-                    stream << *criterion.minimum << '|';
+                   << region.branches.size() << '|';
+            for (const auto& branch : region.branches) {
+                append_string(stream, branch.id);
+                stream << branch.priority << '|'
+                       << branch.criteria.size() << '|';
+                for (const auto& criterion : branch.criteria) {
+                    append_string(stream, criterion.expression);
+                    append_string(stream, criterion.dimension);
+                    stream << criterion.minimum.has_value() << '|';
+                    if (criterion.minimum) {
+                        stream << *criterion.minimum << '|';
+                    }
+                    stream << criterion.maximum.has_value() << '|';
+                    if (criterion.maximum) {
+                        stream << *criterion.maximum << '|';
+                    }
+                    stream << criterion.minimum_inclusive << '|'
+                           << criterion.maximum_inclusive << '|';
                 }
-                stream << criterion.maximum.has_value() << '|';
-                if (criterion.maximum) {
-                    stream << *criterion.maximum << '|';
-                }
-                stream << criterion.minimum_inclusive << '|'
-                       << criterion.maximum_inclusive << '|';
             }
         }
     }
@@ -360,7 +365,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v11) {
+    if (request.schema_version != job_schema_v12) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

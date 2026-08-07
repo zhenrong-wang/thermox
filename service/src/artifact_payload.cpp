@@ -477,7 +477,7 @@ RegimeMapArtifactInput decode_regime_map(
     const std::string& revision,
     const std::string& checksum,
     const Tree& tree) {
-    if (schema_version != platform::regime_map_artifact_schema_v1) {
+    if (schema_version != platform::regime_map_artifact_schema_v2) {
         throw std::invalid_argument(
             "unsupported regime-map schema: " + schema_version);
     }
@@ -501,26 +501,38 @@ RegimeMapArtifactInput decode_regime_map(
             region.id = encoded.get<std::string>("id");
             region.regime = encoded.get<std::string>("regime");
             region.priority = encoded.get("priority", 0);
-            region.criteria = decode_array<RegimeMapCriterionInput>(
-                encoded.get_child("criteria"),
-                [](const Tree& criterion) {
-                    const auto minimum =
-                        criterion.get_optional<double>("minimum");
-                    const auto maximum =
-                        criterion.get_optional<double>("maximum");
-                    return RegimeMapCriterionInput{
-                        criterion.get<std::string>("expression"),
-                        criterion.get<std::string>(
-                            "dimension", "dimensionless"),
-                        minimum
-                            ? std::optional<double>{*minimum}
-                            : std::nullopt,
-                        maximum
-                            ? std::optional<double>{*maximum}
-                            : std::nullopt,
-                        criterion.get("minimum_inclusive", true),
-                        criterion.get("maximum_inclusive", true),
-                    };
+            region.branches = decode_array<RegimeMapBranchInput>(
+                encoded.get_child("branches"),
+                [](const Tree& branch) {
+                    RegimeMapBranchInput value;
+                    value.id = branch.get<std::string>("id");
+                    value.priority = branch.get("priority", 0);
+                    value.criteria =
+                        decode_array<RegimeMapCriterionInput>(
+                            branch.get_child("criteria"),
+                            [](const Tree& criterion) {
+                                const auto minimum = criterion
+                                    .get_optional<double>("minimum");
+                                const auto maximum = criterion
+                                    .get_optional<double>("maximum");
+                                return RegimeMapCriterionInput{
+                                    criterion.get<std::string>(
+                                        "expression"),
+                                    criterion.get<std::string>(
+                                        "dimension", "dimensionless"),
+                                    minimum
+                                        ? std::optional<double>{*minimum}
+                                        : std::nullopt,
+                                    maximum
+                                        ? std::optional<double>{*maximum}
+                                        : std::nullopt,
+                                    criterion.get(
+                                        "minimum_inclusive", true),
+                                    criterion.get(
+                                        "maximum_inclusive", true),
+                                };
+                            });
+                    return value;
                 });
             return region;
         });
@@ -549,25 +561,44 @@ Tree encode_regime_map(const RegimeMapArtifactInput& artifact) {
                 encoded.put("regime", region.regime);
                 encoded.put("priority", region.priority);
                 encoded.add_child(
-                    "criteria",
+                    "branches",
                     array(
-                        region.criteria,
-                        [](const RegimeMapCriterionInput& criterion) {
+                        region.branches,
+                        [](const RegimeMapBranchInput& branch) {
                             Tree value;
-                            value.put("expression", criterion.expression);
-                            value.put("dimension", criterion.dimension);
-                            if (criterion.minimum) {
-                                value.put("minimum", *criterion.minimum);
-                            }
-                            if (criterion.maximum) {
-                                value.put("maximum", *criterion.maximum);
-                            }
-                            value.put(
-                                "minimum_inclusive",
-                                criterion.minimum_inclusive);
-                            value.put(
-                                "maximum_inclusive",
-                                criterion.maximum_inclusive);
+                            value.put("id", branch.id);
+                            value.put("priority", branch.priority);
+                            value.add_child(
+                                "criteria",
+                                array(
+                                    branch.criteria,
+                                    [](const RegimeMapCriterionInput&
+                                           criterion) {
+                                        Tree encoded_criterion;
+                                        encoded_criterion.put(
+                                            "expression",
+                                            criterion.expression);
+                                        encoded_criterion.put(
+                                            "dimension",
+                                            criterion.dimension);
+                                        if (criterion.minimum) {
+                                            encoded_criterion.put(
+                                                "minimum",
+                                                *criterion.minimum);
+                                        }
+                                        if (criterion.maximum) {
+                                            encoded_criterion.put(
+                                                "maximum",
+                                                *criterion.maximum);
+                                        }
+                                        encoded_criterion.put(
+                                            "minimum_inclusive",
+                                            criterion.minimum_inclusive);
+                                        encoded_criterion.put(
+                                            "maximum_inclusive",
+                                            criterion.maximum_inclusive);
+                                        return encoded_criterion;
+                                    }));
                             return value;
                         }));
                 return encoded;
@@ -583,18 +614,24 @@ platform::RegimeMapArtifact regime_map(
     }
     std::vector<platform::RegimeMapRegion> regions;
     for (const auto& region : input.regions) {
-        std::vector<platform::RegimeMapCriterion> criteria;
-        for (const auto& criterion : region.criteria) {
-            criteria.push_back({
-                criterion.expression, criterion.dimension,
-                criterion.minimum, criterion.maximum,
-                criterion.minimum_inclusive,
-                criterion.maximum_inclusive,
+        std::vector<platform::RegimeMapBranch> branches;
+        for (const auto& branch : region.branches) {
+            std::vector<platform::RegimeMapCriterion> criteria;
+            for (const auto& criterion : branch.criteria) {
+                criteria.push_back({
+                    criterion.expression, criterion.dimension,
+                    criterion.minimum, criterion.maximum,
+                    criterion.minimum_inclusive,
+                    criterion.maximum_inclusive,
+                });
+            }
+            branches.push_back({
+                branch.id, branch.priority, std::move(criteria),
             });
         }
         regions.push_back({
             region.id, region.regime, region.priority,
-            std::move(criteria),
+            std::move(branches),
         });
     }
     return {
