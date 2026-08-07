@@ -381,6 +381,36 @@ struct CorrelationArtifactInput {
     std::vector<CorrelationCandidateInput> candidates;
 };
 
+struct RegimeMapVariableInput {
+    std::string name;
+    std::string dimension;
+};
+
+struct RegimeMapCriterionInput {
+    std::string expression;
+    std::string dimension{"dimensionless"};
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
+struct RegimeMapRegionInput {
+    std::string id;
+    std::string regime;
+    int priority{0};
+    std::vector<RegimeMapCriterionInput> criteria;
+};
+
+struct RegimeMapArtifactInput {
+    std::string id;
+    std::string schema_version;
+    std::string revision;
+    std::string checksum_sha256;
+    std::vector<RegimeMapVariableInput> inputs;
+    std::vector<RegimeMapRegionInput> regions;
+};
+
 struct CorrelationTemplateBindingInput {
     std::string template_id;
     std::map<std::string, double> coefficients;
@@ -419,6 +449,7 @@ struct EngineeringArtifactReference {
 struct SimulationArtifactBundle {
     std::vector<PerformanceMapArtifactInput> performance_maps;
     std::vector<CorrelationArtifactInput> correlations;
+    std::vector<RegimeMapArtifactInput> regime_maps;
     std::vector<EngineeringArtifactReference> references;
 };
 

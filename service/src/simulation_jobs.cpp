@@ -162,6 +162,39 @@ void append_artifacts(
             append_applicability(stream, candidate.applicability);
         }
     }
+    stream << artifacts.regime_maps.size() << '|';
+    for (const auto& artifact : artifacts.regime_maps) {
+        append_string(stream, artifact.id);
+        append_string(stream, artifact.schema_version);
+        append_string(stream, artifact.revision);
+        append_string(stream, artifact.checksum_sha256);
+        stream << artifact.inputs.size() << '|';
+        for (const auto& input : artifact.inputs) {
+            append_string(stream, input.name);
+            append_string(stream, input.dimension);
+        }
+        stream << artifact.regions.size() << '|';
+        for (const auto& region : artifact.regions) {
+            append_string(stream, region.id);
+            append_string(stream, region.regime);
+            stream << region.priority << '|'
+                   << region.criteria.size() << '|';
+            for (const auto& criterion : region.criteria) {
+                append_string(stream, criterion.expression);
+                append_string(stream, criterion.dimension);
+                stream << criterion.minimum.has_value() << '|';
+                if (criterion.minimum) {
+                    stream << *criterion.minimum << '|';
+                }
+                stream << criterion.maximum.has_value() << '|';
+                if (criterion.maximum) {
+                    stream << *criterion.maximum << '|';
+                }
+                stream << criterion.minimum_inclusive << '|'
+                       << criterion.maximum_inclusive << '|';
+            }
+        }
+    }
     stream << artifacts.references.size() << '|';
     for (const auto& reference : artifacts.references) {
         append_string(stream, reference.id);
@@ -327,7 +360,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v10) {
+    if (request.schema_version != job_schema_v11) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

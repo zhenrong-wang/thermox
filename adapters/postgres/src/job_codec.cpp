@@ -380,6 +380,100 @@ service::CorrelationArtifactInput decode_correlation(
     return value;
 }
 
+Tree regime_map(const service::RegimeMapArtifactInput& value) {
+    Tree tree;
+    tree.put("id", value.id);
+    tree.put("schema_version", value.schema_version);
+    tree.put("revision", value.revision);
+    tree.put("checksum_sha256", value.checksum_sha256);
+    tree.add_child(
+        "inputs",
+        array(value.inputs, [](const auto& input) {
+            Tree encoded;
+            encoded.put("name", input.name);
+            encoded.put("dimension", input.dimension);
+            return encoded;
+        }));
+    tree.add_child(
+        "regions",
+        array(value.regions, [](const auto& region) {
+            Tree encoded;
+            encoded.put("id", region.id);
+            encoded.put("regime", region.regime);
+            encoded.put("priority", region.priority);
+            encoded.add_child(
+                "criteria",
+                array(region.criteria, [](const auto& criterion) {
+                    Tree item;
+                    item.put("expression", criterion.expression);
+                    item.put("dimension", criterion.dimension);
+                    if (criterion.minimum) {
+                        item.put("minimum", *criterion.minimum);
+                    }
+                    if (criterion.maximum) {
+                        item.put("maximum", *criterion.maximum);
+                    }
+                    item.put(
+                        "minimum_inclusive",
+                        criterion.minimum_inclusive);
+                    item.put(
+                        "maximum_inclusive",
+                        criterion.maximum_inclusive);
+                    return item;
+                }));
+            return encoded;
+        }));
+    return tree;
+}
+
+service::RegimeMapArtifactInput decode_regime_map(
+    const Tree& tree) {
+    service::RegimeMapArtifactInput value;
+    value.id = tree.get<std::string>("id");
+    value.schema_version = tree.get<std::string>("schema_version");
+    value.revision = tree.get<std::string>("revision");
+    value.checksum_sha256 =
+        tree.get<std::string>("checksum_sha256");
+    value.inputs = decode_array<service::RegimeMapVariableInput>(
+        tree.get_child("inputs"), [](const Tree& input) {
+            return service::RegimeMapVariableInput{
+                input.get<std::string>("name"),
+                input.get<std::string>("dimension"),
+            };
+        });
+    value.regions = decode_array<service::RegimeMapRegionInput>(
+        tree.get_child("regions"), [](const Tree& region) {
+            service::RegimeMapRegionInput decoded;
+            decoded.id = region.get<std::string>("id");
+            decoded.regime = region.get<std::string>("regime");
+            decoded.priority = region.get("priority", 0);
+            decoded.criteria =
+                decode_array<service::RegimeMapCriterionInput>(
+                    region.get_child("criteria"),
+                    [](const Tree& criterion) {
+                        const auto minimum =
+                            criterion.get_optional<double>("minimum");
+                        const auto maximum =
+                            criterion.get_optional<double>("maximum");
+                        return service::RegimeMapCriterionInput{
+                            criterion.get<std::string>("expression"),
+                            criterion.get<std::string>(
+                                "dimension", "dimensionless"),
+                            minimum
+                                ? std::optional<double>{*minimum}
+                                : std::nullopt,
+                            maximum
+                                ? std::optional<double>{*maximum}
+                                : std::nullopt,
+                            criterion.get("minimum_inclusive", true),
+                            criterion.get("maximum_inclusive", true),
+                        };
+                    });
+            return decoded;
+        });
+    return value;
+}
+
 Tree artifact_bundle(
     const service::SimulationArtifactBundle& value) {
     Tree tree;
@@ -396,6 +490,13 @@ Tree artifact_bundle(
             value.correlations,
             [](const auto& item) {
                 return correlation(item);
+            }));
+    tree.add_child(
+        "regime_maps",
+        array(
+            value.regime_maps,
+            [](const auto& item) {
+                return regime_map(item);
             }));
     tree.add_child(
         "references",
@@ -421,6 +522,12 @@ service::SimulationArtifactBundle decode_artifact_bundle(
             tree.get_child("correlations"),
             [](const Tree& item) {
                 return decode_correlation(item);
+            });
+    value.regime_maps =
+        decode_array<service::RegimeMapArtifactInput>(
+            tree.get_child("regime_maps"),
+            [](const Tree& item) {
+                return decode_regime_map(item);
             });
     value.references =
         decode_array<service::EngineeringArtifactReference>(

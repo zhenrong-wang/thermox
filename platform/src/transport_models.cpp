@@ -1,6 +1,8 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 
+#include "thermox/platform/two_phase_flow_groups.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -20,6 +22,7 @@ using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
 using component_model_support::require_correlation;
+using component_model_support::optional_regime_map;
 using component_model_support::parameter_or;
 using component_model_support::required_parameter;
 using component_model_support::property_failure;
@@ -1286,6 +1289,8 @@ public:
                  correlation_artifact_type, true},
                 {"friction_pressure_gradient_correlation",
                  correlation_artifact_type, true},
+                {"friction_regime_map",
+                 regime_map_artifact_type, false},
             };
         } else {
             descriptor_.parameters.push_back(
@@ -1390,6 +1395,8 @@ private:
             void_fraction_correlation;
         std::shared_ptr<const CorrelationArtifact>
             friction_pressure_gradient_correlation;
+        std::shared_ptr<const RegimeMapArtifact>
+            friction_regime_map;
     };
 
     static Data compile_data(
@@ -1511,6 +1518,71 @@ private:
                         "friction pressure-gradient correlation input '" +
                         input.name + "' must have dimension '" +
                         supported->second + "'");
+                }
+            }
+            data.friction_regime_map = optional_regime_map(
+                context, "friction_regime_map");
+            if (data.friction_regime_map) {
+                if (!data.properties->supports(
+                        physics::PropertyCapability::surface_tension)) {
+                    throw std::invalid_argument(
+                        "friction regime maps require a property backend "
+                        "with surface_tension capability");
+                }
+                const std::map<std::string, std::string>
+                    supported_regime_inputs{
+                        {"vapor_quality", "dimensionless"},
+                        {"liquid_density", "density"},
+                        {"vapor_density", "density"},
+                        {"liquid_viscosity", "dynamic_viscosity"},
+                        {"vapor_viscosity", "dynamic_viscosity"},
+                        {"mass_flux", "mass_flux"},
+                        {"liquid_mass_flux", "mass_flux"},
+                        {"vapor_mass_flux", "mass_flux"},
+                        {"liquid_superficial_velocity", "speed"},
+                        {"vapor_superficial_velocity", "speed"},
+                        {"liquid_reynolds_number", "dimensionless"},
+                        {"vapor_reynolds_number", "dimensionless"},
+                        {"liquid_froude_number", "dimensionless"},
+                        {"vapor_froude_number", "dimensionless"},
+                        {"liquid_weber_number", "dimensionless"},
+                        {"vapor_weber_number", "dimensionless"},
+                        {"bond_number", "dimensionless"},
+                        {"density_ratio_liquid_to_vapor",
+                         "dimensionless"},
+                        {"viscosity_ratio_liquid_to_vapor",
+                         "dimensionless"},
+                        {"diameter", "length"},
+                        {"surface_tension", "surface_tension"},
+                        {"pressure", "pressure"},
+                    };
+                for (const auto& input :
+                     data.friction_regime_map->inputs()) {
+                    const auto supported =
+                        supported_regime_inputs.find(input.name);
+                    if (supported == supported_regime_inputs.end() ||
+                        input.dimension != supported->second) {
+                        throw std::invalid_argument(
+                            "friction regime-map input has unsupported "
+                            "name or dimension: " + input.name);
+                    }
+                }
+                for (const auto& region :
+                     data.friction_regime_map->regions()) {
+                    const bool covered = std::any_of(
+                        data.friction_pressure_gradient_correlation
+                            ->candidates().begin(),
+                        data.friction_pressure_gradient_correlation
+                            ->candidates().end(),
+                        [&](const auto& candidate) {
+                            return candidate.regime == region.regime;
+                        });
+                    if (!covered) {
+                        throw std::invalid_argument(
+                            "friction regime map selects regime '" +
+                            region.regime +
+                            "' with no matching correlation candidate");
+                    }
                 }
             }
         } else {
@@ -1640,6 +1712,126 @@ private:
             double distributed_friction_loss = 0.0;
             if (data.friction_pressure_gradient_correlation &&
                 std::abs(mass_flow) > 1.0e-14) {
+                std::string selected_friction_regime;
+                if (data.friction_regime_map) {
+                    TwoPhaseFlowGroups groups;
+                    try {
+                        groups = calculate_two_phase_flow_groups({
+                            std::abs(mass_flow) / data.area,
+                            quality,
+                            rho_l,
+                            rho_v,
+                            saturation.liquid.viscosity_pa_s,
+                            saturation.vapor.viscosity_pa_s,
+                            data.diameter,
+                            saturation.surface_tension_n_m,
+                        });
+                    } catch (const std::exception& error) {
+                        return RestrictionEvaluation{
+                            EvaluationStatus::recoverable(error.what())};
+                    }
+                    std::map<std::string, double> map_inputs;
+                    for (const auto& input :
+                         data.friction_regime_map->inputs()) {
+                        if (input.name == "vapor_quality") {
+                            map_inputs.emplace(input.name, quality);
+                        } else if (input.name == "liquid_density") {
+                            map_inputs.emplace(input.name, rho_l);
+                        } else if (input.name == "vapor_density") {
+                            map_inputs.emplace(input.name, rho_v);
+                        } else if (input.name == "liquid_viscosity") {
+                            map_inputs.emplace(
+                                input.name,
+                                saturation.liquid.viscosity_pa_s);
+                        } else if (input.name == "vapor_viscosity") {
+                            map_inputs.emplace(
+                                input.name,
+                                saturation.vapor.viscosity_pa_s);
+                        } else if (input.name == "mass_flux") {
+                            map_inputs.emplace(
+                                input.name,
+                                std::abs(mass_flow) / data.area);
+                        } else if (input.name == "liquid_mass_flux") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.liquid_mass_flux_kg_m2_s);
+                        } else if (input.name == "vapor_mass_flux") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.vapor_mass_flux_kg_m2_s);
+                        } else if (input.name ==
+                                   "liquid_superficial_velocity") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.liquid_superficial_velocity_m_s);
+                        } else if (input.name ==
+                                   "vapor_superficial_velocity") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.vapor_superficial_velocity_m_s);
+                        } else if (input.name ==
+                                   "liquid_reynolds_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.liquid_reynolds_number);
+                        } else if (input.name ==
+                                   "vapor_reynolds_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.vapor_reynolds_number);
+                        } else if (input.name ==
+                                   "liquid_froude_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.liquid_froude_number);
+                        } else if (input.name ==
+                                   "vapor_froude_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.vapor_froude_number);
+                        } else if (input.name ==
+                                   "liquid_weber_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.liquid_weber_number);
+                        } else if (input.name ==
+                                   "vapor_weber_number") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.vapor_weber_number);
+                        } else if (input.name == "bond_number") {
+                            map_inputs.emplace(
+                                input.name, groups.bond_number);
+                        } else if (input.name ==
+                                   "density_ratio_liquid_to_vapor") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.density_ratio_liquid_to_vapor);
+                        } else if (input.name ==
+                                   "viscosity_ratio_liquid_to_vapor") {
+                            map_inputs.emplace(
+                                input.name,
+                                groups.viscosity_ratio_liquid_to_vapor);
+                        } else if (input.name == "diameter") {
+                            map_inputs.emplace(input.name, data.diameter);
+                        } else if (input.name == "surface_tension") {
+                            map_inputs.emplace(
+                                input.name,
+                                saturation.surface_tension_n_m);
+                        } else if (input.name == "pressure") {
+                            map_inputs.emplace(input.name, mean_pressure);
+                        }
+                    }
+                    const auto classified =
+                        data.friction_regime_map->classify(map_inputs);
+                    if (!classified.succeeded()) {
+                        return RestrictionEvaluation{
+                            EvaluationStatus::recoverable(
+                                classified.error)};
+                    }
+                    selected_friction_regime =
+                        classified.selected_regime;
+                }
                 std::map<std::string, double> inputs;
                 for (const auto& input :
                      data.friction_pressure_gradient_correlation->inputs()) {
@@ -1703,7 +1895,7 @@ private:
                 }
                 const auto evaluated =
                     data.friction_pressure_gradient_correlation->evaluate(
-                        inputs);
+                        inputs, selected_friction_regime);
                 if (!evaluated.error.empty()) {
                     return RestrictionEvaluation{
                         EvaluationStatus::recoverable(

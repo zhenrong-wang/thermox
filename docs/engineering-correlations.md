@@ -249,6 +249,13 @@ condensation, rough pipes, rod bundles, microchannels, or every fluid and orient
 require validation or a more appropriate registered artifact; Thermox does not infer that scope
 from numerical convergence.
 
+For flow-pattern-dependent friction families, the correlated two-phase pipe may additionally bind
+a `thermox.regime_map/v1` artifact as `friction_regime_map`. Candidate `regime` labels then form an
+explicit join contract: every map region must resolve to a correlation candidate at compile time.
+The map consumes live property and flow quantities, including the delivered superficial-velocity,
+Reynolds, Froude, Weber, Bond, and phase-ratio groups. See
+[Regime-map architecture](regime-map-architecture.md).
+
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v1`. Payload validation
 happens before immutable content persistence; selected revisions resolve into the calculation

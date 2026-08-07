@@ -2,6 +2,7 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/regime_map.hpp"
 #include "thermox/physics/property_registry.hpp"
 
 #include <algorithm>
@@ -733,6 +734,84 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
     require(initialized.diagnostics.converged,
             "correlated riser DAE initialization: " +
                 initialized.diagnostics.message);
+
+    auto regime_document = document;
+    regime_document.components.at(0).artifact_bindings
+        ["friction_pressure_gradient_correlation"] =
+            "regime-friction-gradient";
+    regime_document.components.at(0).artifact_bindings
+        ["friction_regime_map"] = "flow-pattern-map";
+    thermox::platform::EngineeringArtifactRegistry regime_artifacts;
+    regime_artifacts.register_artifact(
+        zuber_findlay_void_fraction_correlation());
+    regime_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "regime-friction-gradient",
+            thermox::platform::correlation_artifact_schema_v1,
+            "regime-test-1", std::string(64, '8'),
+            {{"mass_flux", "mass_flux"}},
+            {"friction_pressure_gradient", "pressure_gradient"},
+            {
+                {"stratified", "stratified", 0,
+                 {{"gradient", 10.0}},
+                 "gradient + 0 * mass_flux", {}},
+                {"annular", "annular", 0,
+                 {{"gradient", 20.0}},
+                 "gradient + 0 * mass_flux", {}},
+            }});
+    regime_artifacts.register_artifact(
+        thermox::platform::RegimeMapArtifact{
+            "flow-pattern-map",
+            thermox::platform::regime_map_artifact_schema_v1,
+            "regime-test-1", std::string(64, '9'),
+            {{"vapor_weber_number", "dimensionless"}},
+            {{"positive_weber", "annular", 0,
+              {{"vapor_weber_number", "dimensionless", 0.0,
+                std::nullopt, false, true}}}}});
+    const auto regime_graph =
+        thermox::platform::compile_model_graph(
+            regime_document, registry, properties,
+            regime_artifacts, "steady");
+    const auto regime_solved =
+        thermox::solve_newton(regime_graph.problem);
+    require(
+        regime_solved.diagnostics.converged,
+        "bound flow-regime map must select one matching friction "
+        "candidate: " + regime_solved.diagnostics.message);
+
+    // Use a fresh registry to verify compile-time regime coverage.
+    thermox::platform::EngineeringArtifactRegistry missing_artifacts;
+    missing_artifacts.register_artifact(
+        zuber_findlay_void_fraction_correlation());
+    missing_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "regime-friction-gradient",
+            thermox::platform::correlation_artifact_schema_v1,
+            "regime-test-1", std::string(64, '8'),
+            {{"mass_flux", "mass_flux"}},
+            {"friction_pressure_gradient", "pressure_gradient"},
+            {{"annular", "annular", 0, {{"gradient", 20.0}},
+              "gradient + 0 * mass_flux", {}}}});
+    missing_artifacts.register_artifact(
+        thermox::platform::RegimeMapArtifact{
+            "flow-pattern-map",
+            thermox::platform::regime_map_artifact_schema_v1,
+            "regime-test-2", std::string(64, 'a'),
+            {{"vapor_weber_number", "dimensionless"}},
+            {{"uncovered", "slug", 0,
+              {{"vapor_weber_number", "dimensionless", 0.0,
+                std::nullopt, false, true}}}}});
+    bool uncovered_rejected = false;
+    try {
+        (void)thermox::platform::compile_model_graph(
+            regime_document, registry, properties,
+            missing_artifacts, "steady");
+    } catch (const std::invalid_argument&) {
+        uncovered_rejected = true;
+    }
+    require(
+        uncovered_rejected,
+        "every selected regime must have a matching friction closure");
 
     auto nonphysical_document = document;
     nonphysical_document.components.at(0)

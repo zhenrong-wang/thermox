@@ -8,6 +8,7 @@
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
+#include "thermox/platform/regime_map.hpp"
 
 #include <openssl/evp.h>
 
@@ -1019,6 +1020,8 @@ ProjectService::create_artifact_revision(
         request.artifact_type !=
             platform::correlation_artifact_type &&
         request.artifact_type !=
+            platform::regime_map_artifact_type &&
+        request.artifact_type !=
             platform::expression_component_artifact_type &&
         request.artifact_type !=
             assembly_template_artifact_type) {
@@ -1045,6 +1048,11 @@ ProjectService::create_artifact_revision(
         } else if (request.artifact_type ==
                    platform::correlation_artifact_type) {
             canonical = detail::canonicalize_correlation_payload(
+                request.artifact_schema_version,
+                request.artifact_json);
+        } else if (request.artifact_type ==
+                   platform::regime_map_artifact_type) {
+            canonical = detail::canonicalize_regime_map_payload(
                 request.artifact_schema_version,
                 request.artifact_json);
         } else if (request.artifact_type ==
@@ -1263,6 +1271,16 @@ ProjectService::resolve_artifact_revisions(
             platform::correlation_artifact_type) {
             result.snapshot.correlations.push_back(
                 detail::correlation_from_payload(
+                    revision->artifact_id,
+                    revision->artifact_schema_version,
+                    revision->artifact_revision_id,
+                    revision->content.checksum.substr(7),
+                    *payload));
+        } else if (
+            revision->artifact_type ==
+            platform::regime_map_artifact_type) {
+            result.snapshot.regime_maps.push_back(
+                detail::regime_map_from_payload(
                     revision->artifact_id,
                     revision->artifact_schema_version,
                     revision->artifact_revision_id,

@@ -574,7 +574,8 @@ CorrelationArtifact::assess_applicability(
 }
 
 CorrelationEvaluation CorrelationArtifact::evaluate(
-    const std::map<std::string, double>& inputs) const {
+    const std::map<std::string, double>& inputs,
+    std::string_view required_regime) const {
     for (const auto& input : inputs_) {
         const auto found = inputs.find(input.name);
         if (found == inputs.end() || !std::isfinite(found->second)) {
@@ -591,6 +592,10 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     int best_priority = std::numeric_limits<int>::min();
     std::vector<std::string> exclusions;
     for (std::size_t index = 0; index < candidates_.size(); ++index) {
+        if (!required_regime.empty() &&
+            candidates_[index].regime != required_regime) {
+            continue;
+        }
         const auto assessment = assess_ranges(
             candidates_[index].applicability, inputs);
         if (!assessment.applicable) {
@@ -612,7 +617,10 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
         }
     }
     if (applicable.empty()) {
-        std::string error = "no correlation candidate is applicable";
+        std::string error = required_regime.empty()
+            ? "no correlation candidate is applicable"
+            : "no correlation candidate is applicable for required "
+              "regime '" + std::string(required_regime) + "'";
         for (const auto& exclusion : exclusions) {
             error += "; " + exclusion;
         }

@@ -294,7 +294,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v10` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v11` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -567,8 +567,10 @@ Work items:
    - CoolProp-backed saturation surface tension as an explicit capability, authoritative N/m and
      mN/m units, and reusable phase flux, superficial velocity, Reynolds, Froude, Weber, Bond, and
      property-ratio evaluation; ✅
-   - request/persistence serialization, optional component binding, and cited geometry-specific
-     maps remain follow-ons.
+   - canonical request and Team/project persistence payloads, immutable job snapshots and
+     fingerprints, thin HTTP publication, plus optional correlated-pipe friction-map binding with
+     compile-time closure coverage and live regime selection; ✅
+   - cited geometry-specific maps remain follow-ons.
 10. Map validation and interpolation quality controls.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.

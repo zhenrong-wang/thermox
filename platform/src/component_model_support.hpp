@@ -2,6 +2,7 @@
 
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/regime_map.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -141,6 +142,28 @@ require_correlation(
             context.component.id + "." + role);
     }
     return correlation;
+}
+
+inline std::shared_ptr<const RegimeMapArtifact>
+optional_regime_map(
+    const ComponentCompileContext& context,
+    const std::string& role) {
+    const auto it = context.artifacts.find(role);
+    if (it == context.artifacts.end()) return nullptr;
+    if (!it->second ||
+        it->second->artifact_type() != regime_map_artifact_type) {
+        throw std::logic_error(
+            "compiled artifact has wrong type for regime-map role: " +
+            context.component.id + "." + role);
+    }
+    const auto map = std::dynamic_pointer_cast<
+        const RegimeMapArtifact>(it->second);
+    if (!map) {
+        throw std::logic_error(
+            "compiled regime-map artifact has incompatible payload: " +
+            context.component.id + "." + role);
+    }
+    return map;
 }
 
 inline EvaluationStatus property_failure(

@@ -35,10 +35,19 @@ A regime map answers “which declared physical region contains this state?” A
 same classified regime to select pressure-drop, void-fraction, and heat-transfer closures without
 using magic numeric regime codes.
 
-The first milestone provides the platform artifact and deterministic classifier. The next
-integration step is to add request/persistence payloads and optional component artifact roles, then
-pass the selected regime to compatible correlation families. That integration must preserve an
-explicit error when the map selects a regime for which no closure candidate exists.
+The service contract carries regime maps in `SimulationArtifactBundle`. Team/project artifact
+publication accepts `artifact_type=thermox.regime_map` and
+`artifact_schema_version=thermox.regime_map/v1`, canonicalizes and validates the payload before
+content-addressed persistence, and resolves an exact revision into job snapshots. Regions and
+criteria participate in job idempotency fingerprints and PostgreSQL job encoding.
+
+The generic `pipe.fluid.correlated_two_phase_pressure_drop` model exposes the optional
+`friction_regime_map` artifact role. When bound, compilation verifies the property backend's
+surface-tension capability, validates every requested live input, and requires every map regime to
+have a same-named friction-correlation candidate. Runtime derives the groups from the current
+two-phase state, classifies the regime, and evaluates only that candidate. A map gap, ambiguous
+region, missing closure, or invalid derived quantity is an explicit error. Without this optional
+binding, existing correlation-family selection remains independent.
 
 ## Physical data requirements
 
@@ -52,4 +61,5 @@ phase Reynolds/Froude/Weber numbers, Bond number, and phase-property ratios from
 input contract. Published maps remain responsible for declaring any map-specific transformed
 coordinates and validity ranges.
 
-The synthetic regions in unit tests verify selection semantics only and make no physical claim.
+The synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
+physical claim.

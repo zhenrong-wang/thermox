@@ -12,6 +12,7 @@
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/results.hpp"
+#include "thermox/platform/regime_map.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/transient_solver.hpp"
 
@@ -332,6 +333,32 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             {input.output.name, input.output.dimension},
             std::move(candidates)});
     }
+    for (const auto& input : inputs.regime_maps) {
+        std::vector<platform::RegimeMapVariable> variables;
+        for (const auto& variable : input.inputs) {
+            variables.push_back({variable.name, variable.dimension});
+        }
+        std::vector<platform::RegimeMapRegion> regions;
+        for (const auto& region : input.regions) {
+            std::vector<platform::RegimeMapCriterion> criteria;
+            for (const auto& criterion : region.criteria) {
+                criteria.push_back({
+                    criterion.expression, criterion.dimension,
+                    criterion.minimum, criterion.maximum,
+                    criterion.minimum_inclusive,
+                    criterion.maximum_inclusive,
+                });
+            }
+            regions.push_back({
+                region.id, region.regime, region.priority,
+                std::move(criteria),
+            });
+        }
+        artifacts.register_artifact(platform::RegimeMapArtifact{
+            input.id, input.schema_version, input.revision,
+            input.checksum_sha256, std::move(variables),
+            std::move(regions)});
+    }
     return artifacts;
 }
 
@@ -341,6 +368,7 @@ std::vector<ArtifactProvenance> artifact_provenance(
     provenance.reserve(
         inputs.performance_maps.size() +
         inputs.correlations.size() +
+        inputs.regime_maps.size() +
         inputs.references.size());
     for (const auto& artifact : inputs.performance_maps) {
         provenance.push_back({
@@ -355,6 +383,15 @@ std::vector<ArtifactProvenance> artifact_provenance(
         provenance.push_back({
             artifact.id,
             platform::correlation_artifact_type,
+            artifact.schema_version,
+            artifact.revision,
+            artifact.checksum_sha256,
+        });
+    }
+    for (const auto& artifact : inputs.regime_maps) {
+        provenance.push_back({
+            artifact.id,
+            platform::regime_map_artifact_type,
             artifact.schema_version,
             artifact.revision,
             artifact.checksum_sha256,
@@ -378,6 +415,7 @@ SimulationArtifactBundle resolve_artifacts(
     SimulationArtifactBundle resolved;
     resolved.performance_maps = inputs.performance_maps;
     resolved.correlations = inputs.correlations;
+    resolved.regime_maps = inputs.regime_maps;
     for (const auto& reference : inputs.references) {
         if (reference.id.empty() ||
             reference.artifact_type.empty() ||

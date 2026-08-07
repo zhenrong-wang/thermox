@@ -469,6 +469,98 @@ std::string correlation_family_payload() {
 })json";
 }
 
+std::string regime_map_payload() {
+    return R"json({
+  "inputs": [
+    {"name": "vapor_weber_number", "dimension": "dimensionless"},
+    {"name": "bond_number", "dimension": "dimensionless"}
+  ],
+  "regions": [
+    {
+      "id": "low_weber",
+      "regime": "stratified",
+      "priority": 10,
+      "criteria": [
+        {
+          "expression": "vapor_weber_number",
+          "dimension": "dimensionless",
+          "maximum": 20.0,
+          "maximum_inclusive": true
+        },
+        {
+          "expression": "bond_number",
+          "dimension": "dimensionless",
+          "minimum": 0.0,
+          "minimum_inclusive": false
+        }
+      ]
+    },
+    {
+      "id": "high_weber",
+      "regime": "annular",
+      "priority": 10,
+      "criteria": [{
+        "expression": "vapor_weber_number",
+        "dimension": "dimensionless",
+        "minimum": 20.0,
+        "minimum_inclusive": false
+      }]
+    }
+  ]
+})json";
+}
+
+void test_regime_map_artifact_is_executable_input() {
+    thermox::service::ProjectService projects{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project = projects.create_project({
+        team_a, "Regime map artifact", {},
+    });
+    const auto revision = projects.create_artifact_revision({
+        team_a, project.project_id, "two-phase-flow-pattern", {},
+        "thermox.regime_map", "thermox.regime_map/v1",
+        regime_map_payload(),
+    });
+    const auto resolved = projects.resolve_artifact_revisions(
+        team_a, project.project_id,
+        {revision.artifact_revision_id});
+    require(
+        resolved && resolved->snapshot.regime_maps.size() == 1U &&
+            resolved->snapshot.regime_maps.front().id ==
+                "two-phase-flow-pattern" &&
+            resolved->snapshot.regime_maps.front().regions.size() ==
+                2U &&
+            resolved->snapshot.regime_maps.front().regions.back()
+                    .regime == "annular" &&
+            resolved->snapshot.regime_maps.front().regions.front()
+                    .criteria.front().maximum == 20.0,
+        "regime-map revisions must resolve into immutable executable "
+        "artifact snapshots");
+
+    bool rejected = false;
+    try {
+        (void)projects.create_artifact_revision({
+            team_a, project.project_id, "unsafe-regime-map", {},
+            "thermox.regime_map", "thermox.regime_map/v1",
+            R"json({
+              "inputs": [{"name": "x", "dimension": "dimensionless"}],
+              "regions": [{
+                "id": "bad", "regime": "bad", "priority": 0,
+                "criteria": [{
+                  "expression": "system(x)", "maximum": 1.0
+                }]
+              }]
+            })json",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "unsafe regime-map expressions must be rejected before "
+        "persistence");
+}
+
 void test_correlation_artifact_is_executable_input() {
     thermox::service::ProjectService projects{
         thermox::service::make_in_memory_project_repository()};
@@ -1889,6 +1981,7 @@ int main() {
         test_expression_component_artifact_is_executable();
         test_assembly_templates_are_versioned_topology_artifacts();
         test_correlation_artifact_is_executable_input();
+        test_regime_map_artifact_is_executable_input();
         test_artifact_revisions_are_snapshotted_and_scoped();
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();

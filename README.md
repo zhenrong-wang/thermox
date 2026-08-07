@@ -159,7 +159,7 @@ Implemented in this sprint:
   layered calculation readiness with entity-scoped diagnostics and an authoritative queue gate;
   compile-aware validation; exact version-pin enforcement; and canonical
   `thermox.result/v3` JSON with complete execution provenance and graph-native steady/transient
-  values. Its `thermox.job/v10` workflow adds Team-scoped idempotent execution, leased worker claims,
+  values. Its `thermox.job/v11` workflow adds Team-scoped idempotent execution, leased worker claims,
   optimistic job revisions, terminal states, checksummed external result artifacts, stable job
   status JSON, and service-owned result retrieval for thin RPC adapters.
 - Study-owned, dimensioned engineering acceptance criteria bind canonical-SI bounds to declared
@@ -555,7 +555,7 @@ definitions through `thermox.expression_component/v2` for steady algebraic model
 `thermox.expression_component/v3` for safe index-1 transient residuals with declared internal
 states and analytic sparse DAE derivatives. Expressions use registered connector
 variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
-arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v10`. Project-owned
+arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v11`. Project-owned
 definitions are discovered from the project component catalog and appear directly in the canvas
 library with automatic source-revision binding. The library also authors and revises safe
 definitions as immutable project artifacts; component identity/version rules are enforced by the
@@ -564,9 +564,9 @@ service rather than the browser. See
 
 ## Next steps
 
-1. Connect the delivered regime-map artifact through service persistence and optional component
-   bindings, then package cited geometry-specific flow maps and closures using the delivered
-   surface-tension capability and derived nondimensional inputs.
+1. Package cited geometry-specific flow maps and matching closures using the delivered immutable
+   regime-map persistence, optional component binding, surface-tension capability, and derived
+   nondimensional inputs.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
 3. Add native analytic PH derivatives for IF97; ideal gas, HEOS CO2, and single-phase HEOS water

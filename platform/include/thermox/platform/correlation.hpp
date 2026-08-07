@@ -7,6 +7,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace thermox::platform {
@@ -126,7 +127,8 @@ public:
     [[nodiscard]] CorrelationApplicabilityAssessment assess_applicability(
         const std::map<std::string, double>& inputs) const;
     [[nodiscard]] CorrelationEvaluation evaluate(
-        const std::map<std::string, double>& inputs) const;
+        const std::map<std::string, double>& inputs,
+        std::string_view required_regime = {}) const;
 
 private:
     std::vector<CorrelationVariable> inputs_;

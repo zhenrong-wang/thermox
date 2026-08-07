@@ -8,6 +8,7 @@
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/performance_map.hpp"
+#include "thermox/platform/regime_map.hpp"
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -470,6 +471,139 @@ platform::CorrelationArtifact correlation(
     };
 }
 
+RegimeMapArtifactInput decode_regime_map(
+    const std::string& artifact_id,
+    const std::string& schema_version,
+    const std::string& revision,
+    const std::string& checksum,
+    const Tree& tree) {
+    if (schema_version != platform::regime_map_artifact_schema_v1) {
+        throw std::invalid_argument(
+            "unsupported regime-map schema: " + schema_version);
+    }
+    RegimeMapArtifactInput artifact;
+    artifact.id = artifact_id;
+    artifact.schema_version = schema_version;
+    artifact.revision = revision;
+    artifact.checksum_sha256 = checksum;
+    artifact.inputs = decode_array<RegimeMapVariableInput>(
+        tree.get_child("inputs"),
+        [](const Tree& encoded) {
+            return RegimeMapVariableInput{
+                encoded.get<std::string>("name"),
+                encoded.get<std::string>("dimension"),
+            };
+        });
+    artifact.regions = decode_array<RegimeMapRegionInput>(
+        tree.get_child("regions"),
+        [](const Tree& encoded) {
+            RegimeMapRegionInput region;
+            region.id = encoded.get<std::string>("id");
+            region.regime = encoded.get<std::string>("regime");
+            region.priority = encoded.get("priority", 0);
+            region.criteria = decode_array<RegimeMapCriterionInput>(
+                encoded.get_child("criteria"),
+                [](const Tree& criterion) {
+                    const auto minimum =
+                        criterion.get_optional<double>("minimum");
+                    const auto maximum =
+                        criterion.get_optional<double>("maximum");
+                    return RegimeMapCriterionInput{
+                        criterion.get<std::string>("expression"),
+                        criterion.get<std::string>(
+                            "dimension", "dimensionless"),
+                        minimum
+                            ? std::optional<double>{*minimum}
+                            : std::nullopt,
+                        maximum
+                            ? std::optional<double>{*maximum}
+                            : std::nullopt,
+                        criterion.get("minimum_inclusive", true),
+                        criterion.get("maximum_inclusive", true),
+                    };
+                });
+            return region;
+        });
+    return artifact;
+}
+
+Tree encode_regime_map(const RegimeMapArtifactInput& artifact) {
+    Tree tree;
+    tree.add_child(
+        "inputs",
+        array(
+            artifact.inputs,
+            [](const RegimeMapVariableInput& input) {
+                Tree encoded;
+                encoded.put("name", input.name);
+                encoded.put("dimension", input.dimension);
+                return encoded;
+            }));
+    tree.add_child(
+        "regions",
+        array(
+            artifact.regions,
+            [](const RegimeMapRegionInput& region) {
+                Tree encoded;
+                encoded.put("id", region.id);
+                encoded.put("regime", region.regime);
+                encoded.put("priority", region.priority);
+                encoded.add_child(
+                    "criteria",
+                    array(
+                        region.criteria,
+                        [](const RegimeMapCriterionInput& criterion) {
+                            Tree value;
+                            value.put("expression", criterion.expression);
+                            value.put("dimension", criterion.dimension);
+                            if (criterion.minimum) {
+                                value.put("minimum", *criterion.minimum);
+                            }
+                            if (criterion.maximum) {
+                                value.put("maximum", *criterion.maximum);
+                            }
+                            value.put(
+                                "minimum_inclusive",
+                                criterion.minimum_inclusive);
+                            value.put(
+                                "maximum_inclusive",
+                                criterion.maximum_inclusive);
+                            return value;
+                        }));
+                return encoded;
+            }));
+    return tree;
+}
+
+platform::RegimeMapArtifact regime_map(
+    const RegimeMapArtifactInput& input) {
+    std::vector<platform::RegimeMapVariable> variables;
+    for (const auto& variable : input.inputs) {
+        variables.push_back({variable.name, variable.dimension});
+    }
+    std::vector<platform::RegimeMapRegion> regions;
+    for (const auto& region : input.regions) {
+        std::vector<platform::RegimeMapCriterion> criteria;
+        for (const auto& criterion : region.criteria) {
+            criteria.push_back({
+                criterion.expression, criterion.dimension,
+                criterion.minimum, criterion.maximum,
+                criterion.minimum_inclusive,
+                criterion.maximum_inclusive,
+            });
+        }
+        regions.push_back({
+            region.id, region.regime, region.priority,
+            std::move(criteria),
+        });
+    }
+    return {
+        input.id, input.schema_version, input.revision,
+        input.checksum_sha256, std::move(variables),
+        std::move(regions),
+    };
+}
+
 ExpressionComponentInput decode_expression_component(
     const std::string& schema_version,
     const Tree& tree) {
@@ -851,6 +985,27 @@ std::string correlation_payload_json(
     const CorrelationArtifactInput& artifact) {
     correlation(artifact).validate();
     return write(encode_correlation(artifact));
+}
+
+std::string canonicalize_regime_map_payload(
+    const std::string& schema_version,
+    const std::string& payload_json) {
+    const auto artifact = decode_regime_map(
+        "validation", schema_version, "validation",
+        std::string(64, '0'), read(payload_json));
+    regime_map(artifact).validate();
+    return write(encode_regime_map(artifact));
+}
+
+RegimeMapArtifactInput regime_map_from_payload(
+    const std::string& artifact_id,
+    const std::string& schema_version,
+    const std::string& revision,
+    const std::string& checksum,
+    const std::string& payload_json) {
+    return decode_regime_map(
+        artifact_id, schema_version, revision, checksum,
+        read(payload_json));
 }
 
 std::string canonicalize_expression_component_payload(

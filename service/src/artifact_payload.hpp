@@ -31,6 +31,17 @@ CorrelationArtifactInput correlation_from_payload(
 std::string correlation_payload_json(
     const CorrelationArtifactInput& artifact);
 
+std::string canonicalize_regime_map_payload(
+    const std::string& schema_version,
+    const std::string& payload_json);
+
+RegimeMapArtifactInput regime_map_from_payload(
+    const std::string& artifact_id,
+    const std::string& schema_version,
+    const std::string& revision,
+    const std::string& checksum,
+    const std::string& payload_json);
+
 std::string canonicalize_expression_component_payload(
     const std::string& schema_version,
     const std::string& payload_json);

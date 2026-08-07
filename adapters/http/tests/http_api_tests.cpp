@@ -410,6 +410,38 @@ void test_tenant_scoped_asynchronous_jobs() {
         hidden_artifact_detail.status == 404,
         "artifact payload reads must not expose cross-Team "
         "revisions");
+    auto regime_map_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions"
+            "?artifact_id=http-flow-pattern-map"
+            "&artifact_type=thermox.regime_map"
+            "&artifact_schema_version=thermox.regime_map%2Fv1",
+        R"json({
+          "inputs": [{
+            "name": "vapor_weber_number",
+            "dimension": "dimensionless"
+          }],
+          "regions": [{
+            "id": "annular",
+            "regime": "annular",
+            "priority": 10,
+            "criteria": [{
+              "expression": "vapor_weber_number",
+              "dimension": "dimensionless",
+              "minimum": 20.0,
+              "minimum_inclusive": false
+            }]
+          }]
+        })json");
+    const auto uploaded_regime_map = api.handle(
+        authenticated(std::move(regime_map_upload)));
+    require(
+        uploaded_regime_map.status == 201 &&
+            uploaded_regime_map.body.find("thermox.regime_map") !=
+                std::string::npos &&
+            uploaded_regime_map.body.find("sha256:") !=
+                std::string::npos,
+        "HTTP artifact workflow must publish canonical regime maps");
     auto component_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/artifact-revisions"

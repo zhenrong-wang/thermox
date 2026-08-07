@@ -399,7 +399,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v10'
+  schema_version: 'thermox.job/v11'
   job_id: string
   owner: {
     team_id: string
@@ -409,7 +409,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v10'
+    schema_version: 'thermox.job/v11'
     mode: 'steady' | 'transient' | 'calibration'
     case_id: string
     calibration_id: string

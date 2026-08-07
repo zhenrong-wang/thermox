@@ -476,7 +476,7 @@ void test_catalog_discovery() {
         correlated_pipe != response.components.end() &&
             correlated_pipe->supports_steady &&
             correlated_pipe->supports_transient &&
-            correlated_pipe->artifacts.size() == 2 &&
+            correlated_pipe->artifacts.size() == 3 &&
             std::any_of(
                 correlated_pipe->artifacts.begin(),
                 correlated_pipe->artifacts.end(),
@@ -484,9 +484,18 @@ void test_catalog_discovery() {
                     return artifact.role ==
                         "friction_pressure_gradient_correlation" &&
                         artifact.required;
+                }) &&
+            std::any_of(
+                correlated_pipe->artifacts.begin(),
+                correlated_pipe->artifacts.end(),
+                [](const auto& artifact) {
+                    return artifact.role == "friction_regime_map" &&
+                        artifact.artifact_type ==
+                            "thermox.regime_map" &&
+                        !artifact.required;
                 }),
         "catalog must expose independent required two-phase void and "
-        "friction correlation roles");
+        "friction correlation roles plus optional regime selection");
     const auto correlated_inventory = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
