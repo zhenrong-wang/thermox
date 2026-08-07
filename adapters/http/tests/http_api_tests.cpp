@@ -80,7 +80,7 @@ void test_catalog_and_validation() {
         api.handle({"GET", "/api/v1/catalog", {}, {}});
     require(catalog.status == 200, "catalog endpoint must succeed");
     require(
-        catalog.body.find("thermox.catalog/v9") != std::string::npos,
+        catalog.body.find("thermox.catalog/v10") != std::string::npos,
         "catalog endpoint must preserve the service schema");
     const auto parsed_catalog = boost::json::parse(catalog.body);
     require(
@@ -132,29 +132,8 @@ void test_correlation_template_instantiation() {
           "schema_version": "thermox.command/v1",
           "artifact_id": "http-chisholm-family",
           "revision": "1",
-          "bindings": [
-            {
-              "template_id":
-                "chisholm_laminar_laminar_friction_gradient",
-              "candidate_id": "ll",
-              "fallback_for_unmapped_flow_regime": true
-            },
-            {
-              "template_id":
-                "chisholm_laminar_turbulent_friction_gradient",
-              "candidate_id": "lt"
-            },
-            {
-              "template_id":
-                "chisholm_turbulent_laminar_friction_gradient",
-              "candidate_id": "tl"
-            },
-            {
-              "template_id":
-                "chisholm_turbulent_turbulent_friction_gradient",
-              "candidate_id": "tt"
-            }
-          ]
+          "family_template_id":
+            "chisholm_smooth_pipe_friction_family"
         })json"));
     require(
         response.status == 200,
@@ -191,7 +170,7 @@ void test_correlation_template_instantiation() {
           "schema_version": "thermox.command/v1",
           "artifact_id": "invalid",
           "revision": "1",
-          "bindings": [{"template_id": "unknown"}]
+          "family_template_id": "unknown"
         })json"));
     require(
         invalid.status == 400 &&

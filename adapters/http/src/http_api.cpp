@@ -661,6 +661,7 @@ parse_correlation_instantiation_request(const Request& request) {
         if (field.key() != "schema_version" &&
             field.key() != "artifact_id" &&
             field.key() != "revision" &&
+            field.key() != "family_template_id" &&
             field.key() != "bindings") {
             throw std::invalid_argument(
                 "unknown correlation instantiation field: " +
@@ -673,12 +674,21 @@ parse_correlation_instantiation_request(const Request& request) {
     command.artifact_id =
         require_json_string(root, "artifact_id");
     command.revision = require_json_string(root, "revision");
-    const auto& bindings = require_json_field(root, "bindings");
-    if (!bindings.is_array()) {
+    if (const auto* family = root.if_contains("family_template_id")) {
+        if (!family->is_string()) {
+            throw std::invalid_argument(
+                "correlation family_template_id must be a string");
+        }
+        command.family_template_id =
+            std::string(family->as_string());
+    }
+    const auto* bindings = root.if_contains("bindings");
+    if (bindings == nullptr) return command;
+    if (!bindings->is_array()) {
         throw std::invalid_argument(
             "correlation template bindings must be an array");
     }
-    for (const auto& item : bindings.as_array()) {
+    for (const auto& item : bindings->as_array()) {
         if (!item.is_object()) {
             throw std::invalid_argument(
                 "each correlation template binding must be an object");

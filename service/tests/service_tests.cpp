@@ -407,7 +407,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v9,
+            thermox::service::catalog_schema_v10,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -906,6 +906,23 @@ void test_catalog_discovery() {
                 "10.1016/0017-9310(67)90047-6") !=
                 std::string::npos,
         "catalog must expose all referenced Chisholm regime templates");
+    const auto chisholm_family = std::find_if(
+        response.correlation_family_templates.begin(),
+        response.correlation_family_templates.end(),
+        [](const auto& descriptor) {
+            return descriptor.id ==
+                "chisholm_smooth_pipe_friction_family";
+        });
+    require(
+        chisholm_family !=
+                response.correlation_family_templates.end() &&
+            chisholm_family->bindings.size() == 4U &&
+            chisholm_family->bindings.front()
+                .fallback_for_unmapped_flow_regime &&
+            chisholm_family->scope.find("does not claim") !=
+                std::string::npos,
+        "catalog must expose the packaged general Chisholm family and "
+        "its physical scope");
     const auto mishima_ishii = std::find_if(
         response.regime_map_templates.begin(),
         response.regime_map_templates.end(),
@@ -953,7 +970,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v9\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v10\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -965,6 +982,12 @@ void test_catalog_discovery() {
                 std::string::npos &&
             json.find("10.1115/1.3689137") != std::string::npos,
         "catalog JSON must serialize correlation templates and provenance");
+    require(
+        json.find("\"correlation_family_templates\": [") !=
+                std::string::npos &&
+            json.find("chisholm_smooth_pipe_friction_family") !=
+                std::string::npos,
+        "catalog JSON must serialize reusable correlation families");
     require(
         json.find("\"regime_map_templates\": [") !=
                 std::string::npos &&
@@ -1025,6 +1048,31 @@ void test_correlation_template_instantiation() {
             repeated.canonical_payload_json ==
                 response.canonical_payload_json,
         "correlation instantiation must be deterministic");
+
+    thermox::service::InstantiateCorrelationRequest packaged;
+    packaged.artifact_id = "packaged-smooth-pipe-friction";
+    packaged.revision = "engineering-baseline-1";
+    packaged.family_template_id =
+        "chisholm_smooth_pipe_friction_family";
+    const auto packaged_response =
+        service.instantiate_correlation(packaged);
+    require(
+        packaged_response.succeeded() &&
+            packaged_response.artifact.candidates.size() == 4U &&
+            packaged_response.artifact.candidates.back()
+                .fallback_for_unmapped_flow_regime,
+        "service must instantiate a complete registered family by ID");
+
+    auto conflicting = request;
+    conflicting.family_template_id =
+        "chisholm_smooth_pipe_friction_family";
+    const auto conflicting_response =
+        service.instantiate_correlation(conflicting);
+    require(
+        !conflicting_response.succeeded() &&
+            conflicting_response.error.code ==
+                "invalid_correlation_bindings",
+        "service must reject ambiguous family-ID plus explicit bindings");
 
     auto incompatible = request;
     incompatible.bindings.push_back({

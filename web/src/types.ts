@@ -1003,8 +1003,25 @@ export interface CatalogCorrelationTemplate {
   }>
 }
 
+export interface CatalogCorrelationFamilyTemplate {
+  id: string
+  version: string
+  display_name: string
+  category: string
+  reference: string
+  scope: string
+  bindings: Array<{
+    template_id: string
+    coefficients: Record<string, number>
+    candidate_id: string
+    priority: number
+    flow_regimes: string[]
+    fallback_for_unmapped_flow_regime: boolean
+  }>
+}
+
 export interface Catalog {
-  schema_version: 'thermox.catalog/v9'
+  schema_version: 'thermox.catalog/v10'
   status: string
   fingerprint: string
   components: CatalogComponent[]
@@ -1013,6 +1030,7 @@ export interface Catalog {
   thermochemistry_backends: ThermochemistryBackend[]
   connector_domains: ConnectorDomain[]
   correlation_templates: CatalogCorrelationTemplate[]
+  correlation_family_templates: CatalogCorrelationFamilyTemplate[]
   regime_map_templates: CatalogRegimeMapTemplate[]
 }
 

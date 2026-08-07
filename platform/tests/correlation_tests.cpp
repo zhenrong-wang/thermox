@@ -84,25 +84,32 @@ thermox::platform::CorrelationArtifact
 two_phase_friction_pressure_gradient_correlation() {
     const auto templates = thermox::platform::
         make_default_correlation_template_registry();
-    return thermox::platform::instantiate_correlation_family(
+    return thermox::platform::instantiate_correlation_family_template(
         templates,
+        templates.require_family_template(
+            "chisholm_smooth_pipe_friction_family"),
         {"two-phase-friction-gradient", "test-1",
-         std::string(64, '8')},
-        {
-            {"chisholm_laminar_laminar_friction_gradient",
-             {}, "laminar_laminar", 0, {}, true},
-            {"chisholm_laminar_turbulent_friction_gradient",
-             {}, "laminar_turbulent", 0, {}, true},
-            {"chisholm_turbulent_laminar_friction_gradient",
-             {}, "turbulent_laminar", 0, {}, true},
-            {"chisholm_turbulent_turbulent_friction_gradient",
-             {}, "turbulent_turbulent", 0, {}, true},
-        });
+         std::string(64, '8')});
 }
 
 void test_packaged_zuber_findlay_template_has_physical_limits() {
     const auto templates = thermox::platform::
         make_default_correlation_template_registry();
+    const auto& packaged_family = templates.require_family_template(
+        "chisholm_smooth_pipe_friction_family");
+    require(
+        packaged_family.bindings.size() == 4U &&
+            std::all_of(
+                packaged_family.bindings.begin(),
+                packaged_family.bindings.end(),
+                [](const auto& binding) {
+                    return binding.flow_regimes.empty() &&
+                        binding.fallback_for_unmapped_flow_regime;
+                }) &&
+            packaged_family.scope.find("does not claim") !=
+                std::string::npos,
+        "packaged Chisholm family must explicitly declare general "
+        "flow-pattern fallback scope");
     const auto& descriptor = templates.require_template(
         "zuber_findlay_kinematic_void_fraction");
     require(
@@ -708,6 +715,37 @@ void test_two_phase_pipe_uses_bound_void_fraction_correlation() {
                   "correlated riser conserves mass");
     require_close(variable("riser.outlet.h"), 1.5e6, 1.0e-8,
                   "correlated riser transports enthalpy");
+
+    auto mapped_document = document;
+    mapped_document.components.at(0).artifact_bindings
+        ["friction_regime_map"] = "mishima-ishii-composite";
+    const auto regime_templates = thermox::platform::
+        make_default_regime_map_template_registry();
+    artifacts.register_artifact(
+        thermox::platform::instantiate_regime_map_template(
+            regime_templates.require_template(
+                "mishima_ishii_vertical_upflow_composite"),
+            {"mishima-ishii-composite", "test-1",
+             std::string(64, '6')}));
+    const auto mapped_graph = thermox::platform::compile_model_graph(
+        mapped_document, registry, properties, artifacts, "steady");
+    const auto mapped_solved = thermox::solve_newton(mapped_graph.problem);
+    require(
+        mapped_solved.diagnostics.converged,
+        "cited composite regime map must route the packaged general "
+        "friction fallback in a connected pipe: " +
+            mapped_solved.diagnostics.message);
+    const auto mapped_outlet = std::find(
+        mapped_graph.problem.variable_names.begin(),
+        mapped_graph.problem.variable_names.end(), "riser.outlet.p");
+    require(mapped_outlet != mapped_graph.problem.variable_names.end(),
+            "mapped correlated riser outlet pressure must exist");
+    require_close(
+        mapped_solved.x.at(static_cast<std::size_t>(
+            mapped_outlet - mapped_graph.problem.variable_names.begin())),
+        outlet_pressure, 1.0e-7,
+        "classification-only map binding must preserve a general "
+        "fallback pressure-drop result");
 
     auto reverse_document = document;
     reverse_document.components.at(0)

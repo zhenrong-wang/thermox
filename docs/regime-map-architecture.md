@@ -89,7 +89,7 @@ part of the model provenance. This is a cited, limited engineering map—not a u
 the catalog repeats the weak slug/churn evidence warning.
 
 Outside a declared domain, classification returns no applicable region rather than extrapolating.
-Every template exposes its citation and scope through `thermox.catalog/v9`.
+Every template exposes its citation and scope through `thermox.catalog/v10`.
 Direct callers use `instantiate_regime_map_template`; service and remote callers use
 `SimulationService::instantiate_regime_map` or
 `POST /api/v1/regime-map-artifacts/instantiate`. The result is an ordinary canonical
@@ -101,3 +101,6 @@ service contract.
 Synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
 physical claim. The packaged Mishima–Ishii transitions and composite map have separate equation,
 regime-side, alternative-mechanism, metadata-limitation, and out-of-domain refusal tests.
+The composite map is additionally exercised in a connected IF97 two-phase pipe with the packaged
+Chisholm family declared as a general fallback. This validates the artifact-routing path; it does
+not convert Chisholm into a regime-specific correlation or expand either source's validity.

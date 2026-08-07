@@ -205,6 +205,30 @@ std::string catalog_fingerprint(
             hash_number(hash, range.maximum_inclusive);
         }
     }
+    for (const auto& descriptor :
+         correlation_templates.family_descriptors()) {
+        hash_text(hash, descriptor.id);
+        hash_text(hash, descriptor.version);
+        hash_text(hash, descriptor.display_name);
+        hash_text(hash, descriptor.category);
+        hash_text(hash, descriptor.reference);
+        hash_text(hash, descriptor.scope);
+        for (const auto& binding : descriptor.bindings) {
+            hash_text(hash, binding.template_id);
+            hash_text(hash, binding.candidate_id);
+            hash_number(hash, binding.priority);
+            for (const auto& [name, value] : binding.coefficients) {
+                hash_text(hash, name);
+                hash_number(hash, value);
+            }
+            for (const auto& regime : binding.flow_regimes) {
+                hash_text(hash, regime);
+            }
+            hash_number(
+                hash,
+                binding.fallback_for_unmapped_flow_regime);
+        }
+    }
     for (const auto& descriptor : regime_map_templates.descriptors()) {
         hash_text(hash, descriptor.id);
         hash_text(hash, descriptor.version);

@@ -172,6 +172,84 @@ CorrelationTemplateRegistry::descriptors() const {
     return result;
 }
 
+void CorrelationTemplateRegistry::register_family_template(
+    CorrelationFamilyTemplateDescriptor descriptor) {
+    if (!valid_identifier(descriptor.id) || descriptor.version.empty() ||
+        descriptor.display_name.empty() || descriptor.category.empty() ||
+        descriptor.reference.empty() || descriptor.scope.empty() ||
+        descriptor.bindings.empty()) {
+        throw std::invalid_argument(
+            "correlation family template has incomplete metadata: " +
+            descriptor.id);
+    }
+    std::set<std::string> candidate_ids;
+    const CorrelationVariable* expected_output = nullptr;
+    const std::vector<CorrelationVariable>* expected_inputs = nullptr;
+    for (const auto& binding : descriptor.bindings) {
+        const auto& candidate = require_template(binding.template_id);
+        const auto candidate_id = binding.candidate_id.empty()
+            ? binding.template_id
+            : binding.candidate_id;
+        if (!valid_identifier(candidate_id) ||
+            !candidate_ids.insert(candidate_id).second) {
+            throw std::invalid_argument(
+                "correlation family template has an invalid or duplicate "
+                "candidate id: " + candidate_id);
+        }
+        if (expected_output == nullptr) {
+            expected_output = &candidate.output;
+            expected_inputs = &candidate.inputs;
+            continue;
+        }
+        const bool same_inputs =
+            expected_inputs->size() == candidate.inputs.size() &&
+            std::equal(
+                expected_inputs->begin(), expected_inputs->end(),
+                candidate.inputs.begin(),
+                [](const auto& left, const auto& right) {
+                    return left.name == right.name &&
+                        left.dimension == right.dimension;
+                });
+        if (!same_inputs || expected_output->name != candidate.output.name ||
+            expected_output->dimension != candidate.output.dimension) {
+            throw std::invalid_argument(
+                "correlation family template combines incompatible "
+                "candidate contracts: " + descriptor.id);
+        }
+    }
+    (void)instantiate_correlation_family(
+        *this,
+        {"family_template_validation", "validation",
+         std::string(64, '0')},
+        descriptor.bindings);
+    const auto id = descriptor.id;
+    if (!family_templates_.emplace(id, std::move(descriptor)).second) {
+        throw std::invalid_argument(
+            "duplicate correlation family template id: " + id);
+    }
+}
+
+const CorrelationFamilyTemplateDescriptor&
+CorrelationTemplateRegistry::require_family_template(
+    const std::string& id) const {
+    const auto found = family_templates_.find(id);
+    if (found == family_templates_.end()) {
+        throw std::invalid_argument(
+            "unknown correlation family template: " + id);
+    }
+    return found->second;
+}
+
+std::vector<CorrelationFamilyTemplateDescriptor>
+CorrelationTemplateRegistry::family_descriptors() const {
+    std::vector<CorrelationFamilyTemplateDescriptor> result;
+    result.reserve(family_templates_.size());
+    for (const auto& [_, descriptor] : family_templates_) {
+        result.push_back(descriptor);
+    }
+    return result;
+}
+
 CorrelationTemplateRegistry
 make_default_correlation_template_registry() {
     CorrelationTemplateRegistry registry;
@@ -318,6 +396,28 @@ make_default_correlation_template_registry() {
         0.079, -0.25, 20.0,
         turbulent("liquid_reynolds_number"),
         turbulent("vapor_reynolds_number"));
+    registry.register_family_template({
+        "chisholm_smooth_pipe_friction_family",
+        "1.0.0",
+        "Chisholm smooth-pipe two-phase friction family",
+        "Two-phase friction pressure gradient",
+        chisholm_reference,
+        "General isothermal, two-component, smooth-pipe baseline. "
+        "Its four candidates select by liquid/vapor Reynolds state and "
+        "are explicitly declared as fallbacks for physical flow-pattern "
+        "maps; the family does not claim bubbly, slug, churn, or annular "
+        "specific physics.",
+        {
+            {"chisholm_laminar_laminar_friction_gradient", {},
+             "laminar_laminar", 0, {}, true},
+            {"chisholm_laminar_turbulent_friction_gradient", {},
+             "laminar_turbulent", 0, {}, true},
+            {"chisholm_turbulent_laminar_friction_gradient", {},
+             "turbulent_laminar", 0, {}, true},
+            {"chisholm_turbulent_turbulent_friction_gradient", {},
+             "turbulent_turbulent", 0, {}, true},
+        },
+    });
     return registry;
 }
 
@@ -427,6 +527,21 @@ CorrelationArtifact instantiate_correlation_family(
         std::move(output), std::move(candidates)};
     artifact.validate();
     return artifact;
+}
+
+CorrelationArtifact instantiate_correlation_family_template(
+    const CorrelationTemplateRegistry& registry,
+    const CorrelationFamilyTemplateDescriptor& descriptor,
+    CorrelationArtifactIdentity identity) {
+    const auto& registered =
+        registry.require_family_template(descriptor.id);
+    if (registered.version != descriptor.version) {
+        throw std::invalid_argument(
+            "correlation family template version does not match registry: " +
+            descriptor.id);
+    }
+    return instantiate_correlation_family(
+        registry, std::move(identity), registered.bindings);
 }
 
 CorrelationArtifact::CorrelationArtifact(

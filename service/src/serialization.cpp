@@ -1301,6 +1301,55 @@ std::string serialize_catalog_response_json(
         }
         out << "]}";
     }
+    out << "],\n  \"correlation_family_templates\": [";
+    for (std::size_t i = 0;
+         i < response.correlation_family_templates.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& descriptor =
+            response.correlation_family_templates[i];
+        out << "{\"id\": ";
+        json_string(out, descriptor.id);
+        out << ", \"version\": ";
+        json_string(out, descriptor.version);
+        out << ", \"display_name\": ";
+        json_string(out, descriptor.display_name);
+        out << ", \"category\": ";
+        json_string(out, descriptor.category);
+        out << ", \"reference\": ";
+        json_string(out, descriptor.reference);
+        out << ", \"scope\": ";
+        json_string(out, descriptor.scope);
+        out << ", \"bindings\": [";
+        for (std::size_t j = 0; j < descriptor.bindings.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& binding = descriptor.bindings[j];
+            out << "{\"template_id\": ";
+            json_string(out, binding.template_id);
+            out << ", \"coefficients\": {";
+            std::size_t coefficient_index = 0;
+            for (const auto& [name, value] : binding.coefficients) {
+                if (coefficient_index++ != 0) out << ", ";
+                json_string(out, name);
+                out << ": ";
+                json_number(out, value);
+            }
+            out << "}, \"candidate_id\": ";
+            json_string(out, binding.candidate_id);
+            out << ", \"priority\": " << binding.priority;
+            out << ", \"flow_regimes\": [";
+            for (std::size_t k = 0;
+                 k < binding.flow_regimes.size(); ++k) {
+                if (k != 0) out << ", ";
+                json_string(out, binding.flow_regimes[k]);
+            }
+            out << "], \"fallback_for_unmapped_flow_regime\": "
+                << (binding.fallback_for_unmapped_flow_regime
+                        ? "true"
+                        : "false")
+                << '}';
+        }
+        out << "]}";
+    }
     out << "],\n  \"regime_map_templates\": [";
     for (std::size_t i = 0;
          i < response.regime_map_templates.size(); ++i) {

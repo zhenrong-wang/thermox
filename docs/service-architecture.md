@@ -42,7 +42,7 @@ The current synchronous service exposes:
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
 - `EngineeringStudyRequest` / `EngineeringStudyResponse`;
-- `thermox.command/v1`, `thermox.catalog/v9`, `thermox.result/v3`, and `thermox.error/v1`
+- `thermox.command/v1`, `thermox.catalog/v10`, `thermox.result/v3`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
@@ -159,8 +159,8 @@ The application boundary needed by a thin network adapter is now complete:
 
 | Intended operation | Application call | Wire representation |
 | --- | --- | --- |
-| Discover component, correlation, and regime-map templates | `SimulationService::get_catalog` | `thermox.catalog/v9` JSON |
-| Instantiate a correlation artifact from compatible templates | `SimulationService::instantiate_correlation` | `thermox.correlation_instantiation/v1` JSON with canonical payload and SHA-256 |
+| Discover component, correlation-family, correlation, and regime-map templates | `SimulationService::get_catalog` | `thermox.catalog/v10` JSON |
+| Instantiate a correlation artifact from a registered family ID or compatible explicit bindings | `SimulationService::instantiate_correlation` | `thermox.correlation_instantiation/v1` JSON with canonical payload and SHA-256 |
 | Instantiate a regime-map artifact from a template | `SimulationService::instantiate_regime_map` | `thermox.regime_map_instantiation/v1` JSON with canonical payload and SHA-256 |
 | Validate readiness and compile a model | `SimulationService::validate_model` | result-v3 validation JSON with layered readiness and an authoritative calculation gate |
 | Create/list Team projects | `ProjectService` | `thermox.project/v1` JSON |
@@ -219,7 +219,7 @@ The initial routes are:
 | --- | --- | --- |
 | `GET` | `/healthz` | Process-level liveness |
 | `GET` | `/api/v1/catalog` | Runtime catalog discovery |
-| `POST` | `/api/v1/correlation-artifacts/instantiate` | Materialize one template or a compatible regime family as a canonical, content-addressed correlation payload |
+| `POST` | `/api/v1/correlation-artifacts/instantiate` | Materialize a registered family ID or compatible explicit bindings as a canonical, content-addressed correlation payload |
 | `POST` | `/api/v1/regime-map-artifacts/instantiate` | Materialize one physical regime-map template as a canonical, content-addressed payload |
 | `GET`, `POST` | `/api/v1/projects` | List/create Team-owned logical workspaces |
 | `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |

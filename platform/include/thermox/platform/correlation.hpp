@@ -96,16 +96,34 @@ struct CorrelationTemplateCandidateBinding {
     bool fallback_for_unmapped_flow_regime{false};
 };
 
+struct CorrelationFamilyTemplateDescriptor {
+    std::string id;
+    std::string version;
+    std::string display_name;
+    std::string category;
+    std::string reference;
+    std::string scope;
+    std::vector<CorrelationTemplateCandidateBinding> bindings;
+};
+
 class CorrelationTemplateRegistry {
 public:
     void register_template(CorrelationTemplateDescriptor descriptor);
+    void register_family_template(
+        CorrelationFamilyTemplateDescriptor descriptor);
     [[nodiscard]] const CorrelationTemplateDescriptor& require_template(
         const std::string& id) const;
     [[nodiscard]] std::vector<CorrelationTemplateDescriptor>
         descriptors() const;
+    [[nodiscard]] const CorrelationFamilyTemplateDescriptor&
+        require_family_template(const std::string& id) const;
+    [[nodiscard]] std::vector<CorrelationFamilyTemplateDescriptor>
+        family_descriptors() const;
 
 private:
     std::map<std::string, CorrelationTemplateDescriptor> templates_;
+    std::map<std::string, CorrelationFamilyTemplateDescriptor>
+        family_templates_;
 };
 
 class CorrelationArtifact final : public EngineeringArtifact {
@@ -158,5 +176,11 @@ make_default_correlation_template_registry();
     const CorrelationTemplateRegistry& registry,
     CorrelationArtifactIdentity identity,
     std::vector<CorrelationTemplateCandidateBinding> bindings);
+
+[[nodiscard]] CorrelationArtifact
+instantiate_correlation_family_template(
+    const CorrelationTemplateRegistry& registry,
+    const CorrelationFamilyTemplateDescriptor& descriptor,
+    CorrelationArtifactIdentity identity);
 
 }  // namespace thermox::platform

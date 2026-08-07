@@ -559,6 +559,9 @@ Work items:
      content SHA-256 suitable for separate Team/project publication; ✅
    - classical four-regime Lockhart–Martinelli/Chisholm smooth-pipe friction family with live
      phase flux/Reynolds inputs and connected two-phase transport verification; ✅
+   - reusable catalog family preset with explicit general flow-pattern fallback semantics,
+     one-ID platform/service/HTTP instantiation, fingerprinted scope, and connected IF97 pipe
+     verification against the cited composite regime map; ✅
    - geometry/regime-specific coefficient correlations and flow-pattern maps remain follow-ons.
 9. Typed physical-regime classification.
    - provider-neutral `thermox.regime_map/v2` engineering artifact with typed inputs, bounded safe

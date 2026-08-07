@@ -1886,6 +1886,25 @@ CatalogResponse SimulationService::get_catalog(
         response.correlation_templates.push_back(std::move(value));
     }
     for (const auto& descriptor :
+         runtime->impl_->correlation_templates.family_descriptors()) {
+        CatalogCorrelationFamilyTemplateType value;
+        value.id = descriptor.id;
+        value.version = descriptor.version;
+        value.display_name = descriptor.display_name;
+        value.category = descriptor.category;
+        value.reference = descriptor.reference;
+        value.scope = descriptor.scope;
+        for (const auto& binding : descriptor.bindings) {
+            value.bindings.push_back({
+                binding.template_id, binding.coefficients,
+                binding.candidate_id, binding.priority,
+                binding.flow_regimes,
+                binding.fallback_for_unmapped_flow_regime});
+        }
+        response.correlation_family_templates.push_back(
+            std::move(value));
+    }
+    for (const auto& descriptor :
          runtime->impl_->regime_map_templates.descriptors()) {
         CatalogRegimeMapTemplateType value;
         value.id = descriptor.id;
@@ -2105,36 +2124,49 @@ SimulationService::instantiate_correlation(
         return response;
     }
     constexpr std::size_t maximum_bindings = 32;
-    if (request.bindings.empty() ||
+    const bool uses_family_template =
+        !request.family_template_id.empty();
+    const bool has_bindings = !request.bindings.empty();
+    if (uses_family_template == has_bindings ||
         request.bindings.size() > maximum_bindings) {
         response.error = make_error(
             "invalid_correlation_bindings", "request",
-            "correlation instantiation requires between 1 and 32 "
-            "template bindings");
+            "correlation instantiation requires exactly one of "
+            "family_template_id or 1 to 32 template bindings");
         return response;
     }
     try {
-        std::vector<platform::CorrelationTemplateCandidateBinding>
-            bindings;
-        bindings.reserve(request.bindings.size());
-        for (const auto& binding : request.bindings) {
-            bindings.push_back({
-                binding.template_id,
-                binding.coefficients,
-                binding.candidate_id,
-                binding.priority,
-                binding.flow_regimes,
-                binding.fallback_for_unmapped_flow_regime,
-            });
-        }
-        auto artifact = platform::instantiate_correlation_family(
-            impl_->runtime->impl_->correlation_templates,
-            {
+        platform::CorrelationArtifact artifact = [&]() {
+            const platform::CorrelationArtifactIdentity identity{
                 request.artifact_id,
                 request.revision,
                 std::string(64, '0'),
-            },
-            std::move(bindings));
+            };
+            if (uses_family_template) {
+                return platform::instantiate_correlation_family_template(
+                    impl_->runtime->impl_->correlation_templates,
+                    impl_->runtime->impl_->correlation_templates
+                        .require_family_template(
+                            request.family_template_id),
+                    identity);
+            }
+            std::vector<platform::CorrelationTemplateCandidateBinding>
+                bindings;
+            bindings.reserve(request.bindings.size());
+            for (const auto& binding : request.bindings) {
+                bindings.push_back({
+                    binding.template_id,
+                    binding.coefficients,
+                    binding.candidate_id,
+                    binding.priority,
+                    binding.flow_regimes,
+                    binding.fallback_for_unmapped_flow_regime,
+                });
+            }
+            return platform::instantiate_correlation_family(
+                impl_->runtime->impl_->correlation_templates,
+                identity, std::move(bindings));
+        }();
         response.artifact = correlation_input(artifact);
         response.canonical_payload_json =
             detail::correlation_payload_json(response.artifact);

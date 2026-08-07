@@ -235,11 +235,19 @@ artifact. The resulting family selects from live liquid and vapor Reynolds numbe
 deterministic `Re = 2000` boundary, and flows through the same component, persistence, and
 diagnostic contracts as user-authored engineering data.
 
+The default registry also publishes those four bindings as the reusable
+`chisholm_smooth_pipe_friction_family`. Its scope explicitly declares the candidates as general
+fallbacks for otherwise unmapped physical flow patterns; it does not relabel the same equation as
+bubbly, slug, churn, or annular physics. Direct callers instantiate the complete preset with
+`instantiate_correlation_family_template`. The descriptor and every binding participate in the
+runtime catalog fingerprint, so changing the package changes execution provenance.
+
 Direct C++ callers may use that platform function. Service and remote clients use
 `SimulationService::instantiate_correlation` or
 `POST /api/v1/correlation-artifacts/instantiate`. The request names an artifact identity and one
-or more catalog template bindings with optional bounded coefficient overrides, candidate IDs,
-priorities, physical flow-regime routes, and an explicit unmapped-regime fallback declaration.
+of either a registered `family_template_id` or one or more catalog template bindings with optional
+bounded coefficient overrides, candidate IDs, priorities, physical flow-regime routes, and an
+explicit unmapped-regime fallback declaration. Supplying both forms, or neither, is rejected.
 The response contains the ordinary `thermox.correlation/v2` payload, the exact runtime
 catalog fingerprint, and a SHA-256 computed from the canonical payload. Publishing that payload as
 a Team/project artifact revision is intentionally a separate storage operation.
@@ -261,6 +269,12 @@ every map region to have an exact route or a declared fallback. The map consumes
 flow quantities, including the delivered superficial-velocity, Reynolds, Froude, Weber, Bond, and
 phase-ratio groups. See
 [Regime-map architecture](regime-map-architecture.md).
+
+The connected IF97 pipe verification binds the cited Mishima–Ishii composite map, Zuber–Findlay
+void-fraction closure, and the registered Chisholm family. It proves that classification spans the
+real component evaluation path while the explicitly general fallback preserves the baseline
+pressure-drop result. Separate routing tests prove that a genuine exact flow-pattern closure takes
+precedence without modifying the pipe component.
 
 Project publication accepts `artifact_type=thermox.correlation` and
 `artifact_schema_version=thermox.correlation/v2`. Payload validation
