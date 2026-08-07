@@ -241,6 +241,115 @@ make_default_regime_map_template_registry() {
              {{"wave_entrainment", 0, std::move(annular)}}},
         },
     });
+
+    const auto composite_validity = [&]() {
+        return std::vector<RegimeMapCriterion>{
+            {"void_fraction", "dimensionless", 0.0, 1.0,
+             false, false},
+            {"liquid_superficial_velocity", "speed", 0.0,
+             std::nullopt, false, true},
+            {"vapor_superficial_velocity", "speed", 0.0,
+             std::nullopt, false, true},
+            {"liquid_density - vapor_density", "density", 0.0,
+             std::nullopt, false, true},
+            {"liquid_viscosity", "dynamic_viscosity", 0.0,
+             std::nullopt, false, true},
+            {"surface_tension", "surface_tension", 0.0,
+             std::nullopt, false, true},
+            {"diameter", "length", 0.0, std::nullopt, false, true},
+            {"gravity", "acceleration", 0.0, std::nullopt,
+             false, true},
+            {"liquid_reynolds_number", "dimensionless", 1635.0,
+             std::nullopt, false, true},
+            {viscosity_number, "dimensionless", 0.0, 1.0 / 15.0,
+             false, false},
+        };
+    };
+    auto composite_bubbly = composite_validity();
+    composite_bubbly.push_back({
+        "void_fraction", "dimensionless", std::nullopt, 0.3,
+        true, false});
+    auto composite_slug = composite_validity();
+    composite_slug.push_back({
+        "void_fraction", "dimensionless", 0.3, std::nullopt,
+        true, true});
+    composite_slug.push_back({
+        slug_churn_coordinate, "dimensionless", std::nullopt, 0.0,
+        true, false});
+    auto composite_churn = composite_validity();
+    composite_churn.push_back({
+        "void_fraction", "dimensionless", 0.3, std::nullopt,
+        true, true});
+    composite_churn.push_back({
+        slug_churn_coordinate, "dimensionless", 0.0, std::nullopt,
+        true, true});
+    auto composite_entrainment = composite_validity();
+    composite_entrainment.push_back({
+        normalized_vapor_velocity, "dimensionless", 1.0,
+        std::nullopt, true, true});
+    const std::string film_reversal_coordinate =
+        "vapor_superficial_velocity - sqrt((liquid_density - "
+        "vapor_density) * gravity * diameter / vapor_density) * "
+        "(void_fraction - 0.11)";
+    auto composite_film_reversal = composite_validity();
+    composite_film_reversal.push_back({
+        "void_fraction - 0.11", "dimensionless", 0.0,
+        std::nullopt, false, true});
+    composite_film_reversal.push_back({
+        slug_churn_coordinate, "dimensionless", 0.0,
+        std::nullopt, true, true});
+    composite_film_reversal.push_back({
+        film_reversal_coordinate, "speed", 0.0,
+        std::nullopt, true, true});
+    registry.register_template({
+        "mishima_ishii_vertical_upflow_composite",
+        "1.0.0",
+        "Mishima-Ishii vertical-upflow composite map",
+        "Two-phase flow-pattern map",
+        "Mishima and Ishii, International Journal of Heat and Mass "
+        "Transfer 27(5) (1984) 723-737, DOI "
+        "10.1016/0017-9310(84)90142-X; assessment: Khare et al., "
+        "BARC/1997/E/010 (1997)",
+        "Co-current vertical upward gas-liquid flow in a round tube. "
+        "Combines the cited alpha=0.30 bubbly/slug boundary, "
+        "mean-void-fraction slug/churn boundary, and alternative "
+        "film-reversal or wave-entrainment annular mechanisms. The "
+        "void fraction is supplied by the separately bound closure. "
+        "The entire map conservatively requires N_mu < 1/15 and "
+        "liquid Reynolds number > 1635. The cited assessment reports "
+        "weak slug/churn validation; case-specific validation remains "
+        "required.",
+        {
+            {"void_fraction", "dimensionless"},
+            {"liquid_superficial_velocity", "speed"},
+            {"vapor_superficial_velocity", "speed"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"liquid_viscosity", "dynamic_viscosity"},
+            {"surface_tension", "surface_tension"},
+            {"diameter", "length"},
+            {"gravity", "acceleration"},
+            {"liquid_reynolds_number", "dimensionless"},
+        },
+        {
+            {"bubbly", "bubbly", 10,
+             {{"bubble_coalescence", 0,
+               std::move(composite_bubbly)}}},
+            {"slug", "slug", 10,
+             {{"mean_void_fraction", 0,
+               std::move(composite_slug)}}},
+            {"churn", "churn", 10,
+             {{"mean_void_fraction", 0,
+               std::move(composite_churn)}}},
+            {"annular", "annular", 20,
+             {
+                 {"film_reversal", 10,
+                  std::move(composite_film_reversal)},
+                 {"wave_entrainment", 20,
+                  std::move(composite_entrainment)},
+             }},
+        },
+    });
     return registry;
 }
 

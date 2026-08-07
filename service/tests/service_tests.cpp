@@ -914,7 +914,7 @@ void test_catalog_discovery() {
                 "mishima_ishii_vertical_upflow_annular_entrainment";
         });
     require(
-        response.regime_map_templates.size() == 3 &&
+        response.regime_map_templates.size() == 4 &&
             mishima_ishii != response.regime_map_templates.end() &&
             mishima_ishii->regions.size() == 2 &&
             mishima_ishii->regions.front().branches.size() == 1 &&
@@ -923,6 +923,20 @@ void test_catalog_discovery() {
             mishima_ishii->scope.find("vertical upward") !=
                 std::string::npos,
         "catalog must expose cited regime-map templates with explicit scope");
+    const auto composite_map = std::find_if(
+        response.regime_map_templates.begin(),
+        response.regime_map_templates.end(),
+        [](const auto& descriptor) {
+            return descriptor.id ==
+                "mishima_ishii_vertical_upflow_composite";
+        });
+    require(
+        composite_map != response.regime_map_templates.end() &&
+            composite_map->regions.size() == 4U &&
+            composite_map->regions.back().regime == "annular" &&
+            composite_map->regions.back().branches.size() == 2U,
+        "catalog must preserve composite regimes and alternative "
+        "physical mechanisms");
     const auto pressure_units = std::find_if(
         response.unit_dimensions.begin(),
         response.unit_dimensions.end(),

@@ -73,10 +73,20 @@ slug-to-churn boundary for a round tube, and the high-velocity entrainment trans
 flow. They remain separate because the source mechanisms have different inputs and evidence.
 The slug-to-churn template exposes the independent assessment's warning that churn data were
 insufficient to validate that boundary and slug-flow characterization was poor. The annular
-template exposes its liquid-viscosity-number and liquid-Reynolds limits. These templates are not
-presented as one complete Mishima–Ishii flow-pattern map. Outside a declared domain,
-classification returns no applicable region rather than extrapolating. Every template exposes its
-citation and scope through `thermox.catalog/v8`.
+template exposes its liquid-viscosity-number and liquid-Reynolds limits.
+
+A fourth composite template uses the v2 branch contract to combine those boundaries with the
+Mishima–Ishii liquid-film-reversal annular mechanism. It returns bubbly, slug, churn, or annular;
+the annular region records whether film reversal or wave entrainment selected it. Annular has
+higher region priority, allowing the cited entrainment mechanism to bypass an intermediate regime.
+Because one component boundary has the narrower `N_mu < 1/15` and liquid `Re > 1635` envelope,
+the complete composite conservatively applies those gates to every branch. Its void fraction comes
+from the independently bound closure, so changing that closure changes classification and remains
+part of the model provenance. This is a cited, limited engineering map—not a universal truth—and
+the catalog repeats the weak slug/churn evidence warning.
+
+Outside a declared domain, classification returns no applicable region rather than extrapolating.
+Every template exposes its citation and scope through `thermox.catalog/v8`.
 Direct callers use `instantiate_regime_map_template`; service and remote callers use
 `SimulationService::instantiate_regime_map` or
 `POST /api/v1/regime-map-artifacts/instantiate`. The result is an ordinary canonical
@@ -86,5 +96,5 @@ Native extension packages can register additional templates without changing the
 service contract.
 
 Synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
-physical claim. The packaged Mishima–Ishii transitions have separate equation, boundary-side,
-metadata-limitation, and out-of-domain refusal tests.
+physical claim. The packaged Mishima–Ishii transitions and composite map have separate equation,
+regime-side, alternative-mechanism, metadata-limitation, and out-of-domain refusal tests.

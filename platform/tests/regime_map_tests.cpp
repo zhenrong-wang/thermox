@@ -328,7 +328,7 @@ void test_packaged_mishima_ishii_void_fraction_boundaries() {
     const auto registry =
         thermox::platform::make_default_regime_map_template_registry();
     require(
-        registry.descriptors().size() == 3U,
+        registry.descriptors().size() == 4U,
         "default registry must expose each independently auditable "
         "Mishima-Ishii transition template");
     const auto bubbly =
@@ -404,6 +404,89 @@ void test_packaged_mishima_ishii_void_fraction_boundaries() {
         "declared slug-side domain");
 }
 
+void test_packaged_mishima_ishii_composite_map() {
+    const auto registry =
+        thermox::platform::make_default_regime_map_template_registry();
+    const auto& descriptor = registry.require_template(
+        "mishima_ishii_vertical_upflow_composite");
+    const auto map = thermox::platform::instantiate_regime_map_template(
+        descriptor,
+        {"composite-map-test", "test-1", std::string(64, '4')});
+    require(
+        map.regions().size() == 4U &&
+            map.regions().back().branches.size() == 2U,
+        "composite map must retain four regimes and both cited "
+        "annular mechanisms");
+
+    constexpr double j_l = 0.5;
+    constexpr double rho_l = 1000.0;
+    constexpr double rho_g = 1.2;
+    constexpr double mu_l = 1.0e-3;
+    constexpr double sigma = 0.072;
+    constexpr double diameter = 0.05;
+    constexpr double gravity = 9.80665;
+    constexpr double liquid_reynolds = 5000.0;
+    const double delta_rho = rho_l - rho_g;
+    const double laplace_length = std::sqrt(
+        sigma / (gravity * delta_rho));
+    const double viscosity_number = mu_l /
+        std::sqrt(rho_l * sigma * laplace_length);
+    const double entrainment_velocity = std::pow(
+        sigma * gravity * delta_rho / (rho_g * rho_g), 0.25) *
+        std::pow(viscosity_number, -0.2);
+    const auto classify = [&](double alpha, double j_g,
+                              double reynolds) {
+        return map.classify({
+            {"void_fraction", alpha},
+            {"liquid_superficial_velocity", j_l},
+            {"vapor_superficial_velocity", j_g},
+            {"liquid_density", rho_l},
+            {"vapor_density", rho_g},
+            {"liquid_viscosity", mu_l},
+            {"surface_tension", sigma},
+            {"diameter", diameter},
+            {"gravity", gravity},
+            {"liquid_reynolds_number", reynolds},
+        });
+    };
+    require(
+        classify(0.2, 0.2, liquid_reynolds).selected_regime ==
+                "bubbly" &&
+            classify(0.5, 0.2, liquid_reynolds).selected_regime ==
+                "slug" &&
+            classify(0.8, 0.2, liquid_reynolds).selected_regime ==
+                "churn",
+        "composite map must reproduce the ordered low-velocity "
+        "bubbly, slug, and churn regions");
+
+    const auto entrainment =
+        classify(0.5, 1.1 * entrainment_velocity, liquid_reynolds);
+    require(
+        entrainment.succeeded() &&
+            entrainment.selected_regime == "annular" &&
+            entrainment.selected_branch == "wave_entrainment",
+        "composite map must permit a direct wave-entrainment "
+        "transition to annular flow");
+    const double film_velocity =
+        std::sqrt(delta_rho * gravity * diameter / rho_g) *
+        (0.8 - 0.11);
+    require(
+        film_velocity < entrainment_velocity,
+        "test point must isolate film reversal below entrainment");
+    const auto film = classify(
+        0.8, 0.5 * (film_velocity + entrainment_velocity),
+        liquid_reynolds);
+    require(
+        film.succeeded() && film.selected_regime == "annular" &&
+            film.selected_branch == "film_reversal",
+        "composite map must select film reversal independently of "
+        "wave entrainment");
+    require(
+        !classify(0.5, 0.2, 1000.0).succeeded(),
+        "composite map must refuse states outside its conservative "
+        "global applicability envelope");
+}
+
 }  // namespace
 
 int main() {
@@ -415,6 +498,7 @@ int main() {
         test_two_phase_dimensionless_groups();
         test_packaged_mishima_ishii_annular_boundary();
         test_packaged_mishima_ishii_void_fraction_boundaries();
+        test_packaged_mishima_ishii_composite_map();
         std::cout << "thermox regime-map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

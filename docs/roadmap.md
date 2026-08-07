@@ -574,7 +574,10 @@ Work items:
    - separately auditable cited Mishima–Ishii vertical-upflow bubbly/slug, slug/churn, and
      annular-entrainment transition templates, explicit evidence/applicability limits, catalog
      discovery, artifact instantiation, and native-extension registration; ✅
-   - complete flow-pattern maps and matched regime-specific closure families remain follow-ons.
+   - limited composite vertical-upflow map with bubbly/slug/churn/annular regions, alternative
+     film-reversal and wave-entrainment annular branches, conservative global validity gates, and
+     selected-mechanism verification; ✅
+   - matched regime-specific closure families and additional geometries remain follow-ons.
 10. Map validation and interpolation quality controls.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
