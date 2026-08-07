@@ -18,8 +18,18 @@ PropertyLimits If97PropertyPackage::limits() const noexcept {
 
 bool If97PropertyPackage::supports(
     PropertyCapability capability) const noexcept {
-    return capability !=
-        PropertyCapability::state_ph_derivatives;
+    switch (capability) {
+        case PropertyCapability::state_pt:
+        case PropertyCapability::state_ph:
+        case PropertyCapability::state_ps:
+        case PropertyCapability::saturation_p:
+        case PropertyCapability::transport:
+        case PropertyCapability::surface_tension:
+            return true;
+        case PropertyCapability::state_ph_derivatives:
+            return false;
+    }
+    return false;
 }
 
 PropertyResult If97PropertyPackage::state_pt(

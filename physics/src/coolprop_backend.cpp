@@ -302,12 +302,20 @@ SaturationResult coolprop_saturation_p(
         auto liquid = read_state(state);
         liquid.vapor_quality = 0.0;
         liquid.phase = Phase::liquid;
+        const double surface_tension = state.surface_tension();
+        if (!std::isfinite(surface_tension) ||
+            surface_tension <= 0.0) {
+            return {{}, {}, PropertyStatus::backend_error,
+                    "surface tension must be finite and positive"};
+        }
 
         state.update(CoolProp::PQ_INPUTS, pressure_pa, 1.0);
         auto vapor = read_state(state);
         vapor.vapor_quality = 1.0;
         vapor.phase = Phase::vapor;
-        return {liquid, vapor, PropertyStatus::success, {}};
+        return {
+            liquid, vapor, PropertyStatus::success, {},
+            surface_tension};
     } catch (CoolProp::CoolPropBaseError& error) {
         const auto mapped = map_exception(error);
         return {{}, {}, mapped.status, mapped.message};

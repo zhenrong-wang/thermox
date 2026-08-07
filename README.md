@@ -565,8 +565,8 @@ service rather than the browser. See
 ## Next steps
 
 1. Connect the delivered regime-map artifact through service persistence and optional component
-   bindings, add surface-tension properties and derived nondimensional inputs, then package cited
-   geometry-specific flow maps and closures.
+   bindings, then package cited geometry-specific flow maps and closures using the delivered
+   surface-tension capability and derived nondimensional inputs.
 2. Add multi-signal transient comparison, event/window reductions, and server-side export for
    result sets too large for browser materialization.
 3. Add native analytic PH derivatives for IF97; ideal gas, HEOS CO2, and single-phase HEOS water

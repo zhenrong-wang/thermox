@@ -90,6 +90,9 @@ The public C++ interface is
   temperature, density, and internal-energy partials with respect to pressure and enthalpy;
 - explicit capability discovery for PT, PH, PS, and transport operations, allowing the platform
   compiler to reject an incompatible component/backend pairing before solving;
+- saturation-pair surface tension as an explicit `surface_tension` capability and interfacial
+  `SaturationResult` value in N/m; ideal-gas packages do not advertise it and no fallback constant
+  is inferred;
 - SI-unit density, energy, enthalpy, entropy, heat capacities, speed of sound,
   viscosity, thermal conductivity, vapor quality, and phase;
 - validity limits and explicit invalid-input, range, saturation-boundary,

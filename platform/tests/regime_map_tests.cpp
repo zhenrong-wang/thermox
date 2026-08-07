@@ -1,6 +1,8 @@
 #include "thermox/platform/engineering_artifact.hpp"
 #include "thermox/platform/regime_map.hpp"
+#include "thermox/platform/two_phase_flow_groups.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -159,6 +161,63 @@ void test_contract_validation_and_registry() {
         "classification must reject incomplete input vectors");
 }
 
+void test_two_phase_dimensionless_groups() {
+    const auto groups =
+        thermox::platform::calculate_two_phase_flow_groups({
+            100.0, 0.2, 1000.0, 10.0, 1.0e-3, 1.0e-5,
+            0.05, 0.06,
+        });
+    require(
+        std::abs(groups.liquid_mass_flux_kg_m2_s - 80.0) <
+                1.0e-12 &&
+            std::abs(groups.vapor_mass_flux_kg_m2_s - 20.0) <
+                1.0e-12 &&
+            std::abs(groups.liquid_superficial_velocity_m_s - 0.08) <
+                1.0e-12 &&
+            std::abs(groups.vapor_superficial_velocity_m_s - 2.0) <
+                1.0e-12,
+        "phase fluxes and superficial velocities must follow their "
+        "definitions");
+    require(
+        std::abs(groups.liquid_reynolds_number - 4000.0) <
+                1.0e-9 &&
+            std::abs(groups.vapor_reynolds_number - 100000.0) <
+                1.0e-9 &&
+            std::abs(groups.liquid_weber_number -
+                     5.333333333333333) < 1.0e-12 &&
+            std::abs(groups.vapor_weber_number -
+                     33.333333333333333) < 1.0e-12 &&
+            std::abs(groups.density_ratio_liquid_to_vapor - 100.0) <
+                1.0e-12 &&
+            std::abs(groups.viscosity_ratio_liquid_to_vapor - 100.0) <
+                1.0e-12,
+        "Reynolds, Weber, and phase-property ratios must follow their "
+        "definitions");
+    require(
+        std::abs(groups.liquid_froude_number -
+                 0.08 / std::sqrt(9.80665 * 0.05)) < 1.0e-12 &&
+            std::abs(groups.vapor_froude_number -
+                     2.0 / std::sqrt(9.80665 * 0.05)) < 1.0e-12 &&
+            std::abs(groups.bond_number -
+                     9.80665 * 990.0 * 0.05 * 0.05 / 0.06) <
+                1.0e-12,
+        "Froude and Bond groups must use the declared gravity and "
+        "hydraulic diameter");
+
+    bool rejected = false;
+    try {
+        (void)thermox::platform::calculate_two_phase_flow_groups({
+            100.0, 0.2, 1000.0, 10.0, 1.0e-3, 1.0e-5,
+            0.05, 0.0,
+        });
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(
+        rejected,
+        "dimensionless groups must reject missing surface tension");
+}
+
 }  // namespace
 
 int main() {
@@ -166,6 +225,7 @@ int main() {
         test_classification_and_boundary();
         test_priority_gap_and_ambiguity();
         test_contract_validation_and_registry();
+        test_two_phase_dimensionless_groups();
         std::cout << "thermox regime-map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -24,6 +24,7 @@ enum class PropertyCapability {
     state_ps,
     saturation_p,
     transport,
+    surface_tension,
 };
 
 struct ThermodynamicState {
@@ -81,6 +82,9 @@ struct SaturationResult {
     ThermodynamicState vapor;
     PropertyStatus status{PropertyStatus::backend_error};
     std::string message;
+    // Interfacial property at the saturation state, not a bulk-phase
+    // property. Positive and finite when surface_tension is supported.
+    double surface_tension_n_m{0.0};
 
     [[nodiscard]] bool ok() const { return status == PropertyStatus::success; }
 };

@@ -468,6 +468,8 @@ std::string_view capability_name(
             return "saturation_p";
         case physics::PropertyCapability::transport:
             return "transport";
+        case physics::PropertyCapability::surface_tension:
+            return "surface_tension";
     }
     return "unknown";
 }

@@ -109,6 +109,10 @@ const units: Record<string, DimensionUnits> = {
     si: identity('W/m/K'),
     engineering: identity('W/m/K'),
   },
+  surface_tension: {
+    si: identity('N/m'),
+    engineering: { unit: 'mN/m', scale: 1.0e3 },
+  },
   speed: {
     si: identity('m/s'),
     engineering: identity('m/s'),

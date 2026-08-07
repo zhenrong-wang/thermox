@@ -25,6 +25,7 @@ add_library(thermox_platform
     src/storage_models.cpp
     src/turbomachinery_models.cpp
     src/transport_models.cpp
+    src/two_phase_flow_groups.cpp
     src/unit_registry.cpp
     src/valve_models.cpp
 )

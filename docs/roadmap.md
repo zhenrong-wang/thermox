@@ -564,8 +564,11 @@ Work items:
    - provider-neutral `thermox.regime_map/v1` engineering artifact with typed inputs, bounded safe
      expression criteria, explicit boundary inclusion, deterministic priority, and hard failures
      for gaps or ambiguous overlaps; ✅
-   - request/persistence serialization, optional component binding, surface-tension property
-     capability, derived dimensionless groups, and cited geometry-specific maps remain follow-ons.
+   - CoolProp-backed saturation surface tension as an explicit capability, authoritative N/m and
+     mN/m units, and reusable phase flux, superficial velocity, Reynolds, Froude, Weber, Bond, and
+     property-ratio evaluation; ✅
+   - request/persistence serialization, optional component binding, and cited geometry-specific
+     maps remain follow-ons.
 10. Map validation and interpolation quality controls.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.

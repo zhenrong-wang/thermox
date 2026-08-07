@@ -844,7 +844,11 @@ void test_catalog_discovery() {
             std::find(
                 if97->capabilities.begin(),
                 if97->capabilities.end(),
-                "saturation_p") != if97->capabilities.end(),
+                "saturation_p") != if97->capabilities.end() &&
+            std::find(
+                if97->capabilities.begin(),
+                if97->capabilities.end(),
+                "surface_tension") != if97->capabilities.end(),
         "catalog must expose property compatibility metadata");
     const auto water_heos = std::find_if(
         response.property_backends.begin(),

@@ -27,8 +27,18 @@ PropertyLimits IdealGasPropertyPackage::limits() const noexcept {
 }
 
 bool IdealGasPropertyPackage::supports(PropertyCapability capability) const noexcept {
-    return capability != PropertyCapability::transport &&
-           capability != PropertyCapability::saturation_p;
+    switch (capability) {
+        case PropertyCapability::state_pt:
+        case PropertyCapability::state_ph:
+        case PropertyCapability::state_ph_derivatives:
+        case PropertyCapability::state_ps:
+            return true;
+        case PropertyCapability::saturation_p:
+        case PropertyCapability::transport:
+        case PropertyCapability::surface_tension:
+            return false;
+    }
+    return false;
 }
 
 PropertyResult IdealGasPropertyPackage::state_pt(double pressure, double temperature) const {

@@ -25,6 +25,7 @@ bool WaterHeosPropertyPackage::supports(
         case PropertyCapability::state_ps:
         case PropertyCapability::saturation_p:
         case PropertyCapability::transport:
+        case PropertyCapability::surface_tension:
             return true;
     }
     return false;

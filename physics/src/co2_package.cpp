@@ -16,8 +16,19 @@ PropertyLimits Co2PropertyPackage::limits() const noexcept {
     return {0.0, 800e6, 216.592, 2000.0};
 }
 
-bool Co2PropertyPackage::supports(PropertyCapability) const noexcept {
-    return true;
+bool Co2PropertyPackage::supports(
+    PropertyCapability capability) const noexcept {
+    switch (capability) {
+        case PropertyCapability::state_pt:
+        case PropertyCapability::state_ph:
+        case PropertyCapability::state_ph_derivatives:
+        case PropertyCapability::state_ps:
+        case PropertyCapability::saturation_p:
+        case PropertyCapability::transport:
+        case PropertyCapability::surface_tension:
+            return true;
+    }
+    return false;
 }
 
 PropertyResult Co2PropertyPackage::state_pt(

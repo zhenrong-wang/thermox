@@ -295,11 +295,21 @@ void verify_saturation_pairs(
             thermox::physics::PropertyCapability::saturation_p),
         std::string(package.name()) +
             " should advertise saturation_p");
+    require(
+        package.supports(
+            thermox::physics::PropertyCapability::surface_tension),
+        std::string(package.name()) +
+            " should advertise surface_tension");
     const auto saturation = package.saturation_p(pressure);
     require(
         saturation.ok(),
         std::string(package.name()) +
             " saturation: " + saturation.message);
+    require(
+        std::isfinite(saturation.surface_tension_n_m) &&
+            saturation.surface_tension_n_m > 0.0,
+        std::string(package.name()) +
+            " saturation surface tension must be positive and finite");
     require_near(
         saturation.liquid.pressure_pa, pressure,
         pressure * 1.0e-6,
@@ -358,6 +368,32 @@ void verify_saturation_pairs(
         mixture_ph.state.density_kg_m3 > 0.0 &&
             std::isfinite(mixture_ph.state.internal_energy_j_kg),
         "PH two-phase core properties");
+}
+
+void verify_surface_tension_contracts(
+    const thermox::physics::PropertyPackage& co2,
+    const thermox::physics::PropertyPackage& if97,
+    const thermox::physics::PropertyPackage& water_heos) {
+    const auto co2_low = co2.saturation_p(1.0e6);
+    const auto co2_high = co2.saturation_p(7.2e6);
+    const auto water_low = if97.saturation_p(1.0e5);
+    const auto water_high = if97.saturation_p(20.0e6);
+    const auto heos_water = water_heos.saturation_p(1.0e5);
+    require(
+        co2_low.ok() && co2_high.ok() && water_low.ok() &&
+            water_high.ok() && heos_water.ok(),
+        "surface-tension reference saturation states must resolve");
+    require(
+        co2_low.surface_tension_n_m >
+                co2_high.surface_tension_n_m &&
+            water_low.surface_tension_n_m >
+                water_high.surface_tension_n_m,
+        "surface tension must decrease toward each critical point");
+    require_relative_near(
+        water_low.surface_tension_n_m,
+        heos_water.surface_tension_n_m,
+        5.0e-4, 1.0e-8,
+        "IF97 and HEOS water surface tension agreement");
 }
 
 void verify_if97_derivatives_near_vapor_boundary(
@@ -588,11 +624,15 @@ int main() {
     verify_saturation_pairs(if97, 1e5);
     verify_saturation_pairs(if97, 20e6);
     verify_saturation_pairs(water_heos, 1e6);
+    verify_surface_tension_contracts(co2, if97, water_heos);
     verify_if97_derivatives_near_vapor_boundary(if97);
     verify_heos_two_phase_derivative_fallback(water_heos);
     require(!ideal_gas.supports(
                 thermox::physics::PropertyCapability::saturation_p),
             "ideal gas should not advertise saturation_p");
+    require(!ideal_gas.supports(
+                thermox::physics::PropertyCapability::surface_tension),
+            "ideal gas should not advertise surface_tension");
     require(ideal_gas.saturation_p(1e5).status ==
                 thermox::physics::PropertyStatus::unsupported,
             "ideal-gas saturation should be unsupported");

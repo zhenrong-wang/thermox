@@ -69,6 +69,7 @@ std::shared_ptr<const PropertyPackage> PropertyPackageRegistry::create(
         PropertyCapability::state_ps,
         PropertyCapability::saturation_p,
         PropertyCapability::transport,
+        PropertyCapability::surface_tension,
     };
     for (const auto capability : capabilities) {
         const bool declared =
@@ -132,6 +133,7 @@ PropertyPackageRegistry make_default_property_package_registry() {
         PropertyCapability::state_ps,
         PropertyCapability::saturation_p,
         PropertyCapability::transport,
+        PropertyCapability::surface_tension,
     };
     const std::vector ideal_capabilities{
         PropertyCapability::state_pt,
@@ -145,6 +147,7 @@ PropertyPackageRegistry make_default_property_package_registry() {
         PropertyCapability::state_ps,
         PropertyCapability::saturation_p,
         PropertyCapability::transport,
+        PropertyCapability::surface_tension,
     };
     const auto ideal_identity = ideal_gas("Air");
     const auto co2_identity = co2("CO2");

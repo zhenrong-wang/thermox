@@ -315,6 +315,12 @@ UnitRegistry make_default_unit_registry() {
         "dynamic_viscosity", "Pa*s", display("Pa·s"));
     display_only(
         "thermal_conductivity", "W/m/K", display("W/m/K"));
+    registry.register_dimension(dimension(
+        "surface_tension", "N/m", display("mN/m", 1.0e3),
+        {
+            accepted("N/m"),
+            accepted("mN/m", 1.0e-3),
+        }));
     display_only("speed", "m/s", display("m/s"));
     return registry;
 }

@@ -45,9 +45,11 @@ explicit error when the map selects a regime for which no closure candidate exis
 Thermox does not ship a guessed universal flow-pattern map. A packaged map must identify its
 source, geometry, orientation, working-fluid basis, dimensionless groups, and validity envelope.
 Many established gas–liquid maps require superficial velocities, density and viscosity ratios,
-Froude/Weber-type groups, and surface tension. The current property contract exposes density and
-viscosity but not surface tension. Surface-tension capability and derived-group evaluation are
-therefore prerequisites for credible general two-phase map integration, rather than constants to
-be inferred by the classifier.
+Froude/Weber-type groups, and surface tension. The property contract now exposes saturation-pair
+surface tension as a distinct capability with no fallback constant. The reusable
+`calculate_two_phase_flow_groups` function derives phase mass fluxes, superficial velocities,
+phase Reynolds/Froude/Weber numbers, Bond number, and phase-property ratios from one validated SI
+input contract. Published maps remain responsible for declaring any map-specific transformed
+coordinates and validity ranges.
 
 The synthetic regions in unit tests verify selection semantics only and make no physical claim.

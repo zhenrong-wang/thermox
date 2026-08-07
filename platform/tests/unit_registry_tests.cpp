@@ -61,6 +61,21 @@ int main() {
                 pressure_gradient.engineering_display.scale_from_si ==
                     1.0e-3,
             "pressure-gradient engineering metadata must be registered");
+        const auto& surface_tension =
+            units.require_dimension("surface_tension");
+        require(
+            surface_tension.canonical_unit == "N/m" &&
+                surface_tension.engineering_display.symbol ==
+                    "mN/m" &&
+                surface_tension.engineering_display.scale_from_si ==
+                    1.0e3,
+            "surface-tension engineering metadata must be registered");
+        const auto tension = units.convert(72.0, "mN/m");
+        require(
+            tension.dimension == "surface_tension" &&
+                tension.unit == "N/m" &&
+                std::abs(tension.value_si - 0.072) < 1.0e-15,
+            "surface tension must normalize to N/m");
 
         thermox::platform::DimensionUnitDescriptor custom{
             "custom_flux",
