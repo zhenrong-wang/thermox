@@ -1002,7 +1002,7 @@ export interface CatalogCorrelationTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v6'
+  schema_version: 'thermox.catalog/v7'
   status: string
   fingerprint: string
   components: CatalogComponent[]
@@ -1011,6 +1011,32 @@ export interface Catalog {
   thermochemistry_backends: ThermochemistryBackend[]
   connector_domains: ConnectorDomain[]
   correlation_templates: CatalogCorrelationTemplate[]
+  regime_map_templates: CatalogRegimeMapTemplate[]
+}
+
+export interface CatalogRegimeMapTemplate {
+  id: string
+  version: string
+  display_name: string
+  category: string
+  reference: string
+  scope: string
+  inputs: Array<{ name: string; dimension: string }>
+  regions: Array<{
+    id: string
+    regime: string
+    priority: number
+    criteria: Array<{
+      expression: string
+      dimension: string
+      has_minimum: boolean
+      minimum_si: number | null
+      has_maximum: boolean
+      maximum_si: number | null
+      minimum_inclusive: boolean
+      maximum_inclusive: boolean
+    }>
+  }>
 }
 
 export type GraphEntityType =

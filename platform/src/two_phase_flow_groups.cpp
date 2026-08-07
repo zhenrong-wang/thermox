@@ -38,6 +38,7 @@ TwoPhaseFlowGroups calculate_two_phase_flow_groups(
     }
 
     TwoPhaseFlowGroups groups;
+    groups.gravity_m_s2 = inputs.gravity_m_s2;
     groups.liquid_mass_flux_kg_m2_s =
         (1.0 - inputs.vapor_quality) *
         inputs.total_mass_flux_kg_m2_s;

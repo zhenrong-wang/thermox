@@ -40,6 +40,38 @@ struct RegimeMapRegion {
     std::vector<RegimeMapCriterion> criteria;
 };
 
+// A packaged, cited map definition. Templates remain separate from immutable
+// project artifacts: users instantiate a template into an artifact with their
+// own identity before binding it to a model.
+struct RegimeMapTemplateDescriptor {
+    std::string id;
+    std::string version;
+    std::string display_name;
+    std::string category;
+    std::string reference;
+    std::string scope;
+    std::vector<RegimeMapVariable> inputs;
+    std::vector<RegimeMapRegion> regions;
+};
+
+struct RegimeMapArtifactIdentity {
+    std::string id;
+    std::string revision;
+    std::string checksum_sha256;
+};
+
+class RegimeMapTemplateRegistry {
+public:
+    void register_template(RegimeMapTemplateDescriptor descriptor);
+    [[nodiscard]] const RegimeMapTemplateDescriptor& require_template(
+        const std::string& id) const;
+    [[nodiscard]] std::vector<RegimeMapTemplateDescriptor>
+        descriptors() const;
+
+private:
+    std::map<std::string, RegimeMapTemplateDescriptor> templates_;
+};
+
 struct RegimeMapEvaluation {
     std::string selected_region;
     std::string selected_regime;
@@ -78,5 +110,12 @@ private:
     std::vector<RegimeMapRegion> regions_;
     std::vector<std::vector<SafeExpression>> compiled_criteria_;
 };
+
+[[nodiscard]] RegimeMapTemplateRegistry
+make_default_regime_map_template_registry();
+
+[[nodiscard]] RegimeMapArtifact instantiate_regime_map_template(
+    const RegimeMapTemplateDescriptor& descriptor,
+    RegimeMapArtifactIdentity identity);
 
 }  // namespace thermox::platform

@@ -218,6 +218,56 @@ void test_two_phase_dimensionless_groups() {
         "dimensionless groups must reject missing surface tension");
 }
 
+void test_packaged_mishima_ishii_annular_boundary() {
+    const auto registry =
+        thermox::platform::make_default_regime_map_template_registry();
+    const auto& descriptor = registry.require_template(
+        "mishima_ishii_vertical_upflow_annular_entrainment");
+    require(
+        descriptor.scope.find("vertical upward") != std::string::npos &&
+            descriptor.scope.find("only") != std::string::npos,
+        "packaged physical maps must expose their geometry and limited "
+        "classification scope");
+    const auto map = thermox::platform::instantiate_regime_map_template(
+        descriptor,
+        {"mishima-ishii-test", "test-1", std::string(64, 'e')});
+
+    constexpr double rho_l = 1000.0;
+    constexpr double rho_v = 1.2;
+    constexpr double mu_l = 1.0e-3;
+    constexpr double sigma = 0.072;
+    constexpr double gravity = 9.80665;
+    const double laplace_length = std::sqrt(
+        sigma / (gravity * (rho_l - rho_v)));
+    const double viscosity_number = mu_l /
+        std::sqrt(rho_l * sigma * laplace_length);
+    const double transition_velocity = std::pow(
+        sigma * gravity * (rho_l - rho_v) / (rho_v * rho_v),
+        0.25) * std::pow(viscosity_number, -0.2);
+    const auto classify = [&](double velocity, double liquid_reynolds) {
+        return map.classify({
+            {"vapor_superficial_velocity", velocity},
+            {"liquid_density", rho_l},
+            {"vapor_density", rho_v},
+            {"liquid_viscosity", mu_l},
+            {"surface_tension", sigma},
+            {"gravity", gravity},
+            {"liquid_reynolds_number", liquid_reynolds},
+        });
+    };
+    const auto below = classify(0.5 * transition_velocity, 5000.0);
+    const auto above = classify(1.5 * transition_velocity, 5000.0);
+    require(
+        below.succeeded() && below.selected_regime == "pre_annular" &&
+            above.succeeded() && above.selected_regime == "annular",
+        "Mishima-Ishii template must classify both sides of the cited "
+        "entrainment boundary");
+    require(
+        !classify(transition_velocity, 1000.0).succeeded(),
+        "Mishima-Ishii template must refuse evaluation outside its "
+        "declared liquid-Reynolds applicability domain");
+}
+
 }  // namespace
 
 int main() {
@@ -226,6 +276,7 @@ int main() {
         test_priority_gap_and_ambiguity();
         test_contract_validation_and_registry();
         test_two_phase_dimensionless_groups();
+        test_packaged_mishima_ishii_annular_boundary();
         std::cout << "thermox regime-map tests passed\n";
         return 0;
     } catch (const std::exception& error) {

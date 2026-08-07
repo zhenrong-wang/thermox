@@ -3,6 +3,7 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/expression_component.hpp"
+#include "thermox/platform/regime_map.hpp"
 #include "thermox/platform/unit_registry.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/physics/thermochemistry.hpp"
@@ -18,6 +19,7 @@ struct SimulationRuntime::Impl {
     physics::PropertyPackageRegistry properties;
     platform::EngineeringArtifactRegistry engineering_artifacts;
     platform::CorrelationTemplateRegistry correlation_templates;
+    platform::RegimeMapTemplateRegistry regime_map_templates;
     physics::ThermochemistryPackageRegistry thermochemistry;
     platform::UnitRegistry units;
     std::string fingerprint;
@@ -31,6 +33,7 @@ struct NativeRuntimeFactory {
         physics::PropertyPackageRegistry properties,
         platform::EngineeringArtifactRegistry engineering_artifacts,
         platform::CorrelationTemplateRegistry correlation_templates,
+        platform::RegimeMapTemplateRegistry regime_map_templates,
         physics::ThermochemistryPackageRegistry thermochemistry,
         platform::UnitRegistry units);
     static std::shared_ptr<const SimulationRuntime> overlay(

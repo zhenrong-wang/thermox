@@ -407,7 +407,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v6,
+            thermox::service::catalog_schema_v7,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -906,6 +906,20 @@ void test_catalog_discovery() {
                 "10.1016/0017-9310(67)90047-6") !=
                 std::string::npos,
         "catalog must expose all referenced Chisholm regime templates");
+    const auto mishima_ishii = std::find_if(
+        response.regime_map_templates.begin(),
+        response.regime_map_templates.end(),
+        [](const auto& descriptor) {
+            return descriptor.id ==
+                "mishima_ishii_vertical_upflow_annular_entrainment";
+        });
+    require(
+        response.regime_map_templates.size() == 1 &&
+            mishima_ishii != response.regime_map_templates.end() &&
+            mishima_ishii->regions.size() == 2 &&
+            mishima_ishii->scope.find("vertical upward") !=
+                std::string::npos,
+        "catalog must expose cited regime-map templates with explicit scope");
     const auto pressure_units = std::find_if(
         response.unit_dimensions.begin(),
         response.unit_dimensions.end(),
@@ -922,7 +936,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v6\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v7\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -934,6 +948,12 @@ void test_catalog_discovery() {
                 std::string::npos &&
             json.find("10.1115/1.3689137") != std::string::npos,
         "catalog JSON must serialize correlation templates and provenance");
+    require(
+        json.find("\"regime_map_templates\": [") !=
+                std::string::npos &&
+            json.find("10.1016/0017-9310(84)90142-X") !=
+                std::string::npos,
+        "catalog JSON must serialize regime-map templates and provenance");
 }
 
 void test_correlation_template_instantiation() {
@@ -2955,6 +2975,8 @@ void test_injectable_native_runtime() {
             make_default_property_package_registry(),
         {}, thermox::platform::
                 make_default_correlation_template_registry(),
+        thermox::platform::
+                make_default_regime_map_template_registry(),
         std::move(chemistry));
     thermox::service::SimulationService service(runtime);
     const auto catalog = service.get_catalog();

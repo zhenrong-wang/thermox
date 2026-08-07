@@ -17,6 +17,7 @@ struct TwoPhaseFlowGroupInputs {
 // Base nondimensional groups only. Published maps may form their own
 // transformed coordinates from these values and must document that choice.
 struct TwoPhaseFlowGroups {
+    double gravity_m_s2{0.0};
     double liquid_mass_flux_kg_m2_s{0.0};
     double vapor_mass_flux_kg_m2_s{0.0};
     double liquid_superficial_velocity_m_s{0.0};

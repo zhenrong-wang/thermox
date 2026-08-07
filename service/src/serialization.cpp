@@ -1301,6 +1301,67 @@ std::string serialize_catalog_response_json(
         }
         out << "]}";
     }
+    out << "],\n  \"regime_map_templates\": [";
+    for (std::size_t i = 0;
+         i < response.regime_map_templates.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& descriptor = response.regime_map_templates[i];
+        out << "{\"id\": ";
+        json_string(out, descriptor.id);
+        out << ", \"version\": ";
+        json_string(out, descriptor.version);
+        out << ", \"display_name\": ";
+        json_string(out, descriptor.display_name);
+        out << ", \"category\": ";
+        json_string(out, descriptor.category);
+        out << ", \"reference\": ";
+        json_string(out, descriptor.reference);
+        out << ", \"scope\": ";
+        json_string(out, descriptor.scope);
+        out << ", \"inputs\": [";
+        for (std::size_t j = 0; j < descriptor.inputs.size(); ++j) {
+            if (j != 0) out << ", ";
+            out << "{\"name\": ";
+            json_string(out, descriptor.inputs[j].name);
+            out << ", \"dimension\": ";
+            json_string(out, descriptor.inputs[j].dimension);
+            out << '}';
+        }
+        out << "], \"regions\": [";
+        for (std::size_t j = 0; j < descriptor.regions.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& region = descriptor.regions[j];
+            out << "{\"id\": ";
+            json_string(out, region.id);
+            out << ", \"regime\": ";
+            json_string(out, region.regime);
+            out << ", \"priority\": " << region.priority;
+            out << ", \"criteria\": [";
+            for (std::size_t k = 0; k < region.criteria.size(); ++k) {
+                if (k != 0) out << ", ";
+                const auto& criterion = region.criteria[k];
+                out << "{\"expression\": ";
+                json_string(out, criterion.expression);
+                out << ", \"dimension\": ";
+                json_string(out, criterion.dimension);
+                out << ", \"has_minimum\": "
+                    << (criterion.has_minimum ? "true" : "false");
+                out << ", \"minimum_si\": ";
+                json_number(out, criterion.minimum_si);
+                out << ", \"has_maximum\": "
+                    << (criterion.has_maximum ? "true" : "false");
+                out << ", \"maximum_si\": ";
+                json_number(out, criterion.maximum_si);
+                out << ", \"minimum_inclusive\": "
+                    << (criterion.minimum_inclusive ? "true" : "false");
+                out << ", \"maximum_inclusive\": "
+                    << (criterion.maximum_inclusive ? "true" : "false")
+                    << '}';
+            }
+            out << "]}";
+        }
+        out << "]}";
+    }
     out << "]\n}\n";
     return out.str();
 }

@@ -76,6 +76,11 @@ int main() {
                 tension.unit == "N/m" &&
                 std::abs(tension.value_si - 0.072) < 1.0e-15,
             "surface tension must normalize to N/m");
+        require(
+            units.require_dimension("acceleration").canonical_unit ==
+                "m/s2",
+            "regime-map gravity inputs must use a registered SI "
+            "acceleration dimension");
 
         thermox::platform::DimensionUnitDescriptor custom{
             "custom_flux",

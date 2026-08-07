@@ -61,5 +61,16 @@ phase Reynolds/Froude/Weber numbers, Bond number, and phase-property ratios from
 input contract. Published maps remain responsible for declaring any map-specific transformed
 coordinates and validity ranges.
 
-The synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
-physical claim.
+The default `RegimeMapTemplateRegistry` currently contains one deliberately narrow physical
+template: the Mishima–Ishii high-velocity entrainment transition to annular flow for co-current
+vertical upward gas–liquid flow in a round tube. It implements the published property-dependent
+gas-superficial-velocity boundary and its liquid-viscosity-number and liquid-Reynolds limits. It
+classifies only `pre_annular` versus `annular`; it is not presented as the complete Mishima–Ishii
+flow-pattern map. Outside its declared domain, classification returns no applicable region rather
+than extrapolating. The template exposes its citation and scope through `thermox.catalog/v7` and
+can be instantiated into an immutable project artifact. Native extension packages can register
+additional templates without changing the solver or service contract.
+
+Synthetic regions in unit and connected-pipe tests verify selection semantics only and make no
+physical claim. The packaged Mishima–Ishii transition has separate equation, boundary-side, and
+out-of-domain refusal tests.

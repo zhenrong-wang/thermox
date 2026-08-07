@@ -1555,6 +1555,8 @@ private:
                         {"diameter", "length"},
                         {"surface_tension", "surface_tension"},
                         {"pressure", "pressure"},
+                        {"void_fraction", "dimensionless"},
+                        {"gravity", "acceleration"},
                     };
                 for (const auto& input :
                      data.friction_regime_map->inputs()) {
@@ -1735,6 +1737,8 @@ private:
                          data.friction_regime_map->inputs()) {
                         if (input.name == "vapor_quality") {
                             map_inputs.emplace(input.name, quality);
+                        } else if (input.name == "void_fraction") {
+                            map_inputs.emplace(input.name, void_fraction);
                         } else if (input.name == "liquid_density") {
                             map_inputs.emplace(input.name, rho_l);
                         } else if (input.name == "vapor_density") {
@@ -1820,6 +1824,9 @@ private:
                                 saturation.surface_tension_n_m);
                         } else if (input.name == "pressure") {
                             map_inputs.emplace(input.name, mean_pressure);
+                        } else if (input.name == "gravity") {
+                            map_inputs.emplace(
+                                input.name, groups.gravity_m_s2);
                         }
                     }
                     const auto classified =

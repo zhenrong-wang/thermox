@@ -43,6 +43,121 @@ bool inside(
 
 }  // namespace
 
+void RegimeMapTemplateRegistry::register_template(
+    RegimeMapTemplateDescriptor descriptor) {
+    if (!valid_identifier(descriptor.id) || descriptor.version.empty() ||
+        descriptor.display_name.empty() || descriptor.category.empty() ||
+        descriptor.reference.empty() || descriptor.scope.empty()) {
+        throw std::invalid_argument(
+            "regime-map template has incomplete identity, reference, or scope metadata: " +
+            descriptor.id);
+    }
+    RegimeMapArtifact validation{
+        descriptor.id, regime_map_artifact_schema_v1, descriptor.version,
+        std::string(64, '0'), descriptor.inputs, descriptor.regions};
+    validation.validate();
+    const auto id = descriptor.id;
+    if (!templates_.emplace(id, std::move(descriptor)).second) {
+        throw std::invalid_argument(
+            "duplicate regime-map template id: " + id);
+    }
+}
+
+const RegimeMapTemplateDescriptor&
+RegimeMapTemplateRegistry::require_template(
+    const std::string& id) const {
+    const auto found = templates_.find(id);
+    if (found == templates_.end()) {
+        throw std::invalid_argument(
+            "unknown regime-map template: " + id);
+    }
+    return found->second;
+}
+
+std::vector<RegimeMapTemplateDescriptor>
+RegimeMapTemplateRegistry::descriptors() const {
+    std::vector<RegimeMapTemplateDescriptor> result;
+    result.reserve(templates_.size());
+    for (const auto& [_, descriptor] : templates_) {
+        result.push_back(descriptor);
+    }
+    return result;
+}
+
+RegimeMapTemplateRegistry
+make_default_regime_map_template_registry() {
+    RegimeMapTemplateRegistry registry;
+    const std::string viscosity_number =
+        "liquid_viscosity / sqrt(liquid_density * surface_tension * "
+        "sqrt(surface_tension / (gravity * "
+        "(liquid_density - vapor_density))))";
+    const std::string normalized_vapor_velocity =
+        "vapor_superficial_velocity / (pow(surface_tension * gravity * "
+        "(liquid_density - vapor_density) / "
+        "(vapor_density * vapor_density), 0.25) * pow((" +
+        viscosity_number + "), -0.2))";
+    const auto common_criteria = [&]() {
+        return std::vector<RegimeMapCriterion>{
+            {"liquid_density - vapor_density", "density", 0.0,
+             std::nullopt, false, true},
+            {"liquid_reynolds_number", "dimensionless", 1635.0,
+             std::nullopt, false, true},
+            {viscosity_number, "dimensionless", 0.0, 1.0 / 15.0,
+             false, false},
+        };
+    };
+    auto below = common_criteria();
+    below.push_back({
+        normalized_vapor_velocity, "dimensionless", 0.0, 1.0,
+        true, false});
+    auto annular = common_criteria();
+    annular.push_back({
+        normalized_vapor_velocity, "dimensionless", 1.0,
+        std::nullopt, true, true});
+    registry.register_template({
+        "mishima_ishii_vertical_upflow_annular_entrainment",
+        "1.0.0",
+        "Mishima-Ishii vertical-upflow annular entrainment boundary",
+        "Two-phase flow-pattern transition",
+        "Mishima and Ishii, International Journal of Heat and Mass "
+        "Transfer 27(5) (1984) 723-737, DOI "
+        "10.1016/0017-9310(84)90142-X",
+        "Co-current vertical upward gas-liquid flow in a round tube; "
+        "classifies only the high-velocity entrainment transition to "
+        "annular flow. Requires liquid viscosity number N_mu < 1/15 "
+        "and liquid Reynolds number > 1635; outside that domain the "
+        "map deliberately returns no applicable region.",
+        {
+            {"vapor_superficial_velocity", "speed"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"liquid_viscosity", "dynamic_viscosity"},
+            {"surface_tension", "surface_tension"},
+            {"gravity", "acceleration"},
+            {"liquid_reynolds_number", "dimensionless"},
+        },
+        {
+            {"below_annular_entrainment_boundary", "pre_annular", 10,
+             std::move(below)},
+            {"annular_entrainment", "annular", 10,
+             std::move(annular)},
+        },
+    });
+    return registry;
+}
+
+RegimeMapArtifact instantiate_regime_map_template(
+    const RegimeMapTemplateDescriptor& descriptor,
+    RegimeMapArtifactIdentity identity) {
+    RegimeMapArtifact artifact{
+        std::move(identity.id), regime_map_artifact_schema_v1,
+        std::move(identity.revision),
+        std::move(identity.checksum_sha256), descriptor.inputs,
+        descriptor.regions};
+    artifact.validate();
+    return artifact;
+}
+
 RegimeMapArtifact::RegimeMapArtifact(
     std::string artifact_id,
     std::string artifact_schema_version,

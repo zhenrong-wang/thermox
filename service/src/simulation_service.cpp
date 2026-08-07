@@ -1841,6 +1841,38 @@ CatalogResponse SimulationService::get_catalog(
         }
         response.correlation_templates.push_back(std::move(value));
     }
+    for (const auto& descriptor :
+         runtime->impl_->regime_map_templates.descriptors()) {
+        CatalogRegimeMapTemplateType value;
+        value.id = descriptor.id;
+        value.version = descriptor.version;
+        value.display_name = descriptor.display_name;
+        value.category = descriptor.category;
+        value.reference = descriptor.reference;
+        value.scope = descriptor.scope;
+        for (const auto& input : descriptor.inputs) {
+            value.inputs.push_back({input.name, input.dimension});
+        }
+        for (const auto& region : descriptor.regions) {
+            CatalogRegimeMapRegionType mapped_region;
+            mapped_region.id = region.id;
+            mapped_region.regime = region.regime;
+            mapped_region.priority = region.priority;
+            for (const auto& criterion : region.criteria) {
+                mapped_region.criteria.push_back({
+                    criterion.expression, criterion.dimension,
+                    criterion.minimum.has_value(),
+                    criterion.minimum.value_or(0.0),
+                    criterion.maximum.has_value(),
+                    criterion.maximum.value_or(0.0),
+                    criterion.minimum_inclusive,
+                    criterion.maximum_inclusive,
+                });
+            }
+            value.regions.push_back(std::move(mapped_region));
+        }
+        response.regime_map_templates.push_back(std::move(value));
+    }
     for (const auto& extension :
          runtime->impl_->components
              .runtime_extension_descriptors()) {

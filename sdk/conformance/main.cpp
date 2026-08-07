@@ -80,6 +80,8 @@ int main() {
     platform::EngineeringArtifactRegistry engineering_artifacts;
     auto correlation_templates =
         platform::make_default_correlation_template_registry();
+    auto regime_map_templates =
+        platform::make_default_regime_map_template_registry();
     physics::ThermochemistryPackageRegistry thermochemistry;
     auto units = platform::make_default_unit_registry();
 
@@ -161,6 +163,7 @@ int main() {
         properties,
         engineering_artifacts,
         correlation_templates,
+        regime_map_templates,
         thermochemistry,
         units);
 
@@ -169,6 +172,7 @@ int main() {
         std::move(properties),
         std::move(engineering_artifacts),
         std::move(correlation_templates),
+        std::move(regime_map_templates),
         std::move(thermochemistry),
         std::move(units));
     service::SimulationService simulation{runtime};
