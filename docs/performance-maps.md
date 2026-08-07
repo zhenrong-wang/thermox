@@ -102,6 +102,15 @@ of one primary interval shared by all curves and each enabled linear-extrapolati
 domain-neutral numerical facts; compressor-specific limits such as `0 < efficiency <= 1` remain
 component or declared engineering-data constraints rather than being hard-coded in the map kernel.
 
+Conditioned maps apply the same gate to each layer and then validate the three-dimensional join.
+Adjacent layers must have positive shared family and primary domains when the corresponding map
+axes reject extrapolation. With clamp or linear policies, disconnected layers remain representable
+but the quality report records that cross-layer interpolation depends on extrapolation. The
+conditioned report includes every layer report, common and minimum adjacent coverage, the maximum
+condition-axis slope over the overlaid declared grids, and condition-extrapolation advisories.
+Finite layer values separated by an interval so small that the condition derivative overflows are
+rejected during construction.
+
 ## Extrapolation
 
 Each axis independently selects one policy:

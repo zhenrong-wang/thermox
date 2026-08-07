@@ -392,6 +392,22 @@ void test_conditioned_map_interpolates_third_coordinate() {
             map.layers().size() == 2 &&
             !value.condition_extrapolated,
         "conditioned map must retain its third-axis contract");
+    const auto& quality = map.quality_report();
+    require(
+        quality.layer_count == 2U &&
+            quality.condition_minimum == 0.0 &&
+            quality.condition_maximum == 1.0 &&
+            quality.has_global_common_family_domain &&
+            quality.minimum_adjacent_family_overlap == 100.0 &&
+            quality.minimum_adjacent_primary_overlap == 10.0 &&
+            quality.layers.size() == 2U &&
+            quality.outputs.size() == 2U &&
+            quality.advisories.empty(),
+        "conditioned quality report must summarize cross-layer "
+        "coverage");
+    require_close(
+        quality.outputs[0].maximum_absolute_condition_slope, 4.0,
+        "conditioned quality report slope is incorrect");
 
     const thermox::platform::ConditionedPerformanceMap clamped(
         {"geometry_setting", "angle"},
@@ -410,6 +426,93 @@ void test_conditioned_map_interpolates_third_coordinate() {
     require(
         boundary.condition_extrapolated,
         "condition clamp must report extrapolation");
+}
+
+void test_conditioned_map_rejects_disconnected_layers() {
+    const auto make_map = [](
+        double family_minimum, double primary_minimum,
+        thermox::platform::MapExtrapolationPolicy primary =
+            thermox::platform::MapExtrapolationPolicy::reject,
+        thermox::platform::MapExtrapolationPolicy family =
+            thermox::platform::MapExtrapolationPolicy::reject) {
+        return std::make_shared<const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{"x", "dimensionless"},
+            thermox::platform::MapVariable{"y", "dimensionless"},
+            std::vector<thermox::platform::MapVariable>{
+                {"value", "dimensionless"}},
+            std::vector<thermox::platform::MapCurve>{
+                {family_minimum,
+                 {{primary_minimum, {1.0}},
+                  {primary_minimum + 1.0, {2.0}}}},
+                {family_minimum + 1.0,
+                 {{primary_minimum, {2.0}},
+                  {primary_minimum + 1.0, {3.0}}}},
+            },
+            primary, family);
+    };
+
+    bool family_gap_rejected = false;
+    try {
+        (void)thermox::platform::ConditionedPerformanceMap(
+            {"condition", "dimensionless"},
+            {{0.0, make_map(0.0, 0.0)},
+             {1.0, make_map(2.0, 0.0)}});
+    } catch (const std::invalid_argument&) {
+        family_gap_rejected = true;
+    }
+    require(
+        family_gap_rejected,
+        "conditioned maps must reject adjacent layers with no shared "
+        "family domain under reject extrapolation");
+
+    bool primary_gap_rejected = false;
+    try {
+        (void)thermox::platform::ConditionedPerformanceMap(
+            {"condition", "dimensionless"},
+            {{0.0, make_map(0.0, 0.0)},
+             {1.0, make_map(0.0, 2.0)}});
+    } catch (const std::invalid_argument&) {
+        primary_gap_rejected = true;
+    }
+    require(
+        primary_gap_rejected,
+        "conditioned maps must reject adjacent layers with no shared "
+        "primary domain under reject extrapolation");
+
+    const thermox::platform::ConditionedPerformanceMap extrapolating(
+        {"condition", "dimensionless"},
+        {{0.0, make_map(
+                   0.0, 0.0,
+                   thermox::platform::MapExtrapolationPolicy::linear,
+                   thermox::platform::MapExtrapolationPolicy::linear)},
+         {1.0, make_map(
+                   2.0, 2.0,
+                   thermox::platform::MapExtrapolationPolicy::linear,
+                   thermox::platform::MapExtrapolationPolicy::linear)}},
+        thermox::platform::MapExtrapolationPolicy::linear);
+    require(
+        extrapolating.quality_report().advisories.size() == 4U &&
+            extrapolating.quality_report()
+                    .minimum_adjacent_family_overlap == -1.0 &&
+            extrapolating.quality_report()
+                    .minimum_adjacent_primary_overlap == -1.0,
+        "conditioned maps that bridge disconnected layers must expose "
+        "every extrapolation dependency");
+
+    bool condition_derivative_rejected = false;
+    try {
+        (void)thermox::platform::ConditionedPerformanceMap(
+            {"condition", "dimensionless"},
+            {{0.0, scaled_sample_map(1.0)},
+             {std::numeric_limits<double>::denorm_min(),
+              scaled_sample_map(2.0)}});
+    } catch (const std::invalid_argument&) {
+        condition_derivative_rejected = true;
+    }
+    require(
+        condition_derivative_rejected,
+        "conditioned maps whose finite layers produce non-finite "
+        "condition derivatives must be rejected");
 }
 
 void test_versioned_artifact_registry() {
@@ -519,6 +622,7 @@ int main() {
         test_definition_validation();
         test_quality_report_quantifies_interpolation_risk();
         test_conditioned_map_interpolates_third_coordinate();
+        test_conditioned_map_rejects_disconnected_layers();
         test_versioned_artifact_registry();
         test_registry_is_artifact_type_neutral();
         std::cout << "thermox performance map tests passed\n";

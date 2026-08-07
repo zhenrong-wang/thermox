@@ -439,6 +439,266 @@ MapQualityReport assess_quality(
     return report;
 }
 
+struct CoordinateDomain {
+    double minimum{0.0};
+    double maximum{0.0};
+};
+
+CoordinateDomain primary_domain_at_family(
+    const PerformanceMap& map,
+    double family_coordinate) {
+    std::vector<double> family_coordinates;
+    family_coordinates.reserve(map.curves().size());
+    for (const auto& curve : map.curves()) {
+        family_coordinates.push_back(curve.family_coordinate);
+    }
+    const auto selected = bracket(
+        family_coordinates, family_coordinate,
+        map.family_extrapolation(), "family");
+    const auto& lower = map.curves()[selected.lower];
+    const auto& upper = map.curves()[selected.upper];
+    if (map.primary_extrapolation() ==
+        MapExtrapolationPolicy::reject) {
+        return {
+            std::max(
+                lower.samples.front().coordinate,
+                upper.samples.front().coordinate),
+            std::min(
+                lower.samples.back().coordinate,
+                upper.samples.back().coordinate),
+        };
+    }
+    return {
+        std::min(
+            lower.samples.front().coordinate,
+            upper.samples.front().coordinate),
+        std::max(
+            lower.samples.back().coordinate,
+            upper.samples.back().coordinate),
+    };
+}
+
+std::vector<double> cross_layer_family_probes(
+    const PerformanceMap& lower,
+    const PerformanceMap& upper) {
+    const bool reject = lower.family_extrapolation() ==
+        MapExtrapolationPolicy::reject;
+    const double minimum = reject
+        ? std::max(
+              lower.curves().front().family_coordinate,
+              upper.curves().front().family_coordinate)
+        : std::min(
+              lower.curves().front().family_coordinate,
+              upper.curves().front().family_coordinate);
+    const double maximum = reject
+        ? std::min(
+              lower.curves().back().family_coordinate,
+              upper.curves().back().family_coordinate)
+        : std::max(
+              lower.curves().back().family_coordinate,
+              upper.curves().back().family_coordinate);
+    if (maximum < minimum) return {};
+    std::vector<double> probes{minimum, maximum};
+    const auto append = [&](const PerformanceMap& map) {
+        for (const auto& curve : map.curves()) {
+            if (curve.family_coordinate >= minimum &&
+                curve.family_coordinate <= maximum) {
+                probes.push_back(curve.family_coordinate);
+            }
+        }
+    };
+    append(lower);
+    append(upper);
+    std::sort(probes.begin(), probes.end());
+    probes.erase(
+        std::unique(probes.begin(), probes.end()), probes.end());
+    return probes;
+}
+
+std::vector<double> cross_layer_primary_probes(
+    const PerformanceMap& lower,
+    const PerformanceMap& upper,
+    CoordinateDomain domain) {
+    std::vector<double> probes{domain.minimum, domain.maximum};
+    const auto append = [&](const PerformanceMap& map) {
+        for (const auto& curve : map.curves()) {
+            for (const auto& sample : curve.samples) {
+                if (sample.coordinate >= domain.minimum &&
+                    sample.coordinate <= domain.maximum) {
+                    probes.push_back(sample.coordinate);
+                }
+            }
+        }
+    };
+    append(lower);
+    append(upper);
+    std::sort(probes.begin(), probes.end());
+    probes.erase(
+        std::unique(probes.begin(), probes.end()), probes.end());
+    return probes;
+}
+
+ConditionedMapQualityReport assess_conditioned_quality(
+    const std::vector<ConditionedMapLayer>& layers,
+    MapExtrapolationPolicy condition_extrapolation) {
+    ConditionedMapQualityReport report;
+    report.layer_count = layers.size();
+    report.condition_minimum = layers.front().condition_coordinate;
+    report.condition_maximum = layers.back().condition_coordinate;
+    report.common_family_minimum =
+        layers.front().map->curves().front().family_coordinate;
+    report.common_family_maximum =
+        layers.front().map->curves().back().family_coordinate;
+    report.minimum_adjacent_family_overlap =
+        std::numeric_limits<double>::infinity();
+    report.minimum_adjacent_primary_overlap =
+        std::numeric_limits<double>::infinity();
+    for (const auto& output :
+         layers.front().map->output_variables()) {
+        report.outputs.push_back({output.name});
+    }
+    for (const auto& layer : layers) {
+        report.layers.push_back(layer.map->quality_report());
+        report.common_family_minimum = std::max(
+            report.common_family_minimum,
+            layer.map->curves().front().family_coordinate);
+        report.common_family_maximum = std::min(
+            report.common_family_maximum,
+            layer.map->curves().back().family_coordinate);
+    }
+    report.has_global_common_family_domain =
+        report.common_family_maximum > report.common_family_minimum;
+
+    bool relies_on_family_extrapolation = false;
+    bool relies_on_primary_extrapolation = false;
+    for (std::size_t index = 1; index < layers.size(); ++index) {
+        const auto& lower = *layers[index - 1U].map;
+        const auto& upper = *layers[index].map;
+        const double family_overlap_minimum = std::max(
+            lower.curves().front().family_coordinate,
+            upper.curves().front().family_coordinate);
+        const double family_overlap_maximum = std::min(
+            lower.curves().back().family_coordinate,
+            upper.curves().back().family_coordinate);
+        const double family_overlap =
+            family_overlap_maximum - family_overlap_minimum;
+        if (!std::isfinite(family_overlap)) {
+            throw std::invalid_argument(
+                "conditioned performance-map layers have a non-finite "
+                "family-domain separation or overlap");
+        }
+        report.minimum_adjacent_family_overlap = std::min(
+            report.minimum_adjacent_family_overlap, family_overlap);
+        if (lower.family_extrapolation() ==
+                MapExtrapolationPolicy::reject &&
+            family_overlap <= 0.0) {
+            throw std::invalid_argument(
+                "adjacent conditioned performance-map layers have no "
+                "positive shared family-coordinate domain under reject "
+                "extrapolation");
+        }
+        if (family_overlap <= 0.0) {
+            relies_on_family_extrapolation = true;
+        }
+        const double condition_span =
+            layers[index].condition_coordinate -
+            layers[index - 1U].condition_coordinate;
+        if (!std::isfinite(condition_span)) {
+            throw std::invalid_argument(
+                "conditioned performance-map coordinate span is "
+                "non-finite");
+        }
+        for (const double family :
+             cross_layer_family_probes(lower, upper)) {
+            const auto lower_domain =
+                primary_domain_at_family(lower, family);
+            const auto upper_domain =
+                primary_domain_at_family(upper, family);
+            const double primary_overlap_minimum = std::max(
+                lower_domain.minimum, upper_domain.minimum);
+            const double primary_overlap_maximum = std::min(
+                lower_domain.maximum, upper_domain.maximum);
+            const double primary_overlap =
+                primary_overlap_maximum - primary_overlap_minimum;
+            if (!std::isfinite(primary_overlap)) {
+                throw std::invalid_argument(
+                    "conditioned performance-map layers have a "
+                    "non-finite primary-domain separation or overlap");
+            }
+            report.minimum_adjacent_primary_overlap = std::min(
+                report.minimum_adjacent_primary_overlap,
+                primary_overlap);
+            const bool reject_primary =
+                lower.primary_extrapolation() ==
+                MapExtrapolationPolicy::reject;
+            if (reject_primary && primary_overlap <= 0.0) {
+                throw std::invalid_argument(
+                    "adjacent conditioned performance-map layers have "
+                    "no positive shared primary-coordinate domain at "
+                    "family coordinate " + std::to_string(family));
+            }
+            if (primary_overlap <= 0.0) {
+                relies_on_primary_extrapolation = true;
+            }
+            const CoordinateDomain evaluation_domain = reject_primary
+                ? CoordinateDomain{
+                      primary_overlap_minimum,
+                      primary_overlap_maximum}
+                : CoordinateDomain{
+                      std::min(
+                          lower_domain.minimum,
+                          upper_domain.minimum),
+                      std::max(
+                          lower_domain.maximum,
+                          upper_domain.maximum)};
+            for (const double primary : cross_layer_primary_probes(
+                     lower, upper, evaluation_domain)) {
+                const auto lower_value =
+                    lower.evaluate(primary, family);
+                const auto upper_value =
+                    upper.evaluate(primary, family);
+                for (std::size_t output = 0;
+                     output < lower_value.outputs.size(); ++output) {
+                    const double slope =
+                        (upper_value.outputs[output] -
+                         lower_value.outputs[output]) /
+                        condition_span;
+                    if (!std::isfinite(slope)) {
+                        throw std::invalid_argument(
+                            "conditioned performance-map interpolation "
+                            "derivative is non-finite");
+                    }
+                    report.outputs[output]
+                        .maximum_absolute_condition_slope = std::max(
+                            report.outputs[output]
+                                .maximum_absolute_condition_slope,
+                            std::abs(slope));
+                }
+            }
+        }
+    }
+    if (!report.has_global_common_family_domain) {
+        report.advisories.push_back(
+            "no family-coordinate interval is shared by every "
+            "condition layer");
+    }
+    if (relies_on_family_extrapolation) {
+        report.advisories.push_back(
+            "adjacent condition layers rely on family-coordinate "
+            "extrapolation to interpolate between their declared maps");
+    }
+    if (relies_on_primary_extrapolation) {
+        report.advisories.push_back(
+            "adjacent condition layers rely on primary-coordinate "
+            "extrapolation to interpolate between their declared maps");
+    }
+    if (condition_extrapolation == MapExtrapolationPolicy::linear) {
+        report.advisories.push_back(
+            "linear condition-coordinate extrapolation is enabled");
+    }
+    return report;
+}
+
 }  // namespace
 
 PerformanceMap::PerformanceMap(
@@ -644,6 +904,8 @@ ConditionedPerformanceMap::ConditionedPerformanceMap(
             }
         }
     }
+    quality_report_ = assess_conditioned_quality(
+        layers_, condition_extrapolation_);
 }
 
 const MapVariable&
@@ -660,6 +922,11 @@ MapExtrapolationPolicy
 ConditionedPerformanceMap::condition_extrapolation()
     const noexcept {
     return condition_extrapolation_;
+}
+
+const ConditionedMapQualityReport&
+ConditionedPerformanceMap::quality_report() const noexcept {
+    return quality_report_;
 }
 
 ConditionedMapEvaluation ConditionedPerformanceMap::evaluate(

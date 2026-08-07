@@ -124,6 +124,25 @@ struct ConditionedMapEvaluation {
     bool condition_extrapolated{false};
 };
 
+struct ConditionedMapOutputQuality {
+    std::string name;
+    double maximum_absolute_condition_slope{0.0};
+};
+
+struct ConditionedMapQualityReport {
+    std::size_t layer_count{0};
+    double condition_minimum{0.0};
+    double condition_maximum{0.0};
+    double common_family_minimum{0.0};
+    double common_family_maximum{0.0};
+    bool has_global_common_family_domain{false};
+    double minimum_adjacent_family_overlap{0.0};
+    double minimum_adjacent_primary_overlap{0.0};
+    std::vector<MapQualityReport> layers;
+    std::vector<ConditionedMapOutputQuality> outputs;
+    std::vector<std::string> advisories;
+};
+
 // A third-coordinate family of ordinary two-coordinate maps.
 //
 // Every layer retains the non-rectangular primary/family structure of
@@ -143,6 +162,8 @@ public:
         const noexcept;
     [[nodiscard]] MapExtrapolationPolicy
     condition_extrapolation() const noexcept;
+    [[nodiscard]] const ConditionedMapQualityReport&
+        quality_report() const noexcept;
 
     [[nodiscard]] ConditionedMapEvaluation evaluate(
         double primary_coordinate,
@@ -153,6 +174,7 @@ private:
     MapVariable condition_variable_;
     std::vector<ConditionedMapLayer> layers_;
     MapExtrapolationPolicy condition_extrapolation_;
+    ConditionedMapQualityReport quality_report_;
 };
 
 inline constexpr const char* performance_map_artifact_type =
