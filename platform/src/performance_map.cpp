@@ -128,11 +128,50 @@ CurveEvaluation evaluate_curve(
     return result;
 }
 
+std::vector<double> family_slope_probes(
+    const MapCurve& lower,
+    const MapCurve& upper,
+    MapExtrapolationPolicy primary_extrapolation) {
+    const double minimum =
+        primary_extrapolation == MapExtrapolationPolicy::reject
+        ? std::max(
+              lower.samples.front().coordinate,
+              upper.samples.front().coordinate)
+        : std::min(
+              lower.samples.front().coordinate,
+              upper.samples.front().coordinate);
+    const double maximum =
+        primary_extrapolation == MapExtrapolationPolicy::reject
+        ? std::min(
+              lower.samples.back().coordinate,
+              upper.samples.back().coordinate)
+        : std::max(
+              lower.samples.back().coordinate,
+              upper.samples.back().coordinate);
+    if (maximum < minimum) return {};
+    std::vector<double> probes{minimum, maximum};
+    const auto append = [&](const MapCurve& curve) {
+        for (const auto& sample : curve.samples) {
+            if (sample.coordinate >= minimum &&
+                sample.coordinate <= maximum) {
+                probes.push_back(sample.coordinate);
+            }
+        }
+    };
+    append(lower);
+    append(upper);
+    std::sort(probes.begin(), probes.end());
+    probes.erase(
+        std::unique(probes.begin(), probes.end()), probes.end());
+    return probes;
+}
+
 void validate(
     const MapVariable& primary_variable,
     const MapVariable& family_variable,
     const std::vector<MapVariable>& output_variables,
-    const std::vector<MapCurve>& curves) {
+    const std::vector<MapCurve>& curves,
+    MapExtrapolationPolicy primary_extrapolation) {
     const auto valid_variable = [](const MapVariable& variable) {
         return !variable.name.empty() &&
             !variable.dimension.empty();
@@ -211,8 +250,193 @@ void validate(
                 throw std::invalid_argument(
                     "performance map outputs must be finite");
             }
+            if (sample_index != 0U) {
+                const auto& previous =
+                    curve.samples[sample_index - 1U];
+                const double span =
+                    sample.coordinate - previous.coordinate;
+                if (!std::isfinite(span)) {
+                    throw std::invalid_argument(
+                        "performance map primary-coordinate span is "
+                        "non-finite");
+                }
+                for (std::size_t output = 0;
+                     output < sample.outputs.size(); ++output) {
+                    if (!std::isfinite(
+                            (sample.outputs[output] -
+                             previous.outputs[output]) / span)) {
+                        throw std::invalid_argument(
+                            "performance map primary slope is "
+                            "non-finite");
+                    }
+                }
+            }
         }
     }
+
+    for (std::size_t index = 1; index < curves.size(); ++index) {
+        const auto& lower = curves[index - 1U];
+        const auto& upper = curves[index];
+        const double overlap_minimum = std::max(
+            lower.samples.front().coordinate,
+            upper.samples.front().coordinate);
+        const double overlap_maximum = std::min(
+            lower.samples.back().coordinate,
+            upper.samples.back().coordinate);
+        if (!std::isfinite(overlap_maximum - overlap_minimum)) {
+            throw std::invalid_argument(
+                "adjacent performance-map primary domains have a "
+                "non-finite separation or overlap");
+        }
+        if (primary_extrapolation == MapExtrapolationPolicy::reject &&
+            overlap_maximum <= overlap_minimum) {
+            throw std::invalid_argument(
+                "adjacent performance-map curves have no positive shared "
+                "primary-coordinate domain under reject extrapolation");
+        }
+        const double family_span =
+            upper.family_coordinate - lower.family_coordinate;
+        if (!std::isfinite(family_span)) {
+            throw std::invalid_argument(
+                "performance map family-coordinate span is non-finite");
+        }
+        for (const double probe : family_slope_probes(
+                 lower, upper, primary_extrapolation)) {
+            const auto lower_value = evaluate_curve(
+                lower, probe, primary_extrapolation);
+            const auto upper_value = evaluate_curve(
+                upper, probe, primary_extrapolation);
+            for (std::size_t output = 0;
+                 output < lower_value.outputs.size(); ++output) {
+                if (!std::isfinite(
+                        (upper_value.outputs[output] -
+                         lower_value.outputs[output]) / family_span) ||
+                    !std::isfinite(lower_value.derivatives[output]) ||
+                    !std::isfinite(upper_value.derivatives[output])) {
+                    throw std::invalid_argument(
+                        "performance map interpolation derivative is "
+                        "non-finite");
+                }
+            }
+        }
+    }
+}
+
+MapQualityReport assess_quality(
+    const std::vector<MapVariable>& output_variables,
+    const std::vector<MapCurve>& curves,
+    MapExtrapolationPolicy primary_extrapolation,
+    MapExtrapolationPolicy family_extrapolation) {
+    MapQualityReport report;
+    report.curve_count = curves.size();
+    report.family_minimum = curves.front().family_coordinate;
+    report.family_maximum = curves.back().family_coordinate;
+    report.common_primary_minimum =
+        curves.front().samples.front().coordinate;
+    report.common_primary_maximum =
+        curves.front().samples.back().coordinate;
+    report.minimum_adjacent_primary_overlap =
+        std::numeric_limits<double>::infinity();
+    for (const auto& output : output_variables) {
+        report.outputs.push_back({output.name});
+    }
+    for (const auto& curve : curves) {
+        report.sample_count += curve.samples.size();
+        report.common_primary_minimum = std::max(
+            report.common_primary_minimum,
+            curve.samples.front().coordinate);
+        report.common_primary_maximum = std::min(
+            report.common_primary_maximum,
+            curve.samples.back().coordinate);
+        std::vector<double> previous_slopes;
+        for (std::size_t sample = 0;
+             sample < curve.samples.size(); ++sample) {
+            const auto& point = curve.samples[sample];
+            for (std::size_t output = 0;
+                 output < point.outputs.size(); ++output) {
+                report.outputs[output].minimum = std::min(
+                    report.outputs[output].minimum,
+                    point.outputs[output]);
+                report.outputs[output].maximum = std::max(
+                    report.outputs[output].maximum,
+                    point.outputs[output]);
+            }
+            if (sample == 0U) continue;
+            const auto& previous = curve.samples[sample - 1U];
+            const double span = point.coordinate - previous.coordinate;
+            std::vector<double> slopes(point.outputs.size());
+            for (std::size_t output = 0;
+                 output < point.outputs.size(); ++output) {
+                slopes[output] =
+                    (point.outputs[output] - previous.outputs[output]) /
+                    span;
+                report.outputs[output]
+                    .maximum_absolute_primary_slope = std::max(
+                        report.outputs[output]
+                            .maximum_absolute_primary_slope,
+                        std::abs(slopes[output]));
+                if (!previous_slopes.empty()) {
+                    report.outputs[output]
+                        .maximum_absolute_primary_slope_jump = std::max(
+                            report.outputs[output]
+                                .maximum_absolute_primary_slope_jump,
+                            std::abs(
+                                slopes[output] -
+                                previous_slopes[output]));
+                }
+            }
+            previous_slopes = std::move(slopes);
+        }
+    }
+    report.has_global_common_primary_domain =
+        report.common_primary_maximum >
+        report.common_primary_minimum;
+    for (std::size_t index = 1; index < curves.size(); ++index) {
+        const auto& lower = curves[index - 1U];
+        const auto& upper = curves[index];
+        const double overlap_minimum = std::max(
+            lower.samples.front().coordinate,
+            upper.samples.front().coordinate);
+        const double overlap_maximum = std::min(
+            lower.samples.back().coordinate,
+            upper.samples.back().coordinate);
+        report.minimum_adjacent_primary_overlap = std::min(
+            report.minimum_adjacent_primary_overlap,
+            overlap_maximum - overlap_minimum);
+        const double span =
+            upper.family_coordinate - lower.family_coordinate;
+        for (const double probe : family_slope_probes(
+                 lower, upper, primary_extrapolation)) {
+            const auto lower_value = evaluate_curve(
+                lower, probe, primary_extrapolation);
+            const auto upper_value = evaluate_curve(
+                upper, probe, primary_extrapolation);
+            for (std::size_t output = 0;
+                 output < lower_value.outputs.size(); ++output) {
+                report.outputs[output].maximum_absolute_family_slope =
+                    std::max(
+                        report.outputs[output]
+                            .maximum_absolute_family_slope,
+                        std::abs(
+                            (upper_value.outputs[output] -
+                             lower_value.outputs[output]) / span));
+            }
+        }
+    }
+    if (!report.has_global_common_primary_domain) {
+        report.advisories.push_back(
+            "no primary-coordinate interval is shared by every family "
+            "curve; usable primary bounds vary with family coordinate");
+    }
+    if (primary_extrapolation == MapExtrapolationPolicy::linear) {
+        report.advisories.push_back(
+            "linear primary-coordinate extrapolation is enabled");
+    }
+    if (family_extrapolation == MapExtrapolationPolicy::linear) {
+        report.advisories.push_back(
+            "linear family-coordinate extrapolation is enabled");
+    }
+    return report;
 }
 
 }  // namespace
@@ -234,7 +458,11 @@ PerformanceMap::PerformanceMap(
         primary_variable_,
         family_variable_,
         output_variables_,
-        curves_);
+        curves_,
+        primary_extrapolation_);
+    quality_report_ = assess_quality(
+        output_variables_, curves_, primary_extrapolation_,
+        family_extrapolation_);
 }
 
 const MapVariable& PerformanceMap::primary_variable()
@@ -265,6 +493,11 @@ MapExtrapolationPolicy PerformanceMap::primary_extrapolation()
 MapExtrapolationPolicy PerformanceMap::family_extrapolation()
     const noexcept {
     return family_extrapolation_;
+}
+
+const MapQualityReport& PerformanceMap::quality_report()
+    const noexcept {
+    return quality_report_;
 }
 
 MapEvaluation PerformanceMap::evaluate(

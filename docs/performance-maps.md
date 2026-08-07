@@ -80,6 +80,28 @@ Every axis and output has a stable name and physical dimension. Evaluation retur
 - piecewise-analytic derivatives with respect to both coordinates;
 - explicit primary- and family-axis extrapolation flags.
 
+## Numeric quality gate
+
+Construction is also the map's numeric trust boundary. In addition to unique variables, finite
+samples, strictly increasing coordinates, and consistent output arity, Thermox now rejects:
+
+- finite samples whose coordinate spacing would produce a non-finite interpolation derivative;
+- non-finite family-coordinate spans; and
+- adjacent non-rectangular curves with no positive shared primary-coordinate interval when the
+  primary extrapolation policy is `reject`.
+
+The last check prevents a superficially well-formed set of speed lines from creating an unusable
+hole across an entire family interval. `clamp` and `linear` maps may intentionally bridge separated
+curves, but that choice remains explicit.
+
+Every ordinary map exposes a deterministic `MapQualityReport` with curve/sample counts, family and
+globally shared primary bounds, minimum adjacent overlap, per-output observed ranges, maximum
+absolute primary slopes, maximum family slopes over the declared sample envelope, and maximum
+primary-slope jumps. Advisories identify the absence
+of one primary interval shared by all curves and each enabled linear-extrapolation axis. These are
+domain-neutral numerical facts; compressor-specific limits such as `0 < efficiency <= 1` remain
+component or declared engineering-data constraints rather than being hard-coded in the map kernel.
+
 ## Extrapolation
 
 Each axis independently selects one policy:

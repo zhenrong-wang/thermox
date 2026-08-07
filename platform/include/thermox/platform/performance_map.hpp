@@ -2,6 +2,7 @@
 
 #include "thermox/platform/engineering_artifact.hpp"
 
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -36,6 +37,28 @@ struct MapEvaluation {
     std::vector<double> family_derivatives;
     bool primary_extrapolated{false};
     bool family_extrapolated{false};
+};
+
+struct MapOutputQuality {
+    std::string name;
+    double minimum{std::numeric_limits<double>::infinity()};
+    double maximum{-std::numeric_limits<double>::infinity()};
+    double maximum_absolute_primary_slope{0.0};
+    double maximum_absolute_primary_slope_jump{0.0};
+    double maximum_absolute_family_slope{0.0};
+};
+
+struct MapQualityReport {
+    std::size_t curve_count{0};
+    std::size_t sample_count{0};
+    double family_minimum{0.0};
+    double family_maximum{0.0};
+    double common_primary_minimum{0.0};
+    double common_primary_maximum{0.0};
+    bool has_global_common_primary_domain{false};
+    double minimum_adjacent_primary_overlap{0.0};
+    std::vector<MapOutputQuality> outputs;
+    std::vector<std::string> advisories;
 };
 
 class MapDomainError : public std::domain_error {
@@ -73,6 +96,8 @@ public:
         const noexcept;
     [[nodiscard]] MapExtrapolationPolicy family_extrapolation()
         const noexcept;
+    [[nodiscard]] const MapQualityReport& quality_report()
+        const noexcept;
 
     [[nodiscard]] MapEvaluation evaluate(
         double primary_coordinate,
@@ -85,6 +110,7 @@ private:
     std::vector<MapCurve> curves_;
     MapExtrapolationPolicy primary_extrapolation_;
     MapExtrapolationPolicy family_extrapolation_;
+    MapQualityReport quality_report_;
 };
 
 struct ConditionedMapLayer {

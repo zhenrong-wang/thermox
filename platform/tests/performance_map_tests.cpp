@@ -268,6 +268,103 @@ void test_definition_validation() {
     require(
         non_finite_rejected,
         "non-finite map outputs must be rejected");
+
+    bool disconnected_rejected = false;
+    try {
+        (void)thermox::platform::PerformanceMap(
+            {"x", "dimensionless"},
+            {"y", "dimensionless"},
+            {{"value", "dimensionless"}},
+            {
+                {1.0, {{0.0, {1.0}}, {1.0, {2.0}}}},
+                {2.0, {{2.0, {2.0}}, {3.0, {3.0}}}},
+            });
+    } catch (const std::invalid_argument&) {
+        disconnected_rejected = true;
+    }
+    require(
+        disconnected_rejected,
+        "reject-extrapolation maps must reject adjacent curves with "
+        "no positive shared primary domain");
+
+    bool derivative_overflow_rejected = false;
+    try {
+        const double tiny =
+            std::numeric_limits<double>::denorm_min();
+        (void)thermox::platform::PerformanceMap(
+            {"x", "dimensionless"},
+            {"y", "dimensionless"},
+            {{"value", "dimensionless"}},
+            {
+                {1.0, {{0.0, {0.0}}, {tiny, {1.0}}}},
+                {2.0, {{0.0, {0.0}}, {tiny, {1.0}}}},
+            });
+    } catch (const std::invalid_argument&) {
+        derivative_overflow_rejected = true;
+    }
+    require(
+        derivative_overflow_rejected,
+        "maps whose finite samples produce non-finite derivatives "
+        "must be rejected before solver use");
+}
+
+void test_quality_report_quantifies_interpolation_risk() {
+    const auto map = sample_map();
+    const auto& quality = map.quality_report();
+    require(
+        quality.curve_count == 2U && quality.sample_count == 4U &&
+            quality.family_minimum == 100.0 &&
+            quality.family_maximum == 200.0 &&
+            quality.common_primary_minimum == 0.0 &&
+            quality.common_primary_maximum == 10.0 &&
+            quality.has_global_common_primary_domain &&
+            quality.minimum_adjacent_primary_overlap == 10.0 &&
+            quality.outputs.size() == 2U &&
+            quality.advisories.empty(),
+        "quality report must summarize grid coverage deterministically");
+    require_close(
+        quality.outputs[0].minimum, 1.0,
+        "quality report output minimum is incorrect");
+    require_close(
+        quality.outputs[0].maximum, 6.0,
+        "quality report output maximum is incorrect");
+    require_close(
+        quality.outputs[0].maximum_absolute_primary_slope, 0.2,
+        "quality report primary slope is incorrect");
+    require_close(
+        quality.outputs[0].maximum_absolute_family_slope, 0.01,
+        "quality report family slope is incorrect");
+
+    const thermox::platform::PerformanceMap locally_connected(
+        {"x", "dimensionless"}, {"y", "dimensionless"},
+        {{"value", "dimensionless"}},
+        {
+            {1.0, {{0.0, {0.0}}, {5.0, {5.0}}}},
+            {2.0, {{4.0, {4.0}}, {9.0, {9.0}}}},
+            {3.0, {{8.0, {8.0}}, {13.0, {13.0}}}},
+        });
+    require(
+        !locally_connected.quality_report()
+             .has_global_common_primary_domain &&
+            locally_connected.quality_report().advisories.size() == 1U,
+        "locally connected non-rectangular maps must disclose the lack "
+        "of one global primary interval");
+
+    const thermox::platform::PerformanceMap extrapolating(
+        {"x", "dimensionless"}, {"y", "dimensionless"},
+        {{"value", "dimensionless"}},
+        {
+            {1.0, {{0.0, {0.0}}, {1.0, {1.0}}}},
+            {2.0, {{2.0, {2.0}}, {3.0, {3.0}}}},
+        },
+        thermox::platform::MapExtrapolationPolicy::linear,
+        thermox::platform::MapExtrapolationPolicy::linear);
+    require(
+        extrapolating.quality_report().advisories.size() == 3U &&
+            extrapolating.quality_report()
+                .minimum_adjacent_primary_overlap == -1.0,
+        "quality report must disclose disconnected coverage and every "
+        "linear extrapolation axis");
 }
 
 void test_conditioned_map_interpolates_third_coordinate() {
@@ -420,6 +517,7 @@ int main() {
         test_clamp_policy_has_zero_boundary_derivatives();
         test_linear_policy_extrapolates_with_derivatives();
         test_definition_validation();
+        test_quality_report_quantifies_interpolation_risk();
         test_conditioned_map_interpolates_third_coordinate();
         test_versioned_artifact_registry();
         test_registry_is_artifact_type_neutral();

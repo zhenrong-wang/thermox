@@ -582,6 +582,11 @@ Work items:
      selected-mechanism verification; ✅
    - matched regime-specific closure families and additional geometries remain follow-ons.
 10. Map validation and interpolation quality controls.
+    - ordinary non-rectangular map quality reports, finite-derivative validation, positive
+      adjacent-domain coverage for reject extrapolation, output range/slope/kink metrics, and
+      explicit extrapolation/domain advisories; ✅
+    - conditioned-map cross-layer coverage, declared physical output constraints, service
+      readiness projection, and persisted quality review remain follow-ons.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.
