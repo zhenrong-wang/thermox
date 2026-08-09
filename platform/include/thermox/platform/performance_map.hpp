@@ -48,6 +48,11 @@ struct MapOutputQuality {
     double maximum_absolute_family_slope{0.0};
 };
 
+struct MapQualityAdvisory {
+    std::string code;
+    std::string message;
+};
+
 struct MapQualityReport {
     std::size_t curve_count{0};
     std::size_t sample_count{0};
@@ -58,7 +63,7 @@ struct MapQualityReport {
     bool has_global_common_primary_domain{false};
     double minimum_adjacent_primary_overlap{0.0};
     std::vector<MapOutputQuality> outputs;
-    std::vector<std::string> advisories;
+    std::vector<MapQualityAdvisory> advisories;
 };
 
 class MapDomainError : public std::domain_error {
@@ -140,7 +145,7 @@ struct ConditionedMapQualityReport {
     double minimum_adjacent_primary_overlap{0.0};
     std::vector<MapQualityReport> layers;
     std::vector<ConditionedMapOutputQuality> outputs;
-    std::vector<std::string> advisories;
+    std::vector<MapQualityAdvisory> advisories;
 };
 
 // A third-coordinate family of ordinary two-coordinate maps.

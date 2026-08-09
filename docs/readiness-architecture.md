@@ -39,6 +39,12 @@ Successful compilation marks all entities ready. This makes component badges and
 navigation projections of service evidence, while allowing clients to calculate lightweight local
 authoring hints before authoritative validation.
 
+Accepted performance-map artifacts additionally expose a structured quality report. Coverage and
+extrapolation advisories appear as `warning` diagnostics in the `physical` stage but do not block
+the layer or its entities. Invalid map structure, non-finite interpolation behavior, or forbidden
+coverage gaps fail artifact resolution and do block readiness. This distinction prevents a
+qualified engineering risk from being confused with an unusable calculation input.
+
 ## Calculation gate
 
 Thin clients must gate run authoring on all of the following:

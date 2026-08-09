@@ -114,6 +114,43 @@ export interface ReadinessSummary {
   entities: EntityReadiness[]
 }
 
+export interface PerformanceMapOutputQuality {
+  name: string
+  minimum: number
+  maximum: number
+  maximum_absolute_primary_slope: number
+  maximum_absolute_primary_slope_jump: number
+  maximum_absolute_family_slope: number
+}
+
+export interface PerformanceMapLayerQuality {
+  layer_index: number
+  condition_coordinate: number | null
+  curve_count: number
+  sample_count: number
+  family_domain: { minimum: number; maximum: number }
+  common_primary_domain: { minimum: number; maximum: number } | null
+  minimum_adjacent_primary_overlap: number
+  outputs: PerformanceMapOutputQuality[]
+  advisory_codes: string[]
+}
+
+export interface PerformanceMapQuality {
+  schema_version: 'thermox.performance_map_quality/v1'
+  artifact_id: string
+  conditioned: boolean
+  condition_domain: { minimum: number; maximum: number } | null
+  common_family_domain: { minimum: number; maximum: number } | null
+  minimum_adjacent_family_overlap: number
+  minimum_adjacent_primary_overlap: number
+  layers: PerformanceMapLayerQuality[]
+  condition_outputs: Array<{
+    name: string
+    maximum_absolute_condition_slope: number
+  }>
+  advisory_codes: string[]
+}
+
 export interface ProjectModelValidation {
   schema_version: 'thermox.project_model_validation/v1'
   project_id: string
@@ -147,6 +184,7 @@ export interface ProjectModelValidation {
       reduced_connection_equations: string[]
     }
     readiness: ReadinessSummary
+    performance_map_quality: PerformanceMapQuality[]
     diagnostics: ValidationDiagnostic[]
   }
 }

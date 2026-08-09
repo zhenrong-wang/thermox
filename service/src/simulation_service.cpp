@@ -406,6 +406,186 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
     return artifacts;
 }
 
+PerformanceMapLayerQualitySummary map_layer_quality_summary(
+    const platform::MapQualityReport& report,
+    std::size_t layer_index,
+    std::optional<double> condition_coordinate = std::nullopt) {
+    PerformanceMapLayerQualitySummary summary;
+    summary.layer_index = layer_index;
+    summary.has_condition_coordinate = condition_coordinate.has_value();
+    summary.condition_coordinate = condition_coordinate.value_or(0.0);
+    summary.curve_count = report.curve_count;
+    summary.sample_count = report.sample_count;
+    summary.family_minimum = report.family_minimum;
+    summary.family_maximum = report.family_maximum;
+    summary.common_primary_minimum = report.common_primary_minimum;
+    summary.common_primary_maximum = report.common_primary_maximum;
+    summary.has_global_common_primary_domain =
+        report.has_global_common_primary_domain;
+    summary.minimum_adjacent_primary_overlap =
+        report.minimum_adjacent_primary_overlap;
+    for (const auto& output : report.outputs) {
+        summary.outputs.push_back({
+            output.name,
+            output.minimum,
+            output.maximum,
+            output.maximum_absolute_primary_slope,
+            output.maximum_absolute_primary_slope_jump,
+            output.maximum_absolute_family_slope,
+        });
+    }
+    for (const auto& advisory : report.advisories) {
+        summary.advisory_codes.push_back(advisory.code);
+    }
+    return summary;
+}
+
+std::vector<std::string> map_quality_suggestions(
+    const std::string& code) {
+    if (code.find("linear_") != std::string::npos ||
+        code.find("cross_layer_") != std::string::npos) {
+        return {
+            "Use reject extrapolation unless the extrapolated operating "
+            "envelope has been reviewed and qualified.",
+        };
+    }
+    return {
+        "Review map coverage against the intended operating envelope.",
+    };
+}
+
+void append_map_quality_diagnostic(
+    std::vector<Diagnostic>& diagnostics,
+    const std::string& artifact_id,
+    const std::string& json_path,
+    const platform::MapQualityAdvisory& advisory) {
+    diagnostics.push_back({
+        "performance_map_" + advisory.code,
+        DiagnosticSeverity::warning,
+        "physical",
+        json_path,
+        {}, {}, {},
+        "performance map '" + artifact_id + "': " + advisory.message,
+        map_quality_suggestions(advisory.code),
+    });
+}
+
+void append_performance_map_quality(
+    const SimulationArtifactBundle& inputs,
+    const platform::EngineeringArtifactRegistry& artifacts,
+    const platform::ModelDocument& document,
+    ValidateModelResponse& response) {
+    const auto executable = platform::flatten_model_document(document);
+    std::map<std::string, std::string> selected_paths;
+    for (std::size_t component_index = 0;
+         component_index < executable.components.size();
+         ++component_index) {
+        const auto& component = executable.components[component_index];
+        for (const auto& [role, artifact_id] :
+             component.artifact_bindings) {
+            const auto artifact =
+                artifacts.require_artifact(artifact_id);
+            if (artifact->artifact_type() !=
+                platform::performance_map_artifact_type) {
+                continue;
+            }
+            selected_paths.try_emplace(
+                artifact_id,
+                document.assemblies.empty()
+                    ? "/model/components/" +
+                          std::to_string(component_index) +
+                          "/artifacts/" + role
+                    : "/model/assemblies");
+        }
+    }
+    std::vector<std::pair<
+        std::shared_ptr<const platform::PerformanceMapArtifact>,
+        std::string>> selected;
+    std::set<std::string> emitted;
+    for (std::size_t artifact_index = 0;
+         artifact_index < inputs.performance_maps.size();
+         ++artifact_index) {
+        const auto& input = inputs.performance_maps[artifact_index];
+        if (!selected_paths.contains(input.id)) continue;
+        const auto artifact = artifacts.require_as<
+            platform::PerformanceMapArtifact>(
+                input.id, platform::performance_map_artifact_type);
+        selected.push_back({
+            artifact,
+            "/artifacts/performance_maps/" +
+                std::to_string(artifact_index),
+        });
+        emitted.insert(input.id);
+    }
+    for (const auto& [artifact_id, binding_path] : selected_paths) {
+        if (emitted.contains(artifact_id)) continue;
+        selected.push_back({
+            artifacts.require_as<platform::PerformanceMapArtifact>(
+                artifact_id, platform::performance_map_artifact_type),
+            binding_path,
+        });
+    }
+    for (const auto& [artifact, base_path] : selected) {
+        PerformanceMapQualitySummary summary;
+        summary.artifact_id = artifact->id;
+        if (artifact->map) {
+            const auto& report = artifact->map->quality_report();
+            summary.layers.push_back(
+                map_layer_quality_summary(report, 0));
+            for (const auto& advisory : report.advisories) {
+                summary.advisory_codes.push_back(advisory.code);
+                append_map_quality_diagnostic(
+                    response.diagnostics, artifact->id,
+                    base_path + "/map", advisory);
+            }
+        } else {
+            summary.conditioned = true;
+            const auto& report =
+                artifact->conditioned_map->quality_report();
+            summary.condition_minimum = report.condition_minimum;
+            summary.condition_maximum = report.condition_maximum;
+            summary.common_family_minimum =
+                report.common_family_minimum;
+            summary.common_family_maximum =
+                report.common_family_maximum;
+            summary.has_global_common_family_domain =
+                report.has_global_common_family_domain;
+            summary.minimum_adjacent_family_overlap =
+                report.minimum_adjacent_family_overlap;
+            summary.minimum_adjacent_primary_overlap =
+                report.minimum_adjacent_primary_overlap;
+            const auto& layers = artifact->conditioned_map->layers();
+            for (std::size_t layer = 0;
+                 layer < report.layers.size(); ++layer) {
+                summary.layers.push_back(map_layer_quality_summary(
+                    report.layers[layer], layer,
+                    layers[layer].condition_coordinate));
+                for (const auto& advisory :
+                     report.layers[layer].advisories) {
+                    append_map_quality_diagnostic(
+                        response.diagnostics, artifact->id,
+                        base_path + "/layers/" +
+                            std::to_string(layer) + "/map",
+                        advisory);
+                }
+            }
+            for (const auto& output : report.outputs) {
+                summary.outputs.push_back({
+                    output.name,
+                    output.maximum_absolute_condition_slope,
+                });
+            }
+            for (const auto& advisory : report.advisories) {
+                summary.advisory_codes.push_back(advisory.code);
+                append_map_quality_diagnostic(
+                    response.diagnostics, artifact->id,
+                    base_path, advisory);
+            }
+        }
+        response.performance_map_quality.push_back(std::move(summary));
+    }
+}
+
 std::vector<ArtifactProvenance> artifact_provenance(
     const SimulationArtifactBundle& inputs) {
     std::vector<ArtifactProvenance> provenance;
@@ -1714,6 +1894,8 @@ ValidateModelResponse SimulationService::validate_model(
     try {
         document = platform::parse_model_document_text(
             request.model_json, runtime->impl_->units);
+        append_performance_map_quality(
+            artifacts, engineering_artifacts, *document, response);
         initialize_entity_readiness(response.readiness, *document);
         set_layer_state(
             response.readiness, "draft", ReadinessState::ready);

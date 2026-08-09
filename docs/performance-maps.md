@@ -102,6 +102,13 @@ of one primary interval shared by all curves and each enabled linear-extrapolati
 domain-neutral numerical facts; compressor-specific limits such as `0 < efficiency <= 1` remain
 component or declared engineering-data constraints rather than being hard-coded in the map kernel.
 
+Validation projects these reports through the service-owned
+`performance_map_quality` contract. It preserves per-layer coverage, output range and slope
+metrics, condition-axis metrics, and stable advisory codes. Each advisory is also emitted as a
+non-blocking `physical` warning attributed to its exact artifact payload path. Consequently an
+accepted map can remain calculatable while clients still disclose extrapolation or uneven-coverage
+risk; construction failures continue to block physical readiness as `invalid_artifacts`.
+
 Conditioned maps apply the same gate to each layer and then validate the three-dimensional join.
 Adjacent layers must have positive shared family and primary domains when the corresponding map
 axes reject extrapolation. With clamp or linear policies, disconnected layers remain representable
@@ -120,8 +127,9 @@ Each axis independently selects one policy:
 - `linear` — continue the boundary segment and retain its derivative.
 
 Components must not silently change these policies. A rejected evaluation will later map to the
-numeric kernel's recoverable model-domain failure. Successful clamp or linear extrapolation must
-remain visible in diagnostics and result provenance.
+numeric kernel's recoverable model-domain failure. Clamp or linear policy risk remains visible in
+validation diagnostics and the structured quality report. Per-evaluation extrapolation events and
+result-level persistence remain separate runtime follow-ons.
 
 ## Gas-turbine use
 

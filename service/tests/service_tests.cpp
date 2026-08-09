@@ -106,6 +106,28 @@ thermox::service::PerformanceMapArtifactInput compressor_map() {
     return artifact;
 }
 
+thermox::service::PerformanceMapArtifactInput conditioned_compressor_map() {
+    using namespace thermox::service;
+    auto ordinary = compressor_map();
+    PerformanceMapArtifactInput artifact;
+    artifact.id = "request-variable-geometry-map";
+    artifact.schema_version = "thermox.performance_map/v2";
+    artifact.revision = "service-test-1";
+    artifact.checksum_sha256 = std::string(64, 'b');
+    artifact.condition_variable = {
+        "geometry_setting", "angle"};
+    auto lower = *ordinary.map;
+    auto upper = *ordinary.map;
+    lower.primary_extrapolation = "linear";
+    upper.primary_extrapolation = "linear";
+    artifact.layers = {
+        {0.0, std::move(lower)},
+        {1.0, std::move(upper)},
+    };
+    artifact.condition_extrapolation = "linear";
+    return artifact;
+}
+
 thermox::service::EngineeringArtifactReference map_reference(
     const thermox::service::PerformanceMapArtifactInput& artifact) {
     return {
@@ -228,6 +250,30 @@ std::string mapped_compressor_model() {
 })json";
 }
 
+std::string variable_geometry_compressor_model() {
+    auto model = mapped_compressor_model();
+    const auto replace = [&](
+        const std::string& from, const std::string& to) {
+        const auto position = model.find(from);
+        if (position == std::string::npos) {
+            throw std::runtime_error(
+                "test model substitution target not found: " + from);
+        }
+        model.replace(position, from.size(), to);
+    };
+    replace(
+        "compressor.fluid.performance_map",
+        "compressor.fluid.variable_geometry_map");
+    replace(
+        "request-compressor-map",
+        "request-variable-geometry-map");
+    replace(
+        "\"reference_temperature\": {\"value\": 300.0, \"unit\": \"K\"}",
+        "\"reference_temperature\": {\"value\": 300.0, \"unit\": \"K\"},\n"
+        "        \"geometry_setting\": {\"value\": 0.5, \"unit\": \"rad\"}");
+    return model;
+}
+
 void test_request_scoped_performance_map_artifacts() {
     thermox::service::SimulationService service;
     const auto catalog_before = service.get_catalog();
@@ -244,8 +290,74 @@ void test_request_scoped_performance_map_artifacts() {
         compressor_map());
     const auto valid = service.validate_model(validation);
     require(
-        valid.succeeded(),
-        "validation must resolve a request-scoped performance map");
+        valid.succeeded() && valid.readiness.calculatable &&
+            valid.performance_map_quality.size() == 1U &&
+            !valid.performance_map_quality.front().conditioned &&
+            valid.performance_map_quality.front().layers.size() == 1U &&
+            valid.performance_map_quality.front().layers.front()
+                    .curve_count == 2U &&
+            valid.performance_map_quality.front().layers.front()
+                    .sample_count == 4U &&
+            valid.performance_map_quality.front().advisory_codes.empty(),
+        "validation must resolve and report quality for a request-scoped "
+        "performance map");
+    const auto valid_json =
+        thermox::service::serialize_validate_response_json(valid);
+    require(
+        valid_json.find("\"performance_map_quality\": [") !=
+                std::string::npos &&
+            valid_json.find(
+                "\"schema_version\": "
+                "\"thermox.performance_map_quality/v1\"") !=
+                std::string::npos,
+        "validation JSON must expose structured performance-map quality");
+
+    auto extrapolating_validation = validation;
+    auto& extrapolating_map =
+        *extrapolating_validation.artifacts.performance_maps.front().map;
+    extrapolating_map.primary_extrapolation = "linear";
+    extrapolating_map.family_extrapolation = "linear";
+    const auto extrapolating =
+        service.validate_model(extrapolating_validation);
+    require(
+        extrapolating.succeeded() &&
+            extrapolating.readiness.calculatable &&
+            extrapolating.performance_map_quality.front()
+                    .advisory_codes.size() == 2U &&
+            extrapolating.diagnostics.size() == 2U &&
+            extrapolating.diagnostics.front().severity ==
+                thermox::service::DiagnosticSeverity::warning &&
+            extrapolating.diagnostics.front().stage == "physical" &&
+            extrapolating.diagnostics.front().json_path ==
+                "/artifacts/performance_maps/0/map",
+        "map quality advisories must be non-blocking physical warnings "
+        "attributed to the exact artifact payload");
+
+    thermox::service::ValidateModelRequest conditioned_validation;
+    conditioned_validation.model_json =
+        variable_geometry_compressor_model();
+    conditioned_validation.case_id = "operating_point";
+    conditioned_validation.artifacts.performance_maps.push_back(
+        conditioned_compressor_map());
+    const auto conditioned =
+        service.validate_model(conditioned_validation);
+    const auto& conditioned_quality =
+        conditioned.performance_map_quality.at(0);
+    require(
+        conditioned.succeeded() && conditioned.readiness.calculatable &&
+            conditioned_quality.conditioned &&
+            conditioned_quality.layers.size() == 2U &&
+            conditioned_quality.layers.front()
+                    .has_condition_coordinate &&
+            conditioned_quality.layers.front()
+                    .advisory_codes.size() == 1U &&
+            conditioned_quality.advisory_codes.size() == 1U &&
+            conditioned_quality.outputs.size() == 2U &&
+            conditioned.diagnostics.size() == 3U &&
+            conditioned.diagnostics.front().json_path ==
+                "/artifacts/performance_maps/0/layers/0/map",
+        "conditioned-map quality must expose per-layer and cross-layer "
+        "metrics without blocking readiness");
 
     thermox::service::SteadySimulationRequest request;
     request.model_json = validation.model_json;

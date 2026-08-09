@@ -20,6 +20,8 @@ inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
     "thermox.regime_map_instantiation/v1";
+inline constexpr char performance_map_quality_schema_v1[] =
+    "thermox.performance_map_quality/v1";
 
 enum class OperationStatus {
     succeeded,
@@ -761,6 +763,52 @@ struct ReadinessSummary {
     std::vector<EntityReadiness> entities;
 };
 
+struct PerformanceMapOutputQualitySummary {
+    std::string name;
+    double minimum{0.0};
+    double maximum{0.0};
+    double maximum_absolute_primary_slope{0.0};
+    double maximum_absolute_primary_slope_jump{0.0};
+    double maximum_absolute_family_slope{0.0};
+};
+
+struct PerformanceMapLayerQualitySummary {
+    std::size_t layer_index{0};
+    bool has_condition_coordinate{false};
+    double condition_coordinate{0.0};
+    std::size_t curve_count{0};
+    std::size_t sample_count{0};
+    double family_minimum{0.0};
+    double family_maximum{0.0};
+    double common_primary_minimum{0.0};
+    double common_primary_maximum{0.0};
+    bool has_global_common_primary_domain{false};
+    double minimum_adjacent_primary_overlap{0.0};
+    std::vector<PerformanceMapOutputQualitySummary> outputs;
+    std::vector<std::string> advisory_codes;
+};
+
+struct ConditionedMapOutputQualitySummary {
+    std::string name;
+    double maximum_absolute_condition_slope{0.0};
+};
+
+struct PerformanceMapQualitySummary {
+    std::string schema_version{performance_map_quality_schema_v1};
+    std::string artifact_id;
+    bool conditioned{false};
+    double condition_minimum{0.0};
+    double condition_maximum{0.0};
+    double common_family_minimum{0.0};
+    double common_family_maximum{0.0};
+    bool has_global_common_family_domain{false};
+    double minimum_adjacent_family_overlap{0.0};
+    double minimum_adjacent_primary_overlap{0.0};
+    std::vector<PerformanceMapLayerQualitySummary> layers;
+    std::vector<ConditionedMapOutputQualitySummary> outputs;
+    std::vector<std::string> advisory_codes;
+};
+
 struct ValidateModelResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
@@ -768,6 +816,7 @@ struct ValidateModelResponse {
     std::string canonical_model_json;
     CompilationSummary compilation;
     ReadinessSummary readiness;
+    std::vector<PerformanceMapQualitySummary> performance_map_quality;
     std::vector<Diagnostic> diagnostics;
 
     [[nodiscard]] bool succeeded() const {

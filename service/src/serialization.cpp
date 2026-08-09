@@ -410,6 +410,124 @@ void readiness_json(
     out << "]}";
 }
 
+void map_output_quality_json(
+    std::ostream& out,
+    const PerformanceMapOutputQualitySummary& output) {
+    out << "{\"name\": ";
+    json_string(out, output.name);
+    out << ", \"minimum\": ";
+    json_number(out, output.minimum);
+    out << ", \"maximum\": ";
+    json_number(out, output.maximum);
+    out << ", \"maximum_absolute_primary_slope\": ";
+    json_number(out, output.maximum_absolute_primary_slope);
+    out << ", \"maximum_absolute_primary_slope_jump\": ";
+    json_number(out, output.maximum_absolute_primary_slope_jump);
+    out << ", \"maximum_absolute_family_slope\": ";
+    json_number(out, output.maximum_absolute_family_slope);
+    out << '}';
+}
+
+void advisory_codes_json(
+    std::ostream& out,
+    const std::vector<std::string>& codes) {
+    out << '[';
+    for (std::size_t i = 0; i < codes.size(); ++i) {
+        if (i != 0) out << ", ";
+        json_string(out, codes[i]);
+    }
+    out << ']';
+}
+
+void performance_map_quality_json(
+    std::ostream& out,
+    const PerformanceMapQualitySummary& quality) {
+    out << "{\"schema_version\": ";
+    json_string(out, quality.schema_version);
+    out << ", \"artifact_id\": ";
+    json_string(out, quality.artifact_id);
+    out << ", \"conditioned\": "
+        << (quality.conditioned ? "true" : "false");
+    out << ", \"condition_domain\": ";
+    if (quality.conditioned) {
+        out << "{\"minimum\": ";
+        json_number(out, quality.condition_minimum);
+        out << ", \"maximum\": ";
+        json_number(out, quality.condition_maximum);
+        out << '}';
+    } else {
+        out << "null";
+    }
+    out << ", \"common_family_domain\": ";
+    if (quality.conditioned &&
+        quality.has_global_common_family_domain) {
+        out << "{\"minimum\": ";
+        json_number(out, quality.common_family_minimum);
+        out << ", \"maximum\": ";
+        json_number(out, quality.common_family_maximum);
+        out << '}';
+    } else {
+        out << "null";
+    }
+    out << ", \"minimum_adjacent_family_overlap\": ";
+    json_number(out, quality.minimum_adjacent_family_overlap);
+    out << ", \"minimum_adjacent_primary_overlap\": ";
+    json_number(out, quality.minimum_adjacent_primary_overlap);
+    out << ", \"layers\": [";
+    for (std::size_t i = 0; i < quality.layers.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& layer = quality.layers[i];
+        out << "{\"layer_index\": " << layer.layer_index
+            << ", \"condition_coordinate\": ";
+        if (layer.has_condition_coordinate) {
+            json_number(out, layer.condition_coordinate);
+        } else {
+            out << "null";
+        }
+        out << ", \"curve_count\": " << layer.curve_count
+            << ", \"sample_count\": " << layer.sample_count
+            << ", \"family_domain\": {\"minimum\": ";
+        json_number(out, layer.family_minimum);
+        out << ", \"maximum\": ";
+        json_number(out, layer.family_maximum);
+        out << "}, \"common_primary_domain\": ";
+        if (layer.has_global_common_primary_domain) {
+            out << "{\"minimum\": ";
+            json_number(out, layer.common_primary_minimum);
+            out << ", \"maximum\": ";
+            json_number(out, layer.common_primary_maximum);
+            out << '}';
+        } else {
+            out << "null";
+        }
+        out << ", \"minimum_adjacent_primary_overlap\": ";
+        json_number(out, layer.minimum_adjacent_primary_overlap);
+        out << ", \"outputs\": [";
+        for (std::size_t output = 0;
+             output < layer.outputs.size(); ++output) {
+            if (output != 0) out << ", ";
+            map_output_quality_json(out, layer.outputs[output]);
+        }
+        out << "], \"advisory_codes\": ";
+        advisory_codes_json(out, layer.advisory_codes);
+        out << '}';
+    }
+    out << "], \"condition_outputs\": [";
+    for (std::size_t i = 0; i < quality.outputs.size(); ++i) {
+        if (i != 0) out << ", ";
+        out << "{\"name\": ";
+        json_string(out, quality.outputs[i].name);
+        out << ", \"maximum_absolute_condition_slope\": ";
+        json_number(
+            out,
+            quality.outputs[i].maximum_absolute_condition_slope);
+        out << '}';
+    }
+    out << "], \"advisory_codes\": ";
+    advisory_codes_json(out, quality.advisory_codes);
+    out << '}';
+}
+
 void result_value_json(
     std::ostream& out,
     const ResultValue& value) {
@@ -1524,6 +1642,14 @@ std::string serialize_validate_response_json(
     }
     out << "]},\n  \"readiness\": ";
     readiness_json(out, response.readiness);
+    out << ",\n  \"performance_map_quality\": [";
+    for (std::size_t i = 0;
+         i < response.performance_map_quality.size(); ++i) {
+        if (i != 0) out << ", ";
+        performance_map_quality_json(
+            out, response.performance_map_quality[i]);
+    }
+    out << ']';
     out << ",\n  \"diagnostics\": [";
     for (std::size_t i = 0;
          i < response.diagnostics.size(); ++i) {

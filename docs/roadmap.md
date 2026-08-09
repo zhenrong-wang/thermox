@@ -587,8 +587,9 @@ Work items:
       explicit extrapolation/domain advisories; ✅
     - conditioned-map cross-layer family/primary coverage, condition-derivative validation,
       layer reports, extrapolation-dependency advisories, and overlaid-grid slope metrics; ✅
-    - declared physical output constraints, service readiness projection, and persisted quality
-      review remain follow-ons.
+    - structured service validation projection with per-artifact/per-layer metrics, stable warning
+      codes, exact payload attribution, and non-blocking readiness semantics; ✅
+    - declared physical output constraints and persisted quality review remain follow-ons.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.

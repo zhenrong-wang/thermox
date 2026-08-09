@@ -425,16 +425,19 @@ MapQualityReport assess_quality(
     }
     if (!report.has_global_common_primary_domain) {
         report.advisories.push_back(
-            "no primary-coordinate interval is shared by every family "
-            "curve; usable primary bounds vary with family coordinate");
+            {"no_global_common_primary_domain",
+             "no primary-coordinate interval is shared by every family "
+             "curve; usable primary bounds vary with family coordinate"});
     }
     if (primary_extrapolation == MapExtrapolationPolicy::linear) {
         report.advisories.push_back(
-            "linear primary-coordinate extrapolation is enabled");
+            {"linear_primary_extrapolation",
+             "linear primary-coordinate extrapolation is enabled"});
     }
     if (family_extrapolation == MapExtrapolationPolicy::linear) {
         report.advisories.push_back(
-            "linear family-coordinate extrapolation is enabled");
+            {"linear_family_extrapolation",
+             "linear family-coordinate extrapolation is enabled"});
     }
     return report;
 }
@@ -679,22 +682,26 @@ ConditionedMapQualityReport assess_conditioned_quality(
     }
     if (!report.has_global_common_family_domain) {
         report.advisories.push_back(
-            "no family-coordinate interval is shared by every "
-            "condition layer");
+            {"no_global_common_family_domain",
+             "no family-coordinate interval is shared by every "
+             "condition layer"});
     }
     if (relies_on_family_extrapolation) {
         report.advisories.push_back(
-            "adjacent condition layers rely on family-coordinate "
-            "extrapolation to interpolate between their declared maps");
+            {"cross_layer_family_extrapolation",
+             "adjacent condition layers rely on family-coordinate "
+             "extrapolation to interpolate between their declared maps"});
     }
     if (relies_on_primary_extrapolation) {
         report.advisories.push_back(
-            "adjacent condition layers rely on primary-coordinate "
-            "extrapolation to interpolate between their declared maps");
+            {"cross_layer_primary_extrapolation",
+             "adjacent condition layers rely on primary-coordinate "
+             "extrapolation to interpolate between their declared maps"});
     }
     if (condition_extrapolation == MapExtrapolationPolicy::linear) {
         report.advisories.push_back(
-            "linear condition-coordinate extrapolation is enabled");
+            {"linear_condition_extrapolation",
+             "linear condition-coordinate extrapolation is enabled"});
     }
     return report;
 }
