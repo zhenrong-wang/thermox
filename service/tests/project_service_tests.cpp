@@ -1217,6 +1217,92 @@ void test_artifact_revisions_are_snapshotted_and_scoped() {
         "but hide provider object keys");
 }
 
+void test_performance_map_quality_reviews_are_immutable_and_pinned() {
+    using namespace thermox::service;
+    ProjectService service{make_in_memory_project_repository()};
+    const auto project = service.create_project({
+        team_a, "Map qualification", {}});
+    const auto artifact = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "qualified-compressor-map",
+        {},
+        "thermox.performance_map",
+        "thermox.performance_map/v1",
+        performance_map_payload(),
+    });
+    const auto approved =
+        service.create_performance_map_quality_review({
+            team_a,
+            project.project_id,
+            artifact.artifact_revision_id,
+            {},
+            PerformanceMapReviewDisposition::approved_with_conditions,
+            "Corrected flow 70-120 kg/s and speed 250-400 rad/s",
+            "Approved for the declared operating envelope; linear "
+            "extrapolation is prohibited.",
+        });
+    const auto rejected =
+        service.create_performance_map_quality_review({
+            team_a,
+            project.project_id,
+            artifact.artifact_revision_id,
+            approved.review_id,
+            PerformanceMapReviewDisposition::rejected,
+            "Corrected flow above 120 kg/s",
+            "No OEM evidence supports operation beyond the measured "
+            "map envelope.",
+        });
+    const auto reviews =
+        service.list_performance_map_quality_reviews(
+            team_a, project.project_id,
+            artifact.artifact_revision_id);
+    require(
+        reviews.size() == 2U &&
+            approved.artifact_checksum == artifact.content.checksum &&
+            approved.quality_schema_version ==
+                performance_map_quality_schema_v1 &&
+            approved.quality_snapshot_checksum.starts_with("sha256:") &&
+            approved.quality_snapshot_json.find(
+                "\"declared_constraint\": {") != std::string::npos &&
+            rejected.supersedes_review_id == approved.review_id &&
+            reviews.back().review_id == rejected.review_id &&
+            service.list_performance_map_quality_reviews(
+                team_b, project.project_id,
+                artifact.artifact_revision_id).empty(),
+        "quality reviews must pin the exact immutable artifact and "
+        "server-derived quality snapshot while preserving Team scope");
+    const auto json =
+        serialize_performance_map_quality_review_json(approved);
+    require(
+        json.find("\"disposition\": "
+                  "\"approved_with_conditions\"") !=
+                std::string::npos &&
+            json.find("\"quality_snapshot\": {") !=
+                std::string::npos &&
+            json.find(artifact.content.object_key) == std::string::npos,
+        "quality review JSON must expose the review and assessed metrics "
+        "without leaking object-store details");
+
+    bool empty_scope_rejected = false;
+    try {
+        (void)service.create_performance_map_quality_review({
+            team_a,
+            project.project_id,
+            artifact.artifact_revision_id,
+            {},
+            PerformanceMapReviewDisposition::approved,
+            " ",
+            "No review is credible without a scope.",
+        });
+    } catch (const ProjectRequestError&) {
+        empty_scope_rejected = true;
+    }
+    require(
+        empty_scope_rejected,
+        "quality reviews must require an explicit engineering scope");
+}
+
 void test_run_configurations_bind_complete_execution_intent() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -2017,6 +2103,7 @@ int main() {
         test_correlation_artifact_is_executable_input();
         test_regime_map_artifact_is_executable_input();
         test_artifact_revisions_are_snapshotted_and_scoped();
+        test_performance_map_quality_reviews_are_immutable_and_pinned();
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();
         test_calibrations_bind_exact_training_studies();

@@ -1,10 +1,17 @@
 #pragma once
 
+#include "thermox/platform/performance_map.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <string>
 
 namespace thermox::service::detail {
+
+platform::PerformanceMapArtifact performance_map_artifact(
+    const PerformanceMapArtifactInput& input);
+
+PerformanceMapQualitySummary performance_map_quality_summary(
+    const platform::PerformanceMapArtifact& artifact);
 
 std::string canonicalize_performance_map_payload(
     const std::string& schema_version,

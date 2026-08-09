@@ -1049,6 +1049,151 @@ platform::ExpressionComponentDefinition definition(
 
 }  // namespace
 
+platform::PerformanceMapArtifact performance_map_artifact(
+    const PerformanceMapArtifactInput& input) {
+    platform::PerformanceMapArtifact artifact;
+    artifact.id = input.id;
+    artifact.schema_version = input.schema_version;
+    artifact.revision = input.revision;
+    artifact.checksum_sha256 = input.checksum_sha256;
+    if (input.schema_version ==
+        platform::performance_map_artifact_schema_v1) {
+        if (!input.map || input.condition_variable ||
+            !input.layers.empty()) {
+            throw std::invalid_argument(
+                "performance-map v1 artifact '" + input.id +
+                "' requires one ordinary map payload");
+        }
+        artifact.map = validate_map(*input.map);
+    } else if (input.schema_version ==
+               platform::performance_map_artifact_schema_v2) {
+        if (input.map || !input.condition_variable ||
+            input.layers.empty()) {
+            throw std::invalid_argument(
+                "performance-map v2 artifact '" + input.id +
+                "' requires a condition variable and map layers");
+        }
+        std::vector<platform::ConditionedMapLayer> layers;
+        layers.reserve(input.layers.size());
+        for (const auto& layer : input.layers) {
+            layers.push_back({
+                layer.condition_coordinate,
+                validate_map(layer.map),
+            });
+        }
+        artifact.conditioned_map = std::make_shared<const
+            platform::ConditionedPerformanceMap>(
+                platform::MapVariable{
+                    input.condition_variable->name,
+                    input.condition_variable->dimension},
+                std::move(layers),
+                extrapolation(input.condition_extrapolation));
+    } else {
+        throw std::invalid_argument(
+            "unsupported performance-map artifact schema: " +
+            input.schema_version);
+    }
+    artifact.validate();
+    return artifact;
+}
+
+namespace {
+
+PerformanceMapLayerQualitySummary quality_layer(
+    const platform::MapQualityReport& report,
+    std::size_t layer_index,
+    std::optional<double> condition_coordinate = std::nullopt) {
+    PerformanceMapLayerQualitySummary summary;
+    summary.layer_index = layer_index;
+    summary.has_condition_coordinate = condition_coordinate.has_value();
+    summary.condition_coordinate = condition_coordinate.value_or(0.0);
+    summary.curve_count = report.curve_count;
+    summary.sample_count = report.sample_count;
+    summary.family_minimum = report.family_minimum;
+    summary.family_maximum = report.family_maximum;
+    summary.common_primary_minimum = report.common_primary_minimum;
+    summary.common_primary_maximum = report.common_primary_maximum;
+    summary.has_global_common_primary_domain =
+        report.has_global_common_primary_domain;
+    summary.minimum_adjacent_primary_overlap =
+        report.minimum_adjacent_primary_overlap;
+    for (const auto& output : report.outputs) {
+        PerformanceMapOutputQualitySummary output_summary;
+        output_summary.name = output.name;
+        output_summary.minimum = output.minimum;
+        output_summary.maximum = output.maximum;
+        output_summary.maximum_absolute_primary_slope =
+            output.maximum_absolute_primary_slope;
+        output_summary.maximum_absolute_primary_slope_jump =
+            output.maximum_absolute_primary_slope_jump;
+        output_summary.maximum_absolute_family_slope =
+            output.maximum_absolute_family_slope;
+        if (output.declared_constraint) {
+            output_summary.constraint_minimum =
+                output.declared_constraint->minimum;
+            output_summary.constraint_maximum =
+                output.declared_constraint->maximum;
+            output_summary.constraint_minimum_inclusive =
+                output.declared_constraint->minimum_inclusive;
+            output_summary.constraint_maximum_inclusive =
+                output.declared_constraint->maximum_inclusive;
+            output_summary.minimum_lower_margin =
+                output.minimum_lower_margin;
+            output_summary.minimum_upper_margin =
+                output.minimum_upper_margin;
+        }
+        summary.outputs.push_back(std::move(output_summary));
+    }
+    for (const auto& advisory : report.advisories) {
+        summary.advisory_codes.push_back(advisory.code);
+    }
+    return summary;
+}
+
+}  // namespace
+
+PerformanceMapQualitySummary performance_map_quality_summary(
+    const platform::PerformanceMapArtifact& artifact) {
+    PerformanceMapQualitySummary summary;
+    summary.artifact_id = artifact.id;
+    if (artifact.map) {
+        const auto& report = artifact.map->quality_report();
+        summary.layers.push_back(quality_layer(report, 0));
+        for (const auto& advisory : report.advisories) {
+            summary.advisory_codes.push_back(advisory.code);
+        }
+        return summary;
+    }
+    summary.conditioned = true;
+    const auto& report = artifact.conditioned_map->quality_report();
+    summary.condition_minimum = report.condition_minimum;
+    summary.condition_maximum = report.condition_maximum;
+    summary.common_family_minimum = report.common_family_minimum;
+    summary.common_family_maximum = report.common_family_maximum;
+    summary.has_global_common_family_domain =
+        report.has_global_common_family_domain;
+    summary.minimum_adjacent_family_overlap =
+        report.minimum_adjacent_family_overlap;
+    summary.minimum_adjacent_primary_overlap =
+        report.minimum_adjacent_primary_overlap;
+    const auto& layers = artifact.conditioned_map->layers();
+    for (std::size_t layer = 0; layer < report.layers.size(); ++layer) {
+        summary.layers.push_back(quality_layer(
+            report.layers[layer], layer,
+            layers[layer].condition_coordinate));
+    }
+    for (const auto& output : report.outputs) {
+        summary.outputs.push_back({
+            output.name,
+            output.maximum_absolute_condition_slope,
+        });
+    }
+    for (const auto& advisory : report.advisories) {
+        summary.advisory_codes.push_back(advisory.code);
+    }
+    return summary;
+}
+
 std::string canonicalize_performance_map_payload(
     const std::string& schema_version,
     const std::string& payload_json) {

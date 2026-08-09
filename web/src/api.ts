@@ -1,6 +1,9 @@
 import type {
   ArtifactRevision,
   ArtifactRevisionContent,
+  PerformanceMapQualityReview,
+  PerformanceMapQualityReviewList,
+  PerformanceMapReviewDisposition,
   ArtifactRevisionList,
   AssemblyTemplateCatalogEntry,
   ProjectComponentCatalog,
@@ -198,6 +201,34 @@ export const api = {
       `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions/${encodeURIComponent(artifactRevisionId)}`,
       signal,
     ),
+  performanceMapQualityReviews: (
+    projectId: string,
+    artifactRevisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<PerformanceMapQualityReviewList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions/${encodeURIComponent(artifactRevisionId)}/quality-reviews`,
+      signal,
+    ),
+  createPerformanceMapQualityReview: (
+    projectId: string,
+    artifactRevisionId: string,
+    disposition: PerformanceMapReviewDisposition,
+    reviewedScope: string,
+    rationale: string,
+    supersedesReviewId = '',
+    signal?: AbortSignal,
+  ) => postJson<PerformanceMapQualityReview>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions/${encodeURIComponent(artifactRevisionId)}/quality-reviews`,
+    {
+      schema_version: 'thermox.performance_map_quality_review.create/v1',
+      supersedes_review_id: supersedesReviewId,
+      disposition,
+      reviewed_scope: reviewedScope,
+      rationale,
+    },
+    signal,
+  ),
   projectComponentCatalog: (
     projectId: string,
     signal?: AbortSignal,

@@ -15,6 +15,8 @@ std::string serialize_regime_map_instantiation_response_json(
     const InstantiateRegimeMapResponse& response);
 std::string serialize_validate_response_json(
     const ValidateModelResponse& response);
+std::string serialize_performance_map_quality_json(
+    const PerformanceMapQualitySummary& quality);
 std::string serialize_steady_response_json(
     const SteadySimulationResponse& response);
 std::string serialize_calibration_response_json(

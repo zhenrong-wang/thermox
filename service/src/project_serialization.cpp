@@ -180,6 +180,41 @@ void artifact_revision_json(
         << epoch_milliseconds(revision.created_at) << '}';
 }
 
+void performance_map_quality_review_json(
+    std::ostringstream& out,
+    const PerformanceMapQualityReviewRecord& review) {
+    out << "{\"schema_version\": ";
+    json_string(out, review.schema_version);
+    out << ", \"review_id\": ";
+    json_string(out, review.review_id);
+    out << ", \"project_id\": ";
+    json_string(out, review.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, review.team_id);
+    out << ", \"artifact_revision_id\": ";
+    json_string(out, review.artifact_revision_id);
+    out << ", \"artifact_checksum\": ";
+    json_string(out, review.artifact_checksum);
+    out << ", \"supersedes_review_id\": ";
+    json_string(out, review.supersedes_review_id);
+    out << ", \"disposition\": ";
+    json_string(out, to_string(review.disposition));
+    out << ", \"reviewed_scope\": ";
+    json_string(out, review.reviewed_scope);
+    out << ", \"rationale\": ";
+    json_string(out, review.rationale);
+    out << ", \"quality_schema_version\": ";
+    json_string(out, review.quality_schema_version);
+    out << ", \"quality_snapshot_checksum\": ";
+    json_string(out, review.quality_snapshot_checksum);
+    out << ", \"quality_snapshot\": "
+        << review.quality_snapshot_json;
+    out << ", \"created_by_user_id\": ";
+    json_string(out, review.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(review.created_at) << '}';
+}
+
 void steady_solver_json(
     std::ostringstream& out,
     const SteadySolverSettings& solver) {
@@ -777,6 +812,30 @@ std::string serialize_artifact_revisions_json(
             out << ", ";
         }
         artifact_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_performance_map_quality_review_json(
+    const PerformanceMapQualityReviewRecord& review) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    performance_map_quality_review_json(out, review);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_performance_map_quality_reviews_json(
+    const std::vector<PerformanceMapQualityReviewRecord>& reviews) {
+    std::ostringstream out;
+    out << std::setprecision(17)
+        << "{\"schema_version\": "
+           "\"thermox.performance_map_quality_review_list/v1\", "
+           "\"reviews\": [";
+    for (std::size_t index = 0; index < reviews.size(); ++index) {
+        if (index != 0U) out << ", ";
+        performance_map_quality_review_json(out, reviews[index]);
     }
     out << "]}\n";
     return out.str();

@@ -249,3 +249,23 @@ a composition-aware path rather than blindly reusing the fluid policy.
    off-design validation points. ✅
 10. Add standardized component-owned flow-capacity, pressure-ratio, and efficiency map
     corrections across fluid/material and fixed/variable-geometry turbomachinery. ✅
+11. Persist immutable engineering quality reviews against exact artifact revisions, including the
+    artifact checksum, server-derived quality snapshot, reviewer identity, disposition, reviewed
+    scope, rationale, and explicit supersession lineage. ✅
+
+## Engineering quality reviews
+
+A quality review is an auditable engineering decision, not a mutation of a performance map. Each
+`thermox.performance_map_quality_review/v1` record targets one exact artifact revision and checksum
+and embeds the structured quality assessment recomputed by the service from those canonical bytes.
+The snapshot has its own schema and SHA-256 checksum, so later software changes cannot silently
+rewrite the evidence on which the decision was made.
+
+The disposition is `approved`, `approved_with_conditions`, or `rejected`. Reviewers must state the
+operating scope and rationale. A later decision may name the review it supersedes, but prior records
+remain immutable. Supersession is constrained to the same Team, Project, and artifact revision.
+
+Review status does not change map interpolation, extrapolation, or physical bounds, and it does not
+turn invalid source data into a valid artifact. Conversely, readiness does not presently require an
+approval: a future Study governance policy may require a qualifying review for a particular run
+class without coupling that policy to the numeric or artifact-validation layers.

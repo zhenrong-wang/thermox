@@ -465,6 +465,45 @@ service::ArtifactRevisionRecord decode_artifact_revision(
     return record;
 }
 
+service::PerformanceMapReviewDisposition decode_review_disposition(
+    const std::string& value) {
+    if (value == "approved") {
+        return service::PerformanceMapReviewDisposition::approved;
+    }
+    if (value == "approved_with_conditions") {
+        return service::PerformanceMapReviewDisposition::
+            approved_with_conditions;
+    }
+    if (value == "rejected") {
+        return service::PerformanceMapReviewDisposition::rejected;
+    }
+    throw std::runtime_error(
+        "persisted performance-map quality review has an unknown "
+        "disposition");
+}
+
+service::PerformanceMapQualityReviewRecord decode_quality_review(
+    const PGresult* result,
+    int row = 0) {
+    service::PerformanceMapQualityReviewRecord record;
+    record.review_id = field(result, row, 0);
+    record.project_id = field(result, row, 1);
+    record.team_id = field(result, row, 2);
+    record.artifact_revision_id = field(result, row, 3);
+    record.artifact_checksum = field(result, row, 4);
+    record.supersedes_review_id = optional_field(result, row, 5);
+    record.disposition =
+        decode_review_disposition(field(result, row, 6));
+    record.reviewed_scope = field(result, row, 7);
+    record.rationale = field(result, row, 8);
+    record.quality_schema_version = field(result, row, 9);
+    record.quality_snapshot_json = field(result, row, 10);
+    record.quality_snapshot_checksum = field(result, row, 11);
+    record.created_by_user_id = field(result, row, 12);
+    record.created_at = decode_time(field(result, row, 13));
+    return record;
+}
+
 service::StudyRevisionRecord decode_study_revision(
     const PGresult* result,
     int row = 0) {
@@ -567,6 +606,15 @@ constexpr const char artifact_revision_columns[] =
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
 
+constexpr const char quality_review_columns[] =
+    "review_id, project_id, team_id, artifact_revision_id, "
+    "artifact_checksum, supersedes_review_id, disposition, "
+    "reviewed_scope, rationale, quality_schema_version, "
+    "quality_snapshot_json, quality_snapshot_checksum, "
+    "created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)"
+    "::bigint::text";
+
 constexpr const char study_revision_columns[] =
     "study_revision_id, study_id, project_id, team_id, "
     "revision_number, parent_study_revision_id, "
@@ -610,6 +658,8 @@ public:
             "to_regclass('thermox_model_revisions')::text, "
             "to_regclass('thermox_case_revisions')::text, "
             "to_regclass('thermox_artifact_revisions')::text, "
+            "to_regclass("
+            "'thermox_performance_map_quality_reviews')::text, "
             "to_regclass('thermox_study_revisions')::text, "
             "to_regclass("
             "'thermox_run_configuration_revisions')::text");
@@ -618,7 +668,8 @@ public:
             PQgetisnull(schema.get(), 0, 2) ||
             PQgetisnull(schema.get(), 0, 3) ||
             PQgetisnull(schema.get(), 0, 4) ||
-            PQgetisnull(schema.get(), 0, 5)) {
+            PQgetisnull(schema.get(), 0, 5) ||
+            PQgetisnull(schema.get(), 0, 6)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -1121,6 +1172,118 @@ public:
         for (int row = 0; row < PQntuples(result.get()); ++row) {
             records.push_back(
                 decode_artifact_revision(result.get(), row));
+        }
+        return records;
+    }
+
+    service::PerformanceMapQualityReviewRecord
+    create_performance_map_quality_review(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id,
+        const std::string& artifact_checksum,
+        const std::string& supersedes_review_id,
+        service::PerformanceMapReviewDisposition disposition,
+        const std::string& reviewed_scope,
+        const std::string& rationale,
+        const std::string& quality_schema_version,
+        const std::string& quality_snapshot_json,
+        const std::string& quality_snapshot_checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(
+            connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        const auto artifact = execute(
+            connection.get(),
+            "SELECT 1 FROM thermox_artifact_revisions "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND artifact_revision_id = $3 AND checksum = $4 "
+            "FOR SHARE",
+            {
+                team_id.c_str(), project_id.c_str(),
+                artifact_revision_id.c_str(),
+                artifact_checksum.c_str(),
+            });
+        if (PQntuples(artifact.get()) == 0) {
+            throw service::ProjectStateError(
+                "reviewed artifact revision was not found");
+        }
+        if (!supersedes_review_id.empty()) {
+            const auto superseded = execute(
+                connection.get(),
+                "SELECT 1 FROM "
+                "thermox_performance_map_quality_reviews "
+                "WHERE team_id = $1 AND project_id = $2 "
+                "AND artifact_revision_id = $3 "
+                "AND review_id = $4",
+                {
+                    team_id.c_str(), project_id.c_str(),
+                    artifact_revision_id.c_str(),
+                    supersedes_review_id.c_str(),
+                });
+            if (PQntuples(superseded.get()) == 0) {
+                throw service::ProjectStateError(
+                    "superseded quality review was not found");
+            }
+        }
+        const auto disposition_value =
+            service::to_string(disposition);
+        const char* supersedes = supersedes_review_id.empty()
+            ? nullptr : supersedes_review_id.c_str();
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO thermox_performance_map_quality_reviews ("
+            "project_id, team_id, artifact_revision_id, "
+            "artifact_checksum, supersedes_review_id, disposition, "
+            "reviewed_scope, rationale, quality_schema_version, "
+            "quality_snapshot_json, quality_snapshot_checksum, "
+            "created_by_user_id"
+            ") VALUES ("
+            "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12"
+            ") RETURNING "
+            "review_id, project_id, team_id, artifact_revision_id, "
+            "artifact_checksum, supersedes_review_id, disposition, "
+            "reviewed_scope, rationale, quality_schema_version, "
+            "quality_snapshot_json, quality_snapshot_checksum, "
+            "created_by_user_id, "
+            "floor(extract(epoch FROM created_at) * 1000)"
+            "::bigint::text",
+            {
+                project_id.c_str(), team_id.c_str(),
+                artifact_revision_id.c_str(), artifact_checksum.c_str(),
+                supersedes, disposition_value.c_str(),
+                reviewed_scope.c_str(), rationale.c_str(),
+                quality_schema_version.c_str(),
+                quality_snapshot_json.c_str(),
+                quality_snapshot_checksum.c_str(),
+                created_by_user_id.c_str(),
+            });
+        (void)execute(
+            connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        return decode_quality_review(result.get());
+    }
+
+    std::vector<service::PerformanceMapQualityReviewRecord>
+    list_performance_map_quality_reviews(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            quality_review_columns +
+            " FROM thermox_performance_map_quality_reviews "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND artifact_revision_id = $3 "
+            "ORDER BY created_at, review_id";
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {
+                team_id.c_str(), project_id.c_str(),
+                artifact_revision_id.c_str(),
+            });
+        std::vector<service::PerformanceMapQualityReviewRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            records.push_back(decode_quality_review(result.get(), row));
         }
         return records;
     }

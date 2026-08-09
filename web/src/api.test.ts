@@ -260,3 +260,72 @@ describe('expression component authoring API', () => {
     })
   })
 })
+
+describe('performance-map quality review API', () => {
+  it('creates a review against an exact artifact revision', async () => {
+    const review = {
+      schema_version: 'thermox.performance_map_quality_review/v1',
+      review_id: 'map-quality-review-00000001',
+      project_id: 'project-a',
+      artifact_revision_id: 'map revision/1',
+      disposition: 'approved_with_conditions',
+    }
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => new Response(JSON.stringify(review), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.createPerformanceMapQualityReview(
+      'project-a',
+      'map revision/1',
+      'approved_with_conditions',
+      'Corrected speed 250-400 rad/s',
+      'Qualified within the measured envelope.',
+      'map-quality-review-00000000',
+    )).resolves.toEqual(review)
+
+    const [path, request] = fetchMock.mock.calls[0]
+    expect(path).toBe(
+      '/api/v1/projects/project-a/artifact-revisions/map%20revision%2F1/quality-reviews',
+    )
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        schema_version: 'thermox.performance_map_quality_review.create/v1',
+        supersedes_review_id: 'map-quality-review-00000000',
+        disposition: 'approved_with_conditions',
+        reviewed_scope: 'Corrected speed 250-400 rad/s',
+        rationale: 'Qualified within the measured envelope.',
+      }),
+    })
+  })
+
+  it('lists the immutable review history', async () => {
+    const history = {
+      schema_version: 'thermox.performance_map_quality_review_list/v1',
+      reviews: [],
+    }
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(history), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.performanceMapQualityReviews(
+      'project/a',
+      'map-r1',
+    )).resolves.toEqual(history)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project%2Fa/artifact-revisions/map-r1/quality-reviews',
+      expect.objectContaining({
+        headers: { Accept: 'application/json' },
+      }),
+    )
+  })
+})

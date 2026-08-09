@@ -4,6 +4,7 @@
 #include "serialization_internal.hpp"
 
 #include "thermox/service/in_memory_projects.hpp"
+#include "thermox/service/serialization.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
@@ -365,6 +366,19 @@ std::string calibration_identity(
 }
 
 }  // namespace
+
+std::string to_string(
+    PerformanceMapReviewDisposition disposition) {
+    switch (disposition) {
+        case PerformanceMapReviewDisposition::approved:
+            return "approved";
+        case PerformanceMapReviewDisposition::approved_with_conditions:
+            return "approved_with_conditions";
+        case PerformanceMapReviewDisposition::rejected:
+            return "rejected";
+    }
+    return "unknown";
+}
 
 ProjectService::ProjectService(
     std::shared_ptr<ProjectRepository> repository)
@@ -1211,6 +1225,90 @@ ProjectService::list_artifact_revisions(
     }
     return repository_->list_artifact_revisions(
         identity.team_id, project_id);
+}
+
+PerformanceMapQualityReviewRecord
+ProjectService::create_performance_map_quality_review(
+    const CreatePerformanceMapQualityReviewRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.artifact_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and artifact revision IDs must not be empty");
+    }
+    const auto reviewed_scope = trim(request.reviewed_scope);
+    const auto rationale = trim(request.rationale);
+    if (reviewed_scope.empty() || rationale.empty()) {
+        throw ProjectRequestError(
+            "performance-map quality reviews require a reviewed scope "
+            "and rationale");
+    }
+    const auto content = get_artifact_revision_content(
+        request.identity, request.project_id,
+        request.artifact_revision_id);
+    if (!content) {
+        throw ProjectStateError(
+            "reviewed artifact revision was not found");
+    }
+    if (content->revision.artifact_type !=
+        platform::performance_map_artifact_type) {
+        throw ProjectRequestError(
+            "quality reviews may only target performance-map artifacts");
+    }
+    try {
+        const auto input = detail::performance_map_from_payload(
+            content->revision.artifact_id,
+            content->revision.artifact_schema_version,
+            content->revision.artifact_revision_id,
+            content->revision.content.checksum.substr(7),
+            content->canonical_artifact_json);
+        const auto artifact = detail::performance_map_artifact(input);
+        const auto quality =
+            detail::performance_map_quality_summary(artifact);
+        const auto snapshot =
+            serialize_performance_map_quality_json(quality);
+        return repository_->create_performance_map_quality_review(
+            request.identity.team_id,
+            request.identity.user_id,
+            request.project_id,
+            request.artifact_revision_id,
+            content->revision.content.checksum,
+            request.supersedes_review_id,
+            request.disposition,
+            reviewed_scope,
+            rationale,
+            quality.schema_version,
+            snapshot,
+            checksum(snapshot));
+    } catch (const ProjectStateError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string("persisted performance map failed quality "
+                        "assessment: ") + error.what());
+    }
+}
+
+std::vector<PerformanceMapQualityReviewRecord>
+ProjectService::list_performance_map_quality_reviews(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& artifact_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || artifact_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and artifact revision IDs must not be empty");
+    }
+    const auto artifact = repository_->get_artifact_revision(
+        identity.team_id, project_id, artifact_revision_id);
+    if (!artifact) return {};
+    if (artifact->artifact_type !=
+        platform::performance_map_artifact_type) {
+        throw ProjectRequestError(
+            "quality reviews may only target performance-map artifacts");
+    }
+    return repository_->list_performance_map_quality_reviews(
+        identity.team_id, project_id, artifact_revision_id);
 }
 
 std::optional<ResolvedEngineeringArtifacts>

@@ -360,6 +360,86 @@ public:
         return records;
     }
 
+    PerformanceMapQualityReviewRecord
+    create_performance_map_quality_review(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id,
+        const std::string& artifact_checksum,
+        const std::string& supersedes_review_id,
+        PerformanceMapReviewDisposition disposition,
+        const std::string& reviewed_scope,
+        const std::string& rationale,
+        const std::string& quality_schema_version,
+        const std::string& quality_snapshot_json,
+        const std::string& quality_snapshot_checksum) override {
+        std::lock_guard lock(mutex_);
+        const auto artifact =
+            artifact_revisions_.find(artifact_revision_id);
+        if (artifact == artifact_revisions_.end() ||
+            artifact->second.team_id != team_id ||
+            artifact->second.project_id != project_id ||
+            artifact->second.content.checksum != artifact_checksum) {
+            throw ProjectStateError(
+                "reviewed artifact revision was not found");
+        }
+        if (!supersedes_review_id.empty()) {
+            const auto superseded =
+                quality_reviews_.find(supersedes_review_id);
+            if (superseded == quality_reviews_.end() ||
+                superseded->second.team_id != team_id ||
+                superseded->second.project_id != project_id ||
+                superseded->second.artifact_revision_id !=
+                    artifact_revision_id) {
+                throw ProjectStateError(
+                    "superseded quality review was not found");
+            }
+        }
+        PerformanceMapQualityReviewRecord record;
+        record.review_id = next_id(
+            "map-quality-review", next_quality_review_id_++);
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.artifact_revision_id = artifact_revision_id;
+        record.artifact_checksum = artifact_checksum;
+        record.supersedes_review_id = supersedes_review_id;
+        record.disposition = disposition;
+        record.reviewed_scope = reviewed_scope;
+        record.rationale = rationale;
+        record.quality_schema_version = quality_schema_version;
+        record.quality_snapshot_json = quality_snapshot_json;
+        record.quality_snapshot_checksum =
+            quality_snapshot_checksum;
+        record.created_by_user_id = created_by_user_id;
+        record.created_at = std::chrono::system_clock::now();
+        quality_reviews_.emplace(record.review_id, record);
+        return record;
+    }
+
+    std::vector<PerformanceMapQualityReviewRecord>
+    list_performance_map_quality_reviews(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const override {
+        std::lock_guard lock(mutex_);
+        std::vector<PerformanceMapQualityReviewRecord> records;
+        for (const auto& [id, record] : quality_reviews_) {
+            (void)id;
+            if (record.team_id == team_id &&
+                record.project_id == project_id &&
+                record.artifact_revision_id == artifact_revision_id) {
+                records.push_back(record);
+            }
+        }
+        std::sort(
+            records.begin(), records.end(),
+            [](const auto& left, const auto& right) {
+                return left.created_at < right.created_at;
+            });
+        return records;
+    }
+
     StudyRevisionRecord create_study_revision(
         const std::string& team_id,
         const std::string& created_by_user_id,
@@ -683,6 +763,7 @@ private:
     std::uint64_t next_model_revision_id_{1};
     std::uint64_t next_case_revision_id_{1};
     std::uint64_t next_artifact_revision_id_{1};
+    std::uint64_t next_quality_review_id_{1};
     std::uint64_t next_study_revision_id_{1};
     std::uint64_t next_calibration_revision_id_{1};
     std::uint64_t next_run_configuration_revision_id_{1};
@@ -693,6 +774,8 @@ private:
         case_revisions_;
     std::unordered_map<std::string, ArtifactRevisionRecord>
         artifact_revisions_;
+    std::unordered_map<std::string, PerformanceMapQualityReviewRecord>
+        quality_reviews_;
     std::unordered_map<std::string, StudyRevisionRecord> study_revisions_;
     std::unordered_map<std::string, CalibrationRevisionRecord>
         calibration_revisions_;

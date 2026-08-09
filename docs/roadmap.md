@@ -592,7 +592,10 @@ Work items:
     - generic named output intervals with inclusive/exclusive bounds, publication- and
       evaluation-time enforcement, conditioned-layer consistency, quality margins, immutable
       payload/job persistence, and web declaration authoring; ✅
-    - persisted quality review decisions remain a follow-on.
+    - immutable Team/project-scoped quality review decisions pinned to the exact map revision and
+      checksum, with server-derived quality snapshots, reviewer attribution, rationale, explicit
+      supersession, PostgreSQL persistence, and thin HTTP/web-client contracts. ✅
+    - Study-declared review policies and dedicated engineering reviewer roles remain follow-ons.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.

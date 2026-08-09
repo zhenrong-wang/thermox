@@ -146,6 +146,13 @@ payloads in the immutable job snapshot. Consequently workers do not need project
 metadata reads during calculation, and job/result provenance records the logical artifact ID,
 persisted revision ID, schema, and SHA-256 identity.
 
+Migration `016_performance_map_quality_reviews.sql` adds immutable engineering review history for
+performance-map revisions. Every row is constrained to the exact Team/Project/artifact revision and
+artifact checksum, records reviewer identity plus disposition/scope/rationale, and preserves the
+server-derived quality JSON under its own schema and checksum. Optional self-references model
+supersession without updating or deleting prior decisions. These records are governance metadata;
+the canonical map remains in provider-neutral object storage and is never modified by a review.
+
 Migrations `006_run_configuration_revisions.sql` and
 `011_run_configurations_bind_studies.sql` establish reusable execution-policy history. The v3
 contract binds one exact Study revision and complete steady/transient solver settings. The Study

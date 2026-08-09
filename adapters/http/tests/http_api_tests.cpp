@@ -438,6 +438,62 @@ void test_tenant_scoped_asynchronous_jobs() {
             artifact_detail.headers.contains("ETag"),
         "artifact detail must return immutable metadata and the "
         "integrity-checked canonical payload");
+    auto quality_review_request = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions/" + artifact_revision_id +
+            "/quality-reviews",
+        R"json({
+          "schema_version": "thermox.performance_map_quality_review.create/v1",
+          "disposition": "approved_with_conditions",
+          "reviewed_scope": "Corrected flow 70-120 kg/s",
+          "rationale": "Approved inside the measured map envelope."
+        })json");
+    const auto quality_review = api.handle(
+        authenticated(std::move(quality_review_request)));
+    require(
+        quality_review.status == 201 &&
+            quality_review.headers.contains("Location") &&
+            quality_review.headers.contains("ETag") &&
+            quality_review.body.find(
+                "thermox.performance_map_quality_review/v1") !=
+                std::string::npos &&
+            quality_review.body.find(
+                "\"quality_snapshot\": {") != std::string::npos &&
+            quality_review.body.find(
+                "\"disposition\": \"approved_with_conditions\"") !=
+                std::string::npos,
+        "HTTP quality review creation must persist a scoped decision "
+        "and server-derived immutable quality snapshot");
+    const auto quality_review_detail = api.handle(authenticated({
+        "GET",
+        quality_review.headers.at("Location"),
+        {},
+        {},
+    }));
+    require(
+        quality_review_detail.status == 200 &&
+            quality_review_detail.body == quality_review.body &&
+            quality_review_detail.headers.at("ETag") ==
+                quality_review.headers.at("ETag"),
+        "created quality review locations must dereference to the "
+        "same immutable record");
+    const auto quality_reviews = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions/" + artifact_revision_id +
+            "/quality-reviews",
+        {},
+        {},
+    }));
+    require(
+        quality_reviews.status == 200 &&
+            quality_reviews.body.find(
+                "\"reviews\": [{") != std::string::npos &&
+            quality_reviews.body.find(
+                "Approved inside the measured map envelope.") !=
+                std::string::npos,
+        "HTTP quality review history must expose the artifact-scoped "
+        "audit trail");
     const auto hidden_artifact_detail = api.handle(authenticated(
         {
             "GET",

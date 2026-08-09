@@ -101,6 +101,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "013_calibration_revisions.sql",
              "014_calibration_jobs.sql",
              "015_study_acceptance_criteria.sql",
+             "016_performance_map_quality_reviews.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -839,6 +840,31 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL artifact metadata must be immutable and "
         "Team scoped");
+    const auto quality_review =
+        projects.create_performance_map_quality_review({
+            team_a,
+            project.project_id,
+            artifact.artifact_revision_id,
+            {},
+            thermox::service::PerformanceMapReviewDisposition::approved,
+            "Corrected flow 70-120 kg/s and speed 250-400 rad/s",
+            "Qualified for interpolation inside the measured envelope.",
+        });
+    const auto quality_reviews =
+        projects.list_performance_map_quality_reviews(
+            team_a, project.project_id,
+            artifact.artifact_revision_id);
+    require(
+        quality_reviews.size() == 1U &&
+            quality_review.artifact_checksum ==
+                artifact.content.checksum &&
+            quality_review.quality_snapshot_checksum.starts_with(
+                "sha256:") &&
+            projects.list_performance_map_quality_reviews(
+                team_b, project.project_id,
+                artifact.artifact_revision_id).empty(),
+        "PostgreSQL quality reviews must preserve the exact artifact "
+        "and assessed snapshot under Team isolation");
 
     thermox::service::CreateStudyRevisionRequest study_request;
     study_request.identity = team_a;

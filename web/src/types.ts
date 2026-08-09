@@ -809,6 +809,34 @@ export interface ArtifactRevisionContent<T = unknown> {
   artifact: T
 }
 
+export type PerformanceMapReviewDisposition =
+  | 'approved'
+  | 'approved_with_conditions'
+  | 'rejected'
+
+export interface PerformanceMapQualityReview {
+  schema_version: 'thermox.performance_map_quality_review/v1'
+  review_id: string
+  project_id: string
+  team_id: string
+  artifact_revision_id: string
+  artifact_checksum: string
+  supersedes_review_id: string
+  disposition: PerformanceMapReviewDisposition
+  reviewed_scope: string
+  rationale: string
+  quality_schema_version: 'thermox.performance_map_quality/v1'
+  quality_snapshot_checksum: string
+  quality_snapshot: PerformanceMapQuality
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface PerformanceMapQualityReviewList {
+  schema_version: 'thermox.performance_map_quality_review_list/v1'
+  reviews: PerformanceMapQualityReview[]
+}
+
 export interface AssemblyTemplateCatalogEntry {
   source: ArtifactRevision
   definition: TopologyDocument

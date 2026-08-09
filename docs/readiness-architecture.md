@@ -48,6 +48,13 @@ invalid, while accepted constraint intervals and their observed margins remain v
 structured quality report. This distinction prevents a
 qualified engineering risk from being confused with an unusable calculation input.
 
+Persisted performance-map quality reviews remain separate from this calculatability gate. A review
+captures a named engineer's disposition, scope, rationale, and the service-derived quality snapshot
+for one exact artifact revision. It neither blesses invalid bytes nor changes the map contract.
+Until an immutable Study explicitly declares a review policy, readiness continues to answer only
+whether the selected physical input can be evaluated; review history supplies governance evidence
+rather than a hidden run prerequisite.
+
 ## Calculation gate
 
 Thin clients must gate run authoring on all of the following:

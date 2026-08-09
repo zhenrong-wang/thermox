@@ -25,6 +25,8 @@ inline constexpr char artifact_revision_schema_v1[] =
     "thermox.artifact_revision/v1";
 inline constexpr char artifact_revision_content_schema_v1[] =
     "thermox.artifact_revision_content/v1";
+inline constexpr char performance_map_quality_review_schema_v1[] =
+    "thermox.performance_map_quality_review/v1";
 inline constexpr char study_revision_schema_v1[] =
     "thermox.study_revision/v1";
 inline constexpr char calibration_revision_schema_v1[] =
@@ -109,6 +111,35 @@ struct ArtifactRevisionContent {
         artifact_revision_content_schema_v1};
     ArtifactRevisionRecord revision;
     std::string canonical_artifact_json;
+};
+
+enum class PerformanceMapReviewDisposition {
+    approved,
+    approved_with_conditions,
+    rejected,
+};
+
+std::string to_string(PerformanceMapReviewDisposition disposition);
+
+struct PerformanceMapQualityReviewRecord {
+    std::string schema_version{
+        performance_map_quality_review_schema_v1};
+    std::string review_id;
+    std::string project_id;
+    std::string team_id;
+    std::string artifact_revision_id;
+    std::string artifact_checksum;
+    std::string supersedes_review_id;
+    PerformanceMapReviewDisposition disposition{
+        PerformanceMapReviewDisposition::rejected};
+    std::string reviewed_scope;
+    std::string rationale;
+    std::string quality_schema_version{
+        performance_map_quality_schema_v1};
+    std::string quality_snapshot_json;
+    std::string quality_snapshot_checksum;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
 };
 
 struct StudyRevisionRecord {
@@ -266,6 +297,26 @@ public:
         const std::string& team_id,
         const std::string& project_id) const = 0;
 
+    virtual PerformanceMapQualityReviewRecord
+    create_performance_map_quality_review(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id,
+        const std::string& artifact_checksum,
+        const std::string& supersedes_review_id,
+        PerformanceMapReviewDisposition disposition,
+        const std::string& reviewed_scope,
+        const std::string& rationale,
+        const std::string& quality_schema_version,
+        const std::string& quality_snapshot_json,
+        const std::string& quality_snapshot_checksum) = 0;
+    virtual std::vector<PerformanceMapQualityReviewRecord>
+    list_performance_map_quality_reviews(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const = 0;
+
     virtual StudyRevisionRecord create_study_revision(
         const std::string& team_id,
         const std::string& created_by_user_id,
@@ -421,6 +472,17 @@ struct CreateArtifactRevisionRequest {
     std::string artifact_type;
     std::string artifact_schema_version;
     std::string artifact_json;
+};
+
+struct CreatePerformanceMapQualityReviewRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string artifact_revision_id;
+    std::string supersedes_review_id;
+    PerformanceMapReviewDisposition disposition{
+        PerformanceMapReviewDisposition::rejected};
+    std::string reviewed_scope;
+    std::string rationale;
 };
 
 struct CreateRunConfigurationRevisionRequest {
@@ -598,6 +660,14 @@ public:
     list_artifact_revisions(
         const IdentityContext& identity,
         const std::string& project_id) const;
+    [[nodiscard]] PerformanceMapQualityReviewRecord
+    create_performance_map_quality_review(
+        const CreatePerformanceMapQualityReviewRequest& request) const;
+    [[nodiscard]] std::vector<PerformanceMapQualityReviewRecord>
+    list_performance_map_quality_reviews(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const;
     [[nodiscard]] std::optional<ResolvedEngineeringArtifacts>
     resolve_artifact_revisions(
         const IdentityContext& identity,
@@ -716,6 +786,10 @@ std::string serialize_artifact_revision_content_json(
     const ArtifactRevisionContent& content);
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions);
+std::string serialize_performance_map_quality_review_json(
+    const PerformanceMapQualityReviewRecord& review);
+std::string serialize_performance_map_quality_reviews_json(
+    const std::vector<PerformanceMapQualityReviewRecord>& reviews);
 std::string serialize_study_revision_json(
     const StudyRevisionRecord& revision);
 std::string serialize_study_revisions_json(

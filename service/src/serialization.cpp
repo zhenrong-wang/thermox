@@ -1697,6 +1697,13 @@ std::string serialize_validate_response_json(
     return out.str();
 }
 
+std::string serialize_performance_map_quality_json(
+    const PerformanceMapQualitySummary& quality) {
+    std::ostringstream out;
+    performance_map_quality_json(out, quality);
+    return out.str();
+}
+
 std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;

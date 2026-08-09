@@ -240,120 +240,13 @@ std::shared_ptr<const SimulationRuntime> request_runtime(
         base, expression_component_definitions(components));
 }
 
-platform::MapExtrapolationPolicy extrapolation_policy(
-    const std::string& value) {
-    if (value == "reject") {
-        return platform::MapExtrapolationPolicy::reject;
-    }
-    if (value == "clamp") {
-        return platform::MapExtrapolationPolicy::clamp;
-    }
-    if (value == "linear") {
-        return platform::MapExtrapolationPolicy::linear;
-    }
-    throw std::invalid_argument(
-        "unknown performance-map extrapolation policy: " + value);
-}
-
-std::shared_ptr<const platform::PerformanceMap> performance_map(
-    const PerformanceMapPayloadInput& input) {
-    std::vector<platform::MapVariable> outputs;
-    outputs.reserve(input.output_variables.size());
-    for (const auto& variable : input.output_variables) {
-        outputs.push_back({variable.name, variable.dimension});
-    }
-    std::vector<platform::MapCurve> curves;
-    curves.reserve(input.curves.size());
-    for (const auto& input_curve : input.curves) {
-        platform::MapCurve curve;
-        curve.family_coordinate = input_curve.family_coordinate;
-        curve.samples.reserve(input_curve.samples.size());
-        for (const auto& sample : input_curve.samples) {
-            curve.samples.push_back(
-                {sample.coordinate, sample.outputs});
-        }
-        curves.push_back(std::move(curve));
-    }
-    std::vector<platform::MapOutputConstraint> constraints;
-    constraints.reserve(input.output_constraints.size());
-    for (const auto& constraint : input.output_constraints) {
-        constraints.push_back({
-            constraint.output,
-            constraint.minimum,
-            constraint.maximum,
-            constraint.minimum_inclusive,
-            constraint.maximum_inclusive,
-        });
-    }
-    return std::make_shared<const platform::PerformanceMap>(
-        platform::MapVariable{
-            input.primary_variable.name,
-            input.primary_variable.dimension},
-        platform::MapVariable{
-            input.family_variable.name,
-            input.family_variable.dimension},
-        std::move(outputs),
-        std::move(curves),
-        extrapolation_policy(input.primary_extrapolation),
-        extrapolation_policy(input.family_extrapolation),
-        std::move(constraints));
-}
-
-platform::PerformanceMapArtifact performance_map_artifact(
-    const PerformanceMapArtifactInput& input) {
-    platform::PerformanceMapArtifact artifact;
-    artifact.id = input.id;
-    artifact.schema_version = input.schema_version;
-    artifact.revision = input.revision;
-    artifact.checksum_sha256 = input.checksum_sha256;
-    if (input.schema_version ==
-        platform::performance_map_artifact_schema_v1) {
-        if (!input.map || input.condition_variable ||
-            !input.layers.empty()) {
-            throw std::invalid_argument(
-                "performance-map v1 artifact '" + input.id +
-                "' requires one ordinary map payload");
-        }
-        artifact.map = performance_map(*input.map);
-        return artifact;
-    }
-    if (input.schema_version ==
-        platform::performance_map_artifact_schema_v2) {
-        if (input.map || !input.condition_variable ||
-            input.layers.empty()) {
-            throw std::invalid_argument(
-                "performance-map v2 artifact '" + input.id +
-                "' requires a condition variable and map layers");
-        }
-        std::vector<platform::ConditionedMapLayer> layers;
-        layers.reserve(input.layers.size());
-        for (const auto& layer : input.layers) {
-            layers.push_back({
-                layer.condition_coordinate,
-                performance_map(layer.map),
-            });
-        }
-        artifact.conditioned_map =
-            std::make_shared<const platform::ConditionedPerformanceMap>(
-                platform::MapVariable{
-                    input.condition_variable->name,
-                    input.condition_variable->dimension},
-                std::move(layers),
-                extrapolation_policy(
-                    input.condition_extrapolation));
-        return artifact;
-    }
-    throw std::invalid_argument(
-        "unsupported performance-map artifact schema: " +
-        input.schema_version);
-}
-
 platform::EngineeringArtifactRegistry execution_engineering_artifacts(
     const platform::EngineeringArtifactRegistry& runtime_artifacts,
     const SimulationArtifactBundle& inputs) {
     auto artifacts = runtime_artifacts;
     for (const auto& input : inputs.performance_maps) {
-        artifacts.register_artifact(performance_map_artifact(input));
+        artifacts.register_artifact(
+            detail::performance_map_artifact(input));
     }
     for (const auto& input : inputs.correlations) {
         std::vector<platform::CorrelationVariable> variables;
@@ -416,57 +309,6 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             std::move(regions)});
     }
     return artifacts;
-}
-
-PerformanceMapLayerQualitySummary map_layer_quality_summary(
-    const platform::MapQualityReport& report,
-    std::size_t layer_index,
-    std::optional<double> condition_coordinate = std::nullopt) {
-    PerformanceMapLayerQualitySummary summary;
-    summary.layer_index = layer_index;
-    summary.has_condition_coordinate = condition_coordinate.has_value();
-    summary.condition_coordinate = condition_coordinate.value_or(0.0);
-    summary.curve_count = report.curve_count;
-    summary.sample_count = report.sample_count;
-    summary.family_minimum = report.family_minimum;
-    summary.family_maximum = report.family_maximum;
-    summary.common_primary_minimum = report.common_primary_minimum;
-    summary.common_primary_maximum = report.common_primary_maximum;
-    summary.has_global_common_primary_domain =
-        report.has_global_common_primary_domain;
-    summary.minimum_adjacent_primary_overlap =
-        report.minimum_adjacent_primary_overlap;
-    for (const auto& output : report.outputs) {
-        PerformanceMapOutputQualitySummary output_summary;
-        output_summary.name = output.name;
-        output_summary.minimum = output.minimum;
-        output_summary.maximum = output.maximum;
-        output_summary.maximum_absolute_primary_slope =
-            output.maximum_absolute_primary_slope;
-        output_summary.maximum_absolute_primary_slope_jump =
-            output.maximum_absolute_primary_slope_jump;
-        output_summary.maximum_absolute_family_slope =
-            output.maximum_absolute_family_slope;
-        if (output.declared_constraint) {
-            output_summary.constraint_minimum =
-                output.declared_constraint->minimum;
-            output_summary.constraint_maximum =
-                output.declared_constraint->maximum;
-            output_summary.constraint_minimum_inclusive =
-                output.declared_constraint->minimum_inclusive;
-            output_summary.constraint_maximum_inclusive =
-                output.declared_constraint->maximum_inclusive;
-            output_summary.minimum_lower_margin =
-                output.minimum_lower_margin;
-            output_summary.minimum_upper_margin =
-                output.minimum_upper_margin;
-        }
-        summary.outputs.push_back(std::move(output_summary));
-    }
-    for (const auto& advisory : report.advisories) {
-        summary.advisory_codes.push_back(advisory.code);
-    }
-    return summary;
 }
 
 std::vector<std::string> map_quality_suggestions(
@@ -555,40 +397,20 @@ void append_performance_map_quality(
         });
     }
     for (const auto& [artifact, base_path] : selected) {
-        PerformanceMapQualitySummary summary;
-        summary.artifact_id = artifact->id;
+        auto summary =
+            detail::performance_map_quality_summary(*artifact);
         if (artifact->map) {
             const auto& report = artifact->map->quality_report();
-            summary.layers.push_back(
-                map_layer_quality_summary(report, 0));
             for (const auto& advisory : report.advisories) {
-                summary.advisory_codes.push_back(advisory.code);
                 append_map_quality_diagnostic(
                     response.diagnostics, artifact->id,
                     base_path + "/map", advisory);
             }
         } else {
-            summary.conditioned = true;
             const auto& report =
                 artifact->conditioned_map->quality_report();
-            summary.condition_minimum = report.condition_minimum;
-            summary.condition_maximum = report.condition_maximum;
-            summary.common_family_minimum =
-                report.common_family_minimum;
-            summary.common_family_maximum =
-                report.common_family_maximum;
-            summary.has_global_common_family_domain =
-                report.has_global_common_family_domain;
-            summary.minimum_adjacent_family_overlap =
-                report.minimum_adjacent_family_overlap;
-            summary.minimum_adjacent_primary_overlap =
-                report.minimum_adjacent_primary_overlap;
-            const auto& layers = artifact->conditioned_map->layers();
             for (std::size_t layer = 0;
                  layer < report.layers.size(); ++layer) {
-                summary.layers.push_back(map_layer_quality_summary(
-                    report.layers[layer], layer,
-                    layers[layer].condition_coordinate));
                 for (const auto& advisory :
                      report.layers[layer].advisories) {
                     append_map_quality_diagnostic(
@@ -598,14 +420,7 @@ void append_performance_map_quality(
                         advisory);
                 }
             }
-            for (const auto& output : report.outputs) {
-                summary.outputs.push_back({
-                    output.name,
-                    output.maximum_absolute_condition_slope,
-                });
-            }
             for (const auto& advisory : report.advisories) {
-                summary.advisory_codes.push_back(advisory.code);
                 append_map_quality_diagnostic(
                     response.diagnostics, artifact->id,
                     base_path, advisory);

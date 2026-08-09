@@ -845,6 +845,70 @@ parse_job_comparison_request(const Request& request) {
     };
 }
 
+service::CreatePerformanceMapQualityReviewRequest
+parse_performance_map_quality_review_request(
+    const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid performance-map quality review JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "performance-map quality review must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "supersedes_review_id" &&
+            field.key() != "disposition" &&
+            field.key() != "reviewed_scope" &&
+            field.key() != "rationale") {
+            throw std::invalid_argument(
+                "unknown performance-map quality review field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_json_string(root, "schema_version") !=
+        "thermox.performance_map_quality_review.create/v1") {
+        throw std::invalid_argument(
+            "unsupported performance-map quality review "
+            "schema_version");
+    }
+    service::CreatePerformanceMapQualityReviewRequest command;
+    const auto disposition =
+        require_json_string(root, "disposition");
+    if (disposition == "approved") {
+        command.disposition = service::
+            PerformanceMapReviewDisposition::approved;
+    } else if (disposition == "approved_with_conditions") {
+        command.disposition = service::
+            PerformanceMapReviewDisposition::approved_with_conditions;
+    } else if (disposition == "rejected") {
+        command.disposition = service::
+            PerformanceMapReviewDisposition::rejected;
+    } else {
+        throw std::invalid_argument(
+            "unknown performance-map quality review disposition");
+    }
+    command.reviewed_scope =
+        require_json_string(root, "reviewed_scope");
+    command.rationale = require_json_string(root, "rationale");
+    if (const auto* supersedes =
+            root.if_contains("supersedes_review_id")) {
+        if (!supersedes->is_string()) {
+            throw std::invalid_argument(
+                "supersedes_review_id must be a string");
+        }
+        command.supersedes_review_id =
+            std::string(supersedes->as_string());
+    }
+    return command;
+}
+
 service::ApplyGraphEditsRequest parse_graph_edit_request(
     const Request& request) {
     boost::json::value value;
@@ -1677,6 +1741,21 @@ Response artifact_revision_content_response(
     return response;
 }
 
+Response performance_map_quality_review_response(
+    const service::PerformanceMapQualityReviewRecord& review,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_performance_map_quality_review_json(review));
+    response.headers["ETag"] =
+        "\"" + review.quality_snapshot_checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + review.project_id +
+        "/artifact-revisions/" + review.artifact_revision_id +
+        "/quality-reviews/" + review.review_id;
+    return response;
+}
+
 Response run_configuration_revision_response(
     const service::RunConfigurationRevisionRecord& revision,
     int status) {
@@ -2236,6 +2315,114 @@ Response Api::handle(const Request& request) const {
             }
             const std::string artifact_detail_prefix =
                 std::string(artifacts_segment) + "/";
+            constexpr std::string_view quality_reviews_suffix =
+                "/quality-reviews";
+            constexpr std::string_view quality_review_detail_marker =
+                "/quality-reviews/";
+            const auto quality_review_detail =
+                remainder.find(quality_review_detail_marker);
+            if (remainder.starts_with(artifact_detail_prefix) &&
+                quality_review_detail != std::string::npos) {
+                const auto artifact_revision_id = remainder.substr(
+                    artifact_detail_prefix.size(),
+                    quality_review_detail -
+                        artifact_detail_prefix.size());
+                const auto review_id = remainder.substr(
+                    quality_review_detail +
+                    quality_review_detail_marker.size());
+                if (artifact_revision_id.empty() || review_id.empty() ||
+                    review_id.find('/') != std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "performance-map quality review detail only "
+                        "supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto reviews = impl_->projects
+                    ->list_performance_map_quality_reviews(
+                        identity, project_id, artifact_revision_id);
+                const auto review = std::find_if(
+                    reviews.begin(), reviews.end(),
+                    [&](const auto& candidate) {
+                        return candidate.review_id == review_id;
+                    });
+                if (review == reviews.end()) {
+                    return error_response(
+                        404,
+                        "performance_map_quality_review_not_found",
+                        "performance-map quality review was not found");
+                }
+                return performance_map_quality_review_response(
+                    *review, 200);
+            }
+            if (remainder.starts_with(artifact_detail_prefix) &&
+                remainder.ends_with(quality_reviews_suffix)) {
+                const auto artifact_revision_id = remainder.substr(
+                    artifact_detail_prefix.size(),
+                    remainder.size() - artifact_detail_prefix.size() -
+                        quality_reviews_suffix.size());
+                if (artifact_revision_id.empty() ||
+                    artifact_revision_id.find('/') !=
+                        std::string::npos) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto artifact = impl_->projects
+                    ->get_artifact_revision(
+                        identity, project_id, artifact_revision_id);
+                if (!artifact) {
+                    return error_response(
+                        404,
+                        "artifact_revision_not_found",
+                        "artifact revision was not found");
+                }
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    return json_response(
+                        200,
+                        service::
+                            serialize_performance_map_quality_reviews_json(
+                                impl_->projects
+                                    ->list_performance_map_quality_reviews(
+                                        identity,
+                                        project_id,
+                                        artifact_revision_id)));
+                }
+                if (method == "post") {
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_performance_map_quality_review_request(
+                            request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    command.artifact_revision_id = artifact_revision_id;
+                    return performance_map_quality_review_response(
+                        impl_->projects
+                            ->create_performance_map_quality_review(
+                                command),
+                        201);
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "performance-map quality reviews only support "
+                    "GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
             if (remainder.starts_with(
                     artifact_detail_prefix)) {
                 reject_unknown_query(target.query, {});
