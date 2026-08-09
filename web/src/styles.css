@@ -1346,6 +1346,10 @@ code {
   grid-template-columns: 1fr 1fr;
 }
 
+.performance-map-constraint-row {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
 .correlation-expression-row {
   grid-template-columns: 1fr;
 }
@@ -1517,7 +1521,8 @@ code {
 @media (max-width: 800px) {
   .port-definition-row,
   .parameter-definition-row,
-  .equation-definition-row {
+  .equation-definition-row,
+  .performance-map-constraint-row {
     grid-template-columns: 1fr 1fr;
   }
 

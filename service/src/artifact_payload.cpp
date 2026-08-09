@@ -57,6 +57,16 @@ std::shared_ptr<const platform::PerformanceMap> validate_map(
         }
         curves.push_back(std::move(curve));
     }
+    std::vector<platform::MapOutputConstraint> constraints;
+    for (const auto& value : input.output_constraints) {
+        constraints.push_back({
+            value.output,
+            value.minimum,
+            value.maximum,
+            value.minimum_inclusive,
+            value.maximum_inclusive,
+        });
+    }
     return std::make_shared<const platform::PerformanceMap>(
         platform::MapVariable{
             input.primary_variable.name,
@@ -67,7 +77,8 @@ std::shared_ptr<const platform::PerformanceMap> validate_map(
         std::move(outputs),
         std::move(curves),
         extrapolation(input.primary_extrapolation),
-        extrapolation(input.family_extrapolation));
+        extrapolation(input.family_extrapolation),
+        std::move(constraints));
 }
 
 void validate(const PerformanceMapArtifactInput& artifact) {
@@ -163,6 +174,30 @@ PerformanceMapPayloadInput decode_map(const Tree& tree) {
         [](const Tree& item) {
             return decode_variable(item);
         });
+    if (const auto constraints =
+            tree.get_child_optional("output_constraints")) {
+        map.output_constraints =
+            decode_array<MapOutputConstraintInput>(
+                *constraints,
+                [](const Tree& encoded) {
+                    MapOutputConstraintInput constraint;
+                    constraint.output =
+                        encoded.get<std::string>("output");
+                    if (const auto minimum =
+                            encoded.get_optional<double>("minimum")) {
+                        constraint.minimum = *minimum;
+                    }
+                    if (const auto maximum =
+                            encoded.get_optional<double>("maximum")) {
+                        constraint.maximum = *maximum;
+                    }
+                    constraint.minimum_inclusive = encoded.get<bool>(
+                        "minimum_inclusive", true);
+                    constraint.maximum_inclusive = encoded.get<bool>(
+                        "maximum_inclusive", true);
+                    return constraint;
+                });
+    }
     map.curves = decode_array<MapCurveInput>(
         tree.get_child("curves"),
         [](const Tree& encoded) {
@@ -208,6 +243,29 @@ Tree encode_map(const PerformanceMapPayloadInput& map) {
             [](const auto& item) {
                 return encode_variable(item);
             }));
+    if (!map.output_constraints.empty()) {
+        tree.add_child(
+            "output_constraints",
+            array(
+                map.output_constraints,
+                [](const MapOutputConstraintInput& constraint) {
+                    Tree encoded;
+                    encoded.put("output", constraint.output);
+                    if (constraint.minimum) {
+                        encoded.put("minimum", *constraint.minimum);
+                    }
+                    if (constraint.maximum) {
+                        encoded.put("maximum", *constraint.maximum);
+                    }
+                    encoded.put(
+                        "minimum_inclusive",
+                        constraint.minimum_inclusive);
+                    encoded.put(
+                        "maximum_inclusive",
+                        constraint.maximum_inclusive);
+                    return encoded;
+                }));
+    }
     tree.add_child(
         "curves",
         array(

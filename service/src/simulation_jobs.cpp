@@ -78,6 +78,16 @@ void append_map_payload(
         append_string(stream, output.name);
         append_string(stream, output.dimension);
     }
+    stream << map.output_constraints.size() << '|';
+    for (const auto& constraint : map.output_constraints) {
+        append_string(stream, constraint.output);
+        stream << constraint.minimum.has_value() << '|';
+        if (constraint.minimum) stream << *constraint.minimum << '|';
+        stream << constraint.maximum.has_value() << '|';
+        if (constraint.maximum) stream << *constraint.maximum << '|';
+        stream << constraint.minimum_inclusive << '|'
+               << constraint.maximum_inclusive << '|';
+    }
     stream << map.curves.size() << '|';
     for (const auto& curve : map.curves) {
         stream << curve.family_coordinate << '|'

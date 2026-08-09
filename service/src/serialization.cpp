@@ -425,6 +425,42 @@ void map_output_quality_json(
     json_number(out, output.maximum_absolute_primary_slope_jump);
     out << ", \"maximum_absolute_family_slope\": ";
     json_number(out, output.maximum_absolute_family_slope);
+    out << ", \"declared_constraint\": ";
+    if (output.constraint_minimum || output.constraint_maximum) {
+        out << "{\"minimum\": ";
+        if (output.constraint_minimum) {
+            json_number(out, *output.constraint_minimum);
+        } else {
+            out << "null";
+        }
+        out << ", \"maximum\": ";
+        if (output.constraint_maximum) {
+            json_number(out, *output.constraint_maximum);
+        } else {
+            out << "null";
+        }
+        out << ", \"minimum_inclusive\": "
+            << (output.constraint_minimum_inclusive
+                    ? "true" : "false")
+            << ", \"maximum_inclusive\": "
+            << (output.constraint_maximum_inclusive
+                    ? "true" : "false")
+            << '}';
+    } else {
+        out << "null";
+    }
+    out << ", \"minimum_lower_margin\": ";
+    if (output.minimum_lower_margin) {
+        json_number(out, *output.minimum_lower_margin);
+    } else {
+        out << "null";
+    }
+    out << ", \"minimum_upper_margin\": ";
+    if (output.minimum_upper_margin) {
+        json_number(out, *output.minimum_upper_margin);
+    } else {
+        out << "null";
+    }
     out << '}';
 }
 

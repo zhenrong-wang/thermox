@@ -80,6 +80,25 @@ Every axis and output has a stable name and physical dimension. Evaluation retur
 - piecewise-analytic derivatives with respect to both coordinates;
 - explicit primary- and family-axis extrapolation flags.
 
+An artifact may additionally declare generic admissible intervals by output name:
+
+```json
+"output_constraints": [
+  {
+    "output": "isentropic_efficiency",
+    "minimum": 0.0,
+    "maximum": 1.0,
+    "minimum_inclusive": false,
+    "maximum_inclusive": true
+  }
+]
+```
+
+Bounds use the named output's declared SI dimension. Either bound may be omitted, but a declaration
+must contain at least one finite bound. Output names and declarations are unique. This contract is
+domain-neutral: an OEM map can constrain efficiency, pressure ratio, heat-transfer coefficient, or
+any custom output without teaching the interpolation kernel what that output means.
+
 ## Numeric quality gate
 
 Construction is also the map's numeric trust boundary. In addition to unique variables, finite
@@ -88,7 +107,9 @@ samples, strictly increasing coordinates, and consistent output arity, Thermox n
 - finite samples whose coordinate spacing would produce a non-finite interpolation derivative;
 - non-finite family-coordinate spans; and
 - adjacent non-rectangular curves with no positive shared primary-coordinate interval when the
-  primary extrapolation policy is `reject`.
+  primary extrapolation policy is `reject`; and
+- unknown, duplicate, empty, non-finite, or internally inconsistent output constraints, plus any
+  declared sample outside its admissible interval.
 
 The last check prevents a superficially well-formed set of speed lines from creating an unusable
 hole across an entire family interval. `clamp` and `linear` maps may intentionally bridge separated
@@ -101,6 +122,8 @@ primary-slope jumps. Advisories identify the absence
 of one primary interval shared by all curves and each enabled linear-extrapolation axis. These are
 domain-neutral numerical facts; compressor-specific limits such as `0 < efficiency <= 1` remain
 component or declared engineering-data constraints rather than being hard-coded in the map kernel.
+For constrained outputs the report also carries the complete interval and the smallest observed
+margin to each declared bound.
 
 Validation projects these reports through the service-owned
 `performance_map_quality` contract. It preserves per-layer coverage, output range and slope
@@ -130,6 +153,12 @@ Components must not silently change these policies. A rejected evaluation will l
 numeric kernel's recoverable model-domain failure. Clamp or linear policy risk remains visible in
 validation diagnostics and the structured quality report. Per-evaluation extrapolation events and
 result-level persistence remain separate runtime follow-ons.
+
+Declared output constraints remain authoritative during evaluation. Interpolation between valid
+samples stays inside an interval, but linear extrapolation can leave it; such an evaluation raises
+the same recoverable `MapDomainError` used for coordinate-domain failures. Conditioned maps require
+identical constraints in every layer and recheck the interpolated result after condition-axis
+extrapolation.
 
 ## Gas-turbine use
 

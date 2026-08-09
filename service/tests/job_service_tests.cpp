@@ -218,6 +218,26 @@ void test_submission_is_idempotent_and_conflict_safe() {
         "fingerprint and reusing its key "
         "must fail");
 
+    auto constrained = steady_request("map-constraint-submission");
+    constrained.artifacts.performance_maps.push_back(
+        unused_test_map());
+    constrained.artifacts.performance_maps.front()
+        .map->output_constraints.push_back(
+            {"efficiency", 0.0, 1.0, false, true});
+    (void)service.submit(constrained);
+    constrained.artifacts.performance_maps.front()
+        .map->output_constraints.front().maximum = 0.95;
+    conflict = false;
+    try {
+        (void)service.submit(constrained);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "declared map output constraints must participate in the job "
+        "idempotency fingerprint");
+
     auto family_request = steady_request("correlation-family-submission");
     family_request.artifacts.correlations.push_back(
         unused_correlation_family());

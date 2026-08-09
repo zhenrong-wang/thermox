@@ -589,7 +589,10 @@ Work items:
       layer reports, extrapolation-dependency advisories, and overlaid-grid slope metrics; ✅
     - structured service validation projection with per-artifact/per-layer metrics, stable warning
       codes, exact payload attribution, and non-blocking readiness semantics; ✅
-    - declared physical output constraints and persisted quality review remain follow-ons.
+    - generic named output intervals with inclusive/exclusive bounds, publication- and
+      evaluation-time enforcement, conditioned-layer consistency, quality margins, immutable
+      payload/job persistence, and web declaration authoring; ✅
+    - persisted quality review decisions remain a follow-on.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.

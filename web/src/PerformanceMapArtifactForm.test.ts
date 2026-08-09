@@ -43,7 +43,42 @@ describe('performance map authoring', () => {
   })
 
   it('accepts a typed ordered map', () => {
-    expect(validatePerformanceMapDefinition(mapDefinition())).toEqual([])
+    const definition = mapDefinition()
+    definition.output_constraints = [
+      {
+        output: 'isentropic_efficiency',
+        minimum: 0,
+        maximum: 1,
+        minimum_inclusive: false,
+        maximum_inclusive: true,
+      },
+    ]
+    expect(validatePerformanceMapDefinition(definition)).toEqual([])
+  })
+
+  it('rejects invalid constraints and samples outside their bounds', () => {
+    const definition = mapDefinition()
+    definition.output_constraints = [
+      {
+        output: 'isentropic_efficiency',
+        minimum: 0.85,
+        maximum: 1,
+        minimum_inclusive: false,
+        maximum_inclusive: true,
+      },
+      {
+        output: 'missing',
+        minimum_inclusive: true,
+        maximum_inclusive: true,
+      },
+    ]
+    expect(validatePerformanceMapDefinition(definition)).toEqual(
+      expect.arrayContaining([
+        'Constraint 2 references unknown output "missing".',
+        'Constraint 2 needs at least one bound.',
+        'Curve 1 sample 1 violates the declared constraint for "isentropic_efficiency".',
+      ]),
+    )
   })
 
   it('rejects duplicate variables and unordered coordinates', () => {

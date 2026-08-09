@@ -24,6 +24,13 @@ interface PerformanceMapArtifactFormProps {
 
 type VariableDraft = { name: string; dimension: string }
 type CurveDraft = { familyCoordinate: string; samples: string }
+type ConstraintDraft = {
+  output: string
+  minimum: string
+  maximum: string
+  minimumInclusive: boolean
+  maximumInclusive: boolean
+}
 
 const policies: MapExtrapolationPolicy[] = ['reject', 'clamp', 'linear']
 
@@ -67,6 +74,37 @@ export function validatePerformanceMapDefinition(
       issues.push(`Output ${index + 1} needs a name and dimension.`)
     }
   })
+  const outputNames = new Set(
+    definition.output_variables.map((output) => output.name),
+  )
+  const constrainedOutputs = new Set<string>()
+  definition.output_constraints?.forEach((constraint, index) => {
+    if (!outputNames.has(constraint.output)) {
+      issues.push(`Constraint ${index + 1} references unknown output "${constraint.output}".`)
+    }
+    if (constrainedOutputs.has(constraint.output)) {
+      issues.push(`Output constraint for "${constraint.output}" is duplicated.`)
+    }
+    constrainedOutputs.add(constraint.output)
+    if (constraint.minimum === undefined && constraint.maximum === undefined) {
+      issues.push(`Constraint ${index + 1} needs at least one bound.`)
+    }
+    if (
+      (constraint.minimum !== undefined && !Number.isFinite(constraint.minimum)) ||
+      (constraint.maximum !== undefined && !Number.isFinite(constraint.maximum))
+    ) {
+      issues.push(`Constraint ${index + 1} bounds must be finite.`)
+    }
+    if (
+      constraint.minimum !== undefined &&
+      constraint.maximum !== undefined &&
+      (constraint.minimum > constraint.maximum ||
+        (constraint.minimum === constraint.maximum &&
+          (!constraint.minimum_inclusive || !constraint.maximum_inclusive)))
+    ) {
+      issues.push(`Constraint ${index + 1} has an empty interval.`)
+    }
+  })
   const names = new Set<string>()
   for (const variable of variables) {
     if (variable.name && names.has(variable.name)) {
@@ -99,6 +137,24 @@ export function validatePerformanceMapDefinition(
       ) {
         issues.push(`Curve ${curveIndex + 1} sample ${sampleIndex + 1} does not match the declared finite outputs.`)
       }
+      definition.output_constraints?.forEach((constraint) => {
+        const outputIndex = definition.output_variables.findIndex(
+          (output) => output.name === constraint.output,
+        )
+        if (outputIndex < 0 || !Number.isFinite(sample.outputs[outputIndex])) return
+        const value = sample.outputs[outputIndex]
+        const below = constraint.minimum !== undefined &&
+          (value < constraint.minimum ||
+            (value === constraint.minimum && !constraint.minimum_inclusive))
+        const above = constraint.maximum !== undefined &&
+          (value > constraint.maximum ||
+            (value === constraint.maximum && !constraint.maximum_inclusive))
+        if (below || above) {
+          issues.push(
+            `Curve ${curveIndex + 1} sample ${sampleIndex + 1} violates the declared constraint for "${constraint.output}".`,
+          )
+        }
+      })
     })
   })
   return issues
@@ -165,6 +221,15 @@ export function PerformanceMapArtifactForm({
     { name: 'pressure_ratio', dimension: dimensionless },
     { name: 'isentropic_efficiency', dimension: dimensionless },
   ])
+  const [constraints, setConstraints] = useState<ConstraintDraft[]>(
+    (base?.definition.output_constraints ?? []).map((constraint) => ({
+      output: constraint.output,
+      minimum: constraint.minimum === undefined ? '' : String(constraint.minimum),
+      maximum: constraint.maximum === undefined ? '' : String(constraint.maximum),
+      minimumInclusive: constraint.minimum_inclusive,
+      maximumInclusive: constraint.maximum_inclusive,
+    })),
+  )
   const [curves, setCurves] = useState<CurveDraft[]>(base
     ? base.definition.curves.map((curve) => ({ familyCoordinate: String(curve.family_coordinate), samples: samplesText(curve.samples) }))
     : [
@@ -186,6 +251,13 @@ export function PerformanceMapArtifactForm({
       primary_variable: { name: primary.name.trim(), dimension: primary.dimension },
       family_variable: { name: family.name.trim(), dimension: family.dimension },
       output_variables: outputs.map((output) => ({ name: output.name.trim(), dimension: output.dimension })),
+      output_constraints: constraints.map((constraint) => ({
+        output: constraint.output,
+        ...(constraint.minimum.trim() === '' ? {} : { minimum: Number(constraint.minimum) }),
+        ...(constraint.maximum.trim() === '' ? {} : { maximum: Number(constraint.maximum) }),
+        minimum_inclusive: constraint.minimumInclusive,
+        maximum_inclusive: constraint.maximumInclusive,
+      })),
       curves: curves.map((curve) => ({
         family_coordinate: Number(curve.familyCoordinate),
         samples: parsePerformanceMapSamples(curve.samples, outputs.length),
@@ -242,6 +314,21 @@ export function PerformanceMapArtifactForm({
         </div>
         <fieldset><legend>Coordinates</legend>{variableEditor('Primary axis', primary, setPrimary)}{variableEditor('Family axis', family, setFamily)}</fieldset>
         <fieldset><legend>Outputs</legend>{outputs.map((output, index) => <div className="repeatable-row correlation-variable-row" key={index}><label><span>Output name</span><input required value={output.name} onChange={(event) => setOutputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label><label><span>Dimension</span><select required value={output.dimension} onChange={(event) => setOutputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value } : item))}>{dimensions.map((dimension) => <option key={dimension}>{dimension}</option>)}</select></label><button type="button" className="row-remove-button" aria-label={`Remove output ${output.name}`} onClick={() => setOutputs((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}<button type="button" className="add-row-button" onClick={() => setOutputs((current) => [...current, { name: `output_${current.length + 1}`, dimension: dimensionless }])}>+ Add output</button></fieldset>
+        <fieldset>
+          <legend>Physical output constraints</legend>
+          <p className="field-help">Optional admissible bounds in each output's declared SI dimension. Bounds are enforced when publishing and whenever the solver evaluates the map.</p>
+          {constraints.map((constraint, index) => (
+            <div className="repeatable-row performance-map-constraint-row" key={index}>
+              <label><span>Output</span><select required value={constraint.output} onChange={(event) => setConstraints((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, output: event.target.value } : item))}><option value="">Select output</option>{outputs.map((output) => <option key={output.name} value={output.name}>{output.name || 'Unnamed output'}</option>)}</select></label>
+              <label><span>Minimum</span><input type="number" step="any" value={constraint.minimum} onChange={(event) => setConstraints((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimum: event.target.value } : item))} /></label>
+              <label><span>Maximum</span><input type="number" step="any" value={constraint.maximum} onChange={(event) => setConstraints((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximum: event.target.value } : item))} /></label>
+              <label className="checkbox-label"><input type="checkbox" checked={constraint.minimumInclusive} onChange={(event) => setConstraints((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimumInclusive: event.target.checked } : item))} /><span>Include minimum</span></label>
+              <label className="checkbox-label"><input type="checkbox" checked={constraint.maximumInclusive} onChange={(event) => setConstraints((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, maximumInclusive: event.target.checked } : item))} /><span>Include maximum</span></label>
+              <button type="button" className="row-remove-button" aria-label={`Remove constraint ${index + 1}`} onClick={() => setConstraints((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+            </div>
+          ))}
+          <button type="button" className="add-row-button" disabled={!outputs.length} onClick={() => setConstraints((current) => [...current, { output: outputs[0]?.name ?? '', minimum: '', maximum: '', minimumInclusive: true, maximumInclusive: true }])}>+ Add output constraint</button>
+        </fieldset>
         <PerformanceMapImportPanel
           primaryName={primary.name}
           familyName={family.name}

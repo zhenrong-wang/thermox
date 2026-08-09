@@ -42,7 +42,10 @@ authoring hints before authoritative validation.
 Accepted performance-map artifacts additionally expose a structured quality report. Coverage and
 extrapolation advisories appear as `warning` diagnostics in the `physical` stage but do not block
 the layer or its entities. Invalid map structure, non-finite interpolation behavior, or forbidden
-coverage gaps fail artifact resolution and do block readiness. This distinction prevents a
+coverage gaps fail artifact resolution and do block readiness. Declared physical output bounds are
+also validated here: malformed declarations and out-of-bound source samples make the artifact
+invalid, while accepted constraint intervals and their observed margins remain visible in the
+structured quality report. This distinction prevents a
 qualified engineering risk from being confused with an unusable calculation input.
 
 ## Calculation gate

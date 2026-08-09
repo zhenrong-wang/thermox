@@ -385,10 +385,19 @@ struct MapCurveInput {
     std::vector<MapSampleInput> samples;
 };
 
+struct MapOutputConstraintInput {
+    std::string output;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
 struct PerformanceMapPayloadInput {
     MapVariableInput primary_variable;
     MapVariableInput family_variable;
     std::vector<MapVariableInput> output_variables;
+    std::vector<MapOutputConstraintInput> output_constraints;
     std::vector<MapCurveInput> curves;
     std::string primary_extrapolation{"reject"};
     std::string family_extrapolation{"reject"};
@@ -770,6 +779,12 @@ struct PerformanceMapOutputQualitySummary {
     double maximum_absolute_primary_slope{0.0};
     double maximum_absolute_primary_slope_jump{0.0};
     double maximum_absolute_family_slope{0.0};
+    std::optional<double> constraint_minimum;
+    std::optional<double> constraint_maximum;
+    bool constraint_minimum_inclusive{true};
+    bool constraint_maximum_inclusive{true};
+    std::optional<double> minimum_lower_margin;
+    std::optional<double> minimum_upper_margin;
 };
 
 struct PerformanceMapLayerQualitySummary {

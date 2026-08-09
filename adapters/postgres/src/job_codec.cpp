@@ -92,6 +92,29 @@ Tree map_payload(
             [](const auto& item) {
                 return map_variable(item);
             }));
+    if (!value.output_constraints.empty()) {
+        tree.add_child(
+            "output_constraints",
+            array(
+                value.output_constraints,
+                [](const service::MapOutputConstraintInput& constraint) {
+                    Tree encoded;
+                    encoded.put("output", constraint.output);
+                    if (constraint.minimum) {
+                        encoded.put("minimum", *constraint.minimum);
+                    }
+                    if (constraint.maximum) {
+                        encoded.put("maximum", *constraint.maximum);
+                    }
+                    encoded.put(
+                        "minimum_inclusive",
+                        constraint.minimum_inclusive);
+                    encoded.put(
+                        "maximum_inclusive",
+                        constraint.maximum_inclusive);
+                    return encoded;
+                }));
+    }
     tree.add_child(
         "curves",
         array(
@@ -141,6 +164,30 @@ service::PerformanceMapPayloadInput decode_map_payload(
             [](const Tree& item) {
                 return decode_map_variable(item);
             });
+    if (const auto constraints =
+            tree.get_child_optional("output_constraints")) {
+        value.output_constraints =
+            decode_array<service::MapOutputConstraintInput>(
+                *constraints,
+                [](const Tree& encoded) {
+                    service::MapOutputConstraintInput constraint;
+                    constraint.output =
+                        encoded.get<std::string>("output");
+                    if (const auto minimum =
+                            encoded.get_optional<double>("minimum")) {
+                        constraint.minimum = *minimum;
+                    }
+                    if (const auto maximum =
+                            encoded.get_optional<double>("maximum")) {
+                        constraint.maximum = *maximum;
+                    }
+                    constraint.minimum_inclusive = encoded.get<bool>(
+                        "minimum_inclusive", true);
+                    constraint.maximum_inclusive = encoded.get<bool>(
+                        "maximum_inclusive", true);
+                    return constraint;
+                });
+    }
     value.curves = decode_array<service::MapCurveInput>(
         tree.get_child("curves"),
         [](const Tree& encoded_curve) {

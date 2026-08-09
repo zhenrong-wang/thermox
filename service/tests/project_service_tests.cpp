@@ -359,6 +359,13 @@ std::string performance_map_payload() {
     {"name": "pressure_ratio", "dimension": "dimensionless"},
     {"name": "isentropic_efficiency", "dimension": "dimensionless"}
   ],
+  "output_constraints": [
+    {"output": "pressure_ratio", "minimum": 1.0,
+     "minimum_inclusive": false, "maximum_inclusive": true},
+    {"output": "isentropic_efficiency", "minimum": 0.0,
+     "maximum": 1.0, "minimum_inclusive": false,
+     "maximum_inclusive": true}
+  ],
   "curves": [
     {
       "family_coordinate": 250.0,

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <map>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -171,7 +172,8 @@ void validate(
     const MapVariable& family_variable,
     const std::vector<MapVariable>& output_variables,
     const std::vector<MapCurve>& curves,
-    MapExtrapolationPolicy primary_extrapolation) {
+    MapExtrapolationPolicy primary_extrapolation,
+    const std::vector<MapOutputConstraint>& output_constraints) {
     const auto valid_variable = [](const MapVariable& variable) {
         return !variable.name.empty() &&
             !variable.dimension.empty();
@@ -196,6 +198,47 @@ void validate(
             throw std::invalid_argument(
                 "performance map variables must have unique "
                 "non-empty names and dimensions");
+        }
+    }
+    std::map<std::string, const MapOutputConstraint*> constraints;
+    for (const auto& constraint : output_constraints) {
+        const auto output = std::find_if(
+            output_variables.begin(), output_variables.end(),
+            [&](const MapVariable& variable) {
+                return variable.name == constraint.output;
+            });
+        if (constraint.output.empty() ||
+            output == output_variables.end()) {
+            throw std::invalid_argument(
+                "performance map output constraint references unknown "
+                "output '" + constraint.output + "'");
+        }
+        if (!constraints.emplace(
+                constraint.output, &constraint).second) {
+            throw std::invalid_argument(
+                "performance map output constraint is duplicated for '" +
+                constraint.output + "'");
+        }
+        if (!constraint.minimum && !constraint.maximum) {
+            throw std::invalid_argument(
+                "performance map output constraint for '" +
+                constraint.output + "' must declare a bound");
+        }
+        if ((constraint.minimum &&
+             !std::isfinite(*constraint.minimum)) ||
+            (constraint.maximum &&
+             !std::isfinite(*constraint.maximum))) {
+            throw std::invalid_argument(
+                "performance map output constraint bounds must be finite");
+        }
+        if (constraint.minimum && constraint.maximum &&
+            (*constraint.minimum > *constraint.maximum ||
+             (*constraint.minimum == *constraint.maximum &&
+              (!constraint.minimum_inclusive ||
+               !constraint.maximum_inclusive)))) {
+            throw std::invalid_argument(
+                "performance map output constraint for '" +
+                constraint.output + "' has an empty interval");
         }
     }
     if (curves.size() < 2) {
@@ -249,6 +292,28 @@ void validate(
                     })) {
                 throw std::invalid_argument(
                     "performance map outputs must be finite");
+            }
+            for (std::size_t output = 0;
+                 output < sample.outputs.size(); ++output) {
+                const auto constraint = constraints.find(
+                    output_variables[output].name);
+                if (constraint == constraints.end()) continue;
+                const auto& declared = *constraint->second;
+                const double value = sample.outputs[output];
+                const bool below = declared.minimum &&
+                    (value < *declared.minimum ||
+                     (value == *declared.minimum &&
+                      !declared.minimum_inclusive));
+                const bool above = declared.maximum &&
+                    (value > *declared.maximum ||
+                     (value == *declared.maximum &&
+                      !declared.maximum_inclusive));
+                if (below || above) {
+                    throw std::invalid_argument(
+                        "performance map sample violates declared "
+                        "constraint for output '" +
+                        declared.output + "'");
+                }
             }
             if (sample_index != 0U) {
                 const auto& previous =
@@ -326,7 +391,8 @@ MapQualityReport assess_quality(
     const std::vector<MapVariable>& output_variables,
     const std::vector<MapCurve>& curves,
     MapExtrapolationPolicy primary_extrapolation,
-    MapExtrapolationPolicy family_extrapolation) {
+    MapExtrapolationPolicy family_extrapolation,
+    const std::vector<MapOutputConstraint>& output_constraints) {
     MapQualityReport report;
     report.curve_count = curves.size();
     report.family_minimum = curves.front().family_coordinate;
@@ -338,7 +404,19 @@ MapQualityReport assess_quality(
     report.minimum_adjacent_primary_overlap =
         std::numeric_limits<double>::infinity();
     for (const auto& output : output_variables) {
-        report.outputs.push_back({output.name});
+        MapOutputQuality quality;
+        quality.name = output.name;
+        report.outputs.push_back(std::move(quality));
+    }
+    for (auto& output : report.outputs) {
+        const auto constraint = std::find_if(
+            output_constraints.begin(), output_constraints.end(),
+            [&](const MapOutputConstraint& candidate) {
+                return candidate.output == output.name;
+            });
+        if (constraint != output_constraints.end()) {
+            output.declared_constraint = *constraint;
+        }
     }
     for (const auto& curve : curves) {
         report.sample_count += curve.samples.size();
@@ -439,7 +517,51 @@ MapQualityReport assess_quality(
             {"linear_family_extrapolation",
              "linear family-coordinate extrapolation is enabled"});
     }
+    for (auto& output : report.outputs) {
+        if (!output.declared_constraint) continue;
+        if (output.declared_constraint->minimum) {
+            output.minimum_lower_margin =
+                output.minimum -
+                *output.declared_constraint->minimum;
+        }
+        if (output.declared_constraint->maximum) {
+            output.minimum_upper_margin =
+                *output.declared_constraint->maximum -
+                output.maximum;
+        }
+    }
     return report;
+}
+
+void enforce_output_constraints(
+    const std::vector<MapVariable>& output_variables,
+    const std::vector<MapOutputConstraint>& constraints,
+    const std::vector<double>& outputs) {
+    for (const auto& constraint : constraints) {
+        const auto variable = std::find_if(
+            output_variables.begin(), output_variables.end(),
+            [&](const MapVariable& candidate) {
+                return candidate.name == constraint.output;
+            });
+        const auto index = static_cast<std::size_t>(
+            std::distance(output_variables.begin(), variable));
+        const double value = outputs.at(index);
+        const bool below = constraint.minimum &&
+            (value < *constraint.minimum ||
+             (value == *constraint.minimum &&
+              !constraint.minimum_inclusive));
+        const bool above = constraint.maximum &&
+            (value > *constraint.maximum ||
+             (value == *constraint.maximum &&
+              !constraint.maximum_inclusive));
+        if (below || above) {
+            std::ostringstream message;
+            message << "performance map output '" << constraint.output
+                    << "' value " << value
+                    << " violates its declared constraint";
+            throw MapDomainError(message.str());
+        }
+    }
 }
 
 struct CoordinateDomain {
@@ -714,11 +836,13 @@ PerformanceMap::PerformanceMap(
     std::vector<MapVariable> output_variables,
     std::vector<MapCurve> curves,
     MapExtrapolationPolicy primary_extrapolation,
-    MapExtrapolationPolicy family_extrapolation)
+    MapExtrapolationPolicy family_extrapolation,
+    std::vector<MapOutputConstraint> output_constraints)
     : primary_variable_(std::move(primary_variable)),
       family_variable_(std::move(family_variable)),
       output_variables_(std::move(output_variables)),
       curves_(std::move(curves)),
+      output_constraints_(std::move(output_constraints)),
       primary_extrapolation_(primary_extrapolation),
       family_extrapolation_(family_extrapolation) {
     validate(
@@ -726,10 +850,27 @@ PerformanceMap::PerformanceMap(
         family_variable_,
         output_variables_,
         curves_,
-        primary_extrapolation_);
+        primary_extrapolation_,
+        output_constraints_);
+    const auto output_position = [&](const std::string& name) {
+        return std::distance(
+            output_variables_.begin(),
+            std::find_if(
+                output_variables_.begin(), output_variables_.end(),
+                [&](const MapVariable& output) {
+                    return output.name == name;
+                }));
+    };
+    std::sort(
+        output_constraints_.begin(), output_constraints_.end(),
+        [&](const MapOutputConstraint& left,
+            const MapOutputConstraint& right) {
+            return output_position(left.output) <
+                output_position(right.output);
+        });
     quality_report_ = assess_quality(
         output_variables_, curves_, primary_extrapolation_,
-        family_extrapolation_);
+        family_extrapolation_, output_constraints_);
 }
 
 const MapVariable& PerformanceMap::primary_variable()
@@ -750,6 +891,11 @@ PerformanceMap::output_variables() const noexcept {
 const std::vector<MapCurve>& PerformanceMap::curves()
     const noexcept {
     return curves_;
+}
+
+const std::vector<MapOutputConstraint>&
+PerformanceMap::output_constraints() const noexcept {
+    return output_constraints_;
 }
 
 MapExtrapolationPolicy PerformanceMap::primary_extrapolation()
@@ -820,6 +966,8 @@ MapEvaluation PerformanceMap::evaluate(
             : (upper.outputs[i] - lower.outputs[i]) /
                   family_span;
     }
+    enforce_output_constraints(
+        output_variables_, output_constraints_, result.outputs);
     return result;
 }
 
@@ -894,7 +1042,9 @@ ConditionedPerformanceMap::ConditionedPerformanceMap(
             layer.map->primary_extrapolation() !=
                 reference->primary_extrapolation() ||
             layer.map->family_extrapolation() !=
-                reference->family_extrapolation()) {
+                reference->family_extrapolation() ||
+            layer.map->output_constraints() !=
+                reference->output_constraints()) {
             throw std::invalid_argument(
                 "conditioned performance map layers must share "
                 "axis, output, and extrapolation contracts");
@@ -996,6 +1146,10 @@ ConditionedMapEvaluation ConditionedPerformanceMap::evaluate(
             : (upper.outputs[index] - lower.outputs[index]) /
                   span;
     }
+    enforce_output_constraints(
+        layers_.front().map->output_variables(),
+        layers_.front().map->output_constraints(),
+        result.map.outputs);
     return result;
 }
 

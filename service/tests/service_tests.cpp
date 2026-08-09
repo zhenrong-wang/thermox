@@ -94,6 +94,10 @@ thermox::service::PerformanceMapArtifactInput compressor_map() {
         {"pressure_ratio", "dimensionless"},
         {"isentropic_efficiency", "dimensionless"},
     };
+    map.output_constraints = {
+        {"pressure_ratio", 1.0, std::nullopt, false, true},
+        {"isentropic_efficiency", 0.0, 1.0, false, true},
+    };
     map.curves = {
         {250.0,
          {{70.0, {10.0, 0.85}},
@@ -298,6 +302,13 @@ void test_request_scoped_performance_map_artifacts() {
                     .curve_count == 2U &&
             valid.performance_map_quality.front().layers.front()
                     .sample_count == 4U &&
+            valid.performance_map_quality.front().layers.front()
+                    .outputs.at(1).constraint_maximum == 1.0 &&
+            valid.performance_map_quality.front().layers.front()
+                    .outputs.at(1).minimum_upper_margin.has_value() &&
+            std::abs(*valid.performance_map_quality.front().layers.front()
+                          .outputs.at(1).minimum_upper_margin -
+                     0.15) < 1.0e-12 &&
             valid.performance_map_quality.front().advisory_codes.empty(),
         "validation must resolve and report quality for a request-scoped "
         "performance map");
@@ -309,8 +320,26 @@ void test_request_scoped_performance_map_artifacts() {
             valid_json.find(
                 "\"schema_version\": "
                 "\"thermox.performance_map_quality/v1\"") !=
+                std::string::npos &&
+            valid_json.find("\"declared_constraint\": {") !=
                 std::string::npos,
         "validation JSON must expose structured performance-map quality");
+
+    auto physically_invalid_validation = validation;
+    physically_invalid_validation.artifacts.performance_maps.front()
+        .map->output_constraints.at(1).maximum = 0.80;
+    const auto physically_invalid =
+        service.validate_model(physically_invalid_validation);
+    require(
+        physically_invalid.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            !physically_invalid.readiness.calculatable &&
+            physically_invalid.diagnostics.size() == 1U &&
+            physically_invalid.diagnostics.front().code ==
+                "invalid_artifacts" &&
+            physically_invalid.diagnostics.front().stage == "physical",
+        "map samples outside declared physical constraints must block "
+        "artifact readiness before compilation");
 
     auto extrapolating_validation = validation;
     auto& extrapolating_map =

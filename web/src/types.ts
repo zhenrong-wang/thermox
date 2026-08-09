@@ -121,6 +121,14 @@ export interface PerformanceMapOutputQuality {
   maximum_absolute_primary_slope: number
   maximum_absolute_primary_slope_jump: number
   maximum_absolute_family_slope: number
+  declared_constraint: {
+    minimum: number | null
+    maximum: number | null
+    minimum_inclusive: boolean
+    maximum_inclusive: boolean
+  } | null
+  minimum_lower_margin: number | null
+  minimum_upper_margin: number | null
 }
 
 export interface PerformanceMapLayerQuality {
@@ -848,6 +856,13 @@ export interface PerformanceMapArtifactDefinition {
   output_variables: Array<{
     name: string
     dimension: string
+  }>
+  output_constraints?: Array<{
+    output: string
+    minimum?: number
+    maximum?: number
+    minimum_inclusive: boolean
+    maximum_inclusive: boolean
   }>
   curves: Array<{
     family_coordinate: number

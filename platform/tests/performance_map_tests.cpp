@@ -367,6 +367,89 @@ void test_quality_report_quantifies_interpolation_risk() {
         "linear extrapolation axis");
 }
 
+void test_declared_output_constraints_are_enforced() {
+    using namespace thermox::platform;
+    const PerformanceMap constrained(
+        {"x", "dimensionless"},
+        {"family", "dimensionless"},
+        {{"efficiency", "dimensionless"}},
+        {
+            {1.0, {{0.0, {0.70}}, {1.0, {0.80}}}},
+            {2.0, {{0.0, {0.75}}, {1.0, {0.90}}}},
+        },
+        MapExtrapolationPolicy::linear,
+        MapExtrapolationPolicy::reject,
+        {{"efficiency", 0.0, 1.0, false, true}});
+    const auto& output =
+        constrained.quality_report().outputs.front();
+    require(
+        constrained.output_constraints().size() == 1U &&
+            output.declared_constraint.has_value() &&
+            output.minimum_lower_margin.has_value() &&
+            output.minimum_upper_margin.has_value(),
+        "quality report must retain declared physical constraints and "
+        "their observed margins");
+    require_close(
+        *output.minimum_lower_margin, 0.70,
+        "lower constraint margin is incorrect");
+    require_close(
+        *output.minimum_upper_margin, 0.10,
+        "upper constraint margin is incorrect");
+
+    bool sample_rejected = false;
+    try {
+        (void)PerformanceMap(
+            {"x", "dimensionless"},
+            {"family", "dimensionless"},
+            {{"efficiency", "dimensionless"}},
+            {
+                {1.0, {{0.0, {0.70}}, {1.0, {1.01}}}},
+                {2.0, {{0.0, {0.75}}, {1.0, {0.90}}}},
+            },
+            MapExtrapolationPolicy::reject,
+            MapExtrapolationPolicy::reject,
+            {{"efficiency", 0.0, 1.0, false, true}});
+    } catch (const std::invalid_argument&) {
+        sample_rejected = true;
+    }
+    require(
+        sample_rejected,
+        "samples outside a declared physical output constraint must be "
+        "rejected at construction");
+
+    bool extrapolation_rejected = false;
+    try {
+        (void)constrained.evaluate(2.0, 2.0);
+    } catch (const MapDomainError&) {
+        extrapolation_rejected = true;
+    }
+    require(
+        extrapolation_rejected,
+        "linear extrapolation must not return a value outside a declared "
+        "physical output constraint");
+
+    bool inconsistent_layers_rejected = false;
+    try {
+        auto unconstrained = std::make_shared<const PerformanceMap>(
+            MapVariable{"x", "dimensionless"},
+            MapVariable{"family", "dimensionless"},
+            std::vector<MapVariable>{{"efficiency", "dimensionless"}},
+            std::vector<MapCurve>{
+                {1.0, {{0.0, {0.70}}, {1.0, {0.80}}}},
+                {2.0, {{0.0, {0.75}}, {1.0, {0.90}}}},
+            });
+        (void)ConditionedPerformanceMap(
+            {"condition", "dimensionless"},
+            {{0.0, std::make_shared<const PerformanceMap>(constrained)},
+             {1.0, std::move(unconstrained)}});
+    } catch (const std::invalid_argument&) {
+        inconsistent_layers_rejected = true;
+    }
+    require(
+        inconsistent_layers_rejected,
+        "conditioned-map layers must share declared output constraints");
+}
+
 void test_conditioned_map_interpolates_third_coordinate() {
     const thermox::platform::ConditionedPerformanceMap map(
         {"geometry_setting", "angle"},
@@ -621,6 +704,7 @@ int main() {
         test_linear_policy_extrapolates_with_derivatives();
         test_definition_validation();
         test_quality_report_quantifies_interpolation_risk();
+        test_declared_output_constraints_are_enforced();
         test_conditioned_map_interpolates_third_coordinate();
         test_conditioned_map_rejects_disconnected_layers();
         test_versioned_artifact_registry();

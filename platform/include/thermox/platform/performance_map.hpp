@@ -4,6 +4,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -39,6 +40,16 @@ struct MapEvaluation {
     bool family_extrapolated{false};
 };
 
+struct MapOutputConstraint {
+    std::string output;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+
+    bool operator==(const MapOutputConstraint&) const = default;
+};
+
 struct MapOutputQuality {
     std::string name;
     double minimum{std::numeric_limits<double>::infinity()};
@@ -46,6 +57,9 @@ struct MapOutputQuality {
     double maximum_absolute_primary_slope{0.0};
     double maximum_absolute_primary_slope_jump{0.0};
     double maximum_absolute_family_slope{0.0};
+    std::optional<MapOutputConstraint> declared_constraint;
+    std::optional<double> minimum_lower_margin;
+    std::optional<double> minimum_upper_margin;
 };
 
 struct MapQualityAdvisory {
@@ -87,7 +101,8 @@ public:
         MapExtrapolationPolicy primary_extrapolation =
             MapExtrapolationPolicy::reject,
         MapExtrapolationPolicy family_extrapolation =
-            MapExtrapolationPolicy::reject);
+            MapExtrapolationPolicy::reject,
+        std::vector<MapOutputConstraint> output_constraints = {});
 
     [[nodiscard]] const MapVariable& primary_variable()
         const noexcept;
@@ -97,6 +112,8 @@ public:
         const noexcept;
     [[nodiscard]] const std::vector<MapCurve>& curves()
         const noexcept;
+    [[nodiscard]] const std::vector<MapOutputConstraint>&
+        output_constraints() const noexcept;
     [[nodiscard]] MapExtrapolationPolicy primary_extrapolation()
         const noexcept;
     [[nodiscard]] MapExtrapolationPolicy family_extrapolation()
@@ -113,6 +130,7 @@ private:
     MapVariable family_variable_;
     std::vector<MapVariable> output_variables_;
     std::vector<MapCurve> curves_;
+    std::vector<MapOutputConstraint> output_constraints_;
     MapExtrapolationPolicy primary_extrapolation_;
     MapExtrapolationPolicy family_extrapolation_;
     MapQualityReport quality_report_;

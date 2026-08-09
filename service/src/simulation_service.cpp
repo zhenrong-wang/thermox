@@ -274,6 +274,17 @@ std::shared_ptr<const platform::PerformanceMap> performance_map(
         }
         curves.push_back(std::move(curve));
     }
+    std::vector<platform::MapOutputConstraint> constraints;
+    constraints.reserve(input.output_constraints.size());
+    for (const auto& constraint : input.output_constraints) {
+        constraints.push_back({
+            constraint.output,
+            constraint.minimum,
+            constraint.maximum,
+            constraint.minimum_inclusive,
+            constraint.maximum_inclusive,
+        });
+    }
     return std::make_shared<const platform::PerformanceMap>(
         platform::MapVariable{
             input.primary_variable.name,
@@ -284,7 +295,8 @@ std::shared_ptr<const platform::PerformanceMap> performance_map(
         std::move(outputs),
         std::move(curves),
         extrapolation_policy(input.primary_extrapolation),
-        extrapolation_policy(input.family_extrapolation));
+        extrapolation_policy(input.family_extrapolation),
+        std::move(constraints));
 }
 
 platform::PerformanceMapArtifact performance_map_artifact(
@@ -425,14 +437,31 @@ PerformanceMapLayerQualitySummary map_layer_quality_summary(
     summary.minimum_adjacent_primary_overlap =
         report.minimum_adjacent_primary_overlap;
     for (const auto& output : report.outputs) {
-        summary.outputs.push_back({
-            output.name,
-            output.minimum,
-            output.maximum,
-            output.maximum_absolute_primary_slope,
-            output.maximum_absolute_primary_slope_jump,
-            output.maximum_absolute_family_slope,
-        });
+        PerformanceMapOutputQualitySummary output_summary;
+        output_summary.name = output.name;
+        output_summary.minimum = output.minimum;
+        output_summary.maximum = output.maximum;
+        output_summary.maximum_absolute_primary_slope =
+            output.maximum_absolute_primary_slope;
+        output_summary.maximum_absolute_primary_slope_jump =
+            output.maximum_absolute_primary_slope_jump;
+        output_summary.maximum_absolute_family_slope =
+            output.maximum_absolute_family_slope;
+        if (output.declared_constraint) {
+            output_summary.constraint_minimum =
+                output.declared_constraint->minimum;
+            output_summary.constraint_maximum =
+                output.declared_constraint->maximum;
+            output_summary.constraint_minimum_inclusive =
+                output.declared_constraint->minimum_inclusive;
+            output_summary.constraint_maximum_inclusive =
+                output.declared_constraint->maximum_inclusive;
+            output_summary.minimum_lower_margin =
+                output.minimum_lower_margin;
+            output_summary.minimum_upper_margin =
+                output.minimum_upper_margin;
+        }
+        summary.outputs.push_back(std::move(output_summary));
     }
     for (const auto& advisory : report.advisories) {
         summary.advisory_codes.push_back(advisory.code);

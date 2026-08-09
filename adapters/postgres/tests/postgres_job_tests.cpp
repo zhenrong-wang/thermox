@@ -174,6 +174,8 @@ SimulationJobRequest request(
     payload.family_variable = {"speed", "angular_speed"};
     payload.output_variables = {
         {"efficiency", "dimensionless"}};
+    payload.output_constraints = {
+        {"efficiency", 0.0, 1.0, false, true}};
     payload.curves = {
         {1.0, {{2.0, {0.91}}, {3.0, {0.92}}}},
     };
@@ -306,6 +308,8 @@ void test_idempotency_and_tenant_scope(
         first.job_id == repeated.job_id &&
             repeated.request.steady_solver.max_iterations == 17 &&
             repeated.request.artifacts.performance_maps.size() == 1 &&
+            repeated.request.artifacts.performance_maps.front().map
+                    ->output_constraints.front().maximum == 1.0 &&
             repeated.request.artifacts.correlations.size() == 1 &&
             repeated.request.artifacts.correlations.front()
                     .candidates.size() == 1 &&
