@@ -452,6 +452,8 @@ public:
         const std::vector<std::string>& artifact_revision_ids,
         const std::vector<ArtifactQualificationRequirement>&
             artifact_qualification_requirements,
+        const std::vector<ArtifactOperatingEnvelope>&
+            artifact_operating_envelopes,
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -496,6 +498,8 @@ public:
         record.artifact_revision_ids = artifact_revision_ids;
         record.artifact_qualification_requirements =
             artifact_qualification_requirements;
+        record.artifact_operating_envelopes =
+            artifact_operating_envelopes;
         record.result_projections = result_projections;
         record.acceptance_criteria = acceptance_criteria;
         record.checksum = checksum;

@@ -45,7 +45,7 @@ publication accepts `artifact_type=thermox.regime_map` and
 `artifact_schema_version=thermox.regime_map/v2`, canonicalizes and validates the payload before
 content-addressed persistence, and resolves an exact revision into job snapshots. Regions,
 branches, priorities, and criteria participate in job idempotency fingerprints and PostgreSQL job
-encoding. The containing job contract is `thermox.job/v13`.
+encoding. The containing job contract is `thermox.job/v14`.
 
 The generic `pipe.fluid.correlated_two_phase_pressure_drop` model exposes the optional
 `friction_regime_map` artifact role. When bound, compilation verifies the property backend's

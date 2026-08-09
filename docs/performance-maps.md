@@ -254,6 +254,8 @@ a composition-aware path rather than blindly reusing the fluid policy.
     scope, rationale, and explicit supersession lineage. ✅
 12. Let an immutable Study pin exact review evidence and explicitly declare which approving
     dispositions satisfy qualification for each selected artifact revision. ✅
+13. Add dimensioned, Study-owned operating envelopes for map coordinates and enforce them in
+    request-scoped steady/transient map evaluation and durable job snapshots. ✅
 
 ## Engineering quality reviews
 
@@ -268,7 +270,7 @@ operating scope and rationale. A later decision may name the review it supersede
 remain immutable. Supersession is constrained to the same Team, Project, and artifact revision.
 
 Review status does not change map interpolation, extrapolation, or physical bounds, and it does not
-turn invalid source data into a valid artifact. A `thermox.study_revision/v2` may optionally bind an
+turn invalid source data into a valid artifact. A `thermox.study_revision/v3` may optionally bind an
 exact review to an exact selected artifact and list `approved` and/or
 `approved_with_conditions` as acceptable. Study publication verifies the evidence, incorporates the
 canonical policy into the Study checksum, and run resolution verifies it again. A rejected review
@@ -279,4 +281,9 @@ The exact evidence binding is deliberate. A later superseding review does not si
 existing Study or its reproducibility; adopting new evidence requires a new Study revision.
 `approved_with_conditions` currently records human-reviewed scope and rationale; the Study's
 explicit acceptance of that disposition does not convert free-text conditions into solver bounds.
-Machine-enforceable operating-envelope policies remain a separate future contract.
+Study v3 can also declare machine-readable bounds for named primary, family, and conditioned map
+coordinates. Publication verifies coordinate name, dimension, interval, and artifact binding. The
+policy is overlaid only on the request-scoped runtime map, included in the durable job fingerprint
+and PostgreSQL snapshot, and enforced even when the source artifact permits extrapolation. A
+violation produces the stable `artifact_operating_envelope_violation` execution error; the immutable
+source map is never cropped or rewritten.

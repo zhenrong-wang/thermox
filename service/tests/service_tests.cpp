@@ -403,6 +403,21 @@ void test_request_scoped_performance_map_artifacts() {
             response.metadata.artifacts.front().checksum_sha256 ==
                 std::string(64, 'a'),
         "execution metadata must retain engineering artifact provenance");
+    auto restricted = request;
+    restricted.artifacts.performance_maps.front()
+        .coordinate_constraints = {{
+        "corrected_mass_flow", "mass_flow",
+        110.0, 120.0, true, true,
+    }};
+    const auto outside_envelope = service.run_steady(restricted);
+    require(
+        !outside_envelope.succeeded() &&
+            outside_envelope.error.code ==
+                "artifact_operating_envelope_violation" &&
+            outside_envelope.error.message.find("operating envelope") !=
+                std::string::npos,
+        "request-scoped operating envelopes must reject a converged "
+        "physical point outside Study policy");
     const auto serialized =
         thermox::service::serialize_steady_response_json(response);
     require(

@@ -322,6 +322,70 @@ decode_acceptance_criteria(const std::string& payload) {
     return criteria;
 }
 
+std::string operating_envelopes_payload(
+    const std::vector<service::ArtifactOperatingEnvelope>& envelopes) {
+    Tree values;
+    for (const auto& envelope : envelopes) {
+        Tree value;
+        value.put("artifact_revision_id", envelope.artifact_revision_id);
+        Tree coordinates;
+        for (const auto& coordinate : envelope.coordinates) {
+            Tree item;
+            item.put("coordinate", coordinate.coordinate);
+            item.put("dimension", coordinate.dimension);
+            if (coordinate.minimum) item.put("minimum", *coordinate.minimum);
+            if (coordinate.maximum) item.put("maximum", *coordinate.maximum);
+            item.put("minimum_inclusive", coordinate.minimum_inclusive);
+            item.put("maximum_inclusive", coordinate.maximum_inclusive);
+            coordinates.push_back({"", item});
+        }
+        value.add_child("coordinates", coordinates);
+        values.push_back({"", value});
+    }
+    Tree wrapper;
+    wrapper.add_child("items", values);
+    return write_tree(wrapper);
+}
+
+std::vector<service::ArtifactOperatingEnvelope>
+decode_operating_envelopes(const std::string& payload) {
+    const auto tree = read_tree(payload);
+    std::vector<service::ArtifactOperatingEnvelope> envelopes;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::runtime_error(
+                "persisted artifact operating envelopes are not an array");
+        }
+        service::ArtifactOperatingEnvelope envelope;
+        envelope.artifact_revision_id =
+            value.get<std::string>("artifact_revision_id");
+        for (const auto& [coordinate_key, encoded] :
+             value.get_child("coordinates")) {
+            if (!coordinate_key.empty()) {
+                throw std::runtime_error(
+                    "persisted operating-envelope coordinates are not "
+                    "an array");
+            }
+            service::MapCoordinateConstraintInput coordinate;
+            coordinate.coordinate = encoded.get<std::string>("coordinate");
+            coordinate.dimension = encoded.get<std::string>("dimension");
+            if (const auto minimum = encoded.get_optional<double>("minimum")) {
+                coordinate.minimum = *minimum;
+            }
+            if (const auto maximum = encoded.get_optional<double>("maximum")) {
+                coordinate.maximum = *maximum;
+            }
+            coordinate.minimum_inclusive =
+                encoded.get("minimum_inclusive", true);
+            coordinate.maximum_inclusive =
+                encoded.get("maximum_inclusive", true);
+            envelope.coordinates.push_back(std::move(coordinate));
+        }
+        envelopes.push_back(std::move(envelope));
+    }
+    return envelopes;
+}
+
 Connection connect(const std::string& connection_string) {
     Connection connection{PQconnectdb(connection_string.c_str())};
     if (!connection ||
@@ -522,11 +586,13 @@ service::StudyRevisionRecord decode_study_revision(
         decode_result_projections(field(result, row, 9));
     record.acceptance_criteria =
         decode_acceptance_criteria(field(result, row, 10));
+    record.artifact_operating_envelopes =
+        decode_operating_envelopes(field(result, row, 11));
     service::validate_engineering_acceptance_criteria(
         record.acceptance_criteria, record.result_projections);
-    record.checksum = field(result, row, 11);
-    record.created_by_user_id = field(result, row, 12);
-    record.created_at = decode_time(field(result, row, 13));
+    record.checksum = field(result, row, 12);
+    record.created_by_user_id = field(result, row, 13);
+    record.created_at = decode_time(field(result, row, 14));
     return record;
 }
 
@@ -620,6 +686,7 @@ constexpr const char study_revision_columns[] =
     "revision_number, parent_study_revision_id, "
     "model_revision_id, case_revision_id, intent, "
     "result_projections_payload, acceptance_criteria_payload, "
+    "artifact_operating_envelopes_payload, "
     "checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
@@ -1303,6 +1370,8 @@ public:
         const std::vector<std::string>& artifact_revision_ids,
         const std::vector<service::ArtifactQualificationRequirement>&
             artifact_qualification_requirements,
+        const std::vector<service::ArtifactOperatingEnvelope>&
+            artifact_operating_envelopes,
         const std::vector<service::ResultProjection>& result_projections,
         const std::vector<service::EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -1348,16 +1417,19 @@ public:
             result_projections_payload(result_projections);
         const auto criteria_payload =
             acceptance_criteria_payload(acceptance_criteria);
+        const auto envelopes_payload =
+            operating_envelopes_payload(artifact_operating_envelopes);
         const auto sql =
             std::string("INSERT INTO thermox_study_revisions (") +
             "study_id, project_id, team_id, revision_number, "
             "parent_study_revision_id, model_revision_id, "
             "case_revision_id, intent, result_projections_payload, "
-            "acceptance_criteria_payload, checksum, "
+            "acceptance_criteria_payload, "
+            "artifact_operating_envelopes_payload, checksum, "
             "created_by_user_id) VALUES ("
             "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
             "($9::jsonb)->'items', ($10::jsonb)->'items', "
-            "$11, $12) RETURNING " +
+            "($11::jsonb)->'items', $12, $13) RETURNING " +
             study_revision_columns;
         const auto result = execute(
             connection.get(),
@@ -1366,7 +1438,8 @@ public:
              revision_number.c_str(), parent,
              model_revision_id.c_str(), case_revision_id.c_str(),
              intent.c_str(), projections_payload.c_str(),
-             criteria_payload.c_str(), checksum.c_str(),
+             criteria_payload.c_str(), envelopes_payload.c_str(),
+             checksum.c_str(),
              created_by_user_id.c_str()});
         auto record = decode_study_revision(result.get());
         for (std::size_t index = 0;

@@ -50,6 +50,17 @@ struct MapOutputConstraint {
     bool operator==(const MapOutputConstraint&) const = default;
 };
 
+struct MapCoordinateConstraint {
+    std::string coordinate;
+    std::string dimension;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+
+    bool operator==(const MapCoordinateConstraint&) const = default;
+};
+
 struct MapOutputQuality {
     std::string name;
     double minimum{std::numeric_limits<double>::infinity()};
@@ -102,7 +113,9 @@ public:
             MapExtrapolationPolicy::reject,
         MapExtrapolationPolicy family_extrapolation =
             MapExtrapolationPolicy::reject,
-        std::vector<MapOutputConstraint> output_constraints = {});
+        std::vector<MapOutputConstraint> output_constraints = {},
+        std::vector<MapCoordinateConstraint>
+            coordinate_constraints = {});
 
     [[nodiscard]] const MapVariable& primary_variable()
         const noexcept;
@@ -114,6 +127,8 @@ public:
         const noexcept;
     [[nodiscard]] const std::vector<MapOutputConstraint>&
         output_constraints() const noexcept;
+    [[nodiscard]] const std::vector<MapCoordinateConstraint>&
+        coordinate_constraints() const noexcept;
     [[nodiscard]] MapExtrapolationPolicy primary_extrapolation()
         const noexcept;
     [[nodiscard]] MapExtrapolationPolicy family_extrapolation()
@@ -131,6 +146,7 @@ private:
     std::vector<MapVariable> output_variables_;
     std::vector<MapCurve> curves_;
     std::vector<MapOutputConstraint> output_constraints_;
+    std::vector<MapCoordinateConstraint> coordinate_constraints_;
     MapExtrapolationPolicy primary_extrapolation_;
     MapExtrapolationPolicy family_extrapolation_;
     MapQualityReport quality_report_;
@@ -177,7 +193,9 @@ public:
         MapVariable condition_variable,
         std::vector<ConditionedMapLayer> layers,
         MapExtrapolationPolicy condition_extrapolation =
-            MapExtrapolationPolicy::reject);
+            MapExtrapolationPolicy::reject,
+        std::optional<MapCoordinateConstraint> condition_constraint =
+            std::nullopt);
 
     [[nodiscard]] const MapVariable& condition_variable()
         const noexcept;
@@ -187,6 +205,8 @@ public:
     condition_extrapolation() const noexcept;
     [[nodiscard]] const ConditionedMapQualityReport&
         quality_report() const noexcept;
+    [[nodiscard]] const std::optional<MapCoordinateConstraint>&
+        condition_constraint() const noexcept;
 
     [[nodiscard]] ConditionedMapEvaluation evaluate(
         double primary_coordinate,
@@ -197,6 +217,7 @@ private:
     MapVariable condition_variable_;
     std::vector<ConditionedMapLayer> layers_;
     MapExtrapolationPolicy condition_extrapolation_;
+    std::optional<MapCoordinateConstraint> condition_constraint_;
     ConditionedMapQualityReport quality_report_;
 };
 

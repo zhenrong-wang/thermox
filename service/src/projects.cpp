@@ -276,7 +276,9 @@ std::string study_identity(
     const CreateStudyRevisionRequest& request,
     const std::vector<std::string>& artifacts,
     const std::vector<ArtifactQualificationRequirement>&
-        qualification_requirements) {
+        qualification_requirements,
+    const std::vector<ArtifactOperatingEnvelope>&
+        operating_envelopes) {
     std::ostringstream out;
     out << request.study_id.size() << ':' << request.study_id << '|'
         << request.model_revision_id.size() << ':'
@@ -298,6 +300,24 @@ std::string study_identity(
              requirement.acceptable_dispositions) {
             const auto value = to_string(disposition);
             out << value.size() << ':' << value << '|';
+        }
+    }
+    out << operating_envelopes.size() << '|';
+    for (const auto& envelope : operating_envelopes) {
+        out << envelope.artifact_revision_id.size() << ':'
+            << envelope.artifact_revision_id << '|'
+            << envelope.coordinates.size() << '|';
+        for (const auto& coordinate : envelope.coordinates) {
+            out << coordinate.coordinate.size() << ':'
+                << coordinate.coordinate << '|'
+                << coordinate.dimension.size() << ':'
+                << coordinate.dimension << '|'
+                << coordinate.minimum.has_value() << '|';
+            if (coordinate.minimum) out << *coordinate.minimum << '|';
+            out << coordinate.maximum.has_value() << '|';
+            if (coordinate.maximum) out << *coordinate.maximum << '|';
+            out << coordinate.minimum_inclusive << '|'
+                << coordinate.maximum_inclusive << '|';
         }
     }
     out << request.result_projections.size() << '|';
@@ -1545,11 +1565,94 @@ StudyRevisionRecord ProjectService::create_study_revision(
         throw ProjectRequestError(
             "artifact revision IDs must be unique");
     }
-    if (!resolve_artifact_revisions(
+    const auto resolved_artifacts = resolve_artifact_revisions(
             request.identity,
             request.project_id,
-            artifact_ids)) {
+            artifact_ids);
+    if (!resolved_artifacts) {
         throw ProjectStateError("artifact revision was not found");
+    }
+    auto operating_envelopes = request.artifact_operating_envelopes;
+    for (auto& envelope : operating_envelopes) {
+        if (envelope.artifact_revision_id.empty() ||
+            envelope.coordinates.empty() ||
+            !std::binary_search(
+                artifact_ids.begin(), artifact_ids.end(),
+                envelope.artifact_revision_id)) {
+            throw ProjectRequestError(
+                "artifact operating envelopes require a selected "
+                "artifact and at least one coordinate");
+        }
+        const auto map = std::find_if(
+            resolved_artifacts->snapshot.performance_maps.begin(),
+            resolved_artifacts->snapshot.performance_maps.end(),
+            [&](const auto& candidate) {
+                return candidate.revision ==
+                    envelope.artifact_revision_id;
+            });
+        if (map ==
+            resolved_artifacts->snapshot.performance_maps.end()) {
+            throw ProjectRequestError(
+                "artifact operating envelopes currently require a "
+                "performance-map artifact");
+        }
+        const auto matches_variable = [&](const auto& coordinate) {
+            const auto& payload = map->map
+                ? *map->map : map->layers.front().map;
+            return (payload.primary_variable.name == coordinate.coordinate &&
+                    payload.primary_variable.dimension == coordinate.dimension) ||
+                (payload.family_variable.name == coordinate.coordinate &&
+                 payload.family_variable.dimension == coordinate.dimension) ||
+                (map->condition_variable &&
+                 map->condition_variable->name == coordinate.coordinate &&
+                 map->condition_variable->dimension == coordinate.dimension);
+        };
+        for (const auto& coordinate : envelope.coordinates) {
+            if (!matches_variable(coordinate) ||
+                (!coordinate.minimum && !coordinate.maximum) ||
+                (coordinate.minimum &&
+                 !std::isfinite(*coordinate.minimum)) ||
+                (coordinate.maximum &&
+                 !std::isfinite(*coordinate.maximum)) ||
+                (coordinate.minimum && coordinate.maximum &&
+                 (*coordinate.minimum > *coordinate.maximum ||
+                  (*coordinate.minimum == *coordinate.maximum &&
+                   (!coordinate.minimum_inclusive ||
+                    !coordinate.maximum_inclusive))))) {
+                throw ProjectRequestError(
+                    "artifact operating-envelope coordinate or interval "
+                    "is invalid");
+            }
+        }
+        std::sort(
+            envelope.coordinates.begin(), envelope.coordinates.end(),
+            [](const auto& left, const auto& right) {
+                return left.coordinate < right.coordinate;
+            });
+        if (std::adjacent_find(
+                envelope.coordinates.begin(), envelope.coordinates.end(),
+                [](const auto& left, const auto& right) {
+                    return left.coordinate == right.coordinate;
+                }) != envelope.coordinates.end()) {
+            throw ProjectRequestError(
+                "artifact operating-envelope coordinates must be unique");
+        }
+    }
+    std::sort(
+        operating_envelopes.begin(), operating_envelopes.end(),
+        [](const auto& left, const auto& right) {
+            return left.artifact_revision_id <
+                right.artifact_revision_id;
+        });
+    if (std::adjacent_find(
+            operating_envelopes.begin(), operating_envelopes.end(),
+            [](const auto& left, const auto& right) {
+                return left.artifact_revision_id ==
+                    right.artifact_revision_id;
+            }) != operating_envelopes.end()) {
+        throw ProjectRequestError(
+            "a Study may declare only one operating envelope per "
+            "artifact revision");
     }
     auto qualification_requirements =
         request.artifact_qualification_requirements;
@@ -1661,10 +1764,12 @@ StudyRevisionRecord ProjectService::create_study_revision(
         request.intent,
         artifact_ids,
         qualification_requirements,
+        operating_envelopes,
         request.result_projections,
         request.acceptance_criteria,
         checksum(study_identity(
-            request, artifact_ids, qualification_requirements)));
+            request, artifact_ids, qualification_requirements,
+            operating_envelopes)));
 }
 
 std::optional<StudyRevisionRecord>
@@ -1936,7 +2041,7 @@ ProjectService::resolve_run_configuration(
         project_id,
         study->model_revision_id,
         study->case_revision_id);
-    const auto artifacts = resolve_artifact_revisions(
+    auto artifacts = resolve_artifact_revisions(
         identity,
         project_id,
         study->artifact_revision_ids);
@@ -1967,6 +2072,21 @@ ProjectService::resolve_run_configuration(
                 "persisted Study artifact qualification evidence "
                 "could not be verified");
         }
+    }
+    for (const auto& envelope : study->artifact_operating_envelopes) {
+        const auto artifact = std::find_if(
+            artifacts->snapshot.performance_maps.begin(),
+            artifacts->snapshot.performance_maps.end(),
+            [&](const auto& candidate) {
+                return candidate.revision ==
+                    envelope.artifact_revision_id;
+            });
+        if (artifact == artifacts->snapshot.performance_maps.end()) {
+            throw ProjectStateError(
+                "persisted Study operating-envelope artifact was not "
+                "found");
+        }
+        artifact->coordinate_constraints = envelope.coordinates;
     }
     return ResolvedRunConfiguration{
         *configuration,

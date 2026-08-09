@@ -408,6 +408,15 @@ struct ConditionedMapLayerInput {
     PerformanceMapPayloadInput map;
 };
 
+struct MapCoordinateConstraintInput {
+    std::string coordinate;
+    std::string dimension;
+    std::optional<double> minimum;
+    std::optional<double> maximum;
+    bool minimum_inclusive{true};
+    bool maximum_inclusive{true};
+};
+
 struct PerformanceMapArtifactInput {
     std::string id;
     std::string schema_version;
@@ -417,6 +426,7 @@ struct PerformanceMapArtifactInput {
     std::optional<MapVariableInput> condition_variable;
     std::vector<ConditionedMapLayerInput> layers;
     std::string condition_extrapolation{"reject"};
+    std::vector<MapCoordinateConstraintInput> coordinate_constraints;
 };
 
 struct CorrelationVariableInput {

@@ -1528,6 +1528,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         "model_revision_id", "case_revision_id", "intent",
         "artifact_revision_ids", "result_projections",
         "acceptance_criteria", "artifact_qualification_requirements",
+        "artifact_operating_envelopes",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1537,7 +1538,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.study_revision.create/v2") {
+        "thermox.study_revision.create/v3") {
         throw std::invalid_argument(
             "unsupported study create schema_version");
     }
@@ -1616,6 +1617,69 @@ service::CreateStudyRevisionRequest parse_create_study_request(
             }
             command.artifact_qualification_requirements.push_back(
                 std::move(requirement));
+        }
+    }
+    if (const auto envelopes = tree.get_child_optional(
+            "artifact_operating_envelopes")) {
+        for (const auto& [array_key, value] : *envelopes) {
+            if (!array_key.empty()) {
+                throw std::invalid_argument(
+                    "artifact_operating_envelopes must be an array");
+            }
+            for (const auto& [key, unused] : value) {
+                (void)unused;
+                if (key != "artifact_revision_id" &&
+                    key != "coordinates") {
+                    throw std::invalid_argument(
+                        "unknown artifact operating-envelope field: " +
+                        key);
+                }
+            }
+            service::ArtifactOperatingEnvelope envelope;
+            envelope.artifact_revision_id =
+                value.get<std::string>("artifact_revision_id", "");
+            const auto coordinates = value.get_child_optional("coordinates");
+            if (!coordinates) {
+                throw std::invalid_argument(
+                    "artifact operating envelope needs coordinates");
+            }
+            for (const auto& [key, encoded] : *coordinates) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        "operating-envelope coordinates must be an array");
+                }
+                for (const auto& [field, unused] : encoded) {
+                    (void)unused;
+                    if (field != "coordinate" && field != "dimension" &&
+                        field != "minimum" && field != "maximum" &&
+                        field != "minimum_inclusive" &&
+                        field != "maximum_inclusive") {
+                        throw std::invalid_argument(
+                            "unknown operating-envelope coordinate field: " +
+                            field);
+                    }
+                }
+                service::MapCoordinateConstraintInput coordinate;
+                coordinate.coordinate =
+                    encoded.get<std::string>("coordinate", "");
+                coordinate.dimension =
+                    encoded.get<std::string>("dimension", "");
+                if (const auto minimum =
+                        encoded.get_optional<double>("minimum")) {
+                    coordinate.minimum = *minimum;
+                }
+                if (const auto maximum =
+                        encoded.get_optional<double>("maximum")) {
+                    coordinate.maximum = *maximum;
+                }
+                coordinate.minimum_inclusive =
+                    encoded.get("minimum_inclusive", true);
+                coordinate.maximum_inclusive =
+                    encoded.get("maximum_inclusive", true);
+                envelope.coordinates.push_back(std::move(coordinate));
+            }
+            command.artifact_operating_envelopes.push_back(
+                std::move(envelope));
         }
     }
     if (const auto projections =

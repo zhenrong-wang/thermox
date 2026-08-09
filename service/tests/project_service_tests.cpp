@@ -1362,6 +1362,17 @@ void test_run_configurations_bind_complete_execution_intent() {
                 approved_with_conditions,
         },
     }};
+    study_request.artifact_operating_envelopes = {{
+        artifact.artifact_revision_id,
+        {{
+            "corrected_mass_flow",
+            "mass_flow",
+            70.0,
+            120.0,
+            true,
+            true,
+        }},
+    }};
     study_request.result_projections = {
         {
             "compressor_outlet_temperature",
@@ -1403,11 +1414,14 @@ void test_run_configurations_bind_complete_execution_intent() {
             resolved &&
             resolved->study.artifact_qualification_requirements.size() ==
                 1U &&
+            resolved->study.artifact_operating_envelopes.size() == 1U &&
             resolved->study.result_projections.size() == 1U &&
             resolved->model_case.model_revision_id ==
                 model.model_revision_id &&
             resolved->artifacts.snapshot.performance_maps
-                    .size() == 1U,
+                    .size() == 1U &&
+            resolved->artifacts.snapshot.performance_maps.front()
+                    .coordinate_constraints.front().minimum == 70.0,
         "run configurations must immutably bind the complete "
         "execution intent and resolve its snapshots");
     auto unacceptable_policy = study_request;

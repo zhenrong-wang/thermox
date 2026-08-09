@@ -279,7 +279,7 @@ export interface EngineeringAcceptanceSummary {
 }
 
 export interface StudyRevision {
-  schema_version: 'thermox.study_revision/v2'
+  schema_version: 'thermox.study_revision/v3'
   study_revision_id: string
   study_id: string
   project_id: string
@@ -291,11 +291,26 @@ export interface StudyRevision {
   intent: string
   artifact_revision_ids: string[]
   artifact_qualification_requirements: ArtifactQualificationRequirement[]
+  artifact_operating_envelopes: ArtifactOperatingEnvelope[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
+}
+
+export interface MapCoordinateConstraint {
+  coordinate: string
+  dimension: string
+  minimum?: number
+  maximum?: number
+  minimum_inclusive: boolean
+  maximum_inclusive: boolean
+}
+
+export interface ArtifactOperatingEnvelope {
+  artifact_revision_id: string
+  coordinates: MapCoordinateConstraint[]
 }
 
 export interface ArtifactQualificationRequirement {
@@ -310,7 +325,7 @@ export interface StudyRevisionList {
 }
 
 export interface CreateStudyRevision {
-  schema_version: 'thermox.study_revision.create/v2'
+  schema_version: 'thermox.study_revision.create/v3'
   study_id: string
   parent_study_revision_id: string
   model_revision_id: string
@@ -318,6 +333,7 @@ export interface CreateStudyRevision {
   intent: string
   artifact_revision_ids: string[]
   artifact_qualification_requirements: ArtifactQualificationRequirement[]
+  artifact_operating_envelopes: ArtifactOperatingEnvelope[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
 }
@@ -453,7 +469,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v13'
+  schema_version: 'thermox.job/v14'
   job_id: string
   owner: {
     team_id: string
@@ -463,7 +479,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v13'
+    schema_version: 'thermox.job/v14'
     mode: 'steady' | 'transient' | 'calibration'
     case_id: string
     calibration_id: string

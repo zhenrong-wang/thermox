@@ -608,6 +608,37 @@ void study_revision_json(
         }
         out << "]}";
     }
+    out << "], \"artifact_operating_envelopes\": [";
+    for (std::size_t index = 0;
+         index < revision.artifact_operating_envelopes.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& envelope = revision.artifact_operating_envelopes[index];
+        out << "{\"artifact_revision_id\": ";
+        json_string(out, envelope.artifact_revision_id);
+        out << ", \"coordinates\": [";
+        for (std::size_t coordinate_index = 0;
+             coordinate_index < envelope.coordinates.size();
+             ++coordinate_index) {
+            if (coordinate_index != 0U) out << ", ";
+            const auto& coordinate = envelope.coordinates[coordinate_index];
+            out << "{\"coordinate\": ";
+            json_string(out, coordinate.coordinate);
+            out << ", \"dimension\": ";
+            json_string(out, coordinate.dimension);
+            out << ", \"minimum\": ";
+            if (coordinate.minimum) out << *coordinate.minimum;
+            else out << "null";
+            out << ", \"maximum\": ";
+            if (coordinate.maximum) out << *coordinate.maximum;
+            else out << "null";
+            out << ", \"minimum_inclusive\": "
+                << (coordinate.minimum_inclusive ? "true" : "false")
+                << ", \"maximum_inclusive\": "
+                << (coordinate.maximum_inclusive ? "true" : "false")
+                << '}';
+        }
+        out << "]}";
+    }
     out << "], \"result_projections\": [";
     for (std::size_t index = 0;
          index < revision.result_projections.size(); ++index) {

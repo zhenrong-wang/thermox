@@ -248,6 +248,22 @@ Tree performance_map(
     tree.put(
         "condition_extrapolation",
         value.condition_extrapolation);
+    if (!value.coordinate_constraints.empty()) {
+        tree.add_child(
+            "coordinate_constraints",
+            array(
+                value.coordinate_constraints,
+                [](const service::MapCoordinateConstraintInput& value) {
+                    Tree encoded;
+                    encoded.put("coordinate", value.coordinate);
+                    encoded.put("dimension", value.dimension);
+                    if (value.minimum) encoded.put("minimum", *value.minimum);
+                    if (value.maximum) encoded.put("maximum", *value.maximum);
+                    encoded.put("minimum_inclusive", value.minimum_inclusive);
+                    encoded.put("maximum_inclusive", value.maximum_inclusive);
+                    return encoded;
+                }));
+    }
     return tree;
 }
 
@@ -282,6 +298,32 @@ service::PerformanceMapArtifactInput decode_performance_map(
             });
     value.condition_extrapolation =
         tree.get<std::string>("condition_extrapolation");
+    if (const auto constraints =
+            tree.get_child_optional("coordinate_constraints")) {
+        value.coordinate_constraints =
+            decode_array<service::MapCoordinateConstraintInput>(
+                *constraints,
+                [](const Tree& encoded) {
+                    service::MapCoordinateConstraintInput value;
+                    value.coordinate =
+                        encoded.get<std::string>("coordinate");
+                    value.dimension =
+                        encoded.get<std::string>("dimension");
+                    if (const auto minimum =
+                            encoded.get_optional<double>("minimum")) {
+                        value.minimum = *minimum;
+                    }
+                    if (const auto maximum =
+                            encoded.get_optional<double>("maximum")) {
+                        value.maximum = *maximum;
+                    }
+                    value.minimum_inclusive =
+                        encoded.get("minimum_inclusive", true);
+                    value.maximum_inclusive =
+                        encoded.get("maximum_inclusive", true);
+                    return value;
+                });
+    }
     return value;
 }
 

@@ -27,8 +27,8 @@ inline constexpr char artifact_revision_content_schema_v1[] =
     "thermox.artifact_revision_content/v1";
 inline constexpr char performance_map_quality_review_schema_v1[] =
     "thermox.performance_map_quality_review/v1";
-inline constexpr char study_revision_schema_v2[] =
-    "thermox.study_revision/v2";
+inline constexpr char study_revision_schema_v3[] =
+    "thermox.study_revision/v3";
 inline constexpr char calibration_revision_schema_v1[] =
     "thermox.calibration_revision/v1";
 inline constexpr char run_configuration_revision_schema_v3[] =
@@ -149,8 +149,13 @@ struct ArtifactQualificationRequirement {
         acceptable_dispositions;
 };
 
+struct ArtifactOperatingEnvelope {
+    std::string artifact_revision_id;
+    std::vector<MapCoordinateConstraintInput> coordinates;
+};
+
 struct StudyRevisionRecord {
-    std::string schema_version{study_revision_schema_v2};
+    std::string schema_version{study_revision_schema_v3};
     std::string study_revision_id;
     std::string study_id;
     std::string project_id;
@@ -163,6 +168,7 @@ struct StudyRevisionRecord {
     std::vector<std::string> artifact_revision_ids;
     std::vector<ArtifactQualificationRequirement>
         artifact_qualification_requirements;
+    std::vector<ArtifactOperatingEnvelope> artifact_operating_envelopes;
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;
@@ -338,6 +344,8 @@ public:
         const std::vector<std::string>& artifact_revision_ids,
         const std::vector<ArtifactQualificationRequirement>&
             artifact_qualification_requirements,
+        const std::vector<ArtifactOperatingEnvelope>&
+            artifact_operating_envelopes,
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -517,6 +525,7 @@ struct CreateStudyRevisionRequest {
     std::vector<std::string> artifact_revision_ids;
     std::vector<ArtifactQualificationRequirement>
         artifact_qualification_requirements;
+    std::vector<ArtifactOperatingEnvelope> artifact_operating_envelopes;
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;

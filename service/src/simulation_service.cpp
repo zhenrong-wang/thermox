@@ -2367,8 +2367,13 @@ SteadySimulationResponse SimulationService::run_steady(
 
     if (!result.diagnostics.converged) {
         response.status = OperationStatus::solver_failed;
+        const bool operating_envelope_violation =
+            result.diagnostics.message.find("operating envelope") !=
+            std::string::npos;
         response.error = make_error(
-            "nonlinear_solver_failed",
+            operating_envelope_violation
+                ? "artifact_operating_envelope_violation"
+                : "nonlinear_solver_failed",
             "solve",
             result.diagnostics.message);
         return response;
@@ -2968,8 +2973,13 @@ TransientSimulationResponse SimulationService::run_transient(
     response.diagnostics = copy_diagnostics(result.diagnostics);
     if (!result.diagnostics.success) {
         response.status = OperationStatus::solver_failed;
+        const bool operating_envelope_violation =
+            result.diagnostics.message.find("operating envelope") !=
+            std::string::npos;
         response.error = make_error(
-            "transient_solver_failed",
+            operating_envelope_violation
+                ? "artifact_operating_envelope_violation"
+                : "transient_solver_failed",
             "solve",
             result.diagnostics.message);
         return response;

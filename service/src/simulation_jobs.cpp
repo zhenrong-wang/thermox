@@ -144,6 +144,17 @@ void append_artifacts(
             append_map_payload(stream, layer.map);
         }
         append_string(stream, artifact.condition_extrapolation);
+        stream << artifact.coordinate_constraints.size() << '|';
+        for (const auto& constraint : artifact.coordinate_constraints) {
+            append_string(stream, constraint.coordinate);
+            append_string(stream, constraint.dimension);
+            stream << constraint.minimum.has_value() << '|';
+            if (constraint.minimum) stream << *constraint.minimum << '|';
+            stream << constraint.maximum.has_value() << '|';
+            if (constraint.maximum) stream << *constraint.maximum << '|';
+            stream << constraint.minimum_inclusive << '|'
+                   << constraint.maximum_inclusive << '|';
+        }
     }
     stream << artifacts.correlations.size() << '|';
     for (const auto& artifact : artifacts.correlations) {
@@ -375,7 +386,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v13) {
+    if (request.schema_version != job_schema_v14) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

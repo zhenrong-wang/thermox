@@ -703,7 +703,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/study-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.study_revision.create/v2",)"
+            R"("thermox.study_revision.create/v3",)"
             R"("study_id":"http-design-study",)"
             R"("model_revision_id":")"} +
             model.model_revision_id +
@@ -719,6 +719,12 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"(","review_id":")" + quality_review_id +
             R"(","acceptable_dispositions":[)"
             R"("approved","approved_with_conditions"]}],)"
+            R"("artifact_operating_envelopes":[{)"
+            R"("artifact_revision_id":")" + artifact_revision_id +
+            R"(","coordinates":[{)"
+            R"("coordinate":"corrected_mass_flow",)"
+            R"("dimension":"mass_flow","minimum":70.0,)"
+            R"("maximum":120.0}]}],)"
             R"("result_projections":[{)"
             R"("id":"compressor_outlet_temperature",)"
             R"("scope":"port_derived",)"
@@ -735,6 +741,8 @@ void test_tenant_scoped_asynchronous_jobs() {
                 "\"intent\": \"steady_state_design\"") !=
                 std::string::npos &&
             study_created.body.find(quality_review_id) !=
+                std::string::npos &&
+            study_created.body.find("corrected_mass_flow") !=
                 std::string::npos,
         "study routes must persist durable engineering intent");
     const auto study_detail = api.handle(authenticated({
@@ -1239,7 +1247,7 @@ void test_authored_component_job_workflow() {
                 "/study-revisions",
             std::string{
                 R"({"schema_version":)"
-                R"("thermox.study_revision.create/v2",)"
+                R"("thermox.study_revision.create/v3",)"
                 R"("study_id":"authored-gain-study",)"
                 R"("model_revision_id":")"} +
                 model.model_revision_id +

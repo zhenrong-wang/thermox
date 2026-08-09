@@ -37,7 +37,9 @@ thermox::platform::PerformanceMap sample_map(
     thermox::platform::MapExtrapolationPolicy primary =
         thermox::platform::MapExtrapolationPolicy::reject,
     thermox::platform::MapExtrapolationPolicy family =
-        thermox::platform::MapExtrapolationPolicy::reject) {
+        thermox::platform::MapExtrapolationPolicy::reject,
+    std::vector<thermox::platform::MapCoordinateConstraint>
+        coordinate_constraints = {}) {
     return {
         {"corrected_flow", "mass_flow"},
         {"corrected_speed", "angular_speed"},
@@ -63,7 +65,32 @@ thermox::platform::PerformanceMap sample_map(
         },
         primary,
         family,
+        {},
+        std::move(coordinate_constraints),
     };
+}
+
+void test_operating_envelope_rejects_out_of_policy_coordinates() {
+    const auto map = sample_map(
+        thermox::platform::MapExtrapolationPolicy::linear,
+        thermox::platform::MapExtrapolationPolicy::linear,
+        {{
+            "corrected_flow", "mass_flow", 2.0, 8.0, true, true,
+        }});
+    require_close(
+        map.evaluate(5.0, 150.0).outputs.at(0), 2.5,
+        "operating envelope must preserve in-policy interpolation");
+    bool rejected = false;
+    try {
+        (void)map.evaluate(9.0, 150.0);
+    } catch (const thermox::platform::MapDomainError& error) {
+        rejected = std::string(error.what()).find(
+            "operating envelope") != std::string::npos;
+    }
+    require(
+        rejected,
+        "operating envelope must override a source map's permissive "
+        "extrapolation policy");
 }
 
 thermox::platform::PerformanceMapArtifact sample_artifact(
@@ -705,6 +732,7 @@ int main() {
         test_definition_validation();
         test_quality_report_quantifies_interpolation_risk();
         test_declared_output_constraints_are_enforced();
+        test_operating_envelope_rejects_out_of_policy_coordinates();
         test_conditioned_map_interpolates_third_coordinate();
         test_conditioned_map_rejects_disconnected_layers();
         test_versioned_artifact_registry();

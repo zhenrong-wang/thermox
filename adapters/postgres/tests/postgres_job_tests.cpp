@@ -103,6 +103,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "015_study_acceptance_criteria.sql",
              "016_performance_map_quality_reviews.sql",
              "017_study_artifact_qualifications.sql",
+             "018_study_operating_envelopes.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -182,6 +183,9 @@ SimulationJobRequest request(
         {1.0, {{2.0, {0.91}}, {3.0, {0.92}}}},
     };
     map.map = payload;
+    map.coordinate_constraints = {{
+        "flow", "mass_flow", 2.0, 3.0, true, true,
+    }};
     value.artifacts.performance_maps.push_back(std::move(map));
     thermox::service::CorrelationArtifactInput correlation;
     correlation.id = "bend-correlation";
@@ -312,6 +316,8 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.performance_maps.size() == 1 &&
             repeated.request.artifacts.performance_maps.front().map
                     ->output_constraints.front().maximum == 1.0 &&
+            repeated.request.artifacts.performance_maps.front()
+                    .coordinate_constraints.front().minimum == 2.0 &&
             repeated.request.artifacts.correlations.size() == 1 &&
             repeated.request.artifacts.correlations.front()
                     .candidates.size() == 1 &&
@@ -882,6 +888,13 @@ void test_projects_and_immutable_model_revisions(
         quality_review.review_id,
         {thermox::service::EngineeringReviewDisposition::approved},
     }};
+    study_request.artifact_operating_envelopes = {{
+        artifact.artifact_revision_id,
+        {{
+            "corrected_mass_flow", "mass_flow",
+            70.0, 120.0, true, true,
+        }},
+    }};
     study_request.result_projections = {
         {
             "compressor_outlet_temperature",
@@ -905,6 +918,7 @@ void test_projects_and_immutable_model_revisions(
                 1U &&
             loaded_study->artifact_qualification_requirements.front()
                     .review_id == quality_review.review_id &&
+            loaded_study->artifact_operating_envelopes.size() == 1U &&
             loaded_study->intent == "steady_state_design" &&
             projects
                     .list_study_revisions(
