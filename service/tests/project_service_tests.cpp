@@ -1237,7 +1237,7 @@ void test_performance_map_quality_reviews_are_immutable_and_pinned() {
             project.project_id,
             artifact.artifact_revision_id,
             {},
-            PerformanceMapReviewDisposition::approved_with_conditions,
+            EngineeringReviewDisposition::approved_with_conditions,
             "Corrected flow 70-120 kg/s and speed 250-400 rad/s",
             "Approved for the declared operating envelope; linear "
             "extrapolation is prohibited.",
@@ -1248,7 +1248,7 @@ void test_performance_map_quality_reviews_are_immutable_and_pinned() {
             project.project_id,
             artifact.artifact_revision_id,
             approved.review_id,
-            PerformanceMapReviewDisposition::rejected,
+            EngineeringReviewDisposition::rejected,
             "Corrected flow above 120 kg/s",
             "No OEM evidence supports operation beyond the measured "
             "map envelope.",
@@ -1291,7 +1291,7 @@ void test_performance_map_quality_reviews_are_immutable_and_pinned() {
             project.project_id,
             artifact.artifact_revision_id,
             {},
-            PerformanceMapReviewDisposition::approved,
+            EngineeringReviewDisposition::approved,
             " ",
             "No review is credible without a scope.",
         });
@@ -1332,6 +1332,17 @@ void test_run_configurations_bind_complete_execution_intent() {
         "thermox.performance_map/v1",
         performance_map_payload(),
     });
+    const auto map_review =
+        service.create_performance_map_quality_review({
+            team_a,
+            project.project_id,
+            artifact.artifact_revision_id,
+            {},
+            thermox::service::EngineeringReviewDisposition::
+                approved_with_conditions,
+            "Corrected flow 70-120 kg/s",
+            "Qualified for the bound design Study.",
+        });
     thermox::service::CreateStudyRevisionRequest study_request;
     study_request.identity = team_a;
     study_request.project_id = project.project_id;
@@ -1342,6 +1353,15 @@ void test_run_configurations_bind_complete_execution_intent() {
     study_request.artifact_revision_ids = {
         artifact.artifact_revision_id,
     };
+    study_request.artifact_qualification_requirements = {{
+        artifact.artifact_revision_id,
+        map_review.review_id,
+        {
+            thermox::service::EngineeringReviewDisposition::approved,
+            thermox::service::EngineeringReviewDisposition::
+                approved_with_conditions,
+        },
+    }};
     study_request.result_projections = {
         {
             "compressor_outlet_temperature",
@@ -1381,6 +1401,8 @@ void test_run_configurations_bind_complete_execution_intent() {
             first.checksum.starts_with("sha256:") &&
             first.steady_solver.max_iterations == 37 &&
             resolved &&
+            resolved->study.artifact_qualification_requirements.size() ==
+                1U &&
             resolved->study.result_projections.size() == 1U &&
             resolved->model_case.model_revision_id ==
                 model.model_revision_id &&
@@ -1388,6 +1410,22 @@ void test_run_configurations_bind_complete_execution_intent() {
                     .size() == 1U,
         "run configurations must immutably bind the complete "
         "execution intent and resolve its snapshots");
+    auto unacceptable_policy = study_request;
+    unacceptable_policy.study_id = "unacceptable-map-review";
+    unacceptable_policy.artifact_qualification_requirements.front()
+        .acceptable_dispositions = {
+        thermox::service::EngineeringReviewDisposition::approved,
+    };
+    bool unacceptable_review_rejected = false;
+    try {
+        (void)service.create_study_revision(unacceptable_policy);
+    } catch (const thermox::service::ProjectRequestError&) {
+        unacceptable_review_rejected = true;
+    }
+    require(
+        unacceptable_review_rejected,
+        "Study publication must reject qualification evidence whose "
+        "disposition is outside the explicit policy");
     require(
         service
                 .list_run_configuration_revisions(

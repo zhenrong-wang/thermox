@@ -27,8 +27,8 @@ inline constexpr char artifact_revision_content_schema_v1[] =
     "thermox.artifact_revision_content/v1";
 inline constexpr char performance_map_quality_review_schema_v1[] =
     "thermox.performance_map_quality_review/v1";
-inline constexpr char study_revision_schema_v1[] =
-    "thermox.study_revision/v1";
+inline constexpr char study_revision_schema_v2[] =
+    "thermox.study_revision/v2";
 inline constexpr char calibration_revision_schema_v1[] =
     "thermox.calibration_revision/v1";
 inline constexpr char run_configuration_revision_schema_v3[] =
@@ -113,13 +113,13 @@ struct ArtifactRevisionContent {
     std::string canonical_artifact_json;
 };
 
-enum class PerformanceMapReviewDisposition {
+enum class EngineeringReviewDisposition {
     approved,
     approved_with_conditions,
     rejected,
 };
 
-std::string to_string(PerformanceMapReviewDisposition disposition);
+std::string to_string(EngineeringReviewDisposition disposition);
 
 struct PerformanceMapQualityReviewRecord {
     std::string schema_version{
@@ -130,8 +130,8 @@ struct PerformanceMapQualityReviewRecord {
     std::string artifact_revision_id;
     std::string artifact_checksum;
     std::string supersedes_review_id;
-    PerformanceMapReviewDisposition disposition{
-        PerformanceMapReviewDisposition::rejected};
+    EngineeringReviewDisposition disposition{
+        EngineeringReviewDisposition::rejected};
     std::string reviewed_scope;
     std::string rationale;
     std::string quality_schema_version{
@@ -142,8 +142,15 @@ struct PerformanceMapQualityReviewRecord {
     std::chrono::system_clock::time_point created_at;
 };
 
+struct ArtifactQualificationRequirement {
+    std::string artifact_revision_id;
+    std::string review_id;
+    std::vector<EngineeringReviewDisposition>
+        acceptable_dispositions;
+};
+
 struct StudyRevisionRecord {
-    std::string schema_version{study_revision_schema_v1};
+    std::string schema_version{study_revision_schema_v2};
     std::string study_revision_id;
     std::string study_id;
     std::string project_id;
@@ -154,6 +161,8 @@ struct StudyRevisionRecord {
     std::string case_revision_id;
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
+    std::vector<ArtifactQualificationRequirement>
+        artifact_qualification_requirements;
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;
@@ -305,7 +314,7 @@ public:
         const std::string& artifact_revision_id,
         const std::string& artifact_checksum,
         const std::string& supersedes_review_id,
-        PerformanceMapReviewDisposition disposition,
+        EngineeringReviewDisposition disposition,
         const std::string& reviewed_scope,
         const std::string& rationale,
         const std::string& quality_schema_version,
@@ -327,6 +336,8 @@ public:
         const std::string& case_revision_id,
         const std::string& intent,
         const std::vector<std::string>& artifact_revision_ids,
+        const std::vector<ArtifactQualificationRequirement>&
+            artifact_qualification_requirements,
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -479,8 +490,8 @@ struct CreatePerformanceMapQualityReviewRequest {
     std::string project_id;
     std::string artifact_revision_id;
     std::string supersedes_review_id;
-    PerformanceMapReviewDisposition disposition{
-        PerformanceMapReviewDisposition::rejected};
+    EngineeringReviewDisposition disposition{
+        EngineeringReviewDisposition::rejected};
     std::string reviewed_scope;
     std::string rationale;
 };
@@ -504,6 +515,8 @@ struct CreateStudyRevisionRequest {
     std::string case_revision_id;
     std::string intent;
     std::vector<std::string> artifact_revision_ids;
+    std::vector<ArtifactQualificationRequirement>
+        artifact_qualification_requirements;
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;

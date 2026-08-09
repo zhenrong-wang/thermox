@@ -595,7 +595,10 @@ Work items:
     - immutable Team/project-scoped quality review decisions pinned to the exact map revision and
       checksum, with server-derived quality snapshots, reviewer attribution, rationale, explicit
       supersession, PostgreSQL persistence, and thin HTTP/web-client contracts. ✅
-    - Study-declared review policies and dedicated engineering reviewer roles remain follow-ons.
+    - immutable v2 Study qualification policies pinning exact artifact/review evidence, explicit
+      acceptable approving dispositions, deterministic checksums, publication and run-resolution
+      enforcement, normalized PostgreSQL constraints, and thin HTTP/web contracts. ✅
+    - dedicated engineering reviewer roles remain a follow-on.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.

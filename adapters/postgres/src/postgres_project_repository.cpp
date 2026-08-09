@@ -465,17 +465,17 @@ service::ArtifactRevisionRecord decode_artifact_revision(
     return record;
 }
 
-service::PerformanceMapReviewDisposition decode_review_disposition(
+service::EngineeringReviewDisposition decode_review_disposition(
     const std::string& value) {
     if (value == "approved") {
-        return service::PerformanceMapReviewDisposition::approved;
+        return service::EngineeringReviewDisposition::approved;
     }
     if (value == "approved_with_conditions") {
-        return service::PerformanceMapReviewDisposition::
+        return service::EngineeringReviewDisposition::
             approved_with_conditions;
     }
     if (value == "rejected") {
-        return service::PerformanceMapReviewDisposition::rejected;
+        return service::EngineeringReviewDisposition::rejected;
     }
     throw std::runtime_error(
         "persisted performance-map quality review has an unknown "
@@ -662,6 +662,8 @@ public:
             "'thermox_performance_map_quality_reviews')::text, "
             "to_regclass('thermox_study_revisions')::text, "
             "to_regclass("
+            "'thermox_study_artifact_qualifications')::text, "
+            "to_regclass("
             "'thermox_run_configuration_revisions')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
             PQgetisnull(schema.get(), 0, 1) ||
@@ -669,7 +671,8 @@ public:
             PQgetisnull(schema.get(), 0, 3) ||
             PQgetisnull(schema.get(), 0, 4) ||
             PQgetisnull(schema.get(), 0, 5) ||
-            PQgetisnull(schema.get(), 0, 6)) {
+            PQgetisnull(schema.get(), 0, 6) ||
+            PQgetisnull(schema.get(), 0, 7)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -1184,7 +1187,7 @@ public:
         const std::string& artifact_revision_id,
         const std::string& artifact_checksum,
         const std::string& supersedes_review_id,
-        service::PerformanceMapReviewDisposition disposition,
+        service::EngineeringReviewDisposition disposition,
         const std::string& reviewed_scope,
         const std::string& rationale,
         const std::string& quality_schema_version,
@@ -1298,6 +1301,8 @@ public:
         const std::string& case_revision_id,
         const std::string& intent,
         const std::vector<std::string>& artifact_revision_ids,
+        const std::vector<service::ArtifactQualificationRequirement>&
+            artifact_qualification_requirements,
         const std::vector<service::ResultProjection>& result_projections,
         const std::vector<service::EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -1379,9 +1384,44 @@ public:
                  artifact_revision_ids[index].c_str()},
                 PGRES_COMMAND_OK);
         }
+        for (std::size_t index = 0;
+             index < artifact_qualification_requirements.size();
+             ++index) {
+            const auto& requirement =
+                artifact_qualification_requirements[index];
+            std::string dispositions{"{"};
+            for (std::size_t disposition_index = 0;
+                 disposition_index <
+                     requirement.acceptable_dispositions.size();
+                 ++disposition_index) {
+                if (disposition_index != 0U) dispositions += ',';
+                dispositions += service::to_string(
+                    requirement.acceptable_dispositions[
+                        disposition_index]);
+            }
+            dispositions += '}';
+            const auto position = std::to_string(index);
+            (void)execute(
+                connection.get(),
+                "INSERT INTO "
+                "thermox_study_artifact_qualifications ("
+                "study_revision_id, project_id, team_id, position, "
+                "artifact_revision_id, review_id, "
+                "acceptable_dispositions) VALUES ("
+                "$1, $2, $3, $4::integer, $5, $6, $7::text[])",
+                {record.study_revision_id.c_str(),
+                 project_id.c_str(), team_id.c_str(),
+                 position.c_str(),
+                 requirement.artifact_revision_id.c_str(),
+                 requirement.review_id.c_str(),
+                 dispositions.c_str()},
+                PGRES_COMMAND_OK);
+        }
         (void)execute(
             connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
         record.artifact_revision_ids = artifact_revision_ids;
+        record.artifact_qualification_requirements =
+            artifact_qualification_requirements;
         return record;
     }
 
@@ -1405,6 +1445,10 @@ public:
         record.artifact_revision_ids = study_artifact_ids(
             connection.get(), team_id, project_id,
             study_revision_id);
+        record.artifact_qualification_requirements =
+            study_artifact_qualifications(
+                connection.get(), team_id, project_id,
+                study_revision_id);
         return record;
     }
 
@@ -1427,6 +1471,10 @@ public:
             record.artifact_revision_ids = study_artifact_ids(
                 connection.get(), team_id, project_id,
                 record.study_revision_id);
+            record.artifact_qualification_requirements =
+                study_artifact_qualifications(
+                    connection.get(), team_id, project_id,
+                    record.study_revision_id);
             records.push_back(std::move(record));
         }
         return records;
@@ -1770,6 +1818,44 @@ private:
             ids.push_back(field(result.get(), row, 0));
         }
         return ids;
+    }
+
+    static std::vector<service::ArtifactQualificationRequirement>
+    study_artifact_qualifications(
+        PGconn* connection,
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& study_revision_id) {
+        const auto result = execute(
+            connection,
+            "SELECT q.artifact_revision_id, q.review_id, "
+            "d.disposition FROM "
+            "thermox_study_artifact_qualifications q "
+            "CROSS JOIN LATERAL unnest(q.acceptable_dispositions) "
+            "WITH ORDINALITY AS d(disposition, disposition_position) "
+            "WHERE q.team_id = $1 AND q.project_id = $2 "
+            "AND q.study_revision_id = $3 "
+            "ORDER BY q.position, d.disposition_position",
+            {team_id.c_str(), project_id.c_str(),
+             study_revision_id.c_str()});
+        std::vector<service::ArtifactQualificationRequirement>
+            requirements;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            const auto artifact_revision_id = field(result.get(), row, 0);
+            const auto review_id = field(result.get(), row, 1);
+            if (requirements.empty() ||
+                requirements.back().artifact_revision_id !=
+                    artifact_revision_id) {
+                requirements.push_back({
+                    artifact_revision_id,
+                    review_id,
+                    {},
+                });
+            }
+            requirements.back().acceptable_dispositions.push_back(
+                decode_review_disposition(field(result.get(), row, 2)));
+        }
+        return requirements;
     }
 
     std::string connection_string_;

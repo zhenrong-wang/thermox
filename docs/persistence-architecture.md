@@ -153,6 +153,14 @@ server-derived quality JSON under its own schema and checksum. Optional self-ref
 supersession without updating or deleting prior decisions. These records are governance metadata;
 the canonical map remains in provider-neutral object storage and is never modified by a review.
 
+Migration `017_study_artifact_qualifications.sql` adds normalized Study-owned qualification
+requirements. Each requirement must target an artifact already selected by that exact Study and an
+exact quality review of the same Team/Project/artifact revision. The persisted acceptable
+dispositions are limited to `approved` and `approved_with_conditions`; rejected evidence cannot be
+made qualifying. The requirement is part of the v2 Study checksum and is reverified during run
+resolution. Superseding a review never rewrites an existing Study—new evidence is adopted through a
+new Study revision.
+
 Migrations `006_run_configuration_revisions.sql` and
 `011_run_configurations_bind_studies.sql` establish reusable execution-policy history. The v3
 contract binds one exact Study revision and complete steady/transient solver settings. The Study

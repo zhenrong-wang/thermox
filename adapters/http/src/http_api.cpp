@@ -883,13 +883,13 @@ parse_performance_map_quality_review_request(
         require_json_string(root, "disposition");
     if (disposition == "approved") {
         command.disposition = service::
-            PerformanceMapReviewDisposition::approved;
+            EngineeringReviewDisposition::approved;
     } else if (disposition == "approved_with_conditions") {
         command.disposition = service::
-            PerformanceMapReviewDisposition::approved_with_conditions;
+            EngineeringReviewDisposition::approved_with_conditions;
     } else if (disposition == "rejected") {
         command.disposition = service::
-            PerformanceMapReviewDisposition::rejected;
+            EngineeringReviewDisposition::rejected;
     } else {
         throw std::invalid_argument(
             "unknown performance-map quality review disposition");
@@ -1527,7 +1527,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         "schema_version", "study_id", "parent_study_revision_id",
         "model_revision_id", "case_revision_id", "intent",
         "artifact_revision_ids", "result_projections",
-        "acceptance_criteria",
+        "acceptance_criteria", "artifact_qualification_requirements",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1537,7 +1537,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.study_revision.create/v1") {
+        "thermox.study_revision.create/v2") {
         throw std::invalid_argument(
             "unsupported study create schema_version");
     }
@@ -1559,6 +1559,63 @@ service::CreateStudyRevisionRequest parse_create_study_request(
             }
             command.artifact_revision_ids.push_back(
                 value.get_value<std::string>());
+        }
+    }
+    if (const auto requirements = tree.get_child_optional(
+            "artifact_qualification_requirements")) {
+        for (const auto& [array_key, value] : *requirements) {
+            if (!array_key.empty()) {
+                throw std::invalid_argument(
+                    "artifact_qualification_requirements must be an "
+                    "array");
+            }
+            const std::set<std::string> requirement_fields = {
+                "artifact_revision_id", "review_id",
+                "acceptable_dispositions",
+            };
+            for (const auto& [key, unused] : value) {
+                (void)unused;
+                if (!requirement_fields.contains(key)) {
+                    throw std::invalid_argument(
+                        "unknown artifact qualification requirement "
+                        "field: " + key);
+                }
+            }
+            service::ArtifactQualificationRequirement requirement;
+            requirement.artifact_revision_id =
+                value.get<std::string>("artifact_revision_id", "");
+            requirement.review_id =
+                value.get<std::string>("review_id", "");
+            const auto dispositions = value.get_child_optional(
+                "acceptable_dispositions");
+            if (!dispositions) {
+                throw std::invalid_argument(
+                    "artifact qualification requirement needs "
+                    "acceptable_dispositions");
+            }
+            for (const auto& [key, disposition_node] : *dispositions) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        "acceptable_dispositions must be an array");
+                }
+                const auto disposition =
+                    disposition_node.get_value<std::string>();
+                if (disposition == "approved") {
+                    requirement.acceptable_dispositions.push_back(
+                        service::EngineeringReviewDisposition::approved);
+                } else if (disposition ==
+                           "approved_with_conditions") {
+                    requirement.acceptable_dispositions.push_back(
+                        service::EngineeringReviewDisposition::
+                            approved_with_conditions);
+                } else {
+                    throw std::invalid_argument(
+                        "acceptable engineering review disposition must "
+                        "be approved or approved_with_conditions");
+                }
+            }
+            command.artifact_qualification_requirements.push_back(
+                std::move(requirement));
         }
     }
     if (const auto projections =

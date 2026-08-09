@@ -3,7 +3,7 @@ import type {
   ArtifactRevisionContent,
   PerformanceMapQualityReview,
   PerformanceMapQualityReviewList,
-  PerformanceMapReviewDisposition,
+  EngineeringReviewDisposition,
   ArtifactRevisionList,
   AssemblyTemplateCatalogEntry,
   ProjectComponentCatalog,
@@ -213,7 +213,7 @@ export const api = {
   createPerformanceMapQualityReview: (
     projectId: string,
     artifactRevisionId: string,
-    disposition: PerformanceMapReviewDisposition,
+    disposition: EngineeringReviewDisposition,
     reviewedScope: string,
     rationale: string,
     supersedesReviewId = '',

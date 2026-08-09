@@ -279,7 +279,7 @@ export interface EngineeringAcceptanceSummary {
 }
 
 export interface StudyRevision {
-  schema_version: 'thermox.study_revision/v1'
+  schema_version: 'thermox.study_revision/v2'
   study_revision_id: string
   study_id: string
   project_id: string
@@ -290,11 +290,18 @@ export interface StudyRevision {
   case_revision_id: string
   intent: string
   artifact_revision_ids: string[]
+  artifact_qualification_requirements: ArtifactQualificationRequirement[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
+}
+
+export interface ArtifactQualificationRequirement {
+  artifact_revision_id: string
+  review_id: string
+  acceptable_dispositions: EngineeringReviewDisposition[]
 }
 
 export interface StudyRevisionList {
@@ -303,13 +310,14 @@ export interface StudyRevisionList {
 }
 
 export interface CreateStudyRevision {
-  schema_version: 'thermox.study_revision.create/v1'
+  schema_version: 'thermox.study_revision.create/v2'
   study_id: string
   parent_study_revision_id: string
   model_revision_id: string
   case_revision_id: string
   intent: string
   artifact_revision_ids: string[]
+  artifact_qualification_requirements: ArtifactQualificationRequirement[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
 }
@@ -809,7 +817,7 @@ export interface ArtifactRevisionContent<T = unknown> {
   artifact: T
 }
 
-export type PerformanceMapReviewDisposition =
+export type EngineeringReviewDisposition =
   | 'approved'
   | 'approved_with_conditions'
   | 'rejected'
@@ -822,7 +830,7 @@ export interface PerformanceMapQualityReview {
   artifact_revision_id: string
   artifact_checksum: string
   supersedes_review_id: string
-  disposition: PerformanceMapReviewDisposition
+  disposition: EngineeringReviewDisposition
   reviewed_scope: string
   rationale: string
   quality_schema_version: 'thermox.performance_map_quality/v1'

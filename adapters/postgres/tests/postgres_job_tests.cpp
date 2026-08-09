@@ -102,6 +102,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "014_calibration_jobs.sql",
              "015_study_acceptance_criteria.sql",
              "016_performance_map_quality_reviews.sql",
+             "017_study_artifact_qualifications.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -846,7 +847,7 @@ void test_projects_and_immutable_model_revisions(
             project.project_id,
             artifact.artifact_revision_id,
             {},
-            thermox::service::PerformanceMapReviewDisposition::approved,
+            thermox::service::EngineeringReviewDisposition::approved,
             "Corrected flow 70-120 kg/s and speed 250-400 rad/s",
             "Qualified for interpolation inside the measured envelope.",
         });
@@ -876,6 +877,11 @@ void test_projects_and_immutable_model_revisions(
     study_request.artifact_revision_ids = {
         artifact.artifact_revision_id,
     };
+    study_request.artifact_qualification_requirements = {{
+        artifact.artifact_revision_id,
+        quality_review.review_id,
+        {thermox::service::EngineeringReviewDisposition::approved},
+    }};
     study_request.result_projections = {
         {
             "compressor_outlet_temperature",
@@ -895,6 +901,10 @@ void test_projects_and_immutable_model_revisions(
         loaded_study &&
             loaded_study->artifact_revision_ids ==
                 study_request.artifact_revision_ids &&
+            loaded_study->artifact_qualification_requirements.size() ==
+                1U &&
+            loaded_study->artifact_qualification_requirements.front()
+                    .review_id == quality_review.review_id &&
             loaded_study->intent == "steady_state_design" &&
             projects
                     .list_study_revisions(

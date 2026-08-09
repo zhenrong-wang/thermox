@@ -584,6 +584,30 @@ void study_revision_json(
         if (index != 0U) out << ", ";
         json_string(out, revision.artifact_revision_ids[index]);
     }
+    out << "], \"artifact_qualification_requirements\": [";
+    for (std::size_t index = 0;
+         index < revision.artifact_qualification_requirements.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        const auto& requirement =
+            revision.artifact_qualification_requirements[index];
+        out << "{\"artifact_revision_id\": ";
+        json_string(out, requirement.artifact_revision_id);
+        out << ", \"review_id\": ";
+        json_string(out, requirement.review_id);
+        out << ", \"acceptable_dispositions\": [";
+        for (std::size_t disposition_index = 0;
+             disposition_index <
+                 requirement.acceptable_dispositions.size();
+             ++disposition_index) {
+            if (disposition_index != 0U) out << ", ";
+            json_string(
+                out,
+                to_string(requirement.acceptable_dispositions[
+                    disposition_index]));
+        }
+        out << "]}";
+    }
     out << "], \"result_projections\": [";
     for (std::size_t index = 0;
          index < revision.result_projections.size(); ++index) {

@@ -368,7 +368,7 @@ public:
         const std::string& artifact_revision_id,
         const std::string& artifact_checksum,
         const std::string& supersedes_review_id,
-        PerformanceMapReviewDisposition disposition,
+        EngineeringReviewDisposition disposition,
         const std::string& reviewed_scope,
         const std::string& rationale,
         const std::string& quality_schema_version,
@@ -450,6 +450,8 @@ public:
         const std::string& case_revision_id,
         const std::string& intent,
         const std::vector<std::string>& artifact_revision_ids,
+        const std::vector<ArtifactQualificationRequirement>&
+            artifact_qualification_requirements,
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
@@ -492,6 +494,8 @@ public:
         record.case_revision_id = case_revision_id;
         record.intent = intent;
         record.artifact_revision_ids = artifact_revision_ids;
+        record.artifact_qualification_requirements =
+            artifact_qualification_requirements;
         record.result_projections = result_projections;
         record.acceptance_criteria = acceptance_criteria;
         record.checksum = checksum;

@@ -22,6 +22,7 @@
 #include <set>
 #include <sstream>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace thermox::service {
@@ -273,7 +274,9 @@ std::string run_configuration_identity(
 
 std::string study_identity(
     const CreateStudyRevisionRequest& request,
-    const std::vector<std::string>& artifacts) {
+    const std::vector<std::string>& artifacts,
+    const std::vector<ArtifactQualificationRequirement>&
+        qualification_requirements) {
     std::ostringstream out;
     out << request.study_id.size() << ':' << request.study_id << '|'
         << request.model_revision_id.size() << ':'
@@ -283,6 +286,19 @@ std::string study_identity(
         << request.intent.size() << ':' << request.intent << '|';
     for (const auto& id : artifacts) {
         out << id.size() << ':' << id << '|';
+    }
+    out << qualification_requirements.size() << '|';
+    for (const auto& requirement : qualification_requirements) {
+        out << requirement.artifact_revision_id.size() << ':'
+            << requirement.artifact_revision_id << '|'
+            << requirement.review_id.size() << ':'
+            << requirement.review_id << '|'
+            << requirement.acceptable_dispositions.size() << '|';
+        for (const auto disposition :
+             requirement.acceptable_dispositions) {
+            const auto value = to_string(disposition);
+            out << value.size() << ':' << value << '|';
+        }
     }
     out << request.result_projections.size() << '|';
     for (const auto& projection : request.result_projections) {
@@ -368,13 +384,13 @@ std::string calibration_identity(
 }  // namespace
 
 std::string to_string(
-    PerformanceMapReviewDisposition disposition) {
+    EngineeringReviewDisposition disposition) {
     switch (disposition) {
-        case PerformanceMapReviewDisposition::approved:
+        case EngineeringReviewDisposition::approved:
             return "approved";
-        case PerformanceMapReviewDisposition::approved_with_conditions:
+        case EngineeringReviewDisposition::approved_with_conditions:
             return "approved_with_conditions";
-        case PerformanceMapReviewDisposition::rejected:
+        case EngineeringReviewDisposition::rejected:
             return "rejected";
     }
     return "unknown";
@@ -1535,6 +1551,85 @@ StudyRevisionRecord ProjectService::create_study_revision(
             artifact_ids)) {
         throw ProjectStateError("artifact revision was not found");
     }
+    auto qualification_requirements =
+        request.artifact_qualification_requirements;
+    for (auto& requirement : qualification_requirements) {
+        if (requirement.artifact_revision_id.empty() ||
+            requirement.review_id.empty() ||
+            requirement.acceptable_dispositions.empty()) {
+            throw ProjectRequestError(
+                "artifact qualification requirements need an artifact "
+                "revision, review, and acceptable disposition");
+        }
+        if (!std::binary_search(
+                artifact_ids.begin(), artifact_ids.end(),
+                requirement.artifact_revision_id)) {
+            throw ProjectRequestError(
+                "artifact qualification requirements may only target "
+                "artifacts bound by the Study");
+        }
+        std::sort(
+            requirement.acceptable_dispositions.begin(),
+            requirement.acceptable_dispositions.end());
+        if (std::find(
+                requirement.acceptable_dispositions.begin(),
+                requirement.acceptable_dispositions.end(),
+                EngineeringReviewDisposition::rejected) !=
+            requirement.acceptable_dispositions.end()) {
+            throw ProjectRequestError(
+                "a rejected engineering review cannot satisfy an "
+                "artifact qualification requirement");
+        }
+        if (std::adjacent_find(
+                requirement.acceptable_dispositions.begin(),
+                requirement.acceptable_dispositions.end()) !=
+            requirement.acceptable_dispositions.end()) {
+            throw ProjectRequestError(
+                "acceptable review dispositions must be unique");
+        }
+        const auto reviews =
+            repository_->list_performance_map_quality_reviews(
+                request.identity.team_id,
+                request.project_id,
+                requirement.artifact_revision_id);
+        const auto review = std::find_if(
+            reviews.begin(), reviews.end(),
+            [&](const auto& candidate) {
+                return candidate.review_id == requirement.review_id;
+            });
+        if (review == reviews.end()) {
+            throw ProjectStateError(
+                "artifact qualification review was not found");
+        }
+        if (std::find(
+                requirement.acceptable_dispositions.begin(),
+                requirement.acceptable_dispositions.end(),
+                review->disposition) ==
+            requirement.acceptable_dispositions.end()) {
+            throw ProjectRequestError(
+                "artifact qualification review disposition is not "
+                "acceptable under the Study policy");
+        }
+    }
+    std::sort(
+        qualification_requirements.begin(),
+        qualification_requirements.end(),
+        [](const auto& left, const auto& right) {
+            return std::tie(
+                       left.artifact_revision_id, left.review_id) <
+                std::tie(right.artifact_revision_id, right.review_id);
+        });
+    if (std::adjacent_find(
+            qualification_requirements.begin(),
+            qualification_requirements.end(),
+            [](const auto& left, const auto& right) {
+                return left.artifact_revision_id ==
+                    right.artifact_revision_id;
+            }) != qualification_requirements.end()) {
+        throw ProjectRequestError(
+            "a Study may bind only one qualification review per "
+            "artifact revision");
+    }
     try {
         validate_result_projections(request.result_projections);
         validate_engineering_acceptance_criteria(
@@ -1565,9 +1660,11 @@ StudyRevisionRecord ProjectService::create_study_revision(
         request.case_revision_id,
         request.intent,
         artifact_ids,
+        qualification_requirements,
         request.result_projections,
         request.acceptance_criteria,
-        checksum(study_identity(request, artifact_ids)));
+        checksum(study_identity(
+            request, artifact_ids, qualification_requirements)));
 }
 
 std::optional<StudyRevisionRecord>
@@ -1847,6 +1944,29 @@ ProjectService::resolve_run_configuration(
         throw ProjectStateError(
             "persisted run configuration dependencies were "
             "not found");
+    }
+    for (const auto& requirement :
+         study->artifact_qualification_requirements) {
+        const auto reviews =
+            repository_->list_performance_map_quality_reviews(
+                identity.team_id,
+                project_id,
+                requirement.artifact_revision_id);
+        const auto review = std::find_if(
+            reviews.begin(), reviews.end(),
+            [&](const auto& candidate) {
+                return candidate.review_id == requirement.review_id;
+            });
+        if (review == reviews.end() ||
+            std::find(
+                requirement.acceptable_dispositions.begin(),
+                requirement.acceptable_dispositions.end(),
+                review->disposition) ==
+                requirement.acceptable_dispositions.end()) {
+            throw ProjectStateError(
+                "persisted Study artifact qualification evidence "
+                "could not be verified");
+        }
     }
     return ResolvedRunConfiguration{
         *configuration,

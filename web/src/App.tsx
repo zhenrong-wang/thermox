@@ -1231,13 +1231,14 @@ function App() {
       (revision) => revision.study_id === studyId,
     )
     const request: CreateStudyRevision = {
-      schema_version: 'thermox.study_revision.create/v1',
+      schema_version: 'thermox.study_revision.create/v2',
       study_id: studyId,
       parent_study_revision_id: parent?.study_revision_id ?? '',
       model_revision_id: selectedRevisionId,
       case_revision_id: selectedCaseRevision.case_revision_id,
       intent: selectedCaseRevision.mode,
       artifact_revision_ids: selectedArtifactRevisionIds,
+      artifact_qualification_requirements: [],
       result_projections: resultProjections,
       acceptance_criteria: acceptanceCriteria,
     }

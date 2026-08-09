@@ -464,6 +464,10 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos,
         "HTTP quality review creation must persist a scoped decision "
         "and server-derived immutable quality snapshot");
+    const auto quality_review_id =
+        quality_review.headers.at("Location").substr(
+            quality_review.headers.at("Location").find_last_of('/') +
+            1U);
     const auto quality_review_detail = api.handle(authenticated({
         "GET",
         quality_review.headers.at("Location"),
@@ -699,7 +703,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/study-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.study_revision.create/v1",)"
+            R"("thermox.study_revision.create/v2",)"
             R"("study_id":"http-design-study",)"
             R"("model_revision_id":")"} +
             model.model_revision_id +
@@ -709,7 +713,13 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("artifact_revision_ids":[")" +
             artifact_revision_id +
             "\",\"" + component_revision_id +
-            R"("],"result_projections":[{)"
+            R"("],"artifact_qualification_requirements":[{)"
+            R"("artifact_revision_id":")" +
+            artifact_revision_id +
+            R"(","review_id":")" + quality_review_id +
+            R"(","acceptable_dispositions":[)"
+            R"("approved","approved_with_conditions"]}],)"
+            R"("result_projections":[{)"
             R"("id":"compressor_outlet_temperature",)"
             R"("scope":"port_derived",)"
             R"("component_id":"compressor",)"
@@ -723,6 +733,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             study_created.headers.contains("Location") &&
             study_created.body.find(
                 "\"intent\": \"steady_state_design\"") !=
+                std::string::npos &&
+            study_created.body.find(quality_review_id) !=
                 std::string::npos,
         "study routes must persist durable engineering intent");
     const auto study_detail = api.handle(authenticated({
@@ -1227,7 +1239,7 @@ void test_authored_component_job_workflow() {
                 "/study-revisions",
             std::string{
                 R"({"schema_version":)"
-                R"("thermox.study_revision.create/v1",)"
+                R"("thermox.study_revision.create/v2",)"
                 R"("study_id":"authored-gain-study",)"
                 R"("model_revision_id":")"} +
                 model.model_revision_id +
