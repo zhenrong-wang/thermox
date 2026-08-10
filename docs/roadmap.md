@@ -75,6 +75,8 @@ Delivered:
    columns. ✅
 2. Relative-pivot dense and CSR reference linear solvers. ✅
 3. Fixed sparse patterns with value-only updates and hybrid analytic/finite-difference rows. ✅
+   - bounded second-order central finite differences with recoverable one-sided physical-domain
+     fallback, shared by Newton assembly and analytic-Jacobian verification. ✅
 4. Recoverable/fatal physics-evaluation status and bounds-aware line-search recovery. ✅
 5. Duplicate-name validation and fixed-pattern structural matching. ✅
 6. Index-1 DAE contract, consistent initial conditions, implicit adaptive integration, and events. ✅

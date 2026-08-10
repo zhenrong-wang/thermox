@@ -980,6 +980,72 @@ void test_jacobian_verification_reports_bad_derivative() {
             "mismatch identifies its equation and variable");
 }
 
+void test_finite_difference_jacobian_uses_central_difference() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"cubic"};
+    problem.initial_guess = {1.0};
+    problem.variable_scales = {1.0};
+    problem.residual =
+        [](const std::vector<double>& x,
+           std::vector<double>& residual) {
+            residual[0] = x[0] * x[0] * x[0];
+        };
+    problem.jacobian =
+        [](const std::vector<double>& x,
+           thermox::Matrix& jacobian) {
+            jacobian[0][0] = 3.0 * x[0] * x[0];
+        };
+
+    thermox::JacobianVerificationOptions options;
+    options.finite_difference_epsilon = 1.0e-3;
+    options.absolute_tolerance = 2.0e-6;
+    options.relative_tolerance = 0.0;
+    const auto report =
+        thermox::verify_problem_jacobian(problem, {}, options);
+    require(
+        report.passed,
+        "interior finite differences use second-order central accuracy");
+    require_near(
+        report.maximum_absolute_error, 1.0e-6, 1.0e-9,
+        "central cubic derivative truncation error");
+}
+
+void test_finite_difference_jacobian_recovers_one_sided() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"nonnegative_x"};
+    problem.residual_names = {"square"};
+    problem.initial_guess = {0.0};
+    problem.variable_scales = {1.0};
+    problem.lower_bounds = {-1.0};
+    problem.upper_bounds = {1.0};
+    problem.checked_residual =
+        [](const std::vector<double>& x,
+           std::vector<double>& residual) {
+            if (x[0] < 0.0) {
+                return thermox::EvaluationStatus::recoverable(
+                    "negative branch is outside the physical domain");
+            }
+            residual[0] = x[0] * x[0];
+            return thermox::EvaluationStatus::success();
+        };
+    problem.jacobian =
+        [](const std::vector<double>& x,
+           thermox::Matrix& jacobian) {
+            jacobian[0][0] = 2.0 * x[0];
+        };
+
+    thermox::JacobianVerificationOptions options;
+    options.finite_difference_epsilon = 1.0e-4;
+    options.absolute_tolerance = 1.1e-4;
+    options.relative_tolerance = 0.0;
+    const auto report =
+        thermox::verify_problem_jacobian(problem, {}, options);
+    require(
+        report.passed,
+        "recoverable central perturbation failure falls back to the valid side");
+}
+
 void test_fixed_sparse_pattern_and_structure_analysis() {
     thermox::EquationSystemBuilder system;
     const auto x = system.add_variable("x", 0.0);
@@ -1291,6 +1357,8 @@ int main() {
         test_mixed_derivative_equation_system_stays_sparse();
         test_jacobian_verification_checks_only_provided_rows();
         test_jacobian_verification_reports_bad_derivative();
+        test_finite_difference_jacobian_uses_central_difference();
+        test_finite_difference_jacobian_recovers_one_sided();
         test_fixed_sparse_pattern_and_structure_analysis();
         test_structural_analysis_localizes_singular_regions();
         test_fixed_bound_finite_difference_fails_cleanly();

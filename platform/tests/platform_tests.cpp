@@ -4134,13 +4134,20 @@ void test_material_compressor_and_turbine() {
     const double compressor_outlet_h =
         300000.0 +
         (compressor_isentropic_h - 300000.0) / 0.8;
+    // The default dimensionless Newton tolerance and the component's
+    // 1 MJ/kg residual scale permit a 1e-3 J/kg equation residual.
+    // Keep this physics assertion tighter than engineering precision while
+    // avoiding dependence on the finite-difference iteration path.
+    constexpr double enthalpy_solver_tolerance = 2.0e-3;
+    constexpr double power_solver_tolerance = 2.0e-2;
     require_near(
         compressor_value("machine.outlet.h"),
-        compressor_outlet_h, 1.0e-5,
+        compressor_outlet_h, enthalpy_solver_tolerance,
         "material compressor applies isentropic efficiency");
     require_near(
         compressor_value("machine.shaft.W_dot"),
-        10.0 * (compressor_outlet_h - 300000.0), 1.0e-4,
+        10.0 * (compressor_outlet_h - 300000.0),
+        power_solver_tolerance,
         "material compressor closes shaft input power");
 
     const auto turbine_graph = compile_and_solve(R"json({
@@ -4187,11 +4194,12 @@ void test_material_compressor_and_turbine() {
         0.9 * (turbine_isentropic_h - 1000000.0);
     require_near(
         turbine_value("machine.outlet.h"),
-        turbine_outlet_h, 1.0e-5,
+        turbine_outlet_h, enthalpy_solver_tolerance,
         "material turbine applies isentropic efficiency");
     require_near(
         turbine_value("machine.shaft.W_dot"),
-        10.0 * (1000000.0 - turbine_outlet_h), 1.0e-4,
+        10.0 * (1000000.0 - turbine_outlet_h),
+        power_solver_tolerance,
         "material turbine closes shaft output power");
 }
 

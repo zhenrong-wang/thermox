@@ -243,40 +243,60 @@ Matrix finite_difference_jacobian(const NonlinearProblem& problem,
 
     for (std::size_t col = 0; col < n; ++col) {
         const double magnitude = epsilon * std::max(variable_scales[col], std::abs(x[col]));
-        std::vector<double> candidate_steps;
-        if (x[col] + magnitude <= upper_bounds[col]) {
-            candidate_steps.push_back(magnitude);
-        }
-        if (x[col] - magnitude >= lower_bounds[col]) {
-            candidate_steps.push_back(-magnitude);
-        }
-        if (candidate_steps.empty()) {
+        const double positive_value = x[col] + magnitude;
+        const double negative_value = x[col] - magnitude;
+        const bool positive_available =
+            std::isfinite(positive_value) &&
+            positive_value <= upper_bounds[col] &&
+            positive_value != x[col];
+        const bool negative_available =
+            std::isfinite(negative_value) &&
+            negative_value >= lower_bounds[col] &&
+            negative_value != x[col];
+        if (!positive_available && !negative_available) {
             continue;
         }
 
-        std::vector<double> fp;
-        double accepted_step = 0.0;
-        bool evaluated = false;
-        for (const double step : candidate_steps) {
+        const auto evaluate_perturbation =
+            [&](double step)
+            -> std::optional<std::vector<double>> {
             std::vector<double> xp = x;
             xp[col] += step;
             try {
-                fp = evaluate_residual(problem, xp, diagnostics);
-                accepted_step = step;
-                evaluated = true;
-                break;
+                return evaluate_residual(problem, xp, diagnostics);
             } catch (const EvaluationError& ex) {
                 if (!ex.recoverable()) {
                     throw;
                 }
+                return std::nullopt;
             }
+        };
+
+        std::optional<std::vector<double>> positive;
+        std::optional<std::vector<double>> negative;
+        if (positive_available) {
+            positive = evaluate_perturbation(magnitude);
         }
-        if (!evaluated) {
+        if (negative_available) {
+            negative = evaluate_perturbation(-magnitude);
+        }
+        if (!positive && !negative) {
             throw EvaluationError(
                 "finite-difference perturbations failed in the valid variable domain", true);
         }
+
         for (std::size_t row = 0; row < f.size(); ++row) {
-            jacobian[row][col] = (fp[row] - f[row]) / accepted_step;
+            if (positive && negative) {
+                jacobian[row][col] =
+                    ((*positive)[row] - (*negative)[row]) /
+                    (2.0 * magnitude);
+            } else if (positive) {
+                jacobian[row][col] =
+                    ((*positive)[row] - f[row]) / magnitude;
+            } else {
+                jacobian[row][col] =
+                    (f[row] - (*negative)[row]) / magnitude;
+            }
         }
     }
 

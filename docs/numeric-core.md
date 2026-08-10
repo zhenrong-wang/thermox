@@ -45,6 +45,12 @@ Available derivative paths:
 4. dense analytic Jacobian;
 5. full finite-difference fallback.
 
+Finite-difference columns use second-order central perturbations whenever both bounded physical
+states evaluate successfully. At a declared bound, or when one property evaluation reports a
+recoverable domain failure, the same path falls back to the valid one-sided derivative. Fatal
+physics failures remain fatal. The solver and analytic-Jacobian verifier share this implementation,
+so derivative audits exercise the same bounded-domain behavior used during simulation.
+
 Checked residual callbacks can report success, recoverable domain failure, or fatal failure.
 Recoverable failures during line search cause damping instead of terminating the solve. This is
 the intended path for property-domain and map-boundary failures.

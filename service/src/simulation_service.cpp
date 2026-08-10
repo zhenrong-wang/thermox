@@ -1053,8 +1053,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v1"
-            : "thermox.newton/v1",
+            ? "thermox.newton-continuation/v2"
+            : "thermox.newton/v2",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},

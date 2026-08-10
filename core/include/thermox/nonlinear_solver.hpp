@@ -60,6 +60,9 @@ struct SolverOptions {
     int max_iterations{50};
     double residual_tolerance{1.0e-9};
     double step_tolerance{1.0e-10};
+    // Relative perturbation applied to the larger of the declared variable
+    // scale and current magnitude. Interior columns use a central difference;
+    // physical-domain boundaries fall back to the valid one-sided difference.
     double finite_difference_epsilon{1.0e-6};
     double min_damping{1.0e-6};
     double damping_reduction{0.5};
