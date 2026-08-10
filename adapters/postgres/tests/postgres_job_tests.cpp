@@ -183,7 +183,7 @@ SimulationJobRequest request(
         {1.0, {{2.0, {0.91}}, {3.0, {0.92}}}},
     };
     map.map = payload;
-    map.coordinate_constraints = {{
+    map.operating_envelope = {{
         "flow", "mass_flow", 2.0, 3.0, true, true,
     }};
     value.artifacts.performance_maps.push_back(std::move(map));
@@ -203,6 +203,9 @@ SimulationJobRequest request(
          "coefficient * mass_flow * abs(mass_flow) / density",
          {{"mass_flow", 0.0, 20.0, true, false}}},
     };
+    correlation.operating_envelope = {{
+        "mass_flow", "mass_flow", 1.0, 5.0, true, true,
+    }};
     value.artifacts.correlations.push_back(
         std::move(correlation));
     thermox::service::RegimeMapArtifactInput regime_map;
@@ -219,6 +222,10 @@ SimulationJobRequest request(
            {{"vapor_weber_number", "dimensionless", 20.0,
              std::nullopt, false, true}}}}},
     };
+    regime_map.operating_envelope = {{
+        "vapor_weber_number", "dimensionless", 0.0, 50.0,
+        true, true,
+    }};
     value.artifacts.regime_maps.push_back(std::move(regime_map));
     value.artifacts.references.push_back({
         "fuel-spec",
@@ -317,8 +324,10 @@ void test_idempotency_and_tenant_scope(
             repeated.request.artifacts.performance_maps.front().map
                     ->output_constraints.front().maximum == 1.0 &&
             repeated.request.artifacts.performance_maps.front()
-                    .coordinate_constraints.front().minimum == 2.0 &&
+                    .operating_envelope.front().minimum == 2.0 &&
             repeated.request.artifacts.correlations.size() == 1 &&
+            repeated.request.artifacts.correlations.front()
+                    .operating_envelope.front().maximum == 5.0 &&
             repeated.request.artifacts.correlations.front()
                     .candidates.size() == 1 &&
             repeated.request.artifacts.correlations.front()
@@ -333,6 +342,8 @@ void test_idempotency_and_tenant_scope(
                     .candidates.front().applicability.front()
                     .maximum_inclusive &&
             repeated.request.artifacts.regime_maps.size() == 1 &&
+            repeated.request.artifacts.regime_maps.front()
+                    .operating_envelope.front().maximum == 50.0 &&
             repeated.request.artifacts.regime_maps.front()
                     .regions.front().regime == "annular" &&
             repeated.request.artifacts.regime_maps.front()

@@ -551,10 +551,12 @@ CorrelationArtifact::CorrelationArtifact(
     std::string artifact_checksum_sha256,
     std::vector<CorrelationVariable> inputs,
     CorrelationVariable output,
-    std::vector<CorrelationCandidate> candidates)
+    std::vector<CorrelationCandidate> candidates,
+    std::vector<OperatingEnvelopeConstraint> operating_envelope)
     : inputs_(std::move(inputs)),
       output_(std::move(output)),
-      candidates_(std::move(candidates)) {
+      candidates_(std::move(candidates)),
+      operating_envelope_(std::move(operating_envelope)) {
     id = std::move(artifact_id);
     schema_version = std::move(artifact_schema_version);
     revision = std::move(artifact_revision);
@@ -595,6 +597,12 @@ void CorrelationArtifact::validate() const {
                 input.name);
         }
     }
+    std::vector<OperatingEnvelopeVariable> envelope_variables;
+    for (const auto& input : inputs_) {
+        envelope_variables.push_back({input.name, input.dimension});
+    }
+    validate_operating_envelope(
+        operating_envelope_, envelope_variables, "correlation");
     const auto validate_ranges = [&](const auto& ranges) {
         std::set<std::string> ranged_inputs;
         for (const auto& range : ranges) {
@@ -680,6 +688,11 @@ CorrelationArtifact::candidates() const noexcept {
     return candidates_;
 }
 
+const std::vector<OperatingEnvelopeConstraint>&
+CorrelationArtifact::operating_envelope() const noexcept {
+    return operating_envelope_;
+}
+
 CorrelationApplicabilityAssessment
 CorrelationArtifact::assess_applicability(
     const std::map<std::string, double>& inputs) const {
@@ -715,6 +728,10 @@ CorrelationEvaluation CorrelationArtifact::evaluate(
     }
     if (inputs.size() != inputs_.size()) {
         return {0.0, {}, "correlation received unknown inputs", {}, {}};
+    }
+    if (const auto violation = operating_envelope_violation(
+            operating_envelope_, inputs, "correlation")) {
+        return {0.0, {}, *violation, {}, {}};
     }
     std::vector<std::size_t> routed;
     bool using_flow_regime_fallback = false;

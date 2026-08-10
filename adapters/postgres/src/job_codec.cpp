@@ -218,6 +218,51 @@ service::PerformanceMapPayloadInput decode_map_payload(
     return value;
 }
 
+Tree operating_envelope(
+    const std::vector<service::ArtifactCoordinateConstraintInput>& value) {
+    return array(
+        value,
+        [](const service::ArtifactCoordinateConstraintInput& constraint) {
+            Tree encoded;
+            encoded.put("coordinate", constraint.coordinate);
+            encoded.put("dimension", constraint.dimension);
+            if (constraint.minimum) {
+                encoded.put("minimum", *constraint.minimum);
+            }
+            if (constraint.maximum) {
+                encoded.put("maximum", *constraint.maximum);
+            }
+            encoded.put(
+                "minimum_inclusive", constraint.minimum_inclusive);
+            encoded.put(
+                "maximum_inclusive", constraint.maximum_inclusive);
+            return encoded;
+        });
+}
+
+std::vector<service::ArtifactCoordinateConstraintInput>
+decode_operating_envelope(const Tree& tree) {
+    return decode_array<service::ArtifactCoordinateConstraintInput>(
+        tree, [](const Tree& encoded) {
+            service::ArtifactCoordinateConstraintInput value;
+            value.coordinate = encoded.get<std::string>("coordinate");
+            value.dimension = encoded.get<std::string>("dimension");
+            if (const auto minimum =
+                    encoded.get_optional<double>("minimum")) {
+                value.minimum = *minimum;
+            }
+            if (const auto maximum =
+                    encoded.get_optional<double>("maximum")) {
+                value.maximum = *maximum;
+            }
+            value.minimum_inclusive =
+                encoded.get("minimum_inclusive", true);
+            value.maximum_inclusive =
+                encoded.get("maximum_inclusive", true);
+            return value;
+        });
+}
+
 Tree performance_map(
     const service::PerformanceMapArtifactInput& value) {
     Tree tree;
@@ -248,21 +293,10 @@ Tree performance_map(
     tree.put(
         "condition_extrapolation",
         value.condition_extrapolation);
-    if (!value.coordinate_constraints.empty()) {
+    if (!value.operating_envelope.empty()) {
         tree.add_child(
-            "coordinate_constraints",
-            array(
-                value.coordinate_constraints,
-                [](const service::MapCoordinateConstraintInput& value) {
-                    Tree encoded;
-                    encoded.put("coordinate", value.coordinate);
-                    encoded.put("dimension", value.dimension);
-                    if (value.minimum) encoded.put("minimum", *value.minimum);
-                    if (value.maximum) encoded.put("maximum", *value.maximum);
-                    encoded.put("minimum_inclusive", value.minimum_inclusive);
-                    encoded.put("maximum_inclusive", value.maximum_inclusive);
-                    return encoded;
-                }));
+            "operating_envelope",
+            operating_envelope(value.operating_envelope));
     }
     return tree;
 }
@@ -299,30 +333,8 @@ service::PerformanceMapArtifactInput decode_performance_map(
     value.condition_extrapolation =
         tree.get<std::string>("condition_extrapolation");
     if (const auto constraints =
-            tree.get_child_optional("coordinate_constraints")) {
-        value.coordinate_constraints =
-            decode_array<service::MapCoordinateConstraintInput>(
-                *constraints,
-                [](const Tree& encoded) {
-                    service::MapCoordinateConstraintInput value;
-                    value.coordinate =
-                        encoded.get<std::string>("coordinate");
-                    value.dimension =
-                        encoded.get<std::string>("dimension");
-                    if (const auto minimum =
-                            encoded.get_optional<double>("minimum")) {
-                        value.minimum = *minimum;
-                    }
-                    if (const auto maximum =
-                            encoded.get_optional<double>("maximum")) {
-                        value.maximum = *maximum;
-                    }
-                    value.minimum_inclusive =
-                        encoded.get("minimum_inclusive", true);
-                    value.maximum_inclusive =
-                        encoded.get("maximum_inclusive", true);
-                    return value;
-                });
+            tree.get_child_optional("operating_envelope")) {
+        value.operating_envelope = decode_operating_envelope(*constraints);
     }
     return value;
 }
@@ -407,6 +419,11 @@ Tree correlation(
                         }));
                 return encoded;
             }));
+    if (!value.operating_envelope.empty()) {
+        tree.add_child(
+            "operating_envelope",
+            operating_envelope(value.operating_envelope));
+    }
     return tree;
 }
 
@@ -466,6 +483,10 @@ service::CorrelationArtifactInput decode_correlation(
                     });
                 return candidate;
             });
+    if (const auto envelope =
+            tree.get_child_optional("operating_envelope")) {
+        value.operating_envelope = decode_operating_envelope(*envelope);
+    }
     return value;
 }
 
@@ -526,6 +547,11 @@ Tree regime_map(const service::RegimeMapArtifactInput& value) {
                 }));
             return encoded;
         }));
+    if (!value.operating_envelope.empty()) {
+        tree.add_child(
+            "operating_envelope",
+            operating_envelope(value.operating_envelope));
+    }
     return tree;
 }
 
@@ -591,6 +617,10 @@ service::RegimeMapArtifactInput decode_regime_map(
                     });
             return decoded;
         });
+    if (const auto envelope =
+            tree.get_child_optional("operating_envelope")) {
+        value.operating_envelope = decode_operating_envelope(*envelope);
+    }
     return value;
 }
 

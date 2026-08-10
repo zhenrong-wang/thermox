@@ -182,6 +182,32 @@ void test_packaged_zuber_findlay_template_has_physical_limits() {
             "packaged template must enforce coefficient bounds");
 }
 
+void test_study_operating_envelope_precedes_native_applicability() {
+    auto correlation = bend_correlation();
+    correlation = thermox::platform::CorrelationArtifact{
+        correlation.id, correlation.schema_version,
+        correlation.revision, correlation.checksum_sha256,
+        correlation.inputs(), correlation.output(),
+        correlation.candidates(),
+        {{"mass_flow", "mass_flow", 1.0, 2.0, true, true}}};
+    correlation.validate();
+    const auto accepted = correlation.evaluate({
+        {"mass_flow", 1.5}, {"density", 1.2}, {"area", 0.5},
+    });
+    require(
+        accepted.error.empty(),
+        "Study envelope must permit an in-policy correlation point");
+    const auto rejected = correlation.evaluate({
+        {"mass_flow", 2.5}, {"density", 1.2}, {"area", 0.5},
+    });
+    require(
+        rejected.error.find("correlation operating envelope rejected") !=
+            std::string::npos &&
+            rejected.error.find("mass_flow") != std::string::npos,
+        "Study envelope must reject a point even when the source "
+        "correlation has no native applicability restriction");
+}
+
 void test_packaged_chisholm_family_selects_phase_regimes() {
     const auto family =
         two_phase_friction_pressure_gradient_correlation();
@@ -1125,6 +1151,7 @@ int main() {
     try {
         test_correlation_evaluates_with_analytic_derivatives();
         test_packaged_zuber_findlay_template_has_physical_limits();
+        test_study_operating_envelope_precedes_native_applicability();
         test_packaged_chisholm_family_selects_phase_regimes();
         test_correlation_contract_rejects_undeclared_symbols();
         test_correlation_enforces_qualified_operating_envelope();

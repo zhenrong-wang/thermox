@@ -43,8 +43,8 @@ platform::MapExtrapolationPolicy extrapolation(
 
 std::shared_ptr<const platform::PerformanceMap> validate_map(
     const PerformanceMapPayloadInput& input,
-    const std::vector<MapCoordinateConstraintInput>&
-        coordinate_constraints = {}) {
+    const std::vector<ArtifactCoordinateConstraintInput>&
+        operating_envelope_constraints = {}) {
     std::vector<platform::MapVariable> outputs;
     for (const auto& value : input.output_variables) {
         outputs.push_back({value.name, value.dimension});
@@ -69,9 +69,9 @@ std::shared_ptr<const platform::PerformanceMap> validate_map(
             value.maximum_inclusive,
         });
     }
-    std::vector<platform::MapCoordinateConstraint>
+    std::vector<platform::OperatingEnvelopeConstraint>
         operating_envelope;
-    for (const auto& value : coordinate_constraints) {
+    for (const auto& value : operating_envelope_constraints) {
         operating_envelope.push_back({
             value.coordinate,
             value.dimension,
@@ -99,7 +99,7 @@ std::shared_ptr<const platform::PerformanceMap> validate_map(
 void validate(const PerformanceMapArtifactInput& artifact) {
     if (artifact.map) {
         (void)validate_map(
-            *artifact.map, artifact.coordinate_constraints);
+            *artifact.map, artifact.operating_envelope);
         return;
     }
     std::vector<platform::ConditionedMapLayer> layers;
@@ -109,7 +109,7 @@ void validate(const PerformanceMapArtifactInput& artifact) {
             validate_map(
                 layer.map,
                 [&] {
-                    auto constraints = artifact.coordinate_constraints;
+                    auto constraints = artifact.operating_envelope;
                     std::erase_if(
                         constraints,
                         [&](const auto& constraint) {
@@ -128,12 +128,12 @@ void validate(const PerformanceMapArtifactInput& artifact) {
         },
         std::move(layers),
         extrapolation(artifact.condition_extrapolation),
-        [&]() -> std::optional<platform::MapCoordinateConstraint> {
+        [&]() -> std::optional<platform::OperatingEnvelopeConstraint> {
             for (const auto& constraint :
-                 artifact.coordinate_constraints) {
+                 artifact.operating_envelope) {
                 if (constraint.coordinate ==
                     artifact.condition_variable->name) {
-                    return platform::MapCoordinateConstraint{
+                    return platform::OperatingEnvelopeConstraint{
                         constraint.coordinate,
                         constraint.dimension,
                         constraint.minimum,
@@ -587,11 +587,20 @@ platform::CorrelationArtifact correlation(
             std::move(ranges), candidate.flow_regimes,
             candidate.fallback_for_unmapped_flow_regime});
     }
+    std::vector<platform::OperatingEnvelopeConstraint> envelope;
+    for (const auto& constraint : input.operating_envelope) {
+        envelope.push_back({
+            constraint.coordinate, constraint.dimension,
+            constraint.minimum, constraint.maximum,
+            constraint.minimum_inclusive,
+            constraint.maximum_inclusive,
+        });
+    }
     return {
         input.id, input.schema_version, input.revision,
         input.checksum_sha256, std::move(variables),
         {input.output.name, input.output.dimension},
-        std::move(candidates),
+        std::move(candidates), std::move(envelope),
     };
 }
 
@@ -762,6 +771,18 @@ platform::RegimeMapArtifact regime_map(
         input.id, input.schema_version, input.revision,
         input.checksum_sha256, std::move(variables),
         std::move(regions),
+        [&] {
+            std::vector<platform::OperatingEnvelopeConstraint> envelope;
+            for (const auto& constraint : input.operating_envelope) {
+                envelope.push_back({
+                    constraint.coordinate, constraint.dimension,
+                    constraint.minimum, constraint.maximum,
+                    constraint.minimum_inclusive,
+                    constraint.maximum_inclusive,
+                });
+            }
+            return envelope;
+        }(),
     };
 }
 
@@ -1110,7 +1131,7 @@ platform::PerformanceMapArtifact performance_map_artifact(
                 "' requires one ordinary map payload");
         }
         artifact.map = validate_map(
-            *input.map, input.coordinate_constraints);
+            *input.map, input.operating_envelope);
     } else if (input.schema_version ==
                platform::performance_map_artifact_schema_v2) {
         if (input.map || !input.condition_variable ||
@@ -1127,7 +1148,7 @@ platform::PerformanceMapArtifact performance_map_artifact(
                 validate_map(
                     layer.map,
                     [&] {
-                        auto constraints = input.coordinate_constraints;
+                        auto constraints = input.operating_envelope;
                         std::erase_if(
                             constraints,
                             [&](const auto& constraint) {
@@ -1146,12 +1167,12 @@ platform::PerformanceMapArtifact performance_map_artifact(
                 std::move(layers),
                 extrapolation(input.condition_extrapolation),
                 [&]() -> std::optional<
-                    platform::MapCoordinateConstraint> {
+                    platform::OperatingEnvelopeConstraint> {
                     for (const auto& constraint :
-                         input.coordinate_constraints) {
+                         input.operating_envelope) {
                         if (constraint.coordinate ==
                             input.condition_variable->name) {
-                            return platform::MapCoordinateConstraint{
+                            return platform::OperatingEnvelopeConstraint{
                                 constraint.coordinate,
                                 constraint.dimension,
                                 constraint.minimum,
@@ -1168,6 +1189,20 @@ platform::PerformanceMapArtifact performance_map_artifact(
             "unsupported performance-map artifact schema: " +
             input.schema_version);
     }
+    artifact.validate();
+    return artifact;
+}
+
+platform::CorrelationArtifact correlation_artifact(
+    const CorrelationArtifactInput& input) {
+    auto artifact = correlation(input);
+    artifact.validate();
+    return artifact;
+}
+
+platform::RegimeMapArtifact regime_map_artifact(
+    const RegimeMapArtifactInput& input) {
+    auto artifact = regime_map(input);
     artifact.validate();
     return artifact;
 }

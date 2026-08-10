@@ -257,6 +257,10 @@ a composition-aware path rather than blindly reusing the fluid policy.
 13. Add dimensioned, Study-owned operating envelopes for map coordinates and enforce them in
     request-scoped steady/transient map evaluation and durable job snapshots. ✅
 
+The same platform operating-envelope primitive governs correlation and regime-map inputs. This
+keeps Study execution policy artifact-agnostic while preserving map extrapolation, correlation
+applicability, and regime classification as separate source-artifact semantics.
+
 ## Engineering quality reviews
 
 A quality review is an auditable engineering decision, not a mutation of a performance map. Each

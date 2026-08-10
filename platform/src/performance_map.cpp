@@ -564,53 +564,13 @@ void enforce_output_constraints(
     }
 }
 
-void validate_coordinate_constraint(
-    const MapVariable& variable,
-    const MapCoordinateConstraint& constraint) {
-    if (constraint.coordinate != variable.name ||
-        constraint.dimension != variable.dimension) {
-        throw std::invalid_argument(
-            "performance-map operating-envelope coordinate does not "
-            "match its declared variable");
-    }
-    if ((!constraint.minimum && !constraint.maximum) ||
-        (constraint.minimum && !std::isfinite(*constraint.minimum)) ||
-        (constraint.maximum && !std::isfinite(*constraint.maximum)) ||
-        (constraint.minimum && constraint.maximum &&
-         (*constraint.minimum > *constraint.maximum ||
-          (*constraint.minimum == *constraint.maximum &&
-           (!constraint.minimum_inclusive ||
-            !constraint.maximum_inclusive))))) {
-        throw std::invalid_argument(
-            "performance-map operating-envelope interval is invalid");
-    }
-}
-
 void enforce_coordinate_constraint(
-    const MapCoordinateConstraint& constraint,
+    const OperatingEnvelopeConstraint& constraint,
     double value) {
-    const bool below = constraint.minimum &&
-        (value < *constraint.minimum ||
-         (value == *constraint.minimum &&
-          !constraint.minimum_inclusive));
-    const bool above = constraint.maximum &&
-        (value > *constraint.maximum ||
-         (value == *constraint.maximum &&
-          !constraint.maximum_inclusive));
-    if (below || above) {
-        std::ostringstream message;
-        message << "performance-map operating envelope rejected "
-                << "coordinate '" << constraint.coordinate
-                << "' value " << value << " outside ";
-        message << (constraint.minimum_inclusive ? '[' : '(');
-        if (constraint.minimum) message << *constraint.minimum;
-        else message << "-inf";
-        message << ", ";
-        if (constraint.maximum) message << *constraint.maximum;
-        else message << "+inf";
-        message << (constraint.maximum_inclusive ? ']' : ')')
-                << ' ' << constraint.dimension;
-        throw MapDomainError(message.str());
+    if (const auto violation = operating_envelope_violation(
+            {constraint}, {{constraint.coordinate, value}},
+            "performance-map")) {
+        throw MapDomainError(*violation);
     }
 }
 
@@ -888,13 +848,13 @@ PerformanceMap::PerformanceMap(
     MapExtrapolationPolicy primary_extrapolation,
     MapExtrapolationPolicy family_extrapolation,
     std::vector<MapOutputConstraint> output_constraints,
-    std::vector<MapCoordinateConstraint> coordinate_constraints)
+    std::vector<OperatingEnvelopeConstraint> operating_envelope)
     : primary_variable_(std::move(primary_variable)),
       family_variable_(std::move(family_variable)),
       output_variables_(std::move(output_variables)),
       curves_(std::move(curves)),
       output_constraints_(std::move(output_constraints)),
-      coordinate_constraints_(std::move(coordinate_constraints)),
+      operating_envelope_(std::move(operating_envelope)),
       primary_extrapolation_(primary_extrapolation),
       family_extrapolation_(family_extrapolation) {
     validate(
@@ -904,25 +864,11 @@ PerformanceMap::PerformanceMap(
         curves_,
         primary_extrapolation_,
         output_constraints_);
-    std::set<std::string> constrained_coordinates;
-    for (const auto& constraint : coordinate_constraints_) {
-        if (!constrained_coordinates.insert(constraint.coordinate).second) {
-            throw std::invalid_argument(
-                "performance-map operating-envelope coordinates must "
-                "be unique");
-        }
-        if (constraint.coordinate == primary_variable_.name) {
-            validate_coordinate_constraint(
-                primary_variable_, constraint);
-        } else if (constraint.coordinate == family_variable_.name) {
-            validate_coordinate_constraint(
-                family_variable_, constraint);
-        } else {
-            throw std::invalid_argument(
-                "performance-map operating envelope names an unknown "
-                "coordinate");
-        }
-    }
+    validate_operating_envelope(
+        operating_envelope_,
+        {{primary_variable_.name, primary_variable_.dimension},
+         {family_variable_.name, family_variable_.dimension}},
+        "performance-map");
     const auto output_position = [&](const std::string& name) {
         return std::distance(
             output_variables_.begin(),
@@ -969,9 +915,9 @@ PerformanceMap::output_constraints() const noexcept {
     return output_constraints_;
 }
 
-const std::vector<MapCoordinateConstraint>&
-PerformanceMap::coordinate_constraints() const noexcept {
-    return coordinate_constraints_;
+const std::vector<OperatingEnvelopeConstraint>&
+PerformanceMap::operating_envelope() const noexcept {
+    return operating_envelope_;
 }
 
 MapExtrapolationPolicy PerformanceMap::primary_extrapolation()
@@ -992,7 +938,7 @@ const MapQualityReport& PerformanceMap::quality_report()
 MapEvaluation PerformanceMap::evaluate(
     double primary_coordinate,
     double family_coordinate) const {
-    for (const auto& constraint : coordinate_constraints_) {
+    for (const auto& constraint : operating_envelope_) {
         enforce_coordinate_constraint(
             constraint,
             constraint.coordinate == primary_variable_.name
@@ -1057,7 +1003,7 @@ ConditionedPerformanceMap::ConditionedPerformanceMap(
     MapVariable condition_variable,
     std::vector<ConditionedMapLayer> layers,
     MapExtrapolationPolicy condition_extrapolation,
-    std::optional<MapCoordinateConstraint> condition_constraint)
+    std::optional<OperatingEnvelopeConstraint> condition_constraint)
     : condition_variable_(std::move(condition_variable)),
       layers_(std::move(layers)),
       condition_extrapolation_(condition_extrapolation),
@@ -1069,8 +1015,10 @@ ConditionedPerformanceMap::ConditionedPerformanceMap(
             "condition variable");
     }
     if (condition_constraint_) {
-        validate_coordinate_constraint(
-            condition_variable_, *condition_constraint_);
+        validate_operating_envelope(
+            {*condition_constraint_},
+            {{condition_variable_.name, condition_variable_.dimension}},
+            "conditioned performance-map");
     }
     if (layers_.size() < 2) {
         throw std::invalid_argument(
@@ -1174,7 +1122,7 @@ ConditionedPerformanceMap::quality_report() const noexcept {
     return quality_report_;
 }
 
-const std::optional<MapCoordinateConstraint>&
+const std::optional<OperatingEnvelopeConstraint>&
 ConditionedPerformanceMap::condition_constraint() const noexcept {
     return condition_constraint_;
 }

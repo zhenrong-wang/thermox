@@ -58,11 +58,13 @@ resolution verifies the pinned evidence again before durable submission. This is
 governance gate, not a hidden change to model readiness; Studies that declare no requirements retain
 the ordinary calculation gate.
 
-Study v3 may additionally define dimensioned operating envelopes for coordinates of selected
-performance maps. These are validated at publication and overlaid onto request-scoped map objects
-for both steady and transient execution. They do not change source-artifact readiness; they are a
+Study v3 may additionally define dimensioned operating envelopes for typed inputs of selected
+performance maps, correlations, and regime maps. These are validated at publication and overlaid
+onto request-scoped artifact objects for both steady and transient execution. They do not change
+source-artifact readiness or a correlation's native applicability evidence; they are a stricter
 Study execution policy. Out-of-envelope evaluations are rejected even if source-map extrapolation
-is permissive and surface as `artifact_operating_envelope_violation`.
+or source-correlation applicability is permissive and surface as
+`artifact_operating_envelope_violation`.
 
 ## Calculation gate
 

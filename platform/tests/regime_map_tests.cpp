@@ -91,6 +91,28 @@ void test_classification_and_boundary() {
         "derived-expression criteria must select the other region");
 }
 
+void test_study_operating_envelope_restricts_classification() {
+    const auto source = test_map();
+    thermox::platform::RegimeMapArtifact map{
+        source.id, source.schema_version, source.revision,
+        source.checksum_sha256, source.inputs(), source.regions(),
+        {{"gas_froude", "dimensionless", 0.5, 1.5, true, true}}};
+    map.validate();
+    require(
+        map.classify({
+            {"gas_froude", 1.2}, {"liquid_loading", 0.2},
+        }).succeeded(),
+        "Study envelope must permit an in-policy regime-map point");
+    const auto rejected = map.classify({
+        {"gas_froude", 2.0}, {"liquid_loading", 0.2},
+    });
+    require(
+        rejected.error.find("regime-map operating envelope rejected") !=
+            std::string::npos &&
+            rejected.error.find("gas_froude") != std::string::npos,
+        "Study envelope must reject classification outside policy");
+}
+
 void test_priority_gap_and_ambiguity() {
     auto prioritized = thermox::platform::RegimeMapArtifact{
         "priority", thermox::platform::regime_map_artifact_schema_v2,
@@ -492,6 +514,7 @@ void test_packaged_mishima_ishii_composite_map() {
 int main() {
     try {
         test_classification_and_boundary();
+        test_study_operating_envelope_restricts_classification();
         test_priority_gap_and_ambiguity();
         test_alternative_branch_selection();
         test_contract_validation_and_registry();

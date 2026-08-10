@@ -371,9 +371,11 @@ RegimeMapArtifact::RegimeMapArtifact(
     std::string artifact_revision,
     std::string artifact_checksum_sha256,
     std::vector<RegimeMapVariable> inputs,
-    std::vector<RegimeMapRegion> regions)
+    std::vector<RegimeMapRegion> regions,
+    std::vector<OperatingEnvelopeConstraint> operating_envelope)
     : inputs_(std::move(inputs)),
-      regions_(std::move(regions)) {
+      regions_(std::move(regions)),
+      operating_envelope_(std::move(operating_envelope)) {
     id = std::move(artifact_id);
     schema_version = std::move(artifact_schema_version);
     revision = std::move(artifact_revision);
@@ -420,6 +422,12 @@ void RegimeMapArtifact::validate() const {
                 "' has an invalid or duplicate input: " + input.name);
         }
     }
+    std::vector<OperatingEnvelopeVariable> envelope_variables;
+    for (const auto& input : inputs_) {
+        envelope_variables.push_back({input.name, input.dimension});
+    }
+    validate_operating_envelope(
+        operating_envelope_, envelope_variables, "regime-map");
     if (regions_.empty() || regions_.size() > maximum_regions) {
         throw std::invalid_argument(
             "regime map '" + id +
@@ -500,6 +508,11 @@ RegimeMapArtifact::regions() const noexcept {
     return regions_;
 }
 
+const std::vector<OperatingEnvelopeConstraint>&
+RegimeMapArtifact::operating_envelope() const noexcept {
+    return operating_envelope_;
+}
+
 RegimeMapEvaluation RegimeMapArtifact::classify(
     const std::map<std::string, double>& inputs) const {
     for (const auto& input : inputs_) {
@@ -512,6 +525,10 @@ RegimeMapEvaluation RegimeMapArtifact::classify(
     }
     if (inputs.size() != inputs_.size()) {
         return {{}, {}, {}, "regime map received unknown inputs"};
+    }
+    if (const auto violation = operating_envelope_violation(
+            operating_envelope_, inputs, "regime-map")) {
+        return {{}, {}, {}, *violation};
     }
 
     struct Match {

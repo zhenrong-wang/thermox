@@ -405,7 +405,7 @@ void test_request_scoped_performance_map_artifacts() {
         "execution metadata must retain engineering artifact provenance");
     auto restricted = request;
     restricted.artifacts.performance_maps.front()
-        .coordinate_constraints = {{
+        .operating_envelope = {{
         "corrected_mass_flow", "mass_flow",
         110.0, 120.0, true, true,
     }};
@@ -501,6 +501,21 @@ void test_request_scoped_correlation_artifacts() {
             response.metadata.artifacts.front().id ==
                 "request-bend-correlation",
         "correlation execution must retain immutable provenance");
+    auto restricted = request;
+    restricted.artifacts.correlations.front().operating_envelope = {{
+        "mass_flow", "mass_flow", 0.0, 1.0, true, true,
+    }};
+    const auto outside_envelope = service.run_steady(restricted);
+    require(
+        !outside_envelope.succeeded() &&
+            outside_envelope.error.code ==
+                "artifact_operating_envelope_violation" &&
+            outside_envelope.error.message.find("mass_flow") !=
+                std::string::npos,
+        "correlation operating-envelope violations must reach the "
+        "stable service error contract: " +
+            outside_envelope.error.code + ": " +
+            outside_envelope.error.message);
 }
 
 void test_correlation_applicability_reaches_component_diagnostics() {

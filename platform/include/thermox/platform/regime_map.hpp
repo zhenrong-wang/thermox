@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/engineering_artifact.hpp"
+#include "thermox/platform/operating_envelope.hpp"
 #include "thermox/platform/safe_expression.hpp"
 
 #include <map>
@@ -97,7 +98,9 @@ public:
         std::string artifact_revision,
         std::string artifact_checksum_sha256,
         std::vector<RegimeMapVariable> inputs,
-        std::vector<RegimeMapRegion> regions);
+        std::vector<RegimeMapRegion> regions,
+        std::vector<OperatingEnvelopeConstraint>
+            operating_envelope = {});
 
     [[nodiscard]] std::string_view artifact_type()
         const noexcept override {
@@ -109,12 +112,15 @@ public:
         const noexcept;
     [[nodiscard]] const std::vector<RegimeMapRegion>& regions()
         const noexcept;
+    [[nodiscard]] const std::vector<OperatingEnvelopeConstraint>&
+        operating_envelope() const noexcept;
     [[nodiscard]] RegimeMapEvaluation classify(
         const std::map<std::string, double>& inputs) const;
 
 private:
     std::vector<RegimeMapVariable> inputs_;
     std::vector<RegimeMapRegion> regions_;
+    std::vector<OperatingEnvelopeConstraint> operating_envelope_;
     std::vector<std::vector<std::vector<SafeExpression>>>
         compiled_criteria_;
 };

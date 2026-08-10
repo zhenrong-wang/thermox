@@ -249,64 +249,12 @@ platform::EngineeringArtifactRegistry execution_engineering_artifacts(
             detail::performance_map_artifact(input));
     }
     for (const auto& input : inputs.correlations) {
-        std::vector<platform::CorrelationVariable> variables;
-        variables.reserve(input.inputs.size());
-        for (const auto& variable : input.inputs) {
-            variables.push_back(
-                {variable.name, variable.dimension});
-        }
-        std::vector<platform::CorrelationCandidate> candidates;
-        for (const auto& candidate : input.candidates) {
-            std::vector<platform::CorrelationApplicabilityRange> ranges;
-            for (const auto& range : candidate.applicability) {
-                ranges.push_back({
-                    range.input, range.minimum, range.maximum,
-                    range.minimum_inclusive,
-                    range.maximum_inclusive});
-            }
-            candidates.push_back({
-                candidate.id, candidate.regime, candidate.priority,
-                candidate.coefficients, candidate.expression,
-                std::move(ranges), candidate.flow_regimes,
-                candidate.fallback_for_unmapped_flow_regime});
-        }
-        artifacts.register_artifact(platform::CorrelationArtifact{
-            input.id, input.schema_version, input.revision,
-            input.checksum_sha256, std::move(variables),
-            {input.output.name, input.output.dimension},
-            std::move(candidates)});
+        artifacts.register_artifact(
+            detail::correlation_artifact(input));
     }
     for (const auto& input : inputs.regime_maps) {
-        std::vector<platform::RegimeMapVariable> variables;
-        for (const auto& variable : input.inputs) {
-            variables.push_back({variable.name, variable.dimension});
-        }
-        std::vector<platform::RegimeMapRegion> regions;
-        for (const auto& region : input.regions) {
-            std::vector<platform::RegimeMapBranch> branches;
-            for (const auto& branch : region.branches) {
-                std::vector<platform::RegimeMapCriterion> criteria;
-                for (const auto& criterion : branch.criteria) {
-                    criteria.push_back({
-                        criterion.expression, criterion.dimension,
-                        criterion.minimum, criterion.maximum,
-                        criterion.minimum_inclusive,
-                        criterion.maximum_inclusive,
-                    });
-                }
-                branches.push_back({
-                    branch.id, branch.priority, std::move(criteria),
-                });
-            }
-            regions.push_back({
-                region.id, region.regime, region.priority,
-                std::move(branches),
-            });
-        }
-        artifacts.register_artifact(platform::RegimeMapArtifact{
-            input.id, input.schema_version, input.revision,
-            input.checksum_sha256, std::move(variables),
-            std::move(regions)});
+        artifacts.register_artifact(
+            detail::regime_map_artifact(input));
     }
     return artifacts;
 }
@@ -2368,7 +2316,8 @@ SteadySimulationResponse SimulationService::run_steady(
     if (!result.diagnostics.converged) {
         response.status = OperationStatus::solver_failed;
         const bool operating_envelope_violation =
-            result.diagnostics.message.find("operating envelope") !=
+            result.diagnostics.message.find(
+                platform::operating_envelope_violation_code) !=
             std::string::npos;
         response.error = make_error(
             operating_envelope_violation
@@ -2974,7 +2923,8 @@ TransientSimulationResponse SimulationService::run_transient(
     if (!result.diagnostics.success) {
         response.status = OperationStatus::solver_failed;
         const bool operating_envelope_violation =
-            result.diagnostics.message.find("operating envelope") !=
+            result.diagnostics.message.find(
+                platform::operating_envelope_violation_code) !=
             std::string::npos;
         response.error = make_error(
             operating_envelope_violation

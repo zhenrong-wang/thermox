@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/platform/engineering_artifact.hpp"
+#include "thermox/platform/operating_envelope.hpp"
 #include "thermox/platform/safe_expression.hpp"
 
 #include <limits>
@@ -135,7 +136,9 @@ public:
         std::string artifact_checksum_sha256,
         std::vector<CorrelationVariable> inputs,
         CorrelationVariable output,
-        std::vector<CorrelationCandidate> candidates);
+        std::vector<CorrelationCandidate> candidates,
+        std::vector<OperatingEnvelopeConstraint>
+            operating_envelope = {});
 
     [[nodiscard]] std::string_view artifact_type()
         const noexcept override {
@@ -149,6 +152,8 @@ public:
         const noexcept;
     [[nodiscard]] const std::vector<CorrelationCandidate>& candidates()
         const noexcept;
+    [[nodiscard]] const std::vector<OperatingEnvelopeConstraint>&
+        operating_envelope() const noexcept;
     [[nodiscard]] CorrelationApplicabilityAssessment assess_applicability(
         const std::map<std::string, double>& inputs) const;
     [[nodiscard]] CorrelationEvaluation evaluate(
@@ -159,6 +164,7 @@ private:
     std::vector<CorrelationVariable> inputs_;
     CorrelationVariable output_;
     std::vector<CorrelationCandidate> candidates_;
+    std::vector<OperatingEnvelopeConstraint> operating_envelope_;
     std::vector<SafeExpression> compiled_candidates_;
 };
 

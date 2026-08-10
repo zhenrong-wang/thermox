@@ -45,7 +45,13 @@ publication accepts `artifact_type=thermox.regime_map` and
 `artifact_schema_version=thermox.regime_map/v2`, canonicalizes and validates the payload before
 content-addressed persistence, and resolves an exact revision into job snapshots. Regions,
 branches, priorities, and criteria participate in job idempotency fingerprints and PostgreSQL job
-encoding. The containing job contract is `thermox.job/v14`.
+encoding. The containing job contract is `thermox.job/v15`.
+
+An immutable Study may apply a dimensioned operating envelope to any declared regime-map input.
+The policy is distinct from the source map's classification criteria: it restricts where that exact
+artifact revision is authorized to execute. Classification fails before region selection outside
+the policy, using the same `artifact_operating_envelope_violation` service contract as performance
+maps and correlations.
 
 The generic `pipe.fluid.correlated_two_phase_pressure_drop` model exposes the optional
 `friction_regime_map` artifact role. When bound, compilation verifies the property backend's

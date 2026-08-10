@@ -38,8 +38,8 @@ thermox::platform::PerformanceMap sample_map(
         thermox::platform::MapExtrapolationPolicy::reject,
     thermox::platform::MapExtrapolationPolicy family =
         thermox::platform::MapExtrapolationPolicy::reject,
-    std::vector<thermox::platform::MapCoordinateConstraint>
-        coordinate_constraints = {}) {
+    std::vector<thermox::platform::OperatingEnvelopeConstraint>
+        operating_envelope = {}) {
     return {
         {"corrected_flow", "mass_flow"},
         {"corrected_speed", "angular_speed"},
@@ -66,7 +66,7 @@ thermox::platform::PerformanceMap sample_map(
         primary,
         family,
         {},
-        std::move(coordinate_constraints),
+        std::move(operating_envelope),
     };
 }
 

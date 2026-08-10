@@ -119,6 +119,22 @@ void append_applicability(
     }
 }
 
+void append_operating_envelope(
+    std::ostringstream& stream,
+    const std::vector<ArtifactCoordinateConstraintInput>& envelope) {
+    stream << envelope.size() << '|';
+    for (const auto& constraint : envelope) {
+        append_string(stream, constraint.coordinate);
+        append_string(stream, constraint.dimension);
+        stream << constraint.minimum.has_value() << '|';
+        if (constraint.minimum) stream << *constraint.minimum << '|';
+        stream << constraint.maximum.has_value() << '|';
+        if (constraint.maximum) stream << *constraint.maximum << '|';
+        stream << constraint.minimum_inclusive << '|'
+               << constraint.maximum_inclusive << '|';
+    }
+}
+
 void append_artifacts(
     std::ostringstream& stream,
     const SimulationArtifactBundle& artifacts) {
@@ -144,17 +160,7 @@ void append_artifacts(
             append_map_payload(stream, layer.map);
         }
         append_string(stream, artifact.condition_extrapolation);
-        stream << artifact.coordinate_constraints.size() << '|';
-        for (const auto& constraint : artifact.coordinate_constraints) {
-            append_string(stream, constraint.coordinate);
-            append_string(stream, constraint.dimension);
-            stream << constraint.minimum.has_value() << '|';
-            if (constraint.minimum) stream << *constraint.minimum << '|';
-            stream << constraint.maximum.has_value() << '|';
-            if (constraint.maximum) stream << *constraint.maximum << '|';
-            stream << constraint.minimum_inclusive << '|'
-                   << constraint.maximum_inclusive << '|';
-        }
+        append_operating_envelope(stream, artifact.operating_envelope);
     }
     stream << artifacts.correlations.size() << '|';
     for (const auto& artifact : artifacts.correlations) {
@@ -182,6 +188,7 @@ void append_artifacts(
             append_string(stream, candidate.expression);
             append_applicability(stream, candidate.applicability);
         }
+        append_operating_envelope(stream, artifact.operating_envelope);
     }
     stream << artifacts.regime_maps.size() << '|';
     for (const auto& artifact : artifacts.regime_maps) {
@@ -220,6 +227,7 @@ void append_artifacts(
                 }
             }
         }
+        append_operating_envelope(stream, artifact.operating_envelope);
     }
     stream << artifacts.references.size() << '|';
     for (const auto& reference : artifacts.references) {
@@ -386,7 +394,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v14) {
+    if (request.schema_version != job_schema_v15) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);

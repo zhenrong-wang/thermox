@@ -1583,6 +1583,7 @@ StudyRevisionRecord ProjectService::create_study_revision(
                 "artifact operating envelopes require a selected "
                 "artifact and at least one coordinate");
         }
+        std::map<std::string, std::string> declared_coordinates;
         const auto map = std::find_if(
             resolved_artifacts->snapshot.performance_maps.begin(),
             resolved_artifacts->snapshot.performance_maps.end(),
@@ -1590,22 +1591,57 @@ StudyRevisionRecord ProjectService::create_study_revision(
                 return candidate.revision ==
                     envelope.artifact_revision_id;
             });
-        if (map ==
+        if (map !=
             resolved_artifacts->snapshot.performance_maps.end()) {
-            throw ProjectRequestError(
-                "artifact operating envelopes currently require a "
-                "performance-map artifact");
-        }
-        const auto matches_variable = [&](const auto& coordinate) {
             const auto& payload = map->map
                 ? *map->map : map->layers.front().map;
-            return (payload.primary_variable.name == coordinate.coordinate &&
-                    payload.primary_variable.dimension == coordinate.dimension) ||
-                (payload.family_variable.name == coordinate.coordinate &&
-                 payload.family_variable.dimension == coordinate.dimension) ||
-                (map->condition_variable &&
-                 map->condition_variable->name == coordinate.coordinate &&
-                 map->condition_variable->dimension == coordinate.dimension);
+            declared_coordinates.emplace(
+                payload.primary_variable.name,
+                payload.primary_variable.dimension);
+            declared_coordinates.emplace(
+                payload.family_variable.name,
+                payload.family_variable.dimension);
+            if (map->condition_variable) {
+                declared_coordinates.emplace(
+                    map->condition_variable->name,
+                    map->condition_variable->dimension);
+            }
+        } else if (const auto correlation = std::find_if(
+                       resolved_artifacts->snapshot.correlations.begin(),
+                       resolved_artifacts->snapshot.correlations.end(),
+                       [&](const auto& candidate) {
+                           return candidate.revision ==
+                               envelope.artifact_revision_id;
+                       });
+                   correlation !=
+                       resolved_artifacts->snapshot.correlations.end()) {
+            for (const auto& input : correlation->inputs) {
+                declared_coordinates.emplace(
+                    input.name, input.dimension);
+            }
+        } else if (const auto regime_map = std::find_if(
+                       resolved_artifacts->snapshot.regime_maps.begin(),
+                       resolved_artifacts->snapshot.regime_maps.end(),
+                       [&](const auto& candidate) {
+                           return candidate.revision ==
+                               envelope.artifact_revision_id;
+                       });
+                   regime_map !=
+                       resolved_artifacts->snapshot.regime_maps.end()) {
+            for (const auto& input : regime_map->inputs) {
+                declared_coordinates.emplace(
+                    input.name, input.dimension);
+            }
+        } else {
+            throw ProjectRequestError(
+                "artifact operating envelopes require a performance "
+                "map, correlation, or regime-map artifact");
+        }
+        const auto matches_variable = [&](const auto& coordinate) {
+            const auto variable = declared_coordinates.find(
+                coordinate.coordinate);
+            return variable != declared_coordinates.end() &&
+                variable->second == coordinate.dimension;
         };
         for (const auto& coordinate : envelope.coordinates) {
             if (!matches_variable(coordinate) ||
@@ -2074,19 +2110,41 @@ ProjectService::resolve_run_configuration(
         }
     }
     for (const auto& envelope : study->artifact_operating_envelopes) {
-        const auto artifact = std::find_if(
+        const auto map = std::find_if(
             artifacts->snapshot.performance_maps.begin(),
             artifacts->snapshot.performance_maps.end(),
             [&](const auto& candidate) {
                 return candidate.revision ==
                     envelope.artifact_revision_id;
             });
-        if (artifact == artifacts->snapshot.performance_maps.end()) {
-            throw ProjectStateError(
-                "persisted Study operating-envelope artifact was not "
-                "found");
+        if (map != artifacts->snapshot.performance_maps.end()) {
+            map->operating_envelope = envelope.coordinates;
+            continue;
         }
-        artifact->coordinate_constraints = envelope.coordinates;
+        const auto correlation = std::find_if(
+            artifacts->snapshot.correlations.begin(),
+            artifacts->snapshot.correlations.end(),
+            [&](const auto& candidate) {
+                return candidate.revision ==
+                    envelope.artifact_revision_id;
+            });
+        if (correlation != artifacts->snapshot.correlations.end()) {
+            correlation->operating_envelope = envelope.coordinates;
+            continue;
+        }
+        const auto regime_map = std::find_if(
+            artifacts->snapshot.regime_maps.begin(),
+            artifacts->snapshot.regime_maps.end(),
+            [&](const auto& candidate) {
+                return candidate.revision ==
+                    envelope.artifact_revision_id;
+            });
+        if (regime_map != artifacts->snapshot.regime_maps.end()) {
+            regime_map->operating_envelope = envelope.coordinates;
+            continue;
+        }
+        throw ProjectStateError(
+            "persisted Study operating-envelope artifact was not found");
     }
     return ResolvedRunConfiguration{
         *configuration,

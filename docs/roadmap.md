@@ -294,7 +294,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v14` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v15` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -598,9 +598,10 @@ Work items:
     - immutable v2 Study qualification policies pinning exact artifact/review evidence, explicit
       acceptable approving dispositions, deterministic checksums, publication and run-resolution
       enforcement, normalized PostgreSQL constraints, and thin HTTP/web contracts. ✅
-    - dimensioned v3 Study operating envelopes for primary/family/condition map coordinates,
-      request-scoped runtime enforcement overriding permissive source extrapolation, durable v14
-      job snapshots/fingerprints, and stable violation errors. ✅
+    - dimensioned v3 Study operating envelopes for performance-map coordinates, correlation
+      inputs, and regime-map inputs; shared platform validation; request-scoped runtime enforcement
+      overriding permissive source behavior; durable v15 job snapshots/fingerprints; and stable
+      violation errors. ✅
     - dedicated engineering reviewer roles remain a follow-on.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.

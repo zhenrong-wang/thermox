@@ -299,7 +299,7 @@ export interface StudyRevision {
   created_at_epoch_ms: number
 }
 
-export interface MapCoordinateConstraint {
+export interface ArtifactCoordinateConstraint {
   coordinate: string
   dimension: string
   minimum?: number
@@ -310,7 +310,7 @@ export interface MapCoordinateConstraint {
 
 export interface ArtifactOperatingEnvelope {
   artifact_revision_id: string
-  coordinates: MapCoordinateConstraint[]
+  coordinates: ArtifactCoordinateConstraint[]
 }
 
 export interface ArtifactQualificationRequirement {
@@ -469,7 +469,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v14'
+  schema_version: 'thermox.job/v15'
   job_id: string
   owner: {
     team_id: string
@@ -479,7 +479,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v14'
+    schema_version: 'thermox.job/v15'
     mode: 'steady' | 'transient' | 'calibration'
     case_id: string
     calibration_id: string

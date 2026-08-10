@@ -151,7 +151,7 @@ struct ArtifactQualificationRequirement {
 
 struct ArtifactOperatingEnvelope {
     std::string artifact_revision_id;
-    std::vector<MapCoordinateConstraintInput> coordinates;
+    std::vector<ArtifactCoordinateConstraintInput> coordinates;
 };
 
 struct StudyRevisionRecord {

@@ -1659,7 +1659,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
                             field);
                     }
                 }
-                service::MapCoordinateConstraintInput coordinate;
+                service::ArtifactCoordinateConstraintInput coordinate;
                 coordinate.coordinate =
                     encoded.get<std::string>("coordinate", "");
                 coordinate.dimension =

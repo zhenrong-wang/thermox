@@ -1332,6 +1332,24 @@ void test_run_configurations_bind_complete_execution_intent() {
         "thermox.performance_map/v1",
         performance_map_payload(),
     });
+    const auto correlation = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "run-correlation",
+        {},
+        "thermox.correlation",
+        "thermox.correlation/v2",
+        correlation_payload(),
+    });
+    const auto regime_map = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "run-regime-map",
+        {},
+        "thermox.regime_map",
+        "thermox.regime_map/v2",
+        regime_map_payload(),
+    });
     const auto map_review =
         service.create_performance_map_quality_review({
             team_a,
@@ -1352,6 +1370,8 @@ void test_run_configurations_bind_complete_execution_intent() {
     study_request.intent = simulation_case.mode;
     study_request.artifact_revision_ids = {
         artifact.artifact_revision_id,
+        correlation.artifact_revision_id,
+        regime_map.artifact_revision_id,
     };
     study_request.artifact_qualification_requirements = {{
         artifact.artifact_revision_id,
@@ -1372,6 +1392,13 @@ void test_run_configurations_bind_complete_execution_intent() {
             true,
             true,
         }},
+    }, {
+        correlation.artifact_revision_id,
+        {{"mass_flow", "mass_flow", 1.0, 20.0, true, true}},
+    }, {
+        regime_map.artifact_revision_id,
+        {{"vapor_weber_number", "dimensionless", 1.0, 30.0,
+          true, true}},
     }};
     study_request.result_projections = {
         {
@@ -1414,14 +1441,20 @@ void test_run_configurations_bind_complete_execution_intent() {
             resolved &&
             resolved->study.artifact_qualification_requirements.size() ==
                 1U &&
-            resolved->study.artifact_operating_envelopes.size() == 1U &&
+            resolved->study.artifact_operating_envelopes.size() == 3U &&
             resolved->study.result_projections.size() == 1U &&
             resolved->model_case.model_revision_id ==
                 model.model_revision_id &&
             resolved->artifacts.snapshot.performance_maps
                     .size() == 1U &&
             resolved->artifacts.snapshot.performance_maps.front()
-                    .coordinate_constraints.front().minimum == 70.0,
+                    .operating_envelope.front().minimum == 70.0 &&
+            resolved->artifacts.snapshot.correlations.size() == 1U &&
+            resolved->artifacts.snapshot.correlations.front()
+                    .operating_envelope.front().minimum == 1.0 &&
+            resolved->artifacts.snapshot.regime_maps.size() == 1U &&
+            resolved->artifacts.snapshot.regime_maps.front()
+                    .operating_envelope.front().maximum == 30.0,
         "run configurations must immutably bind the complete "
         "execution intent and resolve its snapshots");
     auto unacceptable_policy = study_request;

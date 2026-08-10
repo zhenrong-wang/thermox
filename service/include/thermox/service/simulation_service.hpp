@@ -408,7 +408,7 @@ struct ConditionedMapLayerInput {
     PerformanceMapPayloadInput map;
 };
 
-struct MapCoordinateConstraintInput {
+struct ArtifactCoordinateConstraintInput {
     std::string coordinate;
     std::string dimension;
     std::optional<double> minimum;
@@ -426,7 +426,7 @@ struct PerformanceMapArtifactInput {
     std::optional<MapVariableInput> condition_variable;
     std::vector<ConditionedMapLayerInput> layers;
     std::string condition_extrapolation{"reject"};
-    std::vector<MapCoordinateConstraintInput> coordinate_constraints;
+    std::vector<ArtifactCoordinateConstraintInput> operating_envelope;
 };
 
 struct CorrelationVariableInput {
@@ -461,6 +461,7 @@ struct CorrelationArtifactInput {
     std::vector<CorrelationVariableInput> inputs;
     CorrelationVariableInput output;
     std::vector<CorrelationCandidateInput> candidates;
+    std::vector<ArtifactCoordinateConstraintInput> operating_envelope;
 };
 
 struct RegimeMapVariableInput {
@@ -497,6 +498,7 @@ struct RegimeMapArtifactInput {
     std::string checksum_sha256;
     std::vector<RegimeMapVariableInput> inputs;
     std::vector<RegimeMapRegionInput> regions;
+    std::vector<ArtifactCoordinateConstraintInput> operating_envelope;
 };
 
 struct CorrelationTemplateBindingInput {

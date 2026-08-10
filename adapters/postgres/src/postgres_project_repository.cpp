@@ -366,7 +366,7 @@ decode_operating_envelopes(const std::string& payload) {
                     "persisted operating-envelope coordinates are not "
                     "an array");
             }
-            service::MapCoordinateConstraintInput coordinate;
+            service::ArtifactCoordinateConstraintInput coordinate;
             coordinate.coordinate = encoded.get<std::string>("coordinate");
             coordinate.dimension = encoded.get<std::string>("dimension");
             if (const auto minimum = encoded.get_optional<double>("minimum")) {

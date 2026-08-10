@@ -1,6 +1,8 @@
 #pragma once
 
 #include "thermox/platform/performance_map.hpp"
+#include "thermox/platform/correlation.hpp"
+#include "thermox/platform/regime_map.hpp"
 #include "thermox/service/simulation_service.hpp"
 
 #include <string>
@@ -9,6 +11,12 @@ namespace thermox::service::detail {
 
 platform::PerformanceMapArtifact performance_map_artifact(
     const PerformanceMapArtifactInput& input);
+
+platform::CorrelationArtifact correlation_artifact(
+    const CorrelationArtifactInput& input);
+
+platform::RegimeMapArtifact regime_map_artifact(
+    const RegimeMapArtifactInput& input);
 
 PerformanceMapQualitySummary performance_map_quality_summary(
     const platform::PerformanceMapArtifact& artifact);
