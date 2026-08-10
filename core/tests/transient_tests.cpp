@@ -155,6 +155,9 @@ void test_transient_solver_executes_independent_structural_blocks() {
     options.max_step = 0.05;
     options.nonlinear_options.structural_decomposition_enabled =
         true;
+    const bool umfpack =
+        thermox::make_default_sparse_factorization()
+            ->backend_name() == "umfpack";
     const auto result = thermox::integrate_dae(problem, options);
     require(result.diagnostics.success,
             result.diagnostics.message);
@@ -162,6 +165,14 @@ void test_transient_solver_executes_independent_structural_blocks() {
         result.diagnostics.structural_block_solves > 0 &&
             result.diagnostics.largest_linear_system_size == 1,
         "transient initialization and stages execute independent scalar blocks");
+    require(result.diagnostics.numeric_factorizations > 1,
+            "transient block stages refresh numeric factorizations");
+    require(
+        result.diagnostics.symbolic_factorizations ==
+            (umfpack ? 1 : 0),
+        "equal transient block patterns share one symbolic analysis: actual=" +
+            std::to_string(
+                result.diagnostics.symbolic_factorizations));
 }
 
 void test_dae_equation_system_builder_rejects_non_square_system() {

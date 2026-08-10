@@ -93,8 +93,13 @@ struct SolverOptions {
     LinearSolverFunction linear_solver;
     SparseLinearSolverFunction sparse_linear_solver;
     // Reused across Newton iterations and, when supplied by an integrator,
-    // across transient stages. Custom one-shot hooks take precedence.
+    // across transient stages. Custom one-shot hooks take precedence, and an
+    // explicit factorization takes precedence over a resolver.
     SparseFactorizationPtr sparse_factorization;
+    // Resolves a reusable factorization for an exact fixed CSR pattern. This
+    // prevents symbolic-cache thrashing when structural blocks have different
+    // patterns and are revisited by continuation or transient stages.
+    SparseFactorizationResolver sparse_factorization_resolver;
 };
 
 struct IterationDiagnostic {

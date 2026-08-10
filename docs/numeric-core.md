@@ -142,9 +142,13 @@ Changing dimensions or sparsity invalidates the symbolic cache. The object seria
 shared instance cannot corrupt its cache if called concurrently.
 
 `solve_newton` creates one default factorization per nonlinear solve. A caller may inject a shared
-factorization through `SolverOptions`; the DAE integrator does this automatically for sparse
-problems so consistent initialization and every full/half implicit stage share the same symbolic
-analysis. Fixed-pattern DAE initialization now derives its mixed Jacobian directly from the DAE
+factorization through `SolverOptions`. For structurally decomposed solves, an exact-pattern
+resolver retains one factorization per distinct CSR structure. Equal block patterns share an
+instance, while alternating unlike patterns do not evict one another's symbolic analysis. The
+resolver cache and each factorization serialize access. Continuation and DAE orchestration install
+this resolver automatically when block execution is enabled; monolithic sparse paths retain one
+shared factorization across stages. An explicit factorization or custom one-shot solver remains
+authoritative. Fixed-pattern DAE initialization derives its mixed Jacobian directly from the DAE
 callback: differential columns use `dF/d(y_dot)` and algebraic columns use `dF/dy`.
 
 Diagnostics identify the selected linear backend and distinguish symbolic and numeric
@@ -171,9 +175,9 @@ equation name at the returned state. Transient diagnostics retain the largest su
 converged consistent-initialization and implicit-stage solves. These values make the conservation,
 property, or closure equation limiting numerical acceptance explicit instead of hiding it inside
 one aggregate norm.
-For a fixed-pattern UMFPACK solve, one symbolic factorization and one numeric factorization per
-Newton matrix are expected. The one-shot `solve_sparse_linear_system` and custom dense/sparse
-hooks remain available for isolated calls and backend testing.
+For a fixed-pattern UMFPACK solve, one symbolic factorization per distinct retained pattern and one
+numeric factorization per Newton matrix are expected. The one-shot `solve_sparse_linear_system`
+and custom dense/sparse hooks remain available for isolated calls and backend testing.
 
 ## Physics-layer responsibilities
 

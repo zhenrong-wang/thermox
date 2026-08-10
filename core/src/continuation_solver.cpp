@@ -455,10 +455,17 @@ ContinuationSolveResult solve_continuation(
          problem.sparse_jacobian ||
          problem.partial_sparse_jacobian) &&
         !staged_solver.sparse_factorization &&
+        !staged_solver.sparse_factorization_resolver &&
         !staged_solver.sparse_linear_solver &&
         !staged_solver.linear_solver) {
-        staged_solver.sparse_factorization =
-            make_default_sparse_factorization();
+        if (staged_solver.structural_decomposition_enabled &&
+            problem.sparse_jacobian_pattern.has_value()) {
+            staged_solver.sparse_factorization_resolver =
+                make_default_sparse_factorization_resolver();
+        } else {
+            staged_solver.sparse_factorization =
+                make_default_sparse_factorization();
+        }
     }
 
     ContinuationSolveResult result;

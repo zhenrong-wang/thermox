@@ -23,5 +23,7 @@ using LinearSolverFunction = std::function<LinearSolveResult(Matrix a, std::vect
 using SparseLinearSolverFunction =
     std::function<LinearSolveResult(SparseMatrix a, std::vector<double> b)>;
 using SparseFactorizationPtr = std::shared_ptr<SparseFactorization>;
+using SparseFactorizationResolver =
+    std::function<SparseFactorizationPtr(const SparsePattern& pattern)>;
 
 }  // namespace thermox

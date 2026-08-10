@@ -756,10 +756,17 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     if ((problem.sparse_jacobian_pattern.has_value() ||
          problem.sparse_jacobian) &&
         !nonlinear_options.sparse_factorization &&
+        !nonlinear_options.sparse_factorization_resolver &&
         !nonlinear_options.sparse_linear_solver &&
         !nonlinear_options.linear_solver) {
-        nonlinear_options.sparse_factorization =
-            make_default_sparse_factorization();
+        if (nonlinear_options.structural_decomposition_enabled &&
+            problem.sparse_jacobian_pattern.has_value()) {
+            nonlinear_options.sparse_factorization_resolver =
+                make_default_sparse_factorization_resolver();
+        } else {
+            nonlinear_options.sparse_factorization =
+                make_default_sparse_factorization();
+        }
     }
     const auto accumulate_nonlinear_diagnostics =
         [&result](const SolverDiagnostics& diagnostics) {

@@ -5,8 +5,10 @@
 #include <cstddef>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <sstream>
+#include <tuple>
 #include <utility>
 
 #if defined(THERMOX_HAS_UMFPACK)
@@ -20,6 +22,25 @@ namespace {
 bool is_effectively_zero(double value, double tolerance) {
     return std::abs(value) <= tolerance;
 }
+
+struct SparsePatternKey {
+    std::size_t rows{0};
+    std::size_t columns{0};
+    std::vector<std::size_t> row_offsets;
+    std::vector<std::size_t> column_indices;
+
+    [[nodiscard]] bool operator<(
+        const SparsePatternKey& other) const {
+        return std::tie(rows, columns, row_offsets, column_indices) <
+               std::tie(other.rows, other.columns,
+                        other.row_offsets, other.column_indices);
+    }
+};
+
+struct SparseFactorizationResolverState {
+    std::mutex mutex;
+    std::map<SparsePatternKey, SparseFactorizationPtr> entries;
+};
 
 std::vector<std::map<std::size_t, double>> to_sparse_rows(const SparseMatrix& matrix) {
     std::vector<std::map<std::size_t, double>> rows(matrix.rows());
@@ -359,6 +380,25 @@ SparseFactorizationPtr make_default_sparse_factorization() {
 #else
     return std::make_shared<ReferenceSparseFactorization>();
 #endif
+}
+
+SparseFactorizationResolver
+make_default_sparse_factorization_resolver() {
+    auto state =
+        std::make_shared<SparseFactorizationResolverState>();
+    return [state](const SparsePattern& pattern) {
+        SparsePatternKey key{
+            pattern.rows(), pattern.columns(),
+            pattern.row_offsets(), pattern.column_indices()};
+        std::lock_guard<std::mutex> lock(state->mutex);
+        const auto found = state->entries.find(key);
+        if (found != state->entries.end()) {
+            return found->second;
+        }
+        auto factorization = make_default_sparse_factorization();
+        state->entries.emplace(std::move(key), factorization);
+        return factorization;
+    };
 }
 
 LinearSolveResult solve_sparse_linear_system(

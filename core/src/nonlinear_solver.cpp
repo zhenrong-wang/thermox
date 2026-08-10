@@ -1482,6 +1482,12 @@ NonlinearSolveResult solve_newton_monolithic(
     SolverDiagnostics diagnostics;
     SparseFactorizationPtr factorization =
         options.sparse_factorization;
+    if (!factorization &&
+        options.sparse_factorization_resolver &&
+        problem.sparse_jacobian_pattern.has_value()) {
+        factorization = options.sparse_factorization_resolver(
+            *problem.sparse_jacobian_pattern);
+    }
     if (!factorization && !options.sparse_linear_solver &&
         !options.linear_solver) {
         factorization = make_default_sparse_factorization();
@@ -1692,6 +1698,15 @@ NonlinearSolveResult solve_newton_by_structural_blocks(
     result.x = problem.initial_guess;
     SolverOptions block_options = options;
     block_options.structural_decomposition_enabled = false;
+    auto factorization_resolver =
+        options.sparse_factorization_resolver;
+    if (!factorization_resolver &&
+        !options.sparse_factorization &&
+        !options.sparse_linear_solver &&
+        !options.linear_solver) {
+        factorization_resolver =
+            make_default_sparse_factorization_resolver();
+    }
     // The monolithic solver may accept a step-tolerance termination at up to
     // ten times its residual tolerance. Allocate that allowance across the
     // blocks so their combined L2 residual still satisfies the caller's
@@ -1703,6 +1718,13 @@ NonlinearSolveResult solve_newton_by_structural_blocks(
     for (const auto& block : structure.structural_blocks) {
         auto restricted = make_structural_block_problem(
             problem, block, result.x);
+        if (!options.sparse_factorization &&
+            factorization_resolver &&
+            restricted.sparse_jacobian_pattern.has_value()) {
+            block_options.sparse_factorization =
+                factorization_resolver(
+                    *restricted.sparse_jacobian_pattern);
+        }
         auto solved = solve_newton_monolithic(
             restricted, block_options);
         ++result.diagnostics.structural_block_solves;

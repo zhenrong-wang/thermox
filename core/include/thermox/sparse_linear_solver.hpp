@@ -20,6 +20,12 @@ public:
 [[nodiscard]] SparseFactorizationPtr
 make_default_sparse_factorization();
 
+// Returns a thread-safe resolver that retains one factorization backend per
+// exact CSR pattern. Equal patterns share symbolic analysis; different block
+// patterns cannot evict one another.
+[[nodiscard]] SparseFactorizationResolver
+make_default_sparse_factorization_resolver();
+
 LinearSolveResult solve_sparse_linear_system(SparseMatrix a, std::vector<double> b);
 
 }  // namespace thermox

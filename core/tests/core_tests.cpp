@@ -148,6 +148,32 @@ void test_reusable_sparse_factorization() {
             "changed pattern invalidates symbolic analysis");
 }
 
+void test_sparse_factorization_resolver_keys_exact_patterns() {
+    const auto resolver =
+        thermox::make_default_sparse_factorization_resolver();
+    const auto diagonal = thermox::sparse_from_triplets(
+        2, 2, {{0, 0, 1.0}, {1, 1, 1.0}}).pattern();
+    const auto diagonal_copy = thermox::SparsePattern(
+        diagonal.rows(), diagonal.columns(),
+        diagonal.row_offsets(), diagonal.column_indices());
+    const auto coupled = thermox::sparse_from_triplets(
+        2, 2,
+        {{0, 0, 1.0}, {0, 1, 1.0},
+         {1, 0, 1.0}, {1, 1, 1.0}}).pattern();
+
+    const auto first = resolver(diagonal);
+    const auto equal = resolver(diagonal_copy);
+    const auto different = resolver(coupled);
+    require(first != nullptr && different != nullptr,
+            "factorization resolver creates backends");
+    require(first == equal,
+            "equal CSR structures reuse one factorization");
+    require(first != different,
+            "different CSR structures retain separate factorizations");
+    require(resolver(diagonal) == first,
+            "resolver retains an earlier pattern after another lookup");
+}
+
 void test_newton_reuses_sparse_symbolic_factorization() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"x"};
@@ -1587,6 +1613,7 @@ int main() {
         test_dense_linear_solver();
         test_sparse_linear_solver();
         test_reusable_sparse_factorization();
+        test_sparse_factorization_resolver_keys_exact_patterns();
         test_newton_reuses_sparse_symbolic_factorization();
         test_continuation_recovers_difficult_initial_guess();
         test_continuation_falls_back_to_solvable_target();

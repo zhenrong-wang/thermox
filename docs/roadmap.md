@@ -552,8 +552,10 @@ Work items:
      sparse values and enforcing a final whole-system residual check; ✅
    - optional residual-row and fixed-CSR-offset evaluation contracts, automatically assembled by
      steady and DAE equation builders and consumed by block Newton; ✅
-   - informed-continuation derivative subsets, automatic policy selection, cross-stage block
-     factorization caches, and tearing inside an irreducible block remain follow-ons.
+   - exact-CSR-pattern factorization resolver with symbolic reuse across structural blocks,
+     continuation stages, and transient initialization/full/half stages; ✅
+   - informed-continuation derivative subsets, automatic policy selection, and tearing inside an
+     irreducible block remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,
