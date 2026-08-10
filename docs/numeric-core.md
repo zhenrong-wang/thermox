@@ -148,7 +148,12 @@ analysis. Fixed-pattern DAE initialization now derives its mixed Jacobian direct
 callback: differential columns use `dF/d(y_dot)` and algebraic columns use `dF/dy`.
 
 Diagnostics identify the selected linear backend and distinguish symbolic and numeric
-factorization counts in native and service results.
+factorization counts in native and service results. Every backend result is also checked against
+the exact dimensionless Newton system using the normalized backward error
+`||A x - b||inf / (||A||inf ||x||inf + ||b||inf)`. A non-finite result or an error above the
+configured linear tolerance rejects that Newton solve instead of allowing an inaccurate step to
+contaminate nonlinear convergence. Diagnostics retain the last and worst accepted linear errors;
+continuation and transient integration propagate the worst error across all internal solves.
 Steady diagnostics also report the largest absolute normalized residual and its registered
 equation name at the returned state. Transient diagnostics retain the largest such residual among
 converged consistent-initialization and implicit-stage solves. These values make the conservation,

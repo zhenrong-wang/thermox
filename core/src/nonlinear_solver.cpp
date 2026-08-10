@@ -47,6 +47,10 @@ void validate_options(const SolverOptions& options) {
     if (!is_positive_finite(options.step_tolerance)) {
         throw std::invalid_argument("step_tolerance must be positive and finite");
     }
+    if (!is_positive_finite(options.linear_residual_tolerance)) {
+        throw std::invalid_argument(
+            "linear_residual_tolerance must be positive and finite");
+    }
     if (!is_positive_finite(options.finite_difference_epsilon)) {
         throw std::invalid_argument("finite_difference_epsilon must be positive and finite");
     }
@@ -477,6 +481,91 @@ LinearSolveResult validate_linear_result(LinearSolveResult result, std::size_t e
     return result;
 }
 
+double normalized_backward_error(
+    const Matrix& matrix,
+    const std::vector<double>& x,
+    const std::vector<double>& rhs) {
+    long double matrix_norm = 0.0;
+    long double solution_norm = 0.0;
+    long double rhs_norm = 0.0;
+    long double residual_norm = 0.0;
+    for (const double value : x) {
+        solution_norm = std::max(
+            solution_norm,
+            std::abs(static_cast<long double>(value)));
+    }
+    for (std::size_t row = 0; row < matrix.size(); ++row) {
+        long double row_norm = 0.0;
+        long double product = 0.0;
+        for (std::size_t column = 0;
+             column < matrix[row].size(); ++column) {
+            row_norm += std::abs(
+                static_cast<long double>(matrix[row][column]));
+            product +=
+                static_cast<long double>(matrix[row][column]) *
+                static_cast<long double>(x[column]);
+        }
+        matrix_norm = std::max(matrix_norm, row_norm);
+        rhs_norm = std::max(
+            rhs_norm,
+            std::abs(static_cast<long double>(rhs[row])));
+        residual_norm = std::max(
+            residual_norm,
+            std::abs(product -
+                     static_cast<long double>(rhs[row])));
+    }
+    const long double denominator =
+        matrix_norm * solution_norm + rhs_norm;
+    if (denominator == 0.0L) {
+        return residual_norm == 0.0L
+            ? 0.0
+            : std::numeric_limits<double>::infinity();
+    }
+    return static_cast<double>(residual_norm / denominator);
+}
+
+double normalized_backward_error(
+    const SparseMatrix& matrix,
+    const std::vector<double>& x,
+    const std::vector<double>& rhs) {
+    long double matrix_norm = 0.0;
+    long double solution_norm = 0.0;
+    long double rhs_norm = 0.0;
+    long double residual_norm = 0.0;
+    for (const double value : x) {
+        solution_norm = std::max(
+            solution_norm,
+            std::abs(static_cast<long double>(value)));
+    }
+    for (std::size_t row = 0; row < matrix.rows(); ++row) {
+        long double row_norm = 0.0;
+        long double product = 0.0;
+        for (std::size_t offset = matrix.row_offsets()[row];
+             offset < matrix.row_offsets()[row + 1]; ++offset) {
+            const long double value = matrix.values()[offset];
+            row_norm += std::abs(value);
+            product += value * static_cast<long double>(
+                x[matrix.column_indices()[offset]]);
+        }
+        matrix_norm = std::max(matrix_norm, row_norm);
+        rhs_norm = std::max(
+            rhs_norm,
+            std::abs(static_cast<long double>(rhs[row])));
+        residual_norm = std::max(
+            residual_norm,
+            std::abs(product -
+                     static_cast<long double>(rhs[row])));
+    }
+    const long double denominator =
+        matrix_norm * solution_norm + rhs_norm;
+    if (denominator == 0.0L) {
+        return residual_norm == 0.0L
+            ? 0.0
+            : std::numeric_limits<double>::infinity();
+    }
+    return static_cast<double>(residual_norm / denominator);
+}
+
 LinearSolveResult solve_linear_system(const SolverOptions& options,
                                       const SparseFactorizationPtr& factorization,
                                       EvaluatedJacobian jacobian,
@@ -486,17 +575,29 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
     ++diagnostics.linear_solver_evaluations;
 
     LinearSolveResult result;
+    double backward_error = std::numeric_limits<double>::infinity();
     if (options.sparse_linear_solver) {
         diagnostics.linear_solver_backend =
             "custom-sparse-hook";
         auto sparse = jacobian.is_sparse ? std::move(jacobian.sparse)
                                          : sparse_from_dense(jacobian.dense);
-        result = options.sparse_linear_solver(std::move(sparse), std::move(rhs));
+        result = options.sparse_linear_solver(sparse, rhs);
+        result = validate_linear_result(
+            std::move(result), expected_size);
+        if (result.success) {
+            backward_error = normalized_backward_error(
+                sparse, result.x, rhs);
+        }
     } else if (jacobian.is_sparse && !options.linear_solver) {
         diagnostics.linear_solver_backend =
             std::string(factorization->backend_name());
-        result = factorization->solve(
-            jacobian.sparse, std::move(rhs));
+        result = factorization->solve(jacobian.sparse, rhs);
+        result = validate_linear_result(
+            std::move(result), expected_size);
+        if (result.success) {
+            backward_error = normalized_backward_error(
+                jacobian.sparse, result.x, rhs);
+        }
     } else if (options.sparse_factorization &&
                !options.linear_solver) {
         diagnostics.linear_solver_backend =
@@ -504,21 +605,50 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
         auto sparse = jacobian.is_sparse
             ? std::move(jacobian.sparse)
             : sparse_from_dense(jacobian.dense);
-        result = factorization->solve(sparse, std::move(rhs));
+        result = factorization->solve(sparse, rhs);
+        result = validate_linear_result(
+            std::move(result), expected_size);
+        if (result.success) {
+            backward_error = normalized_backward_error(
+                sparse, result.x, rhs);
+        }
     } else {
         diagnostics.linear_solver_backend =
             options.linear_solver
             ? "custom-dense-hook"
             : "reference-dense";
         auto dense = jacobian.is_sparse ? jacobian.sparse.to_dense() : std::move(jacobian.dense);
-        result = options.linear_solver ? options.linear_solver(std::move(dense), std::move(rhs))
-                                       : solve_dense_linear_system(std::move(dense), std::move(rhs));
+        result = options.linear_solver
+            ? options.linear_solver(dense, rhs)
+            : solve_dense_linear_system(dense, rhs);
+        result = validate_linear_result(
+            std::move(result), expected_size);
+        if (result.success) {
+            backward_error = normalized_backward_error(
+                dense, result.x, rhs);
+        }
     }
     diagnostics.symbolic_factorizations +=
         result.symbolic_factorizations;
     diagnostics.numeric_factorizations +=
         result.numeric_factorizations;
-    return validate_linear_result(std::move(result), expected_size);
+    if (!result.success) return result;
+    diagnostics.last_linear_backward_error = backward_error;
+    diagnostics.maximum_linear_backward_error = std::max(
+        diagnostics.maximum_linear_backward_error,
+        backward_error);
+    if (!std::isfinite(backward_error) ||
+        backward_error > options.linear_residual_tolerance) {
+        std::ostringstream message;
+        message << std::scientific << std::setprecision(6)
+                << "linear backend normalized backward error "
+                << backward_error << " exceeds tolerance "
+                << options.linear_residual_tolerance;
+        result.success = false;
+        result.message = message.str();
+        result.x.clear();
+    }
+    return result;
 }
 
 }  // namespace

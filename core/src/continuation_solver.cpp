@@ -311,6 +311,11 @@ void accumulate_diagnostics(
         stage.symbolic_factorizations;
     aggregate.numeric_factorizations +=
         stage.numeric_factorizations;
+    aggregate.last_linear_backward_error =
+        stage.last_linear_backward_error;
+    aggregate.maximum_linear_backward_error = std::max(
+        aggregate.maximum_linear_backward_error,
+        stage.maximum_linear_backward_error);
     if (stage.linear_solver_backend != "not-used") {
         aggregate.linear_solver_backend =
             stage.linear_solver_backend;

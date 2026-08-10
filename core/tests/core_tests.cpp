@@ -682,6 +682,12 @@ void test_newton_solver_validates_options_and_problem() {
     require_throws_invalid_argument([&]() { (void)thermox::solve_newton(problem, invalid_options); },
                                     "invalid damping_reduction should throw");
 
+    invalid_options = {};
+    invalid_options.linear_residual_tolerance = 0.0;
+    require_throws_invalid_argument(
+        [&]() { (void)thermox::solve_newton(problem, invalid_options); },
+        "invalid linear_residual_tolerance should throw");
+
     thermox::NonlinearProblem invalid_problem = problem;
     invalid_problem.variable_scales = {0.0};
     require_throws_invalid_argument([&]() { (void)thermox::solve_newton(invalid_problem); },
@@ -727,6 +733,12 @@ void test_newton_solver_uses_custom_linear_solver() {
     require(calls > 0, "custom linear solver was called");
     require(result.diagnostics.linear_solver_evaluations == calls,
             "linear solver diagnostics match custom calls");
+    require(
+        result.diagnostics.last_linear_backward_error <=
+                options.linear_residual_tolerance &&
+            result.diagnostics.maximum_linear_backward_error <=
+                options.linear_residual_tolerance,
+        "custom backend result carries verified linear accuracy");
 }
 
 void test_newton_solver_reports_linear_solver_failure() {
@@ -775,6 +787,41 @@ void test_newton_solver_rejects_invalid_linear_solver_step() {
     require(!result.diagnostics.converged, "invalid linear solver step should not converge");
     require_contains(result.diagnostics.message, "linear solver returned step with wrong size",
                      "invalid linear solver step message");
+}
+
+void test_newton_solver_rejects_inaccurate_linear_solver_step() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"linear"};
+    problem.initial_guess = {0.0};
+    problem.residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        residual[0] = x[0] - 1.0;
+    };
+    problem.jacobian = [](
+        const std::vector<double>&,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = 1.0;
+    };
+
+    thermox::SolverOptions options;
+    options.linear_solver = [](
+        thermox::Matrix,
+        std::vector<double> rhs) {
+        return thermox::LinearSolveResult{
+            true, {0.5 * rhs[0]}, "inaccurate custom step"};
+    };
+    const auto result = thermox::solve_newton(problem, options);
+    require(
+        !result.diagnostics.converged &&
+            result.diagnostics.maximum_linear_backward_error >
+                options.linear_residual_tolerance,
+        "Newton rejects a backend step that does not solve its scaled system");
+    require_contains(
+        result.diagnostics.message,
+        "normalized backward error",
+        "inaccurate backend diagnostic reports quantitative failure");
 }
 
 void test_line_search_failure_names_dominant_residual() {
@@ -1381,6 +1428,7 @@ int main() {
         test_newton_solver_uses_custom_linear_solver();
         test_newton_solver_reports_linear_solver_failure();
         test_newton_solver_rejects_invalid_linear_solver_step();
+        test_newton_solver_rejects_inaccurate_linear_solver_step();
         test_line_search_failure_names_dominant_residual();
         test_newton_solver_uses_residual_scales_for_convergence();
         test_newton_solver_scales_linear_system_rows();

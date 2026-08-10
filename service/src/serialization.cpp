@@ -1762,8 +1762,14 @@ std::string serialize_steady_response_json(
         << ", \"symbolic_factorizations\": "
         << response.diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "
-        << response.diagnostics.numeric_factorizations
-        << ", \"linear_solver_backend\": ";
+        << response.diagnostics.numeric_factorizations;
+    out << ", \"last_linear_backward_error\": ";
+    json_number(
+        out, response.diagnostics.last_linear_backward_error);
+    out << ", \"maximum_linear_backward_error\": ";
+    json_number(
+        out, response.diagnostics.maximum_linear_backward_error);
+    out << ", \"linear_solver_backend\": ";
     json_string(
         out, response.diagnostics.linear_solver_backend);
     out
@@ -1807,6 +1813,9 @@ std::string serialize_steady_response_json(
             stage.final_maximum_absolute_normalized_residual);
         out << ", \"limiting_residual\": ";
         json_string(out, stage.limiting_residual);
+        out << ", \"maximum_linear_backward_error\": ";
+        json_number(
+            out, stage.maximum_linear_backward_error);
         out << ", \"message\": ";
         json_string(out, stage.message);
         out << '}';
@@ -2008,8 +2017,12 @@ std::string serialize_transient_response_json(
         << ", \"symbolic_factorizations\": "
         << response.diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "
-        << response.diagnostics.numeric_factorizations
-        << ", \"linear_solver_backend\": ";
+        << response.diagnostics.numeric_factorizations;
+    out << ", \"maximum_linear_backward_error\": ";
+    json_number(
+        out,
+        response.diagnostics.maximum_linear_backward_error);
+    out << ", \"linear_solver_backend\": ";
     json_string(
         out, response.diagnostics.linear_solver_backend);
     out

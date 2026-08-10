@@ -206,6 +206,7 @@ export interface SteadySolverSettings {
   max_iterations: number
   residual_tolerance: number
   step_tolerance: number
+  linear_residual_tolerance: number
   finite_difference_epsilon: number
   min_damping: number
   damping_reduction: number
@@ -671,6 +672,8 @@ export interface SteadySimulationResult {
     final_maximum_absolute_normalized_residual: number
     limiting_residual: string
     final_step_norm: number
+    last_linear_backward_error: number
+    maximum_linear_backward_error: number
     function_evaluations: number
     jacobian_evaluations: number
     linear_solver_evaluations: number
@@ -695,6 +698,7 @@ export interface SteadySimulationResult {
       final_residual_norm: number
       final_maximum_absolute_normalized_residual: number
       limiting_residual: string
+      maximum_linear_backward_error: number
       message: string
     }>
   }
@@ -735,6 +739,7 @@ export interface TransientSimulationResult {
     limiting_error_variable: string
     maximum_absolute_normalized_residual: number
     limiting_nonlinear_residual: string
+    maximum_linear_backward_error: number
     message: string
   }
   trajectory: TransientGraphSample[]

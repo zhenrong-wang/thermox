@@ -3665,15 +3665,28 @@ void test_steady_service() {
         "steady result must identify the platform build");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton/v2" &&
+            "thermox.newton/v3" &&
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
         response.diagnostics
                 .final_maximum_absolute_normalized_residual <=
             response.diagnostics.final_residual_norm &&
-            !response.diagnostics.limiting_residual.empty(),
+            !response.diagnostics.limiting_residual.empty() &&
+            response.diagnostics.maximum_linear_backward_error <=
+                request.solver.linear_residual_tolerance,
         "steady result must identify its limiting normalized equation");
+    require(
+        std::any_of(
+            response.metadata.solver.settings.begin(),
+            response.metadata.solver.settings.end(),
+            [&request](const auto& setting) {
+                return setting.name ==
+                           "linear_residual_tolerance" &&
+                       setting.value ==
+                           request.solver.linear_residual_tolerance;
+            }),
+        "steady provenance must record the linear accuracy contract");
     require(
         !response.metadata.catalog_fingerprint.empty(),
         "steady result must record runtime catalog fingerprint");
@@ -3760,6 +3773,8 @@ void test_steady_service() {
                 std::string::npos &&
             json.find("\"settings\": {") != std::string::npos &&
             json.find("\"limiting_residual\":") !=
+                std::string::npos &&
+            json.find("\"maximum_linear_backward_error\":") !=
                 std::string::npos,
         "steady JSON must serialize complete execution provenance");
 }
@@ -3800,7 +3815,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v2",
+            "thermox.newton-continuation/v3",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(
@@ -3813,6 +3828,8 @@ void test_steady_continuation_service() {
             json.find("\"target_parameter\": 1") !=
                 std::string::npos &&
             json.find("\"limiting_residual\":") !=
+                std::string::npos &&
+            json.find("\"maximum_linear_backward_error\":") !=
                 std::string::npos,
         "steady JSON must expose continuation diagnostics");
 }
@@ -3912,7 +3929,7 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v3",
+            "thermox.dae-bdf/v4",
         "transient result must record solver contract");
     require(
         response.diagnostics.maximum_order_used == 2 &&
@@ -3924,9 +3941,12 @@ void test_transient_service() {
                     .maximum_absolute_normalized_residual <=
                 1.0e-9 &&
             !response.diagnostics
-                 .limiting_nonlinear_residual.empty(),
+                 .limiting_nonlinear_residual.empty() &&
+            response.diagnostics.maximum_linear_backward_error <=
+                request.solver.nonlinear_solver
+                    .linear_residual_tolerance,
         "native transient service must expose scale-aware BDF order "
-        "plus local-error and implicit-constraint evidence");
+        "plus local-error, implicit-constraint, and linear-solve evidence");
     const auto end_time_setting = std::find_if(
         response.metadata.solver.settings.begin(),
         response.metadata.solver.settings.end(),
@@ -4016,6 +4036,17 @@ void test_invalid_solver_settings() {
     require(
         response.error.code == "invalid_solver_settings",
         "invalid solver settings must have a stable error code");
+
+    request.solver.end_time = 1.0;
+    request.solver.nonlinear_solver.linear_residual_tolerance =
+        0.0;
+    const auto invalid_linear = service.run_transient(request);
+    require(
+        invalid_linear.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            invalid_linear.error.code ==
+                "invalid_solver_settings",
+        "invalid linear accuracy settings must be rejected");
 }
 
 thermox::service::GraphResult projection_graph(double kpi_value) {

@@ -35,6 +35,7 @@ void append_steady_settings(
     stream << settings.max_iterations << '|'
            << settings.residual_tolerance << '|'
            << settings.step_tolerance << '|'
+           << settings.linear_residual_tolerance << '|'
            << settings.finite_difference_epsilon << '|'
            << settings.min_damping << '|'
            << settings.damping_reduction << '|'

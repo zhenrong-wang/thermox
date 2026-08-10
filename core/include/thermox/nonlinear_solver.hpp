@@ -60,6 +60,9 @@ struct SolverOptions {
     int max_iterations{50};
     double residual_tolerance{1.0e-9};
     double step_tolerance{1.0e-10};
+    // Maximum normalized backward error accepted from any dense, sparse, or
+    // custom linear backend solving the dimensionless Newton system.
+    double linear_residual_tolerance{1.0e-10};
     // Relative perturbation applied to the larger of the declared variable
     // scale and current magnitude. Interior columns use a central difference;
     // physical-domain boundaries fall back to the valid one-sided difference.
@@ -97,6 +100,8 @@ struct SolverDiagnostics {
     int linear_solver_evaluations{0};
     int symbolic_factorizations{0};
     int numeric_factorizations{0};
+    double last_linear_backward_error{0.0};
+    double maximum_linear_backward_error{0.0};
     std::string linear_solver_backend{"not-used"};
     std::string message;
     std::vector<IterationDiagnostic> history;

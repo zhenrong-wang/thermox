@@ -1261,6 +1261,7 @@ void parse_steady_solver(
         "max_iterations",
         "residual_tolerance",
         "step_tolerance",
+        "linear_residual_tolerance",
         "finite_difference_epsilon",
         "min_damping",
         "damping_reduction",
@@ -1286,6 +1287,9 @@ void parse_steady_solver(
         "residual_tolerance", solver.residual_tolerance);
     solver.step_tolerance =
         tree.get("step_tolerance", solver.step_tolerance);
+    solver.linear_residual_tolerance = tree.get(
+        "linear_residual_tolerance",
+        solver.linear_residual_tolerance);
     solver.finite_difference_epsilon = tree.get(
         "finite_difference_epsilon",
         solver.finite_difference_epsilon);

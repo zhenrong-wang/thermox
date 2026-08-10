@@ -90,6 +90,10 @@ export function resultDiagnosticSummary(
           value: result.diagnostics.limiting_nonlinear_residual || '—',
         },
         {
+          label: 'Worst linear error',
+          value: number(result.diagnostics.maximum_linear_backward_error),
+        },
+        {
           label: 'Linear solver',
           value: result.diagnostics.linear_solver_backend || '—',
         },
@@ -119,6 +123,10 @@ export function resultDiagnosticSummary(
       {
         label: 'Step norm',
         value: number(result.diagnostics.final_step_norm),
+      },
+      {
+        label: 'Worst linear error',
+        value: number(result.diagnostics.maximum_linear_backward_error),
       },
       {
         label: 'Function evaluations',

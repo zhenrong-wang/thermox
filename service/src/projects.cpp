@@ -177,6 +177,8 @@ void validate_steady_solver(
         value.residual_tolerance <= 0.0 ||
         !std::isfinite(value.step_tolerance) ||
         value.step_tolerance <= 0.0 ||
+        !std::isfinite(value.linear_residual_tolerance) ||
+        value.linear_residual_tolerance <= 0.0 ||
         !std::isfinite(value.finite_difference_epsilon) ||
         value.finite_difference_epsilon <= 0.0 ||
         !std::isfinite(value.min_damping) ||
@@ -234,6 +236,7 @@ void append_steady(
     out << value.max_iterations << '|'
         << value.residual_tolerance << '|'
         << value.step_tolerance << '|'
+        << value.linear_residual_tolerance << '|'
         << value.finite_difference_epsilon << '|'
         << value.min_damping << '|'
         << value.damping_reduction << '|'

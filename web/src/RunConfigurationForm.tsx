@@ -32,6 +32,7 @@ const steadyFields: Array<{
   { key: 'max_iterations', label: 'Max iterations', integer: true },
   { key: 'residual_tolerance', label: 'Residual tolerance' },
   { key: 'step_tolerance', label: 'Step tolerance' },
+  { key: 'linear_residual_tolerance', label: 'Linear solve tolerance' },
   { key: 'finite_difference_epsilon', label: 'FD epsilon' },
   { key: 'min_damping', label: 'Minimum damping' },
   { key: 'damping_reduction', label: 'Damping reduction' },

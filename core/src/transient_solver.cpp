@@ -630,6 +630,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 diagnostics.symbolic_factorizations;
             result.diagnostics.numeric_factorizations +=
                 diagnostics.numeric_factorizations;
+            result.diagnostics.maximum_linear_backward_error =
+                std::max(
+                    result.diagnostics
+                        .maximum_linear_backward_error,
+                    diagnostics.maximum_linear_backward_error);
             if (diagnostics.linear_solver_backend !=
                 "not-used") {
                 result.diagnostics.linear_solver_backend =

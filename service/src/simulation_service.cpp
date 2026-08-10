@@ -907,6 +907,8 @@ void validate_settings(const SteadySolverSettings& settings) {
         settings.residual_tolerance <= 0.0 ||
         !std::isfinite(settings.step_tolerance) ||
         settings.step_tolerance <= 0.0 ||
+        !std::isfinite(settings.linear_residual_tolerance) ||
+        settings.linear_residual_tolerance <= 0.0 ||
         !std::isfinite(settings.finite_difference_epsilon) ||
         settings.finite_difference_epsilon <= 0.0 ||
         !std::isfinite(settings.min_damping) ||
@@ -960,6 +962,8 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     options.max_iterations = settings.max_iterations;
     options.residual_tolerance = settings.residual_tolerance;
     options.step_tolerance = settings.step_tolerance;
+    options.linear_residual_tolerance =
+        settings.linear_residual_tolerance;
     options.finite_difference_epsilon =
         settings.finite_difference_epsilon;
     options.min_damping = settings.min_damping;
@@ -1069,13 +1073,15 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v2"
-            : "thermox.newton/v2",
+            ? "thermox.newton-continuation/v3"
+            : "thermox.newton/v3",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
             {"residual_tolerance", settings.residual_tolerance},
             {"step_tolerance", settings.step_tolerance},
+            {"linear_residual_tolerance",
+             settings.linear_residual_tolerance},
             {"finite_difference_epsilon",
              settings.finite_difference_epsilon},
             {"min_damping", settings.min_damping},
@@ -1131,7 +1137,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v3",
+        "thermox.dae-bdf/v4",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1177,6 +1183,8 @@ NonlinearDiagnostics copy_diagnostics(
         source.linear_solver_evaluations,
         source.symbolic_factorizations,
         source.numeric_factorizations,
+        source.last_linear_backward_error,
+        source.maximum_linear_backward_error,
         source.linear_solver_backend,
         source.message,
     };
@@ -1203,6 +1211,7 @@ ContinuationRunDiagnostics copy_diagnostics(
             stage.nonlinear
                 .final_maximum_absolute_normalized_residual,
             stage.nonlinear.limiting_residual,
+            stage.nonlinear.maximum_linear_backward_error,
             stage.nonlinear.message,
         });
     }
@@ -1220,6 +1229,7 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.nonlinear_iterations,
         source.symbolic_factorizations,
         source.numeric_factorizations,
+        source.maximum_linear_backward_error,
         source.linear_solver_backend,
         source.final_time,
         source.last_step,

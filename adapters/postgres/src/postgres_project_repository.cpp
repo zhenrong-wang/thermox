@@ -60,6 +60,9 @@ Tree steady_solver_tree(
     tree.put("residual_tolerance", value.residual_tolerance);
     tree.put("step_tolerance", value.step_tolerance);
     tree.put(
+        "linear_residual_tolerance",
+        value.linear_residual_tolerance);
+    tree.put(
         "finite_difference_epsilon",
         value.finite_difference_epsilon);
     tree.put("min_damping", value.min_damping);
@@ -99,6 +102,8 @@ service::SteadySolverSettings decode_steady_solver(
         tree.get<double>("residual_tolerance");
     value.step_tolerance =
         tree.get<double>("step_tolerance");
+    value.linear_residual_tolerance =
+        tree.get<double>("linear_residual_tolerance");
     value.finite_difference_epsilon =
         tree.get<double>("finite_difference_epsilon");
     value.min_damping = tree.get<double>("min_damping");

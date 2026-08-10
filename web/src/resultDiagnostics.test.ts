@@ -18,6 +18,8 @@ function steadyResult(): SimulationResult {
       final_maximum_absolute_normalized_residual: 2e-8,
       limiting_residual: 'component.compressor.energy',
       final_step_norm: 1e-9,
+      last_linear_backward_error: 3e-15,
+      maximum_linear_backward_error: 8e-15,
       function_evaluations: 11,
       jacobian_evaluations: 4,
       linear_solver_evaluations: 4,
@@ -53,6 +55,10 @@ describe('resultDiagnosticSummary', () => {
       label: 'Limiting equation',
       value: 'component.compressor.energy',
     })
+    expect(summary.facts).toContainEqual({
+      label: 'Worst linear error',
+      value: '8.000e-15',
+    })
   })
 
   it('surfaces transient integration evidence', () => {
@@ -81,6 +87,7 @@ describe('resultDiagnosticSummary', () => {
         limiting_error_variable: 'drum.total_energy',
         maximum_absolute_normalized_residual: 8e-10,
         limiting_nonlinear_residual: 'component.drum.energy',
+        maximum_linear_backward_error: 7e-14,
         message: 'integration complete',
       },
     } satisfies SimulationResult
@@ -97,6 +104,10 @@ describe('resultDiagnosticSummary', () => {
     expect(summary.facts).toContainEqual({
       label: 'Limiting constraint',
       value: 'component.drum.energy',
+    })
+    expect(summary.facts).toContainEqual({
+      label: 'Worst linear error',
+      value: '7.000e-14',
     })
   })
 

@@ -107,6 +107,10 @@ void test_dae_equation_system_builder() {
             options.nonlinear_options.sparse_factorization
                 ->backend_name(),
         "DAE diagnostics report selected sparse backend");
+    require(
+        integrated.diagnostics.maximum_linear_backward_error <=
+            options.nonlinear_options.linear_residual_tolerance,
+        "DAE diagnostics bound the worst implicit linear solve error");
 }
 
 void test_dae_equation_system_builder_rejects_non_square_system() {

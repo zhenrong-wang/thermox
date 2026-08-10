@@ -224,6 +224,8 @@ void steady_solver_json(
         << solver.residual_tolerance
         << ", \"step_tolerance\": "
         << solver.step_tolerance
+        << ", \"linear_residual_tolerance\": "
+        << solver.linear_residual_tolerance
         << ", \"finite_difference_epsilon\": "
         << solver.finite_difference_epsilon
         << ", \"min_damping\": "

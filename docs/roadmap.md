@@ -546,6 +546,8 @@ Work items:
      service diagnostics; ✅
    - deterministic matched-incidence SCC decomposition into dependency-ordered irreducible square
      blocks, retained by steady/transient graph compilation and exposed through validation; ✅
+   - backend-independent normalized backward-error verification for every scaled Newton linear
+     solve, with configurable acceptance and steady/continuation/transient diagnostics; ✅
    - block-wise execution and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
