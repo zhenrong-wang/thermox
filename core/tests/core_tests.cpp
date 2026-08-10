@@ -823,6 +823,15 @@ void test_newton_solver_uses_residual_scales_for_convergence() {
     require(result.diagnostics.iterations == 0, "scaled residual converges at initial guess");
     require_near(result.diagnostics.final_residual_norm, 0.1, 1.0e-12,
                  "diagnostics report scaled residual norm");
+    require_near(
+        result.diagnostics
+            .final_maximum_absolute_normalized_residual,
+        0.1, 1.0e-12,
+        "diagnostics report the worst normalized equation residual");
+    require(
+        result.diagnostics.limiting_residual ==
+            "large_unit_residual",
+        "diagnostics name the limiting physical equation");
     require_near(result.x[0], 0.0, 0.0, "scaled convergence leaves accepted initial guess");
 }
 

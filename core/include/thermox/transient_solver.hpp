@@ -129,6 +129,8 @@ struct TimeIntegrationDiagnostics {
     double maximum_accepted_error_norm{0.0};
     double maximum_error_ratio{0.0};
     std::string limiting_error_variable;
+    double maximum_absolute_normalized_residual{0.0};
+    std::string limiting_nonlinear_residual;
     std::string message;
 };
 

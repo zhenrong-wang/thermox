@@ -1153,6 +1153,8 @@ NonlinearDiagnostics copy_diagnostics(
         source.converged,
         source.iterations,
         source.final_residual_norm,
+        source.final_maximum_absolute_normalized_residual,
+        source.limiting_residual,
         source.final_step_norm,
         source.function_evaluations,
         source.jacobian_evaluations,
@@ -1182,6 +1184,9 @@ ContinuationRunDiagnostics copy_diagnostics(
             stage.accepted,
             stage.nonlinear.iterations,
             stage.nonlinear.final_residual_norm,
+            stage.nonlinear
+                .final_maximum_absolute_normalized_residual,
+            stage.nonlinear.limiting_residual,
             stage.nonlinear.message,
         });
     }
@@ -1206,6 +1211,8 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.maximum_accepted_error_norm,
         source.maximum_error_ratio,
         source.limiting_error_variable,
+        source.maximum_absolute_normalized_residual,
+        source.limiting_nonlinear_residual,
         source.message,
     };
 }

@@ -317,6 +317,9 @@ void accumulate_diagnostics(
     }
     aggregate.final_residual_norm =
         stage.final_residual_norm;
+    aggregate.final_maximum_absolute_normalized_residual =
+        stage.final_maximum_absolute_normalized_residual;
+    aggregate.limiting_residual = stage.limiting_residual;
     aggregate.final_step_norm = stage.final_step_norm;
 }
 

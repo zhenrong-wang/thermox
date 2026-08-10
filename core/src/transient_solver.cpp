@@ -635,6 +635,19 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 result.diagnostics.linear_solver_backend =
                     diagnostics.linear_solver_backend;
             }
+            if (diagnostics.converged &&
+                (result.diagnostics.limiting_nonlinear_residual.empty() ||
+                 diagnostics
+                        .final_maximum_absolute_normalized_residual >
+                     result.diagnostics
+                         .maximum_absolute_normalized_residual)) {
+                result.diagnostics
+                    .maximum_absolute_normalized_residual =
+                    diagnostics
+                        .final_maximum_absolute_normalized_residual;
+                result.diagnostics.limiting_nonlinear_residual =
+                    diagnostics.limiting_residual;
+            }
         };
     std::vector<double> state = problem.initial_state;
     std::vector<double> derivative =

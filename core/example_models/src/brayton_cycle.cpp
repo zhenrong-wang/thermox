@@ -136,6 +136,12 @@ std::string format_brayton_result_json(const BraytonCycleResult& result) {
     out << "  \"converged\": " << (result.diagnostics.converged ? "true" : "false") << ",\n";
     out << "  \"iterations\": " << result.diagnostics.iterations << ",\n";
     out << "  \"final_residual_norm\": " << result.diagnostics.final_residual_norm << ",\n";
+    out << "  \"final_maximum_absolute_normalized_residual\": "
+        << result.diagnostics
+               .final_maximum_absolute_normalized_residual
+        << ",\n";
+    out << "  \"limiting_residual\": \""
+        << result.diagnostics.limiting_residual << "\",\n";
     out << "  \"message\": \"" << result.diagnostics.message << "\",\n";
     out << "  \"variables\": {\n";
     for (std::size_t i = 0; i < result.variable_names.size(); ++i) {
@@ -162,6 +168,11 @@ std::string format_brayton_result_text(const BraytonCycleResult& result) {
     out << "converged: " << (result.diagnostics.converged ? "yes" : "no")
         << " iterations: " << result.diagnostics.iterations
         << " residual_norm: " << std::scientific << result.diagnostics.final_residual_norm
+        << " worst_residual: "
+        << result.diagnostics
+               .final_maximum_absolute_normalized_residual
+        << " limiting_equation: "
+        << result.diagnostics.limiting_residual
         << std::fixed << "\n";
     out << "message: " << result.diagnostics.message << "\n";
     out << "\nVariables\n";

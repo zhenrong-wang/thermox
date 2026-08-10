@@ -684,6 +684,8 @@ struct NonlinearDiagnostics {
     bool converged{false};
     int iterations{0};
     double final_residual_norm{0.0};
+    double final_maximum_absolute_normalized_residual{0.0};
+    std::string limiting_residual;
     double final_step_norm{0.0};
     int function_evaluations{0};
     int jacobian_evaluations{0};
@@ -700,6 +702,8 @@ struct ContinuationStageDiagnostics {
     bool accepted{false};
     int nonlinear_iterations{0};
     double final_residual_norm{0.0};
+    double final_maximum_absolute_normalized_residual{0.0};
+    std::string limiting_residual;
     std::string message;
 };
 
@@ -730,6 +734,8 @@ struct TimeIntegrationDiagnostics {
     double maximum_accepted_error_norm{0.0};
     double maximum_error_ratio{0.0};
     std::string limiting_error_variable;
+    double maximum_absolute_normalized_residual{0.0};
+    std::string limiting_nonlinear_residual;
     std::string message;
 };
 

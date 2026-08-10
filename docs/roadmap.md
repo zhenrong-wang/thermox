@@ -78,6 +78,8 @@ Delivered:
    - bounded second-order central finite differences with recoverable one-sided physical-domain
      fallback, shared by Newton assembly and analytic-Jacobian verification. ✅
 4. Recoverable/fatal physics-evaluation status and bounds-aware line-search recovery. ✅
+   - named maximum normalized equation residuals for returned steady states and converged
+     transient implicit stages, propagated through service and UI diagnostics. ✅
 5. Duplicate-name validation and fixed-pattern structural matching. ✅
 6. Index-1 DAE contract, consistent initial conditions, implicit adaptive integration, and events. ✅
    - per-differential-state absolute error weighting through declared physical scales, retained

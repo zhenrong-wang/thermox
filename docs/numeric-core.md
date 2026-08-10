@@ -141,6 +141,11 @@ callback: differential columns use `dF/d(y_dot)` and algebraic columns use `dF/d
 
 Diagnostics identify the selected linear backend and distinguish symbolic and numeric
 factorization counts in native and service results.
+Steady diagnostics also report the largest absolute normalized residual and its registered
+equation name at the returned state. Transient diagnostics retain the largest such residual among
+converged consistent-initialization and implicit-stage solves. These values make the conservation,
+property, or closure equation limiting numerical acceptance explicit instead of hiding it inside
+one aggregate norm.
 For a fixed-pattern UMFPACK solve, one symbolic factorization and one numeric factorization per
 Newton matrix are expected. The one-shot `solve_sparse_linear_system` and custom dense/sparse
 hooks remain available for isolated calls and backend testing.

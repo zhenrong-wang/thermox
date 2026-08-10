@@ -3650,6 +3650,12 @@ void test_steady_service() {
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
+        response.diagnostics
+                .final_maximum_absolute_normalized_residual <=
+            response.diagnostics.final_residual_norm &&
+            !response.diagnostics.limiting_residual.empty(),
+        "steady result must identify its limiting normalized equation");
+    require(
         !response.metadata.catalog_fingerprint.empty(),
         "steady result must record runtime catalog fingerprint");
     require(
@@ -3733,7 +3739,9 @@ void test_steady_service() {
     require(
         json.find("\"platform_version\": \"0.2.0\"") !=
                 std::string::npos &&
-            json.find("\"settings\": {") != std::string::npos,
+            json.find("\"settings\": {") != std::string::npos &&
+            json.find("\"limiting_residual\":") !=
+                std::string::npos,
         "steady JSON must serialize complete execution provenance");
 }
 
@@ -3756,7 +3764,9 @@ void test_steady_continuation_service() {
             response.continuation.used_informed_path &&
             response.continuation.reached_parameter == 1.0 &&
             response.continuation.accepted_stages > 1 &&
-            !response.continuation.stages.empty(),
+            !response.continuation.stages.empty() &&
+            !response.continuation.stages.back()
+                 .limiting_residual.empty(),
         "steady service must expose successful continuation "
         "stages");
     require(
@@ -3782,6 +3792,8 @@ void test_steady_continuation_service() {
             json.find("\"used_informed_path\": true") !=
                 std::string::npos &&
             json.find("\"target_parameter\": 1") !=
+                std::string::npos &&
+            json.find("\"limiting_residual\":") !=
                 std::string::npos,
         "steady JSON must expose continuation diagnostics");
 }
@@ -3886,9 +3898,14 @@ void test_transient_service() {
             response.diagnostics.last_error_norm <= 1.0 &&
             response.diagnostics.maximum_accepted_error_norm <= 1.0 &&
             response.diagnostics.maximum_error_ratio >= 0.0 &&
-            !response.diagnostics.limiting_error_variable.empty(),
+            !response.diagnostics.limiting_error_variable.empty() &&
+            response.diagnostics
+                    .maximum_absolute_normalized_residual <=
+                1.0e-9 &&
+            !response.diagnostics
+                 .limiting_nonlinear_residual.empty(),
         "native transient service must expose scale-aware BDF order "
-        "and local-error evidence");
+        "plus local-error and implicit-constraint evidence");
     const auto end_time_setting = std::find_if(
         response.metadata.solver.settings.begin(),
         response.metadata.solver.settings.end(),
@@ -3941,6 +3958,8 @@ void test_transient_service() {
             json.find("\"last_error_norm\":") !=
                 std::string::npos &&
             json.find("\"limiting_error_variable\":") !=
+                std::string::npos &&
+            json.find("\"limiting_nonlinear_residual\":") !=
                 std::string::npos,
         "transient JSON must expose graph-native trajectory state");
 }

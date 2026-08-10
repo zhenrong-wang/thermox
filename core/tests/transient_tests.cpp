@@ -235,9 +235,15 @@ void test_adaptive_error_control_uses_physical_variable_scales() {
             result.diagnostics.last_error_norm <= 1.0 &&
             result.diagnostics.maximum_error_ratio > 0.0 &&
             result.diagnostics.limiting_error_variable ==
-                "trace_inventory",
+                "trace_inventory" &&
+            result.diagnostics
+                    .maximum_absolute_normalized_residual <=
+                options.nonlinear_options.residual_tolerance &&
+            !result.diagnostics
+                 .limiting_nonlinear_residual.empty(),
         "integration diagnostics identify the scale-limiting physical "
-        "state and accepted normalized error");
+        "state, accepted normalized error, and limiting implicit "
+        "constraint");
 }
 
 void test_variable_order_bdf2_improves_smooth_accuracy() {

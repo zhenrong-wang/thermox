@@ -1720,6 +1720,13 @@ std::string serialize_steady_response_json(
         << ", \"iterations\": " << response.diagnostics.iterations
         << ", \"final_residual_norm\": ";
     json_number(out, response.diagnostics.final_residual_norm);
+    out << ", \"final_maximum_absolute_normalized_residual\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .final_maximum_absolute_normalized_residual);
+    out << ", \"limiting_residual\": ";
+    json_string(out, response.diagnostics.limiting_residual);
     out << ", \"final_step_norm\": ";
     json_number(out, response.diagnostics.final_step_norm);
     out << ", \"function_evaluations\": "
@@ -1770,6 +1777,12 @@ std::string serialize_steady_response_json(
             << stage.nonlinear_iterations
             << ", \"final_residual_norm\": ";
         json_number(out, stage.final_residual_norm);
+        out << ", \"final_maximum_absolute_normalized_residual\": ";
+        json_number(
+            out,
+            stage.final_maximum_absolute_normalized_residual);
+        out << ", \"limiting_residual\": ";
+        json_string(out, stage.limiting_residual);
         out << ", \"message\": ";
         json_string(out, stage.message);
         out << '}';
@@ -1989,6 +2002,14 @@ std::string serialize_transient_response_json(
     json_number(out, response.diagnostics.maximum_error_ratio);
     out << ", \"limiting_error_variable\": ";
     json_string(out, response.diagnostics.limiting_error_variable);
+    out << ", \"maximum_absolute_normalized_residual\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .maximum_absolute_normalized_residual);
+    out << ", \"limiting_nonlinear_residual\": ";
+    json_string(
+        out, response.diagnostics.limiting_nonlinear_residual);
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
     out << "},\n  \"trajectory\": [";

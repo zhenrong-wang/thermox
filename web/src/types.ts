@@ -663,6 +663,8 @@ export interface SteadySimulationResult {
     converged: boolean
     iterations: number
     final_residual_norm: number
+    final_maximum_absolute_normalized_residual: number
+    limiting_residual: string
     final_step_norm: number
     function_evaluations: number
     jacobian_evaluations: number
@@ -686,6 +688,8 @@ export interface SteadySimulationResult {
       accepted: boolean
       nonlinear_iterations: number
       final_residual_norm: number
+      final_maximum_absolute_normalized_residual: number
+      limiting_residual: string
       message: string
     }>
   }
@@ -724,6 +728,8 @@ export interface TransientSimulationResult {
     maximum_accepted_error_norm: number
     maximum_error_ratio: number
     limiting_error_variable: string
+    maximum_absolute_normalized_residual: number
+    limiting_nonlinear_residual: string
     message: string
   }
   trajectory: TransientGraphSample[]

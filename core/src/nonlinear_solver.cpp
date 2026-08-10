@@ -402,6 +402,28 @@ double scaled_residual_norm(const std::vector<double>& residual,
     return std::sqrt(static_cast<double>(sum));
 }
 
+void set_final_residual_diagnostics(
+    SolverDiagnostics& diagnostics,
+    const std::vector<double>& residual,
+    const std::vector<double>& residual_scales,
+    const std::vector<std::string>& residual_names,
+    double residual_norm) {
+    diagnostics.final_residual_norm = residual_norm;
+    diagnostics.final_maximum_absolute_normalized_residual = 0.0;
+    diagnostics.limiting_residual.clear();
+    for (std::size_t row = 0; row < residual.size(); ++row) {
+        const double ratio =
+            std::abs(residual[row] / residual_scales[row]);
+        if (diagnostics.limiting_residual.empty() ||
+            !std::isfinite(ratio) ||
+            ratio > diagnostics.final_maximum_absolute_normalized_residual) {
+            diagnostics.final_maximum_absolute_normalized_residual =
+                ratio;
+            diagnostics.limiting_residual = residual_names[row];
+        }
+    }
+}
+
 std::vector<double> scale_residual(const std::vector<double>& residual,
                                    const std::vector<double>& residual_scales) {
     std::vector<double> scaled = residual;
@@ -1033,6 +1055,9 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
             return {x, diagnostics};
         }
         const double residual_norm = scaled_residual_norm(residual, residual_scales);
+        set_final_residual_diagnostics(
+            diagnostics, residual, residual_scales,
+            problem.residual_names, residual_norm);
 
         if (!std::isfinite(residual_norm)) {
             diagnostics.converged = false;
@@ -1104,6 +1129,7 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
 
         double damping = 1.0;
         std::vector<double> accepted_x = x;
+        std::vector<double> accepted_residual;
         double accepted_norm = std::numeric_limits<double>::infinity();
         double accepted_step_norm = 0.0;
         bool accepted = false;
@@ -1139,6 +1165,7 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
             if (std::isfinite(candidate_norm) && candidate_norm <= armijo_limit &&
                 candidate_norm < residual_norm) {
                 accepted_x = std::move(candidate_x);
+                accepted_residual = std::move(candidate_residual);
                 accepted_norm = candidate_norm;
                 accepted_step_norm = scaled_step_norm(actual_step, variable_scales);
                 accepted = true;
@@ -1179,6 +1206,9 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
 
         x = std::move(accepted_x);
         diagnostics.final_step_norm = accepted_step_norm;
+        set_final_residual_diagnostics(
+            diagnostics, accepted_residual, residual_scales,
+            problem.residual_names, accepted_norm);
         if (accepted_step_norm <= options.step_tolerance &&
             accepted_norm <= options.residual_tolerance * 10.0) {
             diagnostics.converged = true;
@@ -1192,10 +1222,17 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
     diagnostics.converged = false;
     diagnostics.iterations = options.max_iterations;
     try {
-        diagnostics.final_residual_norm =
-            scaled_residual_norm(evaluate_residual(problem, x, diagnostics), residual_scales);
+        const auto residual =
+            evaluate_residual(problem, x, diagnostics);
+        set_final_residual_diagnostics(
+            diagnostics, residual, residual_scales,
+            problem.residual_names,
+            scaled_residual_norm(residual, residual_scales));
     } catch (const std::exception&) {
         diagnostics.final_residual_norm = std::numeric_limits<double>::infinity();
+        diagnostics.final_maximum_absolute_normalized_residual =
+            std::numeric_limits<double>::infinity();
+        diagnostics.limiting_residual.clear();
     }
     diagnostics.message = "solver exited unexpectedly";
     return {x, diagnostics};

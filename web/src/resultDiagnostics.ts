@@ -80,6 +80,16 @@ export function resultDiagnosticSummary(
           value: result.diagnostics.limiting_error_variable || '—',
         },
         {
+          label: 'Worst constraint residual',
+          value: number(
+            result.diagnostics.maximum_absolute_normalized_residual,
+          ),
+        },
+        {
+          label: 'Limiting constraint',
+          value: result.diagnostics.limiting_nonlinear_residual || '—',
+        },
+        {
           label: 'Linear solver',
           value: result.diagnostics.linear_solver_backend || '—',
         },
@@ -95,6 +105,16 @@ export function resultDiagnosticSummary(
       {
         label: 'Residual norm',
         value: number(result.diagnostics.final_residual_norm),
+      },
+      {
+        label: 'Worst equation residual',
+        value: number(
+          result.diagnostics.final_maximum_absolute_normalized_residual,
+        ),
+      },
+      {
+        label: 'Limiting equation',
+        value: result.diagnostics.limiting_residual || '—',
       },
       {
         label: 'Step norm',
