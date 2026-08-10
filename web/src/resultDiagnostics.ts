@@ -94,6 +94,14 @@ export function resultDiagnosticSummary(
           value: number(result.diagnostics.maximum_linear_backward_error),
         },
         {
+          label: 'Structural block solves',
+          value: number(result.diagnostics.structural_block_solves),
+        },
+        {
+          label: 'Largest linear system',
+          value: number(result.diagnostics.largest_linear_system_size),
+        },
+        {
           label: 'Linear solver',
           value: result.diagnostics.linear_solver_backend || '—',
         },
@@ -127,6 +135,14 @@ export function resultDiagnosticSummary(
       {
         label: 'Worst linear error',
         value: number(result.diagnostics.maximum_linear_backward_error),
+      },
+      {
+        label: 'Structural block solves',
+        value: number(result.diagnostics.structural_block_solves),
+      },
+      {
+        label: 'Largest linear system',
+        value: number(result.diagnostics.largest_linear_system_size),
       },
       {
         label: 'Function evaluations',

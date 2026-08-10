@@ -573,6 +573,9 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
                                       std::size_t expected_size,
                                       SolverDiagnostics& diagnostics) {
     ++diagnostics.linear_solver_evaluations;
+    diagnostics.largest_linear_system_size = std::max(
+        diagnostics.largest_linear_system_size,
+        expected_size);
 
     LinearSolveResult result;
     double backward_error = std::numeric_limits<double>::infinity();
@@ -1044,6 +1047,9 @@ ProblemStructureReport analyze_incidence_structure(
         const std::size_t component = pop_ready();
         StructuralBlock block;
         for (const std::size_t row : components[component]) {
+            block.residual_indices.push_back(row);
+            block.variable_indices.push_back(
+                static_cast<std::size_t>(row_match[row]));
             block.residual_names.push_back(residual_names[row]);
             block.variable_names.push_back(
                 variable_names.at(
@@ -1272,7 +1278,175 @@ double l2_norm(const std::vector<double>& values) {
     return std::sqrt(static_cast<double>(sum));
 }
 
-NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverOptions& options) {
+namespace {
+
+template <typename T>
+std::vector<T> select_values(
+    const std::vector<T>& source,
+    const std::vector<std::size_t>& indices) {
+    if (source.empty()) return {};
+    std::vector<T> selected;
+    selected.reserve(indices.size());
+    for (const std::size_t index : indices) {
+        selected.push_back(source.at(index));
+    }
+    return selected;
+}
+
+std::vector<double> lift_block_state(
+    const std::vector<double>& base_state,
+    const std::vector<std::size_t>& variable_indices,
+    const std::vector<double>& block_state) {
+    std::vector<double> state = base_state;
+    for (std::size_t index = 0;
+         index < variable_indices.size(); ++index) {
+        state.at(variable_indices[index]) = block_state.at(index);
+    }
+    return state;
+}
+
+NonlinearProblem make_structural_block_problem(
+    const NonlinearProblem& source,
+    const StructuralBlock& block,
+    const std::vector<double>& base_state) {
+    NonlinearProblem restricted;
+    restricted.variable_names = block.variable_names;
+    restricted.residual_names = block.residual_names;
+    restricted.initial_guess = select_values(
+        base_state, block.variable_indices);
+    restricted.variable_scales = select_values(
+        source.variable_scales, block.variable_indices);
+    restricted.residual_scales = select_values(
+        source.residual_scales, block.residual_indices);
+    restricted.lower_bounds = select_values(
+        source.lower_bounds, block.variable_indices);
+    restricted.upper_bounds = select_values(
+        source.upper_bounds, block.variable_indices);
+    restricted.checked_residual =
+        [&source, base_state,
+         variable_indices = block.variable_indices,
+         residual_indices = block.residual_indices](
+            const std::vector<double>& block_state,
+            std::vector<double>& block_residual) {
+            const auto state = lift_block_state(
+                base_state, variable_indices, block_state);
+            std::vector<double> residual(
+                source.residual_names.size(), 0.0);
+            EvaluationStatus status = EvaluationStatus::success();
+            if (source.checked_residual) {
+                status = source.checked_residual(state, residual);
+            } else {
+                source.residual(state, residual);
+            }
+            if (!status.ok()) return status;
+            if (residual.size() != source.residual_names.size()) {
+                throw std::runtime_error(
+                    "residual callback changed residual vector size");
+            }
+            for (std::size_t row = 0;
+                 row < residual_indices.size(); ++row) {
+                block_residual.at(row) =
+                    residual.at(residual_indices[row]);
+            }
+            return EvaluationStatus::success();
+        };
+
+    const auto& source_pattern =
+        *source.sparse_jacobian_pattern;
+    const std::size_t missing =
+        std::numeric_limits<std::size_t>::max();
+    std::vector<std::size_t> local_column(
+        source.initial_guess.size(), missing);
+    for (std::size_t column = 0;
+         column < block.variable_indices.size(); ++column) {
+        local_column.at(block.variable_indices[column]) = column;
+    }
+    std::vector<std::size_t> row_offsets{0U};
+    std::vector<std::size_t> column_indices;
+    std::vector<std::size_t> source_offsets;
+    for (const std::size_t source_row : block.residual_indices) {
+        std::vector<std::pair<std::size_t, std::size_t>> entries;
+        for (std::size_t offset =
+                 source_pattern.row_offsets()[source_row];
+             offset < source_pattern.row_offsets()[source_row + 1];
+             ++offset) {
+            const std::size_t column = local_column.at(
+                source_pattern.column_indices()[offset]);
+            if (column != missing) {
+                entries.emplace_back(column, offset);
+            }
+        }
+        std::sort(entries.begin(), entries.end());
+        for (const auto& [column, source_offset] : entries) {
+            column_indices.push_back(column);
+            source_offsets.push_back(source_offset);
+        }
+        row_offsets.push_back(column_indices.size());
+    }
+    restricted.sparse_jacobian_pattern = SparsePattern(
+        block.residual_indices.size(),
+        block.variable_indices.size(),
+        std::move(row_offsets),
+        std::move(column_indices));
+    restricted.sparse_jacobian_values =
+        [&source, base_state,
+         variable_indices = block.variable_indices,
+         source_offsets = std::move(source_offsets)](
+            const std::vector<double>& block_state,
+            std::vector<double>& block_values) {
+            const auto state = lift_block_state(
+                base_state, variable_indices, block_state);
+            std::vector<double> source_values(
+                source.sparse_jacobian_pattern->nonzeros(), 0.0);
+            source.sparse_jacobian_values(state, source_values);
+            if (source_values.size() !=
+                source.sparse_jacobian_pattern->nonzeros()) {
+                throw std::runtime_error(
+                    "sparse_jacobian_values changed values vector size");
+            }
+            for (std::size_t offset = 0;
+                 offset < source_offsets.size(); ++offset) {
+                block_values.at(offset) =
+                    source_values.at(source_offsets[offset]);
+            }
+        };
+    return restricted;
+}
+
+void accumulate_block_diagnostics(
+    SolverDiagnostics& aggregate,
+    const SolverDiagnostics& block) {
+    aggregate.iterations += block.iterations;
+    aggregate.function_evaluations += block.function_evaluations;
+    aggregate.jacobian_evaluations += block.jacobian_evaluations;
+    aggregate.linear_solver_evaluations +=
+        block.linear_solver_evaluations;
+    aggregate.symbolic_factorizations +=
+        block.symbolic_factorizations;
+    aggregate.numeric_factorizations +=
+        block.numeric_factorizations;
+    aggregate.last_linear_backward_error =
+        block.last_linear_backward_error;
+    aggregate.maximum_linear_backward_error = std::max(
+        aggregate.maximum_linear_backward_error,
+        block.maximum_linear_backward_error);
+    aggregate.largest_linear_system_size = std::max(
+        aggregate.largest_linear_system_size,
+        block.largest_linear_system_size);
+    aggregate.final_step_norm = std::max(
+        aggregate.final_step_norm, block.final_step_norm);
+    if (block.linear_solver_backend != "not-used") {
+        aggregate.linear_solver_backend =
+            block.linear_solver_backend;
+    }
+    aggregate.history.insert(
+        aggregate.history.end(),
+        block.history.begin(), block.history.end());
+}
+
+NonlinearSolveResult solve_newton_monolithic(
+    const NonlinearProblem& problem,
+    const SolverOptions& options) {
     validate_options(options);
     const auto variable_scales = defaulted_variable_scales(problem);
     const auto residual_scales = defaulted_residual_scales(problem);
@@ -1494,6 +1668,104 @@ NonlinearSolveResult solve_newton(const NonlinearProblem& problem, const SolverO
     }
     diagnostics.message = "solver exited unexpectedly";
     return {x, diagnostics};
+}
+
+NonlinearSolveResult solve_newton_by_structural_blocks(
+    const NonlinearProblem& problem,
+    const SolverOptions& options,
+    const ProblemStructureReport& structure) {
+    NonlinearSolveResult result;
+    result.x = problem.initial_guess;
+    SolverOptions block_options = options;
+    block_options.structural_decomposition_enabled = false;
+    // The monolithic solver may accept a step-tolerance termination at up to
+    // ten times its residual tolerance. Allocate that allowance across the
+    // blocks so their combined L2 residual still satisfies the caller's
+    // whole-system tolerance.
+    block_options.residual_tolerance =
+        options.residual_tolerance /
+        (10.0 * std::sqrt(static_cast<double>(
+                    structure.structural_blocks.size())));
+    for (const auto& block : structure.structural_blocks) {
+        auto restricted = make_structural_block_problem(
+            problem, block, result.x);
+        auto solved = solve_newton_monolithic(
+            restricted, block_options);
+        ++result.diagnostics.structural_block_solves;
+        accumulate_block_diagnostics(
+            result.diagnostics, solved.diagnostics);
+        for (std::size_t index = 0;
+             index < block.variable_indices.size(); ++index) {
+            result.x.at(block.variable_indices[index]) =
+                solved.x.at(index);
+        }
+        if (!solved.diagnostics.converged) {
+            result.diagnostics.converged = false;
+            result.diagnostics.failed_structural_block =
+                block.residual_names.empty()
+                ? "unnamed"
+                : block.residual_names.front();
+            result.diagnostics.message =
+                "structural block '" +
+                result.diagnostics.failed_structural_block +
+                "' failed: " + solved.diagnostics.message;
+            return result;
+        }
+    }
+
+    const auto residual_scales =
+        defaulted_residual_scales(problem);
+    try {
+        const auto residual = evaluate_residual(
+            problem, result.x, result.diagnostics);
+        const double norm = scaled_residual_norm(
+            residual, residual_scales);
+        set_final_residual_diagnostics(
+            result.diagnostics, residual, residual_scales,
+            problem.residual_names, norm);
+        result.diagnostics.converged =
+            std::isfinite(norm) &&
+            norm <= options.residual_tolerance;
+        result.diagnostics.message =
+            result.diagnostics.converged
+            ? "converged by dependency-ordered structural blocks"
+            : "structural block solve failed whole-system residual check";
+    } catch (const std::exception& error) {
+        result.diagnostics.converged = false;
+        result.diagnostics.final_residual_norm =
+            std::numeric_limits<double>::infinity();
+        result.diagnostics.message =
+            std::string(
+                "whole-system residual evaluation failed after "
+                "structural block solve: ") + error.what();
+    }
+    return result;
+}
+
+}  // namespace
+
+NonlinearSolveResult solve_newton(
+    const NonlinearProblem& problem,
+    const SolverOptions& options) {
+    if (!options.structural_decomposition_enabled ||
+        !problem.sparse_jacobian_pattern.has_value()) {
+        return solve_newton_monolithic(problem, options);
+    }
+    validate_options(options);
+    const auto lower_bounds = defaulted_lower_bounds(problem);
+    const auto upper_bounds = defaulted_upper_bounds(problem);
+    (void)defaulted_variable_scales(problem);
+    (void)defaulted_residual_scales(problem);
+    validate_problem(problem, lower_bounds, upper_bounds);
+    const auto structure = analyze_problem_structure(problem);
+    if (!structure.valid_for_newton()) {
+        return solve_newton_monolithic(problem, options);
+    }
+    if (structure.structural_blocks.size() <= 1U) {
+        return solve_newton_monolithic(problem, options);
+    }
+    return solve_newton_by_structural_blocks(
+        problem, options, structure);
 }
 
 }  // namespace thermox

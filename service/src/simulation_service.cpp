@@ -964,6 +964,8 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     options.step_tolerance = settings.step_tolerance;
     options.linear_residual_tolerance =
         settings.linear_residual_tolerance;
+    options.structural_decomposition_enabled =
+        settings.structural_decomposition_enabled;
     options.finite_difference_epsilon =
         settings.finite_difference_epsilon;
     options.min_damping = settings.min_damping;
@@ -1073,8 +1075,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v3"
-            : "thermox.newton/v3",
+            ? "thermox.newton-continuation/v4"
+            : "thermox.newton/v4",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1082,6 +1084,10 @@ SolverProvenance solver_provenance(
             {"step_tolerance", settings.step_tolerance},
             {"linear_residual_tolerance",
              settings.linear_residual_tolerance},
+            {"structural_decomposition_enabled",
+             settings.structural_decomposition_enabled
+                 ? 1.0
+                 : 0.0},
             {"finite_difference_epsilon",
              settings.finite_difference_epsilon},
             {"min_damping", settings.min_damping},
@@ -1137,7 +1143,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v4",
+        "thermox.dae-bdf/v5",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1185,6 +1191,9 @@ NonlinearDiagnostics copy_diagnostics(
         source.numeric_factorizations,
         source.last_linear_backward_error,
         source.maximum_linear_backward_error,
+        source.structural_block_solves,
+        source.largest_linear_system_size,
+        source.failed_structural_block,
         source.linear_solver_backend,
         source.message,
     };
@@ -1212,6 +1221,9 @@ ContinuationRunDiagnostics copy_diagnostics(
                 .final_maximum_absolute_normalized_residual,
             stage.nonlinear.limiting_residual,
             stage.nonlinear.maximum_linear_backward_error,
+            stage.nonlinear.structural_block_solves,
+            stage.nonlinear.largest_linear_system_size,
+            stage.nonlinear.failed_structural_block,
             stage.nonlinear.message,
         });
     }
@@ -1230,6 +1242,8 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.symbolic_factorizations,
         source.numeric_factorizations,
         source.maximum_linear_backward_error,
+        source.structural_block_solves,
+        source.largest_linear_system_size,
         source.linear_solver_backend,
         source.final_time,
         source.last_step,

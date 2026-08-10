@@ -1173,7 +1173,11 @@ void test_structural_analysis_orders_irreducible_blocks() {
         structure.structural_blocks[0].variable_names ==
                 std::vector<std::string>{"source_state"} &&
             structure.structural_blocks[0].residual_names ==
-                std::vector<std::string>{"source_equation"},
+                std::vector<std::string>{"source_equation"} &&
+            structure.structural_blocks[0].variable_indices ==
+                std::vector<std::size_t>{0} &&
+            structure.structural_blocks[0].residual_indices ==
+                std::vector<std::size_t>{0},
         "independent upstream block is ordered first");
     require(
         structure.structural_blocks[1].variable_names.size() == 2 &&
@@ -1181,6 +1185,78 @@ void test_structural_analysis_orders_irreducible_blocks() {
                 std::vector<std::string>{
                     "left_balance", "right_balance"},
         "mutually coupled equations remain one irreducible block");
+}
+
+void test_newton_solves_dependency_ordered_structural_blocks() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"source", "left", "right"};
+    problem.residual_names = {
+        "source_equation", "sum", "difference"};
+    problem.initial_guess = {0.0, 0.0, 0.0};
+    problem.residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        residual[0] = x[0] - 1.0;
+        residual[1] = x[0] + x[1] + x[2] - 6.0;
+        residual[2] = x[1] - x[2] - 1.0;
+    };
+    const auto jacobian = thermox::sparse_from_triplets(
+        3, 3,
+        {{0, 0, 1.0},
+         {1, 0, 1.0}, {1, 1, 1.0}, {1, 2, 1.0},
+         {2, 1, 1.0}, {2, 2, -1.0}});
+    problem.sparse_jacobian_pattern = jacobian.pattern();
+    problem.sparse_jacobian_values = [](
+        const std::vector<double>&,
+        std::vector<double>& values) {
+        values = {1.0, 1.0, 1.0, 1.0, 1.0, -1.0};
+    };
+
+    thermox::SolverOptions options;
+    options.structural_decomposition_enabled = true;
+    const auto result = thermox::solve_newton(problem, options);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require_near(result.x[0], 1.0, 1.0e-12,
+                 "block solve source");
+    require_near(result.x[1], 3.0, 1.0e-12,
+                 "block solve left");
+    require_near(result.x[2], 2.0, 1.0e-12,
+                 "block solve right");
+    require(
+        result.diagnostics.structural_block_solves == 2 &&
+            result.diagnostics.largest_linear_system_size == 2,
+        "block execution reports two solves and reduced maximum order");
+}
+
+void test_structural_block_solve_checks_complete_residual() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"first", "second"};
+    problem.residual_names = {"hidden_dependency", "second_equation"};
+    problem.initial_guess = {0.0, 0.0};
+    problem.residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        residual[0] = x[0] + x[1] - 2.0;
+        residual[1] = x[1] - 1.0;
+    };
+    const auto declared = thermox::sparse_from_triplets(
+        2, 2, {{0, 0, 1.0}, {1, 1, 1.0}});
+    problem.sparse_jacobian_pattern = declared.pattern();
+    problem.sparse_jacobian_values = [](
+        const std::vector<double>&,
+        std::vector<double>& values) {
+        values = {1.0, 1.0};
+    };
+    thermox::SolverOptions options;
+    options.structural_decomposition_enabled = true;
+    const auto result = thermox::solve_newton(problem, options);
+    require(
+        !result.diagnostics.converged &&
+            result.diagnostics.message.find(
+                "whole-system residual check") !=
+                std::string::npos,
+        "final full residual rejects an incomplete declared dependency pattern");
 }
 
 void test_fixed_bound_finite_difference_fails_cleanly() {
@@ -1442,6 +1518,8 @@ int main() {
         test_fixed_sparse_pattern_and_structure_analysis();
         test_structural_analysis_localizes_singular_regions();
         test_structural_analysis_orders_irreducible_blocks();
+        test_newton_solves_dependency_ordered_structural_blocks();
+        test_structural_block_solve_checks_complete_residual();
         test_fixed_bound_finite_difference_fails_cleanly();
         test_equation_system_builder();
         test_compiled_sparse_equation_system_builder();

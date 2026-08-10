@@ -694,6 +694,9 @@ struct NonlinearDiagnostics {
     int numeric_factorizations{0};
     double last_linear_backward_error{0.0};
     double maximum_linear_backward_error{0.0};
+    int structural_block_solves{0};
+    std::size_t largest_linear_system_size{0};
+    std::string failed_structural_block;
     std::string linear_solver_backend;
     std::string message;
 };
@@ -707,6 +710,9 @@ struct ContinuationStageDiagnostics {
     double final_maximum_absolute_normalized_residual{0.0};
     std::string limiting_residual;
     double maximum_linear_backward_error{0.0};
+    int structural_block_solves{0};
+    std::size_t largest_linear_system_size{0};
+    std::string failed_structural_block;
     std::string message;
 };
 
@@ -731,6 +737,8 @@ struct TimeIntegrationDiagnostics {
     int symbolic_factorizations{0};
     int numeric_factorizations{0};
     double maximum_linear_backward_error{0.0};
+    int structural_block_solves{0};
+    std::size_t largest_linear_system_size{0};
     std::string linear_solver_backend;
     double final_time{0.0};
     double last_step{0.0};
@@ -877,6 +885,7 @@ struct SteadySolverSettings {
     double residual_tolerance{1.0e-10};
     double step_tolerance{1.0e-10};
     double linear_residual_tolerance{1.0e-10};
+    bool structural_decomposition_enabled{false};
     double finite_difference_epsilon{1.0e-6};
     double min_damping{1.0e-6};
     double damping_reduction{0.5};

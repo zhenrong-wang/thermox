@@ -20,6 +20,9 @@ function steadyResult(): SimulationResult {
       final_step_norm: 1e-9,
       last_linear_backward_error: 3e-15,
       maximum_linear_backward_error: 8e-15,
+      structural_block_solves: 4,
+      largest_linear_system_size: 12,
+      failed_structural_block: '',
       function_evaluations: 11,
       jacobian_evaluations: 4,
       linear_solver_evaluations: 4,
@@ -59,6 +62,10 @@ describe('resultDiagnosticSummary', () => {
       label: 'Worst linear error',
       value: '8.000e-15',
     })
+    expect(summary.facts).toContainEqual({
+      label: 'Largest linear system',
+      value: '12',
+    })
   })
 
   it('surfaces transient integration evidence', () => {
@@ -88,6 +95,8 @@ describe('resultDiagnosticSummary', () => {
         maximum_absolute_normalized_residual: 8e-10,
         limiting_nonlinear_residual: 'component.drum.energy',
         maximum_linear_backward_error: 7e-14,
+        structural_block_solves: 30,
+        largest_linear_system_size: 8,
         message: 'integration complete',
       },
     } satisfies SimulationResult

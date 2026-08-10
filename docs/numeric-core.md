@@ -154,6 +154,14 @@ the exact dimensionless Newton system using the normalized backward error
 configured linear tolerance rejects that Newton solve instead of allowing an inaccurate step to
 contaminate nonlinear convergence. Diagnostics retain the last and worst accepted linear errors;
 continuation and transient integration propagate the worst error across all internal solves.
+
+For a structurally nonsingular fixed sparse pattern, callers may enable dependency-ordered block
+execution. The solver restricts each irreducible block to its matched equations and variables,
+retains the provider's exact sparse Jacobian values, and solves blocks serially in triangular
+order. Upstream state is fixed while downstream blocks solve. A final full-model residual check is
+mandatory, so an incomplete declared dependency pattern cannot produce a false convergence.
+Diagnostics report the number of block solves, the largest linear system actually factorized, and
+the first failed block. A single irreducible block automatically stays on the monolithic path.
 Steady diagnostics also report the largest absolute normalized residual and its registered
 equation name at the returned state. Transient diagnostics retain the largest such residual among
 converged consistent-initialization and implicit-stage solves. These values make the conservation,
@@ -183,7 +191,12 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
 - Structural incidence analysis classifies connected underdetermined, overdetermined, and
-  well-determined regions and exposes dependency-ordered irreducible blocks. Block-wise execution
-  and solver tearing are not yet enabled.
+  well-determined regions and exposes dependency-ordered irreducible blocks. Fixed-pattern
+  dependency-ordered execution is opt-in; automatic tearing inside an irreducible block is not yet
+  enabled.
+- Block execution currently restricts the returned rows after invoking the model's full residual
+  and fixed-pattern value callbacks. Row-selective provider callbacks are a future performance and
+  initialization enhancement; block mode therefore provides smaller linear algebra today, not a
+  blanket runtime-speed guarantee.
 - Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.

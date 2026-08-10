@@ -63,6 +63,9 @@ Tree steady_solver_tree(
         "linear_residual_tolerance",
         value.linear_residual_tolerance);
     tree.put(
+        "structural_decomposition_enabled",
+        value.structural_decomposition_enabled);
+    tree.put(
         "finite_difference_epsilon",
         value.finite_difference_epsilon);
     tree.put("min_damping", value.min_damping);
@@ -104,6 +107,8 @@ service::SteadySolverSettings decode_steady_solver(
         tree.get<double>("step_tolerance");
     value.linear_residual_tolerance =
         tree.get<double>("linear_residual_tolerance");
+    value.structural_decomposition_enabled =
+        tree.get<bool>("structural_decomposition_enabled");
     value.finite_difference_epsilon =
         tree.get<double>("finite_difference_epsilon");
     value.min_damping = tree.get<double>("min_damping");

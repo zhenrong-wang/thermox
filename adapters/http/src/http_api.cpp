@@ -1262,6 +1262,7 @@ void parse_steady_solver(
         "residual_tolerance",
         "step_tolerance",
         "linear_residual_tolerance",
+        "structural_decomposition_enabled",
         "finite_difference_epsilon",
         "min_damping",
         "damping_reduction",
@@ -1290,6 +1291,9 @@ void parse_steady_solver(
     solver.linear_residual_tolerance = tree.get(
         "linear_residual_tolerance",
         solver.linear_residual_tolerance);
+    solver.structural_decomposition_enabled = tree.get(
+        "structural_decomposition_enabled",
+        solver.structural_decomposition_enabled);
     solver.finite_difference_epsilon = tree.get(
         "finite_difference_epsilon",
         solver.finite_difference_epsilon);

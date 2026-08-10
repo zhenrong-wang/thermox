@@ -13,9 +13,11 @@ namespace {
 void print_usage(std::ostream& out) {
     out << "Usage:\n"
         << "  thermox_cli solve --model <path> [--case <id>]"
-           " [--continuation] [--format text|json]\n"
+           " [--continuation] [--structural-blocks]"
+           " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
-           " --end-time <seconds> [--format text|json]\n";
+           " --end-time <seconds> [--structural-blocks]"
+           " [--format text|json]\n";
 }
 
 std::string read_file(const std::string& path) {
@@ -71,6 +73,11 @@ void print_steady_text(
               << "converged: "
               << (response.diagnostics.converged ? "yes" : "no") << "\n"
               << "iterations: " << response.diagnostics.iterations << "\n";
+    std::cout << "structural_block_solves: "
+              << response.diagnostics.structural_block_solves << "\n"
+              << "largest_linear_system_size: "
+              << response.diagnostics.largest_linear_system_size
+              << "\n";
     if (response.continuation.enabled) {
         std::cout << "continuation_parameter: "
                   << response.continuation.reached_parameter
@@ -94,7 +101,12 @@ void print_transient_text(
               << (response.diagnostics.success ? "yes" : "no") << "\n"
               << "final_time: " << response.diagnostics.final_time << "\n"
               << "accepted_steps: "
-              << response.diagnostics.accepted_steps << "\n";
+              << response.diagnostics.accepted_steps << "\n"
+              << "structural_block_solves: "
+              << response.diagnostics.structural_block_solves << "\n"
+              << "largest_linear_system_size: "
+              << response.diagnostics.largest_linear_system_size
+              << "\n";
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";
     }
@@ -116,6 +128,7 @@ int main(int argc, char** argv) {
     std::string end_time_text;
     std::string format = "text";
     bool continuation = false;
+    bool structural_blocks = false;
 
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -129,6 +142,8 @@ int main(int argc, char** argv) {
             format = argv[++i];
         } else if (arg == "--continuation") {
             continuation = true;
+        } else if (arg == "--structural-blocks") {
+            structural_blocks = true;
         } else if (arg == "--help" || arg == "-h") {
             print_usage(std::cout);
             return 0;
@@ -175,6 +190,8 @@ int main(int argc, char** argv) {
             request.case_id = case_id;
             request.solver.continuation_enabled =
                 continuation;
+            request.solver.structural_decomposition_enabled =
+                structural_blocks;
             const auto response = service.run_steady(request);
             if (format == "json") {
                 std::cout <<
@@ -191,6 +208,9 @@ int main(int argc, char** argv) {
         request.case_id = case_id;
         request.solver.end_time =
             parse_positive_number(end_time_text, "--end-time");
+        request.solver.nonlinear_solver
+            .structural_decomposition_enabled =
+            structural_blocks;
         const auto response = service.run_transient(request);
         if (format == "json") {
             std::cout <<

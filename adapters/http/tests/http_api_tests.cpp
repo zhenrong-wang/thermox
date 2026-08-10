@@ -868,7 +868,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("run_configuration_id":"http-design-run",)"
             R"("study_revision_id":")"} +
             study_revision_id +
-            R"(","steady_solver":{"max_iterations":37}})");
+            R"(","steady_solver":{"max_iterations":37,)"
+            R"("structural_decomposition_enabled":true}})");
     const auto run_created = api.handle(
         authenticated(std::move(run_upload)));
     require(
@@ -876,6 +877,9 @@ void test_tenant_scoped_asynchronous_jobs() {
             run_created.headers.contains("Location") &&
             run_created.body.find(
                 "\"max_iterations\": 37") !=
+                std::string::npos &&
+            run_created.body.find(
+                "\"structural_decomposition_enabled\": true") !=
                 std::string::npos &&
             run_created.body.find(study_revision_id) !=
                 std::string::npos,

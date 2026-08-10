@@ -1769,6 +1769,13 @@ std::string serialize_steady_response_json(
     out << ", \"maximum_linear_backward_error\": ";
     json_number(
         out, response.diagnostics.maximum_linear_backward_error);
+    out << ", \"structural_block_solves\": "
+        << response.diagnostics.structural_block_solves
+        << ", \"largest_linear_system_size\": "
+        << response.diagnostics.largest_linear_system_size
+        << ", \"failed_structural_block\": ";
+    json_string(
+        out, response.diagnostics.failed_structural_block);
     out << ", \"linear_solver_backend\": ";
     json_string(
         out, response.diagnostics.linear_solver_backend);
@@ -1816,6 +1823,12 @@ std::string serialize_steady_response_json(
         out << ", \"maximum_linear_backward_error\": ";
         json_number(
             out, stage.maximum_linear_backward_error);
+        out << ", \"structural_block_solves\": "
+            << stage.structural_block_solves
+            << ", \"largest_linear_system_size\": "
+            << stage.largest_linear_system_size
+            << ", \"failed_structural_block\": ";
+        json_string(out, stage.failed_structural_block);
         out << ", \"message\": ";
         json_string(out, stage.message);
         out << '}';
@@ -2022,6 +2035,10 @@ std::string serialize_transient_response_json(
     json_number(
         out,
         response.diagnostics.maximum_linear_backward_error);
+    out << ", \"structural_block_solves\": "
+        << response.diagnostics.structural_block_solves
+        << ", \"largest_linear_system_size\": "
+        << response.diagnostics.largest_linear_system_size;
     out << ", \"linear_solver_backend\": ";
     json_string(
         out, response.diagnostics.linear_solver_backend);

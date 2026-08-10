@@ -316,6 +316,15 @@ void accumulate_diagnostics(
     aggregate.maximum_linear_backward_error = std::max(
         aggregate.maximum_linear_backward_error,
         stage.maximum_linear_backward_error);
+    aggregate.structural_block_solves +=
+        stage.structural_block_solves;
+    aggregate.largest_linear_system_size = std::max(
+        aggregate.largest_linear_system_size,
+        stage.largest_linear_system_size);
+    if (!stage.failed_structural_block.empty()) {
+        aggregate.failed_structural_block =
+            stage.failed_structural_block;
+    }
     if (stage.linear_solver_backend != "not-used") {
         aggregate.linear_solver_backend =
             stage.linear_solver_backend;

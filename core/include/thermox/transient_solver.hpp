@@ -123,6 +123,8 @@ struct TimeIntegrationDiagnostics {
     int symbolic_factorizations{0};
     int numeric_factorizations{0};
     double maximum_linear_backward_error{0.0};
+    int structural_block_solves{0};
+    std::size_t largest_linear_system_size{0};
     std::string linear_solver_backend{"not-used"};
     double final_time{0.0};
     double last_step{0.0};

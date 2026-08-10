@@ -548,7 +548,10 @@ Work items:
      blocks, retained by steady/transient graph compilation and exposed through validation; ✅
    - backend-independent normalized backward-error verification for every scaled Newton linear
      solve, with configurable acceptance and steady/continuation/transient diagnostics; ✅
-   - block-wise execution and solver tearing remain follow-ons.
+   - opt-in dependency-ordered execution of fixed-pattern irreducible blocks, preserving analytic
+     sparse values and enforcing a final whole-system residual check; ✅
+   - row-selective model evaluation, automatic policy selection, cross-stage block factorization
+     caches, and tearing inside an irreducible block remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,

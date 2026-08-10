@@ -63,6 +63,9 @@ struct SolverOptions {
     // Maximum normalized backward error accepted from any dense, sparse, or
     // custom linear backend solving the dimensionless Newton system.
     double linear_residual_tolerance{1.0e-10};
+    // Solve a structurally nonsingular fixed-pattern problem in
+    // dependency-ordered irreducible blocks instead of as one system.
+    bool structural_decomposition_enabled{false};
     // Relative perturbation applied to the larger of the declared variable
     // scale and current magnitude. Interior columns use a central difference;
     // physical-domain boundaries fall back to the valid one-sided difference.
@@ -102,6 +105,9 @@ struct SolverDiagnostics {
     int numeric_factorizations{0};
     double last_linear_backward_error{0.0};
     double maximum_linear_backward_error{0.0};
+    int structural_block_solves{0};
+    std::size_t largest_linear_system_size{0};
+    std::string failed_structural_block;
     std::string linear_solver_backend{"not-used"};
     std::string message;
     std::vector<IterationDiagnostic> history;
@@ -152,6 +158,8 @@ struct StructuralRegion {
 };
 
 struct StructuralBlock {
+    std::vector<std::size_t> variable_indices;
+    std::vector<std::size_t> residual_indices;
     std::vector<std::string> variable_names;
     std::vector<std::string> residual_names;
 };

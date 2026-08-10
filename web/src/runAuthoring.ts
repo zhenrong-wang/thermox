@@ -36,6 +36,7 @@ export const defaultSteadySolver: SteadySolverSettings = {
   residual_tolerance: 1e-10,
   step_tolerance: 1e-10,
   linear_residual_tolerance: 1e-10,
+  structural_decomposition_enabled: false,
   finite_difference_epsilon: 1e-6,
   min_damping: 1e-6,
   damping_reduction: 0.5,

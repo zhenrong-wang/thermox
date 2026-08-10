@@ -635,6 +635,13 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     result.diagnostics
                         .maximum_linear_backward_error,
                     diagnostics.maximum_linear_backward_error);
+            result.diagnostics.structural_block_solves +=
+                diagnostics.structural_block_solves;
+            result.diagnostics.largest_linear_system_size =
+                std::max(
+                    result.diagnostics
+                        .largest_linear_system_size,
+                    diagnostics.largest_linear_system_size);
             if (diagnostics.linear_solver_backend !=
                 "not-used") {
                 result.diagnostics.linear_solver_backend =
