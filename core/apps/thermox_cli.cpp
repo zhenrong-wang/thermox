@@ -13,10 +13,12 @@ namespace {
 void print_usage(std::ostream& out) {
     out << "Usage:\n"
         << "  thermox_cli solve --model <path> [--case <id>]"
-           " [--continuation] [--structural-blocks]"
+           " [--continuation]"
+           " [--structural-policy automatic|monolithic|blocks]"
            " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
-           " --end-time <seconds> [--structural-blocks]"
+           " --end-time <seconds>"
+           " [--structural-policy automatic|monolithic|blocks]"
            " [--format text|json]\n";
 }
 
@@ -128,7 +130,8 @@ int main(int argc, char** argv) {
     std::string end_time_text;
     std::string format = "text";
     bool continuation = false;
-    bool structural_blocks = false;
+    auto structural_policy = thermox::service::
+        StructuralDecompositionPolicy::automatic;
 
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -142,8 +145,11 @@ int main(int argc, char** argv) {
             format = argv[++i];
         } else if (arg == "--continuation") {
             continuation = true;
-        } else if (arg == "--structural-blocks") {
-            structural_blocks = true;
+        } else if (arg == "--structural-policy" &&
+                   i + 1 < argc) {
+            structural_policy = thermox::service::
+                structural_decomposition_policy_from_string(
+                    argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(std::cout);
             return 0;
@@ -190,8 +196,8 @@ int main(int argc, char** argv) {
             request.case_id = case_id;
             request.solver.continuation_enabled =
                 continuation;
-            request.solver.structural_decomposition_enabled =
-                structural_blocks;
+            request.solver.structural_decomposition_policy =
+                structural_policy;
             const auto response = service.run_steady(request);
             if (format == "json") {
                 std::cout <<
@@ -209,8 +215,8 @@ int main(int argc, char** argv) {
         request.solver.end_time =
             parse_positive_number(end_time_text, "--end-time");
         request.solver.nonlinear_solver
-            .structural_decomposition_enabled =
-            structural_blocks;
+            .structural_decomposition_policy =
+            structural_policy;
         const auto response = service.run_transient(request);
         if (format == "json") {
             std::cout <<

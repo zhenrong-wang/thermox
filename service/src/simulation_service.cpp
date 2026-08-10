@@ -901,6 +901,15 @@ std::string validation_mode(
 }
 
 void validate_settings(const SteadySolverSettings& settings) {
+    switch (settings.structural_decomposition_policy) {
+    case StructuralDecompositionPolicy::automatic:
+    case StructuralDecompositionPolicy::monolithic:
+    case StructuralDecompositionPolicy::blocks:
+        break;
+    default:
+        throw std::invalid_argument(
+            "invalid structural decomposition policy");
+    }
     if (settings.max_iterations <= 0 ||
         settings.max_line_search_steps <= 0 ||
         !std::isfinite(settings.residual_tolerance) ||
@@ -964,8 +973,20 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     options.step_tolerance = settings.step_tolerance;
     options.linear_residual_tolerance =
         settings.linear_residual_tolerance;
-    options.structural_decomposition_enabled =
-        settings.structural_decomposition_enabled;
+    switch (settings.structural_decomposition_policy) {
+    case StructuralDecompositionPolicy::automatic:
+        options.structural_decomposition_policy =
+            thermox::StructuralDecompositionPolicy::automatic;
+        break;
+    case StructuralDecompositionPolicy::monolithic:
+        options.structural_decomposition_policy =
+            thermox::StructuralDecompositionPolicy::monolithic;
+        break;
+    case StructuralDecompositionPolicy::blocks:
+        options.structural_decomposition_policy =
+            thermox::StructuralDecompositionPolicy::blocks;
+        break;
+    }
     options.finite_difference_epsilon =
         settings.finite_difference_epsilon;
     options.min_damping = settings.min_damping;
@@ -1075,8 +1096,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v4"
-            : "thermox.newton/v4",
+            ? "thermox.newton-continuation/v5"
+            : "thermox.newton/v5",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1084,10 +1105,9 @@ SolverProvenance solver_provenance(
             {"step_tolerance", settings.step_tolerance},
             {"linear_residual_tolerance",
              settings.linear_residual_tolerance},
-            {"structural_decomposition_enabled",
-             settings.structural_decomposition_enabled
-                 ? 1.0
-                 : 0.0},
+            {"structural_decomposition_policy",
+             static_cast<double>(
+                 settings.structural_decomposition_policy)},
             {"finite_difference_epsilon",
              settings.finite_difference_epsilon},
             {"min_damping", settings.min_damping},
@@ -1143,7 +1163,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v5",
+        "thermox.dae-bdf/v6",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1608,6 +1628,35 @@ std::string to_string(OperationStatus status) {
         case OperationStatus::result_failed: return "result_failed";
     }
     return "unknown";
+}
+
+std::string to_string(StructuralDecompositionPolicy policy) {
+    switch (policy) {
+    case StructuralDecompositionPolicy::automatic:
+        return "automatic";
+    case StructuralDecompositionPolicy::monolithic:
+        return "monolithic";
+    case StructuralDecompositionPolicy::blocks:
+        return "blocks";
+    }
+    return "unknown";
+}
+
+StructuralDecompositionPolicy
+structural_decomposition_policy_from_string(
+    std::string_view value) {
+    if (value == "automatic") {
+        return StructuralDecompositionPolicy::automatic;
+    }
+    if (value == "monolithic") {
+        return StructuralDecompositionPolicy::monolithic;
+    }
+    if (value == "blocks") {
+        return StructuralDecompositionPolicy::blocks;
+    }
+    throw std::invalid_argument(
+        "unknown structural decomposition policy: " +
+        std::string(value));
 }
 
 std::string to_string(DiagnosticSeverity severity) {

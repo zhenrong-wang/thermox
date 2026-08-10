@@ -1262,7 +1262,7 @@ void parse_steady_solver(
         "residual_tolerance",
         "step_tolerance",
         "linear_residual_tolerance",
-        "structural_decomposition_enabled",
+        "structural_decomposition_policy",
         "finite_difference_epsilon",
         "min_damping",
         "damping_reduction",
@@ -1291,9 +1291,12 @@ void parse_steady_solver(
     solver.linear_residual_tolerance = tree.get(
         "linear_residual_tolerance",
         solver.linear_residual_tolerance);
-    solver.structural_decomposition_enabled = tree.get(
-        "structural_decomposition_enabled",
-        solver.structural_decomposition_enabled);
+    solver.structural_decomposition_policy =
+        service::structural_decomposition_policy_from_string(
+            tree.get(
+                "structural_decomposition_policy",
+                service::to_string(
+                    solver.structural_decomposition_policy)));
     solver.finite_difference_epsilon = tree.get(
         "finite_difference_epsilon",
         solver.finite_difference_epsilon);

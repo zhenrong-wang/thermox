@@ -226,9 +226,11 @@ void steady_solver_json(
         << solver.step_tolerance
         << ", \"linear_residual_tolerance\": "
         << solver.linear_residual_tolerance
-        << ", \"structural_decomposition_enabled\": "
-        << (solver.structural_decomposition_enabled
-                ? "true" : "false")
+        << ", \"structural_decomposition_policy\": ";
+    json_string(
+        out, to_string(
+                 solver.structural_decomposition_policy));
+    out
         << ", \"finite_difference_epsilon\": "
         << solver.finite_difference_epsilon
         << ", \"min_damping\": "

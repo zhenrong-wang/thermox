@@ -38,6 +38,12 @@ enum class EvaluationStatusCode {
     fatal_failure,
 };
 
+enum class StructuralDecompositionPolicy {
+    automatic,
+    monolithic,
+    blocks,
+};
+
 struct EvaluationStatus {
     EvaluationStatusCode code{EvaluationStatusCode::success};
     std::string message;
@@ -77,9 +83,11 @@ struct SolverOptions {
     // Maximum normalized backward error accepted from any dense, sparse, or
     // custom linear backend solving the dimensionless Newton system.
     double linear_residual_tolerance{1.0e-10};
-    // Solve a structurally nonsingular fixed-pattern problem in
-    // dependency-ordered irreducible blocks instead of as one system.
-    bool structural_decomposition_enabled{false};
+    // Automatic selects blocks only when the fixed pattern is reducible, the
+    // provider certifies root equivalence, and block-local residual and
+    // Jacobian evaluation are available.
+    StructuralDecompositionPolicy structural_decomposition_policy{
+        StructuralDecompositionPolicy::automatic};
     // Relative perturbation applied to the larger of the declared variable
     // scale and current magnitude. Interior columns use a central difference;
     // physical-domain boundaries fall back to the valid one-sided difference.
@@ -140,6 +148,11 @@ struct NonlinearProblem {
     std::vector<double> residual_scales;
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
+    // A provider/compiler assertion that dependency-ordered block solving is
+    // root-equivalent to its monolithic formulation (for example, a fully
+    // linear assembled system). Automatic policy never infers this from
+    // sparsity alone.
+    bool automatic_structural_decomposition_safe{false};
     ResidualFunction residual;
     CheckedResidualFunction checked_residual;
     CheckedResidualSubsetFunction checked_residual_subset;

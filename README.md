@@ -366,10 +366,12 @@ For a difficult initial guess, opt into adaptive residual continuation:
   --format json
 ```
 
-For a model whose validated fixed sparse pattern contains multiple dependency-ordered blocks,
-opt into block-triangular execution with `--structural-blocks`. The same option applies to
-`simulate`; results report the executed block count and largest linear system. A single
-irreducible block remains monolithic.
+For a model whose validated fixed sparse pattern contains multiple dependency-ordered blocks, the
+default `--structural-policy automatic` uses block execution when block-local callbacks are
+available and the compiler certifies root equivalence (currently fully linear assembled systems).
+`--structural-policy monolithic` and `--structural-policy blocks` provide explicit
+comparison overrides. The same policy applies to `simulate`; results report the executed block
+count and largest linear system. A single irreducible block remains monolithic.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

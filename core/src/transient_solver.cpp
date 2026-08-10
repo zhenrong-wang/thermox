@@ -161,6 +161,8 @@ ImplicitStepResult solve_implicit_bdf_step(
     nonlinear.residual_scales = residual_scales;
     nonlinear.lower_bounds = lower_bounds;
     nonlinear.upper_bounds = upper_bounds;
+    nonlinear.automatic_structural_decomposition_safe =
+        problem.automatic_structural_decomposition_safe;
     nonlinear.checked_residual =
         [&problem, next_time, derivative_coefficient,
          derivative_offset](const std::vector<double>& state,
@@ -460,6 +462,8 @@ DaeInitializationResult make_consistent_initial_conditions(
     initialization.lower_bounds.resize(size);
     initialization.upper_bounds.resize(size);
     initialization.residual_scales = residual_scales;
+    initialization.automatic_structural_decomposition_safe =
+        problem.automatic_structural_decomposition_safe;
     for (std::size_t i = 0; i < size; ++i) {
         if (kinds[i] == DaeVariableKind::differential) {
             initialization.variable_names.push_back("derivative(" + problem.variable_names[i] + ")");
@@ -759,7 +763,8 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         !nonlinear_options.sparse_factorization_resolver &&
         !nonlinear_options.sparse_linear_solver &&
         !nonlinear_options.linear_solver) {
-        if (nonlinear_options.structural_decomposition_enabled &&
+        if (nonlinear_options.structural_decomposition_policy !=
+                StructuralDecompositionPolicy::monolithic &&
             problem.sparse_jacobian_pattern.has_value()) {
             nonlinear_options.sparse_factorization_resolver =
                 make_default_sparse_factorization_resolver();

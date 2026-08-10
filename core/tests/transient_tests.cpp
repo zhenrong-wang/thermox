@@ -153,8 +153,6 @@ void test_transient_solver_executes_independent_structural_blocks() {
     options.end_time = 0.1;
     options.initial_step = 0.05;
     options.max_step = 0.05;
-    options.nonlinear_options.structural_decomposition_enabled =
-        true;
     const bool umfpack =
         thermox::make_default_sparse_factorization()
             ->backend_name() == "umfpack";

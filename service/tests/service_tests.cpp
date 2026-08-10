@@ -3649,7 +3649,8 @@ void test_steady_service() {
     request.model_json =
         read_source_file("core/examples/air_compressor.json");
     request.case_id = "design";
-    request.solver.structural_decomposition_enabled = true;
+    request.solver.structural_decomposition_policy =
+        thermox::service::StructuralDecompositionPolicy::blocks;
     const auto response = service.run_steady(request);
     require(
         response.succeeded(),
@@ -3666,7 +3667,7 @@ void test_steady_service() {
         "steady result must identify the platform build");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton/v4" &&
+            "thermox.newton/v5" &&
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
@@ -3706,8 +3707,8 @@ void test_steady_service() {
             response.metadata.solver.settings.end(),
             [](const auto& setting) {
                 return setting.name ==
-                           "structural_decomposition_enabled" &&
-                       setting.value == 1.0;
+                           "structural_decomposition_policy" &&
+                       setting.value == 2.0;
             }),
         "steady provenance must record structural solve policy");
     require(
@@ -3840,7 +3841,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v4",
+            "thermox.newton-continuation/v5",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(
@@ -3954,7 +3955,7 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v5",
+            "thermox.dae-bdf/v6",
         "transient result must record solver contract");
     require(
         response.diagnostics.maximum_order_used == 2 &&

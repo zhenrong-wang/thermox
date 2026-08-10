@@ -458,7 +458,8 @@ ContinuationSolveResult solve_continuation(
         !staged_solver.sparse_factorization_resolver &&
         !staged_solver.sparse_linear_solver &&
         !staged_solver.linear_solver) {
-        if (staged_solver.structural_decomposition_enabled &&
+        if (staged_solver.structural_decomposition_policy !=
+                StructuralDecompositionPolicy::monolithic &&
             problem.sparse_jacobian_pattern.has_value()) {
             staged_solver.sparse_factorization_resolver =
                 make_default_sparse_factorization_resolver();

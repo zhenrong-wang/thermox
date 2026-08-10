@@ -400,7 +400,7 @@ std::size_t EquationSystemBuilder::add_linear_equation(std::string name,
     for (const auto& term : terms) {
         sparsity_variables.push_back(term.variable);
     }
-    return add_sparse_equation(
+    const auto index = add_sparse_equation(
         std::move(name),
         std::move(sparsity_variables),
         [terms = std::move(terms), rhs](const std::vector<double>& x,
@@ -413,6 +413,8 @@ std::size_t EquationSystemBuilder::add_linear_equation(std::string name,
             return residual;
         },
         scale);
+    equations_.back().linear = true;
+    return index;
 }
 
 std::size_t EquationSystemBuilder::add_continuation_linear_equation(
@@ -432,9 +434,10 @@ std::size_t EquationSystemBuilder::add_continuation_linear_equation(
     for (const auto& term : target_terms) {
         sparsity_variables.push_back(term.variable);
     }
-    return add_continuation_sparse_equation(
+    const auto index = add_continuation_sparse_equation(
         std::move(name), std::move(sparsity_variables),
         std::move(assemble), scale);
+    return index;
 }
 
 void EquationSystemBuilder::add_initialization_relation(
@@ -650,6 +653,12 @@ NonlinearProblem EquationSystemBuilder::build() const {
     problem.residual_scales = registry_.residual_scales();
     problem.lower_bounds = registry_.lower_bounds();
     problem.upper_bounds = registry_.upper_bounds();
+    problem.automatic_structural_decomposition_safe =
+        std::all_of(
+            equations_.begin(), equations_.end(),
+            [](const Equation& equation) {
+                return equation.linear;
+            });
 
     const auto equations = equations_;
     const std::size_t variable_count = registry_.variables().size();

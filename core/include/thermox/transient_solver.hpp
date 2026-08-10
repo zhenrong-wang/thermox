@@ -78,6 +78,7 @@ struct DaeProblem {
     std::vector<double> residual_scales;
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
+    bool automatic_structural_decomposition_safe{false};
     DaeResidualFunction residual;
     DaeResidualSubsetFunction residual_subset;
     DaeJacobianFunction jacobian;

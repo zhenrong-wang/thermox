@@ -165,7 +165,8 @@ SimulationJobRequest request(
             "sha256:" + std::string(64, '2'),
         };
     value.steady_solver.max_iterations = 17;
-    value.steady_solver.structural_decomposition_enabled = true;
+    value.steady_solver.structural_decomposition_policy =
+        thermox::service::StructuralDecompositionPolicy::blocks;
     value.transient_solver.end_time = 12.5;
 
     thermox::service::PerformanceMapArtifactInput map;
@@ -322,7 +323,8 @@ void test_idempotency_and_tenant_scope(
         first.job_id == repeated.job_id &&
             repeated.request.steady_solver.max_iterations == 17 &&
             repeated.request.steady_solver
-                .structural_decomposition_enabled &&
+                .structural_decomposition_policy ==
+                thermox::service::StructuralDecompositionPolicy::blocks &&
             repeated.request.artifacts.performance_maps.size() == 1 &&
             repeated.request.artifacts.performance_maps.front().map
                     ->output_constraints.front().maximum == 1.0 &&
@@ -1020,8 +1022,8 @@ void test_projects_and_immutable_model_revisions(
     run_request.run_configuration_id = "postgres-design-run";
     run_request.study_revision_id = study.study_revision_id;
     run_request.steady_solver.max_iterations = 41;
-    run_request.steady_solver.structural_decomposition_enabled =
-        true;
+    run_request.steady_solver.structural_decomposition_policy =
+        thermox::service::StructuralDecompositionPolicy::blocks;
     const auto run =
         projects.create_run_configuration_revision(run_request);
     const auto loaded =
@@ -1034,7 +1036,8 @@ void test_projects_and_immutable_model_revisions(
             loaded->study_revision_id == study.study_revision_id &&
             loaded->steady_solver.max_iterations == 41 &&
             loaded->steady_solver
-                .structural_decomposition_enabled &&
+                .structural_decomposition_policy ==
+                thermox::service::StructuralDecompositionPolicy::blocks &&
             loaded->checksum == run.checksum &&
             projects
                     .list_run_configuration_revisions(

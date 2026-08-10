@@ -159,8 +159,15 @@ configured linear tolerance rejects that Newton solve instead of allowing an ina
 contaminate nonlinear convergence. Diagnostics retain the last and worst accepted linear errors;
 continuation and transient integration propagate the worst error across all internal solves.
 
-For a structurally nonsingular fixed sparse pattern, callers may enable dependency-ordered block
-execution. The solver restricts each irreducible block to its matched equations and variables,
+For a structurally nonsingular fixed sparse pattern, the default `automatic` policy selects
+dependency-ordered block execution only when the system is reducible, the provider exposes both
+residual-row and fixed-CSR-value subset callbacks, and the compiler explicitly asserts that block
+execution is root-equivalent to the monolithic formulation. The native equation builders make
+that assertion only when every assembled equation is linear; sparsity alone cannot prove root
+uniqueness for nonlinear thermal models. If an automatic block attempt nevertheless fails, Newton
+retries the monolithic problem from the original initial state and retains the attempted work in
+diagnostics. Callers may force `monolithic` or `blocks` for controlled comparisons and custom
+providers. The solver restricts each irreducible block to its matched equations and variables,
 retains the provider's exact sparse Jacobian values, and solves blocks serially in triangular
 order. Upstream state is fixed while downstream blocks solve. A final full-model residual check is
 mandatory, so an incomplete declared dependency pattern cannot produce a false convergence.
@@ -169,7 +176,8 @@ the first failed block. A single irreducible block automatically stays on the mo
 `NonlinearProblem` also exposes optional residual-row and fixed-CSR-value subset callbacks. The
 steady and DAE equation-system builders publish these callbacks automatically from their
 per-equation functions, so native compiled graphs evaluate only the equations owned by each block.
-Custom providers may omit them and retain the correct full-callback fallback.
+Custom providers may omit them; automatic policy then stays monolithic, while forced block mode
+retains the correct full-callback fallback.
 Steady diagnostics also report the largest absolute normalized residual and its registered
 equation name at the returned state. Transient diagnostics retain the largest such residual among
 converged consistent-initialization and implicit-stage solves. These values make the conservation,

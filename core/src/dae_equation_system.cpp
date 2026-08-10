@@ -137,7 +137,7 @@ std::size_t DaeEquationSystemBuilder::add_linear_equation(
         }
         sparsity.push_back(term.variable);
     }
-    return add_sparse_equation(
+    const auto index = add_sparse_equation(
         std::move(name), std::move(sparsity),
         [terms = std::move(terms), rhs](
             double,
@@ -155,6 +155,8 @@ std::size_t DaeEquationSystemBuilder::add_linear_equation(
             return EvaluationStatus::success();
         },
         scale);
+    equations_.back().linear = true;
+    return index;
 }
 
 DaeProblem DaeEquationSystemBuilder::build() const {
@@ -180,6 +182,12 @@ DaeProblem DaeEquationSystemBuilder::build() const {
     problem.residual_scales = registry_.residual_scales();
     problem.lower_bounds = registry_.lower_bounds();
     problem.upper_bounds = registry_.upper_bounds();
+    problem.automatic_structural_decomposition_safe =
+        std::all_of(
+            equations_.begin(), equations_.end(),
+            [](const DaeEquation& equation) {
+                return equation.linear;
+            });
 
     const auto equations = equations_;
     problem.residual =

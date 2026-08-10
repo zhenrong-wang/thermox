@@ -1419,7 +1419,8 @@ void test_run_configurations_bind_complete_execution_intent() {
     request.run_configuration_id = "design-run";
     request.study_revision_id = study.study_revision_id;
     request.steady_solver.max_iterations = 37;
-    request.steady_solver.structural_decomposition_enabled = true;
+    request.steady_solver.structural_decomposition_policy =
+        thermox::service::StructuralDecompositionPolicy::blocks;
     const auto first =
         service.create_run_configuration_revision(request);
     request.parent_run_configuration_revision_id =
@@ -1440,7 +1441,8 @@ void test_run_configurations_bind_complete_execution_intent() {
             first.checksum.starts_with("sha256:") &&
             first.steady_solver.max_iterations == 37 &&
             first.steady_solver
-                .structural_decomposition_enabled &&
+                .structural_decomposition_policy ==
+                thermox::service::StructuralDecompositionPolicy::blocks &&
             resolved &&
             resolved->study.artifact_qualification_requirements.size() ==
                 1U &&
@@ -1496,7 +1498,7 @@ void test_run_configurations_bind_complete_execution_intent() {
             serialized.find("\"max_iterations\": 37") !=
                 std::string::npos &&
             serialized.find(
-                "\"structural_decomposition_enabled\": true") !=
+                "\"structural_decomposition_policy\": \"blocks\"") !=
                 std::string::npos &&
             serialized.find(study.study_revision_id) !=
                 std::string::npos,

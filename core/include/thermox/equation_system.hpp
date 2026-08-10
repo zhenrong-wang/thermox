@@ -52,6 +52,7 @@ struct Equation {
         evaluate_continuation_checked;
     ContinuationSparseEquationCallback
         assemble_continuation_sparse;
+    bool linear{false};
 };
 
 enum class LinearEquationRelation {

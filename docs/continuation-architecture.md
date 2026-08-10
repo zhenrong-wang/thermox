@@ -106,7 +106,7 @@ homotopy does not add quantities with incompatible numerical magnitudes.
 ## Platform contract
 
 Continuation is an opt-in member of `SteadySolverSettings`. The service publishes it as
-`thermox.newton-continuation/v4`, persists the settings with run configurations and jobs, and
+`thermox.newton-continuation/v5`, persists the settings with run configurations and jobs, and
 returns structured stage diagnostics. HTTP, CLI, and web interfaces only select settings and
 render results; they do not own continuation logic.
 

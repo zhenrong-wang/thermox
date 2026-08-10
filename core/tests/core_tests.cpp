@@ -6,6 +6,7 @@
 #include "thermox/sparse_matrix.hpp"
 #include "thermox/variable_registry.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <functional>
@@ -714,6 +715,13 @@ void test_newton_solver_validates_options_and_problem() {
         [&]() { (void)thermox::solve_newton(problem, invalid_options); },
         "invalid linear_residual_tolerance should throw");
 
+    invalid_options = {};
+    invalid_options.structural_decomposition_policy =
+        static_cast<thermox::StructuralDecompositionPolicy>(99);
+    require_throws_invalid_argument(
+        [&]() { (void)thermox::solve_newton(problem, invalid_options); },
+        "invalid structural decomposition policy should throw");
+
     thermox::NonlinearProblem invalid_problem = problem;
     invalid_problem.variable_scales = {0.0};
     require_throws_invalid_argument([&]() { (void)thermox::solve_newton(invalid_problem); },
@@ -1219,6 +1227,7 @@ void test_newton_solves_dependency_ordered_structural_blocks() {
     problem.residual_names = {
         "source_equation", "sum", "difference"};
     problem.initial_guess = {0.0, 0.0, 0.0};
+    problem.automatic_structural_decomposition_safe = true;
     int full_residual_calls = 0;
     int subset_residual_calls = 0;
     int full_jacobian_calls = 0;
@@ -1284,7 +1293,6 @@ void test_newton_solves_dependency_ordered_structural_blocks() {
         };
 
     thermox::SolverOptions options;
-    options.structural_decomposition_enabled = true;
     const auto result = thermox::solve_newton(problem, options);
     require(result.diagnostics.converged,
             result.diagnostics.message);
@@ -1306,6 +1314,57 @@ void test_newton_solves_dependency_ordered_structural_blocks() {
         "block execution uses row-selective callbacks and reserves the full residual for final acceptance");
 }
 
+void test_automatic_structural_policy_keeps_custom_callbacks_monolithic() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"first", "second"};
+    problem.residual_names = {"first_equation", "second_equation"};
+    problem.initial_guess = {0.0, 0.0};
+    problem.residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        residual[0] = x[0] - 1.0;
+        residual[1] = x[1] - 2.0;
+    };
+    problem.sparse_jacobian_pattern =
+        thermox::sparse_from_triplets(
+            2, 2, {{0, 0, 1.0}, {1, 1, 1.0}}).pattern();
+    problem.sparse_jacobian_values = [](
+        const std::vector<double>&,
+        std::vector<double>& values) {
+        values = {1.0, 1.0};
+    };
+
+    const auto result = thermox::solve_newton(
+        problem, thermox::SolverOptions{});
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require(
+        result.diagnostics.structural_block_solves == 0 &&
+            result.diagnostics.largest_linear_system_size == 2,
+        "automatic policy keeps providers without subset evaluation monolithic");
+}
+
+void test_linear_equation_builder_certifies_automatic_blocks() {
+    thermox::EquationSystemBuilder system;
+    const auto first = system.add_variable("first", 0.0);
+    const auto second = system.add_variable("second", 0.0);
+    system.add_linear_equation(
+        "first_equation", {{first, 1.0}}, 1.0);
+    system.add_linear_equation(
+        "second_equation", {{second, 1.0}}, 2.0);
+    const auto problem = system.build();
+    require(problem.automatic_structural_decomposition_safe,
+            "fully linear builder output certifies root equivalence");
+
+    const auto result = thermox::solve_newton(
+        problem, thermox::SolverOptions{});
+    require(
+        result.diagnostics.converged &&
+            result.diagnostics.structural_block_solves == 2 &&
+            result.diagnostics.largest_linear_system_size == 1,
+        "automatic policy executes certified linear structural blocks");
+}
+
 void test_structural_block_solve_checks_complete_residual() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"first", "second"};
@@ -1317,6 +1376,17 @@ void test_structural_block_solve_checks_complete_residual() {
         residual[0] = x[0] + x[1] - 2.0;
         residual[1] = x[1] - 1.0;
     };
+    problem.checked_residual_subset = [](
+        const std::vector<double>& x,
+        const std::vector<std::size_t>& rows,
+        std::vector<double>& residual) {
+        for (std::size_t index = 0; index < rows.size(); ++index) {
+            residual[index] = rows[index] == 0
+                ? x[0] + x[1] - 2.0
+                : x[1] - 1.0;
+        }
+        return thermox::EvaluationStatus::success();
+    };
     const auto declared = thermox::sparse_from_triplets(
         2, 2, {{0, 0, 1.0}, {1, 1, 1.0}});
     problem.sparse_jacobian_pattern = declared.pattern();
@@ -1325,8 +1395,15 @@ void test_structural_block_solve_checks_complete_residual() {
         std::vector<double>& values) {
         values = {1.0, 1.0};
     };
+    problem.sparse_jacobian_values_subset = [](
+        const std::vector<double>&,
+        const std::vector<std::size_t>&,
+        std::vector<double>& values) {
+        std::fill(values.begin(), values.end(), 1.0);
+    };
     thermox::SolverOptions options;
-    options.structural_decomposition_enabled = true;
+    options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::blocks;
     const auto result = thermox::solve_newton(problem, options);
     require(
         !result.diagnostics.converged &&
@@ -1334,6 +1411,18 @@ void test_structural_block_solve_checks_complete_residual() {
                 "whole-system residual check") !=
                 std::string::npos,
         "final full residual rejects an incomplete declared dependency pattern");
+
+    problem.automatic_structural_decomposition_safe = true;
+    options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::automatic;
+    const auto recovered = thermox::solve_newton(
+        problem, options);
+    require(
+        recovered.diagnostics.converged &&
+            recovered.diagnostics.structural_block_solves > 0 &&
+            recovered.diagnostics.message.find(
+                "fell back to monolithic") != std::string::npos,
+        "automatic policy retries the original problem monolithically after a block failure");
 }
 
 void test_equation_system_builds_row_selective_callbacks() {
@@ -1649,6 +1738,8 @@ int main() {
         test_structural_analysis_localizes_singular_regions();
         test_structural_analysis_orders_irreducible_blocks();
         test_newton_solves_dependency_ordered_structural_blocks();
+        test_automatic_structural_policy_keeps_custom_callbacks_monolithic();
+        test_linear_equation_builder_certifies_automatic_blocks();
         test_structural_block_solve_checks_complete_residual();
         test_equation_system_builds_row_selective_callbacks();
         test_fixed_bound_finite_difference_fails_cleanly();

@@ -8,6 +8,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace thermox::service {
@@ -880,12 +881,23 @@ struct ValidateModelResponse {
     }
 };
 
+enum class StructuralDecompositionPolicy {
+    automatic,
+    monolithic,
+    blocks,
+};
+
+std::string to_string(StructuralDecompositionPolicy policy);
+StructuralDecompositionPolicy structural_decomposition_policy_from_string(
+    std::string_view value);
+
 struct SteadySolverSettings {
     int max_iterations{50};
     double residual_tolerance{1.0e-10};
     double step_tolerance{1.0e-10};
     double linear_residual_tolerance{1.0e-10};
-    bool structural_decomposition_enabled{false};
+    StructuralDecompositionPolicy structural_decomposition_policy{
+        StructuralDecompositionPolicy::automatic};
     double finite_difference_epsilon{1.0e-6};
     double min_damping{1.0e-6};
     double damping_reduction{0.5};

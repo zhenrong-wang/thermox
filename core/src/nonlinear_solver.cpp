@@ -38,6 +38,15 @@ bool is_positive_finite(double value) {
 }
 
 void validate_options(const SolverOptions& options) {
+    switch (options.structural_decomposition_policy) {
+    case StructuralDecompositionPolicy::automatic:
+    case StructuralDecompositionPolicy::monolithic:
+    case StructuralDecompositionPolicy::blocks:
+        break;
+    default:
+        throw std::invalid_argument(
+            "structural_decomposition_policy is invalid");
+    }
     if (options.max_iterations < 0) {
         throw std::invalid_argument("max_iterations must be non-negative");
     }
@@ -1458,6 +1467,31 @@ void accumulate_block_diagnostics(
         block.history.begin(), block.history.end());
 }
 
+void prepend_failed_attempt_diagnostics(
+    SolverDiagnostics& final,
+    const SolverDiagnostics& attempt) {
+    final.iterations += attempt.iterations;
+    final.function_evaluations += attempt.function_evaluations;
+    final.jacobian_evaluations += attempt.jacobian_evaluations;
+    final.linear_solver_evaluations +=
+        attempt.linear_solver_evaluations;
+    final.symbolic_factorizations +=
+        attempt.symbolic_factorizations;
+    final.numeric_factorizations +=
+        attempt.numeric_factorizations;
+    final.maximum_linear_backward_error = std::max(
+        final.maximum_linear_backward_error,
+        attempt.maximum_linear_backward_error);
+    final.structural_block_solves +=
+        attempt.structural_block_solves;
+    final.largest_linear_system_size = std::max(
+        final.largest_linear_system_size,
+        attempt.largest_linear_system_size);
+    final.history.insert(
+        final.history.begin(),
+        attempt.history.begin(), attempt.history.end());
+}
+
 NonlinearSolveResult solve_newton_monolithic(
     const NonlinearProblem& problem,
     const SolverOptions& options) {
@@ -1697,7 +1731,8 @@ NonlinearSolveResult solve_newton_by_structural_blocks(
     NonlinearSolveResult result;
     result.x = problem.initial_guess;
     SolverOptions block_options = options;
-    block_options.structural_decomposition_enabled = false;
+    block_options.structural_decomposition_policy =
+        StructuralDecompositionPolicy::monolithic;
     auto factorization_resolver =
         options.sparse_factorization_resolver;
     if (!factorization_resolver &&
@@ -1783,7 +1818,8 @@ NonlinearSolveResult solve_newton_by_structural_blocks(
 NonlinearSolveResult solve_newton(
     const NonlinearProblem& problem,
     const SolverOptions& options) {
-    if (!options.structural_decomposition_enabled ||
+    if (options.structural_decomposition_policy ==
+            StructuralDecompositionPolicy::monolithic ||
         !problem.sparse_jacobian_pattern.has_value()) {
         return solve_newton_monolithic(problem, options);
     }
@@ -1800,8 +1836,30 @@ NonlinearSolveResult solve_newton(
     if (structure.structural_blocks.size() <= 1U) {
         return solve_newton_monolithic(problem, options);
     }
-    return solve_newton_by_structural_blocks(
+    if (options.structural_decomposition_policy ==
+            StructuralDecompositionPolicy::automatic &&
+        (!problem.automatic_structural_decomposition_safe ||
+         !problem.checked_residual_subset ||
+         !problem.sparse_jacobian_values_subset)) {
+        return solve_newton_monolithic(problem, options);
+    }
+    auto block_result = solve_newton_by_structural_blocks(
         problem, options, structure);
+    if (block_result.diagnostics.converged ||
+        options.structural_decomposition_policy ==
+            StructuralDecompositionPolicy::blocks) {
+        return block_result;
+    }
+    auto monolithic_result = solve_newton_monolithic(
+        problem, options);
+    prepend_failed_attempt_diagnostics(
+        monolithic_result.diagnostics,
+        block_result.diagnostics);
+    monolithic_result.diagnostics.message =
+        "automatic structural solve fell back to monolithic after: " +
+        block_result.diagnostics.message + "; " +
+        monolithic_result.diagnostics.message;
+    return monolithic_result;
 }
 
 }  // namespace thermox

@@ -237,7 +237,7 @@ void append_steady(
         << value.residual_tolerance << '|'
         << value.step_tolerance << '|'
         << value.linear_residual_tolerance << '|'
-        << value.structural_decomposition_enabled << '|'
+        << to_string(value.structural_decomposition_policy) << '|'
         << value.finite_difference_epsilon << '|'
         << value.min_damping << '|'
         << value.damping_reduction << '|'

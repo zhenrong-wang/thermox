@@ -46,6 +46,7 @@ struct DaeEquation {
     CheckedDaeEquationCallback evaluate;
     SparseDaeEquationCallback assemble_sparse;
     std::vector<std::size_t> sparsity_variables;
+    bool linear{false};
 };
 
 class DaeEquationSystemBuilder {

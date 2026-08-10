@@ -21,7 +21,7 @@ interface RunConfigurationFormProps {
 
 type SteadyNumericKey = Exclude<
   keyof SteadySolverSettings,
-  'continuation_enabled' | 'structural_decomposition_enabled'
+  'continuation_enabled' | 'structural_decomposition_policy'
 >
 
 const steadyFields: Array<{
@@ -304,18 +304,22 @@ function SolverFields({
         />
         <span>Use adaptive continuation</span>
       </label>
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={value.structural_decomposition_enabled}
+      <label>
+        <span>Structural solve policy</span>
+        <select
+          value={value.structural_decomposition_policy}
           onChange={(event) =>
             onChange({
               ...value,
-              structural_decomposition_enabled: event.target.checked,
+              structural_decomposition_policy: event.target.value as
+                SteadySolverSettings['structural_decomposition_policy'],
             })
           }
-        />
-        <span>Solve dependency-ordered structural blocks</span>
+        >
+          <option value="automatic">Automatic</option>
+          <option value="monolithic">Force monolithic</option>
+          <option value="blocks">Force structural blocks</option>
+        </select>
       </label>
       <div className="form-grid">
         {steadyFields.map((field) => (
