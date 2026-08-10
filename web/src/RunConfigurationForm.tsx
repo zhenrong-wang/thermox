@@ -65,7 +65,7 @@ const transientFields: Array<{
   { key: 'initial_step', label: 'Initial step' },
   { key: 'min_step', label: 'Minimum step' },
   { key: 'max_step', label: 'Maximum step' },
-  { key: 'absolute_tolerance', label: 'Absolute tolerance' },
+  { key: 'absolute_tolerance', label: 'Scaled absolute tolerance' },
   { key: 'relative_tolerance', label: 'Relative tolerance' },
   { key: 'max_steps', label: 'Max steps', integer: true },
   {

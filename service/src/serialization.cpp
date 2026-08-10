@@ -1980,6 +1980,15 @@ std::string serialize_transient_response_json(
     json_number(out, response.diagnostics.final_time);
     out << ", \"last_step\": ";
     json_number(out, response.diagnostics.last_step);
+    out << ", \"last_error_norm\": ";
+    json_number(out, response.diagnostics.last_error_norm);
+    out << ", \"maximum_accepted_error_norm\": ";
+    json_number(
+        out, response.diagnostics.maximum_accepted_error_norm);
+    out << ", \"maximum_error_ratio\": ";
+    json_number(out, response.diagnostics.maximum_error_ratio);
+    out << ", \"limiting_error_variable\": ";
+    json_string(out, response.diagnostics.limiting_error_variable);
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
     out << "},\n  \"trajectory\": [";

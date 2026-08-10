@@ -301,31 +301,50 @@ ImplicitStepResult solve_bdf2_step(
         upper_bounds, options);
 }
 
-double integration_error_norm(const std::vector<double>& coarse,
-                              const std::vector<double>& refined,
-                              const std::vector<double>& previous,
-                              const std::vector<DaeVariableKind>& kinds,
-                              double absolute_tolerance,
-                              double relative_tolerance) {
+struct IntegrationErrorEstimate {
+    double norm{0.0};
+    double maximum_ratio{0.0};
+    std::size_t limiting_variable{0U};
+    bool has_controlled_variable{false};
+};
+
+IntegrationErrorEstimate integration_error_estimate(
+    const std::vector<double>& coarse,
+    const std::vector<double>& refined,
+    const std::vector<double>& previous,
+    const std::vector<double>& variable_scales,
+    const std::vector<DaeVariableKind>& kinds,
+    double absolute_tolerance,
+    double relative_tolerance) {
     long double sum = 0.0;
     std::size_t controlled_variables = 0;
+    IntegrationErrorEstimate estimate;
     for (std::size_t i = 0; i < coarse.size(); ++i) {
         if (!kinds.empty() &&
             kinds[i] != DaeVariableKind::differential) {
             continue;
         }
         const double scale =
-            absolute_tolerance +
+            absolute_tolerance * variable_scales[i] +
             relative_tolerance *
                 std::max({std::abs(previous[i]), std::abs(coarse[i]), std::abs(refined[i])});
-        const long double error =
-            static_cast<long double>(refined[i] - coarse[i]) / static_cast<long double>(scale);
+        const long double error = static_cast<long double>(
+            refined[i] - coarse[i]) / static_cast<long double>(scale);
         sum += error * error;
+        const double ratio = std::abs(static_cast<double>(error));
+        if (!estimate.has_controlled_variable ||
+            ratio > estimate.maximum_ratio) {
+            estimate.maximum_ratio = ratio;
+            estimate.limiting_variable = i;
+        }
+        estimate.has_controlled_variable = true;
         ++controlled_variables;
     }
-    if (controlled_variables == 0) return 0.0;
-    return std::sqrt(static_cast<double>(
-        sum / static_cast<long double>(controlled_variables)));
+    if (controlled_variables != 0U) {
+        estimate.norm = std::sqrt(static_cast<double>(
+            sum / static_cast<long double>(controlled_variables)));
+    }
+    return estimate;
 }
 
 bool event_crossed(double before, double after, EventDirection direction) {
@@ -717,12 +736,30 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         }
 
         double error = std::numeric_limits<double>::infinity();
+        IntegrationErrorEstimate error_estimate;
         if (full.success && first_half.success && second_half.success) {
-            error = integration_error_norm(full.state, second_half.state, state,
-                                           problem.variable_kinds,
-                                           options.absolute_tolerance,
-                                           options.relative_tolerance);
-            error /= std::pow(2.0, trial_order) - 1.0;
+            error_estimate = integration_error_estimate(
+                full.state, second_half.state, state, variable_scales,
+                problem.variable_kinds,
+                options.absolute_tolerance,
+                options.relative_tolerance);
+            const double richardson =
+                std::pow(2.0, trial_order) - 1.0;
+            error_estimate.norm /= richardson;
+            error_estimate.maximum_ratio /= richardson;
+            error = error_estimate.norm;
+            result.diagnostics.last_error_norm = error;
+            if (result.diagnostics.limiting_error_variable.empty() ||
+                error_estimate.maximum_ratio >
+                    result.diagnostics.maximum_error_ratio) {
+                result.diagnostics.maximum_error_ratio =
+                    error_estimate.maximum_ratio;
+                if (error_estimate.has_controlled_variable) {
+                    result.diagnostics.limiting_error_variable =
+                        problem.variable_names.at(
+                            error_estimate.limiting_variable);
+                }
+            }
         }
 
         if (!std::isfinite(error) || error > 1.0) {
@@ -792,6 +829,8 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         result.diagnostics.maximum_order_used = std::max(
             result.diagnostics.maximum_order_used, trial_order);
         result.diagnostics.last_step = step;
+        result.diagnostics.maximum_accepted_error_norm = std::max(
+            result.diagnostics.maximum_accepted_error_norm, error);
         result.trajectory.push_back(DaeState{time, state, derivative});
 
         bool terminal_event = false;

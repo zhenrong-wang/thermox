@@ -147,7 +147,8 @@ Implemented in this sprint:
   failures, backtracking line search, structural matching, and iteration diagnostics.
 - Implicit index-1 DAE path for `F(t, y, y_dot) = 0` with differential/algebraic variables,
   consistent initial conditions, analytic dense/sparse Jacobians, adaptive variable-step BDF1/BDF2
-  doubling, event detection, and trajectory diagnostics.
+  doubling, per-state physically scaled local-error control, limiting-state diagnostics, event
+  detection, and trajectory diagnostics.
 - First-class `thermox_platform` module with a model document, component registry, property registry
   integration, and graph compiler.
 - A separate composition-aware thermochemistry contract validates ordered species bases and

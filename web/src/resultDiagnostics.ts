@@ -72,6 +72,14 @@ export function resultDiagnosticSummary(
           value: `${number(result.diagnostics.last_step)} s`,
         },
         {
+          label: 'Last local error',
+          value: number(result.diagnostics.last_error_norm),
+        },
+        {
+          label: 'Limiting state',
+          value: result.diagnostics.limiting_error_variable || '—',
+        },
+        {
           label: 'Linear solver',
           value: result.diagnostics.linear_solver_backend || '—',
         },

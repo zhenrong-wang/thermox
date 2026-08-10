@@ -1115,7 +1115,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v2",
+        "thermox.dae-bdf/v3",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1202,6 +1202,10 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.linear_solver_backend,
         source.final_time,
         source.last_step,
+        source.last_error_norm,
+        source.maximum_accepted_error_norm,
+        source.maximum_error_ratio,
+        source.limiting_error_variable,
         source.message,
     };
 }

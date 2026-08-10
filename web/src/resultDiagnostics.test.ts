@@ -69,6 +69,10 @@ describe('resultDiagnosticSummary', () => {
         linear_solver_backend: 'klu',
         final_time: 5,
         last_step: 0.25,
+        last_error_norm: 0.42,
+        maximum_accepted_error_norm: 0.91,
+        maximum_error_ratio: 1.4,
+        limiting_error_variable: 'drum.total_energy',
         message: 'integration complete',
       },
     } satisfies SimulationResult
@@ -77,6 +81,10 @@ describe('resultDiagnosticSummary', () => {
     expect(summary.facts).toContainEqual({
       label: 'Accepted steps',
       value: '12',
+    })
+    expect(summary.facts).toContainEqual({
+      label: 'Limiting state',
+      value: 'drum.total_energy',
     })
   })
 

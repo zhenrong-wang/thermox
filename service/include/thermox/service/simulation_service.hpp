@@ -726,6 +726,10 @@ struct TimeIntegrationDiagnostics {
     std::string linear_solver_backend;
     double final_time{0.0};
     double last_step{0.0};
+    double last_error_norm{0.0};
+    double maximum_accepted_error_norm{0.0};
+    double maximum_error_ratio{0.0};
+    std::string limiting_error_variable;
     std::string message;
 };
 
@@ -1014,6 +1018,8 @@ struct TransientSolverSettings {
     double initial_step{1.0e-3};
     double min_step{1.0e-9};
     double max_step{0.1};
+    // Dimensionless multiplier applied to each DAE differential
+    // variable's declared physical scale.
     double absolute_tolerance{1.0e-7};
     double relative_tolerance{1.0e-5};
     int max_steps{100000};

@@ -190,6 +190,56 @@ void test_adaptive_dae_integration() {
                  "event time is interpolated");
 }
 
+void test_adaptive_error_control_uses_physical_variable_scales() {
+    auto problem = make_decay_problem();
+    problem.variable_names = {"trace_inventory"};
+    problem.initial_state = {1.0e-9};
+    problem.variable_scales = {1.0e-9};
+    problem.derivative_scales = {1.0e-8};
+    problem.residual_scales = {1.0e-8};
+    problem.lower_bounds = {0.0};
+    problem.upper_bounds = {2.0e-9};
+    problem.residual = [](
+        double, const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        residual[0] = derivative[0] + 10.0 * state[0];
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double, const std::vector<double>&,
+        const std::vector<double>&, double derivative_coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = derivative_coefficient + 10.0;
+        return thermox::EvaluationStatus::success();
+    };
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 1.0;
+    options.initial_step = 1.0;
+    options.max_step = 1.0;
+    options.absolute_tolerance = 1.0e-4;
+    options.relative_tolerance = 1.0e-6;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.diagnostics.accepted_steps > 1,
+        "a small physical state must not disappear under a scalar "
+        "absolute tolerance");
+    require_near(
+        result.trajectory.back().state[0], 1.0e-9 * std::exp(-10.0),
+        5.0e-13,
+        "scale-aware error control resolves trace-inventory decay");
+    require(
+        result.diagnostics.maximum_accepted_error_norm <= 1.0 &&
+            result.diagnostics.last_error_norm <= 1.0 &&
+            result.diagnostics.maximum_error_ratio > 0.0 &&
+            result.diagnostics.limiting_error_variable ==
+                "trace_inventory",
+        "integration diagnostics identify the scale-limiting physical "
+        "state and accepted normalized error");
+}
+
 void test_variable_order_bdf2_improves_smooth_accuracy() {
     const auto problem = make_decay_problem();
     thermox::TimeIntegrationOptions first_order;
@@ -327,6 +377,10 @@ void test_adaptive_error_control_uses_differential_states_only() {
     require(result.diagnostics.success, result.diagnostics.message);
     require(result.diagnostics.accepted_steps < 100,
             "algebraic readout must not drive adaptive step size");
+    require(
+        result.diagnostics.limiting_error_variable == "inventory",
+        "local-error diagnostics must identify a differential state, "
+        "not an algebraic readout");
     const auto& final = result.trajectory.back().state;
     require_near(final[0], std::exp(-0.5), 2.0e-3,
                  "differential state controls integration accuracy");
@@ -361,6 +415,7 @@ int main() {
         test_consistent_initial_conditions_for_ode();
         test_singular_initialization_names_unresolved_unknown();
         test_adaptive_dae_integration();
+        test_adaptive_error_control_uses_physical_variable_scales();
         test_variable_order_bdf2_improves_smooth_accuracy();
         test_native_bdf_rejects_unsupported_order();
         test_index_one_dae_consistent_initialization_and_integration();

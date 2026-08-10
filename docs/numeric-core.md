@@ -96,9 +96,13 @@ targets index-1 systems.
 - fully implicit variable-step BDF1/BDF2 integration;
 - backward-Euler startup and automatic BDF1 restart after an unsuccessful BDF2 trial;
 - order-aware adaptive error control using one full step versus two half steps;
+- dimensionally coherent weighting of each differential state by
+  `absolute_tolerance * variable_scale + relative_tolerance * state_magnitude`;
+- exclusion of algebraic readouts from truncation-error control while still solving their
+  constraints at every implicit stage;
 - bounded Newton solves at every implicit stage;
 - rejected-step recovery;
-- trajectory and nonlinear-work diagnostics;
+- trajectory, nonlinear-work, accepted-error, and limiting-state diagnostics;
 - rising, falling, and direction-independent events;
 - terminal events with an interpolated terminal state.
 

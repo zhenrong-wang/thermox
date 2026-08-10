@@ -720,6 +720,10 @@ export interface TransientSimulationResult {
     linear_solver_backend: string
     final_time: number
     last_step: number
+    last_error_norm: number
+    maximum_accepted_error_norm: number
+    maximum_error_ratio: number
+    limiting_error_variable: string
     message: string
   }
   trajectory: TransientGraphSample[]

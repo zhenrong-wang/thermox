@@ -78,6 +78,8 @@ Delivered:
 4. Recoverable/fatal physics-evaluation status and bounds-aware line-search recovery. ✅
 5. Duplicate-name validation and fixed-pattern structural matching. ✅
 6. Index-1 DAE contract, consistent initial conditions, implicit adaptive integration, and events. ✅
+   - per-differential-state absolute error weighting through declared physical scales, retained
+     relative control, algebraic constraint exclusion, and limiting-state/error diagnostics. ✅
 7. Steady, transient, sanitizer, platform, and isolated example regression coverage. ✅
 8. Reusable UMFPACK factorization lifecycle with fixed-pattern symbolic reuse across steady Newton
    iterations, consistent DAE initialization, and transient stages. ✅

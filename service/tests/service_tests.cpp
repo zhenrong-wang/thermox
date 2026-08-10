@@ -3879,11 +3879,16 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v2",
+            "thermox.dae-bdf/v3",
         "transient result must record solver contract");
     require(
-        response.diagnostics.maximum_order_used == 2,
-        "native transient service must advance from BDF1 startup to BDF2");
+        response.diagnostics.maximum_order_used == 2 &&
+            response.diagnostics.last_error_norm <= 1.0 &&
+            response.diagnostics.maximum_accepted_error_norm <= 1.0 &&
+            response.diagnostics.maximum_error_ratio >= 0.0 &&
+            !response.diagnostics.limiting_error_variable.empty(),
+        "native transient service must expose scale-aware BDF order "
+        "and local-error evidence");
     const auto end_time_setting = std::find_if(
         response.metadata.solver.settings.begin(),
         response.metadata.solver.settings.end(),
@@ -3932,6 +3937,10 @@ void test_transient_service() {
             json.find("\"internal_values\": [") !=
                 std::string::npos &&
             json.find("\"derivative_si_s\":") !=
+                std::string::npos &&
+            json.find("\"last_error_norm\":") !=
+                std::string::npos &&
+            json.find("\"limiting_error_variable\":") !=
                 std::string::npos,
         "transient JSON must expose graph-native trajectory state");
 }
