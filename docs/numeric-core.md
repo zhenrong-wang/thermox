@@ -58,6 +58,14 @@ the intended path for property-domain and map-boundary failures.
 `analyze_problem_structure` validates names and dimensions and performs bipartite structural
 matching when a fixed Jacobian pattern is available.
 
+For a structurally nonsingular incidence graph, the same analysis forms the directed dependency
+graph induced by the equation-variable matching, collapses its strongly connected components, and
+returns irreducible square blocks in deterministic dependency-first order. The graph compiler
+retains this report before choosing a fixed or hybrid Jacobian representation, and validation
+exposes every block plus the largest block size. This is analysis-only today: Newton still solves
+the complete coupled system, while future block solves and tearing can consume the established
+ordering without changing component equations.
+
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,
 warm-starting each stage and preserving dense, sparse, and hybrid derivative paths. Compiled
@@ -170,6 +178,7 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - Bounds use projected trial steps, not a full constrained optimization method.
 - Structural matching requires a declared fixed sparse pattern.
 - Structural incidence analysis classifies connected underdetermined, overdetermined, and
-  well-determined regions; block ordering and solver tearing are not yet enabled.
+  well-determined regions and exposes dependency-ordered irreducible blocks. Block-wise execution
+  and solver tearing are not yet enabled.
 - Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.

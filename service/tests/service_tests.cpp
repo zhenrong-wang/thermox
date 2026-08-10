@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1313,7 +1314,16 @@ void test_validation_and_canonicalization() {
         response.compilation.compiled &&
             response.compilation.mode == "steady" &&
             response.compilation.variable_count ==
-                response.compilation.equation_count,
+                response.compilation.equation_count &&
+            !response.compilation.structural_blocks.empty() &&
+            response.compilation.largest_structural_block_size > 0 &&
+            std::accumulate(
+                response.compilation.structural_blocks.begin(),
+                response.compilation.structural_blocks.end(),
+                std::size_t{0},
+                [](std::size_t total, const auto& block) {
+                    return total + block.variable_names.size();
+                }) == response.compilation.variable_count,
         "validation must compile and structurally analyze the model");
     require(
         response.readiness.calculatable &&
@@ -1345,6 +1355,15 @@ void test_validation_and_canonicalization() {
                 "components.compressor.parameters.eta_is") !=
                 std::string::npos,
         "canonical model must retain calibration contracts");
+    const auto validation_json =
+        thermox::service::serialize_validate_response_json(response);
+    require(
+        validation_json.find("\"structural_blocks\": [") !=
+                std::string::npos &&
+            validation_json.find(
+                "\"largest_structural_block_size\":") !=
+                std::string::npos,
+        "validation JSON must expose block-triangular structure");
 
     thermox::service::ValidateModelRequest round_trip;
     round_trip.model_json = response.canonical_model_json;
@@ -3866,6 +3885,8 @@ void test_transient_service() {
         service.validate_model(validation_request);
     require(
         validation.succeeded() &&
+            validation.compilation.mode == "transient" &&
+            !validation.compilation.structural_blocks.empty() &&
             validation.canonical_model_json.find(
                 "\"parameter_overrides\"") !=
                 std::string::npos &&

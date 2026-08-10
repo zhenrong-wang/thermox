@@ -177,6 +177,14 @@ export function ValidationPanel({
               <strong>{compilation?.equation_count ?? 0}</strong>
               <span>equations</span>
             </div>
+            <div>
+              <strong>{compilation?.structural_blocks.length ?? 0}</strong>
+              <span>solve blocks</span>
+            </div>
+            <div>
+              <strong>{compilation?.largest_structural_block_size ?? 0}</strong>
+              <span>largest block</span>
+            </div>
             <code>
               {compilation?.catalog_fingerprint.slice(0, 18) || 'no catalog'}
             </code>

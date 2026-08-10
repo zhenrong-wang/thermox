@@ -759,11 +759,18 @@ struct ValidateModelRequest {
     SimulationComponentBundle components;
 };
 
+struct CompilationStructuralBlock {
+    std::vector<std::string> variable_names;
+    std::vector<std::string> equation_names;
+};
+
 struct CompilationSummary {
     bool compiled{false};
     std::string mode;
     std::size_t variable_count{0};
     std::size_t equation_count{0};
+    std::size_t largest_structural_block_size{0};
+    std::vector<CompilationStructuralBlock> structural_blocks;
     std::vector<std::string> reduced_connection_equations;
     std::string catalog_fingerprint;
 };

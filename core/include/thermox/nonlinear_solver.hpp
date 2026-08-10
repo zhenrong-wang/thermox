@@ -146,6 +146,11 @@ struct StructuralRegion {
     std::vector<std::string> residual_names;
 };
 
+struct StructuralBlock {
+    std::vector<std::string> variable_names;
+    std::vector<std::string> residual_names;
+};
+
 struct ProblemStructureReport {
     std::size_t variable_count{0};
     std::size_t residual_count{0};
@@ -159,6 +164,10 @@ struct ProblemStructureReport {
     std::vector<std::string> unmatched_variable_names;
     std::vector<std::string> unmatched_residual_names;
     std::vector<StructuralRegion> structural_regions;
+    // Irreducible square blocks in dependency-first block-triangular order.
+    // Available when the complete incidence pattern is structurally
+    // nonsingular.
+    std::vector<StructuralBlock> structural_blocks;
     std::vector<std::string> messages;
 
     [[nodiscard]] bool valid_for_newton() const;

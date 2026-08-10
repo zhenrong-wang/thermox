@@ -1113,6 +1113,29 @@ void test_structural_analysis_localizes_singular_regions() {
         "DM analysis localizes dependent equations and their variable");
 }
 
+void test_structural_analysis_orders_irreducible_blocks() {
+    const auto structure = thermox::analyze_incidence_structure(
+        {"source_state", "coupled_left", "coupled_right"},
+        {"source_equation", "left_balance", "right_balance"},
+        {{0}, {0, 1, 2}, {1, 2}});
+    require(
+        structure.structurally_nonsingular &&
+            structure.structural_blocks.size() == 2,
+        "square incidence decomposes into irreducible blocks");
+    require(
+        structure.structural_blocks[0].variable_names ==
+                std::vector<std::string>{"source_state"} &&
+            structure.structural_blocks[0].residual_names ==
+                std::vector<std::string>{"source_equation"},
+        "independent upstream block is ordered first");
+    require(
+        structure.structural_blocks[1].variable_names.size() == 2 &&
+            structure.structural_blocks[1].residual_names ==
+                std::vector<std::string>{
+                    "left_balance", "right_balance"},
+        "mutually coupled equations remain one irreducible block");
+}
+
 void test_fixed_bound_finite_difference_fails_cleanly() {
     thermox::NonlinearProblem problem;
     problem.variable_names = {"fixed"};
@@ -1370,6 +1393,7 @@ int main() {
         test_finite_difference_jacobian_recovers_one_sided();
         test_fixed_sparse_pattern_and_structure_analysis();
         test_structural_analysis_localizes_singular_regions();
+        test_structural_analysis_orders_irreducible_blocks();
         test_fixed_bound_finite_difference_fails_cleanly();
         test_equation_system_builder();
         test_compiled_sparse_equation_system_builder();

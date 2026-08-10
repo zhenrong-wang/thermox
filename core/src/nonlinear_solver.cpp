@@ -796,6 +796,134 @@ ProblemStructureReport analyze_incidence_structure(
         report.unmatched_variable_names.empty();
     if (!report.structurally_nonsingular) {
         report.messages.push_back("fixed Jacobian pattern is structurally singular");
+        return report;
+    }
+
+    // Collapse the matched equation-variable dependency graph into strongly
+    // connected components. Each component is an irreducible square block;
+    // topologically ordering the condensation graph gives block-triangular
+    // solve order with upstream dependencies first.
+    std::vector<std::vector<std::size_t>> dependencies(
+        report.residual_count);
+    for (std::size_t consumer = 0;
+         consumer < report.residual_count; ++consumer) {
+        for (const std::size_t column :
+             residual_variable_incidence.at(consumer)) {
+            const auto producer = static_cast<std::size_t>(
+                column_match.at(column));
+            if (producer != consumer) {
+                dependencies.at(producer).push_back(consumer);
+            }
+        }
+    }
+    for (auto& adjacent : dependencies) {
+        std::sort(adjacent.begin(), adjacent.end());
+        adjacent.erase(
+            std::unique(adjacent.begin(), adjacent.end()),
+            adjacent.end());
+    }
+
+    std::vector<int> discovery(report.residual_count, -1);
+    std::vector<int> low_link(report.residual_count, -1);
+    std::vector<bool> on_stack(report.residual_count, false);
+    std::vector<std::size_t> stack;
+    std::vector<std::vector<std::size_t>> components;
+    int next_discovery = 0;
+    const auto visit = [&](auto&& self, std::size_t row) -> void {
+        discovery[row] = next_discovery;
+        low_link[row] = next_discovery;
+        ++next_discovery;
+        stack.push_back(row);
+        on_stack[row] = true;
+        for (const std::size_t adjacent : dependencies[row]) {
+            if (discovery[adjacent] < 0) {
+                self(self, adjacent);
+                low_link[row] =
+                    std::min(low_link[row], low_link[adjacent]);
+            } else if (on_stack[adjacent]) {
+                low_link[row] =
+                    std::min(low_link[row], discovery[adjacent]);
+            }
+        }
+        if (low_link[row] != discovery[row]) return;
+        std::vector<std::size_t> component;
+        while (!stack.empty()) {
+            const std::size_t member = stack.back();
+            stack.pop_back();
+            on_stack[member] = false;
+            component.push_back(member);
+            if (member == row) break;
+        }
+        std::sort(component.begin(), component.end());
+        components.push_back(std::move(component));
+    };
+    for (std::size_t row = 0; row < report.residual_count; ++row) {
+        if (discovery[row] < 0) visit(visit, row);
+    }
+
+    std::vector<std::size_t> component_of(
+        report.residual_count, 0U);
+    std::vector<std::size_t> minimum_row(
+        components.size(), 0U);
+    for (std::size_t component = 0;
+         component < components.size(); ++component) {
+        minimum_row[component] = components[component].front();
+        for (const std::size_t row : components[component]) {
+            component_of[row] = component;
+        }
+    }
+    std::vector<std::vector<std::size_t>> block_dependencies(
+        components.size());
+    std::vector<std::size_t> indegree(components.size(), 0U);
+    for (std::size_t producer = 0;
+         producer < dependencies.size(); ++producer) {
+        for (const std::size_t consumer : dependencies[producer]) {
+            const std::size_t from = component_of[producer];
+            const std::size_t to = component_of[consumer];
+            if (from != to) {
+                block_dependencies[from].push_back(to);
+            }
+        }
+    }
+    for (auto& adjacent : block_dependencies) {
+        std::sort(adjacent.begin(), adjacent.end());
+        adjacent.erase(
+            std::unique(adjacent.begin(), adjacent.end()),
+            adjacent.end());
+        for (const std::size_t target : adjacent) {
+            ++indegree[target];
+        }
+    }
+
+    std::vector<std::size_t> ready;
+    for (std::size_t component = 0;
+         component < components.size(); ++component) {
+        if (indegree[component] == 0U) ready.push_back(component);
+    }
+    const auto pop_ready = [&]() {
+        const auto selected = std::min_element(
+            ready.begin(), ready.end(),
+            [&minimum_row](std::size_t left, std::size_t right) {
+                return minimum_row[left] < minimum_row[right];
+            });
+        const std::size_t component = *selected;
+        ready.erase(selected);
+        return component;
+    };
+    while (!ready.empty()) {
+        const std::size_t component = pop_ready();
+        StructuralBlock block;
+        for (const std::size_t row : components[component]) {
+            block.residual_names.push_back(residual_names[row]);
+            block.variable_names.push_back(
+                variable_names.at(
+                    static_cast<std::size_t>(row_match[row])));
+        }
+        report.structural_blocks.push_back(std::move(block));
+        for (const std::size_t target :
+             block_dependencies[component]) {
+            if (--indegree[target] == 0U) ready.push_back(target);
+        }
     }
     return report;
 }

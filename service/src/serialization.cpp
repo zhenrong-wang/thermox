@@ -1665,6 +1665,30 @@ std::string serialize_validate_response_json(
         << response.compilation.variable_count
         << ", \"equation_count\": "
         << response.compilation.equation_count
+        << ", \"largest_structural_block_size\": "
+        << response.compilation.largest_structural_block_size
+        << ", \"structural_blocks\": [";
+    for (std::size_t index = 0;
+         index < response.compilation.structural_blocks.size();
+         ++index) {
+        if (index != 0) out << ", ";
+        const auto& block =
+            response.compilation.structural_blocks[index];
+        out << "{\"variable_names\": [";
+        for (std::size_t name = 0;
+             name < block.variable_names.size(); ++name) {
+            if (name != 0) out << ", ";
+            json_string(out, block.variable_names[name]);
+        }
+        out << "], \"equation_names\": [";
+        for (std::size_t name = 0;
+             name < block.equation_names.size(); ++name) {
+            if (name != 0) out << ", ";
+            json_string(out, block.equation_names[name]);
+        }
+        out << "]}";
+    }
+    out << "]"
         << ", \"catalog_fingerprint\": ";
     json_string(out, response.compilation.catalog_fingerprint);
     out << ", \"reduced_connection_equations\": [";

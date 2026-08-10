@@ -51,6 +51,22 @@ bool valid_schema(const std::string& schema) {
     return schema == command_schema_v1;
 }
 
+void populate_structural_blocks(
+    CompilationSummary& summary,
+    const ProblemStructureReport& structure) {
+    summary.structural_blocks.reserve(
+        structure.structural_blocks.size());
+    for (const auto& block : structure.structural_blocks) {
+        summary.largest_structural_block_size = std::max(
+            summary.largest_structural_block_size,
+            block.variable_names.size());
+        summary.structural_blocks.push_back({
+            block.variable_names,
+            block.residual_names,
+        });
+    }
+}
+
 std::string sha256_hex(std::string_view value) {
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>
         context{EVP_MD_CTX_new(), EVP_MD_CTX_free};
@@ -1737,6 +1753,8 @@ ValidateModelResponse SimulationService::validate_model(
                 graph.problem.variable_names.size();
             response.compilation.equation_count =
                 graph.problem.residual_names.size();
+            populate_structural_blocks(
+                response.compilation, graph.structure);
         } else {
             const auto graph = platform::compile_model_graph(
                 *document,
@@ -1751,6 +1769,8 @@ ValidateModelResponse SimulationService::validate_model(
                 graph.problem.variable_names.size();
             response.compilation.equation_count =
                 graph.problem.residual_names.size();
+            populate_structural_blocks(
+                response.compilation, graph.structure);
             response.compilation.reduced_connection_equations =
                 graph.reduced_connection_equations;
         }

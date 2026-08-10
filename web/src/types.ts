@@ -188,6 +188,11 @@ export interface ProjectModelValidation {
       mode: string
       variable_count: number
       equation_count: number
+      largest_structural_block_size: number
+      structural_blocks: Array<{
+        variable_names: string[]
+        equation_names: string[]
+      }>
       catalog_fingerprint: string
       reduced_connection_equations: string[]
     }

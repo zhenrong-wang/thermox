@@ -219,6 +219,7 @@ struct CompiledModelGraph {
     std::vector<CompiledConnectionEquation> connection_equations;
     std::vector<std::string> reduced_connection_equations;
     std::vector<std::string> fixed_value_equations;
+    ProblemStructureReport structure;
     NonlinearProblem problem;
 };
 
@@ -229,6 +230,7 @@ struct CompiledTransientModelGraph {
     std::vector<CompiledInternalVariable> internal_variables;
     std::vector<CompiledConnectionEquation> connection_equations;
     std::vector<std::string> fixed_value_equations;
+    ProblemStructureReport structure;
     DaeProblem problem;
 };
 

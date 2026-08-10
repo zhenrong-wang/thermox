@@ -690,7 +690,7 @@ std::string summarize_structural_regions(
 }
 
 template <typename Builder>
-void validate_degree_of_freedom(
+ProblemStructureReport validate_degree_of_freedom(
     const std::string& model_id,
     const Builder& system) {
     const std::size_t variables = system.variables().size();
@@ -712,7 +712,7 @@ void validate_degree_of_freedom(
     if (variables == equations) {
         if (unmatched_variables.empty() &&
             unmatched_equations.empty()) {
-            return;
+            return structure;
         }
         throw std::invalid_argument(
             "model '" + model_id +
@@ -1649,7 +1649,8 @@ CompiledModelGraph compile_flat_model_graph(
         }
     }
 
-    validate_degree_of_freedom(document.model_id, system);
+    graph.structure =
+        validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     return graph;
 }
@@ -1959,7 +1960,8 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         }
     }
 
-    validate_degree_of_freedom(document.model_id, system);
+    graph.structure =
+        validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     return graph;
 }

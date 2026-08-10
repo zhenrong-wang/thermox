@@ -544,7 +544,9 @@ Work items:
      and a stable service diagnostic; ✅
    - shared Dulmage-Mendelsohn under/over/well-determined region localization with compiler and
      service diagnostics; ✅
-   - block ordering and solver tearing remain follow-ons.
+   - deterministic matched-incidence SCC decomposition into dependency-ordered irreducible square
+     blocks, retained by steady/transient graph compilation and exposed through validation; ✅
+   - block-wise execution and solver tearing remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,
