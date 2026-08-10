@@ -9,8 +9,8 @@
 
 namespace thermox::service {
 
-inline constexpr char result_summary_schema_v1[] =
-    "thermox.result_summary/v1";
+inline constexpr char result_summary_schema_v2[] =
+    "thermox.result_summary/v2";
 
 enum class ResultValueScope {
     system_balance,
@@ -73,6 +73,10 @@ struct EngineeringAcceptanceResult {
     std::optional<double> upper_bound_si;
     bool lower_inclusive{true};
     bool upper_inclusive{true};
+    std::optional<double> lower_margin_si;
+    std::optional<double> upper_margin_si;
+    double limiting_margin_si{0.0};
+    std::string limiting_bound;
     bool passed{false};
 };
 
@@ -84,7 +88,7 @@ struct EngineeringAcceptanceSummary {
 };
 
 struct ResultSummary {
-    std::string schema_version{result_summary_schema_v1};
+    std::string schema_version{result_summary_schema_v2};
     std::string mode;
     std::vector<ProjectedResultValue> values;
     std::optional<EngineeringAcceptanceSummary>
@@ -106,6 +110,9 @@ void validate_engineering_acceptance_criteria(
 EngineeringAcceptanceSummary evaluate_engineering_acceptance(
     const ResultSummary& summary,
     const std::vector<EngineeringAcceptanceCriterion>& criteria);
+
+void validate_engineering_acceptance_summary(
+    const EngineeringAcceptanceSummary& summary);
 
 ResultSummary project_steady_result(
     const GraphResult& graph,

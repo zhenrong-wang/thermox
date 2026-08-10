@@ -1809,6 +1809,17 @@ std::string encode_result_summary(
                     }
                     item.put("lower_inclusive", result.lower_inclusive);
                     item.put("upper_inclusive", result.upper_inclusive);
+                    if (result.lower_margin_si) {
+                        item.put(
+                            "lower_margin_si", *result.lower_margin_si);
+                    }
+                    if (result.upper_margin_si) {
+                        item.put(
+                            "upper_margin_si", *result.upper_margin_si);
+                    }
+                    item.put(
+                        "limiting_margin_si", result.limiting_margin_si);
+                    item.put("limiting_bound", result.limiting_bound);
                     item.put("passed", result.passed);
                     return item;
                 }));
@@ -1825,7 +1836,7 @@ service::ResultSummary decode_result_summary(
         tree.get<std::string>("schema_version");
     summary.mode = tree.get<std::string>("mode");
     if (summary.schema_version !=
-            service::result_summary_schema_v1 ||
+            service::result_summary_schema_v2 ||
         (summary.mode != "steady" &&
          summary.mode != "transient")) {
         throw std::runtime_error(
@@ -1884,10 +1895,24 @@ service::ResultSummary decode_result_summary(
                         item.get("lower_inclusive", true);
                     result.upper_inclusive =
                         item.get("upper_inclusive", true);
+                    if (const auto margin = item.get_optional<double>(
+                            "lower_margin_si")) {
+                        result.lower_margin_si = *margin;
+                    }
+                    if (const auto margin = item.get_optional<double>(
+                            "upper_margin_si")) {
+                        result.upper_margin_si = *margin;
+                    }
+                    result.limiting_margin_si =
+                        item.get<double>("limiting_margin_si");
+                    result.limiting_bound =
+                        item.get<std::string>("limiting_bound");
                     result.passed = item.get<bool>("passed");
                     return result;
                 });
         summary.engineering_acceptance = std::move(acceptance);
+        service::validate_engineering_acceptance_summary(
+            *summary.engineering_acceptance);
     }
     return summary;
 }

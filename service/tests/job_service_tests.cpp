@@ -453,6 +453,22 @@ void test_success_publishes_a_readable_artifact() {
                     ->passed_count == 1U &&
             completed->result_summary->engineering_acceptance
                     ->failed_count == 1U &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.size() == 2U &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().limiting_margin_si > 0.0 &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().lower_margin_si &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().upper_margin_si &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.back().lower_margin_si &&
+            *completed->result_summary->engineering_acceptance
+                    ->criteria.back().lower_margin_si < 0.0 &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.back().limiting_margin_si < 0.0 &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.back().limiting_bound == "lower" &&
             completed->state ==
                 thermox::service::SimulationJobState::succeeded,
         "engineering acceptance must report pass/fail criteria "
@@ -496,6 +512,10 @@ void test_success_publishes_a_readable_artifact() {
             json.find("\"engineering_acceptance\": {") !=
                 std::string::npos &&
             json.find("\"failed_count\": 1") !=
+                std::string::npos &&
+            json.find("\"limiting_margin_si\": -") !=
+                std::string::npos &&
+            json.find("\"limiting_bound\": \"lower\"") !=
                 std::string::npos &&
             json.find("\"execution\": {") !=
                 std::string::npos,

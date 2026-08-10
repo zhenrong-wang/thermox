@@ -51,7 +51,7 @@ describe('result presentation', () => {
         ],
       },
       result_summary: {
-        schema_version: 'thermox.result_summary/v1',
+        schema_version: 'thermox.result_summary/v2',
         mode: 'steady',
         values: [
           {

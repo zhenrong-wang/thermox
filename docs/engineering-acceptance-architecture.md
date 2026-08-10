@@ -42,7 +42,16 @@ The result summary records:
 
 - the overall accepted/not-accepted verdict;
 - passed and failed counts;
-- each criterion's actual SI value, bounds, inclusivity, dimension, and verdict.
+- each criterion's actual SI value, bounds, inclusivity, dimension, and verdict;
+- signed lower and upper margins where those bounds exist;
+- the limiting bound and its signed SI margin.
+
+Margins are positive inside a bound, zero on its numeric boundary, and negative after crossing it.
+Inclusivity remains explicit, so a zero margin can pass an inclusive bound or fail an exclusive
+bound. For two-sided intervals, the limiting margin is the smaller of the lower and upper margins.
+For transient Studies, criteria evaluate the projection's declared `final`, `minimum`, or `maximum`
+aggregation; therefore the margin retains the exact extremum and sample-time semantics selected by
+the Study.
 
 The durable job state remains `succeeded` when evaluation completes, even if one or more criteria
 fail. Solver errors still produce a failed job and no acceptance verdict. This preserves a clean
@@ -56,7 +65,7 @@ summary derived from that immutable result and Study intent.
 
 The HTTP API accepts and returns `acceptance_criteria` on Study revisions. The web Study editor
 binds optional SI limits to declared projections, and result/history views present engineering
-acceptance separately from convergence diagnostics. Declaration-based clients use the same
+acceptance and limiting margins separately from convergence diagnostics. Declaration-based clients use the same
 service contract and do not depend on the browser workflow.
 
 ## Current boundary and next extensions

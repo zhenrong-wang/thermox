@@ -201,7 +201,7 @@ terminal revision rather than deleting history, and cross-Team targets are repor
 Migration `008_run_result_projections.sql` originally added output selections to run configurations;
 the v3 boundary moves those unit-checked, system-agnostic selections to immutable Study revisions.
 The selections are checksummed and snapshotted into jobs. Successful
-workers atomically publish the projected `thermox.result_summary/v1` in PostgreSQL alongside the
+workers atomically publish the projected `thermox.result_summary/v2` in PostgreSQL alongside the
 full result-artifact manifest, allowing history and status views to render selected engineering
 outputs without reading large object-store results.
 

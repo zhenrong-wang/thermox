@@ -21,7 +21,7 @@ the graph or solver.
 
 Projection definitions are stored in immutable run-configuration revisions and participate in
 their checksums. Submission snapshots them into the immutable job request. After a successful
-solve, the worker materializes `thermox.result_summary/v1` before writing the full result artifact,
+solve, the worker materializes `thermox.result_summary/v2` before writing the full result artifact,
 then publishes the summary, artifact manifest, and terminal job revision atomically. A missing or
 dimensionally incompatible selector produces a structured result-stage job failure.
 

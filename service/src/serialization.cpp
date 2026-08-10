@@ -2079,7 +2079,24 @@ std::string serialize_result_summary_json(
             out << ", \"lower_inclusive\": "
                 << (criterion.lower_inclusive ? "true" : "false")
                 << ", \"upper_inclusive\": "
-                << (criterion.upper_inclusive ? "true" : "false")
+                << (criterion.upper_inclusive ? "true" : "false");
+            out << ", \"lower_margin_si\": ";
+            if (criterion.lower_margin_si) {
+                json_number(out, *criterion.lower_margin_si);
+            } else {
+                out << "null";
+            }
+            out << ", \"upper_margin_si\": ";
+            if (criterion.upper_margin_si) {
+                json_number(out, *criterion.upper_margin_si);
+            } else {
+                out << "null";
+            }
+            out << ", \"limiting_margin_si\": ";
+            json_number(out, criterion.limiting_margin_si);
+            out << ", \"limiting_bound\": ";
+            json_string(out, criterion.limiting_bound);
+            out
                 << ", \"passed\": "
                 << (criterion.passed ? "true" : "false")
                 << '}';

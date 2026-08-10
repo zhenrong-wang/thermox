@@ -520,6 +520,19 @@ void test_atomic_claim_and_terminal_publication(
             0.0,
         },
     };
+    thermox::service::EngineeringAcceptanceResult criterion;
+    criterion.criterion_id = "minimum_net_power";
+    criterion.projection_id = "net_power";
+    criterion.dimension = "power";
+    criterion.actual_value_si = 42.0;
+    criterion.lower_bound_si = 50.0;
+    criterion.lower_margin_si = -8.0;
+    criterion.limiting_margin_si = -8.0;
+    criterion.limiting_bound = "lower";
+    criterion.passed = false;
+    summary.engineering_acceptance =
+        thermox::service::EngineeringAcceptanceSummary{
+            false, 0U, 1U, {criterion}};
     const auto succeeded = jobs->publish_success(
         claimed.job_id,
         claimed.revision,
@@ -537,6 +550,13 @@ void test_atomic_claim_and_terminal_publication(
             succeeded.result_summary->values.size() == 1U &&
             succeeded.result_summary->values.front().value_si ==
                 42.0 &&
+            succeeded.result_summary->engineering_acceptance &&
+            succeeded.result_summary->engineering_acceptance
+                    ->criteria.front().lower_margin_si == -8.0 &&
+            succeeded.result_summary->engineering_acceptance
+                    ->criteria.front().limiting_margin_si == -8.0 &&
+            succeeded.result_summary->engineering_acceptance
+                    ->criteria.front().limiting_bound == "lower" &&
             !succeeded.lease_expires_at.has_value(),
         "success publication must preserve provenance and "
         "artifact metadata");

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dimensionForUnit,
   displayDeltaValue,
+  displayMarginValue,
   displayValue,
   valueToSi,
 } from './displayUnits'
@@ -22,6 +23,10 @@ describe('display units', () => {
     expect(displayDeltaValue(2, 'temperature', 'engineering')).toEqual({
       value: 2,
       unit: '°C/s',
+    })
+    expect(displayMarginValue(-2, 'temperature', 'engineering')).toEqual({
+      value: -2,
+      unit: '°C',
     })
   })
 

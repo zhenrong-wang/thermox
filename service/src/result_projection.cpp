@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <set>
 
 namespace thermox::service {
@@ -321,6 +322,18 @@ EngineeringAcceptanceSummary evaluate_engineering_acceptance(
                  ? value->value_si <= *criterion.upper_bound_si
                  : value->value_si < *criterion.upper_bound_si);
         const bool passed = lower_passed && upper_passed;
+        const std::optional<double> lower_margin =
+            criterion.lower_bound_si
+            ? std::optional<double>{
+                  value->value_si - *criterion.lower_bound_si}
+            : std::nullopt;
+        const std::optional<double> upper_margin =
+            criterion.upper_bound_si
+            ? std::optional<double>{
+                  *criterion.upper_bound_si - value->value_si}
+            : std::nullopt;
+        const bool lower_limits = lower_margin &&
+            (!upper_margin || *lower_margin <= *upper_margin);
         acceptance.criteria.push_back({
             criterion.id,
             criterion.projection_id,
@@ -330,13 +343,103 @@ EngineeringAcceptanceSummary evaluate_engineering_acceptance(
             criterion.upper_bound_si,
             criterion.lower_inclusive,
             criterion.upper_inclusive,
+            lower_margin,
+            upper_margin,
+            lower_limits ? *lower_margin : *upper_margin,
+            lower_limits ? "lower" : "upper",
             passed,
         });
         acceptance.passed_count += passed ? 1U : 0U;
         acceptance.failed_count += passed ? 0U : 1U;
         acceptance.passed = acceptance.passed && passed;
     }
+    validate_engineering_acceptance_summary(acceptance);
     return acceptance;
+}
+
+void validate_engineering_acceptance_summary(
+    const EngineeringAcceptanceSummary& summary) {
+    std::set<std::string> ids;
+    std::size_t passed_count = 0U;
+    for (const auto& result : summary.criteria) {
+        if (result.criterion_id.empty() ||
+            result.projection_id.empty() ||
+            result.dimension.empty() ||
+            !ids.insert(result.criterion_id).second ||
+            !std::isfinite(result.actual_value_si) ||
+            !std::isfinite(result.limiting_margin_si)) {
+            throw ResultProjectionError(
+                "engineering acceptance result identity or value is "
+                "invalid");
+        }
+        const auto finite = [](const std::optional<double>& value) {
+            return !value || std::isfinite(*value);
+        };
+        if (!finite(result.lower_bound_si) ||
+            !finite(result.upper_bound_si) ||
+            !finite(result.lower_margin_si) ||
+            !finite(result.upper_margin_si) ||
+            (!result.lower_bound_si && !result.upper_bound_si) ||
+            result.lower_bound_si.has_value() !=
+                result.lower_margin_si.has_value() ||
+            result.upper_bound_si.has_value() !=
+                result.upper_margin_si.has_value()) {
+            throw ResultProjectionError(
+                "engineering acceptance result bounds or margins are "
+                "invalid");
+        }
+        const auto close = [](double left, double right) {
+            const double scale = std::max(
+                {1.0, std::abs(left), std::abs(right)});
+            return std::abs(left - right) <=
+                8.0 * std::numeric_limits<double>::epsilon() * scale;
+        };
+        if ((result.lower_bound_si &&
+             !close(
+                 *result.lower_margin_si,
+                 result.actual_value_si - *result.lower_bound_si)) ||
+            (result.upper_bound_si &&
+             !close(
+                 *result.upper_margin_si,
+                 *result.upper_bound_si - result.actual_value_si))) {
+            throw ResultProjectionError(
+                "engineering acceptance result margin is inconsistent "
+                "with its value and bound");
+        }
+        const bool lower_limits = result.lower_margin_si &&
+            (!result.upper_margin_si ||
+             *result.lower_margin_si <= *result.upper_margin_si);
+        const std::string expected_bound =
+            lower_limits ? "lower" : "upper";
+        const double expected_margin = lower_limits
+            ? *result.lower_margin_si : *result.upper_margin_si;
+        const bool expected_pass =
+            (!result.lower_margin_si ||
+             (result.lower_inclusive
+                  ? *result.lower_margin_si >= 0.0
+                  : *result.lower_margin_si > 0.0)) &&
+            (!result.upper_margin_si ||
+             (result.upper_inclusive
+                  ? *result.upper_margin_si >= 0.0
+                  : *result.upper_margin_si > 0.0));
+        if (result.limiting_bound != expected_bound ||
+            !close(result.limiting_margin_si, expected_margin) ||
+            result.passed != expected_pass) {
+            throw ResultProjectionError(
+                "engineering acceptance result limiting evidence or "
+                "verdict is inconsistent");
+        }
+        passed_count += result.passed ? 1U : 0U;
+    }
+    const std::size_t failed_count =
+        summary.criteria.size() - passed_count;
+    if (summary.passed_count != passed_count ||
+        summary.failed_count != failed_count ||
+        summary.passed != (failed_count == 0U)) {
+        throw ResultProjectionError(
+            "engineering acceptance summary counts or verdict are "
+            "inconsistent");
+    }
 }
 
 ResultSummary project_steady_result(

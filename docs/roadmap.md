@@ -602,6 +602,9 @@ Work items:
       inputs, and regime-map inputs; shared platform validation; request-scoped runtime enforcement
       overriding permissive source behavior; durable v15 job snapshots/fingerprints; and stable
       violation errors. ✅
+    - structured v2 result-summary engineering evidence with signed lower/upper margins, limiting
+      bound identification, transient-extremum support, durable PostgreSQL encoding, and web result
+      presentation. ✅
     - dedicated engineering reviewer roles remain a follow-on.
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.

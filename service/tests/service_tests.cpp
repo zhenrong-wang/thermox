@@ -4029,7 +4029,7 @@ void test_system_agnostic_result_projection() {
         projection_graph(0.41), steady_projections);
     require(
         steady.schema_version ==
-                thermox::service::result_summary_schema_v1 &&
+                thermox::service::result_summary_schema_v2 &&
             steady.mode == "steady" &&
             steady.values.size() == 2U &&
             steady.values[0].value_si == 0.41 &&
@@ -4041,7 +4041,7 @@ void test_system_agnostic_result_projection() {
     require(
         steady_json.find(
             "\"schema_version\": "
-            "\"thermox.result_summary/v1\"") !=
+            "\"thermox.result_summary/v2\"") !=
                 std::string::npos &&
             steady_json.find(
                 "\"id\": \"cycle_efficiency\"") !=
@@ -4098,6 +4098,65 @@ void test_system_agnostic_result_projection() {
             transient.values[2].sample_time == 2.0,
         "transient summaries must apply explicit reductions and "
         "retain the selected sample time");
+
+    const std::vector<thermox::service::EngineeringAcceptanceCriterion>
+        criteria{
+            {
+                "minimum_efficiency_band",
+                "minimum_efficiency",
+                "dimensionless",
+                0.30,
+                0.50,
+                true,
+                true,
+            },
+            {
+                "maximum_efficiency_ceiling",
+                "maximum_efficiency",
+                "dimensionless",
+                std::nullopt,
+                0.40,
+                true,
+                true,
+            },
+        };
+    thermox::service::validate_engineering_acceptance_criteria(
+        criteria, transient_projections);
+    const auto acceptance =
+        thermox::service::evaluate_engineering_acceptance(
+            transient, criteria);
+    require(
+        !acceptance.passed && acceptance.failed_count == 1U &&
+            acceptance.passed_count == 1U &&
+            acceptance.criteria.front().lower_margin_si &&
+            std::abs(*acceptance.criteria.front().lower_margin_si + 0.05) <
+                1.0e-12 &&
+            acceptance.criteria.front().upper_margin_si &&
+            std::abs(*acceptance.criteria.front().upper_margin_si - 0.25) <
+                1.0e-12 &&
+            std::abs(
+                acceptance.criteria.front().limiting_margin_si + 0.05) <
+                1.0e-12 &&
+            acceptance.criteria.front().limiting_bound == "lower" &&
+            acceptance.criteria.back().upper_margin_si == 0.0 &&
+            acceptance.criteria.back().limiting_margin_si == 0.0 &&
+            acceptance.criteria.back().limiting_bound == "upper" &&
+            acceptance.criteria.back().passed,
+        "engineering acceptance must report signed margins for "
+        "transient extrema and preserve inclusive boundary verdicts");
+    auto inconsistent = acceptance;
+    inconsistent.criteria.front().limiting_margin_si = 0.0;
+    bool inconsistent_rejected = false;
+    try {
+        thermox::service::validate_engineering_acceptance_summary(
+            inconsistent);
+    } catch (const thermox::service::ResultProjectionError&) {
+        inconsistent_rejected = true;
+    }
+    require(
+        inconsistent_rejected,
+        "durable engineering acceptance evidence must reject a margin "
+        "that disagrees with its projected value and bounds");
 
     auto wrong_dimension = steady_projections;
     wrong_dimension.front().dimension = "power";

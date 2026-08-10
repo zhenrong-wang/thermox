@@ -211,6 +211,35 @@ export function displayDeltaValue(
   }
 }
 
+// Converts a difference or margin without applying an affine unit offset.
+// Unlike displayDeltaValue, this is not a time derivative and retains the
+// ordinary display-unit symbol.
+export function displayMarginValue(
+  valueSi: number,
+  dimension: string,
+  profile: DisplayUnitProfile,
+  catalogDimensions: readonly CatalogUnitDimension[] = [],
+): DisplayValue {
+  const catalog = catalogDimensions.find(
+    (item) => item.dimension === dimension,
+  )
+  if (catalog) {
+    const definition = profile === 'si'
+      ? catalog.si_display
+      : catalog.engineering_display
+    return {
+      value: valueSi * definition.scale_from_si,
+      unit: definition.symbol,
+    }
+  }
+  const definition = units[dimension]?.[profile]
+  if (!definition) return { value: valueSi, unit: dimension }
+  return {
+    value: valueSi * definition.scale,
+    unit: definition.unit,
+  }
+}
+
 export function displayUnit(
   dimension: string,
   profile: DisplayUnitProfile,

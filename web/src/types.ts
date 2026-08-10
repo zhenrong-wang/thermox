@@ -268,6 +268,10 @@ export interface EngineeringAcceptanceResult {
   upper_bound_si: number | null
   lower_inclusive: boolean
   upper_inclusive: boolean
+  lower_margin_si: number | null
+  upper_margin_si: number | null
+  limiting_margin_si: number
+  limiting_bound: 'lower' | 'upper'
   passed: boolean
 }
 
@@ -559,7 +563,7 @@ export interface SimulationJob {
     checksum: string
   } | null
   result_summary: {
-    schema_version: 'thermox.result_summary/v1'
+    schema_version: 'thermox.result_summary/v2'
     mode: 'steady' | 'transient'
     values: ResultSummaryValue[]
     engineering_acceptance: EngineeringAcceptanceSummary | null

@@ -1337,6 +1337,12 @@ void test_authored_component_job_workflow() {
             completed->result_summary &&
             completed->result_summary->engineering_acceptance &&
             completed->result_summary->engineering_acceptance->passed &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().lower_margin_si == 1.0 &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().limiting_margin_si == 1.0 &&
+            completed->result_summary->engineering_acceptance
+                    ->criteria.front().limiting_bound == "lower" &&
             completed->result_summary->values.size() == 1U &&
             std::abs(
                 completed->result_summary->values.front()

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDisplayUnits } from './DisplayUnitsContext'
-import { displayDeltaValue, displayValue } from './displayUnits'
+import {
+  displayDeltaValue,
+  displayMarginValue,
+  displayValue,
+} from './displayUnits'
 import {
   filterResultRows,
   flattenGraphResult,
@@ -465,6 +469,12 @@ export function ResultsWorkspace({
                       profile,
                       unitDimensions,
                     ).value)
+                  const margin = displayMarginValue(
+                    criterion.limiting_margin_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
                   return (
                     <div className="acceptance-result-row" key={criterion.criterion_id}>
                       <span className={criterion.passed ? 'passed' : 'failed'}>
@@ -477,6 +487,8 @@ export function ResultsWorkspace({
                       <small>
                         {criterion.lower_inclusive ? '[' : '('}{lower}, {upper}
                         {criterion.upper_inclusive ? ']' : ')'} {actual.unit}
+                        {' · '}{criterion.limiting_bound} margin{' '}
+                        {formatResultValue(margin.value)} {margin.unit}
                       </small>
                     </div>
                   )
