@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -121,6 +122,8 @@ NonlinearProblem make_stage_problem(
     NonlinearProblem stage = target;
     stage.initial_guess = warm_start;
     stage.residual = {};
+    stage.checked_residual_subset = {};
+    stage.sparse_jacobian_values_subset = {};
     stage.checked_residual =
         [&target, anchor, variable_scales, residual_scales,
          parameter](
@@ -144,6 +147,33 @@ NonlinearProblem make_stage_problem(
             }
             return EvaluationStatus::success();
         };
+    if (!uses_informed_residual &&
+        target.checked_residual_subset) {
+        stage.checked_residual_subset =
+            [&target, anchor, variable_scales,
+             residual_scales, parameter](
+                const std::vector<double>& x,
+                const std::vector<std::size_t>& rows,
+                std::vector<double>& residual) {
+                std::vector<double> target_residual(
+                    rows.size(), 0.0);
+                const auto status =
+                    target.checked_residual_subset(
+                        x, rows, target_residual);
+                if (!status.ok()) return status;
+                for (std::size_t output = 0;
+                     output < rows.size(); ++output) {
+                    const std::size_t row = rows[output];
+                    residual[output] =
+                        parameter * target_residual[output] +
+                        (1.0 - parameter) *
+                            residual_scales[row] *
+                            (x[row] - anchor[row]) /
+                            variable_scales[row];
+                }
+                return EvaluationStatus::success();
+            };
+    }
 
     if (target.sparse_jacobian_pattern.has_value() &&
         (!uses_informed_residual ||
@@ -186,6 +216,72 @@ NonlinearProblem make_stage_problem(
                         variable_scales[row];
                 }
             };
+        if (!uses_informed_residual &&
+            target.sparse_jacobian_values_subset) {
+            const std::size_t missing =
+                std::numeric_limits<std::size_t>::max();
+            std::vector<std::size_t> target_of_stage(
+                mapping.pattern.nonzeros(), missing);
+            for (std::size_t target_offset = 0;
+                 target_offset < mapping.target_offsets.size();
+                 ++target_offset) {
+                target_of_stage[
+                    mapping.target_offsets[target_offset]] =
+                    target_offset;
+            }
+            std::vector<std::size_t> diagonal_row_of_stage(
+                mapping.pattern.nonzeros(), missing);
+            for (std::size_t row = 0;
+                 row < mapping.diagonal_offsets.size(); ++row) {
+                diagonal_row_of_stage[
+                    mapping.diagonal_offsets[row]] = row;
+            }
+            stage.sparse_jacobian_values_subset =
+                [&target, target_of_stage,
+                 diagonal_row_of_stage, variable_scales,
+                 residual_scales, parameter, missing](
+                    const std::vector<double>& x,
+                    const std::vector<std::size_t>& offsets,
+                    std::vector<double>& values) {
+                    if (values.size() != offsets.size()) {
+                        throw std::invalid_argument(
+                            "continuation subset value count does not match requested offsets");
+                    }
+                    std::fill(values.begin(), values.end(), 0.0);
+                    std::vector<std::size_t> target_offsets;
+                    std::vector<std::size_t> target_outputs;
+                    for (std::size_t output = 0;
+                         output < offsets.size(); ++output) {
+                        const std::size_t offset = offsets[output];
+                        if (offset >= target_of_stage.size()) {
+                            throw std::out_of_range(
+                                "continuation subset offset is out of range");
+                        }
+                        if (target_of_stage[offset] != missing) {
+                            target_offsets.push_back(
+                                target_of_stage[offset]);
+                            target_outputs.push_back(output);
+                        }
+                        const std::size_t diagonal_row =
+                            diagonal_row_of_stage[offset];
+                        if (diagonal_row != missing) {
+                            values[output] +=
+                                (1.0 - parameter) *
+                                residual_scales[diagonal_row] /
+                                variable_scales[diagonal_row];
+                        }
+                    }
+                    std::vector<double> target_values(
+                        target_offsets.size(), 0.0);
+                    target.sparse_jacobian_values_subset(
+                        x, target_offsets, target_values);
+                    for (std::size_t index = 0;
+                         index < target_values.size(); ++index) {
+                        values[target_outputs[index]] +=
+                            parameter * target_values[index];
+                    }
+                };
+        }
         stage.sparse_jacobian = {};
         stage.partial_sparse_jacobian = {};
         stage.jacobian = {};

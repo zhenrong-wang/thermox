@@ -162,6 +162,10 @@ order. Upstream state is fixed while downstream blocks solve. A final full-model
 mandatory, so an incomplete declared dependency pattern cannot produce a false convergence.
 Diagnostics report the number of block solves, the largest linear system actually factorized, and
 the first failed block. A single irreducible block automatically stays on the monolithic path.
+`NonlinearProblem` also exposes optional residual-row and fixed-CSR-value subset callbacks. The
+steady and DAE equation-system builders publish these callbacks automatically from their
+per-equation functions, so native compiled graphs evaluate only the equations owned by each block.
+Custom providers may omit them and retain the correct full-callback fallback.
 Steady diagnostics also report the largest absolute normalized residual and its registered
 equation name at the returned state. Transient diagnostics retain the largest such residual among
 converged consistent-initialization and implicit-stage solves. These values make the conservation,
@@ -194,9 +198,9 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
   well-determined regions and exposes dependency-ordered irreducible blocks. Fixed-pattern
   dependency-ordered execution is opt-in; automatic tearing inside an irreducible block is not yet
   enabled.
-- Block execution currently restricts the returned rows after invoking the model's full residual
-  and fixed-pattern value callbacks. Row-selective provider callbacks are a future performance and
-  initialization enhancement; block mode therefore provides smaller linear algebra today, not a
-  blanket runtime-speed guarantee.
+- Custom problems without row-selective callbacks invoke their full residual and fixed-pattern
+  value callbacks before restricting the returned rows. Informed-continuation Jacobian transforms
+  also currently use that fallback. Block mode therefore does not guarantee a speedup for every
+  provider or continuation policy.
 - Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.

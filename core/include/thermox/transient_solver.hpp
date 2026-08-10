@@ -18,6 +18,13 @@ using DaeResidualFunction =
                                    const std::vector<double>& state,
                                    const std::vector<double>& derivative,
                                    std::vector<double>& residual)>;
+using DaeResidualSubsetFunction =
+    std::function<EvaluationStatus(
+        double time,
+        const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        const std::vector<std::size_t>& residual_indices,
+        std::vector<double>& residual)>;
 
 // Assemble dF/dy + derivative_coefficient * dF/d(ydot).
 using DaeJacobianFunction =
@@ -38,6 +45,14 @@ using DaeSparseJacobianValuesFunction =
                                    const std::vector<double>& derivative,
                                    double derivative_coefficient,
                                    std::vector<double>& values)>;
+using DaeSparseJacobianValuesSubsetFunction =
+    std::function<EvaluationStatus(
+        double time,
+        const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        double derivative_coefficient,
+        const std::vector<std::size_t>& value_offsets,
+        std::vector<double>& values)>;
 
 enum class EventDirection {
     any,
@@ -64,10 +79,13 @@ struct DaeProblem {
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
     DaeResidualFunction residual;
+    DaeResidualSubsetFunction residual_subset;
     DaeJacobianFunction jacobian;
     DaeSparseJacobianFunction sparse_jacobian;
     std::optional<SparsePattern> sparse_jacobian_pattern;
     DaeSparseJacobianValuesFunction sparse_jacobian_values;
+    DaeSparseJacobianValuesSubsetFunction
+        sparse_jacobian_values_subset;
     std::vector<DaeEvent> events;
 };
 

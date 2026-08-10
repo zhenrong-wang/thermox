@@ -673,6 +673,41 @@ NonlinearProblem EquationSystemBuilder::build() const {
             }
         }
     };
+    problem.checked_residual_subset =
+        [equations, variable_count](
+            const std::vector<double>& x,
+            const std::vector<std::size_t>& residual_indices,
+            std::vector<double>& residual) {
+            if (x.size() != variable_count) {
+                return EvaluationStatus::fatal(
+                    "variable vector size does not match equation system");
+            }
+            if (residual.size() != residual_indices.size()) {
+                return EvaluationStatus::fatal(
+                    "subset residual size does not match requested row count");
+            }
+            for (std::size_t output = 0;
+                 output < residual_indices.size(); ++output) {
+                const std::size_t row = residual_indices[output];
+                if (row >= equations.size()) {
+                    return EvaluationStatus::fatal(
+                        "requested residual row is out of range");
+                }
+                const auto& equation = equations[row];
+                if (equation.evaluate_checked) {
+                    auto status = equation.evaluate_checked(
+                        x, residual[output]);
+                    if (!status.ok()) {
+                        status.message = equation.name + ": " +
+                            status.message;
+                        return status;
+                    }
+                } else {
+                    residual[output] = equation.evaluate(x);
+                }
+            }
+            return EvaluationStatus::success();
+        };
 
     const bool has_checked_equations =
         std::any_of(equations.begin(), equations.end(), [](const auto& equation) {
@@ -823,6 +858,68 @@ NonlinearProblem EquationSystemBuilder::build() const {
                         values[static_cast<std::size_t>(
                             std::distance(pattern.column_indices().begin(), it))] +=
                             partial.derivative;
+                    }
+                }
+            };
+        problem.sparse_jacobian_values_subset =
+            [equations, pattern](
+                const std::vector<double>& x,
+                const std::vector<std::size_t>& value_offsets,
+                std::vector<double>& values) {
+                if (values.size() != value_offsets.size()) {
+                    throw std::invalid_argument(
+                        "subset Jacobian value size does not match requested offset count");
+                }
+                std::fill(values.begin(), values.end(), 0.0);
+                std::map<std::size_t,
+                         std::vector<std::pair<std::size_t,
+                                              std::size_t>>>
+                    requested_by_row;
+                for (std::size_t output = 0;
+                     output < value_offsets.size(); ++output) {
+                    const std::size_t offset = value_offsets[output];
+                    if (offset >= pattern.nonzeros()) {
+                        throw std::out_of_range(
+                            "requested Jacobian value offset is out of range");
+                    }
+                    const auto boundary = std::upper_bound(
+                        pattern.row_offsets().begin(),
+                        pattern.row_offsets().end(), offset);
+                    const std::size_t row = static_cast<std::size_t>(
+                        std::distance(
+                            pattern.row_offsets().begin(), boundary) - 1);
+                    requested_by_row[row].push_back(
+                        {output, offset});
+                }
+                for (const auto& [row, requested] :
+                     requested_by_row) {
+                    const auto& equation = equations.at(row);
+                    std::vector<EquationPartial> row_partials;
+                    (void)equation.assemble_sparse(
+                        x, row_partials);
+                    std::map<std::size_t, double> derivatives;
+                    const auto begin =
+                        pattern.column_indices().begin() +
+                        static_cast<std::ptrdiff_t>(
+                            pattern.row_offsets()[row]);
+                    const auto end =
+                        pattern.column_indices().begin() +
+                        static_cast<std::ptrdiff_t>(
+                            pattern.row_offsets()[row + 1]);
+                    for (const auto& partial : row_partials) {
+                        const auto declared = std::lower_bound(
+                            begin, end, partial.variable);
+                        if (declared == end ||
+                            *declared != partial.variable) {
+                            throw std::runtime_error(
+                                "equation emitted derivative outside declared sparse pattern");
+                        }
+                        derivatives[partial.variable] +=
+                            partial.derivative;
+                    }
+                    for (const auto& [output, offset] : requested) {
+                        values[output] = derivatives[
+                            pattern.column_indices()[offset]];
                     }
                 }
             };

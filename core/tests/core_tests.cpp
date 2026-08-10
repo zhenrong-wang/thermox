@@ -1193,24 +1193,69 @@ void test_newton_solves_dependency_ordered_structural_blocks() {
     problem.residual_names = {
         "source_equation", "sum", "difference"};
     problem.initial_guess = {0.0, 0.0, 0.0};
-    problem.residual = [](
+    int full_residual_calls = 0;
+    int subset_residual_calls = 0;
+    int full_jacobian_calls = 0;
+    int subset_jacobian_calls = 0;
+    problem.residual = [&full_residual_calls](
         const std::vector<double>& x,
         std::vector<double>& residual) {
+        ++full_residual_calls;
         residual[0] = x[0] - 1.0;
         residual[1] = x[0] + x[1] + x[2] - 6.0;
         residual[2] = x[1] - x[2] - 1.0;
     };
+    problem.checked_residual_subset =
+        [&subset_residual_calls](
+            const std::vector<double>& x,
+            const std::vector<std::size_t>& rows,
+            std::vector<double>& residual) {
+            ++subset_residual_calls;
+            for (std::size_t output = 0;
+                 output < rows.size(); ++output) {
+                switch (rows[output]) {
+                case 0:
+                    residual[output] = x[0] - 1.0;
+                    break;
+                case 1:
+                    residual[output] =
+                        x[0] + x[1] + x[2] - 6.0;
+                    break;
+                case 2:
+                    residual[output] = x[1] - x[2] - 1.0;
+                    break;
+                default:
+                    return thermox::EvaluationStatus::fatal(
+                        "unexpected residual row");
+                }
+            }
+            return thermox::EvaluationStatus::success();
+        };
     const auto jacobian = thermox::sparse_from_triplets(
         3, 3,
         {{0, 0, 1.0},
          {1, 0, 1.0}, {1, 1, 1.0}, {1, 2, 1.0},
          {2, 1, 1.0}, {2, 2, -1.0}});
     problem.sparse_jacobian_pattern = jacobian.pattern();
-    problem.sparse_jacobian_values = [](
+    problem.sparse_jacobian_values = [&full_jacobian_calls](
         const std::vector<double>&,
         std::vector<double>& values) {
+        ++full_jacobian_calls;
         values = {1.0, 1.0, 1.0, 1.0, 1.0, -1.0};
     };
+    problem.sparse_jacobian_values_subset =
+        [&subset_jacobian_calls](
+            const std::vector<double>&,
+            const std::vector<std::size_t>& offsets,
+            std::vector<double>& values) {
+            ++subset_jacobian_calls;
+            const std::vector<double> complete{
+                1.0, 1.0, 1.0, 1.0, 1.0, -1.0};
+            for (std::size_t index = 0;
+                 index < offsets.size(); ++index) {
+                values[index] = complete.at(offsets[index]);
+            }
+        };
 
     thermox::SolverOptions options;
     options.structural_decomposition_enabled = true;
@@ -1227,6 +1272,12 @@ void test_newton_solves_dependency_ordered_structural_blocks() {
         result.diagnostics.structural_block_solves == 2 &&
             result.diagnostics.largest_linear_system_size == 2,
         "block execution reports two solves and reduced maximum order");
+    require(
+        subset_residual_calls > 0 &&
+            subset_jacobian_calls > 0 &&
+            full_residual_calls == 1 &&
+            full_jacobian_calls == 0,
+        "block execution uses row-selective callbacks and reserves the full residual for final acceptance");
 }
 
 void test_structural_block_solve_checks_complete_residual() {
@@ -1257,6 +1308,58 @@ void test_structural_block_solve_checks_complete_residual() {
                 "whole-system residual check") !=
                 std::string::npos,
         "final full residual rejects an incomplete declared dependency pattern");
+}
+
+void test_equation_system_builds_row_selective_callbacks() {
+    thermox::EquationSystemBuilder system;
+    const auto first = system.add_variable("first", 0.0);
+    const auto second = system.add_variable("second", 0.0);
+    int first_calls = 0;
+    int second_calls = 0;
+    system.add_sparse_equation(
+        "first_equation", {first},
+        [first, &first_calls](
+            const std::vector<double>& x,
+            std::vector<thermox::EquationPartial>& partials) {
+            ++first_calls;
+            partials.push_back({first, 1.0});
+            return x[first] - 1.0;
+        });
+    system.add_sparse_equation(
+        "second_equation", {second},
+        [second, &second_calls](
+            const std::vector<double>& x,
+            std::vector<thermox::EquationPartial>& partials) {
+            ++second_calls;
+            partials.push_back({second, 1.0});
+            return x[second] - 2.0;
+        });
+    const auto problem = system.build();
+    require(
+        static_cast<bool>(problem.checked_residual_subset) &&
+            static_cast<bool>(
+                problem.sparse_jacobian_values_subset),
+        "equation builder publishes row-selective fixed-pattern callbacks");
+
+    std::vector<double> residual(1, 0.0);
+    const auto residual_status = problem.checked_residual_subset(
+        problem.initial_guess, {1}, residual);
+    require(
+        residual_status.ok() && first_calls == 0 &&
+            second_calls == 1 && residual[0] == -2.0,
+        "subset residual evaluates only the requested equation");
+
+    first_calls = 0;
+    second_calls = 0;
+    std::vector<double> values(1, 0.0);
+    problem.sparse_jacobian_values_subset(
+        problem.initial_guess,
+        {problem.sparse_jacobian_pattern->row_offsets()[1]},
+        values);
+    require(
+        first_calls == 0 && second_calls == 1 &&
+            values[0] == 1.0,
+        "subset Jacobian evaluates only the requested equation row");
 }
 
 void test_fixed_bound_finite_difference_fails_cleanly() {
@@ -1520,6 +1623,7 @@ int main() {
         test_structural_analysis_orders_irreducible_blocks();
         test_newton_solves_dependency_ordered_structural_blocks();
         test_structural_block_solve_checks_complete_residual();
+        test_equation_system_builds_row_selective_callbacks();
         test_fixed_bound_finite_difference_fails_cleanly();
         test_equation_system_builder();
         test_compiled_sparse_equation_system_builder();

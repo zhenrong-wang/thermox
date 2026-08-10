@@ -158,6 +158,11 @@ void validate_problem(const NonlinearProblem& problem,
     } else if (problem.sparse_jacobian_values) {
         throw std::invalid_argument("sparse_jacobian_values requires sparse_jacobian_pattern");
     }
+    if (problem.sparse_jacobian_values_subset &&
+        !problem.sparse_jacobian_pattern.has_value()) {
+        throw std::invalid_argument(
+            "sparse_jacobian_values_subset requires sparse_jacobian_pattern");
+    }
     if (problem.partial_sparse_jacobian && problem.analytic_jacobian_rows.empty()) {
         throw std::invalid_argument(
             "partial_sparse_jacobian requires analytic_jacobian_rows metadata");
@@ -1330,6 +1335,10 @@ NonlinearProblem make_structural_block_problem(
             std::vector<double>& block_residual) {
             const auto state = lift_block_state(
                 base_state, variable_indices, block_state);
+            if (source.checked_residual_subset) {
+                return source.checked_residual_subset(
+                    state, residual_indices, block_residual);
+            }
             std::vector<double> residual(
                 source.residual_names.size(), 0.0);
             EvaluationStatus status = EvaluationStatus::success();
@@ -1396,6 +1405,11 @@ NonlinearProblem make_structural_block_problem(
             std::vector<double>& block_values) {
             const auto state = lift_block_state(
                 base_state, variable_indices, block_state);
+            if (source.sparse_jacobian_values_subset) {
+                source.sparse_jacobian_values_subset(
+                    state, source_offsets, block_values);
+                return;
+            }
             std::vector<double> source_values(
                 source.sparse_jacobian_pattern->nonzeros(), 0.0);
             source.sparse_jacobian_values(state, source_values);

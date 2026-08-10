@@ -50,6 +50,20 @@ struct EvaluationStatus {
 
 using CheckedResidualFunction =
     std::function<EvaluationStatus(const std::vector<double>& x, std::vector<double>& residual)>;
+// Evaluates only the requested residual rows. The output order matches
+// residual_indices and its size must remain unchanged.
+using CheckedResidualSubsetFunction =
+    std::function<EvaluationStatus(
+        const std::vector<double>& x,
+        const std::vector<std::size_t>& residual_indices,
+        std::vector<double>& residual)>;
+// Evaluates only requested offsets in the declared fixed CSR pattern. The
+// output order matches value_offsets and its size must remain unchanged.
+using SparseJacobianValuesSubsetFunction =
+    std::function<void(
+        const std::vector<double>& x,
+        const std::vector<std::size_t>& value_offsets,
+        std::vector<double>& values)>;
 using ContinuationCheckedResidualFunction =
     std::function<EvaluationStatus(const std::vector<double>& x,
                                    const std::vector<double>& anchor,
@@ -123,10 +137,13 @@ struct NonlinearProblem {
     std::vector<double> upper_bounds;
     ResidualFunction residual;
     CheckedResidualFunction checked_residual;
+    CheckedResidualSubsetFunction checked_residual_subset;
     JacobianFunction jacobian;
     SparseJacobianFunction sparse_jacobian;
     std::optional<SparsePattern> sparse_jacobian_pattern;
     SparseJacobianValuesFunction sparse_jacobian_values;
+    SparseJacobianValuesSubsetFunction
+        sparse_jacobian_values_subset;
     SparseJacobianFunction partial_sparse_jacobian;
     std::vector<bool> analytic_jacobian_rows;
     // Optional component- or model-informed path. At parameter 1

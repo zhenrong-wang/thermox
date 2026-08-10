@@ -96,6 +96,11 @@ void validate_dae_problem(const DaeProblem& problem) {
         throw std::invalid_argument(
             "DAE sparse Jacobian values require a fixed sparse pattern");
     }
+    if (problem.sparse_jacobian_values_subset &&
+        !problem.sparse_jacobian_pattern.has_value()) {
+        throw std::invalid_argument(
+            "DAE subset Jacobian values require a fixed sparse pattern");
+    }
     for (const auto& event : problem.events) {
         if (event.name.empty() || !event.evaluate) {
             throw std::invalid_argument("DAE events require a name and evaluation callback");
@@ -167,6 +172,26 @@ ImplicitStepResult solve_implicit_bdf_step(
             }
             return problem.residual(next_time, state, derivative, residual);
         };
+    if (problem.residual_subset) {
+        nonlinear.checked_residual_subset =
+            [&problem, next_time, derivative_coefficient,
+             derivative_offset](
+                const std::vector<double>& state,
+                const std::vector<std::size_t>& rows,
+                std::vector<double>& residual) {
+                std::vector<double> derivative(
+                    state.size(), 0.0);
+                for (std::size_t i = 0;
+                     i < state.size(); ++i) {
+                    derivative[i] =
+                        derivative_coefficient * state[i] +
+                        derivative_offset[i];
+                }
+                return problem.residual_subset(
+                    next_time, state, derivative,
+                    rows, residual);
+            };
+    }
 
     if (problem.sparse_jacobian_pattern.has_value()) {
         nonlinear.sparse_jacobian_pattern = problem.sparse_jacobian_pattern;
@@ -191,6 +216,35 @@ ImplicitStepResult solve_implicit_bdf_step(
                             : status.message);
                 }
             };
+        if (problem.sparse_jacobian_values_subset) {
+            nonlinear.sparse_jacobian_values_subset =
+                [&problem, next_time,
+                 derivative_coefficient,
+                 derivative_offset](
+                    const std::vector<double>& state,
+                    const std::vector<std::size_t>& offsets,
+                    std::vector<double>& values) {
+                    std::vector<double> derivative(
+                        state.size(), 0.0);
+                    for (std::size_t i = 0;
+                         i < state.size(); ++i) {
+                        derivative[i] =
+                            derivative_coefficient * state[i] +
+                            derivative_offset[i];
+                    }
+                    const auto status =
+                        problem.sparse_jacobian_values_subset(
+                            next_time, state, derivative,
+                            derivative_coefficient,
+                            offsets, values);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            status.message.empty()
+                            ? "DAE subset Jacobian value evaluation failed"
+                            : status.message);
+                    }
+                };
+        }
     } else if (problem.sparse_jacobian) {
         nonlinear.sparse_jacobian =
             [&problem, next_time, derivative_coefficient,
@@ -436,6 +490,31 @@ DaeInitializationResult make_consistent_initial_conditions(
             }
             return problem.residual(initial_time, state, derivative, residual);
         };
+    if (problem.residual_subset) {
+        initialization.checked_residual_subset =
+            [&problem, &kinds, initial_time,
+             initial_derivative](
+                const std::vector<double>& unknowns,
+                const std::vector<std::size_t>& rows,
+                std::vector<double>& residual) {
+                std::vector<double> state =
+                    problem.initial_state;
+                std::vector<double> derivative =
+                    initial_derivative;
+                for (std::size_t i = 0;
+                     i < unknowns.size(); ++i) {
+                    if (kinds[i] ==
+                        DaeVariableKind::differential) {
+                        derivative[i] = unknowns[i];
+                    } else {
+                        state[i] = unknowns[i];
+                    }
+                }
+                return problem.residual_subset(
+                    initial_time, state, derivative,
+                    rows, residual);
+            };
+    }
     if (problem.sparse_jacobian_pattern.has_value()) {
         initialization.sparse_jacobian_pattern =
             problem.sparse_jacobian_pattern;
@@ -499,6 +578,67 @@ DaeInitializationResult make_consistent_initial_conditions(
                     }
                 }
             };
+        if (problem.sparse_jacobian_values_subset) {
+            initialization.sparse_jacobian_values_subset =
+                [&problem, &kinds, initial_time,
+                 initial_derivative](
+                    const std::vector<double>& unknowns,
+                    const std::vector<std::size_t>& offsets,
+                    std::vector<double>& values) {
+                    std::vector<double> state =
+                        problem.initial_state;
+                    std::vector<double> derivative =
+                        initial_derivative;
+                    for (std::size_t i = 0;
+                         i < unknowns.size(); ++i) {
+                        if (kinds[i] ==
+                            DaeVariableKind::differential) {
+                            derivative[i] = unknowns[i];
+                        } else {
+                            state[i] = unknowns[i];
+                        }
+                    }
+                    std::vector<double> state_partials(
+                        offsets.size(), 0.0);
+                    std::vector<double> combined_partials(
+                        offsets.size(), 0.0);
+                    auto status =
+                        problem.sparse_jacobian_values_subset(
+                            initial_time, state, derivative,
+                            0.0, offsets, state_partials);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            status.message.empty()
+                            ? "DAE initialization subset state Jacobian evaluation failed"
+                            : status.message);
+                    }
+                    status =
+                        problem.sparse_jacobian_values_subset(
+                            initial_time, state, derivative,
+                            1.0, offsets,
+                            combined_partials);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            status.message.empty()
+                            ? "DAE initialization subset derivative Jacobian evaluation failed"
+                            : status.message);
+                    }
+                    const auto& pattern =
+                        *problem.sparse_jacobian_pattern;
+                    for (std::size_t output = 0;
+                         output < offsets.size(); ++output) {
+                        const std::size_t column =
+                            pattern.column_indices().at(
+                                offsets[output]);
+                        values[output] =
+                            kinds[column] ==
+                                DaeVariableKind::differential
+                            ? combined_partials[output] -
+                                  state_partials[output]
+                            : state_partials[output];
+                    }
+                };
+        }
     } else if (problem.jacobian) {
         initialization.jacobian =
             [&problem, &kinds, initial_time, initial_derivative](

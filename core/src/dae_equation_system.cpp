@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <utility>
 
@@ -203,6 +204,37 @@ DaeProblem DaeEquationSystemBuilder::build() const {
             }
             return EvaluationStatus::success();
         };
+    problem.residual_subset =
+        [equations, variable_count](
+            double time,
+            const std::vector<double>& state,
+            const std::vector<double>& derivative,
+            const std::vector<std::size_t>& residual_indices,
+            std::vector<double>& residual) {
+            if (state.size() != variable_count ||
+                derivative.size() != variable_count ||
+                residual.size() != residual_indices.size()) {
+                return EvaluationStatus::fatal(
+                    "vector size does not match DAE subset request");
+            }
+            for (std::size_t output = 0;
+                 output < residual_indices.size(); ++output) {
+                const std::size_t row = residual_indices[output];
+                if (row >= equations.size()) {
+                    return EvaluationStatus::fatal(
+                        "requested DAE residual row is out of range");
+                }
+                const auto& equation = equations[row];
+                auto status = equation.evaluate(
+                    time, state, derivative, residual[output]);
+                if (!status.ok()) {
+                    status.message = equation.name + ": " +
+                        status.message;
+                    return status;
+                }
+            }
+            return EvaluationStatus::success();
+        };
 
     const bool fixed_sparse =
         std::all_of(equations.begin(), equations.end(), [](const auto& equation) {
@@ -263,6 +295,81 @@ DaeProblem DaeEquationSystemBuilder::build() const {
                         partial.state_derivative +
                         derivative_coefficient *
                             partial.state_rate_derivative;
+                }
+            }
+            return EvaluationStatus::success();
+        };
+    problem.sparse_jacobian_values_subset =
+        [equations, pattern](
+            double time,
+            const std::vector<double>& state,
+            const std::vector<double>& derivative,
+            double derivative_coefficient,
+            const std::vector<std::size_t>& value_offsets,
+            std::vector<double>& values) {
+            if (values.size() != value_offsets.size()) {
+                return EvaluationStatus::fatal(
+                    "DAE subset Jacobian value size does not match requested offset count");
+            }
+            std::fill(values.begin(), values.end(), 0.0);
+            std::map<std::size_t,
+                     std::vector<std::pair<std::size_t,
+                                          std::size_t>>>
+                requested_by_row;
+            for (std::size_t output = 0;
+                 output < value_offsets.size(); ++output) {
+                const std::size_t offset = value_offsets[output];
+                if (offset >= pattern.nonzeros()) {
+                    return EvaluationStatus::fatal(
+                        "requested DAE Jacobian offset is out of range");
+                }
+                const auto boundary = std::upper_bound(
+                    pattern.row_offsets().begin(),
+                    pattern.row_offsets().end(), offset);
+                const std::size_t row = static_cast<std::size_t>(
+                    std::distance(
+                        pattern.row_offsets().begin(), boundary) - 1);
+                requested_by_row[row].push_back({output, offset});
+            }
+            for (const auto& [row, requested] :
+                 requested_by_row) {
+                const auto& equation = equations.at(row);
+                double ignored_residual = 0.0;
+                std::vector<DaeEquationPartial> partials;
+                auto status = equation.assemble_sparse(
+                    time, state, derivative,
+                    ignored_residual, partials);
+                if (!status.ok()) {
+                    status.message = equation.name + ": " +
+                        status.message;
+                    return status;
+                }
+                std::map<std::size_t, double> derivatives;
+                const auto begin =
+                    pattern.column_indices().begin() +
+                    static_cast<std::ptrdiff_t>(
+                        pattern.row_offsets()[row]);
+                const auto end =
+                    pattern.column_indices().begin() +
+                    static_cast<std::ptrdiff_t>(
+                        pattern.row_offsets()[row + 1]);
+                for (const auto& partial : partials) {
+                    const auto declared = std::lower_bound(
+                        begin, end, partial.variable);
+                    if (declared == end ||
+                        *declared != partial.variable) {
+                        return EvaluationStatus::fatal(
+                            equation.name +
+                            ": derivative emitted outside declared sparse pattern");
+                    }
+                    derivatives[partial.variable] +=
+                        partial.state_derivative +
+                        derivative_coefficient *
+                            partial.state_rate_derivative;
+                }
+                for (const auto& [output, offset] : requested) {
+                    values[output] = derivatives[
+                        pattern.column_indices()[offset]];
                 }
             }
             return EvaluationStatus::success();

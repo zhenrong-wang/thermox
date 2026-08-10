@@ -71,6 +71,28 @@ void test_dae_equation_system_builder() {
     const auto problem = system.build();
     require(problem.sparse_jacobian_pattern.has_value(),
             "DAE builder emits a fixed sparse Jacobian pattern");
+    require(
+        static_cast<bool>(problem.residual_subset) &&
+            static_cast<bool>(
+                problem.sparse_jacobian_values_subset),
+        "DAE builder emits row-selective callbacks");
+    std::vector<double> subset_residual(1, 0.0);
+    auto subset_status = problem.residual_subset(
+        0.0, problem.initial_state,
+        problem.initial_derivative, {1}, subset_residual);
+    require(
+        subset_status.ok() &&
+            std::abs(subset_residual[0] + 0.6) < 1.0e-12,
+        "DAE subset residual evaluates the requested row");
+    std::vector<double> subset_values(1, 0.0);
+    subset_status = problem.sparse_jacobian_values_subset(
+        0.0, problem.initial_state,
+        problem.initial_derivative, 2.0,
+        {problem.sparse_jacobian_pattern->row_offsets()[1]},
+        subset_values);
+    require(
+        subset_status.ok() && subset_values[0] == 1.0,
+        "DAE subset Jacobian evaluates the requested fixed-pattern value");
     const auto initialized =
         thermox::make_consistent_initial_conditions(problem, 0.0);
     require(initialized.diagnostics.converged, initialized.diagnostics.message);
@@ -111,6 +133,35 @@ void test_dae_equation_system_builder() {
         integrated.diagnostics.maximum_linear_backward_error <=
             options.nonlinear_options.linear_residual_tolerance,
         "DAE diagnostics bound the worst implicit linear solve error");
+}
+
+void test_transient_solver_executes_independent_structural_blocks() {
+    thermox::DaeEquationSystemBuilder system;
+    const auto first = system.add_variable(
+        "first", thermox::DaeVariableKind::differential,
+        1.0, -1.0, 1.0, 1.0);
+    const auto second = system.add_variable(
+        "second", thermox::DaeVariableKind::differential,
+        2.0, -4.0, 1.0, 1.0);
+    system.add_linear_equation(
+        "first_decay", {{first, 1.0, 1.0}}, 0.0);
+    system.add_linear_equation(
+        "second_decay", {{second, 2.0, 1.0}}, 0.0);
+    const auto problem = system.build();
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.05;
+    options.max_step = 0.05;
+    options.nonlinear_options.structural_decomposition_enabled =
+        true;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success,
+            result.diagnostics.message);
+    require(
+        result.diagnostics.structural_block_solves > 0 &&
+            result.diagnostics.largest_linear_system_size == 1,
+        "transient initialization and stages execute independent scalar blocks");
 }
 
 void test_dae_equation_system_builder_rejects_non_square_system() {
@@ -421,6 +472,7 @@ void test_terminal_event_stops_integration() {
 int main() {
     try {
         test_dae_equation_system_builder();
+        test_transient_solver_executes_independent_structural_blocks();
         test_dae_equation_system_builder_rejects_non_square_system();
         test_consistent_initial_conditions_for_ode();
         test_singular_initialization_names_unresolved_unknown();

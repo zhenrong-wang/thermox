@@ -550,8 +550,10 @@ Work items:
      solve, with configurable acceptance and steady/continuation/transient diagnostics; ✅
    - opt-in dependency-ordered execution of fixed-pattern irreducible blocks, preserving analytic
      sparse values and enforcing a final whole-system residual check; ✅
-   - row-selective model evaluation, automatic policy selection, cross-stage block factorization
-     caches, and tearing inside an irreducible block remain follow-ons.
+   - optional residual-row and fixed-CSR-offset evaluation contracts, automatically assembled by
+     steady and DAE equation builders and consumed by block Newton; ✅
+   - informed-continuation derivative subsets, automatic policy selection, cross-stage block
+     factorization caches, and tearing inside an irreducible block remain follow-ons.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,
