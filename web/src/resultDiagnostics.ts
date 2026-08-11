@@ -94,6 +94,10 @@ export function resultDiagnosticSummary(
           value: number(result.diagnostics.maximum_linear_backward_error),
         },
         {
+          label: 'Linear refinements',
+          value: `${number(result.diagnostics.linear_refinement_successes)} recovered / ${number(result.diagnostics.linear_refinement_attempts)} corrections`,
+        },
+        {
           label: 'Minimum reciprocal pivot ratio',
           value: result.diagnostics.factorization_quality_observations
             ? number(result.diagnostics.minimum_reciprocal_pivot_ratio)
@@ -155,6 +159,10 @@ export function resultDiagnosticSummary(
       {
         label: 'Worst linear error',
         value: number(result.diagnostics.maximum_linear_backward_error),
+      },
+      {
+        label: 'Linear refinements',
+        value: `${number(result.diagnostics.linear_refinement_successes)} recovered / ${number(result.diagnostics.linear_refinement_attempts)} corrections`,
       },
       {
         label: 'Minimum reciprocal pivot ratio',

@@ -830,6 +830,10 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     result.diagnostics
                         .maximum_linear_backward_error,
                     diagnostics.maximum_linear_backward_error);
+            result.diagnostics.linear_refinement_attempts +=
+                diagnostics.linear_refinement_attempts;
+            result.diagnostics.linear_refinement_successes +=
+                diagnostics.linear_refinement_successes;
             result.diagnostics.structural_block_solves +=
                 diagnostics.structural_block_solves;
             result.diagnostics.largest_linear_system_size =

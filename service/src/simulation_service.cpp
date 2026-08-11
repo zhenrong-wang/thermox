@@ -1125,8 +1125,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v11"
-            : "thermox.newton/v10",
+            ? "thermox.newton-continuation/v12"
+            : "thermox.newton/v11",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1192,7 +1192,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v11",
+        "thermox.dae-bdf/v12",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1248,6 +1248,8 @@ NonlinearDiagnostics copy_diagnostics(
         source.factorization_quality_method,
         source.last_linear_backward_error,
         source.maximum_linear_backward_error,
+        source.linear_refinement_attempts,
+        source.linear_refinement_successes,
         source.structural_block_solves,
         source.largest_linear_system_size,
         source.structural_tearing_attempts,
@@ -1285,6 +1287,8 @@ ContinuationRunDiagnostics copy_diagnostics(
                 .final_maximum_absolute_normalized_residual,
             stage.nonlinear.limiting_residual,
             stage.nonlinear.maximum_linear_backward_error,
+            stage.nonlinear.linear_refinement_attempts,
+            stage.nonlinear.linear_refinement_successes,
             stage.nonlinear.factorization_quality_observations,
             stage.nonlinear.last_reciprocal_pivot_ratio,
             stage.nonlinear.minimum_reciprocal_pivot_ratio,
@@ -1329,6 +1333,8 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.factorization_size_at_minimum_ratio,
         source.factorization_quality_method,
         source.maximum_linear_backward_error,
+        source.linear_refinement_attempts,
+        source.linear_refinement_successes,
         source.structural_block_solves,
         source.largest_linear_system_size,
         source.structural_tearing_attempts,

@@ -681,6 +681,10 @@ void nonlinear_diagnostics_json(
     json_number(out, diagnostics.last_linear_backward_error);
     out << ", \"maximum_linear_backward_error\": ";
     json_number(out, diagnostics.maximum_linear_backward_error);
+    out << ", \"linear_refinement_attempts\": "
+        << diagnostics.linear_refinement_attempts
+        << ", \"linear_refinement_successes\": "
+        << diagnostics.linear_refinement_successes;
     out << ", \"structural_block_solves\": "
         << diagnostics.structural_block_solves
         << ", \"largest_linear_system_size\": "
@@ -1882,6 +1886,10 @@ std::string serialize_steady_response_json(
     out << ", \"maximum_linear_backward_error\": ";
     json_number(
         out, response.diagnostics.maximum_linear_backward_error);
+    out << ", \"linear_refinement_attempts\": "
+        << response.diagnostics.linear_refinement_attempts
+        << ", \"linear_refinement_successes\": "
+        << response.diagnostics.linear_refinement_successes;
     out << ", \"structural_block_solves\": "
         << response.diagnostics.structural_block_solves
         << ", \"largest_linear_system_size\": "
@@ -1952,6 +1960,10 @@ std::string serialize_steady_response_json(
         out << ", \"maximum_linear_backward_error\": ";
         json_number(
             out, stage.maximum_linear_backward_error);
+        out << ", \"linear_refinement_attempts\": "
+            << stage.linear_refinement_attempts
+            << ", \"linear_refinement_successes\": "
+            << stage.linear_refinement_successes;
         out << ", \"factorization_quality_observations\": "
             << stage.factorization_quality_observations
             << ", \"last_reciprocal_pivot_ratio\": ";
@@ -2336,6 +2348,10 @@ std::string serialize_transient_response_json(
     json_number(
         out,
         response.diagnostics.maximum_linear_backward_error);
+    out << ", \"linear_refinement_attempts\": "
+        << response.diagnostics.linear_refinement_attempts
+        << ", \"linear_refinement_successes\": "
+        << response.diagnostics.linear_refinement_successes;
     out << ", \"structural_block_solves\": "
         << response.diagnostics.structural_block_solves
         << ", \"largest_linear_system_size\": "

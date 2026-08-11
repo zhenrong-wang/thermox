@@ -548,6 +548,8 @@ Work items:
      blocks, retained by steady/transient graph compilation and exposed through validation; ✅
    - backend-independent normalized backward-error verification for every scaled Newton linear
      solve, with configurable acceptance and steady/continuation/transient diagnostics; ✅
+   - bounded full-system iterative refinement for finite but inaccurate backend steps, with
+     independently recomputed acceptance and steady/continuation/transient recovery telemetry; ✅
    - dependency-ordered execution of fixed-pattern irreducible blocks, preserving analytic
      sparse values and enforcing a final whole-system residual check; ✅
    - optional residual-row and fixed-CSR-offset evaluation contracts, automatically assembled by

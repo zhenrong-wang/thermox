@@ -20,6 +20,8 @@ function steadyResult(): SimulationResult {
       final_step_norm: 1e-9,
       last_linear_backward_error: 3e-15,
       maximum_linear_backward_error: 8e-15,
+      linear_refinement_attempts: 2,
+      linear_refinement_successes: 1,
       structural_block_solves: 4,
       largest_linear_system_size: 12,
       structural_tearing_attempts: 3,
@@ -78,6 +80,10 @@ describe('resultDiagnosticSummary', () => {
       value: '8.000e-15',
     })
     expect(summary.facts).toContainEqual({
+      label: 'Linear refinements',
+      value: '1 recovered / 2 corrections',
+    })
+    expect(summary.facts).toContainEqual({
       label: 'Largest linear system',
       value: '12',
     })
@@ -126,6 +132,8 @@ describe('resultDiagnosticSummary', () => {
         maximum_absolute_normalized_residual: 8e-10,
         limiting_nonlinear_residual: 'component.drum.energy',
         maximum_linear_backward_error: 7e-14,
+        linear_refinement_attempts: 3,
+        linear_refinement_successes: 2,
         structural_block_solves: 30,
         largest_linear_system_size: 8,
         structural_tearing_attempts: 20,
@@ -155,6 +163,10 @@ describe('resultDiagnosticSummary', () => {
     expect(summary.facts).toContainEqual({
       label: 'Worst linear error',
       value: '7.000e-14',
+    })
+    expect(summary.facts).toContainEqual({
+      label: 'Linear refinements',
+      value: '2 recovered / 3 corrections',
     })
     expect(summary.facts).toContainEqual({
       label: 'Tearing fallbacks',

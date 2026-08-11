@@ -1,4 +1,5 @@
 #include "thermox/dae_equation_system.hpp"
+#include "thermox/dense_linear_solver.hpp"
 #include "thermox/sparse_linear_solver.hpp"
 
 #include <cmath>
@@ -144,6 +145,43 @@ void test_dae_equation_system_builder() {
             integrated.diagnostics
                     .factorization_size_at_minimum_ratio == 2,
         "DAE diagnostics aggregate backend pivot evidence across stages");
+
+    thermox::TimeIntegrationOptions refined_options = options;
+    refined_options.nonlinear_options.sparse_factorization.reset();
+    refined_options.nonlinear_options.linear_solver = [](
+        thermox::Matrix matrix,
+        std::vector<double> rhs) {
+        const auto exact = thermox::solve_dense_linear_system(
+            std::move(matrix), std::move(rhs));
+        if (!exact.success) return exact;
+        auto inexact = exact;
+        for (auto& value : inexact.x) {
+            value *= 1.0 - 1.0e-4;
+        }
+        return inexact;
+    };
+    const auto refined = thermox::integrate_dae(
+        problem, refined_options);
+    require(
+        refined.diagnostics.success &&
+            refined.diagnostics.linear_refinement_attempts > 0 &&
+            refined.diagnostics.linear_refinement_successes > 0 &&
+            refined.diagnostics.linear_refinement_attempts >=
+                refined.diagnostics.linear_refinement_successes &&
+            refined.diagnostics.linear_refinement_attempts <=
+                2 * refined.diagnostics.linear_refinement_successes,
+        "DAE orchestration aggregates recovered linear solves across "
+        "initialization and implicit stages: success=" +
+            std::to_string(refined.diagnostics.success) +
+            " attempts=" + std::to_string(
+                refined.diagnostics.linear_refinement_attempts) +
+            " recoveries=" + std::to_string(
+                refined.diagnostics.linear_refinement_successes) +
+            " message=" + refined.diagnostics.message);
+    require_near(
+        refined.trajectory.back().state[0],
+        integrated.trajectory.back().state[0], 1.0e-10,
+        "refined DAE integration preserves the direct-solve trajectory");
 
     thermox::TimeIntegrationOptions tearing_options = options;
     tearing_options.nonlinear_options.sparse_factorization.reset();

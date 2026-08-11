@@ -705,6 +705,8 @@ struct NonlinearDiagnostics {
     std::string factorization_quality_method;
     double last_linear_backward_error{0.0};
     double maximum_linear_backward_error{0.0};
+    int linear_refinement_attempts{0};
+    int linear_refinement_successes{0};
     int structural_block_solves{0};
     std::size_t largest_linear_system_size{0};
     int structural_tearing_attempts{0};
@@ -728,6 +730,8 @@ struct ContinuationStageDiagnostics {
     double final_maximum_absolute_normalized_residual{0.0};
     std::string limiting_residual;
     double maximum_linear_backward_error{0.0};
+    int linear_refinement_attempts{0};
+    int linear_refinement_successes{0};
     int factorization_quality_observations{0};
     double last_reciprocal_pivot_ratio{0.0};
     double minimum_reciprocal_pivot_ratio{0.0};
@@ -778,6 +782,8 @@ struct TimeIntegrationDiagnostics {
     std::size_t factorization_size_at_minimum_ratio{0};
     std::string factorization_quality_method;
     double maximum_linear_backward_error{0.0};
+    int linear_refinement_attempts{0};
+    int linear_refinement_successes{0};
     int structural_block_solves{0};
     std::size_t largest_linear_system_size{0};
     int structural_tearing_attempts{0};

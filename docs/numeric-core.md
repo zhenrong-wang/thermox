@@ -181,9 +181,14 @@ Diagnostics identify the selected linear backend and distinguish symbolic and nu
 factorization counts in native and service results. Every backend result is also checked against
 the exact dimensionless Newton system using the normalized backward error
 `||A x - b||inf / (||A||inf ||x||inf + ||b||inf)`. A non-finite result or an error above the
-configured linear tolerance rejects that Newton solve instead of allowing an inaccurate step to
-contaminate nonlinear convergence. Diagnostics retain the last and worst accepted linear errors;
-continuation and transient integration propagate the worst error across all internal solves.
+configured linear tolerance is never passed to the nonlinear line search. A finite inaccurate
+full-system step receives at most two classical iterative-refinement corrections through the same
+scaled matrix and backend. Each correction solves the original-system residual, and the candidate
+is accepted only after its independently recomputed backward error passes. Exact direct solves
+incur no correction. Diagnostics retain the final and worst observed errors plus correction-attempt
+and recovered-solve counts; continuation and transient integration aggregate that evidence across
+all internal solves. An inaccurate reconstructed Schur-tearing step retains the safe full-system
+fallback, where refinement may recover it.
 
 For a structurally nonsingular fixed sparse pattern, the default `automatic` policy selects
 dependency-ordered block execution only when the system is reducible, the provider exposes both

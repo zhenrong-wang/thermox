@@ -463,6 +463,10 @@ void accumulate_diagnostics(
     aggregate.maximum_linear_backward_error = std::max(
         aggregate.maximum_linear_backward_error,
         stage.maximum_linear_backward_error);
+    aggregate.linear_refinement_attempts +=
+        stage.linear_refinement_attempts;
+    aggregate.linear_refinement_successes +=
+        stage.linear_refinement_successes;
     aggregate.structural_block_solves +=
         stage.structural_block_solves;
     aggregate.largest_linear_system_size = std::max(

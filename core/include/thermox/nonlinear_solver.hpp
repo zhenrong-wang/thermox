@@ -157,6 +157,8 @@ struct SolverDiagnostics {
     std::string factorization_quality_method;
     double last_linear_backward_error{0.0};
     double maximum_linear_backward_error{0.0};
+    int linear_refinement_attempts{0};
+    int linear_refinement_successes{0};
     int structural_block_solves{0};
     std::size_t largest_linear_system_size{0};
     int structural_tearing_attempts{0};

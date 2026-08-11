@@ -686,6 +686,8 @@ export interface SteadySimulationResult {
     final_step_norm: number
     last_linear_backward_error: number
     maximum_linear_backward_error: number
+    linear_refinement_attempts: number
+    linear_refinement_successes: number
     structural_block_solves: number
     largest_linear_system_size: number
     structural_tearing_attempts: number
@@ -729,6 +731,8 @@ export interface SteadySimulationResult {
       final_maximum_absolute_normalized_residual: number
       limiting_residual: string
       maximum_linear_backward_error: number
+      linear_refinement_attempts: number
+      linear_refinement_successes: number
       factorization_quality_observations: number
       last_reciprocal_pivot_ratio: number
       minimum_reciprocal_pivot_ratio: number
@@ -796,6 +800,8 @@ export interface TransientSimulationResult {
     maximum_absolute_normalized_residual: number
     limiting_nonlinear_residual: string
     maximum_linear_backward_error: number
+    linear_refinement_attempts: number
+    linear_refinement_successes: number
     structural_block_solves: number
     largest_linear_system_size: number
     structural_tearing_attempts: number

@@ -961,6 +961,10 @@ void test_newton_solver_uses_custom_linear_solver() {
     require(result.diagnostics.linear_solver_evaluations == calls,
             "linear solver diagnostics match custom calls");
     require(
+        result.diagnostics.linear_refinement_attempts == 0 &&
+            result.diagnostics.linear_refinement_successes == 0,
+        "an accurate backend step incurs no refinement solve");
+    require(
         result.diagnostics.last_linear_backward_error <=
                 options.linear_residual_tolerance &&
             result.diagnostics.maximum_linear_backward_error <=
@@ -1046,13 +1050,62 @@ void test_newton_solver_rejects_inaccurate_linear_solver_step() {
     const auto result = thermox::solve_newton(problem, options);
     require(
         !result.diagnostics.converged &&
+            result.diagnostics.linear_solver_evaluations == 3 &&
+            result.diagnostics.linear_refinement_attempts == 2 &&
+            result.diagnostics.linear_refinement_successes == 0 &&
             result.diagnostics.maximum_linear_backward_error >
                 options.linear_residual_tolerance,
-        "Newton rejects a backend step that does not solve its scaled system");
+        "Newton rejects a backend step that remains inaccurate after the "
+        "bounded refinement budget");
     require_contains(
         result.diagnostics.message,
         "normalized backward error",
         "inaccurate backend diagnostic reports quantitative failure");
+}
+
+void test_newton_solver_refines_inaccurate_linear_solver_step() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x"};
+    problem.residual_names = {"linear"};
+    problem.initial_guess = {0.0};
+    problem.residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        residual[0] = x[0] - 1.0;
+    };
+    problem.jacobian = [](
+        const std::vector<double>&,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = 1.0;
+    };
+
+    int calls = 0;
+    thermox::SolverOptions options;
+    options.linear_solver = [&calls](
+        thermox::Matrix matrix,
+        std::vector<double> rhs) {
+        ++calls;
+        return thermox::LinearSolveResult{
+            true,
+            {(1.0 - 1.0e-4) * rhs[0] / matrix[0][0]},
+            "slightly inaccurate custom step"};
+    };
+    const auto result = thermox::solve_newton(problem, options);
+    require(result.diagnostics.converged, result.diagnostics.message);
+    require_near(
+        result.x[0], 1.0, 1.0e-9,
+        "iterative refinement recovers the Newton step");
+    require(
+        calls == 3 &&
+            result.diagnostics.linear_solver_evaluations == calls &&
+            result.diagnostics.linear_refinement_attempts == 2 &&
+            result.diagnostics.linear_refinement_successes == 1 &&
+            result.diagnostics.last_linear_backward_error <=
+                options.linear_residual_tolerance &&
+            result.diagnostics.maximum_linear_backward_error >
+                options.linear_residual_tolerance,
+        "refinement telemetry distinguishes the inaccurate initial solve "
+        "from its accepted corrected step");
 }
 
 void test_line_search_failure_names_dominant_residual() {
@@ -2129,6 +2182,7 @@ int main() {
         test_newton_solver_reports_linear_solver_failure();
         test_newton_solver_rejects_invalid_linear_solver_step();
         test_newton_solver_rejects_inaccurate_linear_solver_step();
+        test_newton_solver_refines_inaccurate_linear_solver_step();
         test_line_search_failure_names_dominant_residual();
         test_newton_solver_uses_residual_scales_for_convergence();
         test_newton_solver_scales_linear_system_rows();

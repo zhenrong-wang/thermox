@@ -664,89 +664,173 @@ double normalized_backward_error(
     return static_cast<double>(residual_norm / denominator);
 }
 
+std::vector<double> linear_residual(
+    const Matrix& matrix,
+    const std::vector<double>& x,
+    const std::vector<double>& rhs) {
+    std::vector<double> residual(rhs.size(), 0.0);
+    for (std::size_t row = 0; row < matrix.size(); ++row) {
+        long double product = 0.0;
+        for (std::size_t column = 0;
+             column < matrix[row].size(); ++column) {
+            product +=
+                static_cast<long double>(matrix[row][column]) *
+                static_cast<long double>(x[column]);
+        }
+        residual[row] = static_cast<double>(
+            static_cast<long double>(rhs[row]) - product);
+    }
+    return residual;
+}
+
+std::vector<double> linear_residual(
+    const SparseMatrix& matrix,
+    const std::vector<double>& x,
+    const std::vector<double>& rhs) {
+    std::vector<double> residual(rhs.size(), 0.0);
+    for (std::size_t row = 0; row < matrix.rows(); ++row) {
+        long double product = 0.0;
+        for (std::size_t offset = matrix.row_offsets()[row];
+             offset < matrix.row_offsets()[row + 1]; ++offset) {
+            product +=
+                static_cast<long double>(matrix.values()[offset]) *
+                static_cast<long double>(
+                    x[matrix.column_indices()[offset]]);
+        }
+        residual[row] = static_cast<double>(
+            static_cast<long double>(rhs[row]) - product);
+    }
+    return residual;
+}
+
 LinearSolveResult solve_linear_system(const SolverOptions& options,
                                       const SparseFactorizationPtr& factorization,
                                       EvaluatedJacobian jacobian,
                                       std::vector<double> rhs,
                                       std::size_t expected_size,
                                       SolverDiagnostics& diagnostics) {
-    ++diagnostics.linear_solver_evaluations;
     diagnostics.largest_linear_system_size = std::max(
         diagnostics.largest_linear_system_size,
         expected_size);
 
-    LinearSolveResult result;
-    double backward_error = std::numeric_limits<double>::infinity();
+    constexpr int maximum_refinement_steps = 2;
+    const bool use_sparse_matrix =
+        options.sparse_linear_solver ||
+        (!options.linear_solver &&
+         (jacobian.is_sparse || options.sparse_factorization));
+    if (use_sparse_matrix && !jacobian.is_sparse) {
+        jacobian.sparse = sparse_from_dense(jacobian.dense);
+        jacobian.dense.clear();
+        jacobian.is_sparse = true;
+    } else if (!use_sparse_matrix && jacobian.is_sparse) {
+        jacobian.dense = jacobian.sparse.to_dense();
+        jacobian.sparse = {};
+        jacobian.is_sparse = false;
+    }
+
     if (options.sparse_linear_solver) {
         diagnostics.linear_solver_backend =
             "custom-sparse-hook";
-        auto sparse = jacobian.is_sparse ? std::move(jacobian.sparse)
-                                         : sparse_from_dense(jacobian.dense);
-        result = options.sparse_linear_solver(sparse, rhs);
-        result = validate_linear_result(
-            std::move(result), expected_size);
-        if (result.success) {
-            backward_error = normalized_backward_error(
-                sparse, result.x, rhs);
-        }
-    } else if (jacobian.is_sparse && !options.linear_solver) {
+    } else if (use_sparse_matrix) {
         diagnostics.linear_solver_backend =
             std::string(factorization->backend_name());
-        result = factorization->solve(jacobian.sparse, rhs);
-        result = validate_linear_result(
-            std::move(result), expected_size);
-        if (result.success) {
-            backward_error = normalized_backward_error(
-                jacobian.sparse, result.x, rhs);
-        }
-    } else if (options.sparse_factorization &&
-               !options.linear_solver) {
-        diagnostics.linear_solver_backend =
-            std::string(factorization->backend_name());
-        auto sparse = jacobian.is_sparse
-            ? std::move(jacobian.sparse)
-            : sparse_from_dense(jacobian.dense);
-        result = factorization->solve(sparse, rhs);
-        result = validate_linear_result(
-            std::move(result), expected_size);
-        if (result.success) {
-            backward_error = normalized_backward_error(
-                sparse, result.x, rhs);
-        }
     } else {
         diagnostics.linear_solver_backend =
             options.linear_solver
             ? "custom-dense-hook"
             : "reference-dense";
-        auto dense = jacobian.is_sparse ? jacobian.sparse.to_dense() : std::move(jacobian.dense);
-        result = options.linear_solver
-            ? options.linear_solver(dense, rhs)
-            : solve_dense_linear_system(dense, rhs);
-        result = validate_linear_result(
-            std::move(result), expected_size);
-        if (result.success) {
-            backward_error = normalized_backward_error(
-                dense, result.x, rhs);
+    }
+
+    const auto solve_once = [&](std::vector<double> solve_rhs) {
+        if (options.sparse_linear_solver) {
+            return options.sparse_linear_solver(
+                jacobian.sparse, std::move(solve_rhs));
+        }
+        if (use_sparse_matrix) {
+            return factorization->solve(
+                jacobian.sparse, std::move(solve_rhs));
+        }
+        return options.linear_solver
+            ? options.linear_solver(
+                  jacobian.dense, std::move(solve_rhs))
+            : solve_dense_linear_system(
+                  jacobian.dense, std::move(solve_rhs));
+    };
+    const auto backward_error_for = [&](
+                                        const std::vector<double>& x) {
+        return jacobian.is_sparse
+            ? normalized_backward_error(jacobian.sparse, x, rhs)
+            : normalized_backward_error(jacobian.dense, x, rhs);
+    };
+    const auto residual_for = [&](const std::vector<double>& x) {
+        return jacobian.is_sparse
+            ? linear_residual(jacobian.sparse, x, rhs)
+            : linear_residual(jacobian.dense, x, rhs);
+    };
+
+    const auto execute = [&](std::vector<double> solve_rhs) {
+        ++diagnostics.linear_solver_evaluations;
+        auto solved = validate_linear_result(
+            solve_once(std::move(solve_rhs)), expected_size);
+        diagnostics.symbolic_factorizations +=
+            solved.symbolic_factorizations;
+        diagnostics.numeric_factorizations +=
+            solved.numeric_factorizations;
+        record_factorization_quality(
+            diagnostics, solved.factorization_quality);
+        return solved;
+    };
+
+    LinearSolveResult result = execute(rhs);
+    if (!result.success) return result;
+
+    double backward_error = backward_error_for(result.x);
+    const auto record_backward_error = [&](double value) {
+        diagnostics.last_linear_backward_error = value;
+        diagnostics.maximum_linear_backward_error = std::max(
+            diagnostics.maximum_linear_backward_error, value);
+    };
+    record_backward_error(backward_error);
+    int refinement_steps = 0;
+    for (int step = 0;
+         step < maximum_refinement_steps &&
+             std::isfinite(backward_error) &&
+             backward_error > options.linear_residual_tolerance;
+         ++step) {
+        ++refinement_steps;
+        ++diagnostics.linear_refinement_attempts;
+        auto correction = execute(residual_for(result.x));
+        if (!correction.success) {
+            correction.message =
+                "linear iterative refinement failed: " +
+                correction.message;
+            return correction;
+        }
+        for (std::size_t index = 0;
+             index < result.x.size(); ++index) {
+            result.x[index] += correction.x[index];
+            if (!std::isfinite(result.x[index])) {
+                return {
+                    false, {},
+                    "linear iterative refinement produced a "
+                    "non-finite step"};
+            }
+        }
+        backward_error = backward_error_for(result.x);
+        record_backward_error(backward_error);
+        if (backward_error <= options.linear_residual_tolerance) {
+            ++diagnostics.linear_refinement_successes;
         }
     }
-    diagnostics.symbolic_factorizations +=
-        result.symbolic_factorizations;
-    diagnostics.numeric_factorizations +=
-        result.numeric_factorizations;
-    record_factorization_quality(
-        diagnostics, result.factorization_quality);
-    if (!result.success) return result;
-    diagnostics.last_linear_backward_error = backward_error;
-    diagnostics.maximum_linear_backward_error = std::max(
-        diagnostics.maximum_linear_backward_error,
-        backward_error);
     if (!std::isfinite(backward_error) ||
         backward_error > options.linear_residual_tolerance) {
         std::ostringstream message;
         message << std::scientific << std::setprecision(6)
                 << "linear backend normalized backward error "
                 << backward_error << " exceeds tolerance "
-                << options.linear_residual_tolerance;
+                << options.linear_residual_tolerance << " after "
+                << refinement_steps
+                << " refinement step(s)";
         result.success = false;
         result.message = message.str();
         result.x.clear();
@@ -2077,6 +2161,10 @@ void accumulate_block_diagnostics(
     aggregate.maximum_linear_backward_error = std::max(
         aggregate.maximum_linear_backward_error,
         block.maximum_linear_backward_error);
+    aggregate.linear_refinement_attempts +=
+        block.linear_refinement_attempts;
+    aggregate.linear_refinement_successes +=
+        block.linear_refinement_successes;
     aggregate.largest_linear_system_size = std::max(
         aggregate.largest_linear_system_size,
         block.largest_linear_system_size);
@@ -2126,6 +2214,10 @@ void prepend_failed_attempt_diagnostics(
     final.maximum_linear_backward_error = std::max(
         final.maximum_linear_backward_error,
         attempt.maximum_linear_backward_error);
+    final.linear_refinement_attempts +=
+        attempt.linear_refinement_attempts;
+    final.linear_refinement_successes +=
+        attempt.linear_refinement_successes;
     final.structural_block_solves +=
         attempt.structural_block_solves;
     final.largest_linear_system_size = std::max(
