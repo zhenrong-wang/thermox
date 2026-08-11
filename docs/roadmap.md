@@ -661,7 +661,11 @@ Work items:
    - NETL B31A connected HP/IP/LP steam train with gland loss, HP leakage, reheat and LP admission
      mixing, precision-aware condenser boundary, calibrated stage efficiencies, and independent
      stage/aggregate power acceptance checks; ✅
-   - segmented triple-pressure/reheat HRSG, multi-admission steam turbine, and complete 2x1 plant
+   - segmented triple-pressure/reheat HRSG boundary decomposition with ten serial gas surfaces,
+     three IF97 pressure circuits, cold-reheat/IP make-up mixing, whole-system conservation,
+     classified boundary/calibration evidence, and generic terminal-approach rejection of the
+     unsupported assumed coil order; ✅
+   - a single connected 2x1 combined-cycle graph and independently parameterized off-design HRSG
      remain follow-ons.
 
 Exit criteria:

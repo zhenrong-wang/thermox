@@ -1,4 +1,5 @@
 #include "thermox/service/native_extension_sdk.hpp"
+#include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
 #include "thermox/equation_system.hpp"
 #include "thermox/solver_policy_benchmark.hpp"
@@ -309,4 +310,12 @@ int main() {
     require(
         evidence.passed && evidence.passed_count == 1U,
         "installed validation evidence contract failed");
+
+    const auto thermal_feasibility =
+        service::audit_counterflow_thermal_feasibility(
+            service::GraphResult{});
+    require(
+        thermal_feasibility.passed &&
+            thermal_feasibility.checked_count == 0U,
+        "installed thermal feasibility contract failed");
 }

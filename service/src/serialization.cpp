@@ -2592,6 +2592,41 @@ std::string serialize_validation_evidence_summary_json(
     return out.str();
 }
 
+std::string serialize_thermal_feasibility_summary_json(
+    const ThermalFeasibilitySummary& summary) {
+    validate_thermal_feasibility_summary(summary);
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, summary.schema_version);
+    out << ",\n  \"required_minimum_approach_k\": ";
+    json_number(out, summary.required_minimum_approach_k);
+    out << ",\n  \"passed\": "
+        << (summary.passed ? "true" : "false")
+        << ",\n  \"checked_count\": " << summary.checked_count
+        << ",\n  \"passed_count\": " << summary.passed_count
+        << ",\n  \"failed_count\": " << summary.failed_count
+        << ",\n  \"counterflow_approaches\": [";
+    for (std::size_t index = 0;
+         index < summary.counterflow_approaches.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& result = summary.counterflow_approaches[index];
+        out << "{\"component_id\": ";
+        json_string(out, result.component_id);
+        out << ", \"component_kind\": ";
+        json_string(out, result.component_kind);
+        out << ", \"hot_in_minus_cold_out_k\": ";
+        json_number(out, result.hot_in_minus_cold_out_k);
+        out << ", \"hot_out_minus_cold_in_k\": ";
+        json_number(out, result.hot_out_minus_cold_in_k);
+        out << ", \"minimum_approach_k\": ";
+        json_number(out, result.minimum_approach_k);
+        out << ", \"passed\": "
+            << (result.passed ? "true" : "false") << '}';
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_job_record_json(
     const SimulationJobRecord& record) {
     std::ostringstream out;

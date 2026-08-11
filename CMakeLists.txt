@@ -262,6 +262,12 @@ if(TARGET thermox_cantera_backend)
             --case heatup_segment
             --end-time 0.1
     )
+    add_test(NAME platform_segmented_triple_pressure_hrsg_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/netl_b31a/segmented_hrsg.json
+            --case published_boundary_decomposition
+            --continuation
+    )
 endif()
 add_test(NAME platform_two_cell_counterflow_steady_cli
     COMMAND thermox_cli solve

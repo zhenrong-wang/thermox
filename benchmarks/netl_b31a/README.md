@@ -162,6 +162,24 @@ stage balances, and design-point calculation. It is not yet an off-design steam
 turbine prediction model; that requires stage-group maps or equivalent OEM
 correlations and a wet-stage efficiency model.
 
+## Segmented triple-pressure reheat HRSG
+
+`segmented_hrsg.json` replaces the aggregate gas cooler with ten ordinary
+gas-to-fluid heat-exchanger instances and independent HP/IP/LP water/steam
+paths. IP make-up steam mixes with pressure-equalized cold reheat before the
+reheater. The graph solves 250 variables together, conserves all five exhaust
+species, closes system mass and energy, and retains the aggregate benchmark's
+357.686 K stack result.
+
+The segment duties and surface ordering are explicit assumptions because the
+public source does not publish coil-by-coil data. Accordingly, the evidence
+contract classifies the output steam states as calibrated reproduction and the
+stack comparison as boundary-constrained, with no independent predictive
+claim. The generic terminal-approach audit also rejects temperature crosses in
+the assumed ordering, proving that numerical closure is not allowed to imply
+physical calculation readiness. See
+[Segmented triple-pressure reheat HRSG](../../docs/segmented-triple-pressure-hrsg.md).
+
 Run the case with:
 
 ```sh
@@ -176,6 +194,10 @@ Run the case with:
 ./build/thermox_cli solve \
   --model benchmarks/netl_b31a/steam_turbine_train.json \
   --case published_design --format text
+
+./build/thermox_cli solve \
+  --model benchmarks/netl_b31a/segmented_hrsg.json \
+  --case published_boundary_decomposition --continuation --format text
 ```
 
 ## Scope and next expansion
@@ -185,8 +207,9 @@ balance, Cantera state recovery, unit normalization, graph compilation,
 continuation, and service result projection against a real combined-cycle
 boundary. It does not yet validate the complete B31A plant.
 
-The next benchmark expansion should replace the aggregate duty with segmented
-HP/IP/LP economizer, evaporator, superheater, and reheater sections, then add a
-multi-admission steam turbine and the gas-turbine train. Published design-point
-data can validate those balances; credible off-design prediction will still
-require equipment maps or equivalent OEM performance data.
+The aggregate duty has now been decomposed into segmented HP/IP/LP economizer,
+evaporator, superheater, and reheater topology, while the steam side is covered
+by a separate multi-admission turbine train. The next expansion should connect
+those two graphs through shared stream boundaries, then add the gas-turbine
+train. Credible off-design prediction will still require equipment maps, HRSG
+geometry/UA data, or equivalent OEM performance information.

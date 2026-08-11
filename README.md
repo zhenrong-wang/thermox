@@ -103,6 +103,12 @@ Implemented in this sprint:
   two-phase hydraulic loss, separator drum, and superheater models across counterflow Cantera
   exhaust and IF97 water paths. See
   [Dynamic single-pressure HRSG](docs/dynamic-single-pressure-hrsg.md).
+- A steady declaration-only triple-pressure reheat HRSG composes ten gas-to-water surfaces,
+  three IF97 pressure circuits, cold-reheat pressure equalization, and IP make-up mixing while
+  preserving the NETL B31A boundary balance. A generic counterflow audit explicitly rejects the
+  assumed unpublished ordering's temperature crosses, keeping numerical closure, physical
+  feasibility, and evidence strength separate. See
+  [Segmented triple-pressure reheat HRSG](docs/segmented-triple-pressure-hrsg.md).
 - A declaration-only forced-circulation evaporator closes drum liquid through a quasi-steady pump,
   lumped hydraulic momentum storage, equilibrium boiling cell, and two-phase resistance. The
   dynamic graph conserves combined inventory mass and energy while resolving loop-flow

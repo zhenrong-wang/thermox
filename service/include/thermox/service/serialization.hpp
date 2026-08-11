@@ -2,6 +2,7 @@
 
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_jobs.hpp"
+#include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
 
 #include <string>
@@ -32,6 +33,8 @@ std::string serialize_result_summary_json(
     const ResultSummary& summary);
 std::string serialize_validation_evidence_summary_json(
     const ValidationEvidenceSummary& summary);
+std::string serialize_thermal_feasibility_summary_json(
+    const ThermalFeasibilitySummary& summary);
 std::string serialize_job_record_json(
     const SimulationJobRecord& record);
 std::string serialize_job_comparison_json(

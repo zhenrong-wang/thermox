@@ -4,6 +4,7 @@
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
 
 #include <algorithm>
@@ -1892,6 +1893,269 @@ void test_netl_b31a_hrsg_boundary_benchmark() {
             1.0) < 0.04,
         "Cantera stack density must agree with the published "
         "stream table at displayed precision");
+}
+
+void test_netl_b31a_segmented_triple_pressure_hrsg() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/netl_b31a/segmented_hrsg.json");
+    request.case_id = "published_boundary_decomposition";
+    request.solver.continuation_enabled = true;
+    const auto response = service.run_steady(request);
+
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0,
+        "segmented triple-pressure reheat HRSG must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.final_residual_norm < 1.0e-10,
+        "segmented HRSG equations must close independently of its "
+        "engineering evidence class");
+
+    const auto& exhaust = require_port_result(
+        response.graph, "exhaust_inlet", "outlet");
+    const auto& stack = require_port_result(
+        response.graph, "stack", "inlet");
+    const auto temperature = [](const auto& port) {
+        return require_result_value(
+            port.derived_values, "T").value_si;
+    };
+    std::vector<double> gas_temperatures = {temperature(exhaust)};
+    for (const auto* component : {
+             "hp_superheater", "reheater", "ip_superheater",
+             "lp_superheater", "hp_evaporator", "ip_evaporator",
+             "lp_evaporator", "hp_economizer", "ip_economizer",
+             "lp_economizer"}) {
+        gas_temperatures.push_back(temperature(require_port_result(
+            response.graph, component, "hot_out")));
+    }
+    require(
+        std::adjacent_find(
+            gas_temperatures.begin(), gas_temperatures.end(),
+            [](double upstream, double downstream) {
+                return upstream <= downstream;
+            }) == gas_temperatures.end(),
+        "every declared HRSG surface must cool the serial exhaust "
+        "path");
+    for (const auto* species : {
+             "m_dot[O2]", "m_dot[H2O]", "m_dot[CO2]",
+             "m_dot[N2]", "m_dot[AR]"}) {
+        require(
+            std::abs(require_result_value(
+                exhaust.primary_values, species).value_si -
+                require_result_value(
+                    stack.primary_values, species).value_si) <
+                1.0e-9,
+            "segmented HRSG must conserve every exhaust species");
+    }
+
+    const auto& hp_economizer_out = require_port_result(
+        response.graph, "hp_economizer", "cold_out");
+    const auto& hp_evaporator_out = require_port_result(
+        response.graph, "hp_evaporator", "cold_out");
+    const auto& ip_evaporator_out = require_port_result(
+        response.graph, "ip_evaporator", "cold_out");
+    const auto& lp_evaporator_out = require_port_result(
+        response.graph, "lp_evaporator", "cold_out");
+    require(
+        hp_economizer_out.phase == "liquid" &&
+            hp_evaporator_out.phase == "vapor" &&
+            require_result_value(
+                ip_evaporator_out.derived_values,
+                "vapor_quality").value_si > 0.99 &&
+            require_result_value(
+                lp_evaporator_out.derived_values,
+                "vapor_quality").value_si > 0.99,
+        "all three pressure circuits must traverse their declared "
+        "economizer and evaporation state progression");
+
+    const auto& main_steam = require_port_result(
+        response.graph, "main_steam", "inlet");
+    const auto& hot_reheat = require_port_result(
+        response.graph, "hot_reheat", "inlet");
+    const auto& lp_steam = require_port_result(
+        response.graph, "lp_steam", "inlet");
+    const auto primary = [](const auto& port, const char* name) {
+        return require_result_value(
+            port.primary_values, name).value_si;
+    };
+    require(
+        std::abs(primary(main_steam, "h") - 3520.51e3) < 1.0e-3,
+        "segmented HRSG must reproduce main-steam enthalpy");
+    require(
+        std::abs(primary(hot_reheat, "h") - 3641.17e3) < 1.0e-3,
+        "segmented HRSG must reproduce hot-reheat enthalpy");
+    require(
+        std::abs(primary(lp_steam, "h") - 3071.95e3) < 1.0e-3,
+        "segmented HRSG must reproduce LP-steam enthalpy");
+    require(
+        std::abs(
+            primary(hot_reheat, "m_dot") -
+            159.865277777778) < 1.0e-9,
+        "IP make-up and cold reheat flows must mix exactly");
+
+    const double exhaust_mass =
+        primary(exhaust, "m_dot[O2]") +
+        primary(exhaust, "m_dot[H2O]") +
+        primary(exhaust, "m_dot[CO2]") +
+        primary(exhaust, "m_dot[N2]") +
+        primary(exhaust, "m_dot[AR]");
+    const double gas_duty = exhaust_mass *
+        (primary(exhaust, "h") - primary(stack, "h"));
+    require(
+        std::abs(gas_duty - 684.970522136112e6) < 1.0,
+        "segmented gas-side duty must equal all declared surfaces");
+    require(
+        std::abs(require_result_value(
+            response.graph.system_balances,
+            "net_boundary_mass_flow").value_si) < 1.0e-9 &&
+            std::abs(require_result_value(
+                response.graph.system_balances,
+                "net_boundary_energy_flow").value_si) < 1.0,
+        "segmented HRSG must close whole-system steady mass and "
+        "energy balances");
+
+    const auto thermal_feasibility =
+        thermox::service::audit_counterflow_thermal_feasibility(
+            response.graph);
+    const auto approach_of = [&](const char* component_id) {
+        const auto found = std::find_if(
+            thermal_feasibility.counterflow_approaches.begin(),
+            thermal_feasibility.counterflow_approaches.end(),
+            [&](const auto& result) {
+                return result.component_id == component_id;
+            });
+        require(
+            found != thermal_feasibility.counterflow_approaches.end(),
+            std::string("missing thermal approach result for ") +
+                component_id);
+        return *found;
+    };
+    require(
+        !thermal_feasibility.passed &&
+            thermal_feasibility.checked_count == 10U &&
+            thermal_feasibility.failed_count > 0U &&
+            approach_of("hp_superheater").passed &&
+            !approach_of("reheater").passed &&
+            !approach_of("hp_economizer").passed,
+        "generic terminal-approach audit must reject the unpublished "
+        "surface ordering even though its equations close");
+    const auto thermal_json =
+        thermox::service::serialize_thermal_feasibility_summary_json(
+            thermal_feasibility);
+    require(
+        thermal_json.find("thermox.thermal_feasibility/v1") !=
+                std::string::npos &&
+            thermal_json.find("hp_economizer") !=
+                std::string::npos &&
+            thermal_json.find("\"passed\": false") !=
+                std::string::npos,
+        "thermal-feasibility evidence must serialize its failed "
+        "component verdicts");
+    auto tampered_feasibility = thermal_feasibility;
+    tampered_feasibility.failed_count = 0U;
+    bool tampered_feasibility_rejected = false;
+    try {
+        thermox::service::validate_thermal_feasibility_summary(
+            tampered_feasibility);
+    } catch (const thermox::service::ThermalFeasibilityError&) {
+        tampered_feasibility_rejected = true;
+    }
+    require(
+        tampered_feasibility_rejected,
+        "durable thermal-feasibility evidence must reject tampered "
+        "aggregate counts");
+
+    const auto evidence =
+        thermox::service::evaluate_validation_evidence(
+            {
+                {"stack_temperature", "temperature", temperature(stack)},
+                {"main_steam_enthalpy", "specific_enthalpy",
+                 primary(main_steam, "h")},
+                {"hot_reheat_enthalpy", "specific_enthalpy",
+                 primary(hot_reheat, "h")},
+                {"lp_steam_enthalpy", "specific_enthalpy",
+                 primary(lp_steam, "h")},
+                {"normalized_residual", "dimensionless",
+                 response.diagnostics.final_residual_norm},
+            },
+            {
+                {
+                    "stack_temperature_boundary_agreement",
+                    "stack_temperature",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        boundary_constrained,
+                    "temperature", 352.15, 7.0, 0.0,
+                    "NETL B31A Exhibit 4-8 stack temperature",
+                    "All segment duties sum to the published "
+                    "steam-side HRSG boundary duty.",
+                },
+                {
+                    "main_steam_calibrated_reproduction",
+                    "main_steam_enthalpy",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        calibrated_reproduction,
+                    "specific_enthalpy", 3520.51e3, 1.0, 0.0,
+                    "NETL B31A Exhibit 4-8 stream 5",
+                    "The fixed segment duties were partitioned to "
+                    "reproduce this boundary state.",
+                },
+                {
+                    "hot_reheat_calibrated_reproduction",
+                    "hot_reheat_enthalpy",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        calibrated_reproduction,
+                    "specific_enthalpy", 3641.17e3, 1.0, 0.0,
+                    "NETL B31A Exhibit 4-8 stream 7",
+                    "The reheater duty was derived from this boundary "
+                    "state and the declared mixer balance.",
+                },
+                {
+                    "lp_steam_calibrated_reproduction",
+                    "lp_steam_enthalpy",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        calibrated_reproduction,
+                    "specific_enthalpy", 3071.95e3, 1.0, 0.0,
+                    "NETL B31A Exhibit 4-8 stream 9",
+                    "The fixed segment duties were partitioned to "
+                    "reproduce this boundary state.",
+                },
+                {
+                    "scaled_equation_closure",
+                    "normalized_residual",
+                    thermox::service::ValidationEvidenceLayer::numerical,
+                    thermox::service::ValidationEvidenceBasis::
+                        internal_consistency,
+                    "dimensionless", 0.0, 1.0e-10, 0.0,
+                    "Thermox scaled equation system",
+                    "Numerical closure is separate from external "
+                    "engineering validation.",
+                },
+            },
+            {
+                "The source does not publish coil-by-coil duties, UA, "
+                "geometry, pinch, approach, or pressure losses.",
+                "Intermediate HP/IP/LP enthalpy targets and gas-path "
+                "surface ordering are explicit topology assumptions.",
+                "Feed pumps, drums, circulation, blowdown, attemperation, "
+                "ambient loss, and the 1 kg/h source rounding imbalance "
+                "remain outside this steady boundary decomposition.",
+            });
+    require(
+        evidence.passed && evidence.passed_count == 5U &&
+            evidence.classes.front().passed_count == 0U &&
+            evidence.classes[1].passed_count == 1U &&
+            evidence.classes[2].passed_count == 3U &&
+            evidence.classes[4].passed_count == 1U,
+        "segmented HRSG must not promote calibrated topology "
+        "reproduction to independent predictive validation");
 }
 
 void test_dynamic_cantera_if97_hrsg_cell() {
@@ -4912,6 +5176,7 @@ int main() {
 #ifdef THERMOX_TEST_HAS_CANTERA
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
+        test_netl_b31a_segmented_triple_pressure_hrsg();
         test_dynamic_cantera_if97_hrsg_cell();
         test_distributed_cantera_if97_counterflow_exchanger();
         test_dynamic_equilibrium_two_phase_material_fluid_cell();
