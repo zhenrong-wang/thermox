@@ -171,8 +171,9 @@ Implemented in this sprint:
   reports missing or incompatible outputs explicitly, and calculates candidate-minus-baseline SI
   and relative deltas through one service-owned contract used by HTTP and web clients.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
-  validation, steady, and transient HTTP routes onto `thermox_service`, with strict query decoding,
-  JSON content checks, body limits, transport status codes, and safe response headers. A thin
+  validation, steady, transient, and explicit structural-policy audit HTTP routes onto
+  `thermox_service`, with strict query decoding, JSON content checks, body limits, transport status
+  codes, and safe response headers. A thin
   Boost.Beast API process publishes the adapter, while a separate worker process owns calculations.
 - Asynchronous HTTP simulations carry a gateway-supplied identity context, namespace idempotency
   and resource access by Team, retain the submitting user for audit, and hide cross-Team job
@@ -389,6 +390,9 @@ but remains distinct from a condition-number estimate and does not silently chan
 Advanced SDK users can call `benchmark_structural_policies` to audit candidate policies from an
 identical initial state against a monolithic baseline. The audit compares scale-normalized solutions
 and retains full diagnostics; it never auto-selects a production policy or uses timing as correctness.
+Model-oriented clients can invoke the same capability through
+`SimulationService::run_structural_policy_audit` or the development-only synchronous route
+`POST /api/v1/simulations/structural-policy-audit?case_id=...&policies=monolithic,tearing`.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

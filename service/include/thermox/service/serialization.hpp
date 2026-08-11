@@ -19,6 +19,8 @@ std::string serialize_performance_map_quality_json(
     const PerformanceMapQualitySummary& quality);
 std::string serialize_steady_response_json(
     const SteadySimulationResponse& response);
+std::string serialize_structural_policy_audit_response_json(
+    const StructuralPolicyAuditResponse& response);
 std::string serialize_calibration_response_json(
     const CalibrationResponse& response);
 std::string serialize_engineering_study_response_json(

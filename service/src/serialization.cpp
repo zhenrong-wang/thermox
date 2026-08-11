@@ -633,6 +633,81 @@ void graph_result_json(
     out << "}";
 }
 
+void nonlinear_diagnostics_json(
+    std::ostream& out,
+    const NonlinearDiagnostics& diagnostics) {
+    out << "{\"converged\": "
+        << (diagnostics.converged ? "true" : "false")
+        << ", \"iterations\": " << diagnostics.iterations
+        << ", \"final_residual_norm\": ";
+    json_number(out, diagnostics.final_residual_norm);
+    out << ", \"final_maximum_absolute_normalized_residual\": ";
+    json_number(
+        out,
+        diagnostics.final_maximum_absolute_normalized_residual);
+    out << ", \"limiting_residual\": ";
+    json_string(out, diagnostics.limiting_residual);
+    out << ", \"final_step_norm\": ";
+    json_number(out, diagnostics.final_step_norm);
+    out << ", \"function_evaluations\": "
+        << diagnostics.function_evaluations
+        << ", \"jacobian_evaluations\": "
+        << diagnostics.jacobian_evaluations
+        << ", \"linear_solver_evaluations\": "
+        << diagnostics.linear_solver_evaluations
+        << ", \"symbolic_factorizations\": "
+        << diagnostics.symbolic_factorizations
+        << ", \"numeric_factorizations\": "
+        << diagnostics.numeric_factorizations
+        << ", \"factorization_quality_observations\": "
+        << diagnostics.factorization_quality_observations
+        << ", \"last_reciprocal_pivot_ratio\": ";
+    json_number(out, diagnostics.last_reciprocal_pivot_ratio);
+    out << ", \"minimum_reciprocal_pivot_ratio\": ";
+    json_number(out, diagnostics.minimum_reciprocal_pivot_ratio);
+    out << ", \"minimum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out, diagnostics.minimum_absolute_pivot_at_minimum_ratio);
+    out << ", \"maximum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out, diagnostics.maximum_absolute_pivot_at_minimum_ratio);
+    out << ", \"accepted_pivot_count_at_minimum_ratio\": "
+        << diagnostics.accepted_pivot_count_at_minimum_ratio
+        << ", \"factorization_size_at_minimum_ratio\": "
+        << diagnostics.factorization_size_at_minimum_ratio
+        << ", \"factorization_quality_method\": ";
+    json_string(out, diagnostics.factorization_quality_method);
+    out << ", \"last_linear_backward_error\": ";
+    json_number(out, diagnostics.last_linear_backward_error);
+    out << ", \"maximum_linear_backward_error\": ";
+    json_number(out, diagnostics.maximum_linear_backward_error);
+    out << ", \"structural_block_solves\": "
+        << diagnostics.structural_block_solves
+        << ", \"largest_linear_system_size\": "
+        << diagnostics.largest_linear_system_size
+        << ", \"structural_tearing_attempts\": "
+        << diagnostics.structural_tearing_attempts
+        << ", \"structural_tearing_successes\": "
+        << diagnostics.structural_tearing_successes
+        << ", \"structural_tearing_fallbacks\": "
+        << diagnostics.structural_tearing_fallbacks
+        << ", \"largest_tearing_inner_system_size\": "
+        << diagnostics.largest_tearing_inner_system_size
+        << ", \"largest_tearing_outer_system_size\": "
+        << diagnostics.largest_tearing_outer_system_size
+        << ", \"largest_tearing_inner_nonzero_count\": "
+        << diagnostics.largest_tearing_inner_nonzero_count
+        << ", \"last_structural_tearing_fallback\": ";
+    json_string(out, diagnostics.last_structural_tearing_fallback);
+    out << ", \"failed_structural_block\": ";
+    json_string(out, diagnostics.failed_structural_block);
+    out << ", \"linear_solver_backend\": ";
+    json_string(out, diagnostics.linear_solver_backend);
+    out << ", \"message\": ";
+    json_string(out, diagnostics.message);
+    out << '}';
+}
+
 }  // namespace
 
 namespace detail {
@@ -1928,6 +2003,125 @@ std::string serialize_steady_response_json(
          ++i) {
         if (i != 0) out << ", ";
         json_string(out, response.reduced_connection_equations[i]);
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
+std::string serialize_structural_policy_audit_response_json(
+    const StructuralPolicyAuditResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, response.schema_version);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"metadata\": ";
+    execution_metadata_json(out, response.metadata);
+    out << ",\n  \"compilation\": {\"compiled\": "
+        << (response.compilation.compiled ? "true" : "false")
+        << ", \"mode\": ";
+    json_string(out, response.compilation.mode);
+    out << ", \"variable_count\": "
+        << response.compilation.variable_count
+        << ", \"equation_count\": "
+        << response.compilation.equation_count
+        << ", \"largest_structural_block_size\": "
+        << response.compilation.largest_structural_block_size
+        << ", \"catalog_fingerprint\": ";
+    json_string(out, response.compilation.catalog_fingerprint);
+    out << ", \"structural_blocks\": [";
+    for (std::size_t index = 0;
+         index < response.compilation.structural_blocks.size();
+         ++index) {
+        if (index != 0) out << ", ";
+        const auto& block =
+            response.compilation.structural_blocks[index];
+        out << "{\"variable_names\": [";
+        for (std::size_t name = 0;
+             name < block.variable_names.size(); ++name) {
+            if (name != 0) out << ", ";
+            json_string(out, block.variable_names[name]);
+        }
+        out << "], \"equation_names\": [";
+        for (std::size_t name = 0;
+             name < block.equation_names.size(); ++name) {
+            if (name != 0) out << ", ";
+            json_string(out, block.equation_names[name]);
+        }
+        out << "], \"suggested_tear_variable_names\": [";
+        for (std::size_t name = 0;
+             name < block.suggested_tear_variable_names.size();
+             ++name) {
+            if (name != 0) out << ", ";
+            json_string(
+                out, block.suggested_tear_variable_names[name]);
+        }
+        out << "], \"acyclic_after_suggested_tears\": "
+            << (block.acyclic_after_suggested_tears
+                    ? "true" : "false")
+            << ", \"structural_nonzero_count\": "
+            << block.structural_nonzero_count
+            << ", \"suggested_inner_variable_count\": "
+            << block.suggested_inner_variable_count
+            << ", \"suggested_inner_nonzero_count\": "
+            << block.suggested_inner_nonzero_count
+            << ", \"suggested_tear_coupling_nonzero_count\": "
+            << block.suggested_tear_coupling_nonzero_count
+            << ", \"suggested_dense_schur_entry_count\": "
+            << block.suggested_dense_schur_entry_count
+            << '}';
+    }
+    out << "], \"reduced_connection_equations\": [";
+    for (std::size_t index = 0;
+         index < response.compilation
+                     .reduced_connection_equations.size();
+         ++index) {
+        if (index != 0) out << ", ";
+        json_string(
+            out,
+            response.compilation.reduced_connection_equations[index]);
+    }
+    out << "]},\n  \"normalized_solution_tolerance\": ";
+    json_number(out, response.normalized_solution_tolerance);
+    out << ",\n  \"monolithic_baseline_converged\": "
+        << (response.monolithic_baseline_converged
+                ? "true" : "false")
+        << ",\n  \"all_policies_executed\": "
+        << (response.all_policies_executed ? "true" : "false")
+        << ",\n  \"all_policies_converged\": "
+        << (response.all_policies_converged ? "true" : "false")
+        << ",\n  \"all_policies_equivalent_to_monolithic\": "
+        << (response.all_policies_equivalent_to_monolithic
+                ? "true" : "false")
+        << ",\n  \"message\": ";
+    json_string(out, response.message);
+    out << ",\n  \"entries\": [";
+    for (std::size_t index = 0;
+         index < response.entries.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& entry = response.entries[index];
+        out << "{\"policy\": ";
+        json_string(out, to_string(entry.policy));
+        out << ", \"executed\": "
+            << (entry.executed ? "true" : "false")
+            << ", \"converged\": "
+            << (entry.converged ? "true" : "false")
+            << ", \"comparable_to_monolithic\": "
+            << (entry.comparable_to_monolithic
+                    ? "true" : "false")
+            << ", \"equivalent_to_monolithic\": "
+            << (entry.equivalent_to_monolithic
+                    ? "true" : "false")
+            << ", \"maximum_normalized_solution_difference\": ";
+        json_number(
+            out, entry.maximum_normalized_solution_difference);
+        out << ", \"diagnostics\": ";
+        nonlinear_diagnostics_json(out, entry.diagnostics);
+        out << ", \"message\": ";
+        json_string(out, entry.message);
+        out << '}';
     }
     out << "]\n}\n";
     return out.str();

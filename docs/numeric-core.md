@@ -244,6 +244,12 @@ reusable sparse factorizations/resolvers because sharing their symbolic cache ac
 would contaminate comparative work counts. It reports evidence only; it does not recommend, select,
 or persist a production solver policy.
 
+`SimulationService::run_structural_policy_audit` provides the model-oriented application boundary.
+It resolves request-scoped components and immutable artifacts, parses and compiles the steady graph
+once, invokes the core audit, and returns `thermox.structural_policy_audit/v1` with compilation and
+execution provenance. Continuation is rejected explicitly so one audit cannot silently compare
+different nonlinear algorithms under a structural-policy label.
+
 ## Current limits
 
 - Newton systems must be square.

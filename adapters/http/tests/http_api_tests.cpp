@@ -259,6 +259,38 @@ void test_simulation_routes() {
                 std::string::npos,
         "steady endpoint must return a solved result");
 
+    const auto audit = api.handle(
+        json_post(
+            "/api/v1/simulations/structural-policy-audit"
+            "?case_id=design&policies=monolithic,tearing"
+            "&normalized_solution_tolerance=1e-9",
+            steady_model));
+    require(
+        audit.status == 200 &&
+            audit.body.find(
+                "\"schema_version\": "
+                "\"thermox.structural_policy_audit/v1\"") !=
+                std::string::npos &&
+            audit.body.find(
+                "\"all_policies_equivalent_to_monolithic\": true") !=
+                std::string::npos &&
+            audit.body.find("\"policy\": \"tearing\"") !=
+                std::string::npos,
+        "structural policy audit endpoint must expose explicit "
+        "cross-policy evidence");
+
+    const auto invalid_audit = api.handle(
+        json_post(
+            "/api/v1/simulations/structural-policy-audit"
+            "?case_id=design&policies=monolithic,unknown",
+            steady_model));
+    require(
+        invalid_audit.status == 400 &&
+            invalid_audit.body.find(
+                "unknown structural decomposition policy") !=
+                std::string::npos,
+        "structural policy audit endpoint must reject unknown policies");
+
     const std::string transient_model = read_file(
         std::string(THERMOX_SOURCE_DIR) +
         "/core/examples/lumped_thermal_storage.json");
@@ -297,6 +329,16 @@ void test_production_api_disables_synchronous_execution() {
                 std::string::npos,
         "production API defaults must not execute simulations "
         "inside the request process");
+    const auto audit = api.handle(
+        json_post(
+            "/api/v1/simulations/structural-policy-audit",
+            "{}"));
+    require(
+        audit.status == 404 &&
+            audit.body.find(
+                "structural policy audit is unavailable") !=
+                std::string::npos,
+        "production API defaults must also disable synchronous audits");
 }
 
 void test_transport_guards() {

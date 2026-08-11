@@ -23,6 +23,8 @@ inline constexpr char regime_map_instantiation_schema_v1[] =
     "thermox.regime_map_instantiation/v1";
 inline constexpr char performance_map_quality_schema_v1[] =
     "thermox.performance_map_quality/v1";
+inline constexpr char structural_policy_audit_schema_v1[] =
+    "thermox.structural_policy_audit/v1";
 
 enum class OperationStatus {
     succeeded,
@@ -987,6 +989,51 @@ struct SteadySimulationResponse {
     }
 };
 
+struct StructuralPolicyAuditRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string case_id;
+    SteadySolverSettings solver;
+    std::vector<StructuralDecompositionPolicy> policies{
+        StructuralDecompositionPolicy::monolithic,
+        StructuralDecompositionPolicy::tearing,
+    };
+    double normalized_solution_tolerance{1.0e-8};
+    SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
+};
+
+struct StructuralPolicyAuditEntry {
+    StructuralDecompositionPolicy policy{
+        StructuralDecompositionPolicy::monolithic};
+    bool executed{false};
+    bool converged{false};
+    bool comparable_to_monolithic{false};
+    bool equivalent_to_monolithic{false};
+    double maximum_normalized_solution_difference{0.0};
+    NonlinearDiagnostics diagnostics;
+    std::string message;
+};
+
+struct StructuralPolicyAuditResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    std::string schema_version{structural_policy_audit_schema_v1};
+    ExecutionMetadata metadata;
+    CompilationSummary compilation;
+    bool monolithic_baseline_converged{false};
+    bool all_policies_executed{false};
+    bool all_policies_converged{false};
+    bool all_policies_equivalent_to_monolithic{false};
+    double normalized_solution_tolerance{0.0};
+    std::vector<StructuralPolicyAuditEntry> entries;
+    std::string message;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct CalibrationSolverSettings {
     int max_iterations{20};
     double initial_step_fraction{0.1};
@@ -1176,6 +1223,9 @@ public:
         const InstantiateRegimeMapRequest& request) const;
     [[nodiscard]] SteadySimulationResponse run_steady(
         const SteadySimulationRequest& request) const;
+    [[nodiscard]] StructuralPolicyAuditResponse
+    run_structural_policy_audit(
+        const StructuralPolicyAuditRequest& request) const;
     [[nodiscard]] CalibrationResponse run_calibration(
         const CalibrationRequest& request) const;
     [[nodiscard]] EngineeringStudyResponse run_engineering_study(

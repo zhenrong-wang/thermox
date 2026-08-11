@@ -242,10 +242,19 @@ The initial routes are:
 | `GET`, `POST` | `/api/v1/projects/{project_id}/calibration-revisions` | List/publish immutable calibration campaigns bound to exact model and Study revisions |
 | `GET` | `/api/v1/projects/{project_id}/calibration-revisions/{revision_id}` | Read an exact calibration definition, dataset split, and solver policy |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
+| `POST` | `/api/v1/simulations/structural-policy-audit?case_id=...&policies=monolithic,tearing&normalized_solution_tolerance=...` | Development-only synchronous, read-only comparison against a monolithic baseline; disabled by production API defaults |
 | `GET`, `POST` | `/api/v1/jobs?project_id=...&run_configuration_revision_id=...` | List or submit run-configuration-backed asynchronous jobs |
 | `POST` | `/api/v1/jobs?project_id=...&calibration_revision_id=...` | Submit a calibration-revision-backed asynchronous job |
 | `GET` | `/api/v1/jobs/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/jobs/{job_id}/result` | Retrieve a succeeded simulation or calibration result |
+
+The structural-policy audit compiles the submitted model/case/artifact set once, then executes the
+factory-neutral core audit against that compiled problem. Its versioned response retains compilation
+structure, exact model/runtime provenance, per-policy nonlinear diagnostics, normalized root deltas,
+and aggregate equivalence flags. A candidate failure is audit evidence, so a successfully completed
+audit returns success even when a candidate does not converge. It never mutates a run configuration,
+persists a job, or selects a production solver policy. Like the synchronous simulation routes, the
+HTTP route exists for controlled local development and is absent under production API defaults.
 
 Calibration execution composes the exact topology, cases, component artifacts, and calibration
 definition named by the immutable revision. Observations belonging to training Study cases drive

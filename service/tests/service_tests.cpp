@@ -3856,6 +3856,78 @@ void test_steady_service() {
         "steady JSON must serialize complete execution provenance");
 }
 
+void test_structural_policy_audit_service() {
+    thermox::service::SimulationService service;
+    thermox::service::StructuralPolicyAuditRequest request;
+    request.model_json =
+        read_source_file("core/examples/air_compressor.json");
+    request.case_id = "design";
+    request.normalized_solution_tolerance = 1.0e-9;
+    request.policies = {
+        thermox::service::StructuralDecompositionPolicy::tearing,
+        thermox::service::StructuralDecompositionPolicy::monolithic,
+        thermox::service::StructuralDecompositionPolicy::tearing,
+    };
+    const auto response =
+        service.run_structural_policy_audit(request);
+    require(
+        response.succeeded() &&
+            response.schema_version ==
+                thermox::service::structural_policy_audit_schema_v1 &&
+            response.metadata.operation ==
+                "structural_policy_audit" &&
+            response.metadata.solver.contract_version ==
+                thermox::service::structural_policy_audit_schema_v1 &&
+            response.compilation.compiled &&
+            response.entries.size() == 2 &&
+            response.entries.front().policy ==
+                thermox::service::
+                    StructuralDecompositionPolicy::monolithic &&
+            response.monolithic_baseline_converged &&
+            response.all_policies_executed &&
+            response.all_policies_converged &&
+            response.all_policies_equivalent_to_monolithic,
+        "service structural policy audit must retain a deterministic "
+        "monolithic baseline and equivalent candidate evidence: " +
+            response.error.message + "; " + response.message);
+    const auto& torn = response.entries.back();
+    require(
+        torn.policy ==
+                thermox::service::
+                    StructuralDecompositionPolicy::tearing &&
+            torn.comparable_to_monolithic &&
+            torn.equivalent_to_monolithic &&
+            torn.diagnostics.structural_tearing_attempts > 0 &&
+            torn.diagnostics.factorization_quality_observations > 0,
+        "audit entry must expose complete tearing and numerical evidence");
+    const auto json = thermox::service::
+        serialize_structural_policy_audit_response_json(response);
+    require(
+        json.find(
+            "\"schema_version\": "
+            "\"thermox.structural_policy_audit/v1\"") !=
+                std::string::npos &&
+            json.find("\"policy\": \"monolithic\"") !=
+                std::string::npos &&
+            json.find("\"policy\": \"tearing\"") !=
+                std::string::npos &&
+            json.find("\"minimum_reciprocal_pivot_ratio\":") !=
+                std::string::npos &&
+            json.find("\"structural_blocks\": [") !=
+                std::string::npos,
+        "policy audit JSON must serialize provenance, structure, and "
+        "complete numerical evidence");
+
+    request.solver.continuation_enabled = true;
+    const auto invalid =
+        service.run_structural_policy_audit(request);
+    require(
+        !invalid.succeeded() &&
+            invalid.error.code == "invalid_solver_settings",
+        "policy audit must reject continuation rather than compare "
+        "different solve algorithms implicitly");
+}
+
 void test_steady_continuation_service() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -4379,6 +4451,7 @@ int main() {
         test_expression_component_is_request_scoped();
         test_transient_expression_component_flows_through_service();
         test_steady_service();
+        test_structural_policy_audit_service();
         test_steady_continuation_service();
         test_explicit_system_boundary_balance();
         test_transient_service();

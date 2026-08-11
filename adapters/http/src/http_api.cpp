@@ -251,6 +251,52 @@ std::string optional_query(
     return found == query.end() ? std::string{} : found->second;
 }
 
+double optional_positive_double(
+    const Query& query,
+    const std::string& name,
+    double default_value) {
+    const auto found = query.find(name);
+    if (found == query.end()) return default_value;
+    if (found->second.empty()) {
+        throw std::invalid_argument(
+            name + " must not be empty");
+    }
+    double value = 0.0;
+    const char* begin = found->second.data();
+    const char* end = begin + found->second.size();
+    const auto parsed = std::from_chars(begin, end, value);
+    if (parsed.ec != std::errc{} || parsed.ptr != end ||
+        !std::isfinite(value) || value <= 0.0) {
+        throw std::invalid_argument(
+            name + " must be a positive finite number");
+    }
+    return value;
+}
+
+std::vector<service::StructuralDecompositionPolicy>
+structural_policy_list(std::string_view value) {
+    std::vector<service::StructuralDecompositionPolicy> policies;
+    while (!value.empty()) {
+        const auto separator = value.find(',');
+        const auto token = value.substr(0, separator);
+        if (token.empty()) {
+            throw std::invalid_argument(
+                "policies must be a comma-separated list without "
+                "empty entries");
+        }
+        policies.push_back(
+            service::structural_decomposition_policy_from_string(
+                token));
+        if (separator == std::string_view::npos) break;
+        value.remove_prefix(separator + 1);
+    }
+    if (policies.empty()) {
+        throw std::invalid_argument(
+            "policies must contain at least one policy");
+    }
+    return policies;
+}
+
 double required_positive_double(
     const Query& query,
     const std::string& name) {
@@ -2927,6 +2973,52 @@ Response Api::handle(const Request& request) const {
             return json_response(
                 operation_status(result.status),
                 service::serialize_steady_response_json(result));
+        }
+
+        if (target.path ==
+            "/api/v1/simulations/structural-policy-audit") {
+            if (!impl_->options.enable_synchronous_simulations) {
+                return error_response(
+                    404,
+                    "route_not_found",
+                    "synchronous simulation routes are disabled; "
+                    "structural policy audit is unavailable");
+            }
+            if (method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "structural policy audit only supports POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
+            reject_unknown_query(
+                target.query,
+                {"case_id", "policies",
+                 "normalized_solution_tolerance"});
+            require_json_request(
+                request, impl_->options.maximum_body_bytes);
+            service::StructuralPolicyAuditRequest command;
+            command.model_json = request.body;
+            command.case_id = optional_query(
+                target.query, "case_id");
+            const auto policies = optional_query(
+                target.query, "policies");
+            if (!policies.empty()) {
+                command.policies =
+                    structural_policy_list(policies);
+            }
+            command.normalized_solution_tolerance =
+                optional_positive_double(
+                    target.query,
+                    "normalized_solution_tolerance",
+                    command.normalized_solution_tolerance);
+            const auto result = impl_->simulation
+                .run_structural_policy_audit(command);
+            return json_response(
+                operation_status(result.status),
+                service::
+                    serialize_structural_policy_audit_response_json(
+                        result));
         }
 
         if (target.path == "/api/v1/simulations/transient") {

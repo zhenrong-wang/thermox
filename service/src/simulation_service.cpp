@@ -6,6 +6,7 @@
 
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/continuation_solver.hpp"
+#include "thermox/solver_policy_benchmark.hpp"
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/expression_component.hpp"
@@ -973,6 +974,38 @@ ContinuationOptions to_core_continuation(
     return options;
 }
 
+thermox::StructuralDecompositionPolicy to_core(
+    StructuralDecompositionPolicy policy) {
+    switch (policy) {
+    case StructuralDecompositionPolicy::automatic:
+        return thermox::StructuralDecompositionPolicy::automatic;
+    case StructuralDecompositionPolicy::monolithic:
+        return thermox::StructuralDecompositionPolicy::monolithic;
+    case StructuralDecompositionPolicy::blocks:
+        return thermox::StructuralDecompositionPolicy::blocks;
+    case StructuralDecompositionPolicy::tearing:
+        return thermox::StructuralDecompositionPolicy::tearing;
+    }
+    throw std::invalid_argument(
+        "unknown structural decomposition policy");
+}
+
+StructuralDecompositionPolicy to_service(
+    thermox::StructuralDecompositionPolicy policy) {
+    switch (policy) {
+    case thermox::StructuralDecompositionPolicy::automatic:
+        return StructuralDecompositionPolicy::automatic;
+    case thermox::StructuralDecompositionPolicy::monolithic:
+        return StructuralDecompositionPolicy::monolithic;
+    case thermox::StructuralDecompositionPolicy::blocks:
+        return StructuralDecompositionPolicy::blocks;
+    case thermox::StructuralDecompositionPolicy::tearing:
+        return StructuralDecompositionPolicy::tearing;
+    }
+    throw std::invalid_argument(
+        "unknown core structural decomposition policy");
+}
+
 SolverOptions to_core(const SteadySolverSettings& settings) {
     validate_settings(settings);
     SolverOptions options;
@@ -981,24 +1014,8 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     options.step_tolerance = settings.step_tolerance;
     options.linear_residual_tolerance =
         settings.linear_residual_tolerance;
-    switch (settings.structural_decomposition_policy) {
-    case StructuralDecompositionPolicy::automatic:
-        options.structural_decomposition_policy =
-            thermox::StructuralDecompositionPolicy::automatic;
-        break;
-    case StructuralDecompositionPolicy::monolithic:
-        options.structural_decomposition_policy =
-            thermox::StructuralDecompositionPolicy::monolithic;
-        break;
-    case StructuralDecompositionPolicy::blocks:
-        options.structural_decomposition_policy =
-            thermox::StructuralDecompositionPolicy::blocks;
-        break;
-    case StructuralDecompositionPolicy::tearing:
-        options.structural_decomposition_policy =
-            thermox::StructuralDecompositionPolicy::tearing;
-        break;
-    }
+    options.structural_decomposition_policy =
+        to_core(settings.structural_decomposition_policy);
     options.finite_difference_epsilon =
         settings.finite_difference_epsilon;
     options.min_damping = settings.min_damping;
@@ -2505,6 +2522,185 @@ SteadySimulationResponse SimulationService::run_steady(
         response.status = OperationStatus::result_failed;
         response.error = make_error(
             "result_evaluation_failed", "result", ex.what());
+        return response;
+    }
+
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
+StructuralPolicyAuditResponse
+SimulationService::run_structural_policy_audit(
+    const StructuralPolicyAuditRequest& request) const {
+    StructuralPolicyAuditResponse response;
+    response.normalized_solution_tolerance =
+        request.normalized_solution_tolerance;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema", "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.model_json.empty()) {
+        response.error = make_error(
+            "missing_model", "request",
+            "model_json must not be empty");
+        return response;
+    }
+    if (request.solver.continuation_enabled) {
+        response.error = make_error(
+            "invalid_solver_settings", "request",
+            "structural policy audit compares direct Newton policies; "
+            "continuation_enabled must be false");
+        return response;
+    }
+
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
+
+    SolverOptions solver_options;
+    try {
+        solver_options = to_core(request.solver);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_solver_settings", "request", ex.what());
+        return response;
+    }
+
+    StructuralPolicyBenchmarkOptions benchmark_options;
+    benchmark_options.normalized_solution_tolerance =
+        request.normalized_solution_tolerance;
+    benchmark_options.policies.clear();
+    try {
+        if (!std::isfinite(request.normalized_solution_tolerance) ||
+            request.normalized_solution_tolerance <= 0.0) {
+            throw std::invalid_argument(
+                "normalized_solution_tolerance must be finite and "
+                "positive");
+        }
+        for (const auto policy : request.policies) {
+            benchmark_options.policies.push_back(to_core(policy));
+        }
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_policy_audit", "request", ex.what());
+        return response;
+    }
+
+    SimulationArtifactBundle artifacts;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
+    try {
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
+            artifacts);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        return response;
+    }
+
+    platform::ModelDocument document;
+    try {
+        document = platform::parse_model_document_text(
+            request.model_json, runtime->impl_->units);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        response.error = make_error(
+            "invalid_model", "validation", ex.what());
+        return response;
+    }
+
+    platform::CompiledModelGraph graph;
+    try {
+        graph = platform::compile_model_graph(
+            document,
+            runtime->impl_->components,
+            runtime->impl_->properties,
+            engineering_artifacts,
+            runtime->impl_->thermochemistry,
+            request.case_id);
+        auto provenance = solver_provenance(request.solver);
+        provenance.contract_version =
+            structural_policy_audit_schema_v1;
+        provenance.settings.push_back({
+            "normalized_solution_tolerance",
+            request.normalized_solution_tolerance,
+        });
+        provenance.settings.push_back({
+            "requested_policy_count",
+            static_cast<double>(request.policies.size()),
+        });
+        response.metadata = execution_metadata(
+            document,
+            request.schema_version,
+            graph.case_id.value_or(""),
+            "structural_policy_audit",
+            std::move(provenance),
+            runtime->impl_->fingerprint,
+            runtime->impl_->components,
+            runtime->impl_->properties);
+        response.metadata.artifacts =
+            artifact_provenance(artifacts);
+        response.compilation.compiled = true;
+        response.compilation.mode = "steady";
+        response.compilation.variable_count =
+            graph.problem.variable_names.size();
+        response.compilation.equation_count =
+            graph.problem.residual_names.size();
+        response.compilation.catalog_fingerprint =
+            runtime->impl_->fingerprint;
+        response.compilation.reduced_connection_equations =
+            graph.reduced_connection_equations;
+        populate_structural_blocks(
+            response.compilation, graph.structure);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::compilation_failed;
+        response.error = make_error(
+            "compilation_failed", "compilation", ex.what());
+        return response;
+    }
+
+    try {
+        const auto benchmark = benchmark_structural_policies(
+            graph.problem, solver_options, benchmark_options);
+        response.monolithic_baseline_converged =
+            benchmark.monolithic_baseline_converged;
+        response.all_policies_executed =
+            benchmark.all_policies_executed;
+        response.all_policies_converged =
+            benchmark.all_policies_converged;
+        response.all_policies_equivalent_to_monolithic =
+            benchmark.all_policies_equivalent_to_monolithic;
+        response.message = benchmark.message;
+        response.entries.reserve(benchmark.entries.size());
+        for (const auto& entry : benchmark.entries) {
+            response.entries.push_back({
+                to_service(entry.policy),
+                entry.executed,
+                entry.executed &&
+                    entry.solve.diagnostics.converged,
+                entry.comparable_to_monolithic,
+                entry.equivalent_to_monolithic,
+                entry.maximum_normalized_solution_difference,
+                copy_diagnostics(entry.solve.diagnostics),
+                entry.message,
+            });
+        }
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_policy_audit", "audit", ex.what());
         return response;
     }
 
