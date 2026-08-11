@@ -575,6 +575,9 @@ Work items:
      or enabling tearing automatically; ✅
    - backend-sourced LU pivot-quality evidence, aggregated across steady, continuation, and DAE
      solves with explicit method/availability semantics and no condition-number overclaim; ✅
+   - explicit factory-neutral structural-policy audit runner with a monolithic baseline, normalized
+     root-equivalence checks, complete per-policy diagnostics, and no noisy timing gate or automatic
+     policy mutation; ✅
    - nested nonlinear tearing remains a follow-on only if profiling demonstrates a benefit and an
      explicit branch-selection/convergence contract can be justified.
 7. Safe custom equation DSL; no arbitrary user Python in API process.

@@ -386,6 +386,9 @@ selected. They are not numerical conditioning claims.
 Native LU backends additionally report accepted-pivot counts and the minimum observed reciprocal
 `U`-diagonal pivot ratio with an explicit backend method. This is useful numerical warning evidence,
 but remains distinct from a condition-number estimate and does not silently change solver policy.
+Advanced SDK users can call `benchmark_structural_policies` to audit candidate policies from an
+identical initial state against a monolithic baseline. The audit compares scale-normalized solutions
+and retains full diagnostics; it never auto-selects a production policy or uses timing as correctness.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

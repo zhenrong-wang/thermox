@@ -19,6 +19,7 @@ add_library(thermox_core
     src/dense_linear_solver.cpp
     src/equation_system.cpp
     src/nonlinear_solver.cpp
+    src/solver_policy_benchmark.cpp
     src/sparse_linear_solver.cpp
     src/sparse_matrix.cpp
     src/transient_solver.cpp
@@ -68,6 +69,18 @@ target_link_libraries(thermox_core_tests PRIVATE thermox_core)
 add_executable(thermox_transient_tests tests/transient_tests.cpp)
 target_link_libraries(thermox_transient_tests PRIVATE thermox_core)
 
+add_executable(
+    thermox_solver_policy_benchmark_tests
+    tests/solver_policy_benchmark_tests.cpp
+)
+target_link_libraries(
+    thermox_solver_policy_benchmark_tests PRIVATE thermox_core
+)
+
 enable_testing()
 add_test(NAME thermox_core_tests COMMAND thermox_core_tests)
 add_test(NAME thermox_transient_tests COMMAND thermox_transient_tests)
+add_test(
+    NAME thermox_solver_policy_benchmark_tests
+    COMMAND thermox_solver_policy_benchmark_tests
+)

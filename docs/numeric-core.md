@@ -228,6 +228,22 @@ The physics/model compiler remains responsible for:
 
 The numeric core does not know about fluids, phases, turbines, reactors, or units.
 
+## Structural policy audit
+
+`benchmark_structural_policies` is an explicit SDK audit utility for comparing structural solve
+policies without changing production policy selection. It always executes a fresh monolithic
+baseline first, deduplicates the requested candidates, and starts every solve from the identical
+`NonlinearProblem` initial state. Each entry retains its complete `NonlinearSolveResult`, including
+work counts, backward error, tearing fallback, and pivot evidence. Converged candidates are compared
+to the monolithic state using declared variable scales and a caller-controlled normalized solution
+tolerance. Execution failures and nonconvergence remain first-class results rather than being
+silently discarded.
+
+The audit deliberately excludes wall-clock pass/fail thresholds. It also rejects caller-supplied
+reusable sparse factorizations/resolvers because sharing their symbolic cache across candidates
+would contaminate comparative work counts. It reports evidence only; it does not recommend, select,
+or persist a production solver policy.
+
 ## Current limits
 
 - Newton systems must be square.

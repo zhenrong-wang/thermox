@@ -1,4 +1,6 @@
 #include "thermox/service/native_extension_sdk.hpp"
+#include "thermox/equation_system.hpp"
+#include "thermox/solver_policy_benchmark.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -277,4 +279,15 @@ int main() {
     require(
         simulation.run_steady(run).succeeded(),
         "custom model did not solve");
+
+    EquationSystemBuilder policy_fixture;
+    const auto fixture_x =
+        policy_fixture.add_variable("fixture_x", 0.0);
+    policy_fixture.add_linear_equation(
+        "fixture_identity", {{fixture_x, 1.0}}, 1.0);
+    const auto policy_benchmark = benchmark_structural_policies(
+        policy_fixture.build());
+    require(
+        policy_benchmark.all_policies_equivalent_to_monolithic,
+        "installed structural policy benchmark contract failed");
 }
