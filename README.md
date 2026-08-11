@@ -371,7 +371,9 @@ default `--structural-policy automatic` uses block execution when block-local ca
 available and the compiler certifies root equivalence (currently fully linear assembled systems).
 `--structural-policy monolithic` and `--structural-policy blocks` provide explicit
 comparison overrides. The same policy applies to `simulate`; results report the executed block
-count and largest linear system. A single irreducible block remains monolithic.
+count and largest linear system. A single irreducible block remains monolithic. Validation also
+reports deterministic structural tear-variable hints for cyclic blocks; these are complexity and
+initialization diagnostics, not an instruction to run an unverified outer/inner tearing solve.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

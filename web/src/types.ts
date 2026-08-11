@@ -192,6 +192,8 @@ export interface ProjectModelValidation {
       structural_blocks: Array<{
         variable_names: string[]
         equation_names: string[]
+        suggested_tear_variable_names: string[]
+        acyclic_after_suggested_tears: boolean
       }>
       catalog_fingerprint: string
       reduced_connection_equations: string[]

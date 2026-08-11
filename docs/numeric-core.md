@@ -62,9 +62,11 @@ For a structurally nonsingular incidence graph, the same analysis forms the dire
 graph induced by the equation-variable matching, collapses its strongly connected components, and
 returns irreducible square blocks in deterministic dependency-first order. The graph compiler
 retains this report before choosing a fixed or hybrid Jacobian representation, and validation
-exposes every block plus the largest block size. This is analysis-only today: Newton still solves
-the complete coupled system, while future block solves and tearing can consume the established
-ordering without changing component equations.
+exposes every block plus the largest block size. Fixed-pattern problems with row-selective
+callbacks can execute those blocks in dependency order under the configured structural policy.
+Within each cyclic block, analysis also exposes a deterministic feedback-variable suggestion whose
+removal is verified to leave the matched dependency graph acyclic; numerical tearing does not yet
+consume that suggestion.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,
@@ -210,8 +212,9 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 - Structural matching requires a declared fixed sparse pattern.
 - Structural incidence analysis classifies connected underdetermined, overdetermined, and
   well-determined regions and exposes dependency-ordered irreducible blocks. Fixed-pattern
-  dependency-ordered execution is opt-in; automatic tearing inside an irreducible block is not yet
-  enabled.
+  dependency-ordered execution is opt-in. Each irreducible block also reports a deterministic
+  structural feedback-variable suggestion whose removal is verified to make the matched dependency
+  graph acyclic. This remains diagnostic metadata: it does not claim that numerical tearing is safe.
 - Custom problems without row-selective callbacks invoke their full residual and fixed-pattern
   value callbacks before restricting the returned rows. Informed-continuation Jacobian transforms
   also currently use that fallback. Block mode therefore does not guarantee a speedup for every

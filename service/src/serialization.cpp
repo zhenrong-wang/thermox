@@ -1686,7 +1686,15 @@ std::string serialize_validate_response_json(
             if (name != 0) out << ", ";
             json_string(out, block.equation_names[name]);
         }
-        out << "]}";
+        out << "], \"suggested_tear_variable_names\": [";
+        for (std::size_t name = 0;
+             name < block.suggested_tear_variable_names.size(); ++name) {
+            if (name != 0) out << ", ";
+            json_string(out, block.suggested_tear_variable_names[name]);
+        }
+        out << "], \"acyclic_after_suggested_tears\": "
+            << (block.acyclic_after_suggested_tears ? "true" : "false")
+            << "}";
     }
     out << "]"
         << ", \"catalog_fingerprint\": ";

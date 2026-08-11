@@ -560,7 +560,10 @@ Work items:
      contracts; ✅
    - informed-continuation residual-row and fixed-CSR-offset subsets, automatically assembled by
      the equation builder and preserved through homotopy anchor transforms; ✅
-   - tearing inside an irreducible block remains a follow-on.
+   - deterministic feedback-variable suggestions identify a structurally verified acyclic cut
+     inside each irreducible block and are exposed through validation metadata; executing numerical
+     tearing remains a follow-on because it requires an explicit outer/inner residual and convergence
+     contract. ✅
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,

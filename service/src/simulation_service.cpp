@@ -63,6 +63,8 @@ void populate_structural_blocks(
         summary.structural_blocks.push_back({
             block.variable_names,
             block.residual_names,
+            block.suggested_tear_variable_names,
+            block.acyclic_after_suggested_tears,
         });
     }
 }

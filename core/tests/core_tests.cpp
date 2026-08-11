@@ -1347,6 +1347,46 @@ void test_structural_analysis_orders_irreducible_blocks() {
                 std::vector<std::string>{
                     "left_balance", "right_balance"},
         "mutually coupled equations remain one irreducible block");
+    require(
+        structure.structural_blocks[0]
+                .suggested_tear_variable_names.empty() &&
+            structure.structural_blocks[0]
+                .acyclic_after_suggested_tears,
+        "acyclic scalar blocks require no tear variable");
+    require(
+        structure.structural_blocks[1]
+                .suggested_tear_variable_names ==
+            std::vector<std::string>{"coupled_left"} &&
+            structure.structural_blocks[1]
+                .suggested_tear_variable_indices ==
+            std::vector<std::size_t>{1} &&
+            structure.structural_blocks[1]
+                .acyclic_after_suggested_tears,
+        "irreducible block exposes a deterministic feedback variable");
+}
+
+void test_structural_analysis_suggests_verified_feedback_set() {
+    const auto cycle = thermox::analyze_incidence_structure(
+        {"alpha", "beta", "gamma"},
+        {"alpha_balance", "beta_balance", "gamma_balance"},
+        {{0, 2}, {1, 0}, {2, 1}});
+    require(
+        cycle.structural_blocks.size() == 1 &&
+            cycle.structural_blocks[0].suggested_tear_variable_names ==
+                std::vector<std::string>{"alpha"} &&
+            cycle.structural_blocks[0].acyclic_after_suggested_tears,
+        "one feedback variable breaks a deterministic three-node cycle");
+
+    const auto dense = thermox::analyze_incidence_structure(
+        {"alpha", "beta", "gamma"},
+        {"alpha_balance", "beta_balance", "gamma_balance"},
+        {{0, 1, 2}, {0, 1, 2}, {0, 1, 2}});
+    require(
+        dense.structural_blocks.size() == 1 &&
+            dense.structural_blocks[0].suggested_tear_variable_names ==
+                std::vector<std::string>{"alpha", "beta"} &&
+            dense.structural_blocks[0].acyclic_after_suggested_tears,
+        "dense three-variable feedback requires two suggested tears");
 }
 
 void test_newton_solves_dependency_ordered_structural_blocks() {
@@ -1866,6 +1906,7 @@ int main() {
         test_fixed_sparse_pattern_and_structure_analysis();
         test_structural_analysis_localizes_singular_regions();
         test_structural_analysis_orders_irreducible_blocks();
+        test_structural_analysis_suggests_verified_feedback_set();
         test_newton_solves_dependency_ordered_structural_blocks();
         test_automatic_structural_policy_keeps_custom_callbacks_monolithic();
         test_linear_equation_builder_certifies_automatic_blocks();

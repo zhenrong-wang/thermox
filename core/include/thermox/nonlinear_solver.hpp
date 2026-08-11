@@ -215,6 +215,12 @@ struct StructuralBlock {
     std::vector<std::size_t> residual_indices;
     std::vector<std::string> variable_names;
     std::vector<std::string> residual_names;
+    // Deterministic structural feedback-variable suggestion. Removing these
+    // matched variables makes the block dependency graph acyclic. This is a
+    // diagnostic only; it does not establish that numerical tearing is safe.
+    std::vector<std::size_t> suggested_tear_variable_indices;
+    std::vector<std::string> suggested_tear_variable_names;
+    bool acyclic_after_suggested_tears{false};
 };
 
 struct ProblemStructureReport {

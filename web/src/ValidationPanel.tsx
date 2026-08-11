@@ -83,6 +83,10 @@ export function ValidationPanel({
   const compilation = result?.validation.compilation
   const readiness = result?.validation.readiness
   const diagnostics = result?.validation.diagnostics ?? []
+  const suggestedTearVariables =
+    compilation?.structural_blocks.flatMap(
+      (block) => block.suggested_tear_variable_names,
+    ) ?? []
 
   return (
     <section className="validation-panel">
@@ -184,6 +188,10 @@ export function ValidationPanel({
             <div>
               <strong>{compilation?.largest_structural_block_size ?? 0}</strong>
               <span>largest block</span>
+            </div>
+            <div title={suggestedTearVariables.join(', ')}>
+              <strong>{suggestedTearVariables.length}</strong>
+              <span>structural tear hints</span>
             </div>
             <code>
               {compilation?.catalog_fingerprint.slice(0, 18) || 'no catalog'}

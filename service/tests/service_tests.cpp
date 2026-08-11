@@ -1362,8 +1362,14 @@ void test_validation_and_canonicalization() {
                 std::string::npos &&
             validation_json.find(
                 "\"largest_structural_block_size\":") !=
+                std::string::npos &&
+            validation_json.find(
+                "\"suggested_tear_variable_names\":") !=
+                std::string::npos &&
+            validation_json.find(
+                "\"acyclic_after_suggested_tears\": true") !=
                 std::string::npos,
-        "validation JSON must expose block-triangular structure");
+        "validation JSON must expose block and tearing structure");
 
     thermox::service::ValidateModelRequest round_trip;
     round_trip.model_json = response.canonical_model_json;

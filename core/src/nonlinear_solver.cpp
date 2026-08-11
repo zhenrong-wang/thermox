@@ -678,6 +678,99 @@ EvaluationStatus EvaluationStatus::fatal(std::string message) {
     return {EvaluationStatusCode::fatal_failure, std::move(message)};
 }
 
+namespace {
+
+std::vector<std::size_t> suggest_feedback_rows(
+    const std::vector<std::vector<std::size_t>>& dependencies,
+    const std::vector<std::size_t>& members,
+    const std::vector<int>& row_match) {
+    std::vector<bool> active(dependencies.size(), false);
+    for (const std::size_t member : members) active[member] = true;
+
+    const auto find_cyclic_rows = [&]() {
+        std::vector<int> discovery(dependencies.size(), -1);
+        std::vector<int> low_link(dependencies.size(), -1);
+        std::vector<bool> on_stack(dependencies.size(), false);
+        std::vector<std::size_t> stack;
+        std::vector<std::size_t> cyclic;
+        int next_discovery = 0;
+        const auto visit = [&](auto&& self, std::size_t node) -> void {
+            discovery[node] = next_discovery;
+            low_link[node] = next_discovery;
+            ++next_discovery;
+            stack.push_back(node);
+            on_stack[node] = true;
+            for (const std::size_t adjacent : dependencies[node]) {
+                if (!active[adjacent]) continue;
+                if (discovery[adjacent] < 0) {
+                    self(self, adjacent);
+                    low_link[node] = std::min(
+                        low_link[node], low_link[adjacent]);
+                } else if (on_stack[adjacent]) {
+                    low_link[node] = std::min(
+                        low_link[node], discovery[adjacent]);
+                }
+            }
+            if (low_link[node] != discovery[node]) return;
+            std::vector<std::size_t> component;
+            while (!stack.empty()) {
+                const auto member = stack.back();
+                stack.pop_back();
+                on_stack[member] = false;
+                component.push_back(member);
+                if (member == node) break;
+            }
+            if (component.size() > 1U) {
+                cyclic.insert(
+                    cyclic.end(), component.begin(), component.end());
+            }
+        };
+        for (const std::size_t member : members) {
+            if (active[member] && discovery[member] < 0)
+                visit(visit, member);
+        }
+        std::sort(cyclic.begin(), cyclic.end());
+        return cyclic;
+    };
+
+    std::vector<std::size_t> tears;
+    while (true) {
+        const auto cyclic = find_cyclic_rows();
+        if (cyclic.empty()) break;
+        std::size_t selected = cyclic.front();
+        std::size_t selected_score = 0U;
+        for (const std::size_t candidate : cyclic) {
+            std::size_t incoming = 0U;
+            std::size_t outgoing = 0U;
+            for (const std::size_t member : members) {
+                if (!active[member]) continue;
+                incoming += static_cast<std::size_t>(std::binary_search(
+                    dependencies[member].begin(),
+                    dependencies[member].end(), candidate));
+            }
+            for (const std::size_t adjacent : dependencies[candidate]) {
+                outgoing += static_cast<std::size_t>(active[adjacent]);
+            }
+            const std::size_t score = incoming * outgoing;
+            const auto variable = static_cast<std::size_t>(
+                row_match[candidate]);
+            const auto selected_variable = static_cast<std::size_t>(
+                row_match[selected]);
+            if (score > selected_score ||
+                (score == selected_score &&
+                 variable < selected_variable)) {
+                selected = candidate;
+                selected_score = score;
+            }
+        }
+        active[selected] = false;
+        tears.push_back(selected);
+    }
+    return tears;
+}
+
+}  // namespace
+
 bool ProblemStructureReport::valid_for_newton() const {
     return square && !has_duplicate_variable_names && !has_duplicate_residual_names &&
            (!has_complete_sparse_pattern || structurally_nonsingular);
@@ -1069,6 +1162,16 @@ ProblemStructureReport analyze_incidence_structure(
                 variable_names.at(
                     static_cast<std::size_t>(row_match[row])));
         }
+        const auto tear_rows = suggest_feedback_rows(
+            dependencies, components[component], row_match);
+        for (const std::size_t row : tear_rows) {
+            const auto variable = static_cast<std::size_t>(
+                row_match[row]);
+            block.suggested_tear_variable_indices.push_back(variable);
+            block.suggested_tear_variable_names.push_back(
+                variable_names.at(variable));
+        }
+        block.acyclic_after_suggested_tears = true;
         report.structural_blocks.push_back(std::move(block));
         for (const std::size_t target :
              block_dependencies[component]) {

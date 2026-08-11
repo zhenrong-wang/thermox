@@ -775,6 +775,8 @@ struct ValidateModelRequest {
 struct CompilationStructuralBlock {
     std::vector<std::string> variable_names;
     std::vector<std::string> equation_names;
+    std::vector<std::string> suggested_tear_variable_names;
+    bool acyclic_after_suggested_tears{false};
 };
 
 struct CompilationSummary {
