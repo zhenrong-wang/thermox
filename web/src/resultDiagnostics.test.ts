@@ -35,6 +35,14 @@ function steadyResult(): SimulationResult {
       linear_solver_evaluations: 4,
       symbolic_factorizations: 1,
       numeric_factorizations: 4,
+      factorization_quality_observations: 4,
+      last_reciprocal_pivot_ratio: 0.25,
+      minimum_reciprocal_pivot_ratio: 0.125,
+      minimum_absolute_pivot_at_minimum_ratio: 0.5,
+      maximum_absolute_pivot_at_minimum_ratio: 4,
+      accepted_pivot_count_at_minimum_ratio: 12,
+      factorization_size_at_minimum_ratio: 12,
+      factorization_quality_method: 'umfpack-u-diagonal-ratio',
       linear_solver_backend: 'klu',
       message: 'converged',
     },
@@ -77,6 +85,10 @@ describe('resultDiagnosticSummary', () => {
       label: 'Tearing success / attempts',
       value: '3 / 3',
     })
+    expect(summary.facts).toContainEqual({
+      label: 'Minimum reciprocal pivot ratio',
+      value: '0.125',
+    })
   })
 
   it('surfaces transient integration evidence', () => {
@@ -96,6 +108,14 @@ describe('resultDiagnosticSummary', () => {
         nonlinear_iterations: 20,
         symbolic_factorizations: 1,
         numeric_factorizations: 12,
+        factorization_quality_observations: 12,
+        last_reciprocal_pivot_ratio: 0.2,
+        minimum_reciprocal_pivot_ratio: 0.1,
+        minimum_absolute_pivot_at_minimum_ratio: 0.4,
+        maximum_absolute_pivot_at_minimum_ratio: 4,
+        accepted_pivot_count_at_minimum_ratio: 8,
+        factorization_size_at_minimum_ratio: 8,
+        factorization_quality_method: 'umfpack-u-diagonal-ratio',
         linear_solver_backend: 'klu',
         final_time: 5,
         last_step: 0.25,
@@ -139,6 +159,10 @@ describe('resultDiagnosticSummary', () => {
     expect(summary.facts).toContainEqual({
       label: 'Tearing fallbacks',
       value: '1',
+    })
+    expect(summary.facts).toContainEqual({
+      label: 'Pivot evidence',
+      value: '8/8 · umfpack-u-diagonal-ratio',
     })
   })
 

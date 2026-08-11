@@ -18,6 +18,9 @@ public:
     [[nodiscard]] const std::string& message() const {
         return message_;
     }
+    [[nodiscard]] const FactorizationQuality& quality() const {
+        return quality_;
+    }
     [[nodiscard]] LinearSolveResult solve(
         std::vector<double> rhs) const;
     [[nodiscard]] std::vector<LinearSolveResult> solve_multiple(
@@ -28,6 +31,7 @@ private:
     std::vector<std::size_t> pivot_rows_;
     bool valid_{false};
     std::string message_{"not factorized"};
+    FactorizationQuality quality_;
 };
 
 LinearSolveResult solve_dense_linear_system(Matrix a, std::vector<double> b);

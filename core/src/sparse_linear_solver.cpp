@@ -3,6 +3,7 @@
 #include "thermox/dense_linear_solver.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -23,6 +24,17 @@ namespace {
 
 bool is_effectively_zero(double value, double tolerance) {
     return std::abs(value) <= tolerance;
+}
+
+void retain_worse_quality(
+    FactorizationQuality& retained,
+    const FactorizationQuality& candidate) {
+    if (!candidate.available) return;
+    if (!retained.available ||
+        candidate.reciprocal_pivot_ratio <
+            retained.reciprocal_pivot_ratio) {
+        retained = candidate;
+    }
 }
 
 struct SparsePatternKey {
@@ -78,6 +90,9 @@ MultipleLinearSolveResult SparseFactorization::solve_multiple(
             solved.symbolic_factorizations;
         result.numeric_factorizations +=
             solved.numeric_factorizations;
+        retain_worse_quality(
+            result.factorization_quality,
+            solved.factorization_quality);
         if (!solved.success) {
             result.message = solved.message;
             result.x.clear();
@@ -118,7 +133,10 @@ solve_reference_sparse_linear_system(
         return {true, {}, "ok"};
     }
     if (matrix_norm == 0.0) {
-        return {false, {}, "sparse matrix is zero"};
+        return {
+            false, {}, "sparse matrix is zero", 0, 0,
+            {true, 0.0, 0.0, 0.0, 0U, n,
+             "reference-csr-u-diagonal-ratio"}};
     }
     const double pivot_tolerance =
         64.0 * std::numeric_limits<double>::epsilon() * static_cast<double>(n) * matrix_norm;
@@ -127,6 +145,8 @@ solve_reference_sparse_linear_system(
         64.0 * std::numeric_limits<double>::epsilon() * static_cast<double>(n);
 
     auto rows = to_sparse_rows(a);
+    double minimum_pivot = std::numeric_limits<double>::infinity();
+    double maximum_pivot = 0.0;
 
     for (std::size_t col = 0; col < n; ++col) {
         std::size_t pivot = col;
@@ -143,7 +163,15 @@ solve_reference_sparse_linear_system(
         if (pivot_abs <= pivot_tolerance) {
             std::ostringstream oss;
             oss << "singular sparse matrix near column " << col;
-            return {false, {}, oss.str()};
+            return {
+                false, {}, oss.str(), 0, 0,
+                {true,
+                 col == 0U ? 0.0 : minimum_pivot,
+                 maximum_pivot,
+                 0.0,
+                 col,
+                 n,
+                 "reference-csr-u-diagonal-ratio"}};
         }
 
         if (pivot != col) {
@@ -152,6 +180,8 @@ solve_reference_sparse_linear_system(
         }
 
         const double diag = rows[col].at(col);
+        minimum_pivot = std::min(minimum_pivot, std::abs(diag));
+        maximum_pivot = std::max(maximum_pivot, std::abs(diag));
         for (std::size_t row = col + 1; row < n; ++row) {
             const auto factor_entry = rows[row].find(col);
             if (factor_entry == rows[row].end()) {
@@ -177,6 +207,16 @@ solve_reference_sparse_linear_system(
         }
     }
 
+    const FactorizationQuality factorization_quality{
+        true,
+        minimum_pivot,
+        maximum_pivot,
+        maximum_pivot > 0.0 ? minimum_pivot / maximum_pivot : 0.0,
+        n,
+        n,
+        "reference-csr-u-diagonal-ratio",
+    };
+
     std::vector<double> x(n, 0.0);
     for (std::size_t reverse = n; reverse-- > 0;) {
         const auto diag_entry = rows[reverse].find(reverse);
@@ -184,7 +224,9 @@ solve_reference_sparse_linear_system(
             std::abs(diag_entry->second) <= pivot_tolerance) {
             std::ostringstream oss;
             oss << "singular sparse matrix during back substitution near row " << reverse;
-            return {false, {}, oss.str()};
+            return {
+                false, {}, oss.str(), 0, 0,
+                factorization_quality};
         }
 
         double sum = b[reverse];
@@ -195,11 +237,16 @@ solve_reference_sparse_linear_system(
         }
         x[reverse] = sum / diag_entry->second;
         if (!std::isfinite(x[reverse])) {
-            return {false, {}, "sparse linear solver produced a non-finite value"};
+            return {
+                false, {},
+                "sparse linear solver produced a non-finite value",
+                0, 0, factorization_quality};
         }
     }
 
-    return {true, x, "ok"};
+    LinearSolveResult result{true, std::move(x), "ok"};
+    result.factorization_quality = factorization_quality;
+    return result;
 }
 
 class ReferenceSparseFactorization final
@@ -214,7 +261,7 @@ public:
         std::vector<double> rhs) override {
         auto result = solve_reference_sparse_linear_system(
             matrix, std::move(rhs));
-        if (result.success) {
+        if (result.factorization_quality.available) {
             result.numeric_factorizations = 1;
         }
         return result;
@@ -228,11 +275,13 @@ public:
         if (!factorization.factorize(matrix.to_dense())) {
             result.message = factorization.message();
             result.numeric_factorizations = 1;
+            result.factorization_quality = factorization.quality();
             return result;
         }
         const auto solved = factorization.solve_multiple(
             right_hand_sides);
         result.numeric_factorizations = 1;
+        result.factorization_quality = factorization.quality();
         result.x.reserve(solved.size());
         for (const auto& solution : solved) {
             if (!solution.success) {
@@ -273,6 +322,8 @@ public:
             multiple.symbolic_factorizations;
         result.numeric_factorizations =
             multiple.numeric_factorizations;
+        result.factorization_quality =
+            multiple.factorization_quality;
         if (multiple.success && !multiple.x.empty()) {
             result.x = std::move(multiple.x.front());
         }
@@ -352,10 +403,40 @@ public:
         }
 
         void* numeric = nullptr;
+        std::array<double, UMFPACK_INFO> numeric_info{};
         const int numeric_status = umfpack_di_numeric(
             column_offsets_.data(), row_indices_.data(),
-            values_.data(), symbolic_, &numeric, nullptr, nullptr);
+            values_.data(), symbolic_, &numeric, nullptr,
+            numeric_info.data());
         ++result.numeric_factorizations;
+        if (numeric_status == UMFPACK_OK ||
+            numeric_status == UMFPACK_WARNING_singular_matrix) {
+            const double minimum_pivot =
+                numeric_info[UMFPACK_UMIN];
+            const double maximum_pivot =
+                numeric_info[UMFPACK_UMAX];
+            const double pivot_ratio =
+                numeric_info[UMFPACK_RCOND];
+            const double accepted_pivots =
+                numeric_info[UMFPACK_UDIAG_NZ];
+            if (std::isfinite(minimum_pivot) &&
+                std::isfinite(maximum_pivot) &&
+                std::isfinite(pivot_ratio) &&
+                std::isfinite(accepted_pivots) &&
+                minimum_pivot >= 0.0 && maximum_pivot >= 0.0 &&
+                pivot_ratio >= 0.0 && accepted_pivots >= 0.0 &&
+                accepted_pivots <= static_cast<double>(n)) {
+                result.factorization_quality = {
+                    true,
+                    minimum_pivot,
+                    maximum_pivot,
+                    pivot_ratio,
+                    static_cast<std::size_t>(accepted_pivots),
+                    n,
+                    "umfpack-u-diagonal-ratio",
+                };
+            }
+        }
         if (numeric_status != UMFPACK_OK) {
             if (numeric != nullptr) {
                 umfpack_di_free_numeric(&numeric);

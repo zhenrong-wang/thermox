@@ -85,6 +85,10 @@ void print_steady_text(
               << response.diagnostics.structural_tearing_successes
               << "\nstructural_tearing_fallbacks: "
               << response.diagnostics.structural_tearing_fallbacks
+              << "\nminimum_reciprocal_pivot_ratio: "
+              << response.diagnostics.minimum_reciprocal_pivot_ratio
+              << "\nfactorization_quality_method: "
+              << response.diagnostics.factorization_quality_method
               << "\n";
     if (response.continuation.enabled) {
         std::cout << "continuation_parameter: "
@@ -120,6 +124,10 @@ void print_transient_text(
               << response.diagnostics.structural_tearing_successes
               << "\nstructural_tearing_fallbacks: "
               << response.diagnostics.structural_tearing_fallbacks
+              << "\nminimum_reciprocal_pivot_ratio: "
+              << response.diagnostics.minimum_reciprocal_pivot_ratio
+              << "\nfactorization_quality_method: "
+              << response.diagnostics.factorization_quality_method
               << "\n";
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";

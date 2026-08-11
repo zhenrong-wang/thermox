@@ -3687,7 +3687,7 @@ void test_steady_service() {
         "steady result must identify the platform build");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton/v9" &&
+            "thermox.newton/v10" &&
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
@@ -3733,8 +3733,16 @@ void test_steady_service() {
             tearing_response.diagnostics.structural_tearing_successes +
                     tearing_response.diagnostics.structural_tearing_fallbacks ==
                 tearing_response.diagnostics.structural_tearing_attempts &&
+            tearing_response.diagnostics
+                    .factorization_quality_observations > 0 &&
+            !tearing_response.diagnostics
+                    .factorization_quality_method.empty() &&
+            tearing_response.diagnostics
+                    .accepted_pivot_count_at_minimum_ratio <=
+                tearing_response.diagnostics
+                    .factorization_size_at_minimum_ratio &&
             tearing_response.metadata.solver.contract_version ==
-                "thermox.newton/v9",
+                "thermox.newton/v10",
         "service must expose the exact structural tearing policy with a safe fallback");
     require(
         std::any_of(
@@ -3837,6 +3845,10 @@ void test_steady_service() {
                 std::string::npos &&
             json.find("\"last_structural_tearing_fallback\":") !=
                 std::string::npos &&
+            json.find("\"minimum_reciprocal_pivot_ratio\":") !=
+                std::string::npos &&
+            json.find("\"factorization_quality_method\":") !=
+                std::string::npos &&
             json.find("\"maximum_linear_backward_error\":") !=
                 std::string::npos &&
             json.find("\"structural_block_solves\":") !=
@@ -3880,7 +3892,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v10",
+            "thermox.newton-continuation/v11",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(
@@ -3897,6 +3909,8 @@ void test_steady_continuation_service() {
             json.find("\"maximum_linear_backward_error\":") !=
                 std::string::npos &&
             json.find("\"largest_tearing_inner_system_size\":") !=
+                std::string::npos &&
+            json.find("\"accepted_pivot_count_at_minimum_ratio\":") !=
                 std::string::npos,
         "steady JSON must expose continuation diagnostics");
 }
@@ -3996,7 +4010,7 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v10",
+            "thermox.dae-bdf/v11",
         "transient result must record solver contract");
     require(
         response.diagnostics.maximum_order_used == 2 &&
@@ -4070,6 +4084,8 @@ void test_transient_service() {
             json.find("\"limiting_nonlinear_residual\":") !=
                 std::string::npos &&
             json.find("\"structural_tearing_fallbacks\":") !=
+                std::string::npos &&
+            json.find("\"factorization_quality_observations\":") !=
                 std::string::npos,
         "transient JSON must expose graph-native trajectory state");
 }

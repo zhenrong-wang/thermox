@@ -383,6 +383,9 @@ remains monolithic; explicit tearing can partition it. Validation also
 reports deterministic structural tear-variable hints and raw partition cost counts for cyclic
 blocks; these are complexity and initialization diagnostics unless the explicit tearing policy is
 selected. They are not numerical conditioning claims.
+Native LU backends additionally report accepted-pivot counts and the minimum observed reciprocal
+`U`-diagonal pivot ratio with an explicit backend method. This is useful numerical warning evidence,
+but remains distinct from a condition-number estimate and does not silently change solver policy.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

@@ -55,6 +55,17 @@ void test_dense_linear_solver() {
     require(result.success, result.message);
     require_near(result.x[0], 0.0, 1.0e-12, "dense solve x0");
     require_near(result.x[1], 2.5, 1.0e-12, "dense solve x1");
+    require(
+        result.factorization_quality.available &&
+            result.factorization_quality.accepted_pivot_count == 2 &&
+            result.factorization_quality.factorization_size == 2 &&
+            result.factorization_quality.method ==
+                "reference-dense-u-diagonal-ratio",
+        "dense solve reports backend pivot evidence");
+    require_near(
+        result.factorization_quality.reciprocal_pivot_ratio,
+        4.0 / 9.0, 1.0e-12,
+        "dense solve reports reciprocal U-diagonal pivot ratio");
 
     const auto tiny = thermox::solve_dense_linear_system({{1.0e-20}}, {2.0e-20});
     require(tiny.success, "dense solver should be invariant to uniform matrix scaling");
@@ -78,6 +89,10 @@ void test_dense_linear_solver() {
                  "reusable dense factorization second RHS x");
     require_near(multiple[1].x[1], 1.0, 1.0e-12,
                  "reusable dense factorization second RHS y");
+    require_near(
+        factorization.quality().reciprocal_pivot_ratio,
+        0.5, 1.0e-12,
+        "reusable dense factorization retains pivot evidence");
 }
 
 void test_sparse_linear_solver() {
@@ -132,6 +147,13 @@ void test_reusable_sparse_factorization() {
                  "reusable sparse first x1");
     require(first.numeric_factorizations == 1,
             "first sparse solve performs numeric factorization");
+    require(
+        first.factorization_quality.available &&
+            first.factorization_quality.accepted_pivot_count == 2 &&
+            first.factorization_quality.factorization_size == 2 &&
+            first.factorization_quality.reciprocal_pivot_ratio > 0.0 &&
+            first.factorization_quality.reciprocal_pivot_ratio <= 1.0,
+        "sparse factorization reports backend U-diagonal pivot evidence");
 
     matrix = thermox::SparseMatrix(
         matrix.pattern(), {4.0, 1.0, 1.0, 3.0});
@@ -149,7 +171,8 @@ void test_reusable_sparse_factorization() {
         matrix, {{9.0, 7.0}, {5.0, 4.0}});
     require(
         multiple.success && multiple.x.size() == 2 &&
-            multiple.numeric_factorizations == 1,
+            multiple.numeric_factorizations == 1 &&
+            multiple.factorization_quality.available,
         "sparse multi-RHS solve performs one numeric factorization");
     require_near(multiple.x[0][0], 20.0 / 11.0, 1.0e-12,
                  "sparse multi-RHS first x0");
@@ -250,6 +273,14 @@ void test_newton_reuses_sparse_symbolic_factorization() {
         result.diagnostics.linear_solver_backend ==
             options.sparse_factorization->backend_name(),
         "Newton reports selected sparse backend");
+    require(
+        result.diagnostics.factorization_quality_observations ==
+                result.diagnostics.numeric_factorizations &&
+            result.diagnostics.minimum_reciprocal_pivot_ratio > 0.0 &&
+            result.diagnostics.accepted_pivot_count_at_minimum_ratio == 1 &&
+            result.diagnostics.factorization_size_at_minimum_ratio == 1 &&
+            !result.diagnostics.factorization_quality_method.empty(),
+        "Newton aggregates explicitly sourced factorization pivot evidence");
 }
 
 void test_continuation_recovers_difficult_initial_guess() {
@@ -935,6 +966,10 @@ void test_newton_solver_uses_custom_linear_solver() {
             result.diagnostics.maximum_linear_backward_error <=
                 options.linear_residual_tolerance,
         "custom backend result carries verified linear accuracy");
+    require(
+        result.diagnostics.factorization_quality_observations == 0 &&
+            result.diagnostics.factorization_quality_method.empty(),
+        "custom backend leaves optional pivot evidence unavailable");
 }
 
 void test_newton_solver_reports_linear_solver_failure() {
@@ -1484,6 +1519,8 @@ void test_newton_executes_exact_structural_tearing_step() {
             torn.diagnostics.largest_linear_system_size == 2 &&
             torn.diagnostics.linear_solver_evaluations == 2 &&
             torn.diagnostics.numeric_factorizations == 2 &&
+            torn.diagnostics.factorization_quality_observations == 2 &&
+            torn.diagnostics.minimum_reciprocal_pivot_ratio > 0.0 &&
             torn.diagnostics.structural_tearing_attempts == 1 &&
             torn.diagnostics.structural_tearing_successes == 1 &&
             torn.diagnostics.structural_tearing_fallbacks == 0 &&
@@ -1529,6 +1566,10 @@ void test_structural_tearing_falls_back_on_numeric_rank_loss() {
             solved.diagnostics.structural_tearing_successes == 0 &&
             solved.diagnostics.structural_tearing_fallbacks == 1 &&
             !solved.diagnostics.last_structural_tearing_fallback.empty() &&
+            solved.diagnostics.factorization_quality_observations >= 2 &&
+            solved.diagnostics.minimum_reciprocal_pivot_ratio == 0.0 &&
+            solved.diagnostics.accepted_pivot_count_at_minimum_ratio <
+                solved.diagnostics.factorization_size_at_minimum_ratio &&
             solved.diagnostics.largest_linear_system_size == 3,
         "numeric rank loss in a structural partition falls back to the full solve");
     require_near(solved.x[0], 1.0, 1.0e-12, "fallback solves x");

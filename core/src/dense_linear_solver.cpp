@@ -12,6 +12,7 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
     lu_.clear();
     pivot_rows_.clear();
     message_.clear();
+    quality_ = {};
     const std::size_t n = matrix.size();
     for (const auto& row : matrix) {
         if (row.size() != n) {
@@ -37,6 +38,10 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
         return true;
     }
     if (matrix_norm == 0.0) {
+        quality_ = {
+            true, 0.0, 0.0, 0.0, 0U, n,
+            "reference-dense-u-diagonal-ratio",
+        };
         message_ = "matrix is zero";
         return false;
     }
@@ -44,6 +49,8 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
         64.0 * std::numeric_limits<double>::epsilon() * static_cast<double>(n) * matrix_norm;
 
     pivot_rows_.assign(n, 0U);
+    double minimum_pivot = std::numeric_limits<double>::infinity();
+    double maximum_pivot = 0.0;
     for (std::size_t col = 0; col < n; ++col) {
         std::size_t pivot = col;
         double pivot_abs = std::abs(matrix[col][col]);
@@ -56,6 +63,15 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
         }
 
         if (pivot_abs <= pivot_tolerance) {
+            quality_ = {
+                true,
+                col == 0U ? 0.0 : minimum_pivot,
+                maximum_pivot,
+                0.0,
+                col,
+                n,
+                "reference-dense-u-diagonal-ratio",
+            };
             std::ostringstream oss;
             oss << "singular matrix near column " << col;
             message_ = oss.str();
@@ -68,6 +84,8 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
         }
 
         const double diag = matrix[col][col];
+        minimum_pivot = std::min(minimum_pivot, std::abs(diag));
+        maximum_pivot = std::max(maximum_pivot, std::abs(diag));
         for (std::size_t row = col + 1; row < n; ++row) {
             const double factor = matrix[row][col] / diag;
             matrix[row][col] = factor;
@@ -78,6 +96,15 @@ bool DenseLinearFactorization::factorize(Matrix matrix) {
     }
 
     lu_ = std::move(matrix);
+    quality_ = {
+        true,
+        minimum_pivot,
+        maximum_pivot,
+        maximum_pivot > 0.0 ? minimum_pivot / maximum_pivot : 0.0,
+        n,
+        n,
+        "reference-dense-u-diagonal-ratio",
+    };
     valid_ = true;
     message_ = "ok";
     return true;
@@ -118,7 +145,9 @@ LinearSolveResult DenseLinearFactorization::solve(
         }
     }
 
-    return {true, x, "ok"};
+    LinearSolveResult result{true, std::move(x), "ok"};
+    result.factorization_quality = quality_;
+    return result;
 }
 
 std::vector<LinearSolveResult>
@@ -139,9 +168,13 @@ LinearSolveResult solve_dense_linear_system(
     }
     DenseLinearFactorization factorization;
     if (!factorization.factorize(std::move(matrix))) {
-        return {false, {}, factorization.message()};
+        return {
+            false, {}, factorization.message(), 0, 1,
+            factorization.quality()};
     }
-    return factorization.solve(std::move(rhs));
+    auto result = factorization.solve(std::move(rhs));
+    result.numeric_factorizations = 1;
+    return result;
 }
 
 }  // namespace thermox

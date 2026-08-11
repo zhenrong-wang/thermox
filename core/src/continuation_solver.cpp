@@ -434,6 +434,30 @@ void accumulate_diagnostics(
         stage.symbolic_factorizations;
     aggregate.numeric_factorizations +=
         stage.numeric_factorizations;
+    if (stage.factorization_quality_observations > 0) {
+        const bool is_new_minimum =
+            aggregate.factorization_quality_observations == 0 ||
+            stage.minimum_reciprocal_pivot_ratio <
+                aggregate.minimum_reciprocal_pivot_ratio;
+        aggregate.factorization_quality_observations +=
+            stage.factorization_quality_observations;
+        aggregate.last_reciprocal_pivot_ratio =
+            stage.last_reciprocal_pivot_ratio;
+        if (is_new_minimum) {
+            aggregate.minimum_reciprocal_pivot_ratio =
+                stage.minimum_reciprocal_pivot_ratio;
+            aggregate.minimum_absolute_pivot_at_minimum_ratio =
+                stage.minimum_absolute_pivot_at_minimum_ratio;
+            aggregate.maximum_absolute_pivot_at_minimum_ratio =
+                stage.maximum_absolute_pivot_at_minimum_ratio;
+            aggregate.accepted_pivot_count_at_minimum_ratio =
+                stage.accepted_pivot_count_at_minimum_ratio;
+            aggregate.factorization_size_at_minimum_ratio =
+                stage.factorization_size_at_minimum_ratio;
+            aggregate.factorization_quality_method =
+                stage.factorization_quality_method;
+        }
+    }
     aggregate.last_linear_backward_error =
         stage.last_linear_backward_error;
     aggregate.maximum_linear_backward_error = std::max(

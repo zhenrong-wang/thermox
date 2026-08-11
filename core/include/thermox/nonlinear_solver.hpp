@@ -147,6 +147,14 @@ struct SolverDiagnostics {
     int linear_solver_evaluations{0};
     int symbolic_factorizations{0};
     int numeric_factorizations{0};
+    int factorization_quality_observations{0};
+    double last_reciprocal_pivot_ratio{0.0};
+    double minimum_reciprocal_pivot_ratio{0.0};
+    double minimum_absolute_pivot_at_minimum_ratio{0.0};
+    double maximum_absolute_pivot_at_minimum_ratio{0.0};
+    std::size_t accepted_pivot_count_at_minimum_ratio{0};
+    std::size_t factorization_size_at_minimum_ratio{0};
+    std::string factorization_quality_method;
     double last_linear_backward_error{0.0};
     double maximum_linear_backward_error{0.0};
     int structural_block_solves{0};

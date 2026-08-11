@@ -527,6 +527,58 @@ LinearSolveResult validate_linear_result(LinearSolveResult result, std::size_t e
     return result;
 }
 
+void record_factorization_quality(
+    SolverDiagnostics& diagnostics,
+    const FactorizationQuality& quality) {
+    if (!quality.available) return;
+    const bool is_new_minimum =
+        diagnostics.factorization_quality_observations == 0 ||
+        quality.reciprocal_pivot_ratio <
+            diagnostics.minimum_reciprocal_pivot_ratio;
+    ++diagnostics.factorization_quality_observations;
+    diagnostics.last_reciprocal_pivot_ratio =
+        quality.reciprocal_pivot_ratio;
+    if (!is_new_minimum) return;
+    diagnostics.minimum_reciprocal_pivot_ratio =
+        quality.reciprocal_pivot_ratio;
+    diagnostics.minimum_absolute_pivot_at_minimum_ratio =
+        quality.minimum_absolute_pivot;
+    diagnostics.maximum_absolute_pivot_at_minimum_ratio =
+        quality.maximum_absolute_pivot;
+    diagnostics.accepted_pivot_count_at_minimum_ratio =
+        quality.accepted_pivot_count;
+    diagnostics.factorization_size_at_minimum_ratio =
+        quality.factorization_size;
+    diagnostics.factorization_quality_method = quality.method;
+}
+
+void merge_factorization_quality(
+    SolverDiagnostics& aggregate,
+    const SolverDiagnostics& source) {
+    if (source.factorization_quality_observations == 0) return;
+    const bool is_new_minimum =
+        aggregate.factorization_quality_observations == 0 ||
+        source.minimum_reciprocal_pivot_ratio <
+            aggregate.minimum_reciprocal_pivot_ratio;
+    aggregate.factorization_quality_observations +=
+        source.factorization_quality_observations;
+    aggregate.last_reciprocal_pivot_ratio =
+        source.last_reciprocal_pivot_ratio;
+    if (!is_new_minimum) return;
+    aggregate.minimum_reciprocal_pivot_ratio =
+        source.minimum_reciprocal_pivot_ratio;
+    aggregate.minimum_absolute_pivot_at_minimum_ratio =
+        source.minimum_absolute_pivot_at_minimum_ratio;
+    aggregate.maximum_absolute_pivot_at_minimum_ratio =
+        source.maximum_absolute_pivot_at_minimum_ratio;
+    aggregate.accepted_pivot_count_at_minimum_ratio =
+        source.accepted_pivot_count_at_minimum_ratio;
+    aggregate.factorization_size_at_minimum_ratio =
+        source.factorization_size_at_minimum_ratio;
+    aggregate.factorization_quality_method =
+        source.factorization_quality_method;
+}
+
 double normalized_backward_error(
     const Matrix& matrix,
     const std::vector<double>& x,
@@ -681,6 +733,8 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
         result.symbolic_factorizations;
     diagnostics.numeric_factorizations +=
         result.numeric_factorizations;
+    record_factorization_quality(
+        diagnostics, result.factorization_quality);
     if (!result.success) return result;
     diagnostics.last_linear_backward_error = backward_error;
     diagnostics.maximum_linear_backward_error = std::max(
@@ -770,7 +824,8 @@ LinearSolveResult solve_linear_system_by_tearing(
                     if (!factorization.factorize(
                             std::move(matrix))) {
                         return LinearSolveResult{
-                            false, {}, factorization.message()};
+                            false, {}, factorization.message(), 0, 0,
+                            factorization.quality()};
                     }
                     return factorization.solve(
                         std::move(partition_rhs));
@@ -783,6 +838,8 @@ LinearSolveResult solve_linear_system_by_tearing(
                 solved.symbolic_factorizations;
             diagnostics.numeric_factorizations +=
                 solved.numeric_factorizations;
+            record_factorization_quality(
+                diagnostics, solved.factorization_quality);
             if (!solved.success) {
                 solved.message = std::string(label) +
                     " tearing solve failed: " + solved.message;
@@ -943,6 +1000,8 @@ LinearSolveResult solve_linear_system_by_tearing(
             solutions.symbolic_factorizations;
         diagnostics.numeric_factorizations +=
             solutions.numeric_factorizations;
+        record_factorization_quality(
+            diagnostics, solutions.factorization_quality);
         if (!solutions.success ||
             solutions.x.size() != right_hand_sides.size()) {
             return {
@@ -971,6 +1030,8 @@ LinearSolveResult solve_linear_system_by_tearing(
         DenseLinearFactorization inner_factorization;
         ++diagnostics.numeric_factorizations;
         if (!inner_factorization.factorize(inner)) {
+            record_factorization_quality(
+                diagnostics, inner_factorization.quality());
             return {
                 false, {}, "inner tearing factorization failed: " +
                     inner_factorization.message()};
@@ -1003,6 +1064,8 @@ LinearSolveResult solve_linear_system_by_tearing(
             }
         }
         inner_solution = std::move(solutions.front());
+        record_factorization_quality(
+            diagnostics, inner_solution.factorization_quality);
         for (std::size_t tear = 0;
              tear < tear_columns.size(); ++tear) {
             for (std::size_t row = 0;
@@ -2008,6 +2071,7 @@ void accumulate_block_diagnostics(
         block.symbolic_factorizations;
     aggregate.numeric_factorizations +=
         block.numeric_factorizations;
+    merge_factorization_quality(aggregate, block);
     aggregate.last_linear_backward_error =
         block.last_linear_backward_error;
     aggregate.maximum_linear_backward_error = std::max(
@@ -2058,6 +2122,7 @@ void prepend_failed_attempt_diagnostics(
         attempt.symbolic_factorizations;
     final.numeric_factorizations +=
         attempt.numeric_factorizations;
+    merge_factorization_quality(final, attempt);
     final.maximum_linear_backward_error = std::max(
         final.maximum_linear_backward_error,
         attempt.maximum_linear_backward_error);

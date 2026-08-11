@@ -1108,8 +1108,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v10"
-            : "thermox.newton/v9",
+            ? "thermox.newton-continuation/v11"
+            : "thermox.newton/v10",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1175,7 +1175,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v10",
+        "thermox.dae-bdf/v11",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1221,6 +1221,14 @@ NonlinearDiagnostics copy_diagnostics(
         source.linear_solver_evaluations,
         source.symbolic_factorizations,
         source.numeric_factorizations,
+        source.factorization_quality_observations,
+        source.last_reciprocal_pivot_ratio,
+        source.minimum_reciprocal_pivot_ratio,
+        source.minimum_absolute_pivot_at_minimum_ratio,
+        source.maximum_absolute_pivot_at_minimum_ratio,
+        source.accepted_pivot_count_at_minimum_ratio,
+        source.factorization_size_at_minimum_ratio,
+        source.factorization_quality_method,
         source.last_linear_backward_error,
         source.maximum_linear_backward_error,
         source.structural_block_solves,
@@ -1260,6 +1268,14 @@ ContinuationRunDiagnostics copy_diagnostics(
                 .final_maximum_absolute_normalized_residual,
             stage.nonlinear.limiting_residual,
             stage.nonlinear.maximum_linear_backward_error,
+            stage.nonlinear.factorization_quality_observations,
+            stage.nonlinear.last_reciprocal_pivot_ratio,
+            stage.nonlinear.minimum_reciprocal_pivot_ratio,
+            stage.nonlinear.minimum_absolute_pivot_at_minimum_ratio,
+            stage.nonlinear.maximum_absolute_pivot_at_minimum_ratio,
+            stage.nonlinear.accepted_pivot_count_at_minimum_ratio,
+            stage.nonlinear.factorization_size_at_minimum_ratio,
+            stage.nonlinear.factorization_quality_method,
             stage.nonlinear.structural_block_solves,
             stage.nonlinear.largest_linear_system_size,
             stage.nonlinear.structural_tearing_attempts,
@@ -1287,6 +1303,14 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.nonlinear_iterations,
         source.symbolic_factorizations,
         source.numeric_factorizations,
+        source.factorization_quality_observations,
+        source.last_reciprocal_pivot_ratio,
+        source.minimum_reciprocal_pivot_ratio,
+        source.minimum_absolute_pivot_at_minimum_ratio,
+        source.maximum_absolute_pivot_at_minimum_ratio,
+        source.accepted_pivot_count_at_minimum_ratio,
+        source.factorization_size_at_minimum_ratio,
+        source.factorization_quality_method,
         source.maximum_linear_backward_error,
         source.structural_block_solves,
         source.largest_linear_system_size,

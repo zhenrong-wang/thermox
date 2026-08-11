@@ -701,6 +701,14 @@ export interface SteadySimulationResult {
     linear_solver_evaluations: number
     symbolic_factorizations: number
     numeric_factorizations: number
+    factorization_quality_observations: number
+    last_reciprocal_pivot_ratio: number
+    minimum_reciprocal_pivot_ratio: number
+    minimum_absolute_pivot_at_minimum_ratio: number
+    maximum_absolute_pivot_at_minimum_ratio: number
+    accepted_pivot_count_at_minimum_ratio: number
+    factorization_size_at_minimum_ratio: number
+    factorization_quality_method: string
     linear_solver_backend: string
     message: string
   }
@@ -721,6 +729,14 @@ export interface SteadySimulationResult {
       final_maximum_absolute_normalized_residual: number
       limiting_residual: string
       maximum_linear_backward_error: number
+      factorization_quality_observations: number
+      last_reciprocal_pivot_ratio: number
+      minimum_reciprocal_pivot_ratio: number
+      minimum_absolute_pivot_at_minimum_ratio: number
+      maximum_absolute_pivot_at_minimum_ratio: number
+      accepted_pivot_count_at_minimum_ratio: number
+      factorization_size_at_minimum_ratio: number
+      factorization_quality_method: string
       structural_block_solves: number
       largest_linear_system_size: number
       structural_tearing_attempts: number
@@ -762,6 +778,14 @@ export interface TransientSimulationResult {
     nonlinear_iterations: number
     symbolic_factorizations: number
     numeric_factorizations: number
+    factorization_quality_observations: number
+    last_reciprocal_pivot_ratio: number
+    minimum_reciprocal_pivot_ratio: number
+    minimum_absolute_pivot_at_minimum_ratio: number
+    maximum_absolute_pivot_at_minimum_ratio: number
+    accepted_pivot_count_at_minimum_ratio: number
+    factorization_size_at_minimum_ratio: number
+    factorization_quality_method: string
     linear_solver_backend: string
     final_time: number
     last_step: number

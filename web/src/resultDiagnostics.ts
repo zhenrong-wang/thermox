@@ -94,6 +94,18 @@ export function resultDiagnosticSummary(
           value: number(result.diagnostics.maximum_linear_backward_error),
         },
         {
+          label: 'Minimum reciprocal pivot ratio',
+          value: result.diagnostics.factorization_quality_observations
+            ? number(result.diagnostics.minimum_reciprocal_pivot_ratio)
+            : 'unavailable',
+        },
+        {
+          label: 'Pivot evidence',
+          value: result.diagnostics.factorization_quality_observations
+            ? `${result.diagnostics.accepted_pivot_count_at_minimum_ratio}/${result.diagnostics.factorization_size_at_minimum_ratio} · ${result.diagnostics.factorization_quality_method}`
+            : 'unavailable',
+        },
+        {
           label: 'Structural block solves',
           value: number(result.diagnostics.structural_block_solves),
         },
@@ -143,6 +155,18 @@ export function resultDiagnosticSummary(
       {
         label: 'Worst linear error',
         value: number(result.diagnostics.maximum_linear_backward_error),
+      },
+      {
+        label: 'Minimum reciprocal pivot ratio',
+        value: result.diagnostics.factorization_quality_observations
+          ? number(result.diagnostics.minimum_reciprocal_pivot_ratio)
+          : 'unavailable',
+      },
+      {
+        label: 'Pivot evidence',
+        value: result.diagnostics.factorization_quality_observations
+          ? `${result.diagnostics.accepted_pivot_count_at_minimum_ratio}/${result.diagnostics.factorization_size_at_minimum_ratio} · ${result.diagnostics.factorization_quality_method}`
+          : 'unavailable',
       },
       {
         label: 'Structural block solves',

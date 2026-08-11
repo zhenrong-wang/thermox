@@ -573,6 +573,8 @@ Work items:
    - raw suggested-partition cost metrics plus steady, continuation, and transient runtime tearing
      success/fallback telemetry, without treating graph shape as numerical conditioning evidence
      or enabling tearing automatically; ✅
+   - backend-sourced LU pivot-quality evidence, aggregated across steady, continuation, and DAE
+     solves with explicit method/availability semantics and no condition-number overclaim; ✅
    - nested nonlinear tearing remains a follow-on only if profiling demonstrates a benefit and an
      explicit branch-selection/convergence contract can be justified.
 7. Safe custom equation DSL; no arbitrary user Python in API process.

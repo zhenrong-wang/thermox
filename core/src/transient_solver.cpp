@@ -792,6 +792,39 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 diagnostics.symbolic_factorizations;
             result.diagnostics.numeric_factorizations +=
                 diagnostics.numeric_factorizations;
+            if (diagnostics.factorization_quality_observations > 0) {
+                const bool is_new_minimum =
+                    result.diagnostics
+                            .factorization_quality_observations == 0 ||
+                    diagnostics.minimum_reciprocal_pivot_ratio <
+                        result.diagnostics
+                            .minimum_reciprocal_pivot_ratio;
+                result.diagnostics.factorization_quality_observations +=
+                    diagnostics.factorization_quality_observations;
+                result.diagnostics.last_reciprocal_pivot_ratio =
+                    diagnostics.last_reciprocal_pivot_ratio;
+                if (is_new_minimum) {
+                    result.diagnostics.minimum_reciprocal_pivot_ratio =
+                        diagnostics.minimum_reciprocal_pivot_ratio;
+                    result.diagnostics
+                            .minimum_absolute_pivot_at_minimum_ratio =
+                        diagnostics
+                            .minimum_absolute_pivot_at_minimum_ratio;
+                    result.diagnostics
+                            .maximum_absolute_pivot_at_minimum_ratio =
+                        diagnostics
+                            .maximum_absolute_pivot_at_minimum_ratio;
+                    result.diagnostics
+                            .accepted_pivot_count_at_minimum_ratio =
+                        diagnostics
+                            .accepted_pivot_count_at_minimum_ratio;
+                    result.diagnostics
+                            .factorization_size_at_minimum_ratio =
+                        diagnostics.factorization_size_at_minimum_ratio;
+                    result.diagnostics.factorization_quality_method =
+                        diagnostics.factorization_quality_method;
+                }
+            }
             result.diagnostics.maximum_linear_backward_error =
                 std::max(
                     result.diagnostics

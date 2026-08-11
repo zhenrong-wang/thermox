@@ -1780,7 +1780,27 @@ std::string serialize_steady_response_json(
         << ", \"symbolic_factorizations\": "
         << response.diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "
-        << response.diagnostics.numeric_factorizations;
+        << response.diagnostics.numeric_factorizations
+        << ", \"factorization_quality_observations\": "
+        << response.diagnostics.factorization_quality_observations
+        << ", \"last_reciprocal_pivot_ratio\": ";
+    json_number(out, response.diagnostics.last_reciprocal_pivot_ratio);
+    out << ", \"minimum_reciprocal_pivot_ratio\": ";
+    json_number(out, response.diagnostics.minimum_reciprocal_pivot_ratio);
+    out << ", \"minimum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.minimum_absolute_pivot_at_minimum_ratio);
+    out << ", \"maximum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.maximum_absolute_pivot_at_minimum_ratio);
+    out << ", \"accepted_pivot_count_at_minimum_ratio\": "
+        << response.diagnostics.accepted_pivot_count_at_minimum_ratio
+        << ", \"factorization_size_at_minimum_ratio\": "
+        << response.diagnostics.factorization_size_at_minimum_ratio
+        << ", \"factorization_quality_method\": ";
+    json_string(out, response.diagnostics.factorization_quality_method);
     out << ", \"last_linear_backward_error\": ";
     json_number(
         out, response.diagnostics.last_linear_backward_error);
@@ -1857,6 +1877,24 @@ std::string serialize_steady_response_json(
         out << ", \"maximum_linear_backward_error\": ";
         json_number(
             out, stage.maximum_linear_backward_error);
+        out << ", \"factorization_quality_observations\": "
+            << stage.factorization_quality_observations
+            << ", \"last_reciprocal_pivot_ratio\": ";
+        json_number(out, stage.last_reciprocal_pivot_ratio);
+        out << ", \"minimum_reciprocal_pivot_ratio\": ";
+        json_number(out, stage.minimum_reciprocal_pivot_ratio);
+        out << ", \"minimum_absolute_pivot_at_minimum_ratio\": ";
+        json_number(
+            out, stage.minimum_absolute_pivot_at_minimum_ratio);
+        out << ", \"maximum_absolute_pivot_at_minimum_ratio\": ";
+        json_number(
+            out, stage.maximum_absolute_pivot_at_minimum_ratio);
+        out << ", \"accepted_pivot_count_at_minimum_ratio\": "
+            << stage.accepted_pivot_count_at_minimum_ratio
+            << ", \"factorization_size_at_minimum_ratio\": "
+            << stage.factorization_size_at_minimum_ratio
+            << ", \"factorization_quality_method\": ";
+        json_string(out, stage.factorization_quality_method);
         out << ", \"structural_block_solves\": "
             << stage.structural_block_solves
             << ", \"largest_linear_system_size\": "
@@ -2079,7 +2117,27 @@ std::string serialize_transient_response_json(
         << ", \"symbolic_factorizations\": "
         << response.diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "
-        << response.diagnostics.numeric_factorizations;
+        << response.diagnostics.numeric_factorizations
+        << ", \"factorization_quality_observations\": "
+        << response.diagnostics.factorization_quality_observations
+        << ", \"last_reciprocal_pivot_ratio\": ";
+    json_number(out, response.diagnostics.last_reciprocal_pivot_ratio);
+    out << ", \"minimum_reciprocal_pivot_ratio\": ";
+    json_number(out, response.diagnostics.minimum_reciprocal_pivot_ratio);
+    out << ", \"minimum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.minimum_absolute_pivot_at_minimum_ratio);
+    out << ", \"maximum_absolute_pivot_at_minimum_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.maximum_absolute_pivot_at_minimum_ratio);
+    out << ", \"accepted_pivot_count_at_minimum_ratio\": "
+        << response.diagnostics.accepted_pivot_count_at_minimum_ratio
+        << ", \"factorization_size_at_minimum_ratio\": "
+        << response.diagnostics.factorization_size_at_minimum_ratio
+        << ", \"factorization_quality_method\": ";
+    json_string(out, response.diagnostics.factorization_quality_method);
     out << ", \"maximum_linear_backward_error\": ";
     json_number(
         out,

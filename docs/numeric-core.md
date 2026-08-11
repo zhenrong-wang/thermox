@@ -82,6 +82,16 @@ attempts, successes, fallbacks, maximum inner/outer dimensions, inner storage no
 last fallback reason. These are measured structural and execution facts; they are deliberately not
 presented as rank or conditioning estimates, and they do not make automatic policy select tearing.
 
+Successful native LU factorizations also return backend-sourced pivot evidence: the smallest and
+largest accepted absolute diagonal entries of `U`, their ratio, the accepted-pivot count, the
+factorization dimension, and a method identifier. UMFPACK supplies these from its numeric `Info`
+array; the reference dense/CSR backends compute the same `U`-diagonal quantities from their own
+factorization. Solver diagnostics retain the last ratio and the worst (minimum) observed ratio
+across Newton blocks, continuation stages, and transient stages. Custom linear hooks leave the
+evidence unavailable unless they explicitly populate the public result contract. The reciprocal
+pivot ratio is ordering- and scaling-dependent and is intentionally named and documented as pivot
+evidence—not as a matrix condition number, numerical-rank proof, or automatic policy threshold.
+
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,
 warm-starting each stage and preserving dense, sparse, and hybrid derivative paths. Compiled

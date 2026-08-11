@@ -133,6 +133,17 @@ void test_dae_equation_system_builder() {
         integrated.diagnostics.maximum_linear_backward_error <=
             options.nonlinear_options.linear_residual_tolerance,
         "DAE diagnostics bound the worst implicit linear solve error");
+    require(
+        integrated.diagnostics.factorization_quality_observations ==
+                integrated.diagnostics.numeric_factorizations &&
+            integrated.diagnostics.minimum_reciprocal_pivot_ratio > 0.0 &&
+            integrated.diagnostics
+                    .accepted_pivot_count_at_minimum_ratio ==
+                integrated.diagnostics
+                    .factorization_size_at_minimum_ratio &&
+            integrated.diagnostics
+                    .factorization_size_at_minimum_ratio == 2,
+        "DAE diagnostics aggregate backend pivot evidence across stages");
 
     thermox::TimeIntegrationOptions tearing_options = options;
     tearing_options.nonlinear_options.sparse_factorization.reset();
