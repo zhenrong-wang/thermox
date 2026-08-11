@@ -319,6 +319,7 @@ function SolverFields({
           <option value="automatic">Automatic</option>
           <option value="monolithic">Force monolithic</option>
           <option value="blocks">Force structural blocks</option>
+          <option value="tearing">Force exact Schur tearing</option>
         </select>
       </label>
       <div className="form-grid">

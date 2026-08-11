@@ -96,6 +96,12 @@ void validate_dae_problem(const DaeProblem& problem) {
         throw std::invalid_argument(
             "DAE sparse Jacobian values require a fixed sparse pattern");
     }
+    if (problem.structural_jacobian_pattern.has_value() &&
+        (problem.structural_jacobian_pattern->rows() != size ||
+         problem.structural_jacobian_pattern->columns() != size)) {
+        throw std::invalid_argument(
+            "DAE structural Jacobian pattern shape is invalid");
+    }
     if (problem.sparse_jacobian_values_subset &&
         !problem.sparse_jacobian_pattern.has_value()) {
         throw std::invalid_argument(
@@ -163,6 +169,8 @@ ImplicitStepResult solve_implicit_bdf_step(
     nonlinear.upper_bounds = upper_bounds;
     nonlinear.automatic_structural_decomposition_safe =
         problem.automatic_structural_decomposition_safe;
+    nonlinear.structural_jacobian_pattern =
+        problem.structural_jacobian_pattern;
     nonlinear.checked_residual =
         [&problem, next_time, derivative_coefficient,
          derivative_offset](const std::vector<double>& state,
@@ -464,6 +472,8 @@ DaeInitializationResult make_consistent_initial_conditions(
     initialization.residual_scales = residual_scales;
     initialization.automatic_structural_decomposition_safe =
         problem.automatic_structural_decomposition_safe;
+    initialization.structural_jacobian_pattern =
+        problem.structural_jacobian_pattern;
     for (std::size_t i = 0; i < size; ++i) {
         if (kinds[i] == DaeVariableKind::differential) {
             initialization.variable_names.push_back("derivative(" + problem.variable_names[i] + ")");

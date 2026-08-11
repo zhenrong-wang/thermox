@@ -42,6 +42,9 @@ enum class StructuralDecompositionPolicy {
     automatic,
     monolithic,
     blocks,
+    // Use structurally suggested feedback variables to partition each
+    // Newton linearization through an exact Schur complement.
+    tearing,
 };
 
 struct EvaluationStatus {
@@ -172,6 +175,9 @@ struct NonlinearProblem {
     CheckedResidualSubsetFunction checked_residual_subset;
     JacobianFunction jacobian;
     SparseJacobianFunction sparse_jacobian;
+    // Complete structural incidence supplied by the compiler. It may be an
+    // over-approximation and does not imply fixed-CSR value evaluation.
+    std::optional<SparsePattern> structural_jacobian_pattern;
     std::optional<SparsePattern> sparse_jacobian_pattern;
     SparseJacobianValuesFunction sparse_jacobian_values;
     SparseJacobianValuesSubsetFunction

@@ -887,6 +887,7 @@ enum class StructuralDecompositionPolicy {
     automatic,
     monolithic,
     blocks,
+    tearing,
 };
 
 std::string to_string(StructuralDecompositionPolicy policy);

@@ -369,11 +369,15 @@ For a difficult initial guess, opt into adaptive residual continuation:
 For a model whose validated fixed sparse pattern contains multiple dependency-ordered blocks, the
 default `--structural-policy automatic` uses block execution when block-local callbacks are
 available and the compiler certifies root equivalence (currently fully linear assembled systems).
-`--structural-policy monolithic` and `--structural-policy blocks` provide explicit
-comparison overrides. The same policy applies to `simulate`; results report the executed block
-count and largest linear system. A single irreducible block remains monolithic. Validation also
+`--structural-policy monolithic`, `--structural-policy blocks`, and
+`--structural-policy tearing` provide explicit comparison overrides. Tearing partitions every
+Newton linearization with the suggested feedback variables, solves the exact Schur complement,
+checks the reconstructed full-system step, and visibly falls back to the full linear solve when
+the structural partition loses numerical rank. The same policy applies to `simulate`; results report the executed block
+count and largest linear system. Under automatic/block decomposition, a single irreducible block
+remains monolithic; explicit tearing can partition it. Validation also
 reports deterministic structural tear-variable hints for cyclic blocks; these are complexity and
-initialization diagnostics, not an instruction to run an unverified outer/inner tearing solve.
+initialization diagnostics unless the explicit tearing policy is selected.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

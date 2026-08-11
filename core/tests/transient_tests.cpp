@@ -133,6 +133,25 @@ void test_dae_equation_system_builder() {
         integrated.diagnostics.maximum_linear_backward_error <=
             options.nonlinear_options.linear_residual_tolerance,
         "DAE diagnostics bound the worst implicit linear solve error");
+
+    thermox::TimeIntegrationOptions tearing_options = options;
+    tearing_options.nonlinear_options.sparse_factorization.reset();
+    tearing_options.nonlinear_options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::tearing;
+    const auto torn = thermox::integrate_dae(
+        problem, tearing_options);
+    require(
+        torn.diagnostics.success &&
+            torn.diagnostics.linear_solver_backend.starts_with(
+                "structural-schur/") &&
+            torn.diagnostics.maximum_linear_backward_error <=
+                tearing_options.nonlinear_options
+                    .linear_residual_tolerance,
+        "DAE initialization and implicit stages support exact structural tearing");
+    require_near(
+        torn.trajectory.back().state[0],
+        integrated.trajectory.back().state[0], 1.0e-12,
+        "torn DAE integration preserves the ordinary trajectory");
 }
 
 void test_transient_solver_executes_independent_structural_blocks() {

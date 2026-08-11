@@ -10,6 +10,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace thermox {
@@ -42,6 +43,7 @@ void validate_options(const SolverOptions& options) {
     case StructuralDecompositionPolicy::automatic:
     case StructuralDecompositionPolicy::monolithic:
     case StructuralDecompositionPolicy::blocks:
+    case StructuralDecompositionPolicy::tearing:
         break;
     default:
         throw std::invalid_argument(
@@ -166,6 +168,36 @@ void validate_problem(const NonlinearProblem& problem,
         }
     } else if (problem.sparse_jacobian_values) {
         throw std::invalid_argument("sparse_jacobian_values requires sparse_jacobian_pattern");
+    }
+    if (problem.structural_jacobian_pattern.has_value()) {
+        const auto& pattern = *problem.structural_jacobian_pattern;
+        if (pattern.rows() != problem.residual_names.size() ||
+            pattern.columns() != problem.initial_guess.size()) {
+            throw std::invalid_argument(
+                "structural_jacobian_pattern shape does not match problem");
+        }
+        if (problem.sparse_jacobian_pattern.has_value()) {
+            const auto& numeric = *problem.sparse_jacobian_pattern;
+            for (std::size_t row = 0; row < numeric.rows(); ++row) {
+                const auto structural_begin =
+                    pattern.column_indices().begin() +
+                    static_cast<std::ptrdiff_t>(
+                        pattern.row_offsets()[row]);
+                const auto structural_end =
+                    pattern.column_indices().begin() +
+                    static_cast<std::ptrdiff_t>(
+                        pattern.row_offsets()[row + 1]);
+                for (std::size_t offset = numeric.row_offsets()[row];
+                     offset < numeric.row_offsets()[row + 1]; ++offset) {
+                    if (!std::binary_search(
+                            structural_begin, structural_end,
+                            numeric.column_indices()[offset])) {
+                        throw std::invalid_argument(
+                            "numeric Jacobian pattern is not contained in structural incidence");
+                    }
+                }
+            }
+        }
     }
     if (problem.sparse_jacobian_values_subset &&
         !problem.sparse_jacobian_pattern.has_value()) {
@@ -664,6 +696,189 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
         result.success = false;
         result.message = message.str();
         result.x.clear();
+    }
+    return result;
+}
+
+LinearSolveResult solve_linear_system_by_tearing(
+    const SolverOptions& options,
+    EvaluatedJacobian jacobian,
+    const std::vector<double>& rhs,
+    const std::vector<std::size_t>& tear_rows,
+    const std::vector<std::size_t>& tear_columns,
+    SolverDiagnostics& diagnostics) {
+    const std::size_t size = rhs.size();
+    if (tear_rows.size() != tear_columns.size() ||
+        tear_rows.empty() || tear_rows.size() >= size) {
+        return {false, {}, "invalid structural tearing partition"};
+    }
+    if (options.sparse_linear_solver && !options.linear_solver) {
+        return {
+            false, {},
+            "structural tearing requires the reference or custom dense linear backend"};
+    }
+
+    std::vector<bool> is_tear_row(size, false);
+    std::vector<bool> is_tear_column(size, false);
+    for (const auto row : tear_rows) {
+        if (row >= size || is_tear_row[row]) {
+            return {false, {}, "duplicate or out-of-range tear residual"};
+        }
+        is_tear_row[row] = true;
+    }
+    for (const auto column : tear_columns) {
+        if (column >= size || is_tear_column[column]) {
+            return {false, {}, "duplicate or out-of-range tear variable"};
+        }
+        is_tear_column[column] = true;
+    }
+    std::vector<std::size_t> inner_rows;
+    std::vector<std::size_t> inner_columns;
+    for (std::size_t index = 0; index < size; ++index) {
+        if (!is_tear_row[index]) inner_rows.push_back(index);
+        if (!is_tear_column[index]) inner_columns.push_back(index);
+    }
+    if (inner_rows.size() != inner_columns.size()) {
+        return {false, {}, "structural tearing inner partition is not square"};
+    }
+
+    const Matrix dense = jacobian.is_sparse
+        ? jacobian.sparse.to_dense()
+        : std::move(jacobian.dense);
+    const auto solve_dense_partition =
+        [&](Matrix matrix, std::vector<double> partition_rhs,
+            std::string_view label) {
+            ++diagnostics.linear_solver_evaluations;
+            diagnostics.largest_linear_system_size = std::max(
+                diagnostics.largest_linear_system_size,
+                matrix.size());
+            auto solved = options.linear_solver
+                ? options.linear_solver(
+                    std::move(matrix), std::move(partition_rhs))
+                : solve_dense_linear_system(
+                    std::move(matrix), std::move(partition_rhs));
+            solved = validate_linear_result(
+                std::move(solved),
+                label == "inner" ? inner_rows.size()
+                                   : tear_rows.size());
+            diagnostics.symbolic_factorizations +=
+                solved.symbolic_factorizations;
+            diagnostics.numeric_factorizations +=
+                solved.numeric_factorizations;
+            if (!solved.success) {
+                solved.message = std::string(label) +
+                    " tearing solve failed: " + solved.message;
+            }
+            return solved;
+        };
+
+    Matrix inner(
+        inner_rows.size(),
+        std::vector<double>(inner_columns.size(), 0.0));
+    Matrix inner_to_tear(
+        inner_rows.size(),
+        std::vector<double>(tear_columns.size(), 0.0));
+    Matrix tear_to_inner(
+        tear_rows.size(),
+        std::vector<double>(inner_columns.size(), 0.0));
+    Matrix schur(
+        tear_rows.size(),
+        std::vector<double>(tear_columns.size(), 0.0));
+    std::vector<double> inner_rhs(inner_rows.size(), 0.0);
+    std::vector<double> tear_rhs(tear_rows.size(), 0.0);
+    for (std::size_t row = 0; row < inner_rows.size(); ++row) {
+        inner_rhs[row] = rhs[inner_rows[row]];
+        for (std::size_t column = 0;
+             column < inner_columns.size(); ++column) {
+            inner[row][column] =
+                dense[inner_rows[row]][inner_columns[column]];
+        }
+        for (std::size_t column = 0;
+             column < tear_columns.size(); ++column) {
+            inner_to_tear[row][column] =
+                dense[inner_rows[row]][tear_columns[column]];
+        }
+    }
+    for (std::size_t row = 0; row < tear_rows.size(); ++row) {
+        tear_rhs[row] = rhs[tear_rows[row]];
+        for (std::size_t column = 0;
+             column < inner_columns.size(); ++column) {
+            tear_to_inner[row][column] =
+                dense[tear_rows[row]][inner_columns[column]];
+        }
+        for (std::size_t column = 0;
+             column < tear_columns.size(); ++column) {
+            schur[row][column] =
+                dense[tear_rows[row]][tear_columns[column]];
+        }
+    }
+
+    auto inner_solution = solve_dense_partition(
+        inner, inner_rhs, "inner");
+    if (!inner_solution.success) return inner_solution;
+    Matrix eliminated_columns(
+        inner_columns.size(),
+        std::vector<double>(tear_columns.size(), 0.0));
+    for (std::size_t tear = 0; tear < tear_columns.size(); ++tear) {
+        std::vector<double> column(inner_rows.size(), 0.0);
+        for (std::size_t row = 0; row < inner_rows.size(); ++row) {
+            column[row] = inner_to_tear[row][tear];
+        }
+        auto eliminated = solve_dense_partition(
+            inner, std::move(column), "inner");
+        if (!eliminated.success) return eliminated;
+        for (std::size_t row = 0;
+             row < inner_columns.size(); ++row) {
+            eliminated_columns[row][tear] = eliminated.x[row];
+        }
+    }
+    for (std::size_t row = 0; row < tear_rows.size(); ++row) {
+        for (std::size_t inner_column = 0;
+             inner_column < inner_columns.size(); ++inner_column) {
+            tear_rhs[row] -= tear_to_inner[row][inner_column] *
+                inner_solution.x[inner_column];
+            for (std::size_t tear = 0;
+                 tear < tear_columns.size(); ++tear) {
+                schur[row][tear] -=
+                    tear_to_inner[row][inner_column] *
+                    eliminated_columns[inner_column][tear];
+            }
+        }
+    }
+    auto tear_solution = solve_dense_partition(
+        std::move(schur), std::move(tear_rhs), "outer");
+    if (!tear_solution.success) return tear_solution;
+
+    LinearSolveResult result;
+    result.success = true;
+    result.x.assign(size, 0.0);
+    for (std::size_t tear = 0; tear < tear_columns.size(); ++tear) {
+        result.x[tear_columns[tear]] = tear_solution.x[tear];
+    }
+    for (std::size_t row = 0; row < inner_columns.size(); ++row) {
+        double value = inner_solution.x[row];
+        for (std::size_t tear = 0; tear < tear_columns.size(); ++tear) {
+            value -= eliminated_columns[row][tear] *
+                tear_solution.x[tear];
+        }
+        result.x[inner_columns[row]] = value;
+    }
+    const double backward_error = normalized_backward_error(
+        dense, result.x, rhs);
+    diagnostics.linear_solver_backend = options.linear_solver
+        ? "structural-schur/custom-dense-hook"
+        : "structural-schur/reference-dense";
+    diagnostics.last_linear_backward_error = backward_error;
+    diagnostics.maximum_linear_backward_error = std::max(
+        diagnostics.maximum_linear_backward_error, backward_error);
+    if (!std::isfinite(backward_error) ||
+        backward_error > options.linear_residual_tolerance) {
+        std::ostringstream message;
+        message << std::scientific << std::setprecision(6)
+                << "reconstructed tearing step normalized backward error "
+                << backward_error << " exceeds tolerance "
+                << options.linear_residual_tolerance;
+        return {false, {}, message.str()};
     }
     return result;
 }
@@ -1182,7 +1397,13 @@ ProblemStructureReport analyze_incidence_structure(
 }
 
 ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem) {
-    if (!problem.sparse_jacobian_pattern.has_value()) {
+    const SparsePattern* structural_pattern =
+        problem.structural_jacobian_pattern.has_value()
+        ? &*problem.structural_jacobian_pattern
+        : problem.sparse_jacobian_pattern.has_value()
+            ? &*problem.sparse_jacobian_pattern
+            : nullptr;
+    if (structural_pattern == nullptr) {
         ProblemStructureReport report;
         report.variable_count = problem.initial_guess.size();
         report.residual_count = problem.residual_names.size();
@@ -1221,11 +1442,10 @@ ProblemStructureReport analyze_problem_structure(const NonlinearProblem& problem
                 "residual names must be unique");
         }
         report.messages.push_back(
-            "no fixed Jacobian pattern is available for structural matching");
+            "no declared Jacobian incidence is available for structural matching");
         return report;
     }
-    const SparsePattern& pattern =
-        *problem.sparse_jacobian_pattern;
+    const SparsePattern& pattern = *structural_pattern;
     if (pattern.rows() != problem.residual_names.size() ||
         pattern.columns() != problem.initial_guess.size()) {
         ProblemStructureReport report;
@@ -1612,7 +1832,32 @@ NonlinearSolveResult solve_newton_monolithic(
         throw std::invalid_argument("residual_names must be unique");
     }
     if (structure.has_complete_sparse_pattern && !structure.structurally_nonsingular) {
-        throw std::invalid_argument("fixed sparse Jacobian pattern is structurally singular");
+        throw std::invalid_argument("declared Jacobian incidence is structurally singular");
+    }
+    std::vector<std::size_t> tear_rows;
+    std::vector<std::size_t> tear_columns;
+    if (options.structural_decomposition_policy ==
+            StructuralDecompositionPolicy::tearing) {
+        if (!structure.has_complete_sparse_pattern) {
+            throw std::invalid_argument(
+                "structural tearing requires a declared Jacobian incidence pattern");
+        }
+        for (const auto& block : structure.structural_blocks) {
+            for (const std::size_t tear_column :
+                 block.suggested_tear_variable_indices) {
+                const auto match = std::find(
+                    block.variable_indices.begin(),
+                    block.variable_indices.end(), tear_column);
+                if (match == block.variable_indices.end()) {
+                    throw std::logic_error(
+                        "structural tear variable is not in its block");
+                }
+                const auto offset = static_cast<std::size_t>(
+                    std::distance(block.variable_indices.begin(), match));
+                tear_columns.push_back(tear_column);
+                tear_rows.push_back(block.residual_indices.at(offset));
+            }
+        }
     }
 
     std::vector<double> x = problem.initial_guess;
@@ -1692,9 +1937,30 @@ NonlinearSolveResult solve_newton_monolithic(
             rhs[i] = -scaled_residual[i];
         }
 
-        const auto linear = solve_linear_system(
-            options, factorization, std::move(jacobian),
-            std::move(rhs), x.size(), diagnostics);
+        LinearSolveResult linear;
+        if (tear_columns.empty()) {
+            linear = solve_linear_system(
+                options, factorization, std::move(jacobian),
+                std::move(rhs), x.size(), diagnostics);
+        } else {
+            linear = solve_linear_system_by_tearing(
+                options, jacobian, rhs,
+                tear_rows, tear_columns, diagnostics);
+            if (!linear.success) {
+                const std::string tearing_failure = linear.message;
+                linear = solve_linear_system(
+                    options, factorization, std::move(jacobian),
+                    std::move(rhs), x.size(), diagnostics);
+                diagnostics.linear_solver_backend =
+                    "structural-schur-fallback/" +
+                    diagnostics.linear_solver_backend;
+                if (!linear.success) {
+                    linear.message = "structural tearing failed (" +
+                        tearing_failure + "); full solve also failed: " +
+                        linear.message;
+                }
+            }
+        }
         if (!linear.success) {
             diagnostics.converged = false;
             diagnostics.iterations = iteration;
@@ -1923,6 +2189,8 @@ NonlinearSolveResult solve_newton(
     const SolverOptions& options) {
     if (options.structural_decomposition_policy ==
             StructuralDecompositionPolicy::monolithic ||
+        options.structural_decomposition_policy ==
+            StructuralDecompositionPolicy::tearing ||
         !problem.sparse_jacobian_pattern.has_value()) {
         return solve_newton_monolithic(problem, options);
     }

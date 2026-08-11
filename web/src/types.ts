@@ -209,7 +209,11 @@ export interface SteadySolverSettings {
   residual_tolerance: number
   step_tolerance: number
   linear_residual_tolerance: number
-  structural_decomposition_policy: 'automatic' | 'monolithic' | 'blocks'
+  structural_decomposition_policy:
+    | 'automatic'
+    | 'monolithic'
+    | 'blocks'
+    | 'tearing'
   finite_difference_epsilon: number
   min_damping: number
   damping_reduction: number

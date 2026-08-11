@@ -907,6 +907,7 @@ void validate_settings(const SteadySolverSettings& settings) {
     case StructuralDecompositionPolicy::automatic:
     case StructuralDecompositionPolicy::monolithic:
     case StructuralDecompositionPolicy::blocks:
+    case StructuralDecompositionPolicy::tearing:
         break;
     default:
         throw std::invalid_argument(
@@ -987,6 +988,10 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     case StructuralDecompositionPolicy::blocks:
         options.structural_decomposition_policy =
             thermox::StructuralDecompositionPolicy::blocks;
+        break;
+    case StructuralDecompositionPolicy::tearing:
+        options.structural_decomposition_policy =
+            thermox::StructuralDecompositionPolicy::tearing;
         break;
     }
     options.finite_difference_epsilon =
@@ -1098,8 +1103,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v6"
-            : "thermox.newton/v5",
+            ? "thermox.newton-continuation/v7"
+            : "thermox.newton/v6",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1165,7 +1170,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v6",
+        "thermox.dae-bdf/v7",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1640,6 +1645,8 @@ std::string to_string(StructuralDecompositionPolicy policy) {
         return "monolithic";
     case StructuralDecompositionPolicy::blocks:
         return "blocks";
+    case StructuralDecompositionPolicy::tearing:
+        return "tearing";
     }
     return "unknown";
 }
@@ -1655,6 +1662,9 @@ structural_decomposition_policy_from_string(
     }
     if (value == "blocks") {
         return StructuralDecompositionPolicy::blocks;
+    }
+    if (value == "tearing") {
+        return StructuralDecompositionPolicy::tearing;
     }
     throw std::invalid_argument(
         "unknown structural decomposition policy: " +

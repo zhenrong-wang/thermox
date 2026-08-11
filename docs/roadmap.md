@@ -561,9 +561,12 @@ Work items:
    - informed-continuation residual-row and fixed-CSR-offset subsets, automatically assembled by
      the equation builder and preserved through homotopy anchor transforms; ✅
    - deterministic feedback-variable suggestions identify a structurally verified acyclic cut
-     inside each irreducible block and are exposed through validation metadata; executing numerical
-     tearing remains a follow-on because it requires an explicit outer/inner residual and convergence
-     contract. ✅
+     inside each irreducible block and are exposed through validation metadata; ✅
+   - explicit exact Schur-complement tearing of Newton linearizations, with reconstructed
+     whole-system backward-error verification, numerical-rank fallback, and separate structural
+     incidence versus fixed-CSR contracts; ✅
+   - nested nonlinear tearing remains a follow-on only if profiling demonstrates a benefit and an
+     explicit branch-selection/convergence contract can be justified.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,

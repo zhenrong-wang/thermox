@@ -887,6 +887,27 @@ NonlinearProblem EquationSystemBuilder::build() const {
         std::all_of(equations.begin(), equations.end(), [](const auto& equation) {
             return !equation.sparsity_variables.empty();
         });
+    {
+        std::vector<std::size_t> row_offsets{0U};
+        std::vector<std::size_t> column_indices;
+        for (const auto& equation : equations) {
+            if (equation.sparsity_variables.empty()) {
+                for (std::size_t column = 0;
+                     column < variable_count; ++column) {
+                    column_indices.push_back(column);
+                }
+            } else {
+                column_indices.insert(
+                    column_indices.end(),
+                    equation.sparsity_variables.begin(),
+                    equation.sparsity_variables.end());
+            }
+            row_offsets.push_back(column_indices.size());
+        }
+        problem.structural_jacobian_pattern = SparsePattern(
+            equations.size(), variable_count,
+            std::move(row_offsets), std::move(column_indices));
+    }
     if (has_fixed_sparse_pattern) {
         std::vector<std::size_t> row_offsets;
         std::vector<std::size_t> column_indices;

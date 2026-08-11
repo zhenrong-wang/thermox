@@ -181,12 +181,22 @@ NonlinearProblem make_stage_problem(
             };
     }
 
+    if (target.structural_jacobian_pattern.has_value()) {
+        stage.structural_jacobian_pattern =
+            make_fixed_pattern_mapping(
+                *target.structural_jacobian_pattern)
+                .pattern;
+    }
+
     if (target.sparse_jacobian_pattern.has_value() &&
         (!uses_informed_residual ||
          target.continuation_sparse_jacobian_values)) {
         const auto mapping = make_fixed_pattern_mapping(
             *target.sparse_jacobian_pattern);
         stage.sparse_jacobian_pattern = mapping.pattern;
+        if (!target.structural_jacobian_pattern.has_value()) {
+            stage.structural_jacobian_pattern = mapping.pattern;
+        }
         stage.sparse_jacobian_values =
             [&target, anchor, mapping, variable_scales,
              residual_scales, parameter,

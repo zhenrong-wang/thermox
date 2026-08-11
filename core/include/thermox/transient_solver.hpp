@@ -83,6 +83,7 @@ struct DaeProblem {
     DaeResidualSubsetFunction residual_subset;
     DaeJacobianFunction jacobian;
     DaeSparseJacobianFunction sparse_jacobian;
+    std::optional<SparsePattern> structural_jacobian_pattern;
     std::optional<SparsePattern> sparse_jacobian_pattern;
     DaeSparseJacobianValuesFunction sparse_jacobian_values;
     DaeSparseJacobianValuesSubsetFunction

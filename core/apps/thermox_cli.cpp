@@ -14,11 +14,11 @@ void print_usage(std::ostream& out) {
     out << "Usage:\n"
         << "  thermox_cli solve --model <path> [--case <id>]"
            " [--continuation]"
-           " [--structural-policy automatic|monolithic|blocks]"
+           " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
            " --end-time <seconds>"
-           " [--structural-policy automatic|monolithic|blocks]"
+           " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n";
 }
 

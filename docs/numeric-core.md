@@ -65,8 +65,12 @@ retains this report before choosing a fixed or hybrid Jacobian representation, a
 exposes every block plus the largest block size. Fixed-pattern problems with row-selective
 callbacks can execute those blocks in dependency order under the configured structural policy.
 Within each cyclic block, analysis also exposes a deterministic feedback-variable suggestion whose
-removal is verified to leave the matched dependency graph acyclic; numerical tearing does not yet
-consume that suggestion.
+removal is verified to leave the matched dependency graph acyclic. The explicit `tearing` policy
+uses that partition at the linearized Newton level: it eliminates the inner variables, solves the
+Schur complement in the tear variables, reconstructs the complete step, and applies the ordinary
+whole-system backward-error and nonlinear line-search checks. A singular or inaccurate structural
+partition deterministically falls back to the ordinary full linear solve. This exact linearized
+path does not introduce a separate nested nonlinear branch-selection contract.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,
@@ -214,7 +218,10 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
   well-determined regions and exposes dependency-ordered irreducible blocks. Fixed-pattern
   dependency-ordered execution is opt-in. Each irreducible block also reports a deterministic
   structural feedback-variable suggestion whose removal is verified to make the matched dependency
-  graph acyclic. This remains diagnostic metadata: it does not claim that numerical tearing is safe.
+  graph acyclic. Exact Schur tearing is explicitly selectable; automatic policy does not enable it.
+- Structural incidence and numeric Jacobian storage are separate contracts. Hybrid derivative
+  problems may declare a conservative incidence pattern without pretending to provide fixed CSR
+  values.
 - Custom problems without row-selective callbacks invoke their full residual and fixed-pattern
   value callbacks before restricting the returned rows. Informed-continuation Jacobian transforms
   also currently use that fallback. Block mode therefore does not guarantee a speedup for every

@@ -1135,6 +1135,12 @@ void test_mixed_derivative_equation_system_stays_sparse() {
     const auto problem = system.build();
     require(static_cast<bool>(problem.partial_sparse_jacobian),
             "mixed derivative system exposes partial sparse assembly");
+    require(
+        !problem.sparse_jacobian_pattern.has_value() &&
+            problem.structural_jacobian_pattern.has_value() &&
+            thermox::analyze_problem_structure(problem)
+                .structurally_nonsingular,
+        "hybrid derivatives retain complete structural incidence without claiming fixed CSR values");
     require(problem.analytic_jacobian_rows == std::vector<bool>({true, false}),
             "mixed derivative system records analytic rows");
     const auto result = thermox::solve_newton(problem);
@@ -1387,6 +1393,86 @@ void test_structural_analysis_suggests_verified_feedback_set() {
                 std::vector<std::string>{"alpha", "beta"} &&
             dense.structural_blocks[0].acyclic_after_suggested_tears,
         "dense three-variable feedback requires two suggested tears");
+}
+
+void test_newton_executes_exact_structural_tearing_step() {
+    thermox::EquationSystemBuilder system;
+    const auto x = system.add_variable("x", 0.0);
+    const auto y = system.add_variable("y", 0.0);
+    const auto z = system.add_variable("z", 0.0);
+    system.add_linear_equation(
+        "balance_x", {{x, 3.0}, {y, 1.0}, {z, -1.0}}, 4.0);
+    system.add_linear_equation(
+        "balance_y", {{x, 1.0}, {y, 4.0}, {z, 1.0}}, 12.0);
+    system.add_linear_equation(
+        "balance_z", {{x, -1.0}, {y, 1.0}, {z, 5.0}}, 16.0);
+    const auto problem = system.build();
+
+    thermox::SolverOptions monolithic_options;
+    monolithic_options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::monolithic;
+    const auto monolithic = thermox::solve_newton(
+        problem, monolithic_options);
+    thermox::SolverOptions tearing_options = monolithic_options;
+    tearing_options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::tearing;
+    const auto torn = thermox::solve_newton(
+        problem, tearing_options);
+
+    require(
+        monolithic.diagnostics.converged &&
+            torn.diagnostics.converged,
+        "monolithic and structurally torn Newton solves converge");
+    for (std::size_t index = 0; index < torn.x.size(); ++index) {
+        require_near(
+            torn.x[index], monolithic.x[index], 1.0e-12,
+            "Schur tearing preserves the monolithic Newton solution");
+    }
+    require(
+        torn.diagnostics.linear_solver_backend ==
+                "structural-schur/reference-dense" &&
+            torn.diagnostics.largest_linear_system_size == 2 &&
+            torn.diagnostics.linear_solver_evaluations == 4 &&
+            torn.diagnostics.maximum_linear_backward_error <=
+                tearing_options.linear_residual_tolerance,
+        "tearing reports its reduced inner and outer linear solves");
+}
+
+void test_structural_tearing_falls_back_on_numeric_rank_loss() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"x", "y", "z"};
+    problem.residual_names = {"rx", "ry", "rz"};
+    problem.initial_guess = {0.0, 0.0, 0.0};
+    problem.checked_residual = [](
+        const std::vector<double>& state,
+        std::vector<double>& residual) {
+        residual[0] = state[0] - 1.0;
+        residual[1] = state[1] + state[2] - 5.0;
+        residual[2] = state[2] - 3.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.sparse_jacobian_pattern = thermox::SparsePattern(
+        3, 3, {0, 3, 6, 9}, {0, 1, 2, 0, 1, 2, 0, 1, 2});
+    problem.sparse_jacobian_values = [](
+        const std::vector<double>&,
+        std::vector<double>& values) {
+        values = {1.0, 0.0, 0.0,
+                  0.0, 1.0, 1.0,
+                  0.0, 0.0, 1.0};
+    };
+    thermox::SolverOptions options;
+    options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::tearing;
+    const auto solved = thermox::solve_newton(problem, options);
+    require(
+        solved.diagnostics.converged &&
+            solved.diagnostics.linear_solver_backend.starts_with(
+                "structural-schur-fallback/") &&
+            solved.diagnostics.largest_linear_system_size == 3,
+        "numeric rank loss in a structural partition falls back to the full solve");
+    require_near(solved.x[0], 1.0, 1.0e-12, "fallback solves x");
+    require_near(solved.x[1], 2.0, 1.0e-12, "fallback solves y");
+    require_near(solved.x[2], 3.0, 1.0e-12, "fallback solves z");
 }
 
 void test_newton_solves_dependency_ordered_structural_blocks() {
@@ -1907,6 +1993,8 @@ int main() {
         test_structural_analysis_localizes_singular_regions();
         test_structural_analysis_orders_irreducible_blocks();
         test_structural_analysis_suggests_verified_feedback_set();
+        test_newton_executes_exact_structural_tearing_step();
+        test_structural_tearing_falls_back_on_numeric_rank_loss();
         test_newton_solves_dependency_ordered_structural_blocks();
         test_automatic_structural_policy_keeps_custom_callbacks_monolithic();
         test_linear_equation_builder_certifies_automatic_blocks();
