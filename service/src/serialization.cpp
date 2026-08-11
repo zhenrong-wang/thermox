@@ -2523,6 +2523,75 @@ std::string serialize_result_summary_json(
     return out.str();
 }
 
+std::string serialize_validation_evidence_summary_json(
+    const ValidationEvidenceSummary& summary) {
+    validate_validation_evidence_summary(summary);
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, summary.schema_version);
+    out << ",\n  \"passed\": "
+        << (summary.passed ? "true" : "false")
+        << ",\n  \"passed_count\": " << summary.passed_count
+        << ",\n  \"failed_count\": " << summary.failed_count
+        << ",\n  \"evidence_classes\": [";
+    for (std::size_t index = 0;
+         index < summary.classes.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& item = summary.classes[index];
+        out << "{\"basis\": ";
+        json_string(out, to_string(item.basis));
+        out << ", \"passed_count\": " << item.passed_count
+            << ", \"failed_count\": " << item.failed_count
+            << '}';
+    }
+    out << "],\n  \"criteria\": [";
+    for (std::size_t index = 0;
+         index < summary.criteria.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& criterion = summary.criteria[index];
+        out << "{\"criterion_id\": ";
+        json_string(out, criterion.criterion_id);
+        out << ", \"observed_value_id\": ";
+        json_string(out, criterion.observed_value_id);
+        out << ", \"layer\": ";
+        json_string(out, to_string(criterion.layer));
+        out << ", \"basis\": ";
+        json_string(out, to_string(criterion.basis));
+        out << ", \"dimension\": ";
+        json_string(out, criterion.dimension);
+        out << ", \"actual_value_si\": ";
+        json_number(out, criterion.actual_value_si);
+        out << ", \"reference_value_si\": ";
+        json_number(out, criterion.reference_value_si);
+        out << ", \"signed_error_si\": ";
+        json_number(out, criterion.signed_error_si);
+        out << ", \"absolute_error_si\": ";
+        json_number(out, criterion.absolute_error_si);
+        out << ", \"relative_error\": ";
+        if (criterion.relative_error) {
+            json_number(out, *criterion.relative_error);
+        } else {
+            out << "null";
+        }
+        out << ", \"allowed_absolute_error_si\": ";
+        json_number(out, criterion.allowed_absolute_error_si);
+        out << ", \"source_reference\": ";
+        json_string(out, criterion.source_reference);
+        out << ", \"note\": ";
+        json_string(out, criterion.note);
+        out << ", \"passed\": "
+            << (criterion.passed ? "true" : "false") << '}';
+    }
+    out << "],\n  \"limitations\": [";
+    for (std::size_t index = 0;
+         index < summary.limitations.size(); ++index) {
+        if (index != 0) out << ", ";
+        json_string(out, summary.limitations[index]);
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_job_record_json(
     const SimulationJobRecord& record) {
     std::ostringstream out;

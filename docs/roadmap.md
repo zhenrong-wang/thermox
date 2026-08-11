@@ -652,6 +652,9 @@ Work items:
 11. Multi-user auth, authorization, project isolation, audit logs.
 12. Scalable job workers and deployment automation.
 13. Extended benchmark suite against published/reference examples.
+   - transport-neutral classified validation-evidence contract separating independent,
+     boundary-constrained, calibrated, derived, internal-consistency, and assumption-dependent
+     comparisons with explicit source and limitation evidence; ✅
    - NETL 2025 Case B31A aggregate HRSG boundary audit with independently reconstructed
      water/steam duty, Cantera exhaust properties, explicit numerical/external tolerances, and a
      service-level regression test; ✅

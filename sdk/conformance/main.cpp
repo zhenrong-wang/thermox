@@ -1,4 +1,5 @@
 #include "thermox/service/native_extension_sdk.hpp"
+#include "thermox/service/validation_evidence.hpp"
 #include "thermox/equation_system.hpp"
 #include "thermox/solver_policy_benchmark.hpp"
 
@@ -290,4 +291,22 @@ int main() {
     require(
         policy_benchmark.all_policies_equivalent_to_monolithic,
         "installed structural policy benchmark contract failed");
+
+    const auto evidence = service::evaluate_validation_evidence(
+        {{"fixture_value", "dimensionless", 1.0}},
+        {{
+            "fixture_identity_evidence",
+            "fixture_value",
+            service::ValidationEvidenceLayer::numerical,
+            service::ValidationEvidenceBasis::internal_consistency,
+            "dimensionless",
+            1.0,
+            0.0,
+            0.0,
+            "SDK conformance fixture",
+            "Verifies the installed validation evidence contract.",
+        }});
+    require(
+        evidence.passed && evidence.passed_count == 1U,
+        "installed validation evidence contract failed");
 }

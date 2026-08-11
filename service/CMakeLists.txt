@@ -13,6 +13,7 @@ add_library(thermox_service
     src/simulation_jobs.cpp
     src/simulation_runtime.cpp
     src/simulation_service.cpp
+    src/validation_evidence.cpp
 )
 add_library(thermox::service ALIAS thermox_service)
 set_target_properties(

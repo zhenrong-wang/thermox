@@ -397,6 +397,11 @@ Model-oriented clients can invoke the same capability through
 `SimulationService::run_structural_policy_audit` or the development-only synchronous route
 `POST /api/v1/simulations/structural-policy-audit?case_id=...&policies=monolithic,tearing`.
 
+Engineering benchmarks use the separate `thermox.validation_evidence/v1` service contract to
+classify each dimensioned comparison as independent, boundary-constrained, calibrated, derived,
+internal consistency, or assumption-dependent. Numeric agreement never upgrades its own evidence
+class, and explicit data limitations remain part of the serialized summary.
+
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,
 derived-property evaluation, provenance, and JSON result construction belong to the service.

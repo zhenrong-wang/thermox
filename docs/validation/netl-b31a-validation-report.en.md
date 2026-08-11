@@ -3,8 +3,8 @@
 ## NETL Case B31A Natural-Gas Combined Cycle
 
 **Document status:** Engineering review draft<br>
-**Revision:** 1<br>
-**Date:** 3 August 2026<br>
+**Revision:** 2<br>
+**Date:** 11 August 2026<br>
 **Thermox validation baseline:** commit `fc87fa6`<br>
 **Language:** English
 
@@ -91,6 +91,17 @@ example, the HP/IP/LP isentropic efficiencies reproduce the design-point outlet
 states used to derive them. The connected topology, mixing, leakage routing,
 mass balance, property evaluation, and power aggregation remain meaningful
 tests, but off-design prediction requires independent data.
+
+The executable regressions encode these distinctions through
+`thermox.validation_evidence/v1`. Each dimensioned comparison carries a layer,
+source reference, tolerance, explicit limitations, and one evidence basis:
+independent reference, boundary constrained, calibrated reproduction, derived
+reference, internal consistency, or assumption dependent. Classification does
+not change a numeric verdict, and a passing comparison cannot promote itself to
+a stronger evidence class. In this report, the IF97 enthalpy comparisons are
+independent published-output checks, the aggregate HRSG temperature comparison
+is boundary constrained, the steam-train power comparison is calibrated, and
+scaled equation closure is internal consistency.
 
 ## 4. Platform elements under test
 

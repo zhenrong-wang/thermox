@@ -112,6 +112,15 @@ These checks are executable service regressions. Numerical residual limits,
 property agreement tolerances, and source-balance tolerances are separate
 assertions so one category cannot conceal another.
 
+The regressions now also evaluate the generic
+`thermox.validation_evidence/v1` contract. Steam-state enthalpies are classified
+as independent published-output comparisons because enthalpy is not imposed on
+the PT state solve. The aggregate HRSG stack-temperature comparison is
+classified as boundary-constrained, and steam-train power is classified as a
+calibrated reproduction. Numerical closure is recorded separately as internal
+consistency. Passing these checks therefore cannot be serialized or reported
+as a stronger evidence class than the calculation actually supports.
+
 ## Decomposed steam-turbine train
 
 `steam_turbine_train.json` replaces the aggregate steam-power arithmetic with a

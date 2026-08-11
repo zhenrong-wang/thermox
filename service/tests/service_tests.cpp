@@ -4,6 +4,7 @@
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/validation_evidence.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1578,7 +1579,7 @@ void test_cantera_brayton_integration_benchmark() {
                 compressor_shaft.primary_values, "W_dot")
                     .value_si -
             34.80152099e6) < 100.0,
-        "Brayton compressor power must match the independent "
+        "Brayton compressor power must match the standalone "
         "Cantera reference");
     require(
         std::abs(
@@ -1586,7 +1587,7 @@ void test_cantera_brayton_integration_benchmark() {
                 turbine_shaft.primary_values, "W_dot")
                     .value_si -
             69.86066885e6) < 100.0,
-        "Brayton turbine power must match the independent "
+        "Brayton turbine power must match the standalone "
         "Cantera reference");
     require(
         std::abs(
@@ -1602,15 +1603,127 @@ void test_cantera_brayton_integration_benchmark() {
                     .value_si -
             1418.696978) < 1.0e-3,
         "Brayton equilibrium firing temperature must match the "
-        "independent Cantera reference");
+        "standalone Cantera reference");
     require(
         std::abs(
             require_result_value(
                 turbine_outlet.derived_values, "T")
                     .value_si -
             864.300347) < 1.0e-3,
-        "Brayton exhaust temperature must match the independent "
+        "Brayton exhaust temperature must match the standalone "
         "Cantera reference");
+    const auto benchmark_summary =
+        thermox::service::project_steady_result(
+            response.graph,
+            {
+                {
+                    "net_electric_power",
+                    thermox::service::ResultValueScope::port_primary,
+                    "generator",
+                    "electrical",
+                    "P",
+                    "power",
+                    thermox::service::ResultAggregation::final,
+                },
+                {
+                    "turbine_inlet_temperature",
+                    thermox::service::ResultValueScope::port_derived,
+                    "combustor",
+                    "outlet",
+                    "T",
+                    "temperature",
+                    thermox::service::ResultAggregation::final,
+                },
+                {
+                    "turbine_exhaust_temperature",
+                    thermox::service::ResultValueScope::port_derived,
+                    "turbine",
+                    "outlet",
+                    "T",
+                    "temperature",
+                    thermox::service::ResultAggregation::final,
+                },
+            });
+    auto benchmark_observations = thermox::service::
+        validation_observations_from_result_summary(
+            benchmark_summary);
+    benchmark_observations.push_back({
+        "normalized_residual",
+        "dimensionless",
+        response.diagnostics.final_residual_norm,
+    });
+    const auto evidence =
+        thermox::service::evaluate_validation_evidence(
+            benchmark_observations,
+            {
+                {
+                    "brayton_net_power_reference",
+                    "net_electric_power",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        derived_reference,
+                    "power",
+                    33.84513305e6,
+                    100.0,
+                    0.0,
+                    "Standalone direct Cantera calculation",
+                    "Uses the same thermochemistry mechanism as the "
+                    "registered property path.",
+                },
+                {
+                    "brayton_firing_temperature_reference",
+                    "turbine_inlet_temperature",
+                    thermox::service::ValidationEvidenceLayer::component,
+                    thermox::service::ValidationEvidenceBasis::
+                        derived_reference,
+                    "temperature",
+                    1418.696978,
+                    1.0e-3,
+                    0.0,
+                    "Standalone direct Cantera calculation",
+                    "Verifies graph integration rather than an external "
+                    "OEM combustor test.",
+                },
+                {
+                    "brayton_exhaust_temperature_reference",
+                    "turbine_exhaust_temperature",
+                    thermox::service::ValidationEvidenceLayer::component,
+                    thermox::service::ValidationEvidenceBasis::
+                        derived_reference,
+                    "temperature",
+                    864.300347,
+                    1.0e-3,
+                    0.0,
+                    "Standalone direct Cantera calculation",
+                    "Verifies component composition and property calls.",
+                },
+                {
+                    "brayton_numerical_closure",
+                    "normalized_residual",
+                    thermox::service::ValidationEvidenceLayer::numerical,
+                    thermox::service::ValidationEvidenceBasis::
+                        internal_consistency,
+                    "dimensionless",
+                    0.0,
+                    1.0e-10,
+                    0.0,
+                    "Thermox scaled equation system",
+                    "Closure is not external cycle validation.",
+                },
+            },
+            {
+                "The reference uses the same Cantera mechanism and is "
+                "not an independent property source.",
+                "The design point specifies component pressure ratios "
+                "and efficiencies rather than OEM maps.",
+            });
+    require(
+        evidence.passed && evidence.passed_count == 4U &&
+            evidence.classes.front().passed_count == 0U &&
+            evidence.classes[3].passed_count == 3U &&
+            evidence.classes[4].passed_count == 1U,
+        "Brayton evidence must remain derived integration evidence, "
+        "not be promoted to independent OEM validation");
 }
 
 void test_netl_b31a_hrsg_boundary_benchmark() {
@@ -1665,6 +1778,70 @@ void test_netl_b31a_hrsg_boundary_benchmark() {
         "steam-side heat recovery must predict the published 79 "
         "degC stack temperature within the declared 7 K boundary "
         "audit tolerance");
+    const auto projected = thermox::service::project_steady_result(
+        response.graph,
+        {{
+            "stack_temperature",
+            thermox::service::ResultValueScope::port_derived,
+            "aggregate_hrsg",
+            "outlet",
+            "T",
+            "temperature",
+            thermox::service::ResultAggregation::final,
+        }});
+    auto observations = thermox::service::
+        validation_observations_from_result_summary(projected);
+    observations.push_back({
+        "normalized_residual",
+        "dimensionless",
+        response.diagnostics.final_residual_norm,
+    });
+    const auto evidence =
+        thermox::service::evaluate_validation_evidence(
+            observations,
+            {
+                {
+                    "stack_temperature_boundary_agreement",
+                    "stack_temperature",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        boundary_constrained,
+                    "temperature",
+                    352.15,
+                    7.0,
+                    0.0,
+                    "NETL B31A Exhibit 4-8 stack temperature",
+                    "The calculation is driven by the published "
+                    "design-point steam-side heat duty.",
+                },
+                {
+                    "scaled_equation_closure",
+                    "normalized_residual",
+                    thermox::service::ValidationEvidenceLayer::numerical,
+                    thermox::service::ValidationEvidenceBasis::
+                        internal_consistency,
+                    "dimensionless",
+                    0.0,
+                    1.0e-10,
+                    0.0,
+                    "Thermox scaled equation system",
+                    "Numerical closure is separate from external "
+                    "engineering agreement.",
+                },
+            },
+            {
+                "The published gas-side and steam-side HRSG duties "
+                "differ by 26.035 GJ/h.",
+                "No detailed HRSG geometry or off-design correlations "
+                "are published.",
+            });
+    require(
+        evidence.passed && evidence.passed_count == 2U &&
+            evidence.classes.front().passed_count == 0U &&
+            evidence.classes[1].passed_count == 1U &&
+            evidence.classes[4].passed_count == 1U,
+        "B31A HRSG evidence must pass without being mislabeled as "
+        "independent predictive validation");
 
     constexpr const char* species[] = {
         "m_dot[O2]", "m_dot[H2O]", "m_dot[CO2]",
@@ -2420,6 +2597,10 @@ void test_netl_b31a_steam_stream_property_benchmark() {
         {"stream_9", 3071.95e3, 1.9, 0.1},
         {"stream_11", 160.78e3, 992.8, 0.3},
     };
+    std::vector<thermox::service::ResultProjection>
+        enthalpy_projections;
+    std::vector<thermox::service::ValidationEvidenceCriterion>
+        enthalpy_criteria;
     for (const auto& expected : states) {
         const auto& port = require_port_result(
             response.graph, expected.id, "outlet");
@@ -2439,7 +2620,70 @@ void test_netl_b31a_steam_stream_property_benchmark() {
                     expected.density_tolerance,
             std::string(expected.id) +
                 " IF97 density must agree at published precision");
+        const std::string observation_id =
+            std::string(expected.id) + "_enthalpy";
+        enthalpy_projections.push_back({
+            observation_id,
+            thermox::service::ResultValueScope::port_primary,
+            expected.id,
+            "outlet",
+            "h",
+            "specific_enthalpy",
+            thermox::service::ResultAggregation::final,
+        });
+        enthalpy_criteria.push_back({
+            observation_id + "_agreement",
+            observation_id,
+            thermox::service::ValidationEvidenceLayer::property,
+            thermox::service::ValidationEvidenceBasis::
+                independent_reference,
+            "specific_enthalpy",
+            expected.enthalpy_j_kg,
+            2500.0,
+            0.0,
+            "NETL B31A published steam-stream table",
+            "Published enthalpy is not imposed on the PT state solve.",
+        });
     }
+
+    const auto property_summary =
+        thermox::service::project_steady_result(
+            response.graph, enthalpy_projections);
+    auto property_observations = thermox::service::
+        validation_observations_from_result_summary(property_summary);
+    property_observations.push_back({
+        "normalized_residual",
+        "dimensionless",
+        response.diagnostics.final_residual_norm,
+    });
+    enthalpy_criteria.push_back({
+        "property_state_numerical_closure",
+        "normalized_residual",
+        thermox::service::ValidationEvidenceLayer::numerical,
+        thermox::service::ValidationEvidenceBasis::internal_consistency,
+        "dimensionless",
+        0.0,
+        1.0e-10,
+        0.0,
+        "Thermox scaled equation system",
+        "Closure does not substitute for property agreement.",
+    });
+    const auto property_evidence =
+        thermox::service::evaluate_validation_evidence(
+            property_observations,
+            enthalpy_criteria,
+            {
+                "Published pressures and temperatures have limited "
+                "display precision.",
+                "Steam-table reference conventions may differ from IF97.",
+            });
+    require(
+        property_evidence.passed &&
+            property_evidence.passed_count == 7U &&
+            property_evidence.classes.front().passed_count == 6U &&
+            property_evidence.classes[4].passed_count == 1U,
+        "B31A steam-property evidence must distinguish independent "
+        "published outputs from numerical closure");
 
     const auto& exhaust = require_port_result(
         response.graph, "stream_10", "outlet");
@@ -2487,6 +2731,10 @@ void test_netl_b31a_decomposed_steam_turbine_train() {
          126292155.644046},
     };
     double total_shaft_power = 0.0;
+    std::vector<thermox::service::ResultProjection>
+        stage_power_projections;
+    std::vector<thermox::service::ValidationEvidenceCriterion>
+        stage_power_criteria;
     for (const auto& target : targets) {
         const auto& outlet = require_port_result(
             response.graph, target.id, "outlet");
@@ -2511,6 +2759,30 @@ void test_netl_b31a_decomposed_steam_turbine_train() {
             std::string(target.id) +
                 " shaft balance must remain reproducible");
         total_shaft_power += power;
+        const std::string observation_id =
+            std::string(target.id) + "_shaft_power";
+        stage_power_projections.push_back({
+            observation_id,
+            thermox::service::ResultValueScope::port_primary,
+            target.id,
+            "shaft",
+            "W_dot",
+            "power",
+            thermox::service::ResultAggregation::final,
+        });
+        stage_power_criteria.push_back({
+            observation_id + "_reproduction",
+            observation_id,
+            thermox::service::ValidationEvidenceLayer::component,
+            thermox::service::ValidationEvidenceBasis::
+                calibrated_reproduction,
+            "power",
+            target.shaft_power_w,
+            1.0,
+            0.0,
+            "NETL B31A stage states and calibrated efficiency",
+            "The stage efficiency is fitted from this design point.",
+        });
     }
     require(
         std::abs(total_shaft_power - 278703861.274164) < 1.0,
@@ -2519,6 +2791,64 @@ void test_netl_b31a_decomposed_steam_turbine_train() {
         std::abs(total_shaft_power * 0.975 / 1.0e6 - 272.0) < 0.4,
         "decomposed train must reproduce published generator power "
         "within source/property precision");
+    const auto stage_power_summary =
+        thermox::service::project_steady_result(
+            response.graph, stage_power_projections);
+    auto stage_power_observations = thermox::service::
+        validation_observations_from_result_summary(
+            stage_power_summary);
+    stage_power_observations.push_back({
+        "generator_power",
+        "power",
+        total_shaft_power * 0.975,
+    });
+    stage_power_observations.push_back({
+        "normalized_residual",
+        "dimensionless",
+        response.diagnostics.final_residual_norm,
+    });
+    stage_power_criteria.push_back({
+        "steam_generator_power_reproduction",
+        "generator_power",
+        thermox::service::ValidationEvidenceLayer::system,
+        thermox::service::ValidationEvidenceBasis::
+            calibrated_reproduction,
+        "power",
+        272.0e6,
+        0.4e6,
+        0.0,
+        "NETL B31A steam-turbine generator power",
+        "The same design point determines stage efficiencies.",
+    });
+    stage_power_criteria.push_back({
+        "steam_train_numerical_closure",
+        "normalized_residual",
+        thermox::service::ValidationEvidenceLayer::numerical,
+        thermox::service::ValidationEvidenceBasis::internal_consistency,
+        "dimensionless",
+        0.0,
+        1.0e-10,
+        0.0,
+        "Thermox scaled equation system",
+        "Closure validates execution, not off-design performance.",
+    });
+    const auto train_evidence =
+        thermox::service::evaluate_validation_evidence(
+            stage_power_observations,
+            stage_power_criteria,
+            {
+                "Stage efficiencies are calibrated at the published "
+                "design point.",
+                "The HP leakage state is not independently published.",
+                "No off-design stage-group maps are available.",
+            });
+    require(
+        train_evidence.passed && train_evidence.passed_count == 5U &&
+            train_evidence.classes.front().passed_count == 0U &&
+            train_evidence.classes[2].passed_count == 4U &&
+            train_evidence.classes[4].passed_count == 1U,
+        "B31A steam-train evidence must remain explicitly calibrated "
+        "rather than being promoted to predictive validation");
 
     const auto& cold_reheat = require_port_result(
         response.graph, "cold_reheat", "inlet");
@@ -4417,6 +4747,153 @@ void test_system_agnostic_result_projection() {
         "result projection must reject dimension mismatches");
 }
 
+void test_validation_evidence_contract() {
+    using namespace thermox::service;
+    ResultSummary projected;
+    projected.mode = "steady";
+    projected.values = {
+        {"stack_temperature", "temperature", 357.686,
+         ResultAggregation::final, false, 0.0},
+        {"steam_power", "power", 271.736e6,
+         ResultAggregation::final, false, 0.0},
+        {"normalized_residual", "dimensionless", 4.3e-14,
+         ResultAggregation::final, false, 0.0},
+        {"main_steam_enthalpy", "specific_energy", 3522.653e3,
+         ResultAggregation::final, false, 0.0},
+        {"unpublished_loss", "power", 2.0e6,
+         ResultAggregation::final, false, 0.0},
+    };
+    const std::vector<ValidationEvidenceCriterion> criteria{
+        {
+            "stack_boundary_agreement",
+            "stack_temperature",
+            ValidationEvidenceLayer::system,
+            ValidationEvidenceBasis::boundary_constrained,
+            "temperature",
+            352.15,
+            7.0,
+            0.0,
+            "NETL B31A Exhibit 4-8",
+            "Steam-side duty is a published design-point boundary.",
+        },
+        {
+            "calibrated_steam_power",
+            "steam_power",
+            ValidationEvidenceLayer::system,
+            ValidationEvidenceBasis::calibrated_reproduction,
+            "power",
+            272.0e6,
+            0.4e6,
+            0.0,
+            "NETL B31A power summary",
+            "Stage efficiencies were fitted at this operating point.",
+        },
+        {
+            "numerical_closure",
+            "normalized_residual",
+            ValidationEvidenceLayer::numerical,
+            ValidationEvidenceBasis::internal_consistency,
+            "dimensionless",
+            0.0,
+            1.0e-10,
+            0.0,
+            "Thermox scaled equation system",
+            "Numerical closure is not external physical validation.",
+        },
+        {
+            "if97_main_steam",
+            "main_steam_enthalpy",
+            ValidationEvidenceLayer::property,
+            ValidationEvidenceBasis::independent_reference,
+            "specific_energy",
+            3520.51e3,
+            2500.0,
+            0.0,
+            "NETL B31A stream 5 enthalpy",
+            "Published enthalpy is not imposed on the PT state solve.",
+        },
+        {
+            "assumed_unpublished_loss",
+            "unpublished_loss",
+            ValidationEvidenceLayer::component,
+            ValidationEvidenceBasis::assumption_dependent,
+            "power",
+            0.0,
+            1.0e6,
+            0.0,
+            "No published equipment loss allocation",
+            "Deliberately fails to keep the assumption visible.",
+        },
+    };
+    const auto evidence = evaluate_validation_evidence(
+        validation_observations_from_result_summary(projected),
+        criteria,
+        {
+            "No gas-turbine compressor or turbine maps are published.",
+            "Calibrated stage efficiencies do not validate off-design prediction.",
+        });
+    const auto class_for = [&](ValidationEvidenceBasis basis)
+        -> const ValidationEvidenceClassSummary& {
+        const auto found = std::find_if(
+            evidence.classes.begin(), evidence.classes.end(),
+            [&](const auto& item) { return item.basis == basis; });
+        require(found != evidence.classes.end(),
+                "missing validation evidence class summary");
+        return *found;
+    };
+    require(
+        !evidence.passed && evidence.passed_count == 4U &&
+            evidence.failed_count == 1U &&
+            class_for(ValidationEvidenceBasis::independent_reference)
+                    .passed_count == 1U &&
+            class_for(ValidationEvidenceBasis::calibrated_reproduction)
+                    .passed_count == 1U &&
+            class_for(ValidationEvidenceBasis::assumption_dependent)
+                    .failed_count == 1U &&
+            evidence.criteria.front().signed_error_si > 5.0 &&
+            evidence.criteria.front().passed &&
+            evidence.limitations.size() == 2U,
+        "validation evidence must preserve numeric verdicts, evidence "
+        "independence, and explicit limitations");
+    const auto json = serialize_validation_evidence_summary_json(
+        evidence);
+    require(
+        json.find("\"schema_version\": "
+                  "\"thermox.validation_evidence/v1\"") !=
+                std::string::npos &&
+            json.find("\"basis\": \"independent_reference\"") !=
+                std::string::npos &&
+            json.find("\"basis\": \"calibrated_reproduction\"") !=
+                std::string::npos &&
+            json.find("\"limitations\": [") !=
+                std::string::npos,
+        "validation evidence JSON must retain classification and limits");
+
+    bool missing_rejected = false;
+    try {
+        (void)evaluate_validation_evidence({}, criteria);
+    } catch (const ValidationEvidenceError& error) {
+        missing_rejected =
+            std::string(error.what()).find("missing observation") !=
+            std::string::npos;
+    }
+    require(
+        missing_rejected,
+        "validation evidence must reject missing observed values");
+
+    auto inconsistent = evidence;
+    ++inconsistent.classes.front().passed_count;
+    bool inconsistent_rejected = false;
+    try {
+        validate_validation_evidence_summary(inconsistent);
+    } catch (const ValidationEvidenceError&) {
+        inconsistent_rejected = true;
+    }
+    require(
+        inconsistent_rejected,
+        "durable validation evidence must reject reclassified counts");
+}
+
 }  // namespace
 
 int main() {
@@ -4466,6 +4943,7 @@ int main() {
         test_structured_compilation_failure();
         test_invalid_solver_settings();
         test_system_agnostic_result_projection();
+        test_validation_evidence_contract();
         std::cout << "thermox service tests passed\n";
         return 0;
     } catch (const std::exception& ex) {
