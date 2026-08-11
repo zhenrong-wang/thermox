@@ -22,6 +22,13 @@ function steadyResult(): SimulationResult {
       maximum_linear_backward_error: 8e-15,
       structural_block_solves: 4,
       largest_linear_system_size: 12,
+      structural_tearing_attempts: 3,
+      structural_tearing_successes: 3,
+      structural_tearing_fallbacks: 0,
+      largest_tearing_inner_system_size: 10,
+      largest_tearing_outer_system_size: 2,
+      largest_tearing_inner_nonzero_count: 28,
+      last_structural_tearing_fallback: '',
       failed_structural_block: '',
       function_evaluations: 11,
       jacobian_evaluations: 4,
@@ -66,6 +73,10 @@ describe('resultDiagnosticSummary', () => {
       label: 'Largest linear system',
       value: '12',
     })
+    expect(summary.facts).toContainEqual({
+      label: 'Tearing success / attempts',
+      value: '3 / 3',
+    })
   })
 
   it('surfaces transient integration evidence', () => {
@@ -97,6 +108,13 @@ describe('resultDiagnosticSummary', () => {
         maximum_linear_backward_error: 7e-14,
         structural_block_solves: 30,
         largest_linear_system_size: 8,
+        structural_tearing_attempts: 20,
+        structural_tearing_successes: 19,
+        structural_tearing_fallbacks: 1,
+        largest_tearing_inner_system_size: 7,
+        largest_tearing_outer_system_size: 1,
+        largest_tearing_inner_nonzero_count: 18,
+        last_structural_tearing_fallback: 'inner rank failure',
         message: 'integration complete',
       },
     } satisfies SimulationResult
@@ -117,6 +135,10 @@ describe('resultDiagnosticSummary', () => {
     expect(summary.facts).toContainEqual({
       label: 'Worst linear error',
       value: '7.000e-14',
+    })
+    expect(summary.facts).toContainEqual({
+      label: 'Tearing fallbacks',
+      value: '1',
     })
   })
 

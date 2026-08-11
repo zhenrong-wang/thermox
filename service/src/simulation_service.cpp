@@ -65,6 +65,11 @@ void populate_structural_blocks(
             block.residual_names,
             block.suggested_tear_variable_names,
             block.acyclic_after_suggested_tears,
+            block.structural_nonzero_count,
+            block.suggested_inner_variable_count,
+            block.suggested_inner_nonzero_count,
+            block.suggested_tear_coupling_nonzero_count,
+            block.suggested_dense_schur_entry_count,
         });
     }
 }
@@ -1103,8 +1108,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v9"
-            : "thermox.newton/v8",
+            ? "thermox.newton-continuation/v10"
+            : "thermox.newton/v9",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1170,7 +1175,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v9",
+        "thermox.dae-bdf/v10",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1220,6 +1225,13 @@ NonlinearDiagnostics copy_diagnostics(
         source.maximum_linear_backward_error,
         source.structural_block_solves,
         source.largest_linear_system_size,
+        source.structural_tearing_attempts,
+        source.structural_tearing_successes,
+        source.structural_tearing_fallbacks,
+        source.largest_tearing_inner_system_size,
+        source.largest_tearing_outer_system_size,
+        source.largest_tearing_inner_nonzero_count,
+        source.last_structural_tearing_fallback,
         source.failed_structural_block,
         source.linear_solver_backend,
         source.message,
@@ -1250,6 +1262,13 @@ ContinuationRunDiagnostics copy_diagnostics(
             stage.nonlinear.maximum_linear_backward_error,
             stage.nonlinear.structural_block_solves,
             stage.nonlinear.largest_linear_system_size,
+            stage.nonlinear.structural_tearing_attempts,
+            stage.nonlinear.structural_tearing_successes,
+            stage.nonlinear.structural_tearing_fallbacks,
+            stage.nonlinear.largest_tearing_inner_system_size,
+            stage.nonlinear.largest_tearing_outer_system_size,
+            stage.nonlinear.largest_tearing_inner_nonzero_count,
+            stage.nonlinear.last_structural_tearing_fallback,
             stage.nonlinear.failed_structural_block,
             stage.nonlinear.message,
         });
@@ -1271,6 +1290,13 @@ TimeIntegrationDiagnostics copy_diagnostics(
         source.maximum_linear_backward_error,
         source.structural_block_solves,
         source.largest_linear_system_size,
+        source.structural_tearing_attempts,
+        source.structural_tearing_successes,
+        source.structural_tearing_fallbacks,
+        source.largest_tearing_inner_system_size,
+        source.largest_tearing_outer_system_size,
+        source.largest_tearing_inner_nonzero_count,
+        source.last_structural_tearing_fallback,
         source.linear_solver_backend,
         source.final_time,
         source.last_step,

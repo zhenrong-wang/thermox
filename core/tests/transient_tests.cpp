@@ -144,6 +144,10 @@ void test_dae_equation_system_builder() {
         torn.diagnostics.success &&
             torn.diagnostics.linear_solver_backend.starts_with(
                 "structural-schur/") &&
+            torn.diagnostics.structural_tearing_attempts > 0 &&
+            torn.diagnostics.structural_tearing_successes ==
+                torn.diagnostics.structural_tearing_attempts &&
+            torn.diagnostics.structural_tearing_fallbacks == 0 &&
             torn.diagnostics.maximum_linear_backward_error <=
                 tearing_options.nonlinear_options
                     .linear_residual_tolerance,

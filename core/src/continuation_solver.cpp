@@ -444,6 +444,25 @@ void accumulate_diagnostics(
     aggregate.largest_linear_system_size = std::max(
         aggregate.largest_linear_system_size,
         stage.largest_linear_system_size);
+    aggregate.structural_tearing_attempts +=
+        stage.structural_tearing_attempts;
+    aggregate.structural_tearing_successes +=
+        stage.structural_tearing_successes;
+    aggregate.structural_tearing_fallbacks +=
+        stage.structural_tearing_fallbacks;
+    aggregate.largest_tearing_inner_system_size = std::max(
+        aggregate.largest_tearing_inner_system_size,
+        stage.largest_tearing_inner_system_size);
+    aggregate.largest_tearing_outer_system_size = std::max(
+        aggregate.largest_tearing_outer_system_size,
+        stage.largest_tearing_outer_system_size);
+    aggregate.largest_tearing_inner_nonzero_count = std::max(
+        aggregate.largest_tearing_inner_nonzero_count,
+        stage.largest_tearing_inner_nonzero_count);
+    if (!stage.last_structural_tearing_fallback.empty()) {
+        aggregate.last_structural_tearing_fallback =
+            stage.last_structural_tearing_fallback;
+    }
     if (!stage.failed_structural_block.empty()) {
         aggregate.failed_structural_block =
             stage.failed_structural_block;

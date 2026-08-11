@@ -377,10 +377,12 @@ the structural partition loses numerical rank. The reference backend reuses one 
 factorization for the physical RHS and every tear-coupling column; sparse Jacobians retain a CSR
 inner block and reuse one sparse numeric factorization across all right-hand sides. Only the reduced
 Schur system is dense. The same policy applies to `simulate`; results report the executed block
-count and largest linear system. Under automatic/block decomposition, a single irreducible block
+count, largest linear system, tearing attempts/successes/fallbacks, reduced dimensions, and the
+last fallback reason. Under automatic/block decomposition, a single irreducible block
 remains monolithic; explicit tearing can partition it. Validation also
-reports deterministic structural tear-variable hints for cyclic blocks; these are complexity and
-initialization diagnostics unless the explicit tearing policy is selected.
+reports deterministic structural tear-variable hints and raw partition cost counts for cyclic
+blocks; these are complexity and initialization diagnostics unless the explicit tearing policy is
+selected. They are not numerical conditioning claims.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

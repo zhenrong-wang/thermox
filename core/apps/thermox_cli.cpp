@@ -79,6 +79,12 @@ void print_steady_text(
               << response.diagnostics.structural_block_solves << "\n"
               << "largest_linear_system_size: "
               << response.diagnostics.largest_linear_system_size
+              << "\nstructural_tearing_attempts: "
+              << response.diagnostics.structural_tearing_attempts
+              << "\nstructural_tearing_successes: "
+              << response.diagnostics.structural_tearing_successes
+              << "\nstructural_tearing_fallbacks: "
+              << response.diagnostics.structural_tearing_fallbacks
               << "\n";
     if (response.continuation.enabled) {
         std::cout << "continuation_parameter: "
@@ -108,6 +114,12 @@ void print_transient_text(
               << response.diagnostics.structural_block_solves << "\n"
               << "largest_linear_system_size: "
               << response.diagnostics.largest_linear_system_size
+              << "\nstructural_tearing_attempts: "
+              << response.diagnostics.structural_tearing_attempts
+              << "\nstructural_tearing_successes: "
+              << response.diagnostics.structural_tearing_successes
+              << "\nstructural_tearing_fallbacks: "
+              << response.diagnostics.structural_tearing_fallbacks
               << "\n";
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";

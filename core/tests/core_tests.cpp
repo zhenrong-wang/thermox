@@ -1414,7 +1414,14 @@ void test_structural_analysis_suggests_verified_feedback_set() {
         cycle.structural_blocks.size() == 1 &&
             cycle.structural_blocks[0].suggested_tear_variable_names ==
                 std::vector<std::string>{"alpha"} &&
-            cycle.structural_blocks[0].acyclic_after_suggested_tears,
+            cycle.structural_blocks[0].acyclic_after_suggested_tears &&
+            cycle.structural_blocks[0].structural_nonzero_count == 6 &&
+            cycle.structural_blocks[0].suggested_inner_variable_count == 2 &&
+            cycle.structural_blocks[0].suggested_inner_nonzero_count == 3 &&
+            cycle.structural_blocks[0]
+                    .suggested_tear_coupling_nonzero_count == 2 &&
+            cycle.structural_blocks[0]
+                    .suggested_dense_schur_entry_count == 1,
         "one feedback variable breaks a deterministic three-node cycle");
 
     const auto dense = thermox::analyze_incidence_structure(
@@ -1425,7 +1432,14 @@ void test_structural_analysis_suggests_verified_feedback_set() {
         dense.structural_blocks.size() == 1 &&
             dense.structural_blocks[0].suggested_tear_variable_names ==
                 std::vector<std::string>{"alpha", "beta"} &&
-            dense.structural_blocks[0].acyclic_after_suggested_tears,
+            dense.structural_blocks[0].acyclic_after_suggested_tears &&
+            dense.structural_blocks[0].structural_nonzero_count == 9 &&
+            dense.structural_blocks[0].suggested_inner_variable_count == 1 &&
+            dense.structural_blocks[0].suggested_inner_nonzero_count == 1 &&
+            dense.structural_blocks[0]
+                    .suggested_tear_coupling_nonzero_count == 4 &&
+            dense.structural_blocks[0]
+                    .suggested_dense_schur_entry_count == 4,
         "dense three-variable feedback requires two suggested tears");
 }
 
@@ -1470,6 +1484,12 @@ void test_newton_executes_exact_structural_tearing_step() {
             torn.diagnostics.largest_linear_system_size == 2 &&
             torn.diagnostics.linear_solver_evaluations == 2 &&
             torn.diagnostics.numeric_factorizations == 2 &&
+            torn.diagnostics.structural_tearing_attempts == 1 &&
+            torn.diagnostics.structural_tearing_successes == 1 &&
+            torn.diagnostics.structural_tearing_fallbacks == 0 &&
+            torn.diagnostics.largest_tearing_inner_system_size == 1 &&
+            torn.diagnostics.largest_tearing_outer_system_size == 2 &&
+            torn.diagnostics.largest_tearing_inner_nonzero_count == 1 &&
             torn.diagnostics.maximum_linear_backward_error <=
                 tearing_options.linear_residual_tolerance,
         "tearing reports its reduced inner and outer linear solves");
@@ -1505,6 +1525,10 @@ void test_structural_tearing_falls_back_on_numeric_rank_loss() {
         solved.diagnostics.converged &&
             solved.diagnostics.linear_solver_backend.starts_with(
                 "structural-schur-fallback/") &&
+            solved.diagnostics.structural_tearing_attempts == 1 &&
+            solved.diagnostics.structural_tearing_successes == 0 &&
+            solved.diagnostics.structural_tearing_fallbacks == 1 &&
+            !solved.diagnostics.last_structural_tearing_fallback.empty() &&
             solved.diagnostics.largest_linear_system_size == 3,
         "numeric rank loss in a structural partition falls back to the full solve");
     require_near(solved.x[0], 1.0, 1.0e-12, "fallback solves x");

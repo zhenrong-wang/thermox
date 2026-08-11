@@ -1694,6 +1694,16 @@ std::string serialize_validate_response_json(
         }
         out << "], \"acyclic_after_suggested_tears\": "
             << (block.acyclic_after_suggested_tears ? "true" : "false")
+            << ", \"structural_nonzero_count\": "
+            << block.structural_nonzero_count
+            << ", \"suggested_inner_variable_count\": "
+            << block.suggested_inner_variable_count
+            << ", \"suggested_inner_nonzero_count\": "
+            << block.suggested_inner_nonzero_count
+            << ", \"suggested_tear_coupling_nonzero_count\": "
+            << block.suggested_tear_coupling_nonzero_count
+            << ", \"suggested_dense_schur_entry_count\": "
+            << block.suggested_dense_schur_entry_count
             << "}";
     }
     out << "]"
@@ -1781,6 +1791,22 @@ std::string serialize_steady_response_json(
         << response.diagnostics.structural_block_solves
         << ", \"largest_linear_system_size\": "
         << response.diagnostics.largest_linear_system_size
+        << ", \"structural_tearing_attempts\": "
+        << response.diagnostics.structural_tearing_attempts
+        << ", \"structural_tearing_successes\": "
+        << response.diagnostics.structural_tearing_successes
+        << ", \"structural_tearing_fallbacks\": "
+        << response.diagnostics.structural_tearing_fallbacks
+        << ", \"largest_tearing_inner_system_size\": "
+        << response.diagnostics.largest_tearing_inner_system_size
+        << ", \"largest_tearing_outer_system_size\": "
+        << response.diagnostics.largest_tearing_outer_system_size
+        << ", \"largest_tearing_inner_nonzero_count\": "
+        << response.diagnostics.largest_tearing_inner_nonzero_count
+        << ", \"last_structural_tearing_fallback\": ";
+    json_string(
+        out, response.diagnostics.last_structural_tearing_fallback);
+    out
         << ", \"failed_structural_block\": ";
     json_string(
         out, response.diagnostics.failed_structural_block);
@@ -1835,6 +1861,21 @@ std::string serialize_steady_response_json(
             << stage.structural_block_solves
             << ", \"largest_linear_system_size\": "
             << stage.largest_linear_system_size
+            << ", \"structural_tearing_attempts\": "
+            << stage.structural_tearing_attempts
+            << ", \"structural_tearing_successes\": "
+            << stage.structural_tearing_successes
+            << ", \"structural_tearing_fallbacks\": "
+            << stage.structural_tearing_fallbacks
+            << ", \"largest_tearing_inner_system_size\": "
+            << stage.largest_tearing_inner_system_size
+            << ", \"largest_tearing_outer_system_size\": "
+            << stage.largest_tearing_outer_system_size
+            << ", \"largest_tearing_inner_nonzero_count\": "
+            << stage.largest_tearing_inner_nonzero_count
+            << ", \"last_structural_tearing_fallback\": ";
+        json_string(out, stage.last_structural_tearing_fallback);
+        out
             << ", \"failed_structural_block\": ";
         json_string(out, stage.failed_structural_block);
         out << ", \"message\": ";
@@ -2046,7 +2087,22 @@ std::string serialize_transient_response_json(
     out << ", \"structural_block_solves\": "
         << response.diagnostics.structural_block_solves
         << ", \"largest_linear_system_size\": "
-        << response.diagnostics.largest_linear_system_size;
+        << response.diagnostics.largest_linear_system_size
+        << ", \"structural_tearing_attempts\": "
+        << response.diagnostics.structural_tearing_attempts
+        << ", \"structural_tearing_successes\": "
+        << response.diagnostics.structural_tearing_successes
+        << ", \"structural_tearing_fallbacks\": "
+        << response.diagnostics.structural_tearing_fallbacks
+        << ", \"largest_tearing_inner_system_size\": "
+        << response.diagnostics.largest_tearing_inner_system_size
+        << ", \"largest_tearing_outer_system_size\": "
+        << response.diagnostics.largest_tearing_outer_system_size
+        << ", \"largest_tearing_inner_nonzero_count\": "
+        << response.diagnostics.largest_tearing_inner_nonzero_count
+        << ", \"last_structural_tearing_fallback\": ";
+    json_string(
+        out, response.diagnostics.last_structural_tearing_fallback);
     out << ", \"linear_solver_backend\": ";
     json_string(
         out, response.diagnostics.linear_solver_backend);

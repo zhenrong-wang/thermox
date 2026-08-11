@@ -76,6 +76,11 @@ tear-coupling right-hand sides as one batch before forming the reduced system. C
 dense hooks retain their existing per-right-hand-side behavior. When the evaluated Jacobian is
 sparse, the inner block remains CSR and the sparse backend performs one symbolic/numeric
 factorization followed by multiple back substitutions; only the reduced Schur complement is dense.
+Validation reports the raw full-block incidence count, suggested inner dimension/nonzeros,
+tear-coupling nonzeros, and dense-Schur entry count. Runtime diagnostics separately report tearing
+attempts, successes, fallbacks, maximum inner/outer dimensions, inner storage nonzeros, and the
+last fallback reason. These are measured structural and execution facts; they are deliberately not
+presented as rank or conditioning estimates, and they do not make automatic policy select tearing.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,

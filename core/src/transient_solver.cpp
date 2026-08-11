@@ -804,6 +804,31 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     result.diagnostics
                         .largest_linear_system_size,
                     diagnostics.largest_linear_system_size);
+            result.diagnostics.structural_tearing_attempts +=
+                diagnostics.structural_tearing_attempts;
+            result.diagnostics.structural_tearing_successes +=
+                diagnostics.structural_tearing_successes;
+            result.diagnostics.structural_tearing_fallbacks +=
+                diagnostics.structural_tearing_fallbacks;
+            result.diagnostics.largest_tearing_inner_system_size =
+                std::max(
+                    result.diagnostics
+                        .largest_tearing_inner_system_size,
+                    diagnostics.largest_tearing_inner_system_size);
+            result.diagnostics.largest_tearing_outer_system_size =
+                std::max(
+                    result.diagnostics
+                        .largest_tearing_outer_system_size,
+                    diagnostics.largest_tearing_outer_system_size);
+            result.diagnostics.largest_tearing_inner_nonzero_count =
+                std::max(
+                    result.diagnostics
+                        .largest_tearing_inner_nonzero_count,
+                    diagnostics.largest_tearing_inner_nonzero_count);
+            if (!diagnostics.last_structural_tearing_fallback.empty()) {
+                result.diagnostics.last_structural_tearing_fallback =
+                    diagnostics.last_structural_tearing_fallback;
+            }
             if (diagnostics.linear_solver_backend !=
                 "not-used") {
                 result.diagnostics.linear_solver_backend =

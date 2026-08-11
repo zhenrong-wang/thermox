@@ -145,6 +145,13 @@ struct TimeIntegrationDiagnostics {
     double maximum_linear_backward_error{0.0};
     int structural_block_solves{0};
     std::size_t largest_linear_system_size{0};
+    int structural_tearing_attempts{0};
+    int structural_tearing_successes{0};
+    int structural_tearing_fallbacks{0};
+    std::size_t largest_tearing_inner_system_size{0};
+    std::size_t largest_tearing_outer_system_size{0};
+    std::size_t largest_tearing_inner_nonzero_count{0};
+    std::string last_structural_tearing_fallback;
     std::string linear_solver_backend{"not-used"};
     double final_time{0.0};
     double last_step{0.0};

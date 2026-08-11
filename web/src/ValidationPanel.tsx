@@ -87,6 +87,16 @@ export function ValidationPanel({
     compilation?.structural_blocks.flatMap(
       (block) => block.suggested_tear_variable_names,
     ) ?? []
+  const suggestedSchurEntries =
+    compilation?.structural_blocks.reduce(
+      (total, block) => total + block.suggested_dense_schur_entry_count,
+      0,
+    ) ?? 0
+  const suggestedInnerNonzeros =
+    compilation?.structural_blocks.reduce(
+      (total, block) => total + block.suggested_inner_nonzero_count,
+      0,
+    ) ?? 0
 
   return (
     <section className="validation-panel">
@@ -189,7 +199,9 @@ export function ValidationPanel({
               <strong>{compilation?.largest_structural_block_size ?? 0}</strong>
               <span>largest block</span>
             </div>
-            <div title={suggestedTearVariables.join(', ')}>
+            <div
+              title={`${suggestedTearVariables.join(', ')} | suggested inner nnz ${suggestedInnerNonzeros}; dense Schur entries ${suggestedSchurEntries}`}
+            >
               <strong>{suggestedTearVariables.length}</strong>
               <span>structural tear hints</span>
             </div>

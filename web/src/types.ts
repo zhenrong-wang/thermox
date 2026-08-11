@@ -194,6 +194,11 @@ export interface ProjectModelValidation {
         equation_names: string[]
         suggested_tear_variable_names: string[]
         acyclic_after_suggested_tears: boolean
+        structural_nonzero_count: number
+        suggested_inner_variable_count: number
+        suggested_inner_nonzero_count: number
+        suggested_tear_coupling_nonzero_count: number
+        suggested_dense_schur_entry_count: number
       }>
       catalog_fingerprint: string
       reduced_connection_equations: string[]
@@ -683,6 +688,13 @@ export interface SteadySimulationResult {
     maximum_linear_backward_error: number
     structural_block_solves: number
     largest_linear_system_size: number
+    structural_tearing_attempts: number
+    structural_tearing_successes: number
+    structural_tearing_fallbacks: number
+    largest_tearing_inner_system_size: number
+    largest_tearing_outer_system_size: number
+    largest_tearing_inner_nonzero_count: number
+    last_structural_tearing_fallback: string
     failed_structural_block: string
     function_evaluations: number
     jacobian_evaluations: number
@@ -711,6 +723,13 @@ export interface SteadySimulationResult {
       maximum_linear_backward_error: number
       structural_block_solves: number
       largest_linear_system_size: number
+      structural_tearing_attempts: number
+      structural_tearing_successes: number
+      structural_tearing_fallbacks: number
+      largest_tearing_inner_system_size: number
+      largest_tearing_outer_system_size: number
+      largest_tearing_inner_nonzero_count: number
+      last_structural_tearing_fallback: string
       failed_structural_block: string
       message: string
     }>
@@ -755,6 +774,13 @@ export interface TransientSimulationResult {
     maximum_linear_backward_error: number
     structural_block_solves: number
     largest_linear_system_size: number
+    structural_tearing_attempts: number
+    structural_tearing_successes: number
+    structural_tearing_fallbacks: number
+    largest_tearing_inner_system_size: number
+    largest_tearing_outer_system_size: number
+    largest_tearing_inner_nonzero_count: number
+    last_structural_tearing_fallback: string
     message: string
   }
   trajectory: TransientGraphSample[]

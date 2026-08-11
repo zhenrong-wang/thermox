@@ -98,6 +98,14 @@ export function resultDiagnosticSummary(
           value: number(result.diagnostics.structural_block_solves),
         },
         {
+          label: 'Tearing success / attempts',
+          value: `${number(result.diagnostics.structural_tearing_successes)} / ${number(result.diagnostics.structural_tearing_attempts)}`,
+        },
+        {
+          label: 'Tearing fallbacks',
+          value: number(result.diagnostics.structural_tearing_fallbacks),
+        },
+        {
           label: 'Largest linear system',
           value: number(result.diagnostics.largest_linear_system_size),
         },
@@ -139,6 +147,14 @@ export function resultDiagnosticSummary(
       {
         label: 'Structural block solves',
         value: number(result.diagnostics.structural_block_solves),
+      },
+      {
+        label: 'Tearing success / attempts',
+        value: `${number(result.diagnostics.structural_tearing_successes)} / ${number(result.diagnostics.structural_tearing_attempts)}`,
+      },
+      {
+        label: 'Tearing fallbacks',
+        value: number(result.diagnostics.structural_tearing_fallbacks),
       },
       {
         label: 'Largest linear system',

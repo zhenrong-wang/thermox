@@ -570,6 +570,9 @@ Work items:
    - sparse multi-right-hand-side factorization contract and CSR inner Schur elimination, retaining
      symbolic reuse across Newton, continuation, and DAE stages while limiting dense work to the
      reduced tear system; ✅
+   - raw suggested-partition cost metrics plus steady, continuation, and transient runtime tearing
+     success/fallback telemetry, without treating graph shape as numerical conditioning evidence
+     or enabling tearing automatically; ✅
    - nested nonlinear tearing remains a follow-on only if profiling demonstrates a benefit and an
      explicit branch-selection/convergence contract can be justified.
 7. Safe custom equation DSL; no arbitrary user Python in API process.

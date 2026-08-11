@@ -742,6 +742,12 @@ LinearSolveResult solve_linear_system_by_tearing(
     if (inner_rows.size() != inner_columns.size()) {
         return {false, {}, "structural tearing inner partition is not square"};
     }
+    diagnostics.largest_tearing_inner_system_size = std::max(
+        diagnostics.largest_tearing_inner_system_size,
+        inner_rows.size());
+    diagnostics.largest_tearing_outer_system_size = std::max(
+        diagnostics.largest_tearing_outer_system_size,
+        tear_rows.size());
 
     const bool source_is_sparse = jacobian.is_sparse;
     const Matrix dense = source_is_sparse
@@ -866,7 +872,13 @@ LinearSolveResult solve_linear_system_by_tearing(
             std::move(inner_row_offsets),
             std::move(inner_column_indices),
             std::move(inner_values));
+        diagnostics.largest_tearing_inner_nonzero_count = std::max(
+            diagnostics.largest_tearing_inner_nonzero_count,
+            sparse_inner.nonzeros());
     } else {
+        diagnostics.largest_tearing_inner_nonzero_count = std::max(
+            diagnostics.largest_tearing_inner_nonzero_count,
+            inner_rows.size() * inner_columns.size());
         for (std::size_t row = 0;
              row < inner_rows.size(); ++row) {
             for (std::size_t column = 0;
@@ -1576,6 +1588,42 @@ ProblemStructureReport analyze_incidence_structure(
                 variable_names.at(variable));
         }
         block.acyclic_after_suggested_tears = true;
+        std::vector<bool> is_block_variable(
+            report.variable_count, false);
+        std::vector<bool> is_tear_variable(
+            report.variable_count, false);
+        std::vector<bool> is_tear_residual(
+            report.residual_count, false);
+        for (const std::size_t variable : block.variable_indices) {
+            is_block_variable[variable] = true;
+        }
+        for (const std::size_t row : tear_rows) {
+            is_tear_residual[row] = true;
+            is_tear_variable[static_cast<std::size_t>(row_match[row])] =
+                true;
+        }
+        block.suggested_inner_variable_count =
+            block.variable_indices.size() - tear_rows.size();
+        for (const std::size_t row : block.residual_indices) {
+            std::set<std::size_t> unique_columns;
+            for (const std::size_t column :
+                 residual_variable_incidence[row]) {
+                if (!is_block_variable[column] ||
+                    !unique_columns.insert(column).second) {
+                    continue;
+                }
+                ++block.structural_nonzero_count;
+                if (!is_tear_residual[row] &&
+                    !is_tear_variable[column]) {
+                    ++block.suggested_inner_nonzero_count;
+                } else if (is_tear_residual[row] !=
+                           is_tear_variable[column]) {
+                    ++block.suggested_tear_coupling_nonzero_count;
+                }
+            }
+        }
+        block.suggested_dense_schur_entry_count =
+            tear_rows.size() * tear_rows.size();
         report.structural_blocks.push_back(std::move(block));
         for (const std::size_t target :
              block_dependencies[component]) {
@@ -1968,6 +2016,25 @@ void accumulate_block_diagnostics(
     aggregate.largest_linear_system_size = std::max(
         aggregate.largest_linear_system_size,
         block.largest_linear_system_size);
+    aggregate.structural_tearing_attempts +=
+        block.structural_tearing_attempts;
+    aggregate.structural_tearing_successes +=
+        block.structural_tearing_successes;
+    aggregate.structural_tearing_fallbacks +=
+        block.structural_tearing_fallbacks;
+    aggregate.largest_tearing_inner_system_size = std::max(
+        aggregate.largest_tearing_inner_system_size,
+        block.largest_tearing_inner_system_size);
+    aggregate.largest_tearing_outer_system_size = std::max(
+        aggregate.largest_tearing_outer_system_size,
+        block.largest_tearing_outer_system_size);
+    aggregate.largest_tearing_inner_nonzero_count = std::max(
+        aggregate.largest_tearing_inner_nonzero_count,
+        block.largest_tearing_inner_nonzero_count);
+    if (!block.last_structural_tearing_fallback.empty()) {
+        aggregate.last_structural_tearing_fallback =
+            block.last_structural_tearing_fallback;
+    }
     aggregate.final_step_norm = std::max(
         aggregate.final_step_norm, block.final_step_norm);
     if (block.linear_solver_backend != "not-used") {
@@ -1999,6 +2066,25 @@ void prepend_failed_attempt_diagnostics(
     final.largest_linear_system_size = std::max(
         final.largest_linear_system_size,
         attempt.largest_linear_system_size);
+    final.structural_tearing_attempts +=
+        attempt.structural_tearing_attempts;
+    final.structural_tearing_successes +=
+        attempt.structural_tearing_successes;
+    final.structural_tearing_fallbacks +=
+        attempt.structural_tearing_fallbacks;
+    final.largest_tearing_inner_system_size = std::max(
+        final.largest_tearing_inner_system_size,
+        attempt.largest_tearing_inner_system_size);
+    final.largest_tearing_outer_system_size = std::max(
+        final.largest_tearing_outer_system_size,
+        attempt.largest_tearing_outer_system_size);
+    final.largest_tearing_inner_nonzero_count = std::max(
+        final.largest_tearing_inner_nonzero_count,
+        attempt.largest_tearing_inner_nonzero_count);
+    if (!attempt.last_structural_tearing_fallback.empty()) {
+        final.last_structural_tearing_fallback =
+            attempt.last_structural_tearing_fallback;
+    }
     final.history.insert(
         final.history.begin(),
         attempt.history.begin(), attempt.history.end());
@@ -2132,11 +2218,15 @@ NonlinearSolveResult solve_newton_monolithic(
                 options, factorization, std::move(jacobian),
                 std::move(rhs), x.size(), diagnostics);
         } else {
+            ++diagnostics.structural_tearing_attempts;
             linear = solve_linear_system_by_tearing(
                 options, factorization, jacobian, rhs,
                 tear_rows, tear_columns, diagnostics);
             if (!linear.success) {
                 const std::string tearing_failure = linear.message;
+                ++diagnostics.structural_tearing_fallbacks;
+                diagnostics.last_structural_tearing_fallback =
+                    tearing_failure;
                 linear = solve_linear_system(
                     options, factorization, std::move(jacobian),
                     std::move(rhs), x.size(), diagnostics);
@@ -2148,6 +2238,8 @@ NonlinearSolveResult solve_newton_monolithic(
                         tearing_failure + "); full solve also failed: " +
                         linear.message;
                 }
+            } else {
+                ++diagnostics.structural_tearing_successes;
             }
         }
         if (!linear.success) {
