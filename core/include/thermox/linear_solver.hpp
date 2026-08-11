@@ -17,6 +17,15 @@ struct LinearSolveResult {
     int numeric_factorizations{0};
 };
 
+struct MultipleLinearSolveResult {
+    bool success{false};
+    // One solution vector per supplied right-hand side.
+    Matrix x;
+    std::string message;
+    int symbolic_factorizations{0};
+    int numeric_factorizations{0};
+};
+
 class SparseFactorization;
 
 using LinearSolverFunction = std::function<LinearSolveResult(Matrix a, std::vector<double> b)>;

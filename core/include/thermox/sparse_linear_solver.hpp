@@ -15,6 +15,9 @@ public:
     [[nodiscard]] virtual LinearSolveResult solve(
         const SparseMatrix& matrix,
         std::vector<double> rhs) = 0;
+    [[nodiscard]] virtual MultipleLinearSolveResult solve_multiple(
+        const SparseMatrix& matrix,
+        const Matrix& right_hand_sides);
 };
 
 [[nodiscard]] SparseFactorizationPtr

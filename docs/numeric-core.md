@@ -73,7 +73,9 @@ partition deterministically falls back to the ordinary full linear solve. This e
 path does not introduce a separate nested nonlinear branch-selection contract. The reference
 backend factors the inner dense matrix once per Newton linearization and solves the physical and
 tear-coupling right-hand sides as one batch before forming the reduced system. Custom one-shot
-dense hooks retain their existing per-right-hand-side behavior.
+dense hooks retain their existing per-right-hand-side behavior. When the evaluated Jacobian is
+sparse, the inner block remains CSR and the sparse backend performs one symbolic/numeric
+factorization followed by multiple back substitutions; only the reduced Schur complement is dense.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,

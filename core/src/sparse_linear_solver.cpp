@@ -1,5 +1,7 @@
 #include "thermox/sparse_linear_solver.hpp"
 
+#include "thermox/dense_linear_solver.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -64,6 +66,29 @@ std::vector<std::map<std::size_t, double>> to_sparse_rows(const SparseMatrix& ma
 }
 
 }  // namespace
+
+MultipleLinearSolveResult SparseFactorization::solve_multiple(
+    const SparseMatrix& matrix,
+    const Matrix& right_hand_sides) {
+    MultipleLinearSolveResult result;
+    result.x.reserve(right_hand_sides.size());
+    for (const auto& rhs : right_hand_sides) {
+        auto solved = solve(matrix, rhs);
+        result.symbolic_factorizations +=
+            solved.symbolic_factorizations;
+        result.numeric_factorizations +=
+            solved.numeric_factorizations;
+        if (!solved.success) {
+            result.message = solved.message;
+            result.x.clear();
+            return result;
+        }
+        result.x.push_back(std::move(solved.x));
+    }
+    result.success = true;
+    result.message = "ok";
+    return result;
+}
 
 [[maybe_unused]] static LinearSolveResult
 solve_reference_sparse_linear_system(
@@ -194,6 +219,33 @@ public:
         }
         return result;
     }
+
+    MultipleLinearSolveResult solve_multiple(
+        const SparseMatrix& matrix,
+        const Matrix& right_hand_sides) override {
+        DenseLinearFactorization factorization;
+        MultipleLinearSolveResult result;
+        if (!factorization.factorize(matrix.to_dense())) {
+            result.message = factorization.message();
+            result.numeric_factorizations = 1;
+            return result;
+        }
+        const auto solved = factorization.solve_multiple(
+            right_hand_sides);
+        result.numeric_factorizations = 1;
+        result.x.reserve(solved.size());
+        for (const auto& solution : solved) {
+            if (!solution.success) {
+                result.message = solution.message;
+                result.x.clear();
+                return result;
+            }
+            result.x.push_back(solution.x);
+        }
+        result.success = true;
+        result.message = "ok (reference CSR multi-RHS)";
+        return result;
+    }
 };
 
 #if defined(THERMOX_HAS_UMFPACK)
@@ -213,23 +265,42 @@ public:
     LinearSolveResult solve(
         const SparseMatrix& matrix,
         std::vector<double> rhs) override {
-        std::scoped_lock lock(mutex_);
-        const std::size_t n = rhs.size();
-        if (matrix.rows() != n) {
-            return {
-                false, {},
-                "sparse matrix row count does not match RHS size"};
+        auto multiple = solve_multiple(matrix, {std::move(rhs)});
+        LinearSolveResult result;
+        result.success = multiple.success;
+        result.message = std::move(multiple.message);
+        result.symbolic_factorizations =
+            multiple.symbolic_factorizations;
+        result.numeric_factorizations =
+            multiple.numeric_factorizations;
+        if (multiple.success && !multiple.x.empty()) {
+            result.x = std::move(multiple.x.front());
         }
+        return result;
+    }
+
+    MultipleLinearSolveResult solve_multiple(
+        const SparseMatrix& matrix,
+        const Matrix& right_hand_sides) override {
+        std::scoped_lock lock(mutex_);
+        const std::size_t n = matrix.rows();
         if (matrix.columns() != n) {
             return {
                 false, {},
                 "sparse matrix must be square"};
         }
-        for (const double value : rhs) {
-            if (!std::isfinite(value)) {
+        for (const auto& rhs : right_hand_sides) {
+            if (rhs.size() != n) {
                 return {
                     false, {},
-                    "RHS contains a non-finite value"};
+                    "sparse matrix row count does not match RHS size"};
+            }
+            for (const double value : rhs) {
+                if (!std::isfinite(value)) {
+                    return {
+                        false, {},
+                        "RHS contains a non-finite value"};
+                }
             }
         }
         for (const double value : matrix.values()) {
@@ -240,7 +311,9 @@ public:
             }
         }
         if (n == 0) {
-            return {true, {}, "ok (UMFPACK)"};
+            return {
+                true, Matrix(right_hand_sides.size()),
+                "ok (UMFPACK)"};
         }
         if (n > static_cast<std::size_t>(
                     std::numeric_limits<int>::max()) ||
@@ -252,7 +325,7 @@ public:
                 "sparse matrix exceeds UMFPACK integer index range"};
         }
 
-        LinearSolveResult result;
+        MultipleLinearSolveResult result;
         const auto pattern = matrix.pattern();
         if (symbolic_ == nullptr ||
             !same_pattern(pattern_, pattern)) {
@@ -295,17 +368,25 @@ public:
             return result;
         }
 
-        result.x.assign(n, 0.0);
-        const int solve_status = umfpack_di_solve(
-            UMFPACK_A, column_offsets_.data(),
-            row_indices_.data(), values_.data(),
-            result.x.data(), rhs.data(), numeric, nullptr,
-            nullptr);
+        result.x.assign(
+            right_hand_sides.size(),
+            std::vector<double>(n, 0.0));
+        int solve_status = UMFPACK_OK;
+        for (std::size_t index = 0;
+             index < right_hand_sides.size(); ++index) {
+            solve_status = umfpack_di_solve(
+                UMFPACK_A, column_offsets_.data(),
+                row_indices_.data(), values_.data(),
+                result.x[index].data(),
+                right_hand_sides[index].data(),
+                numeric, nullptr, nullptr);
+            if (solve_status != UMFPACK_OK) break;
+        }
         umfpack_di_free_numeric(&numeric);
         if (solve_status != UMFPACK_OK) {
             result.x.clear();
             result.message =
-                "UMFPACK sparse back substitution failed";
+                "UMFPACK sparse multi-RHS back substitution failed";
             return result;
         }
         result.success = true;

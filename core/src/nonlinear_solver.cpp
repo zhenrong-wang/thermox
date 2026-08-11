@@ -702,6 +702,7 @@ LinearSolveResult solve_linear_system(const SolverOptions& options,
 
 LinearSolveResult solve_linear_system_by_tearing(
     const SolverOptions& options,
+    const SparseFactorizationPtr& sparse_factorization,
     EvaluatedJacobian jacobian,
     const std::vector<double>& rhs,
     const std::vector<std::size_t>& tear_rows,
@@ -742,9 +743,11 @@ LinearSolveResult solve_linear_system_by_tearing(
         return {false, {}, "structural tearing inner partition is not square"};
     }
 
-    const Matrix dense = jacobian.is_sparse
-        ? jacobian.sparse.to_dense()
+    const bool source_is_sparse = jacobian.is_sparse;
+    const Matrix dense = source_is_sparse
+        ? Matrix{}
         : std::move(jacobian.dense);
+    std::string inner_backend = "reference-dense";
     const auto solve_dense_partition =
         [&](Matrix matrix, std::vector<double> partition_rhs,
             std::string_view label) {
@@ -797,28 +800,98 @@ LinearSolveResult solve_linear_system_by_tearing(
     std::vector<double> tear_rhs(tear_rows.size(), 0.0);
     for (std::size_t row = 0; row < inner_rows.size(); ++row) {
         inner_rhs[row] = rhs[inner_rows[row]];
-        for (std::size_t column = 0;
-             column < inner_columns.size(); ++column) {
-            inner[row][column] =
-                dense[inner_rows[row]][inner_columns[column]];
-        }
-        for (std::size_t column = 0;
-             column < tear_columns.size(); ++column) {
-            inner_to_tear[row][column] =
-                dense[inner_rows[row]][tear_columns[column]];
-        }
     }
     for (std::size_t row = 0; row < tear_rows.size(); ++row) {
         tear_rhs[row] = rhs[tear_rows[row]];
-        for (std::size_t column = 0;
-             column < inner_columns.size(); ++column) {
-            tear_to_inner[row][column] =
-                dense[tear_rows[row]][inner_columns[column]];
+    }
+    SparseMatrix sparse_inner;
+    if (source_is_sparse) {
+        const std::size_t missing =
+            std::numeric_limits<std::size_t>::max();
+        std::vector<std::size_t> inner_row_position(size, missing);
+        std::vector<std::size_t> inner_column_position(size, missing);
+        std::vector<std::size_t> tear_row_position(size, missing);
+        std::vector<std::size_t> tear_column_position(size, missing);
+        for (std::size_t index = 0; index < inner_rows.size(); ++index) {
+            inner_row_position[inner_rows[index]] = index;
+            inner_column_position[inner_columns[index]] = index;
         }
-        for (std::size_t column = 0;
-             column < tear_columns.size(); ++column) {
-            schur[row][column] =
-                dense[tear_rows[row]][tear_columns[column]];
+        for (std::size_t index = 0; index < tear_rows.size(); ++index) {
+            tear_row_position[tear_rows[index]] = index;
+            tear_column_position[tear_columns[index]] = index;
+        }
+        std::vector<std::size_t> inner_row_offsets(
+            inner_rows.size() + 1U, 0U);
+        std::vector<std::size_t> inner_column_indices;
+        std::vector<double> inner_values;
+        inner_column_indices.reserve(jacobian.sparse.nonzeros());
+        inner_values.reserve(jacobian.sparse.nonzeros());
+        for (std::size_t source_row = 0;
+             source_row < size; ++source_row) {
+            const auto inner_row = inner_row_position[source_row];
+            const auto tear_row = tear_row_position[source_row];
+            for (std::size_t offset =
+                     jacobian.sparse.row_offsets()[source_row];
+                 offset <
+                     jacobian.sparse.row_offsets()[source_row + 1];
+                 ++offset) {
+                const auto source_column =
+                    jacobian.sparse.column_indices()[offset];
+                const auto inner_column =
+                    inner_column_position[source_column];
+                const auto tear_column =
+                    tear_column_position[source_column];
+                const double value = jacobian.sparse.values()[offset];
+                if (inner_row != missing && inner_column != missing) {
+                    inner_column_indices.push_back(inner_column);
+                    inner_values.push_back(value);
+                } else if (inner_row != missing &&
+                           tear_column != missing) {
+                    inner_to_tear[inner_row][tear_column] = value;
+                } else if (tear_row != missing &&
+                           inner_column != missing) {
+                    tear_to_inner[tear_row][inner_column] = value;
+                } else if (tear_row != missing &&
+                           tear_column != missing) {
+                    schur[tear_row][tear_column] = value;
+                }
+            }
+            if (inner_row != missing) {
+                inner_row_offsets[inner_row + 1U] =
+                    inner_values.size();
+            }
+        }
+        sparse_inner = SparseMatrix(
+            inner_rows.size(), inner_columns.size(),
+            std::move(inner_row_offsets),
+            std::move(inner_column_indices),
+            std::move(inner_values));
+    } else {
+        for (std::size_t row = 0;
+             row < inner_rows.size(); ++row) {
+            for (std::size_t column = 0;
+                 column < inner_columns.size(); ++column) {
+                inner[row][column] =
+                    dense[inner_rows[row]][inner_columns[column]];
+            }
+            for (std::size_t column = 0;
+                 column < tear_columns.size(); ++column) {
+                inner_to_tear[row][column] =
+                    dense[inner_rows[row]][tear_columns[column]];
+            }
+        }
+        for (std::size_t row = 0;
+             row < tear_rows.size(); ++row) {
+            for (std::size_t column = 0;
+                 column < inner_columns.size(); ++column) {
+                tear_to_inner[row][column] =
+                    dense[tear_rows[row]][inner_columns[column]];
+            }
+            for (std::size_t column = 0;
+                 column < tear_columns.size(); ++column) {
+                schur[row][column] =
+                    dense[tear_rows[row]][tear_columns[column]];
+            }
         }
     }
 
@@ -826,7 +899,63 @@ LinearSolveResult solve_linear_system_by_tearing(
     Matrix eliminated_columns(
         inner_columns.size(),
         std::vector<double>(tear_columns.size(), 0.0));
-    if (!options.linear_solver) {
+    if (source_is_sparse && !options.linear_solver) {
+        auto inner_factorization =
+            options.sparse_factorization_resolver
+            ? options.sparse_factorization_resolver(
+                sparse_inner.pattern())
+            : sparse_factorization;
+        if (!inner_factorization) {
+            inner_factorization =
+                make_default_sparse_factorization();
+        }
+        Matrix right_hand_sides;
+        right_hand_sides.reserve(1U + tear_columns.size());
+        right_hand_sides.push_back(inner_rhs);
+        for (std::size_t tear = 0;
+             tear < tear_columns.size(); ++tear) {
+            std::vector<double> column(inner_rows.size(), 0.0);
+            for (std::size_t row = 0;
+                 row < inner_rows.size(); ++row) {
+                column[row] = inner_to_tear[row][tear];
+            }
+            right_hand_sides.push_back(std::move(column));
+        }
+        ++diagnostics.linear_solver_evaluations;
+        diagnostics.largest_linear_system_size = std::max(
+            diagnostics.largest_linear_system_size,
+            inner_rows.size());
+        auto solutions = inner_factorization->solve_multiple(
+            sparse_inner, right_hand_sides);
+        diagnostics.symbolic_factorizations +=
+            solutions.symbolic_factorizations;
+        diagnostics.numeric_factorizations +=
+            solutions.numeric_factorizations;
+        if (!solutions.success ||
+            solutions.x.size() != right_hand_sides.size()) {
+            return {
+                false, {}, "inner sparse tearing solve failed: " +
+                    solutions.message};
+        }
+        inner_backend = std::string(
+            inner_factorization->backend_name()) + "-multi-rhs";
+        inner_solution = {
+            true, std::move(solutions.x.front()), solutions.message};
+        for (std::size_t tear = 0;
+             tear < tear_columns.size(); ++tear) {
+            if (solutions.x[tear + 1U].size() !=
+                    inner_columns.size()) {
+                return {
+                    false, {},
+                    "inner sparse tearing solution size mismatch"};
+            }
+            for (std::size_t row = 0;
+                 row < inner_columns.size(); ++row) {
+                eliminated_columns[row][tear] =
+                    solutions.x[tear + 1U][row];
+            }
+        }
+    } else if (!options.linear_solver) {
         DenseLinearFactorization inner_factorization;
         ++diagnostics.numeric_factorizations;
         if (!inner_factorization.factorize(inner)) {
@@ -926,7 +1055,8 @@ LinearSolveResult solve_linear_system_by_tearing(
         dense, result.x, rhs);
     diagnostics.linear_solver_backend = options.linear_solver
         ? "structural-schur/custom-dense-hook"
-        : "structural-schur/reference-dense";
+        : "structural-schur/" + inner_backend +
+            "+dense-outer";
     diagnostics.last_linear_backward_error = backward_error;
     diagnostics.maximum_linear_backward_error = std::max(
         diagnostics.maximum_linear_backward_error, backward_error);
@@ -2003,7 +2133,7 @@ NonlinearSolveResult solve_newton_monolithic(
                 std::move(rhs), x.size(), diagnostics);
         } else {
             linear = solve_linear_system_by_tearing(
-                options, jacobian, rhs,
+                options, factorization, jacobian, rhs,
                 tear_rows, tear_columns, diagnostics);
             if (!linear.success) {
                 const std::string tearing_failure = linear.message;

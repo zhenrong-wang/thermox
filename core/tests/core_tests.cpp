@@ -145,6 +145,21 @@ void test_reusable_sparse_factorization() {
     require(second.numeric_factorizations == 1,
             "changed values refresh numeric factorization");
 
+    const auto multiple = factorization->solve_multiple(
+        matrix, {{9.0, 7.0}, {5.0, 4.0}});
+    require(
+        multiple.success && multiple.x.size() == 2 &&
+            multiple.numeric_factorizations == 1,
+        "sparse multi-RHS solve performs one numeric factorization");
+    require_near(multiple.x[0][0], 20.0 / 11.0, 1.0e-12,
+                 "sparse multi-RHS first x0");
+    require_near(multiple.x[0][1], 19.0 / 11.0, 1.0e-12,
+                 "sparse multi-RHS first x1");
+    require_near(multiple.x[1][0], 1.0, 1.0e-12,
+                 "sparse multi-RHS second x0");
+    require_near(multiple.x[1][1], 1.0, 1.0e-12,
+                 "sparse multi-RHS second x1");
+
     const bool umfpack =
         factorization->backend_name() == "umfpack";
     require(first.symbolic_factorizations ==
@@ -1448,8 +1463,10 @@ void test_newton_executes_exact_structural_tearing_step() {
             "Schur tearing preserves the monolithic Newton solution");
     }
     require(
-            torn.diagnostics.linear_solver_backend ==
-                "structural-schur/reference-dense" &&
+        torn.diagnostics.linear_solver_backend.starts_with(
+                "structural-schur/") &&
+            torn.diagnostics.linear_solver_backend.ends_with(
+                "-multi-rhs+dense-outer") &&
             torn.diagnostics.largest_linear_system_size == 2 &&
             torn.diagnostics.linear_solver_evaluations == 2 &&
             torn.diagnostics.numeric_factorizations == 2 &&
@@ -1493,6 +1510,54 @@ void test_structural_tearing_falls_back_on_numeric_rank_loss() {
     require_near(solved.x[0], 1.0, 1.0e-12, "fallback solves x");
     require_near(solved.x[1], 2.0, 1.0e-12, "fallback solves y");
     require_near(solved.x[2], 3.0, 1.0e-12, "fallback solves z");
+}
+
+void test_sparse_tearing_reuses_inner_symbolic_factorization() {
+    thermox::EquationSystemBuilder system;
+    const auto x = system.add_variable("x", 0.8);
+    const auto y = system.add_variable("y", 0.8);
+    const auto z = system.add_variable("z", 0.8);
+    const std::vector<std::size_t> variables{x, y, z};
+    system.add_sparse_equation(
+        "x_balance", variables,
+        [x, y, z](const std::vector<double>& state,
+                  std::vector<thermox::EquationPartial>& partials) {
+            partials = {{x, 2.0 * state[x]}, {y, 1.0}, {z, 1.0}};
+            return state[x] * state[x] + state[y] + state[z] - 3.0;
+        });
+    system.add_sparse_equation(
+        "y_balance", variables,
+        [x, y, z](const std::vector<double>& state,
+                  std::vector<thermox::EquationPartial>& partials) {
+            partials = {{x, 1.0}, {y, 2.0 * state[y]}, {z, 1.0}};
+            return state[x] + state[y] * state[y] + state[z] - 3.0;
+        });
+    system.add_sparse_equation(
+        "z_balance", variables,
+        [x, y, z](const std::vector<double>& state,
+                  std::vector<thermox::EquationPartial>& partials) {
+            partials = {{x, 1.0}, {y, 1.0}, {z, 2.0 * state[z]}};
+            return state[x] + state[y] + state[z] * state[z] - 3.0;
+        });
+    thermox::SolverOptions options;
+    options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::tearing;
+    const auto solved = thermox::solve_newton(system.build(), options);
+    require(solved.diagnostics.converged, solved.diagnostics.message);
+    require(solved.diagnostics.iterations > 1,
+            "nonlinear tearing regression spans multiple Jacobians");
+    require_near(solved.x[x], 1.0, 1.0e-9, "sparse tearing nonlinear x");
+    require_near(solved.x[y], 1.0, 1.0e-9, "sparse tearing nonlinear y");
+    require_near(solved.x[z], 1.0, 1.0e-9, "sparse tearing nonlinear z");
+    const bool umfpack =
+        thermox::make_default_sparse_factorization()->backend_name() ==
+        "umfpack";
+    require(
+        solved.diagnostics.symbolic_factorizations ==
+                (umfpack ? 1 : 0) &&
+            solved.diagnostics.numeric_factorizations ==
+                solved.diagnostics.linear_solver_evaluations,
+        "sparse tearing reuses inner symbolic analysis and performs one inner plus one outer numeric factorization per Newton step");
 }
 
 void test_newton_solves_dependency_ordered_structural_blocks() {
@@ -2015,6 +2080,7 @@ int main() {
         test_structural_analysis_suggests_verified_feedback_set();
         test_newton_executes_exact_structural_tearing_step();
         test_structural_tearing_falls_back_on_numeric_rank_loss();
+        test_sparse_tearing_reuses_inner_symbolic_factorization();
         test_newton_solves_dependency_ordered_structural_blocks();
         test_automatic_structural_policy_keeps_custom_callbacks_monolithic();
         test_linear_equation_builder_certifies_automatic_blocks();

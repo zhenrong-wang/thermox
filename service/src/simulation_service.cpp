@@ -1103,8 +1103,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v8"
-            : "thermox.newton/v7",
+            ? "thermox.newton-continuation/v9"
+            : "thermox.newton/v8",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1170,7 +1170,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v8",
+        "thermox.dae-bdf/v9",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
