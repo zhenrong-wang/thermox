@@ -147,19 +147,25 @@ NonlinearProblem make_stage_problem(
             }
             return EvaluationStatus::success();
         };
-    if (!uses_informed_residual &&
-        target.checked_residual_subset) {
+    if ((uses_informed_residual &&
+         target.continuation_checked_residual_subset) ||
+        (!uses_informed_residual &&
+         target.checked_residual_subset)) {
         stage.checked_residual_subset =
             [&target, anchor, variable_scales,
-             residual_scales, parameter](
+             residual_scales, parameter,
+             uses_informed_residual](
                 const std::vector<double>& x,
                 const std::vector<std::size_t>& rows,
                 std::vector<double>& residual) {
                 std::vector<double> target_residual(
                     rows.size(), 0.0);
-                const auto status =
-                    target.checked_residual_subset(
-                        x, rows, target_residual);
+                const auto status = uses_informed_residual
+                    ? target.continuation_checked_residual_subset(
+                          x, anchor, parameter, rows,
+                          target_residual)
+                    : target.checked_residual_subset(
+                          x, rows, target_residual);
                 if (!status.ok()) return status;
                 for (std::size_t output = 0;
                      output < rows.size(); ++output) {
@@ -216,8 +222,11 @@ NonlinearProblem make_stage_problem(
                         variable_scales[row];
                 }
             };
-        if (!uses_informed_residual &&
-            target.sparse_jacobian_values_subset) {
+        if ((uses_informed_residual &&
+             target
+                 .continuation_sparse_jacobian_values_subset) ||
+            (!uses_informed_residual &&
+             target.sparse_jacobian_values_subset)) {
             const std::size_t missing =
                 std::numeric_limits<std::size_t>::max();
             std::vector<std::size_t> target_of_stage(
@@ -239,7 +248,8 @@ NonlinearProblem make_stage_problem(
             stage.sparse_jacobian_values_subset =
                 [&target, target_of_stage,
                  diagonal_row_of_stage, variable_scales,
-                 residual_scales, parameter, missing](
+                 residual_scales, anchor, parameter,
+                 uses_informed_residual, missing](
                     const std::vector<double>& x,
                     const std::vector<std::size_t>& offsets,
                     std::vector<double>& values) {
@@ -273,8 +283,15 @@ NonlinearProblem make_stage_problem(
                     }
                     std::vector<double> target_values(
                         target_offsets.size(), 0.0);
-                    target.sparse_jacobian_values_subset(
-                        x, target_offsets, target_values);
+                    if (uses_informed_residual) {
+                        target
+                            .continuation_sparse_jacobian_values_subset(
+                                x, anchor, parameter,
+                                target_offsets, target_values);
+                    } else {
+                        target.sparse_jacobian_values_subset(
+                            x, target_offsets, target_values);
+                    }
                     for (std::size_t index = 0;
                          index < target_values.size(); ++index) {
                         values[target_outputs[index]] +=
@@ -449,6 +466,17 @@ ContinuationSolveResult solve_continuation(
         throw std::invalid_argument(
             "continuation target sparse pattern requires "
             "value evaluation");
+    }
+    if (problem.continuation_checked_residual_subset &&
+        !problem.continuation_checked_residual) {
+        throw std::invalid_argument(
+            "continuation residual subset requires full continuation residual evaluation");
+    }
+    if (problem.continuation_sparse_jacobian_values_subset &&
+        (!problem.sparse_jacobian_pattern.has_value() ||
+         !problem.continuation_sparse_jacobian_values)) {
+        throw std::invalid_argument(
+            "continuation sparse value subset requires a fixed pattern and full continuation value evaluation");
     }
     SolverOptions staged_solver = solver_options;
     if ((problem.sparse_jacobian_pattern.has_value() ||

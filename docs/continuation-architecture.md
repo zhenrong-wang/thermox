@@ -42,6 +42,12 @@ diagonal, and the same factorization object is shared across stages. `used_infor
 whether the compiled problem supplied model-aware callbacks; it is not inferred from component
 names.
 
+Informed paths may also provide residual-row and fixed-CSR-offset subset callbacks. The equation
+builder assembles both from per-equation continuation functions. Structural block Newton then
+requests only the rows and derivative values owned by each block, while the full informed residual
+is still evaluated for mandatory whole-stage acceptance. Providers that omit informed subsets
+retain the correct whole-callback fallback.
+
 ## Component extension contract
 
 `NonlinearProblem` may carry parameterized residual and dense, sparse, fixed-pattern, or hybrid
@@ -106,7 +112,7 @@ homotopy does not add quantities with incompatible numerical magnitudes.
 ## Platform contract
 
 Continuation is an opt-in member of `SteadySolverSettings`. The service publishes it as
-`thermox.newton-continuation/v5`, persists the settings with run configurations and jobs, and
+`thermox.newton-continuation/v6`, persists the settings with run configurations and jobs, and
 returns structured stage diagnostics. HTTP, CLI, and web interfaces only select settings and
 render results; they do not own continuation logic.
 

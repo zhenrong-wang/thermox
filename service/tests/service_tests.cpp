@@ -3841,7 +3841,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v5",
+            "thermox.newton-continuation/v6",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(

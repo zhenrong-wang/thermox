@@ -176,6 +176,8 @@ the first failed block. A single irreducible block automatically stays on the mo
 `NonlinearProblem` also exposes optional residual-row and fixed-CSR-value subset callbacks. The
 steady and DAE equation-system builders publish these callbacks automatically from their
 per-equation functions, so native compiled graphs evaluate only the equations owned by each block.
+The steady builder publishes equivalent informed-continuation subsets, and the homotopy driver
+preserves them while adding its anchor residual and diagonal derivative contributions.
 Custom providers may omit them; automatic policy then stays monolithic, while forced block mode
 retains the correct full-callback fallback.
 Steady diagnostics also report the largest absolute normalized residual and its registered

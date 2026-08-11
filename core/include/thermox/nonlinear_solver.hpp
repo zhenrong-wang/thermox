@@ -75,6 +75,20 @@ using ContinuationCheckedResidualFunction =
                                    const std::vector<double>& anchor,
                                    double parameter,
                                    std::vector<double>& residual)>;
+using ContinuationCheckedResidualSubsetFunction =
+    std::function<EvaluationStatus(
+        const std::vector<double>& x,
+        const std::vector<double>& anchor,
+        double parameter,
+        const std::vector<std::size_t>& residual_indices,
+        std::vector<double>& residual)>;
+using ContinuationSparseJacobianValuesSubsetFunction =
+    std::function<void(
+        const std::vector<double>& x,
+        const std::vector<double>& anchor,
+        double parameter,
+        const std::vector<std::size_t>& value_offsets,
+        std::vector<double>& values)>;
 
 struct SolverOptions {
     int max_iterations{50};
@@ -167,10 +181,14 @@ struct NonlinearProblem {
     // Optional component- or model-informed path. At parameter 1
     // these callbacks must represent the ordinary target problem.
     ContinuationCheckedResidualFunction continuation_checked_residual;
+    ContinuationCheckedResidualSubsetFunction
+        continuation_checked_residual_subset;
     ContinuationJacobianFunction continuation_jacobian;
     ContinuationSparseJacobianFunction continuation_sparse_jacobian;
     ContinuationSparseJacobianValuesFunction
         continuation_sparse_jacobian_values;
+    ContinuationSparseJacobianValuesSubsetFunction
+        continuation_sparse_jacobian_values_subset;
     ContinuationSparseJacobianFunction
         continuation_partial_sparse_jacobian;
 };

@@ -1096,7 +1096,7 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v5"
+            ? "thermox.newton-continuation/v6"
             : "thermox.newton/v5",
         {
             {"max_iterations",

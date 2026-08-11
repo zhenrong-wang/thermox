@@ -558,8 +558,9 @@ Work items:
      with block-local callbacks, automatic monolithic retry on block failure, and explicit
      monolithic/block overrides through native, service, persistence, HTTP, CLI, and web
      contracts; ✅
-   - informed-continuation derivative subsets and tearing inside an irreducible block remain
-     follow-ons.
+   - informed-continuation residual-row and fixed-CSR-offset subsets, automatically assembled by
+     the equation builder and preserved through homotopy anchor transforms; ✅
+   - tearing inside an irreducible block remains a follow-on.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
    - bounded steady algebraic expression grammar, symbol validation, analytic sparse
      differentiation, implementation fingerprints, trusted composition-root registration,

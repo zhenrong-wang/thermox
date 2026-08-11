@@ -356,6 +356,12 @@ void test_equation_builder_exposes_component_continuation_path() {
         static_cast<bool>(
             problem.continuation_sparse_jacobian_values),
         "builder exposes parameterized fixed-pattern Jacobian");
+    require(
+        static_cast<bool>(
+            problem.continuation_checked_residual_subset) &&
+            static_cast<bool>(problem
+                .continuation_sparse_jacobian_values_subset),
+        "builder exposes informed continuation subset callbacks");
 
     std::vector<double> residual(1, 0.0);
     const auto status =
@@ -365,6 +371,21 @@ void test_equation_builder_exposes_component_continuation_path() {
     require_near(
         residual.at(0), -4.5, 0.0,
         "continuation equation receives stage parameter");
+    std::vector<double> subset_residual(1, 0.0);
+    const auto subset_status =
+        problem.continuation_checked_residual_subset(
+            {1.0}, {1.0}, 0.5, {0},
+            subset_residual);
+    require(subset_status.ok(), subset_status.message);
+    require_near(
+        subset_residual.at(0), -4.5, 0.0,
+        "continuation subset evaluates requested residual row");
+    std::vector<double> subset_values(1, 0.0);
+    problem.continuation_sparse_jacobian_values_subset(
+        {1.0}, {1.0}, 0.5, {0}, subset_values);
+    require_near(
+        subset_values.at(0), 1.0, 0.0,
+        "continuation subset evaluates requested Jacobian value");
     problem.residual({1.0}, residual);
     require_near(
         residual.at(0), -9.0, 0.0,
@@ -384,6 +405,113 @@ void test_equation_builder_exposes_component_continuation_path() {
     require_near(
         solved.x.at(x), 10.0, 1.0e-10,
         "component-informed path reaches target");
+}
+
+void test_informed_continuation_executes_structural_subsets() {
+    thermox::EquationSystemBuilder system;
+    const auto first = system.add_variable("first", 0.0);
+    const auto second = system.add_variable("second", 0.0);
+    system.add_continuation_sparse_equation(
+        "first_target", {first},
+        [first](const std::vector<double>& values,
+                const std::vector<double>& anchor,
+                double parameter,
+                std::vector<thermox::EquationPartial>& partials) {
+            partials.push_back({first, 1.0});
+            return values[first] -
+                (anchor[first] +
+                 parameter * (1.0 - anchor[first]));
+        });
+    system.add_continuation_sparse_equation(
+        "second_target", {second},
+        [second](const std::vector<double>& values,
+                 const std::vector<double>& anchor,
+                 double parameter,
+                 std::vector<thermox::EquationPartial>& partials) {
+            partials.push_back({second, 1.0});
+            return values[second] -
+                (anchor[second] +
+                 parameter * (2.0 - anchor[second]));
+        });
+    auto problem = system.build();
+
+    int full_residual_calls = 0;
+    int subset_residual_calls = 0;
+    int full_jacobian_calls = 0;
+    int subset_jacobian_calls = 0;
+    const auto full_residual =
+        problem.continuation_checked_residual;
+    problem.continuation_checked_residual =
+        [full_residual, &full_residual_calls](
+            const std::vector<double>& x,
+            const std::vector<double>& anchor,
+            double parameter,
+            std::vector<double>& residual) {
+            ++full_residual_calls;
+            return full_residual(
+                x, anchor, parameter, residual);
+        };
+    const auto subset_residual =
+        problem.continuation_checked_residual_subset;
+    problem.continuation_checked_residual_subset =
+        [subset_residual, &subset_residual_calls](
+            const std::vector<double>& x,
+            const std::vector<double>& anchor,
+            double parameter,
+            const std::vector<std::size_t>& rows,
+            std::vector<double>& residual) {
+            ++subset_residual_calls;
+            return subset_residual(
+                x, anchor, parameter, rows, residual);
+        };
+    const auto full_jacobian =
+        problem.continuation_sparse_jacobian_values;
+    problem.continuation_sparse_jacobian_values =
+        [full_jacobian, &full_jacobian_calls](
+            const std::vector<double>& x,
+            const std::vector<double>& anchor,
+            double parameter,
+            std::vector<double>& values) {
+            ++full_jacobian_calls;
+            full_jacobian(x, anchor, parameter, values);
+        };
+    const auto subset_jacobian =
+        problem.continuation_sparse_jacobian_values_subset;
+    problem.continuation_sparse_jacobian_values_subset =
+        [subset_jacobian, &subset_jacobian_calls](
+            const std::vector<double>& x,
+            const std::vector<double>& anchor,
+            double parameter,
+            const std::vector<std::size_t>& offsets,
+            std::vector<double>& values) {
+            ++subset_jacobian_calls;
+            subset_jacobian(
+                x, anchor, parameter, offsets, values);
+        };
+
+    thermox::SolverOptions options;
+    options.structural_decomposition_policy =
+        thermox::StructuralDecompositionPolicy::blocks;
+    thermox::ContinuationOptions continuation;
+    continuation.initial_step = 0.5;
+    const auto solved = thermox::solve_continuation(
+        problem, options, continuation);
+    require(solved.continuation.converged,
+            solved.continuation.message);
+    require_near(solved.x[first], 1.0, 1.0e-12,
+                 "informed block continuation first target");
+    require_near(solved.x[second], 2.0, 1.0e-12,
+                 "informed block continuation second target");
+    require(
+        solved.diagnostics.structural_block_solves > 0 &&
+            solved.diagnostics.largest_linear_system_size == 1,
+        "informed continuation executes independent structural blocks");
+    require(
+        subset_residual_calls > 0 &&
+            subset_jacobian_calls > 0 &&
+            full_residual_calls > 0 &&
+            full_jacobian_calls == 0,
+        "informed block continuation reserves full residuals for acceptance and evaluates derivatives by subset");
 }
 
 void test_informed_residual_without_derivative_uses_finite_difference() {
@@ -1707,6 +1835,7 @@ int main() {
         test_continuation_recovers_difficult_initial_guess();
         test_continuation_falls_back_to_solvable_target();
         test_equation_builder_exposes_component_continuation_path();
+        test_informed_continuation_executes_structural_subsets();
         test_informed_residual_without_derivative_uses_finite_difference();
         test_sparse_matrix_conversion_and_scaling();
         test_sparse_matrix_validates_shape();
