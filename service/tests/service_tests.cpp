@@ -3681,7 +3681,7 @@ void test_steady_service() {
         "steady result must identify the platform build");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton/v6" &&
+            "thermox.newton/v7" &&
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
@@ -3724,7 +3724,7 @@ void test_steady_service() {
             tearing_response.diagnostics.linear_solver_backend.starts_with(
                 "structural-schur-") &&
             tearing_response.metadata.solver.contract_version ==
-                "thermox.newton/v6",
+                "thermox.newton/v7",
         "service must expose the exact structural tearing policy with a safe fallback");
     require(
         std::any_of(
@@ -3866,7 +3866,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v7",
+            "thermox.newton-continuation/v8",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(
@@ -3980,7 +3980,7 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v7",
+            "thermox.dae-bdf/v8",
         "transient result must record solver contract");
     require(
         response.diagnostics.maximum_order_used == 2 &&

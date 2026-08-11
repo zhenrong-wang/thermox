@@ -373,7 +373,8 @@ available and the compiler certifies root equivalence (currently fully linear as
 `--structural-policy tearing` provide explicit comparison overrides. Tearing partitions every
 Newton linearization with the suggested feedback variables, solves the exact Schur complement,
 checks the reconstructed full-system step, and visibly falls back to the full linear solve when
-the structural partition loses numerical rank. The same policy applies to `simulate`; results report the executed block
+the structural partition loses numerical rank. The reference backend reuses one inner LU
+factorization for the physical RHS and every tear-coupling column. The same policy applies to `simulate`; results report the executed block
 count and largest linear system. Under automatic/block decomposition, a single irreducible block
 remains monolithic; explicit tearing can partition it. Validation also
 reports deterministic structural tear-variable hints for cyclic blocks; these are complexity and

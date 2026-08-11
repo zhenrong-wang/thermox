@@ -59,6 +59,25 @@ void test_dense_linear_solver() {
     const auto tiny = thermox::solve_dense_linear_system({{1.0e-20}}, {2.0e-20});
     require(tiny.success, "dense solver should be invariant to uniform matrix scaling");
     require_near(tiny.x[0], 2.0, 1.0e-12, "tiny scaled dense solve");
+
+    thermox::DenseLinearFactorization factorization;
+    require(
+        factorization.factorize({{0.0, 2.0}, {1.0, 3.0}}),
+        factorization.message());
+    const auto multiple = factorization.solve_multiple(
+        {{4.0, 7.0}, {2.0, 4.0}});
+    require(
+        multiple.size() == 2 && multiple[0].success &&
+            multiple[1].success,
+        "reusable dense factorization solves multiple right-hand sides");
+    require_near(multiple[0].x[0], 1.0, 1.0e-12,
+                 "reusable dense factorization first RHS x");
+    require_near(multiple[0].x[1], 2.0, 1.0e-12,
+                 "reusable dense factorization first RHS y");
+    require_near(multiple[1].x[0], 1.0, 1.0e-12,
+                 "reusable dense factorization second RHS x");
+    require_near(multiple[1].x[1], 1.0, 1.0e-12,
+                 "reusable dense factorization second RHS y");
 }
 
 void test_sparse_linear_solver() {
@@ -1429,10 +1448,11 @@ void test_newton_executes_exact_structural_tearing_step() {
             "Schur tearing preserves the monolithic Newton solution");
     }
     require(
-        torn.diagnostics.linear_solver_backend ==
+            torn.diagnostics.linear_solver_backend ==
                 "structural-schur/reference-dense" &&
             torn.diagnostics.largest_linear_system_size == 2 &&
-            torn.diagnostics.linear_solver_evaluations == 4 &&
+            torn.diagnostics.linear_solver_evaluations == 2 &&
+            torn.diagnostics.numeric_factorizations == 2 &&
             torn.diagnostics.maximum_linear_backward_error <=
                 tearing_options.linear_residual_tolerance,
         "tearing reports its reduced inner and outer linear solves");

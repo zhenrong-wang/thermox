@@ -70,7 +70,10 @@ uses that partition at the linearized Newton level: it eliminates the inner vari
 Schur complement in the tear variables, reconstructs the complete step, and applies the ordinary
 whole-system backward-error and nonlinear line-search checks. A singular or inaccurate structural
 partition deterministically falls back to the ordinary full linear solve. This exact linearized
-path does not introduce a separate nested nonlinear branch-selection contract.
+path does not introduce a separate nested nonlinear branch-selection contract. The reference
+backend factors the inner dense matrix once per Newton linearization and solves the physical and
+tear-coupling right-hand sides as one batch before forming the reduced system. Custom one-shot
+dense hooks retain their existing per-right-hand-side behavior.
 
 `solve_continuation` provides an opt-in scaled residual homotopy for difficult initial guesses.
 It adaptively advances from an anchored initial-state problem to the exact target residual,

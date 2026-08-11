@@ -755,8 +755,17 @@ LinearSolveResult solve_linear_system_by_tearing(
             auto solved = options.linear_solver
                 ? options.linear_solver(
                     std::move(matrix), std::move(partition_rhs))
-                : solve_dense_linear_system(
-                    std::move(matrix), std::move(partition_rhs));
+                : [&]() {
+                    DenseLinearFactorization factorization;
+                    ++diagnostics.numeric_factorizations;
+                    if (!factorization.factorize(
+                            std::move(matrix))) {
+                        return LinearSolveResult{
+                            false, {}, factorization.message()};
+                    }
+                    return factorization.solve(
+                        std::move(partition_rhs));
+                }();
             solved = validate_linear_result(
                 std::move(solved),
                 label == "inner" ? inner_rows.size()
@@ -813,23 +822,73 @@ LinearSolveResult solve_linear_system_by_tearing(
         }
     }
 
-    auto inner_solution = solve_dense_partition(
-        inner, inner_rhs, "inner");
-    if (!inner_solution.success) return inner_solution;
+    LinearSolveResult inner_solution;
     Matrix eliminated_columns(
         inner_columns.size(),
         std::vector<double>(tear_columns.size(), 0.0));
-    for (std::size_t tear = 0; tear < tear_columns.size(); ++tear) {
-        std::vector<double> column(inner_rows.size(), 0.0);
-        for (std::size_t row = 0; row < inner_rows.size(); ++row) {
-            column[row] = inner_to_tear[row][tear];
+    if (!options.linear_solver) {
+        DenseLinearFactorization inner_factorization;
+        ++diagnostics.numeric_factorizations;
+        if (!inner_factorization.factorize(inner)) {
+            return {
+                false, {}, "inner tearing factorization failed: " +
+                    inner_factorization.message()};
         }
-        auto eliminated = solve_dense_partition(
-            inner, std::move(column), "inner");
-        if (!eliminated.success) return eliminated;
-        for (std::size_t row = 0;
-             row < inner_columns.size(); ++row) {
-            eliminated_columns[row][tear] = eliminated.x[row];
+        Matrix right_hand_sides;
+        right_hand_sides.reserve(1U + tear_columns.size());
+        right_hand_sides.push_back(inner_rhs);
+        for (std::size_t tear = 0;
+             tear < tear_columns.size(); ++tear) {
+            std::vector<double> column(inner_rows.size(), 0.0);
+            for (std::size_t row = 0;
+                 row < inner_rows.size(); ++row) {
+                column[row] = inner_to_tear[row][tear];
+            }
+            right_hand_sides.push_back(std::move(column));
+        }
+        ++diagnostics.linear_solver_evaluations;
+        diagnostics.largest_linear_system_size = std::max(
+            diagnostics.largest_linear_system_size,
+            inner.size());
+        auto solutions = inner_factorization.solve_multiple(
+            right_hand_sides);
+        for (auto& solution : solutions) {
+            solution = validate_linear_result(
+                std::move(solution), inner_rows.size());
+            if (!solution.success) {
+                solution.message = "inner tearing solve failed: " +
+                    solution.message;
+                return solution;
+            }
+        }
+        inner_solution = std::move(solutions.front());
+        for (std::size_t tear = 0;
+             tear < tear_columns.size(); ++tear) {
+            for (std::size_t row = 0;
+                 row < inner_columns.size(); ++row) {
+                eliminated_columns[row][tear] =
+                    solutions[tear + 1U].x[row];
+            }
+        }
+    } else {
+        inner_solution = solve_dense_partition(
+            inner, inner_rhs, "inner");
+        if (!inner_solution.success) return inner_solution;
+        for (std::size_t tear = 0;
+             tear < tear_columns.size(); ++tear) {
+            std::vector<double> column(inner_rows.size(), 0.0);
+            for (std::size_t row = 0;
+                 row < inner_rows.size(); ++row) {
+                column[row] = inner_to_tear[row][tear];
+            }
+            auto eliminated = solve_dense_partition(
+                inner, std::move(column), "inner");
+            if (!eliminated.success) return eliminated;
+            for (std::size_t row = 0;
+                 row < inner_columns.size(); ++row) {
+                eliminated_columns[row][tear] =
+                    eliminated.x[row];
+            }
         }
     }
     for (std::size_t row = 0; row < tear_rows.size(); ++row) {

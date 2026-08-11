@@ -565,6 +565,8 @@ Work items:
    - explicit exact Schur-complement tearing of Newton linearizations, with reconstructed
      whole-system backward-error verification, numerical-rank fallback, and separate structural
      incidence versus fixed-CSR contracts; ✅
+   - reusable partial-pivoting dense LU and batched inner right-hand-side solves so Schur assembly
+     performs one inner factorization per Newton linearization; ✅
    - nested nonlinear tearing remains a follow-on only if profiling demonstrates a benefit and an
      explicit branch-selection/convergence contract can be justified.
 7. Safe custom equation DSL; no arbitrary user Python in API process.
