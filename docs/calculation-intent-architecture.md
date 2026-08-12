@@ -122,11 +122,50 @@ two-sided Gaussian uncertainty at a truncated optimum. Free parameters retain
 free parameters. A profile-likelihood or sampling workflow is still required to quantify a
 one-sided confidence limit for an active parameter.
 
+### Profile-likelihood intervals
+
+Profile likelihood is an explicit, optional post-reconciliation phase because each interval can
+require many additional physical-model solves. For each selected parameter and direction,
+Thermox fixes that parameter at trial coordinates, re-optimizes all nuisance parameters with the
+same covariance-whitened active-set Gauss-Newton machinery, brackets the requested objective
+increase, and bisects the bracket. It never substitutes the local covariance ellipse for these
+nonlinear evaluations.
+
+The request declares the objective increase, bracketing/bisection/nuisance-solve budgets, and an
+optional list of parameter IDs. The default objective increase `3.841458820694124` is the usual
+asymptotic 95% likelihood-ratio threshold for one profiled parameter; the numerical value and its
+statistical interpretation remain visible rather than being called “95%” unconditionally.
+
+Each endpoint reports its coordinate, achieved objective increase, whether the threshold was
+reached, and whether a finite physical bound truncated that side. A parameter already at its
+upper bound therefore has an upper endpoint equal to the estimate with `bound_truncated=true` and
+`threshold_reached=false`; its opposite side can still yield a one-sided likelihood limit.
+Failures and model-evaluation counts are local to each interval and do not relabel a successful
+base reconciliation as failed. Profiling is disabled by default and its settings are preserved in
+solver provenance.
+
+A threshold crossing is a numerical profile result, not automatically a credible confidence
+claim. Its usual likelihood-ratio coverage additionally assumes a defensible measurement model,
+adequate physical model, identifiable nuisance fit, and suitable asymptotic regime. A very large
+reduced chi-square or known missing physics remains visible and can invalidate that interpretation
+even when the profile calculation itself succeeds; Thermox does not rescale the likelihood or
+rename the interval to hide poor agreement.
+
+The thin CLI exposes the same service contract:
+
+```sh
+thermox_cli reconcile --model model.json \
+  --reconciliation weighted_fit --mode weighted-measurements \
+  --profile-likelihood --profile-parameter airflow \
+  --profile-objective-increase 3.841458820694124 --format json
+```
+
 Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
 automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
 visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
-The free-parameter covariance is a local first-order approximation and does not yet include
-nonlinear confidence regions, one-sided bound profiles, or Monte Carlo propagation. The reference
+The free-parameter covariance is a local first-order approximation. Profile likelihood provides
+bounded one-dimensional nonlinear intervals, but simultaneous multidimensional confidence
+regions and Monte Carlo propagation remain future work. The reference
 implementation uses column-pivoted QR; an optimized sparse QR or SVD backend can replace it for
 very large or extremely ill-conditioned estimation problems without changing this service
 contract.

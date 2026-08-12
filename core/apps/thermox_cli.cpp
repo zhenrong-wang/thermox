@@ -29,6 +29,9 @@ void print_usage(std::ostream& out) {
            " [--format text|json]\n"
         << "  thermox_cli reconcile --model <path>"
            " --reconciliation <id>"
+           " [--profile-likelihood]"
+           " [--profile-objective-increase <value>]"
+           " [--profile-parameter <id>]"
            " [--mode hard-equalities|weighted-measurements]"
            " [--max-iterations <count>]"
            " [--format text|json]\n";
@@ -167,6 +170,9 @@ int main(int argc, char** argv) {
     std::string end_time_text;
     std::string format = "text";
     bool continuation = false;
+    bool profile_likelihood = false;
+    std::string profile_objective_increase_text;
+    std::vector<std::string> profile_parameter_ids;
     auto structural_policy = thermox::service::
         StructuralDecompositionPolicy::automatic;
 
@@ -186,6 +192,13 @@ int main(int argc, char** argv) {
             max_iterations_text = argv[++i];
         } else if (arg == "--mode" && i + 1 < argc) {
             reconciliation_mode = argv[++i];
+        } else if (arg == "--profile-likelihood") {
+            profile_likelihood = true;
+        } else if (arg == "--profile-objective-increase" &&
+                   i + 1 < argc) {
+            profile_objective_increase_text = argv[++i];
+        } else if (arg == "--profile-parameter" && i + 1 < argc) {
+            profile_parameter_ids.emplace_back(argv[++i]);
         } else if (arg == "--end-time" && i + 1 < argc) {
             end_time_text = argv[++i];
         } else if (arg == "--format" && i + 1 < argc) {
@@ -305,6 +318,19 @@ int main(int argc, char** argv) {
                 }
                 request.solver.max_iterations =
                     static_cast<int>(count);
+            }
+            request.profile_likelihood.enabled = profile_likelihood;
+            request.profile_likelihood.parameter_ids =
+                profile_parameter_ids;
+            if (!profile_parameter_ids.empty()) {
+                request.profile_likelihood.enabled = true;
+            }
+            if (!profile_objective_increase_text.empty()) {
+                request.profile_likelihood.objective_increase =
+                    parse_positive_number(
+                        profile_objective_increase_text,
+                        "--profile-objective-increase");
+                request.profile_likelihood.enabled = true;
             }
             const auto response =
                 service.run_data_reconciliation(request);

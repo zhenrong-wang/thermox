@@ -400,8 +400,11 @@ Next:
     chi-square diagnostics. ✅
 18. Add active-set Gauss-Newton convergence at finite bounds, free-subspace covariance, null
     symmetric uncertainty for bound-active parameters, and explicit uncertainty interpretation. ✅
-19. Add profile-likelihood and nonlinear or sampling-based confidence regions where first-order
-    propagation is insufficient; allow a sparse QR/SVD backend for very large rectangular
+19. Add opt-in bounded profile-likelihood intervals with nuisance-parameter re-optimization,
+    adaptive threshold bracketing, explicit bound truncation, evaluation budgets, provenance, and
+    thin CLI access. ✅
+20. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
+    profiling is insufficient; allow a sparse QR/SVD backend for very large rectangular
     sensitivities.
 
 See `docs/calibration-architecture.md`.

@@ -2545,6 +2545,44 @@ std::string serialize_data_reconciliation_response_json(
         json_number(out, correlation.correlation);
         out << "}";
     }
+    out << "],\n  \"profile_likelihood_intervals\": [";
+    for (std::size_t index = 0;
+         index < response.profile_likelihood_intervals.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& interval =
+            response.profile_likelihood_intervals[index];
+        const auto endpoint_json =
+            [&](const ProfileLikelihoodEndpoint& endpoint) {
+            out << "{\"value_si\": ";
+            json_number(out, endpoint.value_si);
+            out << ", \"objective_increase\": ";
+            json_number(out, endpoint.objective_increase);
+            out << ", \"threshold_reached\": "
+                << (endpoint.threshold_reached ? "true" : "false")
+                << ", \"bound_truncated\": "
+                << (endpoint.bound_truncated ? "true" : "false")
+                << "}";
+        };
+        out << "{\"parameter_id\": ";
+        json_string(out, interval.parameter_id);
+        out << ", \"dimension\": ";
+        json_string(out, interval.dimension);
+        out << ", \"estimate_si\": ";
+        json_number(out, interval.estimate_si);
+        out << ", \"requested_objective_increase\": ";
+        json_number(out, interval.requested_objective_increase);
+        out << ", \"lower\": ";
+        endpoint_json(interval.lower);
+        out << ", \"upper\": ";
+        endpoint_json(interval.upper);
+        out << ", \"model_evaluations\": "
+            << interval.model_evaluations
+            << ", \"succeeded\": "
+            << (interval.succeeded ? "true" : "false")
+            << ", \"message\": ";
+        json_string(out, interval.message);
+        out << "}";
+    }
     out << "],\n  \"held_out_results\": [";
     for (std::size_t index = 0;
          index < response.held_out_results.size(); ++index) {

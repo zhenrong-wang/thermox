@@ -3844,6 +3844,13 @@ void test_weighted_reconciliation_applies_measurement_correlation() {
     request.mode = thermox::service::
         ReconciliationMode::weighted_measurements;
     request.solver.max_iterations = 6;
+    request.profile_likelihood.enabled = true;
+    request.profile_likelihood.objective_increase = 1.0;
+    request.profile_likelihood.maximum_bracket_steps = 6;
+    request.profile_likelihood.maximum_bisection_steps = 8;
+    request.profile_likelihood.maximum_nuisance_iterations = 3;
+    request.profile_likelihood.parameter_ids = {
+        "shared_inferred_airflow"};
 
     const auto response = service.run_data_reconciliation(request);
     require(
@@ -3869,10 +3876,35 @@ void test_weighted_reconciliation_applies_measurement_correlation() {
         "declared positive correlation must preserve the symmetric "
         "estimate while changing Mahalanobis chi-square and propagated "
         "uncertainty");
+    require(
+        response.profile_likelihood_intervals.size() == 1 &&
+            response.profile_likelihood_intervals.front().succeeded &&
+            response.profile_likelihood_intervals.front()
+                .lower.threshold_reached &&
+            response.profile_likelihood_intervals.front()
+                .upper.threshold_reached &&
+            !response.profile_likelihood_intervals.front()
+                 .lower.bound_truncated &&
+            !response.profile_likelihood_intervals.front()
+                 .upper.bound_truncated &&
+            std::abs(
+                response.profile_likelihood_intervals.front()
+                    .lower.value_si -
+                (100.138007655668 - 0.239036278783)) <= 5.0e-3 &&
+            std::abs(
+                response.profile_likelihood_intervals.front()
+                    .upper.value_si -
+                (100.138007655668 + 0.239036278783)) <= 5.0e-3,
+        "one-unit likelihood profile must agree with the local linear "
+        "uncertainty for the public linear interior case");
     const auto json = thermox::service::
         serialize_data_reconciliation_response_json(response);
     require(
         json.find("\"measurement_covariance_applied\": true") !=
+                std::string::npos &&
+            json.find("\"profile_likelihood_intervals\": [") !=
+                std::string::npos &&
+            json.find("\"threshold_reached\": true") !=
                 std::string::npos &&
             response.reconciled_model_json.find(
                 "\"measurement_correlations\"") !=
@@ -3930,6 +3962,12 @@ void test_weighted_reconciliation_reports_active_bound_uncertainty() {
     request.mode = thermox::service::
         ReconciliationMode::weighted_measurements;
     request.solver.max_iterations = 6;
+    request.profile_likelihood.enabled = true;
+    request.profile_likelihood.objective_increase = 1.0;
+    request.profile_likelihood.maximum_bracket_steps = 6;
+    request.profile_likelihood.maximum_bisection_steps = 8;
+    request.profile_likelihood.maximum_nuisance_iterations = 3;
+    request.profile_likelihood.parameter_ids = {"bounded_airflow"};
 
     const auto response = service.run_data_reconciliation(request);
     require(
@@ -3952,6 +3990,19 @@ void test_weighted_reconciliation_reports_active_bound_uncertainty() {
             response.parameter_correlations.empty(),
         "a constrained optimum must not receive an unconstrained "
         "symmetric standard uncertainty");
+    require(
+        response.profile_likelihood_intervals.size() == 1 &&
+            response.profile_likelihood_intervals.front().succeeded &&
+            response.profile_likelihood_intervals.front()
+                .lower.threshold_reached &&
+            response.profile_likelihood_intervals.front()
+                .upper.bound_truncated &&
+            !response.profile_likelihood_intervals.front()
+                 .upper.threshold_reached &&
+            response.profile_likelihood_intervals.front()
+                    .upper.value_si == 120.0,
+        "profile likelihood must expose the one-sided physical-bound "
+        "truncation that local covariance cannot quantify");
     const auto json = thermox::service::
         serialize_data_reconciliation_response_json(response);
     require(
@@ -3960,6 +4011,23 @@ void test_weighted_reconciliation_reports_active_bound_uncertainty() {
             json.find("\"active_bound_count\": 1") !=
                 std::string::npos,
         "active-bound uncertainty semantics must survive serialization");
+}
+
+void test_profile_likelihood_rejects_invalid_intent() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "fixed_power_relaxed_airflow";
+    request.profile_likelihood.enabled = true;
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.status ==
+                thermox::service::OperationStatus::invalid_model &&
+            response.error.message.find(
+                "requires weighted-measurements") != std::string::npos,
+        "profile likelihood must reject hard-equality intent rather "
+        "than invent a measurement likelihood");
 }
 
 std::string independent_study_model(
@@ -5844,6 +5912,7 @@ int main() {
         test_weighted_reconciliation_applies_measurement_correlation();
         test_model_rejects_invalid_measurement_correlation();
         test_weighted_reconciliation_reports_active_bound_uncertainty();
+        test_profile_likelihood_rejects_invalid_intent();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();

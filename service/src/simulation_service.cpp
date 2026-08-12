@@ -1197,7 +1197,8 @@ SolverProvenance solver_provenance(
 
 SolverProvenance solver_provenance(
     const ReconciliationSolverSettings& settings,
-    ReconciliationMode mode) {
+    ReconciliationMode mode,
+    const ProfileLikelihoodSettings& profile) {
     SolverProvenance provenance{
         mode == ReconciliationMode::hard_equalities
             ? "thermox.reconciliation-newton/v1"
@@ -1214,6 +1215,16 @@ SolverProvenance solver_provenance(
              settings.objective_relative_tolerance},
             {"minimum_line_search_fraction",
              settings.minimum_line_search_fraction},
+            {"profile_likelihood.enabled",
+             profile.enabled ? 1.0 : 0.0},
+            {"profile_likelihood.objective_increase",
+             profile.objective_increase},
+            {"profile_likelihood.maximum_bracket_steps",
+             static_cast<double>(profile.maximum_bracket_steps)},
+            {"profile_likelihood.maximum_bisection_steps",
+             static_cast<double>(profile.maximum_bisection_steps)},
+            {"profile_likelihood.maximum_nuisance_iterations",
+             static_cast<double>(profile.maximum_nuisance_iterations)},
         },
     };
     const auto simulation =
@@ -3157,7 +3168,14 @@ SimulationService::run_data_reconciliation(
         settings.objective_relative_tolerance <= 0.0 ||
         !std::isfinite(settings.minimum_line_search_fraction) ||
         settings.minimum_line_search_fraction <= 0.0 ||
-        settings.minimum_line_search_fraction >= 1.0) {
+        settings.minimum_line_search_fraction >= 1.0 ||
+        (request.profile_likelihood.enabled &&
+         (!std::isfinite(
+              request.profile_likelihood.objective_increase) ||
+          request.profile_likelihood.objective_increase <= 0.0 ||
+          request.profile_likelihood.maximum_bracket_steps <= 0 ||
+          request.profile_likelihood.maximum_bisection_steps <= 0 ||
+          request.profile_likelihood.maximum_nuisance_iterations <= 0))) {
         response.error = make_error(
             "invalid_reconciliation_settings", "request",
             "invalid data-reconciliation solver settings");
@@ -3199,6 +3217,12 @@ SimulationService::run_data_reconciliation(
             runtime->impl_->thermochemistry);
         definition = &require_calibration(
             document, request.reconciliation_id);
+        if (request.profile_likelihood.enabled &&
+            request.mode != ReconciliationMode::weighted_measurements) {
+            throw std::invalid_argument(
+                "profile likelihood requires weighted-measurements "
+                "reconciliation mode");
+        }
         if (request.mode == ReconciliationMode::hard_equalities &&
             definition->parameters.size() !=
                 definition->observations.size()) {
@@ -3225,6 +3249,24 @@ SimulationService::run_data_reconciliation(
                 throw std::invalid_argument(
                     "data reconciliation does not accept parameter "
                     "priors; hard equalities determine inferred values");
+            }
+        }
+        if (request.profile_likelihood.enabled) {
+            std::set<std::string> parameter_ids;
+            for (const auto& parameter : definition->parameters) {
+                parameter_ids.insert(parameter.id);
+            }
+            std::set<std::string> requested_ids;
+            for (const auto& id :
+                 request.profile_likelihood.parameter_ids) {
+                if (id.empty() ||
+                    !requested_ids.insert(id).second ||
+                    !parameter_ids.contains(id)) {
+                    throw std::invalid_argument(
+                        "profile-likelihood parameter IDs must be "
+                        "unique and reference declared adjustable "
+                        "quantities: " + id);
+                }
             }
         }
         std::set<std::pair<std::string, std::string>> hard_targets;
@@ -3265,7 +3307,8 @@ SimulationService::run_data_reconciliation(
         response.metadata = execution_metadata(
             document, request.schema_version, "",
             "data_reconciliation",
-            solver_provenance(settings, request.mode),
+            solver_provenance(
+                settings, request.mode, request.profile_likelihood),
             runtime->impl_->fingerprint,
             runtime->impl_->components,
             runtime->impl_->properties);
@@ -3868,6 +3911,303 @@ SimulationService::run_data_reconciliation(
             ex.what());
         return response;
         }
+    }
+
+    if (request.profile_likelihood.enabled) {
+        struct ProfilePoint {
+            std::vector<double> parameter_values;
+            ObjectiveEvaluation evaluation;
+            bool succeeded{false};
+            std::string message;
+        };
+        const auto optimize_profile_point =
+            [&](std::size_t fixed_index,
+                double fixed_value,
+                std::vector<double> candidate) {
+            ProfilePoint point;
+            candidate[fixed_index] = fixed_value;
+            try {
+                auto current = evaluate(candidate, &best.case_states);
+                for (int iteration = 0;
+                     iteration < request.profile_likelihood
+                                      .maximum_nuisance_iterations;
+                     ++iteration) {
+                    auto jacobian = sensitivity_at(candidate, current);
+                    jacobian = correlation_whitener.whiten_rows(jacobian);
+                    if (jacobian.empty()) {
+                        throw std::runtime_error(
+                            "could not whiten profile sensitivity");
+                    }
+                    std::vector<double> rhs(jacobian.size(), 0.0);
+                    for (std::size_t row = 0;
+                         row < jacobian.size(); ++row) {
+                        rhs[row] = -current.observations[row]
+                                        .normalized_residual;
+                    }
+                    const auto whitened_rhs =
+                        correlation_whitener.solve_lower(std::move(rhs));
+                    if (!whitened_rhs.success) {
+                        throw std::runtime_error(
+                            "could not whiten profile residuals: " +
+                            whitened_rhs.message);
+                    }
+                    std::vector<std::size_t> nuisance_indices;
+                    for (std::size_t column = 0;
+                         column < candidate.size(); ++column) {
+                        if (column == fixed_index) continue;
+                        double gradient = 0.0;
+                        double gradient_scale = 0.0;
+                        for (std::size_t row = 0;
+                             row < jacobian.size(); ++row) {
+                            const double contribution =
+                                -jacobian[row][column] *
+                                whitened_rhs.x[row];
+                            gradient += contribution;
+                            gradient_scale += std::abs(contribution);
+                        }
+                        const double bound_tolerance =
+                            1.0e-10 *
+                            (upper[column] - lower[column]);
+                        const bool at_lower =
+                            candidate[column] - lower[column] <=
+                            bound_tolerance;
+                        const bool at_upper =
+                            upper[column] - candidate[column] <=
+                            bound_tolerance;
+                        const double gradient_tolerance =
+                            1.0e-12 *
+                            std::max(1.0, gradient_scale);
+                        const bool outward =
+                            (at_lower &&
+                             gradient > gradient_tolerance) ||
+                            (at_upper &&
+                             gradient < -gradient_tolerance);
+                        if (!outward) nuisance_indices.push_back(column);
+                    }
+                    if (nuisance_indices.empty()) break;
+
+                    thermox::Matrix nuisance_jacobian(
+                        jacobian.size(),
+                        std::vector<double>(
+                            nuisance_indices.size(), 0.0));
+                    for (std::size_t row = 0;
+                         row < jacobian.size(); ++row) {
+                        for (std::size_t column = 0;
+                             column < nuisance_indices.size(); ++column) {
+                            nuisance_jacobian[row][column] =
+                                jacobian[row][nuisance_indices[column]];
+                        }
+                    }
+                    const auto least_squares =
+                        thermox::solve_dense_least_squares(
+                            std::move(nuisance_jacobian),
+                            whitened_rhs.x);
+                    if (!least_squares.success) {
+                        throw std::runtime_error(
+                            "profile nuisance sensitivity is singular: " +
+                            least_squares.message);
+                    }
+                    double maximum_scaled_step = 0.0;
+                    for (std::size_t index = 0;
+                         index < nuisance_indices.size(); ++index) {
+                        const auto parameter = nuisance_indices[index];
+                        maximum_scaled_step = std::max(
+                            maximum_scaled_step,
+                            std::abs(least_squares.x[index]) /
+                                (upper[parameter] - lower[parameter]));
+                    }
+                    if (maximum_scaled_step <= settings.step_tolerance) {
+                        break;
+                    }
+                    bool accepted = false;
+                    double fraction = 1.0;
+                    while (fraction >=
+                           settings.minimum_line_search_fraction) {
+                        auto trial = candidate;
+                        for (std::size_t index = 0;
+                             index < nuisance_indices.size(); ++index) {
+                            const auto parameter =
+                                nuisance_indices[index];
+                            trial[parameter] = std::clamp(
+                                candidate[parameter] + fraction *
+                                    least_squares.x[index],
+                                lower[parameter], upper[parameter]);
+                        }
+                        trial[fixed_index] = fixed_value;
+                        try {
+                            auto trial_evaluation = evaluate(
+                                trial, &current.case_states);
+                            if (trial_evaluation.value < current.value) {
+                                candidate = std::move(trial);
+                                current = std::move(trial_evaluation);
+                                accepted = true;
+                                break;
+                            }
+                        } catch (const std::exception&) {
+                        }
+                        fraction *= 0.5;
+                    }
+                    if (!accepted) break;
+                }
+                point.parameter_values = std::move(candidate);
+                point.evaluation = std::move(current);
+                point.succeeded = true;
+                point.message = "profile nuisance optimum evaluated";
+            } catch (const std::exception& ex) {
+                point.message = ex.what();
+            }
+            return point;
+        };
+
+        const double optimum_objective = best.value;
+        const auto profile_side =
+            [&](std::size_t parameter_index,
+                int direction,
+                int& evaluation_count,
+                std::string& failure_message) {
+            ProfileLikelihoodEndpoint endpoint;
+            const double estimate = values[parameter_index];
+            const double bound = direction < 0
+                ? lower[parameter_index]
+                : upper[parameter_index];
+            const double span = std::abs(bound - estimate);
+            if (span <= 1.0e-14 *
+                    (upper[parameter_index] -
+                     lower[parameter_index])) {
+                endpoint.value_si = estimate;
+                endpoint.bound_truncated = true;
+                return endpoint;
+            }
+
+            ProfilePoint below{
+                values, best, true, "profile optimum"};
+            double below_coordinate = estimate;
+            ProfilePoint above;
+            double above_coordinate = estimate;
+            bool bracketed = false;
+            double fraction = std::ldexp(
+                1.0,
+                1 - request.profile_likelihood.maximum_bracket_steps);
+            for (int step = 0;
+                 step < request.profile_likelihood.maximum_bracket_steps;
+                 ++step) {
+                fraction = std::min(1.0, fraction);
+                const double coordinate =
+                    estimate + static_cast<double>(direction) *
+                        span * fraction;
+                const int before = response.diagnostics.model_evaluations;
+                auto current = optimize_profile_point(
+                    parameter_index, coordinate,
+                    below.parameter_values);
+                evaluation_count +=
+                    response.diagnostics.model_evaluations - before;
+                if (!current.succeeded) {
+                    failure_message = current.message;
+                    return endpoint;
+                }
+                const double increase =
+                    current.evaluation.value - optimum_objective;
+                if (increase <
+                    -settings.objective_relative_tolerance *
+                     std::max(optimum_objective, 1.0)) {
+                    failure_message =
+                        "profile found an objective below the reported "
+                        "reconciliation optimum";
+                    return endpoint;
+                }
+                if (increase >=
+                    request.profile_likelihood.objective_increase) {
+                    above = std::move(current);
+                    above_coordinate = coordinate;
+                    bracketed = true;
+                    break;
+                }
+                below = std::move(current);
+                below_coordinate = coordinate;
+                if (fraction >= 1.0) break;
+                fraction = std::min(1.0, fraction * 2.0);
+            }
+            if (!bracketed) {
+                endpoint.value_si = bound;
+                endpoint.objective_increase =
+                    below.evaluation.value - optimum_objective;
+                endpoint.bound_truncated = true;
+                return endpoint;
+            }
+
+            for (int step = 0;
+                 step < request.profile_likelihood.maximum_bisection_steps;
+                 ++step) {
+                const double coordinate =
+                    0.5 * (below_coordinate + above_coordinate);
+                const int before = response.diagnostics.model_evaluations;
+                auto middle = optimize_profile_point(
+                    parameter_index, coordinate,
+                    below.parameter_values);
+                evaluation_count +=
+                    response.diagnostics.model_evaluations - before;
+                if (!middle.succeeded) {
+                    failure_message = middle.message;
+                    return endpoint;
+                }
+                const double increase =
+                    middle.evaluation.value - optimum_objective;
+                if (increase >=
+                    request.profile_likelihood.objective_increase) {
+                    above = std::move(middle);
+                    above_coordinate = coordinate;
+                } else {
+                    below = std::move(middle);
+                    below_coordinate = coordinate;
+                }
+            }
+            endpoint.value_si = above_coordinate;
+            endpoint.objective_increase =
+                above.evaluation.value - optimum_objective;
+            endpoint.threshold_reached = true;
+            endpoint.bound_truncated =
+                std::abs(above_coordinate - bound) <=
+                1.0e-12 *
+                    (upper[parameter_index] - lower[parameter_index]);
+            return endpoint;
+        };
+
+        std::set<std::string> selected(
+            request.profile_likelihood.parameter_ids.begin(),
+            request.profile_likelihood.parameter_ids.end());
+        for (std::size_t parameter_index = 0;
+             parameter_index < definition->parameters.size();
+             ++parameter_index) {
+            const auto& parameter =
+                definition->parameters[parameter_index];
+            if (!selected.empty() && !selected.contains(parameter.id)) {
+                continue;
+            }
+            ReconciliationProfileInterval interval;
+            interval.parameter_id = parameter.id;
+            interval.dimension = parameter.lower_bound->dimension;
+            interval.estimate_si = values[parameter_index];
+            interval.requested_objective_increase =
+                request.profile_likelihood.objective_increase;
+            std::string lower_failure;
+            std::string upper_failure;
+            interval.lower = profile_side(
+                parameter_index, -1,
+                interval.model_evaluations, lower_failure);
+            interval.upper = profile_side(
+                parameter_index, 1,
+                interval.model_evaluations, upper_failure);
+            interval.succeeded =
+                lower_failure.empty() && upper_failure.empty();
+            interval.message = interval.succeeded
+                ? "profile interval evaluated"
+                : (!lower_failure.empty()
+                       ? "lower profile failed: " + lower_failure
+                       : "upper profile failed: " + upper_failure);
+            response.profile_likelihood_intervals.push_back(
+                std::move(interval));
+        }
+        apply_values(values);
     }
 
     for (const auto& held_out_case : request.held_out_cases) {
