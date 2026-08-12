@@ -567,6 +567,8 @@ std::string_view capability_name(
             return "equilibrium_hp";
         case physics::ThermochemistryCapability::transport:
             return "transport";
+        case physics::ThermochemistryCapability::lower_heating_value:
+            return "lower_heating_value";
     }
     return "unknown";
 }

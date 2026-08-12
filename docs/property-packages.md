@@ -9,6 +9,7 @@ Fixed-fluid property packages and reacting-mixture thermochemistry are separate 
 - composition-aware PT and PH states;
 - composition-aware PS states for isentropic compression and expansion;
 - equilibrium at fixed enthalpy and pressure;
+- reference-state lower heating value from complete stoichiometric combustion with water vapor;
 - mechanism, phase, implementation, version, and capability identity.
 
 `ThermochemistryPackageRegistry` constructs these packages by backend, mechanism, and phase.
@@ -33,10 +34,18 @@ cmake -S . -B build-cantera -DTHERMOX_ENABLE_CANTERA=ON
 ```
 
 This produces `thermox::cantera_backend`, whose registration function adds composition-aware PT,
-PH, PS, equilibrium-HP, and transport capabilities. The default build remains bounded and does
-not compile Cantera. When the option is enabled, the native service runtime links and registers
-the Cantera backend automatically; callers can still construct an explicit runtime registry for
-dependency injection and testing.
+PH, PS, equilibrium-HP, transport, and lower-heating-value capabilities. The default build remains
+bounded and does not compile Cantera. When the option is enabled, the native service runtime links
+and registers the Cantera backend automatically; callers can still construct an explicit runtime
+registry for dependency injection and testing.
+
+The lower-heating-value operation accepts a backend-neutral fuel composition and an explicit
+reference pressure and temperature. The Cantera adapter forms a stoichiometric pure-oxygen
+mixture, closes complete C/H/N combustion to CO2, water vapor, and N2 at the same reference state,
+and reports heat release per unit mass of the original fuel composition. It is intended for
+fuel-basis consistency and performance-test reduction. It does not infer an OEM fuel correction,
+substitute for a calorimeter value, or silently convert between LHV and HHV. Compositions requiring
+other complete-combustion products must use a backend that explicitly supports them.
 
 The built-in `compressor.material.isentropic_efficiency` and
 `turbine.material.isentropic_efficiency` components preserve each species mass flow, evaluate the

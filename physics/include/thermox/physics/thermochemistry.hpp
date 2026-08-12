@@ -53,6 +53,7 @@ enum class ThermochemistryCapability {
     state_ps,
     equilibrium_hp,
     transport,
+    lower_heating_value,
 };
 
 struct ThermochemicalState {
@@ -63,6 +64,16 @@ struct ThermochemicalState {
 
 struct ThermochemicalResult {
     ThermochemicalState state;
+    PropertyStatus status{PropertyStatus::backend_error};
+    std::string message;
+
+    [[nodiscard]] bool ok() const {
+        return status == PropertyStatus::success;
+    }
+};
+
+struct HeatingValueResult {
+    double lower_heating_value_j_kg{0.0};
     PropertyStatus status{PropertyStatus::backend_error};
     std::string message;
 
@@ -102,6 +113,10 @@ public:
         double pressure_pa,
         double enthalpy_j_kg,
         const SpeciesComposition& reactants) const = 0;
+    [[nodiscard]] virtual HeatingValueResult lower_heating_value(
+        double reference_pressure_pa,
+        double reference_temperature_k,
+        const SpeciesComposition& fuel) const = 0;
 };
 
 struct ThermochemistryBackendDescriptor {

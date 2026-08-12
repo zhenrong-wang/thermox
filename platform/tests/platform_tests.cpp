@@ -113,6 +113,16 @@ public:
             thermox::physics::PropertyStatus::success,
             {}};
     }
+    thermox::physics::HeatingValueResult lower_heating_value(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&) const override {
+        return {
+            0.0,
+            thermox::physics::PropertyStatus::unsupported,
+            "test backend does not implement heating values",
+        };
+    }
 
 private:
     thermox::physics::ThermochemicalResult state(

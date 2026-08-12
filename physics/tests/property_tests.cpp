@@ -6,6 +6,9 @@
 #include "thermox/physics/humid_air.hpp"
 #include "thermox/physics/thermochemistry.hpp"
 #include "thermox/physics/water_heos_package.hpp"
+#ifdef THERMOX_TEST_HAS_CANTERA
+#include "thermox/physics/cantera_thermochemistry.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -73,6 +76,12 @@ public:
         double,
         const thermox::physics::SpeciesComposition&)
         const override {
+        return {};
+    }
+    thermox::physics::HeatingValueResult lower_heating_value(
+        double,
+        double,
+        const thermox::physics::SpeciesComposition&) const override {
         return {};
     }
 
@@ -556,6 +565,42 @@ void verify_thermochemistry_contracts() {
         "and species basis");
 }
 
+#ifdef THERMOX_TEST_HAS_CANTERA
+void verify_cantera_lower_heating_value() {
+    thermox::physics::ThermochemistryPackageRegistry registry;
+    thermox::physics::register_cantera_thermochemistry_backend(
+        registry);
+    const auto package =
+        registry.create("cantera", "gri30.yaml", "gri30");
+    require(
+        package->supports(
+            thermox::physics::ThermochemistryCapability::
+                lower_heating_value),
+        "Cantera advertises lower-heating-value support");
+
+    const thermox::physics::SpeciesComposition methane{
+        thermox::physics::CompositionBasis::mass_fraction,
+        {"CH4"},
+        {1.0},
+    };
+    const auto result = package->lower_heating_value(
+        101325.0, 298.15, methane);
+    require(result.ok(), result.message);
+    require_near(
+        result.lower_heating_value_j_kg,
+        50.025e6,
+        5.0e3,
+        "Cantera methane LHV at 298.15 K");
+
+    const auto invalid = package->lower_heating_value(
+        -1.0, 298.15, methane);
+    require(
+        invalid.status ==
+            thermox::physics::PropertyStatus::invalid_input,
+        "heating-value service rejects an invalid reference pressure");
+}
+#endif
+
 void verify_humid_air_ambient_state() {
     const auto humid =
         thermox::physics::humid_air_state_ptrh(
@@ -613,6 +658,9 @@ int main() {
         thermox::physics::PropertyDerivativeSource::analytic);
     verify_co2_cycle_points(co2);
     verify_thermochemistry_contracts();
+#ifdef THERMOX_TEST_HAS_CANTERA
+    verify_cantera_lower_heating_value();
+#endif
     verify_humid_air_ambient_state();
     verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);

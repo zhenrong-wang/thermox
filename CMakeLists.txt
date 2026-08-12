@@ -315,6 +315,12 @@ add_test(NAME platform_rankine_example_cli
 
 add_executable(thermox_property_tests physics/tests/property_tests.cpp)
 target_link_libraries(thermox_property_tests PRIVATE thermox_physics thermox_core)
+if(TARGET thermox_cantera_backend)
+    target_link_libraries(
+        thermox_property_tests PRIVATE thermox_cantera_backend)
+    target_compile_definitions(
+        thermox_property_tests PRIVATE THERMOX_TEST_HAS_CANTERA=1)
+endif()
 add_test(NAME thermox_property_tests COMMAND thermox_property_tests)
 
 set(THERMOX_SDK_TARGETS

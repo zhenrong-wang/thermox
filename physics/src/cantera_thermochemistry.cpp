@@ -94,6 +94,108 @@ public:
             Flash::equilibrium_hp);
     }
 
+    HeatingValueResult lower_heating_value(
+        double pressure,
+        double temperature,
+        const SpeciesComposition& fuel) const override {
+        if (!std::isfinite(pressure) ||
+            !std::isfinite(temperature) || pressure <= 0.0 ||
+            temperature <= 0.0 || fuel.empty()) {
+            return {
+                0.0,
+                PropertyStatus::invalid_input,
+                "heating-value reference state must be finite and "
+                "physically positive, with a nonempty fuel composition",
+            };
+        }
+
+        std::scoped_lock lock(mutex_);
+        try {
+            const auto thermo = solution_->thermo();
+            Cantera::Composition fuel_composition;
+            for (std::size_t index = 0;
+                 index < fuel.species().size(); ++index) {
+                const auto species_index = thermo->speciesIndex(
+                    fuel.species().at(index));
+                if (species_index == Cantera::npos) {
+                    throw Cantera::CanteraError(
+                        "CanteraThermochemistryPackage::"
+                        "lower_heating_value",
+                        "species '{}' is absent from mechanism '{}'",
+                        fuel.species().at(index), mechanism_);
+                }
+                auto fraction = fuel.fractions().at(index);
+                if (fuel.basis() ==
+                    CompositionBasis::mass_fraction) {
+                    fraction /=
+                        thermo->molecularWeight(species_index);
+                }
+                fuel_composition[fuel.species().at(index)] =
+                    fraction;
+            }
+
+            thermo->setState_TP(temperature, pressure);
+            const Cantera::Composition oxidizer{{"O2", 1.0}};
+            thermo->setEquivalenceRatio(
+                1.0, fuel_composition, oxidizer);
+            const double reactant_enthalpy =
+                thermo->enthalpy_mass();
+            const double fuel_mass_fraction =
+                thermo->mixtureFraction(
+                    fuel_composition,
+                    oxidizer,
+                    Cantera::ThermoBasis::molar);
+            if (!(fuel_mass_fraction > 0.0)) {
+                return {
+                    0.0,
+                    PropertyStatus::invalid_input,
+                    "fuel has no positive mass in its stoichiometric mixture",
+                };
+            }
+
+            const auto element_fraction =
+                [&thermo](std::string_view name) {
+                    const auto index = thermo->elementIndex(
+                        std::string(name));
+                    return index == Cantera::npos
+                        ? 0.0
+                        : thermo->elementalMoleFraction(index);
+                };
+            Cantera::Composition products{
+                {"CO2", element_fraction("C")},
+                {"H2O", 0.5 * element_fraction("H")},
+                {"N2", 0.5 * element_fraction("N")},
+            };
+            thermo->setState_TPX(
+                temperature, pressure, products);
+            const double product_enthalpy =
+                thermo->enthalpy_mass();
+            const double heating_value =
+                (reactant_enthalpy - product_enthalpy) /
+                fuel_mass_fraction;
+            if (!std::isfinite(heating_value) ||
+                heating_value <= 0.0) {
+                return {
+                    0.0,
+                    PropertyStatus::invalid_input,
+                    "composition does not produce a positive lower heating "
+                    "value under complete combustion",
+                };
+            }
+            return {
+                heating_value,
+                PropertyStatus::success,
+                {},
+            };
+        } catch (const Cantera::CanteraError& error) {
+            return {
+                0.0,
+                PropertyStatus::backend_error,
+                error.what(),
+            };
+        }
+    }
+
 private:
     enum class Flash { pt, ph, ps, equilibrium_hp };
 
@@ -220,6 +322,7 @@ void register_cantera_thermochemistry_backend(
                 ThermochemistryCapability::state_ps,
                 ThermochemistryCapability::equilibrium_hp,
                 ThermochemistryCapability::transport,
+                ThermochemistryCapability::lower_heating_value,
             },
         },
         [](std::string_view mechanism,
