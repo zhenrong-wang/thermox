@@ -1,6 +1,7 @@
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/native_runtime.hpp"
+#include "thermox/service/performance_test.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
@@ -5387,6 +5388,107 @@ void test_validation_evidence_contract() {
         "durable validation evidence must reject reclassified counts");
 }
 
+void test_iso2314_gas_turbine_performance_test_reduction() {
+    using namespace thermox::service;
+    GasTurbinePerformanceTestRequest request;
+    request.id = "public-synthetic-iso2314-campaign";
+    request.equipment_id = "synthetic-gt";
+    request.evidence = {
+        true, true, true, true, true, true, true, true, false};
+
+    GasTurbinePerformanceRun run;
+    run.id = "run-1";
+    run.duration_seconds = 1800.0;
+    run.gross_generator_power_w = {100.0e6, 0.1e6};
+    run.generator_losses_w = {1.0e6, 0.01e6};
+    run.fuel_mass_flow_kg_s = {5.0, 0.01};
+    run.fuel_lhv_j_kg = {50.0e6, 0.1e6};
+    run.fuel_sensible_enthalpy_j_kg = {0.0, 0.0};
+    run.output_corrections = {
+        {"ambient_temperature", 1.1,
+         CorrectionEvidenceBasis::manufacturer_curve,
+         "public synthetic correction table", 0.001},
+    };
+    run.heat_rate_corrections = {
+        {"ambient_temperature", 0.98,
+         CorrectionEvidenceBasis::manufacturer_curve,
+         "public synthetic correction table", 0.001},
+    };
+    run.stability = {
+        {"generator_terminal_power", 0.004, 0.01, "relative",
+         StabilityStatistic::maximum_deviation_from_mean},
+        {"ambient_temperature", 0.5, 2.0, "temperature_difference",
+         StabilityStatistic::maximum_deviation_from_mean},
+    };
+    request.runs = {run};
+
+    const auto result =
+        evaluate_gas_turbine_performance_test(request);
+    require(
+        result.iso_conformity_demonstrated &&
+            result.passed_count == 9U &&
+            result.not_demonstrated_count == 0U,
+        "complete synthetic evidence must demonstrate the declared "
+        "ISO 2314 checks");
+    require(
+        std::abs(
+            result.runs[0].net_generator_power_w.value_si - 99.0e6) <
+                1.0e-9 &&
+            std::abs(
+                result.runs[0].fuel_thermal_input_w.value_si -
+                250.0e6) < 1.0e-9 &&
+            std::abs(
+                result.runs[0].heat_rate_j_per_kwh.value_si -
+                3.6e6 / (99.0 / 250.0)) < 1.0e-9 &&
+            std::abs(
+                result.runs[0].corrected_net_generator_power_w.value_si -
+                108.9e6) < 1.0e-6,
+        "ISO performance reduction must compute net power, fuel input, "
+        "heat rate, and corrected power from the declared boundary");
+    require(
+        result.runs[0].corrected_heat_rate_j_per_kwh
+                .standard_uncertainty_si.has_value() &&
+            result.runs[0].corrected_heat_rate_j_per_kwh
+                .expanded_uncertainty_si_k2.has_value(),
+        "complete Type B input and correction uncertainties must "
+        "propagate to a k=2 result");
+    const auto json =
+        serialize_gas_turbine_performance_test_result_json(result);
+    require(
+        json.find("thermox.gas_turbine_performance_test/v1") !=
+                std::string::npos &&
+            json.find("\"iso_conformity_demonstrated\":true") !=
+                std::string::npos &&
+            json.find("\"basis\":\"manufacturer_curve\"") !=
+                std::string::npos &&
+            json.find(
+                "\"statistic\":\"maximum_deviation_from_mean\"") !=
+                std::string::npos,
+        "performance-test result serialization must preserve schema and "
+        "correction/stability evidence");
+
+    request.id = "reported-summary-only";
+    request.evidence.raw_time_series_available = false;
+    request.evidence.instrument_calibrations_available = false;
+    request.evidence.contemporaneous_fuel_sample_available = false;
+    request.evidence.correction_curves_available = false;
+    request.evidence.correction_curve_range_confirmed = false;
+    request.evidence.uncertainty_analysis_available = false;
+    request.evidence.deviations_documented_and_approved = true;
+    request.runs[0].stability[0].statistic =
+        StabilityStatistic::standard_deviation;
+    const auto reported =
+        evaluate_gas_turbine_performance_test(request);
+    require(
+        !reported.iso_conformity_demonstrated &&
+            reported.accepted_deviation_count == 1U &&
+            reported.not_demonstrated_count >= 4U &&
+            reported.failed_count == 0U,
+        "reported factors and stability summaries must reproduce results "
+        "without being promoted to independently demonstrated ISO "
+        "conformity");
+}
+
 }  // namespace
 
 int main() {
@@ -5439,6 +5541,7 @@ int main() {
         test_invalid_solver_settings();
         test_system_agnostic_result_projection();
         test_validation_evidence_contract();
+        test_iso2314_gas_turbine_performance_test_reduction();
         std::cout << "thermox service tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

@@ -1,0 +1,78 @@
+{
+  "schema_version": "thermox.gas_turbine_performance_test/v1",
+  "id": "public-synthetic-iso2314-campaign",
+  "equipment_id": "synthetic-gas-turbine",
+  "standard_reference": "ISO 2314:2009",
+  "evidence": {
+    "test_boundary_defined": true,
+    "reference_conditions_defined": true,
+    "raw_time_series_available": true,
+    "instrument_calibrations_available": true,
+    "contemporaneous_fuel_sample_available": true,
+    "correction_curves_available": true,
+    "correction_curve_range_confirmed": true,
+    "uncertainty_analysis_available": true,
+    "deviations_documented_and_approved": false
+  },
+  "runs": [
+    {
+      "id": "run-1",
+      "duration_seconds": 1800,
+      "gross_generator_power_w": {
+        "value_si": 100000000,
+        "standard_uncertainty_si": 100000
+      },
+      "generator_losses_w": {
+        "value_si": 1000000,
+        "standard_uncertainty_si": 10000
+      },
+      "fuel_mass_flow_kg_s": {
+        "value_si": 5.0,
+        "standard_uncertainty_si": 0.01
+      },
+      "fuel_lhv_j_kg": {
+        "value_si": 50000000,
+        "standard_uncertainty_si": 100000
+      },
+      "fuel_sensible_enthalpy_j_kg": {
+        "value_si": 0,
+        "standard_uncertainty_si": 0
+      },
+      "include_fuel_sensible_heat": true,
+      "output_corrections": [
+        {
+          "id": "ambient_temperature",
+          "factor": 1.1,
+          "basis": "manufacturer_curve",
+          "source_reference": "public synthetic correction table",
+          "relative_standard_uncertainty": 0.001
+        }
+      ],
+      "heat_rate_corrections": [
+        {
+          "id": "ambient_temperature",
+          "factor": 0.98,
+          "basis": "manufacturer_curve",
+          "source_reference": "public synthetic correction table",
+          "relative_standard_uncertainty": 0.001
+        }
+      ],
+      "stability": [
+        {
+          "parameter": "generator_terminal_power",
+          "observed_variation": 0.004,
+          "allowed_variation": 0.01,
+          "dimension": "relative",
+          "statistic": "maximum_deviation_from_mean"
+        },
+        {
+          "parameter": "ambient_temperature",
+          "observed_variation": 0.5,
+          "allowed_variation": 2.0,
+          "dimension": "temperature_difference",
+          "statistic": "maximum_deviation_from_mean"
+        }
+      ]
+    }
+  ]
+}

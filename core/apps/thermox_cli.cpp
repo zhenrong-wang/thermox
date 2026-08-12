@@ -1,5 +1,6 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/performance_test.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -19,6 +20,8 @@ void print_usage(std::ostream& out) {
         << "  thermox_cli simulate --model <path> [--case <id>]"
            " --end-time <seconds>"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
+           " [--format text|json]\n"
+        << "  thermox_cli performance-test --input <path>"
            " [--format text|json]\n";
 }
 
@@ -146,6 +149,7 @@ int main(int argc, char** argv) {
 
     const std::string command = argv[1];
     std::string model_path;
+    std::string input_path;
     std::string case_id;
     std::string end_time_text;
     std::string format = "text";
@@ -157,6 +161,8 @@ int main(int argc, char** argv) {
         const std::string arg = argv[i];
         if (arg == "--model" && i + 1 < argc) {
             model_path = argv[++i];
+        } else if (arg == "--input" && i + 1 < argc) {
+            input_path = argv[++i];
         } else if (arg == "--case" && i + 1 < argc) {
             case_id = argv[++i];
         } else if (arg == "--end-time" && i + 1 < argc) {
@@ -180,13 +186,19 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (command != "solve" && command != "simulate") {
+    if (command != "solve" && command != "simulate" &&
+        command != "performance-test") {
         std::cerr << "Unknown command: " << command << "\n";
         print_usage(std::cerr);
         return 2;
     }
-    if (model_path.empty()) {
+    if (command != "performance-test" && model_path.empty()) {
         std::cerr << "Missing required --model path\n";
+        print_usage(std::cerr);
+        return 2;
+    }
+    if (command == "performance-test" && input_path.empty()) {
+        std::cerr << "Missing required --input path\n";
         print_usage(std::cerr);
         return 2;
     }
@@ -208,6 +220,31 @@ int main(int argc, char** argv) {
     }
 
     try {
+        if (command == "performance-test") {
+            const auto response = thermox::service::
+                evaluate_gas_turbine_performance_test_json(
+                    read_file(input_path));
+            if (format == "json") {
+                std::cout << thermox::service::
+                    serialize_gas_turbine_performance_test_result_json(
+                        response);
+            } else {
+                std::cout
+                    << "campaign: " << response.id << "\n"
+                    << "equipment: " << response.equipment_id << "\n"
+                    << "standard: " << response.standard_reference << "\n"
+                    << "iso_conformity_demonstrated: "
+                    << (response.iso_conformity_demonstrated ? "yes" : "no")
+                    << "\n"
+                    << "average_corrected_net_generator_power_w: "
+                    << response.average_corrected_net_generator_power_w
+                    << "\n"
+                    << "average_corrected_heat_rate_j_per_kwh: "
+                    << response.average_corrected_heat_rate_j_per_kwh
+                    << "\n";
+            }
+            return 0;
+        }
         const std::string model_json = read_file(model_path);
         thermox::service::SimulationService service;
         if (command == "solve") {

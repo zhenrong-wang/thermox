@@ -242,6 +242,10 @@ Implemented in this sprint:
 - A leakage-guarded engineering-study service calibrates designated baseline cases, freezes the
   canonical fitted model, runs independent steady prediction cases, and reports per-observation
   and aggregate normalized validation residuals.
+- A declaration-driven gas-turbine performance-test service reduces measured net power, fuel
+  input, efficiency, heat rate, and correction chains; propagates uncertainty when its inputs are
+  available; and reports evidence-qualified GB/T 14100 / ISO 2314 compliance dispositions without
+  promoting reported OEM factors to independently derived physics.
 - Composition-aware compressor and turbine residuals cache thermochemistry flashes by their local
   pressure, enthalpy, and species-flow dependencies, preventing unrelated graph perturbations from
   repeatedly invoking expensive backend calculations.

@@ -5,6 +5,7 @@ add_library(thermox_service
     src/in_memory_artifacts.cpp
     src/in_memory_jobs.cpp
     src/in_memory_projects.cpp
+    src/performance_test.cpp
     src/project_serialization.cpp
     src/projects.cpp
     src/result_comparison.cpp
@@ -24,6 +25,8 @@ target_include_directories(thermox_service
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CPM_PACKAGE_nlohmann_json_SOURCE_DIR}/include
 )
 target_link_libraries(thermox_service
     PUBLIC thermox_platform
