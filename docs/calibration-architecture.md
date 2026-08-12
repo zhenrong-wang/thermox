@@ -96,6 +96,21 @@ The response includes initial/fitted values, bounds, per-observation physical an
 residuals, objective diagnostics, complete execution settings, and a canonical fitted model that
 can be submitted directly for independent validation runs.
 
+The thin command-line adapter exposes the same service workflow for local and batch use:
+
+```sh
+thermox_cli calibrate \
+  --model model.json \
+  --calibration acceptance_fit \
+  --max-iterations 20 \
+  --format json
+```
+
+`--max-iterations` is an execution budget, not a convergence claim. A successful response can
+therefore contain `diagnostics.converged=false` when the best feasible fitted model is returned
+after the bounded coordinate search reaches that budget. Callers must retain the convergence
+flag, objective history summary, and observation residuals when qualifying the result.
+
 `EngineeringStudyRequest` formalizes that independent workflow. It runs one named calibration,
 freezes the returned canonical model, executes each declared prediction case sequentially through
 the ordinary steady service, and evaluates prediction observations only after the solve. A case
@@ -110,3 +125,18 @@ optimizer interface can add trust-region least squares and covariance/identifiab
 without changing model, component, property, or observation contracts. Transient estimation is
 also a later workflow; the first implementation intentionally accepts steady cases only. The
 numeric solver and component models remain unaware of calibration campaigns.
+
+## Evidence classification
+
+Calibration residuals demonstrate reconstruction of the observations used by the optimizer; they
+are not independent validation. A result that holds measured boundaries fixed, calibrates internal
+parameters, and compares a different measured output is a boundary-constrained check. It is
+stronger than replaying the calibration observations, but it remains sensitive to the completeness
+and measurement basis of those boundaries.
+
+Predictive evidence requires cases excluded from calibration and should use
+`EngineeringStudyRequest`, which enforces that separation. Off-design prediction additionally
+requires the physical artifacts that govern movement between operating points, such as equipment
+maps, control schedules, bleed/cooling topology, heat-loss models, and auxiliary-load definitions.
+The platform must report a held-out discrepancy as missing evidence or missing physics; it must not
+absorb it into an unowned plant-wide correction.

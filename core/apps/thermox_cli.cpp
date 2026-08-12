@@ -22,6 +22,10 @@ void print_usage(std::ostream& out) {
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
+           " [--format text|json]\n"
+        << "  thermox_cli calibrate --model <path>"
+           " --calibration <id>"
+           " [--max-iterations <count>]"
            " [--format text|json]\n";
 }
 
@@ -151,6 +155,8 @@ int main(int argc, char** argv) {
     std::string model_path;
     std::string input_path;
     std::string case_id;
+    std::string calibration_id;
+    std::string max_iterations_text;
     std::string end_time_text;
     std::string format = "text";
     bool continuation = false;
@@ -165,6 +171,10 @@ int main(int argc, char** argv) {
             input_path = argv[++i];
         } else if (arg == "--case" && i + 1 < argc) {
             case_id = argv[++i];
+        } else if (arg == "--calibration" && i + 1 < argc) {
+            calibration_id = argv[++i];
+        } else if (arg == "--max-iterations" && i + 1 < argc) {
+            max_iterations_text = argv[++i];
         } else if (arg == "--end-time" && i + 1 < argc) {
             end_time_text = argv[++i];
         } else if (arg == "--format" && i + 1 < argc) {
@@ -187,13 +197,18 @@ int main(int argc, char** argv) {
     }
 
     if (command != "solve" && command != "simulate" &&
-        command != "performance-test") {
+        command != "performance-test" && command != "calibrate") {
         std::cerr << "Unknown command: " << command << "\n";
         print_usage(std::cerr);
         return 2;
     }
     if (command != "performance-test" && model_path.empty()) {
         std::cerr << "Missing required --model path\n";
+        print_usage(std::cerr);
+        return 2;
+    }
+    if (command == "calibrate" && calibration_id.empty()) {
+        std::cerr << "Missing required --calibration id\n";
         print_usage(std::cerr);
         return 2;
     }
@@ -247,6 +262,39 @@ int main(int argc, char** argv) {
         }
         const std::string model_json = read_file(model_path);
         thermox::service::SimulationService service;
+        if (command == "calibrate") {
+            thermox::service::CalibrationRequest request;
+            request.model_json = model_json;
+            request.calibration_id = calibration_id;
+            if (!max_iterations_text.empty()) {
+                const double count = parse_positive_number(
+                    max_iterations_text, "--max-iterations");
+                if (std::floor(count) != count || count > 1000.0) {
+                    throw std::invalid_argument(
+                        "--max-iterations must be an integer no greater "
+                        "than 1000");
+                }
+                request.solver.max_iterations =
+                    static_cast<int>(count);
+            }
+            const auto response = service.run_calibration(request);
+            if (format == "json") {
+                std::cout << thermox::service::
+                    serialize_calibration_response_json(response);
+            } else {
+                std::cout << "calibration: "
+                          << response.calibration_id << "\n"
+                          << "status: "
+                          << thermox::service::to_string(response.status)
+                          << "\nobjective: "
+                          << response.diagnostics.final_objective << "\n";
+                for (const auto& parameter : response.parameters) {
+                    std::cout << parameter.id << " = "
+                              << parameter.fitted_value_si << "\n";
+                }
+            }
+            return response.succeeded() ? 0 : 1;
+        }
         if (command == "solve") {
             thermox::service::SteadySimulationRequest request;
             request.model_json = model_json;

@@ -43,6 +43,13 @@ add_test(
     COMMAND thermox_cli performance-test
         --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/iso2314_performance_test.json
         --format json)
+add_test(
+    NAME platform_calibration_cli
+    COMMAND thermox_cli calibrate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/air_compressor.json
+        --calibration acceptance_fit
+        --max-iterations 8
+        --format json)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)

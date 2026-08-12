@@ -238,7 +238,9 @@ Implemented in this sprint:
   material ports through the selected thermochemistry backend.
 - A bounded multi-case calibration service performs sequential uncertainty-weighted coordinate
   search through ordinary steady simulations and returns fitted parameters, residual attribution,
-  execution provenance, and a reusable canonical fitted model.
+  execution provenance, and a reusable canonical fitted model. The thin CLI exposes the same
+  service through `calibrate --model ... --calibration ... --max-iterations ...` for bounded local
+  and batch execution.
 - A leakage-guarded engineering-study service calibrates designated baseline cases, freezes the
   canonical fitted model, runs independent steady prediction cases, and reports per-observation
   and aggregate normalized validation residuals.
