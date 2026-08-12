@@ -2009,6 +2009,13 @@ std::string serialize_steady_response_json(
     }
     out << "]},\n  \"graph\": ";
     graph_result_json(out, response.graph);
+    out << ",\n  \"thermal_feasibility\": ";
+    if (response.succeeded()) {
+        out << serialize_thermal_feasibility_summary_json(
+            response.thermal_feasibility);
+    } else {
+        out << "null";
+    }
     out << ",\n  \"reduced_connection_equations\": [";
     for (std::size_t i = 0;
          i < response.reduced_connection_equations.size();
@@ -2398,7 +2405,14 @@ std::string serialize_transient_response_json(
         out, response.diagnostics.limiting_nonlinear_residual);
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
-    out << "},\n  \"trajectory\": [";
+    out << "},\n  \"thermal_feasibility\": ";
+    if (response.succeeded()) {
+        out << serialize_thermal_feasibility_summary_json(
+            response.thermal_feasibility);
+    } else {
+        out << "null";
+    }
+    out << ",\n  \"trajectory\": [";
     for (std::size_t i = 0; i < response.trajectory.size(); ++i) {
         if (i != 0) out << ", ";
         const auto& sample = response.trajectory[i];
@@ -2598,6 +2612,8 @@ std::string serialize_thermal_feasibility_summary_json(
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
     json_string(out, summary.schema_version);
+    out << ",\n  \"scope\": ";
+    json_string(out, summary.scope);
     out << ",\n  \"required_minimum_approach_k\": ";
     json_number(out, summary.required_minimum_approach_k);
     out << ",\n  \"passed\": "
@@ -2620,6 +2636,12 @@ std::string serialize_thermal_feasibility_summary_json(
         json_number(out, result.hot_out_minus_cold_in_k);
         out << ", \"minimum_approach_k\": ";
         json_number(out, result.minimum_approach_k);
+        out << ", \"sample_time\": ";
+        if (result.has_sample_time) {
+            json_number(out, result.sample_time);
+        } else {
+            out << "null";
+        }
         out << ", \"passed\": "
             << (result.passed ? "true" : "false") << '}';
     }

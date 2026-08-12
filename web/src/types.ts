@@ -667,6 +667,27 @@ export interface GraphResult {
   kpis: GraphResultValue[]
 }
 
+export interface CounterflowApproachResult {
+  component_id: string
+  component_kind: string
+  hot_in_minus_cold_out_k: number
+  hot_out_minus_cold_in_k: number
+  minimum_approach_k: number
+  sample_time: number | null
+  passed: boolean
+}
+
+export interface ThermalFeasibilitySummary {
+  schema_version: 'thermox.thermal_feasibility/v1'
+  scope: 'steady' | 'trajectory'
+  required_minimum_approach_k: number
+  passed: boolean
+  checked_count: number
+  passed_count: number
+  failed_count: number
+  counterflow_approaches: CounterflowApproachResult[]
+}
+
 export interface SteadySimulationResult {
   schema_version: 'thermox.result/v3'
   status: 'succeeded'
@@ -755,6 +776,7 @@ export interface SteadySimulationResult {
     }>
   }
   graph: GraphResult
+  thermal_feasibility: ThermalFeasibilitySummary
   reduced_connection_equations: string[]
 }
 
@@ -813,6 +835,7 @@ export interface TransientSimulationResult {
     last_structural_tearing_fallback: string
     message: string
   }
+  thermal_feasibility: ThermalFeasibilitySummary
   trajectory: TransientGraphSample[]
   events: Array<TransientGraphSample & {
     name: string

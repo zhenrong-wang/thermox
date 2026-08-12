@@ -27,6 +27,14 @@ int main() {
             temperature.dimension == "temperature" &&
                 std::abs(temperature.value_si - 293.15) < 1.0e-12,
             "offset conversion must produce canonical SI");
+        const auto temperature_difference =
+            units.convert(20.0, "delta_degC");
+        require(
+            temperature_difference.dimension ==
+                "temperature_difference" &&
+                temperature_difference.value_si == 20.0,
+            "temperature differences must not apply an absolute "
+            "temperature offset");
         const auto time = units.convert(2.0, "min");
         require(
             time.dimension == "time" &&

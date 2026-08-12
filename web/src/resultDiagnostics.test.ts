@@ -59,6 +59,16 @@ function steadyResult(): SimulationResult {
       stages: [],
     },
     graph: { components: [], system_balances: [], kpis: [] },
+    thermal_feasibility: {
+      schema_version: 'thermox.thermal_feasibility/v1',
+      scope: 'steady',
+      required_minimum_approach_k: 0,
+      passed: true,
+      checked_count: 0,
+      passed_count: 0,
+      failed_count: 0,
+      counterflow_approaches: [],
+    },
     reduced_connection_equations: [],
   }
 }
@@ -105,6 +115,16 @@ describe('resultDiagnosticSummary', () => {
       metadata: {} as SimulationResult['metadata'],
       trajectory: [],
       events: [],
+      thermal_feasibility: {
+        schema_version: 'thermox.thermal_feasibility/v1',
+        scope: 'trajectory',
+        required_minimum_approach_k: 0,
+        passed: true,
+        checked_count: 0,
+        passed_count: 0,
+        failed_count: 0,
+        counterflow_approaches: [],
+      },
       diagnostics: {
         success: true,
         accepted_steps: 12,

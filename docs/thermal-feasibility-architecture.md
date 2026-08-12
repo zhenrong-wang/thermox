@@ -18,8 +18,16 @@ minimum_approach = min(delta_T_a, delta_T_b)
 The component passes when `minimum_approach` is at least the caller's finite, nonnegative required
 minimum. The summary contains every component result, aggregate counts, and the required threshold;
 its validator rejects non-finite values, duplicate component identities, inconsistent derived
-minima, verdicts, or aggregate counts. A stable JSON serializer makes the evidence suitable for
-future job reports and UI readiness gates.
+minima, verdicts, or aggregate counts. Every successful steady and transient result now carries the
+stable summary. Transient evidence retains the worst approach and its sample time for each
+component across the complete stored trajectory.
+
+Each audited result graph also exposes `counterflow_hot_in_minus_cold_out`,
+`counterflow_hot_out_minus_cold_in`, and `counterflow_minimum_approach` component metrics. Their
+dimension is `temperature_difference`, whose canonical `delta_K` and engineering `delta_degC`
+units deliberately have no absolute-temperature offset. Normal Study projections and acceptance
+criteria can therefore govern physical admissibility without a heat-exchanger-specific job path.
+The web result workspace presents the physical verdict separately from numerical convergence.
 
 The audit is component-kind agnostic: it recognizes the physical port contract, so registered and
 future user-provided exchanger implementations receive the same check. UA-based counterflow models

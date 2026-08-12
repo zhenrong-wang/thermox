@@ -177,6 +177,12 @@ UnitRegistry make_default_unit_registry() {
             accepted("degC", 1.0, 273.15, {"C"}),
         }));
     registry.register_dimension(dimension(
+        "temperature_difference", "delta_K", display("K"),
+        {
+            accepted("delta_K"),
+            accepted("delta_degC", 1.0, 0.0, {"degC_delta"}),
+        }));
+    registry.register_dimension(dimension(
         "angle", "rad", display("deg", 180.0 / std::acos(-1.0)),
         {
             accepted("rad"),

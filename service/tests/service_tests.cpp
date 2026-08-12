@@ -2018,9 +2018,7 @@ void test_netl_b31a_segmented_triple_pressure_hrsg() {
         "segmented HRSG must close whole-system steady mass and "
         "energy balances");
 
-    const auto thermal_feasibility =
-        thermox::service::audit_counterflow_thermal_feasibility(
-            response.graph);
+    const auto& thermal_feasibility = response.thermal_feasibility;
     const auto approach_of = [&](const char* component_id) {
         const auto found = std::find_if(
             thermal_feasibility.counterflow_approaches.begin(),
@@ -2036,6 +2034,7 @@ void test_netl_b31a_segmented_triple_pressure_hrsg() {
     };
     require(
         !thermal_feasibility.passed &&
+            thermal_feasibility.scope == "steady" &&
             thermal_feasibility.checked_count == 10U &&
             thermal_feasibility.failed_count > 0U &&
             approach_of("hp_superheater").passed &&
@@ -2055,6 +2054,46 @@ void test_netl_b31a_segmented_triple_pressure_hrsg() {
                 std::string::npos,
         "thermal-feasibility evidence must serialize its failed "
         "component verdicts");
+    const auto durable_response_json =
+        thermox::service::serialize_steady_response_json(response);
+    require(
+        durable_response_json.find("\"thermal_feasibility\"") !=
+                std::string::npos &&
+            durable_response_json.find(
+                "counterflow_minimum_approach") !=
+                std::string::npos,
+        "durable steady result must contain both aggregate physical "
+        "evidence and projectable component metrics");
+    const auto reheater_acceptance_projection =
+        thermox::service::project_steady_result(
+            response.graph,
+            {{
+                "reheater_minimum_approach",
+                thermox::service::ResultValueScope::component_metric,
+                "reheater",
+                {},
+                "counterflow_minimum_approach",
+                "temperature_difference",
+                thermox::service::ResultAggregation::final,
+            }});
+    const auto reheater_acceptance =
+        thermox::service::evaluate_engineering_acceptance(
+            reheater_acceptance_projection,
+            {{
+                "positive_reheater_terminal_approach",
+                "reheater_minimum_approach",
+                "temperature_difference",
+                0.0,
+                std::nullopt,
+                true,
+                true,
+            }});
+    require(
+        !reheater_acceptance.passed &&
+            reheater_acceptance.failed_count == 1U &&
+            reheater_acceptance.criteria.front().actual_value_si < 0.0,
+        "ordinary Study engineering acceptance must be able to "
+        "block a thermally inadmissible exchanger result");
     auto tampered_feasibility = thermal_feasibility;
     tampered_feasibility.failed_count = 0U;
     bool tampered_feasibility_rejected = false;
@@ -2367,6 +2406,48 @@ void test_dynamic_equilibrium_two_phase_material_fluid_cell() {
             response.trajectory.size() > 1,
         "dynamic equilibrium two-phase cell must solve: " +
             response.error.message);
+    require(
+        response.thermal_feasibility.scope == "trajectory" &&
+            response.thermal_feasibility.checked_count == 1U &&
+            std::all_of(
+                response.thermal_feasibility.counterflow_approaches.begin(),
+                response.thermal_feasibility.counterflow_approaches.end(),
+                [](const auto& result) {
+                    return result.has_sample_time &&
+                        std::isfinite(result.sample_time);
+                }),
+        "transient heat-transfer result must retain the worst terminal "
+        "approach and sample time for every exchanger");
+    const auto transient_approach_projection =
+        thermox::service::project_transient_result(
+            response.trajectory,
+            {{
+                "minimum_evaporator_approach",
+                thermox::service::ResultValueScope::component_metric,
+                "evaporating_cell",
+                {},
+                "counterflow_minimum_approach",
+                "temperature_difference",
+                thermox::service::ResultAggregation::minimum,
+            }});
+    require(
+        transient_approach_projection.values.size() == 1U &&
+            std::abs(
+                transient_approach_projection.values.front().value_si -
+                response.thermal_feasibility.counterflow_approaches
+                    .front().minimum_approach_k) < 1.0e-10 &&
+            transient_approach_projection.values.front().has_sample_time,
+        "Study projections must expose the trajectory-wide limiting "
+        "counterflow approach and its sample time");
+    const auto durable_transient_json =
+        thermox::service::serialize_transient_response_json(response);
+    require(
+        durable_transient_json.find("\"scope\": \"trajectory\"") !=
+                std::string::npos &&
+            durable_transient_json.find("\"sample_time\":") !=
+                std::string::npos,
+        "durable transient result must retain limiting physical "
+        "evidence with time attribution");
 
     const auto& initial_graph = response.trajectory.front().graph;
     const auto& final_graph = response.trajectory.back().graph;

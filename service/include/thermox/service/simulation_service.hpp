@@ -683,6 +683,31 @@ struct GraphResult {
     std::vector<ResultValue> kpis;
 };
 
+inline constexpr const char* thermal_feasibility_schema_v1 =
+    "thermox.thermal_feasibility/v1";
+
+struct CounterflowApproachResult {
+    std::string component_id;
+    std::string component_kind;
+    double hot_in_minus_cold_out_k{0.0};
+    double hot_out_minus_cold_in_k{0.0};
+    double minimum_approach_k{0.0};
+    bool has_sample_time{false};
+    double sample_time{0.0};
+    bool passed{false};
+};
+
+struct ThermalFeasibilitySummary {
+    std::string schema_version{thermal_feasibility_schema_v1};
+    std::string scope;
+    double required_minimum_approach_k{0.0};
+    bool passed{false};
+    std::size_t checked_count{0};
+    std::size_t passed_count{0};
+    std::size_t failed_count{0};
+    std::vector<CounterflowApproachResult> counterflow_approaches;
+};
+
 struct NonlinearDiagnostics {
     bool converged{false};
     int iterations{0};
@@ -988,6 +1013,7 @@ struct SteadySimulationResponse {
     NonlinearDiagnostics diagnostics;
     ContinuationRunDiagnostics continuation;
     GraphResult graph;
+    ThermalFeasibilitySummary thermal_feasibility;
     std::vector<std::string> reduced_connection_equations;
 
     [[nodiscard]] bool succeeded() const {
@@ -1194,6 +1220,7 @@ struct TransientSimulationResponse {
     TimeIntegrationDiagnostics diagnostics;
     std::vector<StateSample> trajectory;
     std::vector<EventValue> events;
+    ThermalFeasibilitySummary thermal_feasibility;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

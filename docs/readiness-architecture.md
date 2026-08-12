@@ -85,3 +85,13 @@ converged. Engineering acceptance answers whether completed physical results sat
 dimensioned criteria declared by the immutable Study. These remain separate contracts: a job can
 succeed numerically while its engineering acceptance verdict is false. See
 `engineering-acceptance-architecture.md`.
+
+Result-dependent physical feasibility follows the same boundary. Input readiness can prove that a
+heat-exchanger graph has resolvable ports, properties, parameters, and equations, but terminal
+approaches do not exist until a steady solution or transient trajectory has been calculated.
+Successful execution therefore publishes `thermox.thermal_feasibility/v1` separately from the
+pre-execution `calculatable` gate. Counterflow approach values are also exposed as ordinary
+component metrics, allowing an immutable Study to require a nonnegative or design-specific minimum
+through its existing engineering-acceptance criteria. A converged job remains durable evidence even
+when that physical acceptance fails; clients must not present it as an admissible engineering
+result.

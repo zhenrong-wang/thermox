@@ -1,4 +1,5 @@
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/thermal_feasibility.hpp"
 
 #include "serialization_internal.hpp"
 #include "runtime_internal.hpp"
@@ -2524,6 +2525,10 @@ SteadySimulationResponse SimulationService::run_steady(
             runtime->impl_->thermochemistry);
         response.graph =
             copy_graph_result(evaluator.evaluate(result.x));
+        response.thermal_feasibility =
+            audit_counterflow_thermal_feasibility(response.graph);
+        append_counterflow_thermal_metrics(
+            response.graph, response.thermal_feasibility);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::result_failed;
         response.error = make_error(
@@ -3310,23 +3315,38 @@ TransientSimulationResponse SimulationService::run_transient(
             runtime->impl_->thermochemistry);
         response.trajectory.reserve(result.trajectory.size());
         for (const auto& sample : result.trajectory) {
-            response.trajectory.push_back({
+            StateSample projected{
                 sample.time,
                 copy_graph_result(
                     evaluator.evaluate(
                         sample.state, sample.derivative)),
-            });
+            };
+            const auto snapshot_feasibility =
+                audit_counterflow_thermal_feasibility(
+                    projected.graph);
+            append_counterflow_thermal_metrics(
+                projected.graph, snapshot_feasibility);
+            response.trajectory.push_back(std::move(projected));
         }
         response.events.reserve(result.events.size());
         for (const auto& event : result.events) {
-            response.events.push_back({
+            EventValue projected{
                 event.name,
                 event.time,
                 copy_graph_result(
                     evaluator.evaluate(event.state)),
                 event.terminal,
-            });
+            };
+            const auto event_feasibility =
+                audit_counterflow_thermal_feasibility(
+                    projected.graph);
+            append_counterflow_thermal_metrics(
+                projected.graph, event_feasibility);
+            response.events.push_back(std::move(projected));
         }
+        response.thermal_feasibility =
+            audit_counterflow_thermal_feasibility(
+                response.trajectory);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::result_failed;
         response.error = make_error(

@@ -665,6 +665,9 @@ Work items:
      three IF97 pressure circuits, cold-reheat/IP make-up mixing, whole-system conservation,
      classified boundary/calibration evidence, and generic terminal-approach rejection of the
      unsupported assumed coil order; ✅
+   - durable steady/trajectory counterflow-feasibility summaries, projectable approach metrics,
+     offset-safe temperature-difference units, Study acceptance integration, and web result
+     presentation distinct from numerical convergence; ✅
    - a single connected 2x1 combined-cycle graph and independently parameterized off-design HRSG
      remain follow-ons.
 

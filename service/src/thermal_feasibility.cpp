@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <unordered_set>
 #include <utility>
 
@@ -58,6 +59,7 @@ ThermalFeasibilitySummary audit_counterflow_thermal_feasibility(
     }
 
     ThermalFeasibilitySummary summary;
+    summary.scope = "steady";
     summary.required_minimum_approach_k =
         required_minimum_approach_k;
     for (const auto& component : graph.components) {
@@ -70,12 +72,7 @@ ThermalFeasibilitySummary audit_counterflow_thermal_feasibility(
             static_cast<std::size_t>(hot_out != nullptr) +
             static_cast<std::size_t>(cold_in != nullptr) +
             static_cast<std::size_t>(cold_out != nullptr);
-        if (matching_ports == 0U) continue;
-        if (matching_ports != 4U) {
-            throw ThermalFeasibilityError(
-                "component '" + component.component_id +
-                "' exposes an incomplete counterflow port contract");
-        }
+        if (matching_ports != 4U) continue;
         if (summary.counterflow_approaches.size() >=
             maximum_checked_components) {
             throw ThermalFeasibilityError(
@@ -111,12 +108,70 @@ ThermalFeasibilitySummary audit_counterflow_thermal_feasibility(
     return summary;
 }
 
+ThermalFeasibilitySummary audit_counterflow_thermal_feasibility(
+    const std::vector<StateSample>& trajectory,
+    double required_minimum_approach_k) {
+    if (trajectory.empty()) {
+        throw ThermalFeasibilityError(
+            "counterflow trajectory audit requires at least one sample");
+    }
+    ThermalFeasibilitySummary summary;
+    summary.scope = "trajectory";
+    summary.required_minimum_approach_k =
+        required_minimum_approach_k;
+    std::map<std::string, CounterflowApproachResult> worst;
+    for (const auto& sample : trajectory) {
+        if (!std::isfinite(sample.time)) {
+            throw ThermalFeasibilityError(
+                "counterflow trajectory sample time must be finite");
+        }
+        const auto snapshot = audit_counterflow_thermal_feasibility(
+            sample.graph, required_minimum_approach_k);
+        for (auto result : snapshot.counterflow_approaches) {
+            result.has_sample_time = true;
+            result.sample_time = sample.time;
+            const auto found = worst.find(result.component_id);
+            if (found == worst.end()) {
+                worst.emplace(result.component_id, std::move(result));
+            } else {
+                if (found->second.component_kind != result.component_kind) {
+                    throw ThermalFeasibilityError(
+                        "counterflow component kind changes across "
+                        "trajectory for '" + result.component_id + "'");
+                }
+                if (result.minimum_approach_k <
+                    found->second.minimum_approach_k) {
+                    found->second = std::move(result);
+                }
+            }
+        }
+    }
+    summary.counterflow_approaches.reserve(worst.size());
+    for (auto& [component_id, result] : worst) {
+        (void)component_id;
+        summary.counterflow_approaches.push_back(std::move(result));
+    }
+    summary.checked_count = summary.counterflow_approaches.size();
+    summary.passed_count = static_cast<std::size_t>(std::count_if(
+        summary.counterflow_approaches.begin(),
+        summary.counterflow_approaches.end(),
+        [](const auto& result) { return result.passed; }));
+    summary.failed_count = summary.checked_count - summary.passed_count;
+    summary.passed = summary.failed_count == 0U;
+    validate_thermal_feasibility_summary(summary);
+    return summary;
+}
+
 void validate_thermal_feasibility_summary(
     const ThermalFeasibilitySummary& summary) {
-    if (summary.schema_version != thermal_feasibility_schema) {
+    if (summary.schema_version != thermal_feasibility_schema_v1) {
         throw ThermalFeasibilityError(
             "unsupported thermal-feasibility schema: " +
             summary.schema_version);
+    }
+    if (summary.scope != "steady" && summary.scope != "trajectory") {
+        throw ThermalFeasibilityError(
+            "thermal-feasibility scope must be steady or trajectory");
     }
     if (!std::isfinite(summary.required_minimum_approach_k) ||
         summary.required_minimum_approach_k < 0.0) {
@@ -156,11 +211,68 @@ void validate_thermal_feasibility_summary(
                 "thermal-feasibility result for component '" +
                 result.component_id + "' is inconsistent");
         }
+        if (result.has_sample_time != (summary.scope == "trajectory") ||
+            (result.has_sample_time &&
+             !std::isfinite(result.sample_time))) {
+            throw ThermalFeasibilityError(
+                "thermal-feasibility sample attribution for component '" +
+                result.component_id + "' is inconsistent");
+        }
         if (result.passed) ++passed_count;
     }
     if (passed_count != summary.passed_count) {
         throw ThermalFeasibilityError(
             "thermal-feasibility verdict distribution is inconsistent");
+    }
+}
+
+void append_counterflow_thermal_metrics(
+    GraphResult& graph,
+    const ThermalFeasibilitySummary& summary) {
+    validate_thermal_feasibility_summary(summary);
+    if (summary.scope != "steady") {
+        throw ThermalFeasibilityError(
+            "component thermal metrics require a steady snapshot "
+            "summary");
+    }
+    for (const auto& result : summary.counterflow_approaches) {
+        const auto component = std::find_if(
+            graph.components.begin(), graph.components.end(),
+            [&](const auto& candidate) {
+                return candidate.component_id == result.component_id;
+            });
+        if (component == graph.components.end() ||
+            component->kind != result.component_kind) {
+            throw ThermalFeasibilityError(
+                "thermal-feasibility result references an unknown "
+                "component: " + result.component_id);
+        }
+        for (const auto* name : {
+                 "counterflow_hot_in_minus_cold_out",
+                 "counterflow_hot_out_minus_cold_in",
+                 "counterflow_minimum_approach"}) {
+            if (std::any_of(
+                    component->metrics.begin(), component->metrics.end(),
+                    [&](const auto& metric) {
+                        return metric.name == name;
+                    })) {
+                throw ThermalFeasibilityError(
+                    "component '" + result.component_id +
+                    "' already owns thermal-feasibility metric '" +
+                    name + "'");
+            }
+        }
+        component->metrics.push_back({
+            "counterflow_hot_in_minus_cold_out",
+            "temperature_difference",
+            result.hot_in_minus_cold_out_k});
+        component->metrics.push_back({
+            "counterflow_hot_out_minus_cold_in",
+            "temperature_difference",
+            result.hot_out_minus_cold_in_k});
+        component->metrics.push_back({
+            "counterflow_minimum_approach", "temperature_difference",
+            result.minimum_approach_k});
     }
 }
 

@@ -628,6 +628,62 @@ export function ResultsWorkspace({
             </section>
           )}
 
+          <section className={`solver-diagnostic-card ${
+            result.thermal_feasibility.passed
+              ? 'physical-feasibility-passed'
+              : 'physical-feasibility-failed'
+          }`}>
+            <header>
+              <div>
+                <span className="section-kicker">Physical evidence</span>
+                <h2>Counterflow thermal feasibility</h2>
+              </div>
+              <span className={
+                result.thermal_feasibility.passed
+                  ? 'solver-outcome successful'
+                  : 'solver-outcome unsuccessful'
+              }>
+                {result.thermal_feasibility.passed
+                  ? 'Admissible' : 'Not admissible'}
+              </span>
+            </header>
+            <div className="solver-diagnostic-facts">
+              <div>
+                <span>Checked exchangers</span>
+                <code>{result.thermal_feasibility.checked_count}</code>
+              </div>
+              <div>
+                <span>Passed</span>
+                <code>{result.thermal_feasibility.passed_count}</code>
+              </div>
+              <div>
+                <span>Failed</span>
+                <code>{result.thermal_feasibility.failed_count}</code>
+              </div>
+              <div>
+                <span>Evaluation scope</span>
+                <code>{result.thermal_feasibility.scope}</code>
+              </div>
+            </div>
+            {result.thermal_feasibility.counterflow_approaches
+              .filter((approach) => !approach.passed)
+              .slice(0, 5)
+              .map((approach) => (
+                <p key={approach.component_id}>
+                  <strong>{approach.component_id}</strong>{' '}
+                  crosses by {formatResultValue(
+                    Math.abs(approach.minimum_approach_k),
+                  )} K
+                  {approach.sample_time === null
+                    ? ''
+                    : ` at t=${formatResultValue(approach.sample_time)} s`}
+                </p>
+              ))}
+            {!result.thermal_feasibility.checked_count && (
+              <p>No counterflow four-port components were present.</p>
+            )}
+          </section>
+
           {isTransientResult(result) && sampleCount > 0 && (
             <>
               <section className="result-timeline">
