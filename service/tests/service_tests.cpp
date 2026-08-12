@@ -1,5 +1,6 @@
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
+#include "thermox/service/engineering_study.hpp"
 #include "thermox/service/native_runtime.hpp"
 #include "thermox/service/performance_test.hpp"
 #include "thermox/service/result_projection.hpp"
@@ -4250,6 +4251,37 @@ void test_engineering_study_freezes_before_prediction() {
             rejected.error.code ==
                 "invalid_study_predictions",
         "calibration cases must not be reused as independent predictions");
+
+    const std::string declared =
+        std::string{"{\"schema_version\":\"thermox.engineering_study/v1\","}
+        + "\"model_document\":" +
+        independent_study_model(baseline_power) +
+        R"json(,"calibration_id":"baseline_fit",
+          "calibration_solver":{"max_iterations":20},
+          "prediction_cases":[{"case_id":"validation",
+            "observations":[{"id":"validation_power",
+              "target":"compressor.shaft.W_dot","dimension":"power",
+              "measured_si":)json" +
+        std::to_string(validation_power) +
+        R"json(,"sigma_si":10000.0}]}]})json";
+    const auto parsed = thermox::service::
+        parse_engineering_study_request_json(declared);
+    require(
+        parsed.calibration_id == "baseline_fit" &&
+            parsed.calibration_solver.max_iterations == 20 &&
+            parsed.prediction_cases.size() == 1 &&
+            parsed.prediction_cases.front().observations.size() == 1,
+        "declarative engineering-study input must preserve the frozen "
+        "calibration/prediction split");
+    const auto declared_response = thermox::service::
+        evaluate_engineering_study_json(declared);
+    require(
+        declared_response.succeeded() &&
+            std::abs(
+                declared_response.predictions.front()
+                    .observations.front().residual_si) < 5000.0,
+        "declarative engineering-study execution must use the same "
+        "service path as direct callers");
 }
 
 void test_map_correction_is_calibrated_then_frozen() {

@@ -245,7 +245,9 @@ Implemented in this sprint:
   and batch execution.
 - A leakage-guarded engineering-study service calibrates designated baseline cases, freezes the
   canonical fitted model, runs independent steady prediction cases, and reports per-observation
-  and aggregate normalized validation residuals.
+  and aggregate normalized validation residuals. A versioned
+  `thermox.engineering_study/v1` declaration and thin `thermox_cli study --input ...` adapter make
+  the identical workflow reproducible for local and confidential validation campaigns.
 - A distinct data-reconciliation service solves square sets of measured hard equalities for
   explicitly owned adjustable boundaries or parameters using bounded, line-searched Newton
   iterations. It rejects priors and singular sensitivity systems, requires equality convergence,

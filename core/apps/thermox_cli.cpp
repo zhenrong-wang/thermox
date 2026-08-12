@@ -1,6 +1,7 @@
 #include "thermox/service/serialization.hpp"
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/performance_test.hpp"
+#include "thermox/service/engineering_study.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -22,6 +23,8 @@ void print_usage(std::ostream& out) {
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
+           " [--format text|json]\n"
+        << "  thermox_cli study --input <path>"
            " [--format text|json]\n"
         << "  thermox_cli calibrate --model <path>"
            " --calibration <id>"
@@ -221,13 +224,15 @@ int main(int argc, char** argv) {
     }
 
     if (command != "solve" && command != "simulate" &&
-        command != "performance-test" && command != "calibrate" &&
+        command != "performance-test" && command != "study" &&
+        command != "calibrate" &&
         command != "reconcile") {
         std::cerr << "Unknown command: " << command << "\n";
         print_usage(std::cerr);
         return 2;
     }
-    if (command != "performance-test" && model_path.empty()) {
+    if (command != "performance-test" && command != "study" &&
+        model_path.empty()) {
         std::cerr << "Missing required --model path\n";
         print_usage(std::cerr);
         return 2;
@@ -242,7 +247,8 @@ int main(int argc, char** argv) {
         print_usage(std::cerr);
         return 2;
     }
-    if (command == "performance-test" && input_path.empty()) {
+    if ((command == "performance-test" || command == "study") &&
+        input_path.empty()) {
         std::cerr << "Missing required --input path\n";
         print_usage(std::cerr);
         return 2;
@@ -289,6 +295,38 @@ int main(int argc, char** argv) {
                     << "\n";
             }
             return 0;
+        }
+        if (command == "study") {
+            const auto response = thermox::service::
+                evaluate_engineering_study_json(read_file(input_path));
+            if (format == "json") {
+                std::cout << thermox::service::
+                    serialize_engineering_study_response_json(response);
+            } else {
+                std::cout << "status: "
+                          << thermox::service::to_string(response.status)
+                          << "\nprediction_cases: "
+                          << response.diagnostics.prediction_case_count
+                          << "\nrms_normalized_residual: "
+                          << response.diagnostics.rms_normalized_residual
+                          << "\nmaximum_absolute_normalized_residual: "
+                          << response.diagnostics
+                                 .maximum_absolute_normalized_residual
+                          << "\n";
+                for (const auto& prediction : response.predictions) {
+                    for (const auto& observation :
+                         prediction.observations) {
+                        std::cout << prediction.case_id << "."
+                                  << observation.id << " predicted="
+                                  << observation.predicted_si
+                                  << " measured="
+                                  << observation.measured_si
+                                  << " residual="
+                                  << observation.residual_si << "\n";
+                    }
+                }
+            }
+            return response.succeeded() ? 0 : 1;
         }
         const std::string model_json = read_file(model_path);
         thermox::service::SimulationService service;

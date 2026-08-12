@@ -139,6 +139,41 @@ The response preserves the complete calibration and per-case graph results while
 physical residuals, normalized residuals, weighted sums of squares, RMS normalized residual, and
 the maximum absolute normalized residual.
 
+For local, confidential, and CI validation campaigns the same service is available through a
+versioned declaration. `model_document` is an ordinary `thermox.model/v2` document; calibration
+observations remain inside that document, while held-out observations exist only in the study
+request:
+
+```json
+{
+  "schema_version": "thermox.engineering_study/v1",
+  "model_document": {"schema_version": "thermox.model/v2", "model": {}, "cases": [], "calibrations": []},
+  "calibration_id": "baseline_fit",
+  "calibration_solver": {"max_iterations": 20},
+  "prediction_solver": {"maximum_iterations": 80},
+  "prediction_cases": [{
+    "case_id": "held_out",
+    "observations": [{
+      "id": "held_out_power",
+      "target": "generator.electrical.P",
+      "dimension": "power",
+      "measured_si": 250000000.0,
+      "sigma_si": 2500000.0
+    }]
+  }]
+}
+```
+
+```sh
+thermox_cli study --input study.json --format json
+```
+
+The parser does not copy prediction observations into the model or optimizer. The service rejects
+any prediction case used by a calibration observation, freezes the fitted canonical model, and
+evaluates held-out residuals only after each prediction solve. The CLI is a thin adapter over this
+service contract. `sigma_si` is the declared normalization scale; callers must state whether it is
+a traceable standard uncertainty, an acceptance tolerance, or an exploratory scale.
+
 Coordinate search is intended for a small number of engineering calibration parameters. A later
 optimizer interface can add trust-region least squares and covariance/identifiability analysis
 without changing model, component, property, or observation contracts. Transient estimation is
