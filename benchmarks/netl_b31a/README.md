@@ -180,6 +180,21 @@ the assumed ordering, proving that numerical closure is not allowed to imply
 physical calculation readiness. See
 [Segmented triple-pressure reheat HRSG](../../docs/segmented-triple-pressure-hrsg.md).
 
+## Connected heat-recovery steam cycle
+
+`connected_steam_cycle.json` closes the main-steam, cold/hot-reheat, and LP
+admission interfaces between the segmented HRSG and decomposed steam train.
+It is one 28-component equation system, not two service calls coordinated by
+case-specific arithmetic. The design point produces 278.508 MW of steam
+turbine shaft power and 271.546 MWe at the published generator efficiency,
+while closing external mass and energy balances.
+
+The result deliberately retains `thermal_feasibility.passed=false`: four of
+the ten assumed HRSG segments have a negative terminal approach. Shaft power
+is calibrated reproduction and equation closure is internal consistency, so
+the case is not presented as independent or off-design validation. See
+[Connected heat-recovery steam cycle](../../docs/connected-heat-recovery-steam-cycle.md).
+
 Run the case with:
 
 ```sh
@@ -198,6 +213,10 @@ Run the case with:
 ./build/thermox_cli solve \
   --model benchmarks/netl_b31a/segmented_hrsg.json \
   --case published_boundary_decomposition --continuation --format text
+
+./build/thermox_cli solve \
+  --model benchmarks/netl_b31a/connected_steam_cycle.json \
+  --case published_connected_cycle --continuation --format text
 ```
 
 ## Scope and next expansion
@@ -207,9 +226,8 @@ balance, Cantera state recovery, unit normalization, graph compilation,
 continuation, and service result projection against a real combined-cycle
 boundary. It does not yet validate the complete B31A plant.
 
-The aggregate duty has now been decomposed into segmented HP/IP/LP economizer,
-evaporator, superheater, and reheater topology, while the steam side is covered
-by a separate multi-admission turbine train. The next expansion should connect
-those two graphs through shared stream boundaries, then add the gas-turbine
-train. Credible off-design prediction will still require equipment maps, HRSG
-geometry/UA data, or equivalent OEM performance information.
+The segmented HP/IP/LP HRSG and multi-admission steam train are now connected
+through shared streams in one solve. The next physical expansion is the gas
+turbine train and the condenser/feedwater return path. Credible off-design
+prediction will still require equipment maps, HRSG geometry/UA data, or
+equivalent OEM performance information.

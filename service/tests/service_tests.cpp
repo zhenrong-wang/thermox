@@ -3214,6 +3214,154 @@ void test_netl_b31a_decomposed_steam_turbine_train() {
         "reproduce condenser flow within source rounding");
 }
 
+void test_netl_b31a_connected_hrsg_and_steam_cycle() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/netl_b31a/connected_steam_cycle.json");
+    request.case_id = "published_connected_cycle";
+    request.solver.continuation_enabled = true;
+    const auto response = service.run_steady(request);
+
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0,
+        "connected B31A HRSG and steam cycle must solve: " +
+            response.error.message);
+    require(
+        response.graph.components.size() == 28U &&
+            response.diagnostics.final_residual_norm < 1.0e-10,
+        "the connected benchmark must remain one closed 28-component "
+        "nonlinear system");
+
+    const auto primary = [](const auto& port, const char* name) {
+        return require_result_value(
+            port.primary_values, name).value_si;
+    };
+    const auto& main_steam = require_port_result(
+        response.graph, "hp_superheater", "cold_out");
+    const auto& hp_inlet = require_port_result(
+        response.graph, "hp_turbine", "inlet");
+    const auto& hot_reheat = require_port_result(
+        response.graph, "reheater", "cold_out");
+    const auto& ip_reheat_admission = require_port_result(
+        response.graph, "ip_inlet_mixer", "inlet_a");
+    const auto& lp_steam = require_port_result(
+        response.graph, "lp_superheater", "cold_out");
+    const auto& lp_admission = require_port_result(
+        response.graph, "lp_inlet_mixer", "inlet_b");
+    for (const auto* name : {"p", "h"}) {
+        require(
+            std::abs(
+                primary(main_steam, name) -
+                primary(hp_inlet, name)) < 1.0e-6 &&
+                std::abs(
+                    primary(hot_reheat, name) -
+                    primary(ip_reheat_admission, name)) < 1.0e-6 &&
+                std::abs(
+                    primary(lp_steam, name) -
+                    primary(lp_admission, name)) < 1.0e-6,
+            std::string("connected HRSG/turbine interface must preserve ") +
+                name);
+    }
+    require(
+        std::abs(
+            primary(main_steam, "m_dot") -
+            primary(hp_inlet, "m_dot") -
+            primary(require_port_result(
+                response.graph, "gland_loss", "inlet"),
+                "m_dot")) < 1.0e-9 &&
+            std::abs(
+                primary(hot_reheat, "m_dot") -
+                primary(ip_reheat_admission, "m_dot")) < 1.0e-9 &&
+            std::abs(
+                primary(lp_steam, "m_dot") -
+                primary(lp_admission, "m_dot")) < 1.0e-9,
+        "connected interfaces must preserve flow including the explicit "
+        "main-steam gland split");
+
+    double total_shaft_power = 0.0;
+    for (const auto* stage : {
+             "hp_turbine", "ip_turbine", "lp_turbine"}) {
+        const double power = primary(
+            require_port_result(response.graph, stage, "shaft"),
+            "W_dot");
+        require(
+            power > 50.0e6,
+            std::string(stage) +
+                " must produce positive utility-scale shaft power");
+        total_shaft_power += power;
+    }
+    require(
+        std::abs(total_shaft_power - 278508416.752932) < 1.0,
+        "connected HP/IP/LP shaft power must remain reproducible");
+    require(
+        std::abs(total_shaft_power * 0.975 - 272.0e6) < 0.5e6,
+        "connected steam cycle must reproduce published generator "
+        "power within declared source and property precision");
+    require(
+        std::abs(require_result_value(
+            response.graph.system_balances,
+            "net_boundary_mass_flow").value_si) < 1.0e-9 &&
+            std::abs(require_result_value(
+                response.graph.system_balances,
+                "net_boundary_energy_flow").value_si) < 1.0,
+        "the connected system must close external mass and energy "
+        "balances without coordinator arithmetic");
+
+    require(
+        !response.thermal_feasibility.passed &&
+            response.thermal_feasibility.checked_count == 10U &&
+            response.thermal_feasibility.failed_count == 4U,
+        "the connected solve must preserve the HRSG ordering's known "
+        "thermal infeasibility instead of promoting convergence to "
+        "physical validation");
+
+    const auto evidence =
+        thermox::service::evaluate_validation_evidence(
+            {
+                {"generator_power", "power",
+                 total_shaft_power * 0.975},
+                {"normalized_residual", "dimensionless",
+                 response.diagnostics.final_residual_norm},
+            },
+            {
+                {
+                    "connected_generator_power_reproduction",
+                    "generator_power",
+                    thermox::service::ValidationEvidenceLayer::system,
+                    thermox::service::ValidationEvidenceBasis::
+                        calibrated_reproduction,
+                    "power", 272.0e6, 0.5e6, 0.0,
+                    "NETL B31A steam-turbine generator power",
+                    "Stage efficiencies and HRSG segment duties are "
+                    "design-point calibration inputs.",
+                },
+                {
+                    "connected_cycle_numerical_closure",
+                    "normalized_residual",
+                    thermox::service::ValidationEvidenceLayer::numerical,
+                    thermox::service::ValidationEvidenceBasis::
+                        internal_consistency,
+                    "dimensionless", 0.0, 1.0e-10, 0.0,
+                    "Thermox connected equation system",
+                    "Closure validates execution, not off-design "
+                    "prediction or HRSG coil ordering.",
+                },
+            },
+            {
+                "Segment duties and stage efficiencies are calibrated.",
+                "Four assumed counterflow segment approaches are negative.",
+                "Gas-turbine, condenser, and feedwater return equipment "
+                "are outside this declaration.",
+            });
+    require(
+        evidence.passed && evidence.passed_count == 2U,
+        "connected benchmark evidence must pass only with its "
+        "calibrated and internal-consistency qualifications");
+}
+
 void test_netl_b31a_published_balance_consistency() {
     constexpr double air_kg_h = 3764363.0;
     constexpr double fuel_kg_h = 95442.0;
@@ -5267,6 +5415,7 @@ int main() {
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();
+        test_netl_b31a_connected_hrsg_and_steam_cycle();
         test_netl_b31a_published_balance_consistency();
         test_compile_aware_validation_diagnostics();
         test_structurally_singular_validation_diagnostic();
