@@ -2317,6 +2317,8 @@ std::string serialize_data_reconciliation_response_json(
     execution_metadata_json(out, response.metadata);
     out << ",\n  \"calculation_intent\": ";
     json_string(out, to_string(response.intent));
+    out << ",\n  \"reconciliation_mode\": ";
+    json_string(out, to_string(response.mode));
     out << ",\n  \"reconciliation_id\": ";
     json_string(out, response.reconciliation_id);
     out << ",\n  \"diagnostics\": {\"converged\": "
@@ -2334,6 +2336,19 @@ std::string serialize_data_reconciliation_response_json(
         out,
         response.diagnostics
             .final_maximum_absolute_normalized_constraint);
+    out << ", \"adjustable_quantity_count\": "
+        << response.diagnostics.adjustable_quantity_count
+        << ", \"measurement_count\": "
+        << response.diagnostics.measurement_count
+        << ", \"degrees_of_freedom\": "
+        << response.diagnostics.degrees_of_freedom
+        << ", \"weighted_sum_squares\": ";
+    json_number(out, response.diagnostics.weighted_sum_squares);
+    out << ", \"reduced_chi_square_available\": "
+        << (response.diagnostics.reduced_chi_square_available
+                ? "true" : "false")
+        << ", \"reduced_chi_square\": ";
+    json_number(out, response.diagnostics.reduced_chi_square);
     out << ", \"sensitivity_factorization_quality_available\": "
         << (response.diagnostics
                     .sensitivity_factorization_quality_available
@@ -2348,6 +2363,11 @@ std::string serialize_data_reconciliation_response_json(
         out,
         response.diagnostics
             .sensitivity_factorization_quality_method);
+    out << ", \"sensitivity_rank\": "
+        << response.diagnostics.sensitivity_rank
+        << ", \"locally_identifiable\": "
+        << (response.diagnostics.locally_identifiable
+                ? "true" : "false");
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
     out << "},\n  \"inferred_parameters\": [";
@@ -2400,6 +2420,61 @@ std::string serialize_data_reconciliation_response_json(
         json_number(out, constraint.residual_si);
         out << ", \"normalized_residual\": ";
         json_number(out, constraint.normalized_residual);
+        out << "}";
+    }
+    out << "],\n  \"weighted_measurements\": [";
+    for (std::size_t index = 0;
+         index < response.weighted_measurements.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& measurement = response.weighted_measurements[index];
+        out << "{\"id\": ";
+        json_string(out, measurement.id);
+        out << ", \"case_id\": ";
+        json_string(out, measurement.case_id);
+        out << ", \"target\": ";
+        json_string(out, measurement.target);
+        out << ", \"dimension\": ";
+        json_string(out, measurement.dimension);
+        out << ", \"measured_si\": ";
+        json_number(out, measurement.measured_si);
+        out << ", \"reconciled_si\": ";
+        json_number(out, measurement.predicted_si);
+        out << ", \"standard_uncertainty_si\": ";
+        json_number(out, measurement.sigma_si);
+        out << ", \"residual_si\": ";
+        json_number(out, measurement.residual_si);
+        out << ", \"normalized_residual\": ";
+        json_number(out, measurement.normalized_residual);
+        out << "}";
+    }
+    out << "],\n  \"parameter_uncertainties\": [";
+    for (std::size_t index = 0;
+         index < response.parameter_uncertainties.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& uncertainty =
+            response.parameter_uncertainties[index];
+        out << "{\"parameter_id\": ";
+        json_string(out, uncertainty.parameter_id);
+        out << ", \"dimension\": ";
+        json_string(out, uncertainty.dimension);
+        out << ", \"standard_uncertainty_si\": ";
+        json_number(out, uncertainty.standard_uncertainty_si);
+        out << ", \"bound_active\": "
+            << (uncertainty.bound_active ? "true" : "false")
+            << "}";
+    }
+    out << "],\n  \"parameter_correlations\": [";
+    for (std::size_t index = 0;
+         index < response.parameter_correlations.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& correlation =
+            response.parameter_correlations[index];
+        out << "{\"first_parameter_id\": ";
+        json_string(out, correlation.first_parameter_id);
+        out << ", \"second_parameter_id\": ";
+        json_string(out, correlation.second_parameter_id);
+        out << ", \"correlation\": ";
+        json_number(out, correlation.correlation);
         out << "}";
     }
     out << "],\n  \"held_out_results\": [";

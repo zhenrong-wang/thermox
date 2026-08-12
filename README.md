@@ -250,6 +250,10 @@ Implemented in this sprint:
   explicitly owned adjustable boundaries or parameters using bounded, line-searched Newton
   iterations. It rejects priors and singular sensitivity systems, requires equality convergence,
   and reports inferred quantities, hard constraints, and held-out comparisons separately.
+- An explicit overdetermined weighted-reconciliation mode adds bounded Gauss-Newton estimation,
+  sensitivity rank and local identifiability, measurement redundancy and reduced-chi-square
+  diagnostics, and local parameter uncertainty/correlation propagation without weakening hard
+  equality semantics.
 - A declaration-driven gas-turbine performance-test service reduces measured net power, fuel
   input, efficiency, heat rate, and correction chains; propagates uncertainty when its inputs are
   available; and reports evidence-qualified GB/T 14100 / ISO 2314 compliance dispositions without

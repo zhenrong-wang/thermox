@@ -1192,9 +1192,12 @@ SolverProvenance solver_provenance(
 }
 
 SolverProvenance solver_provenance(
-    const ReconciliationSolverSettings& settings) {
+    const ReconciliationSolverSettings& settings,
+    ReconciliationMode mode) {
     SolverProvenance provenance{
-        "thermox.reconciliation-newton/v1",
+        mode == ReconciliationMode::hard_equalities
+            ? "thermox.reconciliation-newton/v1"
+            : "thermox.reconciliation-gauss-newton/v1",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1202,6 +1205,9 @@ SolverProvenance solver_provenance(
              settings.finite_difference_fraction},
             {"constraint_tolerance",
              settings.constraint_tolerance},
+            {"step_tolerance", settings.step_tolerance},
+            {"objective_relative_tolerance",
+             settings.objective_relative_tolerance},
             {"minimum_line_search_fraction",
              settings.minimum_line_search_fraction},
         },
@@ -1746,6 +1752,16 @@ std::string to_string(CalculationIntent intent) {
             return "data_reconciliation";
     }
     throw std::invalid_argument("unknown calculation intent");
+}
+
+std::string to_string(ReconciliationMode mode) {
+    switch (mode) {
+        case ReconciliationMode::hard_equalities:
+            return "hard_equalities";
+        case ReconciliationMode::weighted_measurements:
+            return "weighted_measurements";
+    }
+    throw std::invalid_argument("unknown reconciliation mode");
 }
 
 std::string to_string(StructuralDecompositionPolicy policy) {
@@ -3062,6 +3078,7 @@ SimulationService::run_data_reconciliation(
     const DataReconciliationRequest& request) const {
     DataReconciliationResponse response;
     response.reconciliation_id = request.reconciliation_id;
+    response.mode = request.mode;
     if (!valid_schema(request.schema_version) ||
         request.model_json.empty() ||
         request.reconciliation_id.empty()) {
@@ -3078,6 +3095,10 @@ SimulationService::run_data_reconciliation(
         settings.finite_difference_fraction >= 1.0 ||
         !std::isfinite(settings.constraint_tolerance) ||
         settings.constraint_tolerance <= 0.0 ||
+        !std::isfinite(settings.step_tolerance) ||
+        settings.step_tolerance <= 0.0 ||
+        !std::isfinite(settings.objective_relative_tolerance) ||
+        settings.objective_relative_tolerance <= 0.0 ||
         !std::isfinite(settings.minimum_line_search_fraction) ||
         settings.minimum_line_search_fraction <= 0.0 ||
         settings.minimum_line_search_fraction >= 1.0) {
@@ -3122,11 +3143,20 @@ SimulationService::run_data_reconciliation(
             runtime->impl_->thermochemistry);
         definition = &require_calibration(
             document, request.reconciliation_id);
-        if (definition->parameters.size() !=
-            definition->observations.size()) {
+        if (request.mode == ReconciliationMode::hard_equalities &&
+            definition->parameters.size() !=
+                definition->observations.size()) {
             throw std::invalid_argument(
                 "data reconciliation requires one hard equality per "
                 "adjustable quantity");
+        }
+        if (request.mode ==
+                ReconciliationMode::weighted_measurements &&
+            definition->observations.size() <
+                definition->parameters.size()) {
+            throw std::invalid_argument(
+                "weighted reconciliation requires at least as many "
+                "measurements as adjustable quantities");
         }
         for (const auto& parameter : definition->parameters) {
             if (parameter.prior_mean.has_value()) {
@@ -3172,11 +3202,19 @@ SimulationService::run_data_reconciliation(
         }
         response.metadata = execution_metadata(
             document, request.schema_version, "",
-            "data_reconciliation", solver_provenance(settings),
+            "data_reconciliation",
+            solver_provenance(settings, request.mode),
             runtime->impl_->fingerprint,
             runtime->impl_->components,
             runtime->impl_->properties);
         response.metadata.artifacts = artifact_provenance(artifacts);
+        response.diagnostics.adjustable_quantity_count =
+            definition->parameters.size();
+        response.diagnostics.measurement_count =
+            definition->observations.size();
+        response.diagnostics.degrees_of_freedom =
+            definition->observations.size() -
+            definition->parameters.size();
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
         response.error = make_error(
@@ -3270,90 +3308,197 @@ SimulationService::run_data_reconciliation(
         .initial_maximum_absolute_normalized_constraint =
         maximum_constraint(best);
 
+    const auto sensitivity_at =
+        [&](const std::vector<double>& center,
+            const ObjectiveEvaluation& center_evaluation) {
+        thermox::Matrix jacobian(
+            center_evaluation.observations.size(),
+            std::vector<double>(center.size(), 0.0));
+        for (std::size_t column = 0;
+             column < center.size(); ++column) {
+            const double range = upper[column] - lower[column];
+            double delta = settings.finite_difference_fraction * range;
+            if (center[column] + delta > upper[column]) {
+                delta = -delta;
+            }
+            if (center[column] + delta < lower[column] ||
+                delta == 0.0) {
+                throw std::runtime_error(
+                    "could not perturb bounded adjustable quantity '" +
+                    definition->parameters[column].id + "'");
+            }
+            auto perturbed_values = center;
+            perturbed_values[column] += delta;
+            const auto perturbed = evaluate(
+                perturbed_values, &center_evaluation.case_states);
+            for (std::size_t row = 0;
+                 row < jacobian.size(); ++row) {
+                jacobian[row][column] =
+                    (perturbed.observations[row]
+                         .normalized_residual -
+                     center_evaluation.observations[row]
+                         .normalized_residual) /
+                    delta;
+            }
+        }
+        apply_values(center);
+        return jacobian;
+    };
+    const auto normal_matrix =
+        [](const thermox::Matrix& jacobian) {
+        const std::size_t columns = jacobian.front().size();
+        thermox::Matrix normal(
+            columns, std::vector<double>(columns, 0.0));
+        for (const auto& row : jacobian) {
+            for (std::size_t left = 0; left < columns; ++left) {
+                for (std::size_t right = 0;
+                     right < columns; ++right) {
+                    normal[left][right] += row[left] * row[right];
+                }
+            }
+        }
+        return normal;
+    };
+    const auto sensitivity_rank =
+        [](thermox::Matrix matrix) {
+        if (matrix.empty() || matrix.front().empty()) {
+            return std::size_t{0};
+        }
+        double maximum = 0.0;
+        for (const auto& row : matrix) {
+            for (const double value : row) {
+                maximum = std::max(maximum, std::abs(value));
+            }
+        }
+        const double tolerance = std::max(
+            1.0, maximum) *
+            std::numeric_limits<double>::epsilon() *
+            static_cast<double>(
+                std::max(matrix.size(), matrix.front().size())) *
+            100.0;
+        std::size_t rank = 0;
+        for (std::size_t column = 0;
+             column < matrix.front().size() && rank < matrix.size();
+             ++column) {
+            std::size_t pivot = rank;
+            for (std::size_t row = rank + 1;
+                 row < matrix.size(); ++row) {
+                if (std::abs(matrix[row][column]) >
+                    std::abs(matrix[pivot][column])) {
+                    pivot = row;
+                }
+            }
+            if (std::abs(matrix[pivot][column]) <= tolerance) continue;
+            std::swap(matrix[pivot], matrix[rank]);
+            const double diagonal = matrix[rank][column];
+            for (std::size_t row = rank + 1;
+                 row < matrix.size(); ++row) {
+                const double factor = matrix[row][column] / diagonal;
+                for (std::size_t trailing = column;
+                     trailing < matrix[row].size(); ++trailing) {
+                    matrix[row][trailing] -=
+                        factor * matrix[rank][trailing];
+                }
+            }
+            ++rank;
+        }
+        return rank;
+    };
+    const auto record_factorization_quality =
+        [&](const thermox::FactorizationQuality& quality) {
+        if (!quality.available) return;
+        const double ratio = quality.reciprocal_pivot_ratio;
+        if (!response.diagnostics
+                 .sensitivity_factorization_quality_available ||
+            ratio < response.diagnostics
+                .minimum_sensitivity_reciprocal_pivot_ratio) {
+            response.diagnostics
+                .minimum_sensitivity_reciprocal_pivot_ratio = ratio;
+            response.diagnostics
+                .sensitivity_factorization_quality_method =
+                quality.method;
+        }
+        response.diagnostics
+            .sensitivity_factorization_quality_available = true;
+    };
+
     for (int iteration = 0;
          iteration < settings.max_iterations; ++iteration) {
         const double current_maximum = maximum_constraint(best);
-        if (current_maximum <= settings.constraint_tolerance) {
+        if (request.mode == ReconciliationMode::hard_equalities &&
+            current_maximum <= settings.constraint_tolerance) {
             response.diagnostics.converged = true;
             response.diagnostics.message =
                 "hard reconciliation constraints satisfied";
             break;
         }
-        thermox::Matrix jacobian(
-            values.size(),
-            std::vector<double>(values.size(), 0.0));
-        bool derivative_failed = false;
-        std::string derivative_error;
-        for (std::size_t column = 0;
-             column < values.size(); ++column) {
-            const double range = upper[column] - lower[column];
-            double delta = settings.finite_difference_fraction * range;
-            if (values[column] + delta > upper[column]) {
-                delta = -delta;
-            }
-            if (values[column] + delta < lower[column] ||
-                delta == 0.0) {
-                derivative_failed = true;
-                derivative_error =
-                    "could not perturb bounded adjustable quantity '" +
-                    definition->parameters[column].id + "'";
-                break;
-            }
-            auto perturbed_values = values;
-            perturbed_values[column] += delta;
-            try {
-                const auto perturbed = evaluate(
-                    perturbed_values, &best.case_states);
-                for (std::size_t row = 0;
-                     row < values.size(); ++row) {
-                    jacobian[row][column] =
-                        (perturbed.observations[row]
-                             .normalized_residual -
-                         best.observations[row]
-                             .normalized_residual) /
-                        delta;
-                }
-            } catch (const std::exception& ex) {
-                derivative_failed = true;
-                derivative_error = ex.what();
-                break;
-            }
-        }
-        apply_values(values);
-        if (derivative_failed) {
+        thermox::Matrix jacobian;
+        try {
+            jacobian = sensitivity_at(values, best);
+        } catch (const std::exception& ex) {
             response.error = make_error(
                 "reconciliation_jacobian_failed", "reconciliation",
-                derivative_error);
+                ex.what());
+            break;
+        }
+        response.diagnostics.sensitivity_rank =
+            sensitivity_rank(jacobian);
+        response.diagnostics.locally_identifiable =
+            response.diagnostics.sensitivity_rank == values.size();
+        if (!response.diagnostics.locally_identifiable) {
+            response.error = make_error(
+                "reconciliation_unidentifiable", "reconciliation",
+                "measurement sensitivity rank " +
+                    std::to_string(
+                        response.diagnostics.sensitivity_rank) +
+                    " is below adjustable quantity count " +
+                    std::to_string(values.size()));
             break;
         }
         std::vector<double> rhs(values.size());
-        for (std::size_t row = 0; row < values.size(); ++row) {
-            rhs[row] = -best.observations[row].normalized_residual;
+        thermox::Matrix system;
+        if (request.mode == ReconciliationMode::hard_equalities) {
+            system = jacobian;
+            for (std::size_t row = 0; row < values.size(); ++row) {
+                rhs[row] =
+                    -best.observations[row].normalized_residual;
+            }
+        } else {
+            system = normal_matrix(jacobian);
+            for (std::size_t column = 0;
+                 column < values.size(); ++column) {
+                for (std::size_t row = 0;
+                     row < jacobian.size(); ++row) {
+                    rhs[column] -= jacobian[row][column] *
+                        best.observations[row].normalized_residual;
+                }
+            }
         }
         const auto linear = thermox::solve_dense_linear_system(
-            std::move(jacobian), std::move(rhs));
+            std::move(system), std::move(rhs));
         if (!linear.success) {
             response.error = make_error(
                 "reconciliation_unidentifiable", "reconciliation",
-                "hard-constraint sensitivity matrix is singular: " +
+                "measurement sensitivity system is singular: " +
                     linear.message);
             break;
         }
-        if (linear.factorization_quality.available) {
-            const double ratio = linear.factorization_quality
-                .reciprocal_pivot_ratio;
-            if (!response.diagnostics
-                     .sensitivity_factorization_quality_available ||
-                ratio < response.diagnostics
-                    .minimum_sensitivity_reciprocal_pivot_ratio) {
-                response.diagnostics
-                    .minimum_sensitivity_reciprocal_pivot_ratio = ratio;
-                response.diagnostics
-                    .sensitivity_factorization_quality_method =
-                    linear.factorization_quality.method;
-            }
-            response.diagnostics
-                .sensitivity_factorization_quality_available = true;
+        record_factorization_quality(linear.factorization_quality);
+        double maximum_scaled_step = 0.0;
+        for (std::size_t index = 0;
+             index < values.size(); ++index) {
+            maximum_scaled_step = std::max(
+                maximum_scaled_step,
+                std::abs(linear.x[index]) /
+                    (upper[index] - lower[index]));
+        }
+        if (request.mode ==
+                ReconciliationMode::weighted_measurements &&
+            maximum_scaled_step <= settings.step_tolerance) {
+            response.diagnostics.converged = true;
+            response.diagnostics.message =
+                "weighted reconciliation step tolerance reached";
+            break;
         }
         bool accepted = false;
         double fraction = 1.0;
@@ -3371,10 +3516,22 @@ SimulationService::run_data_reconciliation(
             try {
                 auto evaluation = evaluate(
                     candidate, &best.case_states);
-                if (squared_constraint_norm(evaluation) < base_norm) {
+                const double candidate_norm =
+                    squared_constraint_norm(evaluation);
+                if (candidate_norm < base_norm) {
                     values = std::move(candidate);
                     best = std::move(evaluation);
                     accepted = true;
+                    if (request.mode ==
+                            ReconciliationMode::weighted_measurements &&
+                        (base_norm - candidate_norm) /
+                                std::max(base_norm, 1.0) <=
+                            settings.objective_relative_tolerance) {
+                        response.diagnostics.converged = true;
+                        response.diagnostics.message =
+                            "weighted reconciliation objective "
+                            "tolerance reached";
+                    }
                     break;
                 }
             } catch (const std::exception&) {
@@ -3387,12 +3544,14 @@ SimulationService::run_data_reconciliation(
             response.error = make_error(
                 "reconciliation_line_search_failed",
                 "reconciliation",
-                "no bounded Newton step reduced the hard-constraint "
+                "no bounded reconciliation step reduced the measurement "
                 "residual");
             break;
         }
+        if (response.diagnostics.converged) break;
     }
-    if (!response.diagnostics.converged &&
+    if (request.mode == ReconciliationMode::hard_equalities &&
+        !response.diagnostics.converged &&
         maximum_constraint(best) <= settings.constraint_tolerance) {
         response.diagnostics.converged = true;
         response.diagnostics.message =
@@ -3402,14 +3561,30 @@ SimulationService::run_data_reconciliation(
         response.error.code.empty()) {
         response.error = make_error(
             "reconciliation_iteration_limit", "reconciliation",
-            "hard constraints were not satisfied within the iteration "
-            "budget");
+            request.mode == ReconciliationMode::hard_equalities
+                ? "hard constraints were not satisfied within the "
+                  "iteration budget"
+                : "weighted measurements did not converge within the "
+                  "iteration budget");
     }
     apply_values(values);
     response.diagnostics
         .final_maximum_absolute_normalized_constraint =
         maximum_constraint(best);
-    response.hard_constraints = best.observations;
+    response.diagnostics.weighted_sum_squares =
+        squared_constraint_norm(best);
+    if (response.diagnostics.degrees_of_freedom > 0) {
+        response.diagnostics.reduced_chi_square_available = true;
+        response.diagnostics.reduced_chi_square =
+            response.diagnostics.weighted_sum_squares /
+            static_cast<double>(
+                response.diagnostics.degrees_of_freedom);
+    }
+    if (request.mode == ReconciliationMode::hard_equalities) {
+        response.hard_constraints = best.observations;
+    } else {
+        response.weighted_measurements = best.observations;
+    }
     for (std::size_t index = 0;
          index < definition->parameters.size(); ++index) {
         const auto& parameter = definition->parameters[index];
@@ -3429,6 +3604,83 @@ SimulationService::run_data_reconciliation(
     if (!response.diagnostics.converged) {
         response.status = OperationStatus::solver_failed;
         return response;
+    }
+
+    if (request.mode == ReconciliationMode::weighted_measurements) {
+        try {
+        const auto final_jacobian = sensitivity_at(values, best);
+        thermox::DenseLinearFactorization information;
+        if (!information.factorize(normal_matrix(final_jacobian))) {
+            throw std::runtime_error(
+                "final measurement information matrix is singular: " +
+                information.message());
+        }
+        const std::size_t count = values.size();
+        thermox::Matrix identities(
+            count, std::vector<double>(count, 0.0));
+        for (std::size_t index = 0; index < count; ++index) {
+            identities[index][index] = 1.0;
+        }
+        const auto inverse_columns =
+            information.solve_multiple(identities);
+        thermox::Matrix covariance(
+            count, std::vector<double>(count, 0.0));
+        for (std::size_t column = 0; column < count; ++column) {
+            if (!inverse_columns[column].success) {
+                throw std::runtime_error(
+                    "could not invert final measurement information "
+                    "matrix: " + inverse_columns[column].message);
+            }
+            for (std::size_t row = 0; row < count; ++row) {
+                covariance[row][column] =
+                    inverse_columns[column].x[row];
+            }
+        }
+        std::vector<double> standard_uncertainties(count, 0.0);
+        for (std::size_t index = 0; index < count; ++index) {
+            const double variance = covariance[index][index];
+            if (!std::isfinite(variance) || variance < 0.0) {
+                throw std::runtime_error(
+                    "final parameter covariance is not positive on its "
+                    "diagonal");
+            }
+            standard_uncertainties[index] = std::sqrt(variance);
+            const double bound_tolerance =
+                1.0e-10 * (upper[index] - lower[index]);
+            response.parameter_uncertainties.push_back({
+                definition->parameters[index].id,
+                definition->parameters[index]
+                    .lower_bound->dimension,
+                standard_uncertainties[index],
+                values[index] - lower[index] <= bound_tolerance ||
+                    upper[index] - values[index] <= bound_tolerance,
+            });
+        }
+        for (std::size_t first = 0; first < count; ++first) {
+            for (std::size_t second = first + 1;
+                 second < count; ++second) {
+                const double denominator =
+                    standard_uncertainties[first] *
+                    standard_uncertainties[second];
+                const double correlation = denominator > 0.0
+                    ? std::clamp(
+                          covariance[first][second] / denominator,
+                          -1.0, 1.0)
+                    : 0.0;
+                response.parameter_correlations.push_back({
+                    definition->parameters[first].id,
+                    definition->parameters[second].id,
+                    correlation,
+                });
+            }
+        }
+        } catch (const std::exception& ex) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "reconciliation_uncertainty_failed", "reconciliation",
+            ex.what());
+        return response;
+        }
     }
 
     for (const auto& held_out_case : request.held_out_cases) {

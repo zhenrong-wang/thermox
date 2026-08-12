@@ -57,6 +57,14 @@ add_test(
         --reconciliation fixed_power_relaxed_airflow
         --max-iterations 6
         --format json)
+add_test(
+    NAME platform_weighted_reconciliation_cli
+    COMMAND thermox_cli reconcile
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/examples/data_reconciliation.json
+        --reconciliation weighted_repeated_power
+        --mode weighted-measurements
+        --max-iterations 6
+        --format json)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)

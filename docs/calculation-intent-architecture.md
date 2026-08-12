@@ -40,8 +40,12 @@ Data reconciliation answers an inverse question such as:
 > With measured power and other selected states imposed as equalities, what inlet flow makes the
 > declared model mutually consistent?
 
-The current service contract reuses a named model calibration declaration only as a typed list of
-adjustable targets and observations. Reconciliation gives those entries stricter semantics:
+The service contract reuses a named model calibration declaration only as a typed list of
+adjustable targets and observations. It exposes two explicit reconciliation modes.
+
+### Hard equalities
+
+Hard-equality reconciliation gives those entries stricter semantics:
 
 - every observation is a hard equality;
 - the number of adjustable quantities must equal the number of hard equalities;
@@ -53,6 +57,34 @@ adjustable targets and observations. Reconciliation gives those entries stricter
 
 The observation `sigma` acts only as a numerical residual scale in this intent. It does not soften
 the equality.
+
+### Weighted measurements
+
+Weighted-measurement reconciliation is a separate overdetermined statistical mode. It requires at
+least as many measurements as adjustable quantities and minimizes the sum of squared residuals
+normalized by the declared measurement standard uncertainties. A bounded, line-searched
+Gauss-Newton step solves the rectangular sensitivity system through its normal information matrix.
+
+The response reports:
+
+- sensitivity rank and a local-identifiability verdict;
+- measurement count, adjustable count, and redundancy degrees of freedom;
+- weighted sum of squares and reduced chi-square when redundancy exists;
+- local linearized parameter standard uncertainties from `(J^T J)^-1`;
+- pairwise parameter correlations;
+- whether an inferred value is at a bound, where unconstrained covariance interpretation is
+  limited;
+- the dense factorization pivot ratio and method, explicitly not mislabeled as a matrix condition
+  number.
+
+Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
+automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
+visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
+The current covariance is a local first-order approximation and does not yet include correlated
+measurement covariance, nonlinear confidence regions, or Monte Carlo propagation. The compact
+reference implementation uses normal equations after checking rank on the unmodified rectangular
+sensitivity matrix. A future optimizer backend should use pivoted QR or SVD for strongly
+ill-conditioned large estimation problems without changing this service contract.
 
 Case-owned targets make boundary reconciliation explicit:
 
@@ -96,6 +128,17 @@ the regression test. The thin local adapter runs the hard-equality portion with:
 thermox_cli reconcile \
   --model examples/data_reconciliation.json \
   --reconciliation fixed_power_relaxed_airflow \
+  --max-iterations 6 \
+  --format json
+```
+
+The same example contains two redundant power readings for weighted reconciliation:
+
+```sh
+thermox_cli reconcile \
+  --model examples/data_reconciliation.json \
+  --reconciliation weighted_repeated_power \
+  --mode weighted-measurements \
   --max-iterations 6 \
   --format json
 ```

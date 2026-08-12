@@ -3722,6 +3722,114 @@ void test_hard_constraint_data_reconciliation_service() {
         "reconciliation JSON must preserve semantic result separation");
 }
 
+void test_overdetermined_weighted_reconciliation_service() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_repeated_power";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.solver.max_iterations = 6;
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded(),
+        "overdetermined weighted reconciliation must succeed: " +
+            response.error.message);
+    require(
+        response.mode == thermox::service::
+                ReconciliationMode::weighted_measurements &&
+            response.hard_constraints.empty() &&
+            response.weighted_measurements.size() == 2,
+        "weighted measurements must remain distinct from hard "
+        "equalities");
+    require(
+        std::abs(
+            response.inferred_parameters.front().fitted_value_si -
+            100.138007655668) <= 1.0e-6,
+        "weighted reconciliation should infer the uncertainty-weighted "
+        "airflow");
+    require(
+        response.diagnostics.adjustable_quantity_count == 1 &&
+            response.diagnostics.measurement_count == 2 &&
+            response.diagnostics.degrees_of_freedom == 1 &&
+            response.diagnostics.sensitivity_rank == 1 &&
+            response.diagnostics.locally_identifiable &&
+            response.diagnostics.reduced_chi_square_available &&
+            std::abs(
+                response.diagnostics.weighted_sum_squares - 0.5) <=
+                1.0e-8 &&
+            std::abs(
+                response.diagnostics.reduced_chi_square - 0.5) <=
+                1.0e-8,
+        "weighted reconciliation must report redundancy and measurement "
+        "consistency statistics");
+    require(
+        response.parameter_uncertainties.size() == 1 &&
+            std::abs(
+                response.parameter_uncertainties.front()
+                    .standard_uncertainty_si -
+                0.195172298358) <= 1.0e-6 &&
+            !response.parameter_uncertainties.front().bound_active,
+        "known measurement uncertainties must propagate through the "
+        "local sensitivity matrix");
+    const auto json = thermox::service::
+        serialize_data_reconciliation_response_json(response);
+    require(
+        json.find(
+            "\"reconciliation_mode\": \"weighted_measurements\"") !=
+                std::string::npos &&
+            json.find("\"weighted_measurements\":") !=
+                std::string::npos &&
+            json.find("\"parameter_uncertainties\":") !=
+                std::string::npos,
+        "weighted reconciliation JSON must expose statistical meaning");
+}
+
+void test_weighted_reconciliation_rejects_rank_deficiency() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "unidentifiable_power_only";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.status == thermox::service::
+                OperationStatus::solver_failed &&
+            response.error.code == "reconciliation_unidentifiable" &&
+            response.diagnostics.sensitivity_rank == 1 &&
+            response.diagnostics.adjustable_quantity_count == 2 &&
+            !response.diagnostics.locally_identifiable,
+        "two repeated measurements of one output must not identify two "
+        "adjustable quantities");
+}
+
+void test_weighted_reconciliation_reports_parameter_correlation() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_airflow_efficiency";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded() &&
+            response.diagnostics.sensitivity_rank == 2 &&
+            response.diagnostics.locally_identifiable &&
+            response.parameter_uncertainties.size() == 2 &&
+            response.parameter_correlations.size() == 1 &&
+            response.parameter_correlations.front().correlation > 0.8 &&
+            response.parameter_correlations.front().correlation < 0.9,
+        "two identifiable inferred quantities must expose their local "
+        "uncertainties and material parameter correlation");
+}
+
 std::string independent_study_model(
     double baseline_power_w) {
     std::ostringstream model;
@@ -5598,6 +5706,9 @@ int main() {
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
         test_hard_constraint_data_reconciliation_service();
+        test_overdetermined_weighted_reconciliation_service();
+        test_weighted_reconciliation_rejects_rank_deficiency();
+        test_weighted_reconciliation_reports_parameter_correlation();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();

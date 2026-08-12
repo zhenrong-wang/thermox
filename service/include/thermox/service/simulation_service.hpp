@@ -1195,9 +1195,18 @@ struct ReconciliationSolverSettings {
     int max_iterations{12};
     double finite_difference_fraction{1.0e-4};
     double constraint_tolerance{1.0e-6};
+    double step_tolerance{1.0e-8};
+    double objective_relative_tolerance{1.0e-10};
     double minimum_line_search_fraction{1.0 / 1024.0};
     SteadySolverSettings simulation_solver;
 };
+
+enum class ReconciliationMode {
+    hard_equalities,
+    weighted_measurements,
+};
+
+std::string to_string(ReconciliationMode mode);
 
 // Reconciliation reuses a model calibration declaration as an explicit list
 // of adjustable quantities and hard measured equalities. Unlike calibration,
@@ -1207,6 +1216,7 @@ struct DataReconciliationRequest {
     std::string schema_version{command_schema_v1};
     std::string model_json;
     std::string reconciliation_id;
+    ReconciliationMode mode{ReconciliationMode::hard_equalities};
     ReconciliationSolverSettings solver;
     std::vector<StudyPredictionCase> held_out_cases;
     SimulationArtifactBundle artifacts;
@@ -1219,10 +1229,31 @@ struct DataReconciliationDiagnostics {
     int model_evaluations{0};
     double initial_maximum_absolute_normalized_constraint{0.0};
     double final_maximum_absolute_normalized_constraint{0.0};
+    std::size_t adjustable_quantity_count{0};
+    std::size_t measurement_count{0};
+    std::size_t degrees_of_freedom{0};
+    double weighted_sum_squares{0.0};
+    bool reduced_chi_square_available{false};
+    double reduced_chi_square{0.0};
     bool sensitivity_factorization_quality_available{false};
     double minimum_sensitivity_reciprocal_pivot_ratio{0.0};
     std::string sensitivity_factorization_quality_method;
+    std::size_t sensitivity_rank{0};
+    bool locally_identifiable{false};
     std::string message;
+};
+
+struct ReconciliationParameterUncertainty {
+    std::string parameter_id;
+    std::string dimension;
+    double standard_uncertainty_si{0.0};
+    bool bound_active{false};
+};
+
+struct ReconciliationParameterCorrelation {
+    std::string first_parameter_id;
+    std::string second_parameter_id;
+    double correlation{0.0};
 };
 
 struct DataReconciliationResponse {
@@ -1230,10 +1261,16 @@ struct DataReconciliationResponse {
     ServiceError error;
     ExecutionMetadata metadata;
     CalculationIntent intent{CalculationIntent::data_reconciliation};
+    ReconciliationMode mode{ReconciliationMode::hard_equalities};
     std::string reconciliation_id;
     DataReconciliationDiagnostics diagnostics;
     std::vector<CalibrationParameterEstimate> inferred_parameters;
     std::vector<CalibrationObservationResidual> hard_constraints;
+    std::vector<CalibrationObservationResidual> weighted_measurements;
+    std::vector<ReconciliationParameterUncertainty>
+        parameter_uncertainties;
+    std::vector<ReconciliationParameterCorrelation>
+        parameter_correlations;
     std::vector<StudyCaseResult> held_out_results;
     std::string reconciled_model_json;
 

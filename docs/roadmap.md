@@ -390,8 +390,12 @@ Next:
 14. Separate weighted parameter calibration from square hard-equality data reconciliation; expose
     case-owned adjustable boundaries, bounded Newton sensitivities, strict equality convergence,
     and semantically separate inferred, constrained, and held-out results. ✅
-15. Add covariance and propagated measurement-uncertainty analysis for overdetermined
-    reconciliation while preserving explicit identifiability diagnostics.
+15. Add overdetermined weighted reconciliation with sensitivity rank, local identifiability,
+    covariance, parameter correlation, reduced chi-square, and propagated independent measurement
+    uncertainty while preserving exact hard-equality mode. ✅
+16. Add correlated measurement covariance, active-bound-aware uncertainty, and nonlinear or
+    sampling-based confidence regions where first-order propagation is insufficient; introduce a
+    pivoted-QR/SVD optimizer backend for strongly ill-conditioned rectangular sensitivities.
 
 See `docs/calibration-architecture.md`.
 

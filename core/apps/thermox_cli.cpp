@@ -29,6 +29,7 @@ void print_usage(std::ostream& out) {
            " [--format text|json]\n"
         << "  thermox_cli reconcile --model <path>"
            " --reconciliation <id>"
+           " [--mode hard-equalities|weighted-measurements]"
            " [--max-iterations <count>]"
            " [--format text|json]\n";
 }
@@ -162,6 +163,7 @@ int main(int argc, char** argv) {
     std::string calibration_id;
     std::string reconciliation_id;
     std::string max_iterations_text;
+    std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string format = "text";
     bool continuation = false;
@@ -182,6 +184,8 @@ int main(int argc, char** argv) {
             reconciliation_id = argv[++i];
         } else if (arg == "--max-iterations" && i + 1 < argc) {
             max_iterations_text = argv[++i];
+        } else if (arg == "--mode" && i + 1 < argc) {
+            reconciliation_mode = argv[++i];
         } else if (arg == "--end-time" && i + 1 < argc) {
             end_time_text = argv[++i];
         } else if (arg == "--format" && i + 1 < argc) {
@@ -279,6 +283,18 @@ int main(int argc, char** argv) {
             thermox::service::DataReconciliationRequest request;
             request.model_json = model_json;
             request.reconciliation_id = reconciliation_id;
+            if (reconciliation_mode == "hard-equalities") {
+                request.mode = thermox::service::
+                    ReconciliationMode::hard_equalities;
+            } else if (reconciliation_mode ==
+                       "weighted-measurements") {
+                request.mode = thermox::service::
+                    ReconciliationMode::weighted_measurements;
+            } else {
+                throw std::invalid_argument(
+                    "--mode must be hard-equalities or "
+                    "weighted-measurements");
+            }
             if (!max_iterations_text.empty()) {
                 const double count = parse_positive_number(
                     max_iterations_text, "--max-iterations");

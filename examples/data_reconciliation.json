@@ -44,6 +44,21 @@
         "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
         "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
       }
+    },
+    {
+      "id": "repeat_point",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 90.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.outlet.p": {"value": 1.2, "unit": "MPa"},
+        "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
+      }
     }
   ],
   "calibrations": [
@@ -69,6 +84,122 @@
           "case": "test_point",
           "target": "compressor.shaft.W_dot",
           "measured": {"value": 36.229874174599141, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
+    },
+    {
+      "id": "weighted_repeated_power",
+      "parameters": [
+        {
+          "id": "shared_inferred_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "cases": ["test_point"],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "first_power_measurement",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.229874174599141, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        },
+        {
+          "id": "second_power_measurement",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.329874174599143, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
+    },
+    {
+      "id": "unidentifiable_power_only",
+      "parameters": [
+        {
+          "id": "airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        },
+        {
+          "id": "efficiency",
+          "scope": "component",
+          "targets": ["components.compressor.parameters.eta_is"],
+          "bounds": {"lower": 0.75, "upper": 0.95}
+        }
+      ],
+      "observations": [
+        {
+          "id": "power_meter_a",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.23, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        },
+        {
+          "id": "power_meter_b",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.33, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
+    },
+    {
+      "id": "weighted_airflow_efficiency",
+      "parameters": [
+        {
+          "id": "airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        },
+        {
+          "id": "efficiency",
+          "scope": "component",
+          "targets": ["components.compressor.parameters.eta_is"],
+          "bounds": {"lower": 0.75, "upper": 0.95}
+        }
+      ],
+      "observations": [
+        {
+          "id": "power_meter_a",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.229874174599141, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        },
+        {
+          "id": "discharge_temperature",
+          "case": "test_point",
+          "target": "compressor.outlet.T",
+          "measured": {"value": 660.67570109108158, "unit": "K"},
+          "sigma": {"value": 1.0, "unit": "K"}
+        },
+        {
+          "id": "power_meter_b",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.329874174599143, "unit": "MW"},
           "sigma": {"value": 0.1, "unit": "MW"}
         }
       ]
