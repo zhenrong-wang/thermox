@@ -3648,6 +3648,80 @@ void test_bounded_calibration_service() {
         "calibration JSON must expose residuals and fitted model");
 }
 
+void test_hard_constraint_data_reconciliation_service() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "fixed_power_relaxed_airflow";
+    request.solver.max_iterations = 6;
+    request.solver.constraint_tolerance = 1.0e-8;
+    request.held_out_cases = {{
+        "test_point",
+        {{
+            "held_out_discharge_temperature",
+            "compressor.outlet.T",
+            "temperature",
+            660.67570109108158,
+            1.0,
+        }},
+    }};
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded(),
+        "hard-constraint reconciliation must succeed: " +
+            response.error.message);
+    require(
+        response.intent == thermox::service::
+            CalculationIntent::data_reconciliation &&
+            response.diagnostics.converged,
+        "reconciliation must expose its distinct calculation intent and "
+        "hard-constraint convergence");
+    require(
+        response.inferred_parameters.size() == 1 &&
+            response.hard_constraints.size() == 1 &&
+            response.held_out_results.size() == 1,
+        "reconciliation must separate inferred quantities, hard "
+        "constraints, and held-out results");
+    require(
+        std::abs(
+            response.inferred_parameters.front().fitted_value_si -
+            100.0) <= 1.0e-6,
+        "fixed measured power should infer the originating airflow");
+    require(
+        std::abs(
+            response.hard_constraints.front()
+                .normalized_residual) <= 1.0e-8,
+        "hard equality must satisfy the declared normalized tolerance");
+    require(
+        response.diagnostics
+            .sensitivity_factorization_quality_available &&
+            response.diagnostics
+                .minimum_sensitivity_reciprocal_pivot_ratio > 0.0,
+        "reconciliation must expose sensitivity factorization quality "
+        "without mislabeling it as a matrix condition number");
+    require(
+        std::abs(
+            response.held_out_results.front()
+                .observations.front().predicted_si -
+            660.67570109108158) <= 1.0e-7,
+        "held-out output must be evaluated only after reconciliation");
+    const auto json = thermox::service::
+        serialize_data_reconciliation_response_json(response);
+    require(
+        json.find(
+            "\"calculation_intent\": \"data_reconciliation\"") !=
+                std::string::npos &&
+            json.find("\"inferred_parameters\":") !=
+                std::string::npos &&
+            json.find("\"hard_constraints\":") !=
+                std::string::npos &&
+            json.find("\"held_out_results\":") !=
+                std::string::npos,
+        "reconciliation JSON must preserve semantic result separation");
+}
+
 std::string independent_study_model(
     double baseline_power_w) {
     std::ostringstream model;
@@ -5523,6 +5597,7 @@ int main() {
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
+        test_hard_constraint_data_reconciliation_service();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();

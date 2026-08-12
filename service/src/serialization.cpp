@@ -2304,6 +2304,148 @@ std::string serialize_engineering_study_response_json(
     return out.str();
 }
 
+std::string serialize_data_reconciliation_response_json(
+    const DataReconciliationResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, result_schema_v3);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"metadata\": ";
+    execution_metadata_json(out, response.metadata);
+    out << ",\n  \"calculation_intent\": ";
+    json_string(out, to_string(response.intent));
+    out << ",\n  \"reconciliation_id\": ";
+    json_string(out, response.reconciliation_id);
+    out << ",\n  \"diagnostics\": {\"converged\": "
+        << (response.diagnostics.converged ? "true" : "false")
+        << ", \"iterations\": " << response.diagnostics.iterations
+        << ", \"model_evaluations\": "
+        << response.diagnostics.model_evaluations
+        << ", \"initial_maximum_absolute_normalized_constraint\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .initial_maximum_absolute_normalized_constraint);
+    out << ", \"final_maximum_absolute_normalized_constraint\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .final_maximum_absolute_normalized_constraint);
+    out << ", \"sensitivity_factorization_quality_available\": "
+        << (response.diagnostics
+                    .sensitivity_factorization_quality_available
+                ? "true" : "false")
+        << ", \"minimum_sensitivity_reciprocal_pivot_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics
+            .minimum_sensitivity_reciprocal_pivot_ratio);
+    out << ", \"sensitivity_factorization_quality_method\": ";
+    json_string(
+        out,
+        response.diagnostics
+            .sensitivity_factorization_quality_method);
+    out << ", \"message\": ";
+    json_string(out, response.diagnostics.message);
+    out << "},\n  \"inferred_parameters\": [";
+    for (std::size_t index = 0;
+         index < response.inferred_parameters.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& parameter = response.inferred_parameters[index];
+        out << "{\"id\": ";
+        json_string(out, parameter.id);
+        out << ", \"scope\": ";
+        json_string(out, parameter.scope);
+        out << ", \"dimension\": ";
+        json_string(out, parameter.dimension);
+        out << ", \"initial_value_si\": ";
+        json_number(out, parameter.initial_value_si);
+        out << ", \"inferred_value_si\": ";
+        json_number(out, parameter.fitted_value_si);
+        out << ", \"lower_bound_si\": ";
+        json_number(out, parameter.lower_bound_si);
+        out << ", \"upper_bound_si\": ";
+        json_number(out, parameter.upper_bound_si);
+        out << ", \"targets\": [";
+        for (std::size_t target = 0;
+             target < parameter.targets.size(); ++target) {
+            if (target != 0) out << ", ";
+            json_string(out, parameter.targets[target]);
+        }
+        out << "]}";
+    }
+    out << "],\n  \"hard_constraints\": [";
+    for (std::size_t index = 0;
+         index < response.hard_constraints.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& constraint = response.hard_constraints[index];
+        out << "{\"id\": ";
+        json_string(out, constraint.id);
+        out << ", \"case_id\": ";
+        json_string(out, constraint.case_id);
+        out << ", \"target\": ";
+        json_string(out, constraint.target);
+        out << ", \"dimension\": ";
+        json_string(out, constraint.dimension);
+        out << ", \"required_si\": ";
+        json_number(out, constraint.measured_si);
+        out << ", \"solved_si\": ";
+        json_number(out, constraint.predicted_si);
+        out << ", \"scale_si\": ";
+        json_number(out, constraint.sigma_si);
+        out << ", \"residual_si\": ";
+        json_number(out, constraint.residual_si);
+        out << ", \"normalized_residual\": ";
+        json_number(out, constraint.normalized_residual);
+        out << "}";
+    }
+    out << "],\n  \"held_out_results\": [";
+    for (std::size_t index = 0;
+         index < response.held_out_results.size(); ++index) {
+        if (index != 0) out << ", ";
+        const auto& result = response.held_out_results[index];
+        out << "{\"case_id\": ";
+        json_string(out, result.case_id);
+        out << ", \"weighted_sum_squares\": ";
+        json_number(out, result.weighted_sum_squares);
+        out << ", \"observations\": [";
+        for (std::size_t observation_index = 0;
+             observation_index < result.observations.size();
+             ++observation_index) {
+            if (observation_index != 0) out << ", ";
+            const auto& observation =
+                result.observations[observation_index];
+            out << "{\"id\": ";
+            json_string(out, observation.id);
+            out << ", \"target\": ";
+            json_string(out, observation.target);
+            out << ", \"dimension\": ";
+            json_string(out, observation.dimension);
+            out << ", \"measured_si\": ";
+            json_number(out, observation.measured_si);
+            out << ", \"predicted_si\": ";
+            json_number(out, observation.predicted_si);
+            out << ", \"sigma_si\": ";
+            json_number(out, observation.sigma_si);
+            out << ", \"residual_si\": ";
+            json_number(out, observation.residual_si);
+            out << ", \"normalized_residual\": ";
+            json_number(out, observation.normalized_residual);
+            out << "}";
+        }
+        out << "], \"simulation\": "
+            << serialize_steady_response_json(result.simulation)
+            << "}";
+    }
+    out << "],\n  \"reconciled_model_json\": ";
+    json_string(out, response.reconciled_model_json);
+    out << "\n}\n";
+    return out.str();
+}
+
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;

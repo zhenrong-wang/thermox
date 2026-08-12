@@ -6,6 +6,7 @@
 #include "artifact_payload.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/dense_linear_solver.hpp"
 #include "thermox/continuation_solver.hpp"
 #include "thermox/solver_policy_benchmark.hpp"
 #include "thermox/platform/calibration.hpp"
@@ -1191,6 +1192,30 @@ SolverProvenance solver_provenance(
 }
 
 SolverProvenance solver_provenance(
+    const ReconciliationSolverSettings& settings) {
+    SolverProvenance provenance{
+        "thermox.reconciliation-newton/v1",
+        {
+            {"max_iterations",
+             static_cast<double>(settings.max_iterations)},
+            {"finite_difference_fraction",
+             settings.finite_difference_fraction},
+            {"constraint_tolerance",
+             settings.constraint_tolerance},
+            {"minimum_line_search_fraction",
+             settings.minimum_line_search_fraction},
+        },
+    };
+    const auto simulation =
+        solver_provenance(settings.simulation_solver);
+    for (const auto& setting : simulation.settings) {
+        provenance.settings.push_back({
+            "simulation." + setting.name, setting.value});
+    }
+    return provenance;
+}
+
+SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
         "thermox.dae-bdf/v12",
@@ -1709,6 +1734,18 @@ std::string to_string(OperationStatus status) {
         case OperationStatus::result_failed: return "result_failed";
     }
     return "unknown";
+}
+
+std::string to_string(CalculationIntent intent) {
+    switch (intent) {
+        case CalculationIntent::forward_prediction:
+            return "forward_prediction";
+        case CalculationIntent::parameter_calibration:
+            return "parameter_calibration";
+        case CalculationIntent::data_reconciliation:
+            return "data_reconciliation";
+    }
+    throw std::invalid_argument("unknown calculation intent");
 }
 
 std::string to_string(StructuralDecompositionPolicy policy) {
@@ -3016,6 +3053,438 @@ CalibrationResponse SimulationService::run_calibration(
     }
     response.fitted_model_json =
         detail::serialize_model_document_json(document);
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
+DataReconciliationResponse
+SimulationService::run_data_reconciliation(
+    const DataReconciliationRequest& request) const {
+    DataReconciliationResponse response;
+    response.reconciliation_id = request.reconciliation_id;
+    if (!valid_schema(request.schema_version) ||
+        request.model_json.empty() ||
+        request.reconciliation_id.empty()) {
+        response.error = make_error(
+            "invalid_reconciliation_request", "request",
+            "schema_version, model_json, and reconciliation_id "
+            "are required");
+        return response;
+    }
+    const auto& settings = request.solver;
+    if (settings.max_iterations <= 0 ||
+        !std::isfinite(settings.finite_difference_fraction) ||
+        settings.finite_difference_fraction <= 0.0 ||
+        settings.finite_difference_fraction >= 1.0 ||
+        !std::isfinite(settings.constraint_tolerance) ||
+        settings.constraint_tolerance <= 0.0 ||
+        !std::isfinite(settings.minimum_line_search_fraction) ||
+        settings.minimum_line_search_fraction <= 0.0 ||
+        settings.minimum_line_search_fraction >= 1.0) {
+        response.error = make_error(
+            "invalid_reconciliation_settings", "request",
+            "invalid data-reconciliation solver settings");
+        return response;
+    }
+    try {
+        (void)to_core(settings.simulation_solver);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_solver_settings", "request", ex.what());
+        return response;
+    }
+
+    std::shared_ptr<const SimulationRuntime> runtime;
+    SimulationArtifactBundle artifacts;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+        artifacts = resolve_artifacts(
+            request.artifacts,
+            impl_->artifact_resolver.get());
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts,
+            artifacts);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_reconciliation_runtime", "request", ex.what());
+        return response;
+    }
+
+    platform::ModelDocument document;
+    const platform::CalibrationDefinition* definition = nullptr;
+    try {
+        document = platform::parse_model_document_text(
+            request.model_json, runtime->impl_->units);
+        platform::validate_calibration_observation_contracts(
+            document, runtime->impl_->components,
+            runtime->impl_->thermochemistry);
+        definition = &require_calibration(
+            document, request.reconciliation_id);
+        if (definition->parameters.size() !=
+            definition->observations.size()) {
+            throw std::invalid_argument(
+                "data reconciliation requires one hard equality per "
+                "adjustable quantity");
+        }
+        for (const auto& parameter : definition->parameters) {
+            if (parameter.prior_mean.has_value()) {
+                throw std::invalid_argument(
+                    "data reconciliation does not accept parameter "
+                    "priors; hard equalities determine inferred values");
+            }
+        }
+        std::set<std::pair<std::string, std::string>> hard_targets;
+        for (const auto& observation : definition->observations) {
+            hard_targets.emplace(
+                observation.case_id, observation.target);
+        }
+        std::set<std::string> held_out_ids;
+        for (const auto& held_out_case : request.held_out_cases) {
+            if (held_out_case.case_id.empty() ||
+                held_out_case.observations.empty()) {
+                throw std::invalid_argument(
+                    "held-out cases require a case ID and observations");
+            }
+            for (const auto& observation :
+                 held_out_case.observations) {
+                if (observation.id.empty() ||
+                    observation.target.empty() ||
+                    observation.dimension.empty() ||
+                    !held_out_ids.insert(observation.id).second ||
+                    !std::isfinite(observation.measured_si) ||
+                    !std::isfinite(observation.sigma_si) ||
+                    observation.sigma_si <= 0.0) {
+                    throw std::invalid_argument(
+                        "held-out observations require unique IDs, "
+                        "targets, dimensions, finite measurements, and "
+                        "positive uncertainties");
+                }
+                if (hard_targets.contains({
+                        held_out_case.case_id,
+                        observation.target})) {
+                    throw std::invalid_argument(
+                        "held-out observation cannot also be a hard "
+                        "reconciliation constraint");
+                }
+            }
+        }
+        response.metadata = execution_metadata(
+            document, request.schema_version, "",
+            "data_reconciliation", solver_provenance(settings),
+            runtime->impl_->fingerprint,
+            runtime->impl_->components,
+            runtime->impl_->properties);
+        response.metadata.artifacts = artifact_provenance(artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        response.error = make_error(
+            "invalid_reconciliation_model", "validation", ex.what());
+        return response;
+    }
+
+    std::vector<double> values;
+    std::vector<double> initial;
+    std::vector<double> lower;
+    std::vector<double> upper;
+    try {
+        for (const auto& parameter : definition->parameters) {
+            if (!parameter.lower_bound.has_value() ||
+                !parameter.upper_bound.has_value() ||
+                !std::isfinite(parameter.lower_bound->value_si) ||
+                !std::isfinite(parameter.upper_bound->value_si)) {
+                throw std::invalid_argument(
+                    "reconciliation adjustable quantity '" +
+                    parameter.id + "' requires finite bounds");
+            }
+            const double value =
+                platform::require_calibration_parameter_target(
+                    document, parameter.targets.front()).value_si;
+            values.push_back(value);
+            initial.push_back(value);
+            lower.push_back(parameter.lower_bound->value_si);
+            upper.push_back(parameter.upper_bound->value_si);
+        }
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        response.error = make_error(
+            "invalid_reconciliation_bounds", "validation", ex.what());
+        return response;
+    }
+
+    const auto apply_values =
+        [&](const std::vector<double>& candidate) {
+        for (std::size_t index = 0;
+             index < definition->parameters.size(); ++index) {
+            for (const auto& target :
+                 definition->parameters[index].targets) {
+                platform::require_calibration_parameter_target(
+                    document, target).value_si = candidate[index];
+            }
+        }
+    };
+    const auto evaluate =
+        [&](const std::vector<double>& candidate,
+            const std::map<std::string, CalibrationState>* warm_starts) {
+        apply_values(candidate);
+        auto result = evaluate_calibration_objective(
+            document, *definition, settings.simulation_solver,
+            runtime->impl_->components,
+            runtime->impl_->properties, engineering_artifacts,
+            runtime->impl_->thermochemistry, warm_starts);
+        ++response.diagnostics.model_evaluations;
+        return result;
+    };
+    const auto maximum_constraint =
+        [](const ObjectiveEvaluation& evaluation) {
+        double maximum = 0.0;
+        for (const auto& observation : evaluation.observations) {
+            maximum = std::max(
+                maximum,
+                std::abs(observation.normalized_residual));
+        }
+        return maximum;
+    };
+    const auto squared_constraint_norm =
+        [](const ObjectiveEvaluation& evaluation) {
+        double value = 0.0;
+        for (const auto& observation : evaluation.observations) {
+            value += observation.normalized_residual *
+                observation.normalized_residual;
+        }
+        return value;
+    };
+
+    ObjectiveEvaluation best;
+    try {
+        best = evaluate(values, nullptr);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "reconciliation_baseline_failed", "reconciliation",
+            ex.what());
+        return response;
+    }
+    response.diagnostics
+        .initial_maximum_absolute_normalized_constraint =
+        maximum_constraint(best);
+
+    for (int iteration = 0;
+         iteration < settings.max_iterations; ++iteration) {
+        const double current_maximum = maximum_constraint(best);
+        if (current_maximum <= settings.constraint_tolerance) {
+            response.diagnostics.converged = true;
+            response.diagnostics.message =
+                "hard reconciliation constraints satisfied";
+            break;
+        }
+        thermox::Matrix jacobian(
+            values.size(),
+            std::vector<double>(values.size(), 0.0));
+        bool derivative_failed = false;
+        std::string derivative_error;
+        for (std::size_t column = 0;
+             column < values.size(); ++column) {
+            const double range = upper[column] - lower[column];
+            double delta = settings.finite_difference_fraction * range;
+            if (values[column] + delta > upper[column]) {
+                delta = -delta;
+            }
+            if (values[column] + delta < lower[column] ||
+                delta == 0.0) {
+                derivative_failed = true;
+                derivative_error =
+                    "could not perturb bounded adjustable quantity '" +
+                    definition->parameters[column].id + "'";
+                break;
+            }
+            auto perturbed_values = values;
+            perturbed_values[column] += delta;
+            try {
+                const auto perturbed = evaluate(
+                    perturbed_values, &best.case_states);
+                for (std::size_t row = 0;
+                     row < values.size(); ++row) {
+                    jacobian[row][column] =
+                        (perturbed.observations[row]
+                             .normalized_residual -
+                         best.observations[row]
+                             .normalized_residual) /
+                        delta;
+                }
+            } catch (const std::exception& ex) {
+                derivative_failed = true;
+                derivative_error = ex.what();
+                break;
+            }
+        }
+        apply_values(values);
+        if (derivative_failed) {
+            response.error = make_error(
+                "reconciliation_jacobian_failed", "reconciliation",
+                derivative_error);
+            break;
+        }
+        std::vector<double> rhs(values.size());
+        for (std::size_t row = 0; row < values.size(); ++row) {
+            rhs[row] = -best.observations[row].normalized_residual;
+        }
+        const auto linear = thermox::solve_dense_linear_system(
+            std::move(jacobian), std::move(rhs));
+        if (!linear.success) {
+            response.error = make_error(
+                "reconciliation_unidentifiable", "reconciliation",
+                "hard-constraint sensitivity matrix is singular: " +
+                    linear.message);
+            break;
+        }
+        if (linear.factorization_quality.available) {
+            const double ratio = linear.factorization_quality
+                .reciprocal_pivot_ratio;
+            if (!response.diagnostics
+                     .sensitivity_factorization_quality_available ||
+                ratio < response.diagnostics
+                    .minimum_sensitivity_reciprocal_pivot_ratio) {
+                response.diagnostics
+                    .minimum_sensitivity_reciprocal_pivot_ratio = ratio;
+                response.diagnostics
+                    .sensitivity_factorization_quality_method =
+                    linear.factorization_quality.method;
+            }
+            response.diagnostics
+                .sensitivity_factorization_quality_available = true;
+        }
+        bool accepted = false;
+        double fraction = 1.0;
+        const double base_norm = squared_constraint_norm(best);
+        while (fraction >=
+               settings.minimum_line_search_fraction) {
+            auto candidate = values;
+            for (std::size_t index = 0;
+                 index < candidate.size(); ++index) {
+                candidate[index] = std::clamp(
+                    values[index] +
+                        fraction * linear.x[index],
+                    lower[index], upper[index]);
+            }
+            try {
+                auto evaluation = evaluate(
+                    candidate, &best.case_states);
+                if (squared_constraint_norm(evaluation) < base_norm) {
+                    values = std::move(candidate);
+                    best = std::move(evaluation);
+                    accepted = true;
+                    break;
+                }
+            } catch (const std::exception&) {
+            }
+            fraction *= 0.5;
+        }
+        response.diagnostics.iterations = iteration + 1;
+        if (!accepted) {
+            apply_values(values);
+            response.error = make_error(
+                "reconciliation_line_search_failed",
+                "reconciliation",
+                "no bounded Newton step reduced the hard-constraint "
+                "residual");
+            break;
+        }
+    }
+    if (!response.diagnostics.converged &&
+        maximum_constraint(best) <= settings.constraint_tolerance) {
+        response.diagnostics.converged = true;
+        response.diagnostics.message =
+            "hard reconciliation constraints satisfied";
+    }
+    if (!response.diagnostics.converged &&
+        response.error.code.empty()) {
+        response.error = make_error(
+            "reconciliation_iteration_limit", "reconciliation",
+            "hard constraints were not satisfied within the iteration "
+            "budget");
+    }
+    apply_values(values);
+    response.diagnostics
+        .final_maximum_absolute_normalized_constraint =
+        maximum_constraint(best);
+    response.hard_constraints = best.observations;
+    for (std::size_t index = 0;
+         index < definition->parameters.size(); ++index) {
+        const auto& parameter = definition->parameters[index];
+        response.inferred_parameters.push_back({
+            parameter.id,
+            parameter.scope,
+            parameter.lower_bound->dimension,
+            initial[index],
+            values[index],
+            lower[index],
+            upper[index],
+            parameter.targets,
+        });
+    }
+    response.reconciled_model_json =
+        detail::serialize_model_document_json(document);
+    if (!response.diagnostics.converged) {
+        response.status = OperationStatus::solver_failed;
+        return response;
+    }
+
+    for (const auto& held_out_case : request.held_out_cases) {
+        StudyCaseResult result;
+        result.case_id = held_out_case.case_id;
+        SteadySimulationRequest simulation;
+        simulation.schema_version = request.schema_version;
+        simulation.model_json = response.reconciled_model_json;
+        simulation.case_id = held_out_case.case_id;
+        simulation.solver = settings.simulation_solver;
+        simulation.artifacts = request.artifacts;
+        simulation.components = request.components;
+        result.simulation = run_steady(simulation);
+        if (!result.simulation.succeeded()) {
+            response.status = result.simulation.status;
+            response.error = make_error(
+                "reconciliation_held_out_solve_failed", "held_out",
+                result.simulation.error.message);
+            return response;
+        }
+        try {
+            for (const auto& observation :
+                 held_out_case.observations) {
+                const auto& predicted = require_graph_value(
+                    result.simulation.graph, observation.target);
+                if (predicted.dimension != observation.dimension) {
+                    throw std::invalid_argument(
+                        "held-out observation dimension does not match "
+                        "the graph result");
+                }
+                const double residual =
+                    predicted.value_si - observation.measured_si;
+                const double normalized =
+                    residual / observation.sigma_si;
+                result.weighted_sum_squares += normalized * normalized;
+                result.observations.push_back({
+                    observation.id,
+                    held_out_case.case_id,
+                    observation.target,
+                    observation.dimension,
+                    observation.measured_si,
+                    predicted.value_si,
+                    observation.sigma_si,
+                    residual,
+                    normalized,
+                });
+            }
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::invalid_request;
+            response.error = make_error(
+                "invalid_reconciliation_held_out_observation",
+                "held_out", ex.what());
+            return response;
+        }
+        response.held_out_results.push_back(std::move(result));
+    }
     response.status = OperationStatus::succeeded;
     return response;
 }

@@ -27,6 +27,8 @@ std::string serialize_calibration_response_json(
     const CalibrationResponse& response);
 std::string serialize_engineering_study_response_json(
     const EngineeringStudyResponse& response);
+std::string serialize_data_reconciliation_response_json(
+    const DataReconciliationResponse& response);
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
 std::string serialize_result_summary_json(

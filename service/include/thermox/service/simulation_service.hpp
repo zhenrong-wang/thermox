@@ -1183,6 +1183,65 @@ struct EngineeringStudyResponse {
     }
 };
 
+enum class CalculationIntent {
+    forward_prediction,
+    parameter_calibration,
+    data_reconciliation,
+};
+
+std::string to_string(CalculationIntent intent);
+
+struct ReconciliationSolverSettings {
+    int max_iterations{12};
+    double finite_difference_fraction{1.0e-4};
+    double constraint_tolerance{1.0e-6};
+    double minimum_line_search_fraction{1.0 / 1024.0};
+    SteadySolverSettings simulation_solver;
+};
+
+// Reconciliation reuses a model calibration declaration as an explicit list
+// of adjustable quantities and hard measured equalities. Unlike calibration,
+// it requires a square constraint system and does not minimize a compromise
+// objective or apply priors.
+struct DataReconciliationRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string reconciliation_id;
+    ReconciliationSolverSettings solver;
+    std::vector<StudyPredictionCase> held_out_cases;
+    SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
+};
+
+struct DataReconciliationDiagnostics {
+    bool converged{false};
+    int iterations{0};
+    int model_evaluations{0};
+    double initial_maximum_absolute_normalized_constraint{0.0};
+    double final_maximum_absolute_normalized_constraint{0.0};
+    bool sensitivity_factorization_quality_available{false};
+    double minimum_sensitivity_reciprocal_pivot_ratio{0.0};
+    std::string sensitivity_factorization_quality_method;
+    std::string message;
+};
+
+struct DataReconciliationResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    ExecutionMetadata metadata;
+    CalculationIntent intent{CalculationIntent::data_reconciliation};
+    std::string reconciliation_id;
+    DataReconciliationDiagnostics diagnostics;
+    std::vector<CalibrationParameterEstimate> inferred_parameters;
+    std::vector<CalibrationObservationResidual> hard_constraints;
+    std::vector<StudyCaseResult> held_out_results;
+    std::string reconciled_model_json;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct TransientSolverSettings {
     double start_time{0.0};
     double end_time{1.0};
@@ -1263,6 +1322,8 @@ public:
         const CalibrationRequest& request) const;
     [[nodiscard]] EngineeringStudyResponse run_engineering_study(
         const EngineeringStudyRequest& request) const;
+    [[nodiscard]] DataReconciliationResponse run_data_reconciliation(
+        const DataReconciliationRequest& request) const;
     [[nodiscard]] TransientSimulationResponse run_transient(
         const TransientSimulationRequest& request) const;
 

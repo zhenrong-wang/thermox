@@ -387,6 +387,11 @@ Next:
     and prove ordinary calibration can fit and freeze them for independent prediction. ✅
 13. Add species-keyed parameter templates and a fixed-composition material source that leaves
     total flow available for downstream map/pressure closure. ✅
+14. Separate weighted parameter calibration from square hard-equality data reconciliation; expose
+    case-owned adjustable boundaries, bounded Newton sensitivities, strict equality convergence,
+    and semantically separate inferred, constrained, and held-out results. ✅
+15. Add covariance and propagated measurement-uncertainty analysis for overdetermined
+    reconciliation while preserving explicit identifiability diagnostics.
 
 See `docs/calibration-architecture.md`.
 

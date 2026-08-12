@@ -24,6 +24,7 @@ isolated example models.
 - [Persistence Architecture](docs/persistence-architecture.md)
 - [Performance Map Architecture](docs/performance-maps.md)
 - [Calibration Architecture](docs/calibration-architecture.md)
+- [Calculation Intent Architecture](docs/calculation-intent-architecture.md)
 - [Product Workflow Architecture](docs/product-workflow-architecture.md)
 - [Calculation Readiness Architecture](docs/readiness-architecture.md)
 - [Engineering Acceptance Architecture](docs/engineering-acceptance-architecture.md)
@@ -245,6 +246,10 @@ Implemented in this sprint:
 - A leakage-guarded engineering-study service calibrates designated baseline cases, freezes the
   canonical fitted model, runs independent steady prediction cases, and reports per-observation
   and aggregate normalized validation residuals.
+- A distinct data-reconciliation service solves square sets of measured hard equalities for
+  explicitly owned adjustable boundaries or parameters using bounded, line-searched Newton
+  iterations. It rejects priors and singular sensitivity systems, requires equality convergence,
+  and reports inferred quantities, hard constraints, and held-out comparisons separately.
 - A declaration-driven gas-turbine performance-test service reduces measured net power, fuel
   input, efficiency, heat rate, and correction chains; propagates uncertainty when its inputs are
   available; and reports evidence-qualified GB/T 14100 / ISO 2314 compliance dispositions without

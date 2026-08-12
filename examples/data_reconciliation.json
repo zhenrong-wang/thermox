@@ -1,0 +1,77 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "airflow_reconciliation",
+    "name": "Generic fixed-power airflow reconciliation",
+    "revision": "1",
+    "media": [
+      {
+        "id": "air",
+        "backend": "ideal_gas_mixture",
+        "substance": "Air",
+        "package_version": "1.0.0"
+      }
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.fluid.isentropic_efficiency",
+        "version": "1.0.0",
+        "parameters": {
+          "pressure_ratio": 12.0,
+          "eta_is": 0.86
+        },
+        "media": {
+          "inlet": "air",
+          "outlet": "air"
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "test_point",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "compressor.inlet.m_dot": {"value": 90.0, "unit": "kg/s"},
+        "compressor.inlet.p": {"value": 101.325, "unit": "kPa"},
+        "compressor.inlet.T": {"value": 300.0, "unit": "K"},
+        "compressor.shaft.omega": 314.1592653589793
+      },
+      "initial_guesses": {
+        "compressor.outlet.p": {"value": 1.2, "unit": "MPa"},
+        "compressor.outlet.h": {"value": 650.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 35.0, "unit": "MW"}
+      }
+    }
+  ],
+  "calibrations": [
+    {
+      "id": "fixed_power_relaxed_airflow",
+      "parameters": [
+        {
+          "id": "inferred_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "cases": ["test_point"],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "required_shaft_power",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.229874174599141, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
+    }
+  ]
+}
