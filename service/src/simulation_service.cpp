@@ -3480,6 +3480,18 @@ SimulationService::run_data_reconciliation(
         response.diagnostics
             .sensitivity_factorization_quality_available = true;
     };
+    const auto at_lower_bound =
+        [&](std::size_t index) {
+        const double tolerance =
+            1.0e-10 * (upper[index] - lower[index]);
+        return values[index] - lower[index] <= tolerance;
+    };
+    const auto at_upper_bound =
+        [&](std::size_t index) {
+        const double tolerance =
+            1.0e-10 * (upper[index] - lower[index]);
+        return upper[index] - values[index] <= tolerance;
+    };
 
     for (int iteration = 0;
          iteration < settings.max_iterations; ++iteration) {
@@ -3557,22 +3569,79 @@ SimulationService::run_data_reconciliation(
                         whitened_rhs.message);
                 break;
             }
-            const auto least_squares =
+            const auto full_least_squares =
                 thermox::solve_dense_least_squares(
-                    std::move(jacobian), whitened_rhs.x);
+                    jacobian, whitened_rhs.x);
             response.diagnostics.sensitivity_rank =
-                least_squares.rank;
+                full_least_squares.rank;
             response.diagnostics.locally_identifiable =
-                least_squares.rank == values.size();
+                full_least_squares.rank == values.size();
             record_factorization_quality(
-                least_squares.factorization_quality);
-            if (!least_squares.success) {
+                full_least_squares.factorization_quality);
+            if (!full_least_squares.success) {
                 response.error = make_error(
                     "reconciliation_unidentifiable", "reconciliation",
-                    least_squares.message);
+                    full_least_squares.message);
                 break;
             }
-            step = least_squares.x;
+
+            std::vector<std::size_t> free_indices;
+            for (std::size_t column = 0;
+                 column < values.size(); ++column) {
+                double gradient = 0.0;
+                double gradient_scale = 0.0;
+                for (std::size_t row = 0;
+                     row < jacobian.size(); ++row) {
+                    const double contribution =
+                        -jacobian[row][column] *
+                        whitened_rhs.x[row];
+                    gradient += contribution;
+                    gradient_scale += std::abs(contribution);
+                }
+                const double tolerance =
+                    1.0e-12 * std::max(1.0, gradient_scale);
+                const bool outward =
+                    (at_lower_bound(column) &&
+                     gradient > tolerance) ||
+                    (at_upper_bound(column) &&
+                     gradient < -tolerance);
+                if (!outward) free_indices.push_back(column);
+            }
+            step.assign(values.size(), 0.0);
+            if (free_indices.size() == values.size()) {
+                step = full_least_squares.x;
+            } else if (!free_indices.empty()) {
+                thermox::Matrix free_jacobian(
+                    jacobian.size(),
+                    std::vector<double>(free_indices.size(), 0.0));
+                for (std::size_t row = 0;
+                     row < jacobian.size(); ++row) {
+                    for (std::size_t column = 0;
+                         column < free_indices.size(); ++column) {
+                        free_jacobian[row][column] =
+                            jacobian[row][free_indices[column]];
+                    }
+                }
+                const auto free_least_squares =
+                    thermox::solve_dense_least_squares(
+                        std::move(free_jacobian),
+                        whitened_rhs.x);
+                record_factorization_quality(
+                    free_least_squares.factorization_quality);
+                if (!free_least_squares.success) {
+                    response.error = make_error(
+                        "reconciliation_unidentifiable",
+                        "reconciliation",
+                        "free-parameter sensitivity is singular: " +
+                            free_least_squares.message);
+                    break;
+                }
+                for (std::size_t index = 0;
+                     index < free_indices.size(); ++index) {
+                    step[free_indices[index]] =
+                        free_least_squares.x[index];
+                }
+            }
         }
         double maximum_scaled_step = 0.0;
         for (std::size_t index = 0;
@@ -3587,7 +3656,8 @@ SimulationService::run_data_reconciliation(
             maximum_scaled_step <= settings.step_tolerance) {
             response.diagnostics.converged = true;
             response.diagnostics.message =
-                "weighted reconciliation step tolerance reached";
+                "weighted reconciliation active-set step tolerance "
+                "reached";
             break;
         }
         bool accepted = false;
@@ -3705,54 +3775,88 @@ SimulationService::run_data_reconciliation(
             throw std::runtime_error(
                 "could not whiten final measurement sensitivity");
         }
-        const auto final_factorization =
-            thermox::solve_dense_least_squares(
-                whitened_final_jacobian,
-                std::vector<double>(
-                    whitened_final_jacobian.size(), 0.0));
-        if (!final_factorization.success) {
-            throw std::runtime_error(
-                "final measurement sensitivity factorization failed: " +
-                final_factorization.message);
-        }
-        record_factorization_quality(
-            final_factorization.factorization_quality);
         const std::size_t count = values.size();
-        const auto& covariance = final_factorization.covariance;
-        std::vector<double> standard_uncertainties(count, 0.0);
+        std::vector<bool> bound_active(count, false);
+        std::vector<std::size_t> free_indices;
         for (std::size_t index = 0; index < count; ++index) {
-            const double variance = covariance[index][index];
-            if (!std::isfinite(variance) || variance < 0.0) {
-                throw std::runtime_error(
-                    "final parameter covariance is not positive on its "
-                    "diagonal");
+            bound_active[index] =
+                at_lower_bound(index) || at_upper_bound(index);
+            if (!bound_active[index]) free_indices.push_back(index);
+        }
+        response.diagnostics.active_bound_count =
+            count - free_indices.size();
+        response.diagnostics.free_uncertainty_parameter_count =
+            free_indices.size();
+
+        std::vector<std::optional<double>> standard_uncertainties(
+            count);
+        thermox::Matrix free_covariance;
+        if (!free_indices.empty()) {
+            thermox::Matrix free_jacobian(
+                whitened_final_jacobian.size(),
+                std::vector<double>(free_indices.size(), 0.0));
+            for (std::size_t row = 0;
+                 row < whitened_final_jacobian.size(); ++row) {
+                for (std::size_t column = 0;
+                     column < free_indices.size(); ++column) {
+                    free_jacobian[row][column] =
+                        whitened_final_jacobian[row]
+                            [free_indices[column]];
+                }
             }
-            standard_uncertainties[index] = std::sqrt(variance);
-            const double bound_tolerance =
-                1.0e-10 * (upper[index] - lower[index]);
+            const auto free_factorization =
+                thermox::solve_dense_least_squares(
+                    std::move(free_jacobian),
+                    std::vector<double>(
+                        whitened_final_jacobian.size(), 0.0));
+            if (!free_factorization.success) {
+                throw std::runtime_error(
+                    "final free-parameter sensitivity factorization "
+                    "failed: " + free_factorization.message);
+            }
+            record_factorization_quality(
+                free_factorization.factorization_quality);
+            free_covariance = free_factorization.covariance;
+            for (std::size_t free_index = 0;
+                 free_index < free_indices.size(); ++free_index) {
+                const double variance =
+                    free_covariance[free_index][free_index];
+                if (!std::isfinite(variance) || variance < 0.0) {
+                    throw std::runtime_error(
+                        "final free-parameter covariance is not positive "
+                        "on its diagonal");
+                }
+                standard_uncertainties[free_indices[free_index]] =
+                    std::sqrt(variance);
+            }
+        }
+        for (std::size_t index = 0; index < count; ++index) {
             response.parameter_uncertainties.push_back({
                 definition->parameters[index].id,
                 definition->parameters[index]
                     .lower_bound->dimension,
                 standard_uncertainties[index],
-                values[index] - lower[index] <= bound_tolerance ||
-                    upper[index] - values[index] <= bound_tolerance,
+                bound_active[index],
+                bound_active[index]
+                    ? "bound_active_one_sided_not_estimated"
+                    : "local_two_sided_linearized",
             });
         }
-        for (std::size_t first = 0; first < count; ++first) {
+        for (std::size_t first = 0;
+             first < free_indices.size(); ++first) {
             for (std::size_t second = first + 1;
-                 second < count; ++second) {
+                 second < free_indices.size(); ++second) {
                 const double denominator =
-                    standard_uncertainties[first] *
-                    standard_uncertainties[second];
+                    *standard_uncertainties[free_indices[first]] *
+                    *standard_uncertainties[free_indices[second]];
                 const double correlation = denominator > 0.0
                     ? std::clamp(
-                          covariance[first][second] / denominator,
+                          free_covariance[first][second] / denominator,
                           -1.0, 1.0)
                     : 0.0;
                 response.parameter_correlations.push_back({
-                    definition->parameters[first].id,
-                    definition->parameters[second].id,
+                    definition->parameters[free_indices[first]].id,
+                    definition->parameters[free_indices[second]].id,
                     correlation,
                 });
             }

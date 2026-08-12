@@ -1244,14 +1244,17 @@ struct DataReconciliationDiagnostics {
     std::string sensitivity_factorization_quality_method;
     std::size_t sensitivity_rank{0};
     bool locally_identifiable{false};
+    std::size_t active_bound_count{0};
+    std::size_t free_uncertainty_parameter_count{0};
     std::string message;
 };
 
 struct ReconciliationParameterUncertainty {
     std::string parameter_id;
     std::string dimension;
-    double standard_uncertainty_si{0.0};
+    std::optional<double> standard_uncertainty_si;
     bool bound_active{false};
+    std::string interpretation;
 };
 
 struct ReconciliationParameterCorrelation {

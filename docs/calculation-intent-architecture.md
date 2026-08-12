@@ -98,8 +98,8 @@ The response reports:
 - local linearized parameter standard uncertainties from `(J_w^T J_w)^-1`, where `J_w` is the
   covariance-whitened sensitivity;
 - pairwise parameter correlations;
-- whether an inferred value is at a bound, where unconstrained covariance interpretation is
-  limited;
+- the active-bound count and the number of locally free parameters included in uncertainty;
+- an explicit uncertainty interpretation for every inferred parameter;
 - the rank-revealing factorization's accepted-diagonal ratio and method, explicitly not mislabeled
   as a matrix condition number.
 
@@ -108,11 +108,25 @@ so it is individually interpretable. `weighted_sum_squares` and reduced chi-squa
 Mahalanobis quantities after correlation whitening. Diagnostics explicitly disclose whether
 measurement covariance was applied and how many off-diagonal pairs were declared.
 
+Weighted reconciliation uses a local active set at finite parameter bounds. A parameter at its
+lower bound whose objective gradient points lower, or at its upper bound whose gradient points
+higher, is held fixed while the Gauss-Newton step is recomputed over the remaining free columns.
+This lets a valid constrained optimum converge instead of repeatedly proposing a clipped zero
+step. Rank and identifiability of the declared full sensitivity remain visible separately.
+
+After convergence, covariance is factorized only over locally free sensitivity columns.
+Bound-active parameters receive `standard_uncertainty_si: null`, `bound_active: true`, and the
+interpretation `bound_active_one_sided_not_estimated`; Thermox does not report a fabricated
+two-sided Gaussian uncertainty at a truncated optimum. Free parameters retain
+`local_two_sided_linearized` uncertainties, and parameter correlations are emitted only between
+free parameters. A profile-likelihood or sampling workflow is still required to quantify a
+one-sided confidence limit for an active parameter.
+
 Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
 automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
 visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
-The current covariance is a local first-order approximation and does not yet include nonlinear
-confidence regions or Monte Carlo propagation. The reference
+The free-parameter covariance is a local first-order approximation and does not yet include
+nonlinear confidence regions, one-sided bound profiles, or Monte Carlo propagation. The reference
 implementation uses column-pivoted QR; an optimized sparse QR or SVD backend can replace it for
 very large or extremely ill-conditioned estimation problems without changing this service
 contract.

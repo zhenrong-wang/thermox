@@ -398,9 +398,11 @@ Next:
 17. Add canonical pairwise measurement correlations, positive-definite covariance validation,
     Cholesky-whitened calibration/reconciliation objectives and sensitivities, and explicit joint
     chi-square diagnostics. ✅
-18. Add active-bound-aware uncertainty and nonlinear or sampling-based confidence regions where
-    first-order propagation is insufficient; allow a sparse QR/SVD backend for very large
-    rectangular sensitivities.
+18. Add active-set Gauss-Newton convergence at finite bounds, free-subspace covariance, null
+    symmetric uncertainty for bound-active parameters, and explicit uncertainty interpretation. ✅
+19. Add profile-likelihood and nonlinear or sampling-based confidence regions where first-order
+    propagation is insufficient; allow a sparse QR/SVD backend for very large rectangular
+    sensitivities.
 
 See `docs/calibration-architecture.md`.
 

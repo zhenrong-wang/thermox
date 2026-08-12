@@ -243,6 +243,39 @@
           "correlation": 0.5
         }
       ]
+    },
+    {
+      "id": "weighted_active_upper_bound",
+      "parameters": [
+        {
+          "id": "bounded_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "cases": ["test_point"],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "power_meter_a",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 47.0, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        },
+        {
+          "id": "power_meter_b",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 47.1, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ]
     }
   ]
 }

@@ -2424,7 +2424,11 @@ std::string serialize_data_reconciliation_response_json(
         << response.diagnostics.sensitivity_rank
         << ", \"locally_identifiable\": "
         << (response.diagnostics.locally_identifiable
-                ? "true" : "false");
+                ? "true" : "false")
+        << ", \"active_bound_count\": "
+        << response.diagnostics.active_bound_count
+        << ", \"free_uncertainty_parameter_count\": "
+        << response.diagnostics.free_uncertainty_parameter_count;
     out << ", \"message\": ";
     json_string(out, response.diagnostics.message);
     out << "},\n  \"inferred_parameters\": [";
@@ -2515,10 +2519,17 @@ std::string serialize_data_reconciliation_response_json(
         out << ", \"dimension\": ";
         json_string(out, uncertainty.dimension);
         out << ", \"standard_uncertainty_si\": ";
-        json_number(out, uncertainty.standard_uncertainty_si);
+        if (uncertainty.standard_uncertainty_si.has_value()) {
+            json_number(
+                out, *uncertainty.standard_uncertainty_si);
+        } else {
+            out << "null";
+        }
         out << ", \"bound_active\": "
             << (uncertainty.bound_active ? "true" : "false")
-            << "}";
+            << ", \"interpretation\": ";
+        json_string(out, uncertainty.interpretation);
+        out << "}";
     }
     out << "],\n  \"parameter_correlations\": [";
     for (std::size_t index = 0;

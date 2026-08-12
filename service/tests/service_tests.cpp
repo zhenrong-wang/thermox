@@ -3769,10 +3769,12 @@ void test_overdetermined_weighted_reconciliation_service() {
         "weighted reconciliation must report CPQR rank, redundancy, and "
         "measurement consistency statistics");
     require(
-        response.parameter_uncertainties.size() == 1 &&
+            response.parameter_uncertainties.size() == 1 &&
+            response.parameter_uncertainties.front()
+                .standard_uncertainty_si.has_value() &&
             std::abs(
-                response.parameter_uncertainties.front()
-                    .standard_uncertainty_si -
+                *response.parameter_uncertainties.front()
+                     .standard_uncertainty_si -
                 0.195172298358) <= 1.0e-6 &&
             !response.parameter_uncertainties.front().bound_active,
         "known measurement uncertainties must propagate through the "
@@ -3858,9 +3860,11 @@ void test_weighted_reconciliation_applies_measurement_correlation() {
                 response.diagnostics.weighted_sum_squares - 1.0) <=
                 1.0e-8 &&
             response.parameter_uncertainties.size() == 1 &&
+            response.parameter_uncertainties.front()
+                .standard_uncertainty_si.has_value() &&
             std::abs(
-                response.parameter_uncertainties.front()
-                    .standard_uncertainty_si -
+                *response.parameter_uncertainties.front()
+                     .standard_uncertainty_si -
                 0.239036278783) <= 1.0e-6,
         "declared positive correlation must preserve the symmetric "
         "estimate while changing Mahalanobis chi-square and propagated "
@@ -3915,6 +3919,47 @@ void test_model_rejects_invalid_measurement_correlation() {
                 "strictly between -1 and 1") != std::string::npos,
         "model validation must reject an invalid correlation "
         "coefficient before reconciliation");
+}
+
+void test_weighted_reconciliation_reports_active_bound_uncertainty() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_active_upper_bound";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.solver.max_iterations = 6;
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded(),
+        "active-bound weighted reconciliation must converge: " +
+            response.error.message);
+    require(
+        response.inferred_parameters.size() == 1 &&
+            std::abs(
+                response.inferred_parameters.front().fitted_value_si -
+                120.0) <= 1.0e-10 &&
+            response.diagnostics.active_bound_count == 1 &&
+            response.diagnostics.free_uncertainty_parameter_count == 0 &&
+            response.parameter_uncertainties.size() == 1 &&
+            response.parameter_uncertainties.front().bound_active &&
+            !response.parameter_uncertainties.front()
+                 .standard_uncertainty_si.has_value() &&
+            response.parameter_uncertainties.front().interpretation ==
+                "bound_active_one_sided_not_estimated" &&
+            response.parameter_correlations.empty(),
+        "a constrained optimum must not receive an unconstrained "
+        "symmetric standard uncertainty");
+    const auto json = thermox::service::
+        serialize_data_reconciliation_response_json(response);
+    require(
+        json.find("\"standard_uncertainty_si\": null") !=
+                std::string::npos &&
+            json.find("\"active_bound_count\": 1") !=
+                std::string::npos,
+        "active-bound uncertainty semantics must survive serialization");
 }
 
 std::string independent_study_model(
@@ -5798,6 +5843,7 @@ int main() {
         test_weighted_reconciliation_reports_parameter_correlation();
         test_weighted_reconciliation_applies_measurement_correlation();
         test_model_rejects_invalid_measurement_correlation();
+        test_weighted_reconciliation_reports_active_bound_uncertainty();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();
