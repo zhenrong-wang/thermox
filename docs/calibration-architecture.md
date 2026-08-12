@@ -194,3 +194,19 @@ requires the physical artifacts that govern movement between operating points, s
 maps, control schedules, bleed/cooling topology, heat-loss models, and auxiliary-load definitions.
 The platform must report a held-out discrepancy as missing evidence or missing physics; it must not
 absorb it into an unowned plant-wide correction.
+
+### Reduced-order discrepancy parameters
+
+A component- or system-owned discrepancy parameter can be useful when a real test campaign does
+not expose enough internal equipment data. For example, a shaft-train fixed loss can represent an
+unresolved but locally stable difference between thermodynamic shaft work and the declared
+generator boundary. Such a parameter is acceptable only when its ownership, units, bounds, fitted
+cases, and limitations are explicit.
+
+Agreement after fitting a discrepancy parameter supports only the operating envelope exercised by
+held-out cases. It does not identify the parameter as a measured physical loss and must not be used
+to hide missing cooling flows, auxiliary boundaries, maps, controls, or measurement-basis errors.
+A useful qualification sequence is therefore: fit physical state parameters on training
+observations, fit the minimum additional discrepancy term on training output, freeze both stages,
+and evaluate separately declared prediction observations. A materially separated load or ambient
+point is stronger evidence than several nearly identical repeat runs.
