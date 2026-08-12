@@ -22,12 +22,22 @@ Every adjustable value references the physical parameter consumed by an equation
 ```text
 components.<component-id>.parameters.<parameter-name>
 connections.<connection-id>.parameters.<parameter-name>
+cases.<case-id>.fixed_values.<graph-variable>
+cases.<case-id>.parameter_overrides.<component-parameter-path>
 ```
 
 A `component`-scoped calibration parameter has exactly one target. A `system`-scoped parameter may
 represent a plant-wide or shared estimate and may bind multiple dimensionally compatible physical
 targets with the same initial value. Scope controls estimation and sharing; it does not move the
 parameter out of its physical owner.
+
+Case-owned fixed-value targets support inverse boundary reconstruction without inventing a
+component parameter. For example, holding measured power and thermodynamic states fixed while
+estimating an inlet flow uses `cases.test_point.fixed_values.inlet.outlet.m_dot`. Each independently
+estimated operating-point boundary should be a separate calibration parameter. Shared physical
+parameters remain component- or connection-owned and can still be fitted over those same cases.
+Case-owned parameter overrides use the parallel `parameter_overrides` path when the estimated
+quantity is an operating configuration such as guide-vane angle rather than a graph boundary.
 
 Effects with a recognizable physical owner remain explicit graph elements. Shaft loss belongs to a
 shaft-train component, generator loss to a generator, bleed and cooling flows to topology, duct

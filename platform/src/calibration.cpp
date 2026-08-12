@@ -299,6 +299,46 @@ ScalarValue& require_calibration_parameter_target(
     if (std::string_view{target}.starts_with("connections.")) {
         return resolve("connections.", document.connections);
     }
+    constexpr std::string_view case_prefix{"cases."};
+    constexpr std::string_view fixed_value_marker{".fixed_values."};
+    constexpr std::string_view override_marker{".parameter_overrides."};
+    const std::string_view path{target};
+    if (path.starts_with(case_prefix)) {
+        auto split = path.find(
+            fixed_value_marker, case_prefix.size());
+        auto value_marker = fixed_value_marker;
+        bool fixed_value = true;
+        if (split == std::string_view::npos) {
+            split = path.find(override_marker, case_prefix.size());
+            value_marker = override_marker;
+            fixed_value = false;
+        }
+        if (split == std::string_view::npos ||
+            split == case_prefix.size() ||
+            split + value_marker.size() >= path.size()) {
+            throw std::invalid_argument(
+                "invalid case calibration parameter target: " +
+                target);
+        }
+        const std::string case_id{
+            path.substr(
+                case_prefix.size(), split - case_prefix.size())};
+        const std::string variable{
+            path.substr(split + value_marker.size())};
+        for (auto& operating_case : document.cases) {
+            if (operating_case.id != case_id) continue;
+            auto& values = fixed_value
+                ? operating_case.fixed_values
+                : operating_case.parameter_overrides;
+            const auto value = values.find(variable);
+            if (value != values.end()) {
+                return value->second;
+            }
+        }
+        throw std::invalid_argument(
+            "unresolved case calibration parameter target: " +
+            target);
+    }
     throw std::invalid_argument(
         "invalid calibration parameter target: " + target);
 }

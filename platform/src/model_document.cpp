@@ -801,6 +801,7 @@ const ScalarValue& calibration_target_value(
     const std::string& target) {
     constexpr std::string_view component_prefix{"components."};
     constexpr std::string_view connection_prefix{"connections."};
+    constexpr std::string_view case_prefix{"cases."};
     constexpr std::string_view parameter_marker{".parameters."};
     const auto resolve = [&](std::string_view prefix,
                              const auto& owners,
@@ -848,9 +849,54 @@ const ScalarValue& calibration_target_value(
         return resolve(
             connection_prefix, document.connections, "connection");
     }
+    constexpr std::string_view fixed_value_marker{".fixed_values."};
+    constexpr std::string_view override_marker{".parameter_overrides."};
+    const std::string_view path{target};
+    if (path.starts_with(case_prefix)) {
+        auto marker = path.find(
+            fixed_value_marker, case_prefix.size());
+        auto value_marker = fixed_value_marker;
+        bool fixed_value = true;
+        if (marker == std::string_view::npos) {
+            marker = path.find(override_marker, case_prefix.size());
+            value_marker = override_marker;
+            fixed_value = false;
+        }
+        if (marker == std::string_view::npos ||
+            marker == case_prefix.size() ||
+            marker + value_marker.size() >= path.size()) {
+            throw std::invalid_argument(
+                "case calibration target must use "
+                "cases.<id>.fixed_values.<variable> or "
+                "cases.<id>.parameter_overrides.<parameter-path>: " +
+                target);
+        }
+        const std::string case_id{
+            path.substr(
+                case_prefix.size(), marker - case_prefix.size())};
+        const std::string variable{
+            path.substr(marker + value_marker.size())};
+        for (const auto& operating_case : document.cases) {
+            if (operating_case.id != case_id) continue;
+            const auto& values = fixed_value
+                ? operating_case.fixed_values
+                : operating_case.parameter_overrides;
+            const auto value = values.find(variable);
+            if (value == values.end()) {
+                throw std::invalid_argument(
+                    "calibration target references unknown case value: " +
+                    target);
+            }
+            return value->second;
+        }
+        throw std::invalid_argument(
+            "calibration target references unknown case: " + target);
+    }
     throw std::invalid_argument(
         "calibration target must use components.<id>.parameters.<name> "
-        "or connections.<id>.parameters.<name>: " + target);
+        "or connections.<id>.parameters.<name>, or "
+        "cases.<id>.fixed_values.<variable> or "
+        "cases.<id>.parameter_overrides.<parameter-path>: " + target);
 }
 
 CalibrationParameterDefinition parse_calibration_parameter(

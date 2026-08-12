@@ -231,8 +231,9 @@ Implemented in this sprint:
 - `thermox.model/v2` component instances bind media to fluid ports while all port names, domains,
   directions, and connection cardinality come from the active runtime catalog.
 - Calibration campaigns select explicit component/connection parameter targets without changing
-  their physical ownership, and carry component/system sharing scope, cases, bounds, priors,
-  measured graph observations, and uncertainties through canonical service serialization.
+  their physical ownership, can explicitly estimate case-owned fixed boundaries and parameter
+  overrides, and carry component/system sharing scope, cases, bounds, priors, measured graph
+  observations, and uncertainties through canonical service serialization.
 - Service validation resolves calibration observations against registered graph results, while
   the result layer derives thermodynamic temperature and composition metadata for reacting
   material ports through the selected thermochemistry backend.

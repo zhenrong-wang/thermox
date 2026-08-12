@@ -1,5 +1,6 @@
 #include "thermox/continuation_solver.hpp"
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/results.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
@@ -618,7 +619,13 @@ void test_model_document_supports_component_and_system_calibration() {
     "connections": []
   },
   "cases": [
-    {"id": "baseline", "mode": "steady_state_design"},
+    {
+      "id": "baseline",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "air_source.outlet.m_dot": {"value": 600.0, "unit": "kg/s"}
+      }
+    },
     {"id": "part_load", "mode": "steady_state_off_design"}
   ],
   "calibrations": [
@@ -645,6 +652,18 @@ void test_model_document_supports_component_and_system_calibration() {
             "lower": {"value": 0.0, "unit": "MW"},
             "upper": {"value": 8.0, "unit": "MW"}
           }
+        },
+        {
+          "id": "baseline_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.baseline.fixed_values.air_source.outlet.m_dot"
+          ],
+          "cases": ["baseline"],
+          "bounds": {
+            "lower": {"value": 500.0, "unit": "kg/s"},
+            "upper": {"value": 700.0, "unit": "kg/s"}
+          }
         }
       ],
       "observations": [
@@ -665,8 +684,9 @@ void test_model_document_supports_component_and_system_calibration() {
         "one calibration definition should load");
     const auto& calibration = document.calibrations.front();
     require(
-        calibration.parameters.size() == 2,
-        "component and system calibration parameters should coexist");
+        calibration.parameters.size() == 3,
+        "component, system, and case-boundary calibration parameters "
+        "should coexist");
     require(
         calibration.parameters.at(0).scope == "component" &&
             calibration.parameters.at(0).targets.front() ==
@@ -680,6 +700,23 @@ void test_model_document_supports_component_and_system_calibration() {
         calibration.parameters.at(1).upper_bound->value_si,
         8.0e6, 1.0e-9,
         "calibration bounds should normalize to SI");
+    require(
+        calibration.parameters.at(2).targets.front() ==
+            "cases.baseline.fixed_values.air_source.outlet.m_dot",
+        "system calibration should retain explicit case-boundary "
+        "ownership");
+    auto mutable_document = document;
+    auto& airflow = thermox::platform::
+        require_calibration_parameter_target(
+            mutable_document,
+            calibration.parameters.at(2).targets.front());
+    airflow.value_si = 625.0;
+    require_near(
+        mutable_document.cases.front().fixed_values.at(
+            "air_source.outlet.m_dot").value_si,
+        625.0, 1.0e-12,
+        "case-boundary calibration target should resolve to its owned "
+        "fixed value");
     require_near(
         calibration.observations.front().sigma.value_si,
         1.0e6, 1.0e-9,
