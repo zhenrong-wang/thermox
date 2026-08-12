@@ -107,11 +107,19 @@ struct CalibrationObservationDefinition {
     ScalarValue sigma;
 };
 
+struct MeasurementCorrelationDefinition {
+    std::string first_observation_id;
+    std::string second_observation_id;
+    double correlation{0.0};
+};
+
 struct CalibrationDefinition {
     std::string id;
     std::string label;
     std::vector<CalibrationParameterDefinition> parameters;
     std::vector<CalibrationObservationDefinition> observations;
+    std::vector<MeasurementCorrelationDefinition>
+        measurement_correlations;
 };
 
 struct ModelDocument {

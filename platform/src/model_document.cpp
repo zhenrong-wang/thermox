@@ -1,5 +1,6 @@
 #include "thermox/platform/model_document.hpp"
 #include "thermox/platform/unit_registry.hpp"
+#include "thermox/dense_cholesky.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -1008,6 +1009,35 @@ CalibrationObservationDefinition parse_calibration_observation(
     return observation;
 }
 
+MeasurementCorrelationDefinition parse_measurement_correlation(
+    const JsonValue& value) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "measurement_correlations entries must be objects");
+    }
+    MeasurementCorrelationDefinition result;
+    result.first_observation_id =
+        require_string(value, "first_observation");
+    result.second_observation_id =
+        require_string(value, "second_observation");
+    result.correlation = require_number_value(
+        require_member(value, "correlation"),
+        "measurement correlation coefficient");
+    if (result.first_observation_id ==
+        result.second_observation_id) {
+        throw std::invalid_argument(
+            "measurement correlation must reference two distinct "
+            "observations");
+    }
+    if (!std::isfinite(result.correlation) ||
+        std::abs(result.correlation) >= 1.0) {
+        throw std::invalid_argument(
+            "measurement correlation coefficient must be finite and "
+            "strictly between -1 and 1");
+    }
+    return result;
+}
+
 CalibrationDefinition parse_calibration(const JsonValue& value) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument(
@@ -1035,6 +1065,26 @@ CalibrationDefinition parse_calibration(const JsonValue& value) {
             "calibration observation");
         calibration.observations.push_back(
             std::move(observation));
+    }
+    std::set<std::pair<std::string, std::string>> correlation_pairs;
+    if (const auto* correlations =
+            optional_array_member(
+                value, "measurement_correlations")) {
+        for (const auto& entry : correlations->array) {
+            auto correlation =
+                parse_measurement_correlation(entry);
+            auto pair = std::minmax(
+                correlation.first_observation_id,
+                correlation.second_observation_id);
+            if (!correlation_pairs.emplace(
+                     pair.first, pair.second).second) {
+                throw std::invalid_argument(
+                    "duplicate measurement correlation pair: " +
+                    pair.first + ", " + pair.second);
+            }
+            calibration.measurement_correlations.push_back(
+                std::move(correlation));
+        }
     }
     if (calibration.parameters.empty()) {
         throw std::invalid_argument(
@@ -1137,6 +1187,48 @@ void validate_calibrations(ModelDocument& document) {
                     "' references unknown case: " +
                     observation.case_id);
             }
+        }
+        std::map<std::string, std::size_t, std::less<>>
+            observation_indices;
+        for (std::size_t index = 0;
+             index < calibration.observations.size(); ++index) {
+            observation_indices.emplace(
+                calibration.observations[index].id, index);
+        }
+        thermox::Matrix correlation_matrix(
+            calibration.observations.size(),
+            std::vector<double>(
+                calibration.observations.size(), 0.0));
+        for (std::size_t index = 0;
+             index < correlation_matrix.size(); ++index) {
+            correlation_matrix[index][index] = 1.0;
+        }
+        for (const auto& correlation :
+             calibration.measurement_correlations) {
+            const auto first = observation_indices.find(
+                correlation.first_observation_id);
+            const auto second = observation_indices.find(
+                correlation.second_observation_id);
+            if (first == observation_indices.end() ||
+                second == observation_indices.end()) {
+                throw std::invalid_argument(
+                    "measurement correlation references an unknown "
+                    "observation: " +
+                    correlation.first_observation_id + ", " +
+                    correlation.second_observation_id);
+            }
+            correlation_matrix[first->second][second->second] =
+                correlation.correlation;
+            correlation_matrix[second->second][first->second] =
+                correlation.correlation;
+        }
+        thermox::DenseCholeskyFactorization factorization;
+        if (!factorization.factorize(
+                std::move(correlation_matrix))) {
+            throw std::invalid_argument(
+                "calibration '" + calibration.id +
+                "' measurement correlation matrix is not positive "
+                "definite: " + factorization.message());
         }
     }
 }

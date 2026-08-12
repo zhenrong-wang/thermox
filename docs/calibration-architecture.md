@@ -73,6 +73,14 @@ An observation identifies a case, a graph result target, a measured value, and i
 Uncertainty is part of the contract so estimation can weight unlike measurements without treating
 all field values as exact.
 
+Measurements that share an uncertainty source may declare pairwise `measurement_correlations` on
+the calibration definition. Each entry references two observation IDs and a coefficient strictly
+inside `(-1, 1)`. Unspecified pairs remain independent. Model validation assembles the complete
+correlation matrix and requires it to be positive definite; individual valid-looking pairs cannot
+therefore create an impossible joint uncertainty model. The service uses a Cholesky factor to
+whiten normalized residuals before evaluating the calibration objective. The response reports the
+declared pair count and whether covariance was applied.
+
 ## Validation boundary
 
 Model-document parsing currently validates:
@@ -84,7 +92,8 @@ Model-document parsing currently validates:
 - case references;
 - ordered bounds;
 - positive prior and observation uncertainties;
-- measured-value and uncertainty dimensions.
+- measured-value and uncertainty dimensions;
+- unique, known correlation pairs and a positive-definite measurement correlation matrix.
 
 Service validation additionally resolves observation paths against the active component registry
 and checks that measured dimensions match the exposed primary or derived result. Fluid and
@@ -94,8 +103,8 @@ temperatures can participate in gas-turbine calibration without becoming connect
 The service executes bounded, multi-case estimation by repeatedly invoking the ordinary steady
 simulation workflow. Its dependency-free reference optimizer is a deterministic coordinate search:
 candidate solve failures are rejected, every observation is weighted by its declared uncertainty,
-and priors contribute normalized penalty residuals. Evaluations and case solves remain sequential
-to bound host resource use.
+declared correlations whiten the joint residual, and priors contribute normalized penalty
+residuals. Evaluations and case solves remain sequential to bound host resource use.
 
 Each accepted case solution is retained as a named-variable warm start. A candidate parameter move
 first attempts the requested endpoint; on failure, adaptive continuation halves the move and walks

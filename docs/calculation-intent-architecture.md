@@ -68,23 +68,51 @@ Rank and the local covariance kernel are obtained from the same rectangular fact
 implementation does not form the normal information matrix and therefore does not square its
 condition number.
 
+Observations retain their marginal standard uncertainties in `sigma`. When measurements share
+instrumentation, data reduction, ambient correction, or another common uncertainty source, the
+calibration declaration may add pairwise `measurement_correlations` by stable observation ID:
+
+```json
+"measurement_correlations": [
+  {
+    "first_observation": "power_meter_a",
+    "second_observation": "power_meter_b",
+    "correlation": 0.5
+  }
+]
+```
+
+Unspecified pairs are independent. Thermox assembles the complete correlation matrix in
+observation order and rejects self-pairs, duplicate pairs, unknown IDs, coefficients outside
+`(-1, 1)`, and matrices that are not positive definite. A dense Cholesky factor whitens both the
+normalized residual vector and sensitivity rows before objective, rank, QR-step, chi-square, and
+covariance calculations. Calibration uses the same correlated objective; hard-equality
+reconciliation rejects correlation declarations because measurement probability does not soften
+an exact equality.
+
 The response reports:
 
 - sensitivity rank and a local-identifiability verdict;
 - measurement count, adjustable count, and redundancy degrees of freedom;
 - weighted sum of squares and reduced chi-square when redundancy exists;
-- local linearized parameter standard uncertainties from `(J^T J)^-1`;
+- local linearized parameter standard uncertainties from `(J_w^T J_w)^-1`, where `J_w` is the
+  covariance-whitened sensitivity;
 - pairwise parameter correlations;
 - whether an inferred value is at a bound, where unconstrained covariance interpretation is
   limited;
 - the rank-revealing factorization's accepted-diagonal ratio and method, explicitly not mislabeled
   as a matrix condition number.
 
+Per-observation `normalized_residual` remains the marginal value `(calculated - measured)/sigma`
+so it is individually interpretable. `weighted_sum_squares` and reduced chi-square are the joint
+Mahalanobis quantities after correlation whitening. Diagnostics explicitly disclose whether
+measurement covariance was applied and how many off-diagonal pairs were declared.
+
 Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
 automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
 visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
-The current covariance is a local first-order approximation and does not yet include correlated
-measurement covariance, nonlinear confidence regions, or Monte Carlo propagation. The reference
+The current covariance is a local first-order approximation and does not yet include nonlinear
+confidence regions or Monte Carlo propagation. The reference
 implementation uses column-pivoted QR; an optimized sparse QR or SVD backend can replace it for
 very large or extremely ill-conditioned estimation problems without changing this service
 contract.

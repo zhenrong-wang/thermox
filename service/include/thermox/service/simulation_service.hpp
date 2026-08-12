@@ -1112,6 +1112,8 @@ struct CalibrationDiagnostics {
     bool converged{false};
     int iterations{0};
     int objective_evaluations{0};
+    std::size_t measurement_correlation_count{0};
+    bool measurement_covariance_applied{false};
     double initial_objective{0.0};
     double final_objective{0.0};
     std::string message;
@@ -1231,6 +1233,8 @@ struct DataReconciliationDiagnostics {
     double final_maximum_absolute_normalized_constraint{0.0};
     std::size_t adjustable_quantity_count{0};
     std::size_t measurement_count{0};
+    std::size_t measurement_correlation_count{0};
+    bool measurement_covariance_applied{false};
     std::size_t degrees_of_freedom{0};
     double weighted_sum_squares{0.0};
     bool reduced_chi_square_available{false};

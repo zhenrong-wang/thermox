@@ -6,6 +6,7 @@
 #include "artifact_payload.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/dense_cholesky.hpp"
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/least_squares_solver.hpp"
 #include "thermox/continuation_solver.hpp"
@@ -1648,6 +1649,42 @@ struct ObjectiveEvaluation {
     std::map<std::string, CalibrationState> case_states;
 };
 
+thermox::Matrix measurement_correlation_matrix(
+    const platform::CalibrationDefinition& calibration) {
+    thermox::Matrix matrix(
+        calibration.observations.size(),
+        std::vector<double>(
+            calibration.observations.size(), 0.0));
+    std::map<std::string, std::size_t, std::less<>> indices;
+    for (std::size_t index = 0;
+         index < calibration.observations.size(); ++index) {
+        matrix[index][index] = 1.0;
+        indices.emplace(calibration.observations[index].id, index);
+    }
+    for (const auto& correlation :
+         calibration.measurement_correlations) {
+        const auto first = indices.at(
+            correlation.first_observation_id);
+        const auto second = indices.at(
+            correlation.second_observation_id);
+        matrix[first][second] = correlation.correlation;
+        matrix[second][first] = correlation.correlation;
+    }
+    return matrix;
+}
+
+thermox::DenseCholeskyFactorization measurement_whitener(
+    const platform::CalibrationDefinition& calibration) {
+    thermox::DenseCholeskyFactorization factorization;
+    if (!factorization.factorize(
+            measurement_correlation_matrix(calibration))) {
+        throw std::invalid_argument(
+            "measurement correlation matrix cannot be whitened: " +
+            factorization.message());
+    }
+    return factorization;
+}
+
 ObjectiveEvaluation evaluate_calibration_objective(
     const platform::ModelDocument& document,
     const platform::CalibrationDefinition& calibration,
@@ -1661,6 +1698,7 @@ ObjectiveEvaluation evaluate_calibration_objective(
         warm_starts = nullptr) {
     ObjectiveEvaluation evaluation;
     evaluation.value = 0.0;
+    std::vector<double> normalized_residuals;
     std::map<std::string, CalibrationCaseSolution> case_results;
     for (const auto& observation : calibration.observations) {
         if (!case_results.contains(observation.case_id)) {
@@ -1686,7 +1724,7 @@ ObjectiveEvaluation evaluate_calibration_objective(
             predicted.value_si - observation.measured.value_si;
         const double normalized =
             residual / observation.sigma.value_si;
-        evaluation.value += normalized * normalized;
+        normalized_residuals.push_back(normalized);
         evaluation.observations.push_back({
             observation.id,
             observation.case_id,
@@ -1698,6 +1736,17 @@ ObjectiveEvaluation evaluate_calibration_objective(
             residual,
             normalized,
         });
+    }
+    const auto whitener = measurement_whitener(calibration);
+    const auto whitened = whitener.solve_lower(
+        std::move(normalized_residuals));
+    if (!whitened.success) {
+        throw std::runtime_error(
+            "could not whiten calibration residuals: " +
+            whitened.message);
+    }
+    for (const double residual : whitened.x) {
+        evaluation.value += residual * residual;
     }
     for (auto& [case_id, solution] : case_results) {
         evaluation.case_states.emplace(
@@ -2871,6 +2920,10 @@ CalibrationResponse SimulationService::run_calibration(
     try {
         calibration =
             &require_calibration(document, request.calibration_id);
+        response.diagnostics.measurement_correlation_count =
+            calibration->measurement_correlations.size();
+        response.diagnostics.measurement_covariance_applied =
+            !calibration->measurement_correlations.empty();
     } catch (const std::exception& ex) {
         response.error = make_error(
             "unknown_calibration", "request", ex.what());
@@ -3161,6 +3214,12 @@ SimulationService::run_data_reconciliation(
                 "weighted reconciliation requires at least as many "
                 "measurements as adjustable quantities");
         }
+        if (request.mode == ReconciliationMode::hard_equalities &&
+            !definition->measurement_correlations.empty()) {
+            throw std::invalid_argument(
+                "hard-equality reconciliation does not use measurement "
+                "correlations; select weighted-measurements mode");
+        }
         for (const auto& parameter : definition->parameters) {
             if (parameter.prior_mean.has_value()) {
                 throw std::invalid_argument(
@@ -3215,6 +3274,10 @@ SimulationService::run_data_reconciliation(
             definition->parameters.size();
         response.diagnostics.measurement_count =
             definition->observations.size();
+        response.diagnostics.measurement_correlation_count =
+            definition->measurement_correlations.size();
+        response.diagnostics.measurement_covariance_applied =
+            !definition->measurement_correlations.empty();
         response.diagnostics.degrees_of_freedom =
             definition->observations.size() -
             definition->parameters.size();
@@ -3289,13 +3352,21 @@ SimulationService::run_data_reconciliation(
     };
     const auto squared_constraint_norm =
         [](const ObjectiveEvaluation& evaluation) {
-        double value = 0.0;
-        for (const auto& observation : evaluation.observations) {
-            value += observation.normalized_residual *
-                observation.normalized_residual;
-        }
-        return value;
+        return evaluation.value;
     };
+
+    thermox::DenseCholeskyFactorization correlation_whitener;
+    if (request.mode == ReconciliationMode::weighted_measurements) {
+        try {
+            correlation_whitener = measurement_whitener(*definition);
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::invalid_model;
+            response.error = make_error(
+                "invalid_measurement_covariance", "validation",
+                ex.what());
+            return response;
+        }
+    }
 
     ObjectiveEvaluation best;
     try {
@@ -3423,6 +3494,15 @@ SimulationService::run_data_reconciliation(
         thermox::Matrix jacobian;
         try {
             jacobian = sensitivity_at(values, best);
+            if (request.mode ==
+                    ReconciliationMode::weighted_measurements) {
+                jacobian =
+                    correlation_whitener.whiten_rows(jacobian);
+                if (jacobian.empty()) {
+                    throw std::runtime_error(
+                        "could not whiten measurement sensitivity");
+                }
+            }
         } catch (const std::exception& ex) {
             response.error = make_error(
                 "reconciliation_jacobian_failed", "reconciliation",
@@ -3468,9 +3548,18 @@ SimulationService::run_data_reconciliation(
                 rhs[row] =
                     -best.observations[row].normalized_residual;
             }
+            const auto whitened_rhs =
+                correlation_whitener.solve_lower(std::move(rhs));
+            if (!whitened_rhs.success) {
+                response.error = make_error(
+                    "invalid_measurement_covariance", "reconciliation",
+                    "could not whiten measurement residuals: " +
+                        whitened_rhs.message);
+                break;
+            }
             const auto least_squares =
                 thermox::solve_dense_least_squares(
-                    std::move(jacobian), std::move(rhs));
+                    std::move(jacobian), whitened_rhs.x);
             response.diagnostics.sensitivity_rank =
                 least_squares.rank;
             response.diagnostics.locally_identifiable =
@@ -3610,10 +3699,17 @@ SimulationService::run_data_reconciliation(
     if (request.mode == ReconciliationMode::weighted_measurements) {
         try {
         const auto final_jacobian = sensitivity_at(values, best);
+        const auto whitened_final_jacobian =
+            correlation_whitener.whiten_rows(final_jacobian);
+        if (whitened_final_jacobian.empty()) {
+            throw std::runtime_error(
+                "could not whiten final measurement sensitivity");
+        }
         const auto final_factorization =
             thermox::solve_dense_least_squares(
-                final_jacobian,
-                std::vector<double>(final_jacobian.size(), 0.0));
+                whitened_final_jacobian,
+                std::vector<double>(
+                    whitened_final_jacobian.size(), 0.0));
         if (!final_factorization.success) {
             throw std::runtime_error(
                 "final measurement sensitivity factorization failed: " +

@@ -1,4 +1,5 @@
 #include "thermox/dense_linear_solver.hpp"
+#include "thermox/dense_cholesky.hpp"
 #include "thermox/continuation_solver.hpp"
 #include "thermox/equation_system.hpp"
 #include "thermox/least_squares_solver.hpp"
@@ -94,6 +95,31 @@ void test_dense_linear_solver() {
         factorization.quality().reciprocal_pivot_ratio,
         0.5, 1.0e-12,
         "reusable dense factorization retains pivot evidence");
+}
+
+void test_dense_cholesky_whitening() {
+    thermox::DenseCholeskyFactorization factorization;
+    require(
+        factorization.factorize({{1.0, 0.5}, {0.5, 1.0}}),
+        factorization.message());
+    const auto whitened = factorization.solve_lower({-0.5, 0.5});
+    require(whitened.success, whitened.message);
+    double squared_norm = 0.0;
+    for (const double value : whitened.x) {
+        squared_norm += value * value;
+    }
+    require_near(squared_norm, 1.0, 1.0e-12,
+                 "correlated residual Mahalanobis norm");
+    const auto whitened_matrix = factorization.whiten_rows(
+        {{1.0}, {1.0}});
+    require(whitened_matrix.size() == 2 &&
+                whitened_matrix.front().size() == 1,
+            "Cholesky whitening preserves rectangular shape");
+
+    thermox::DenseCholeskyFactorization invalid;
+    require(
+        !invalid.factorize({{1.0, 1.0}, {1.0, 1.0}}),
+        "Cholesky rejects positive-semidefinite covariance");
 }
 
 void test_dense_least_squares_solver() {
@@ -2205,6 +2231,7 @@ void test_linear_initialization_propagates_from_explicit_anchor() {
 int main() {
     try {
         test_dense_linear_solver();
+        test_dense_cholesky_whitening();
         test_dense_least_squares_solver();
         test_sparse_linear_solver();
         test_reusable_sparse_factorization();

@@ -3833,6 +3833,90 @@ void test_weighted_reconciliation_reports_parameter_correlation() {
         "uncertainties and material parameter correlation");
 }
 
+void test_weighted_reconciliation_applies_measurement_correlation() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_correlated_power";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.solver.max_iterations = 6;
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded(),
+        "correlated weighted reconciliation must succeed: " +
+            response.error.message);
+    require(
+        response.diagnostics.measurement_correlation_count == 1 &&
+            response.diagnostics.measurement_covariance_applied &&
+            std::abs(
+                response.inferred_parameters.front().fitted_value_si -
+                100.138007655668) <= 1.0e-6 &&
+            std::abs(
+                response.diagnostics.weighted_sum_squares - 1.0) <=
+                1.0e-8 &&
+            response.parameter_uncertainties.size() == 1 &&
+            std::abs(
+                response.parameter_uncertainties.front()
+                    .standard_uncertainty_si -
+                0.239036278783) <= 1.0e-6,
+        "declared positive correlation must preserve the symmetric "
+        "estimate while changing Mahalanobis chi-square and propagated "
+        "uncertainty");
+    const auto json = thermox::service::
+        serialize_data_reconciliation_response_json(response);
+    require(
+        json.find("\"measurement_covariance_applied\": true") !=
+                std::string::npos &&
+            response.reconciled_model_json.find(
+                "\"measurement_correlations\"") !=
+                std::string::npos,
+        "reconciliation JSON must disclose covariance whitening");
+
+    thermox::service::CalibrationRequest calibration;
+    calibration.model_json = request.model_json;
+    calibration.calibration_id = "weighted_correlated_power";
+    calibration.solver.max_iterations = 4;
+    const auto calibration_response =
+        service.run_calibration(calibration);
+    require(
+        calibration_response.succeeded() &&
+            calibration_response.diagnostics
+                    .measurement_correlation_count == 1 &&
+            calibration_response.diagnostics
+                .measurement_covariance_applied &&
+            calibration_response.diagnostics.final_objective <
+                calibration_response.diagnostics.initial_objective,
+        "ordinary calibration must use and disclose the same correlated "
+        "measurement objective");
+}
+
+void test_model_rejects_invalid_measurement_correlation() {
+    auto model = read_source_file("examples/data_reconciliation.json");
+    const std::string valid = "\"correlation\": 0.5";
+    const auto position = model.find(valid);
+    require(position != std::string::npos,
+            "correlated reconciliation fixture contains coefficient");
+    model.replace(position, valid.size(), "\"correlation\": 1.0");
+
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json = std::move(model);
+    request.reconciliation_id = "weighted_correlated_power";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.status ==
+                thermox::service::OperationStatus::invalid_model &&
+            response.error.message.find(
+                "strictly between -1 and 1") != std::string::npos,
+        "model validation must reject an invalid correlation "
+        "coefficient before reconciliation");
+}
+
 std::string independent_study_model(
     double baseline_power_w) {
     std::ostringstream model;
@@ -5712,6 +5796,8 @@ int main() {
         test_overdetermined_weighted_reconciliation_service();
         test_weighted_reconciliation_rejects_rank_deficiency();
         test_weighted_reconciliation_reports_parameter_correlation();
+        test_weighted_reconciliation_applies_measurement_correlation();
+        test_model_rejects_invalid_measurement_correlation();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();

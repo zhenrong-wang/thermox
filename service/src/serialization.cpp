@@ -181,7 +181,30 @@ void calibration_definition_json(
                               ? "\n"
                               : ",\n");
     }
-    out << child_indent << "]\n" << indent << "}";
+    out << child_indent << "]";
+    if (!calibration.measurement_correlations.empty()) {
+        out << ",\n" << child_indent
+            << "\"measurement_correlations\": [\n";
+        for (std::size_t index = 0;
+             index < calibration.measurement_correlations.size();
+             ++index) {
+            const auto& correlation =
+                calibration.measurement_correlations[index];
+            out << item_indent << "{\"first_observation\": ";
+            json_string(out, correlation.first_observation_id);
+            out << ", \"second_observation\": ";
+            json_string(out, correlation.second_observation_id);
+            out << ", \"correlation\": ";
+            json_number(out, correlation.correlation);
+            out << "}"
+                << (index + 1U ==
+                            calibration.measurement_correlations.size()
+                        ? "\n"
+                        : ",\n");
+        }
+        out << child_indent << "]";
+    }
+    out << "\n" << indent << "}";
 }
 
 void error_json(std::ostream& out, const ServiceError& error) {
@@ -1189,7 +1212,31 @@ std::string serialize_model_document_json(
                             ? "\n"
                             : ",\n");
             }
-            out << "      ]\n    }"
+            out << "      ]";
+            if (!calibration.measurement_correlations.empty()) {
+                out << ",\n      \"measurement_correlations\": [\n";
+                for (std::size_t j = 0;
+                     j < calibration.measurement_correlations.size();
+                     ++j) {
+                    const auto& correlation =
+                        calibration.measurement_correlations[j];
+                    out << "        {\"first_observation\": ";
+                    json_string(
+                        out, correlation.first_observation_id);
+                    out << ", \"second_observation\": ";
+                    json_string(
+                        out, correlation.second_observation_id);
+                    out << ", \"correlation\": ";
+                    json_number(out, correlation.correlation);
+                    out << "}"
+                        << (j + 1 == calibration
+                                        .measurement_correlations.size()
+                                ? "\n"
+                                : ",\n");
+                }
+                out << "      ]";
+            }
+            out << "\n    }"
                 << (i + 1 == document.calibrations.size()
                         ? "\n"
                         : ",\n");
@@ -2165,6 +2212,11 @@ std::string serialize_calibration_response_json(
         << response.diagnostics.iterations
         << ", \"objective_evaluations\": "
         << response.diagnostics.objective_evaluations
+        << ", \"measurement_correlation_count\": "
+        << response.diagnostics.measurement_correlation_count
+        << ", \"measurement_covariance_applied\": "
+        << (response.diagnostics.measurement_covariance_applied
+                ? "true" : "false")
         << ", \"initial_objective\": ";
     json_number(out, response.diagnostics.initial_objective);
     out << ", \"final_objective\": ";
@@ -2340,6 +2392,11 @@ std::string serialize_data_reconciliation_response_json(
         << response.diagnostics.adjustable_quantity_count
         << ", \"measurement_count\": "
         << response.diagnostics.measurement_count
+        << ", \"measurement_correlation_count\": "
+        << response.diagnostics.measurement_correlation_count
+        << ", \"measurement_covariance_applied\": "
+        << (response.diagnostics.measurement_covariance_applied
+                ? "true" : "false")
         << ", \"degrees_of_freedom\": "
         << response.diagnostics.degrees_of_freedom
         << ", \"weighted_sum_squares\": ";

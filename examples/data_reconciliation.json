@@ -203,6 +203,46 @@
           "sigma": {"value": 0.1, "unit": "MW"}
         }
       ]
+    },
+    {
+      "id": "weighted_correlated_power",
+      "parameters": [
+        {
+          "id": "shared_inferred_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.test_point.fixed_values.compressor.inlet.m_dot"
+          ],
+          "cases": ["test_point"],
+          "bounds": {
+            "lower": {"value": 70.0, "unit": "kg/s"},
+            "upper": {"value": 120.0, "unit": "kg/s"}
+          }
+        }
+      ],
+      "observations": [
+        {
+          "id": "first_power_measurement",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.229874174599141, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        },
+        {
+          "id": "second_power_measurement",
+          "case": "test_point",
+          "target": "compressor.shaft.W_dot",
+          "measured": {"value": 36.329874174599143, "unit": "MW"},
+          "sigma": {"value": 0.1, "unit": "MW"}
+        }
+      ],
+      "measurement_correlations": [
+        {
+          "first_observation": "first_power_measurement",
+          "second_observation": "second_power_measurement",
+          "correlation": 0.5
+        }
+      ]
     }
   ]
 }
