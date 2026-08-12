@@ -7,6 +7,7 @@
 
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/dense_linear_solver.hpp"
+#include "thermox/least_squares_solver.hpp"
 #include "thermox/continuation_solver.hpp"
 #include "thermox/solver_policy_benchmark.hpp"
 #include "thermox/platform/calibration.hpp"
@@ -1199,7 +1200,7 @@ SolverProvenance solver_provenance(
     SolverProvenance provenance{
         mode == ReconciliationMode::hard_equalities
             ? "thermox.reconciliation-newton/v1"
-            : "thermox.reconciliation-gauss-newton/v1",
+            : "thermox.reconciliation-cpqr-gauss-newton/v2",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -3346,21 +3347,6 @@ SimulationService::run_data_reconciliation(
         apply_values(center);
         return jacobian;
     };
-    const auto normal_matrix =
-        [](const thermox::Matrix& jacobian) {
-        const std::size_t columns = jacobian.front().size();
-        thermox::Matrix normal(
-            columns, std::vector<double>(columns, 0.0));
-        for (const auto& row : jacobian) {
-            for (std::size_t left = 0; left < columns; ++left) {
-                for (std::size_t right = 0;
-                     right < columns; ++right) {
-                    normal[left][right] += row[left] * row[right];
-                }
-            }
-        }
-        return normal;
-    };
     const auto sensitivity_rank =
         [](thermox::Matrix matrix) {
         if (matrix.empty() || matrix.front().empty()) {
@@ -3443,55 +3429,68 @@ SimulationService::run_data_reconciliation(
                 ex.what());
             break;
         }
-        response.diagnostics.sensitivity_rank =
-            sensitivity_rank(jacobian);
-        response.diagnostics.locally_identifiable =
-            response.diagnostics.sensitivity_rank == values.size();
-        if (!response.diagnostics.locally_identifiable) {
-            response.error = make_error(
-                "reconciliation_unidentifiable", "reconciliation",
-                "measurement sensitivity rank " +
-                    std::to_string(
-                        response.diagnostics.sensitivity_rank) +
-                    " is below adjustable quantity count " +
-                    std::to_string(values.size()));
-            break;
-        }
-        std::vector<double> rhs(values.size());
-        thermox::Matrix system;
+        std::vector<double> step;
         if (request.mode == ReconciliationMode::hard_equalities) {
-            system = jacobian;
+            response.diagnostics.sensitivity_rank =
+                sensitivity_rank(jacobian);
+            response.diagnostics.locally_identifiable =
+                response.diagnostics.sensitivity_rank == values.size();
+            if (!response.diagnostics.locally_identifiable) {
+                response.error = make_error(
+                    "reconciliation_unidentifiable", "reconciliation",
+                    "measurement sensitivity rank " +
+                        std::to_string(
+                            response.diagnostics.sensitivity_rank) +
+                        " is below adjustable quantity count " +
+                        std::to_string(values.size()));
+                break;
+            }
+            std::vector<double> rhs(values.size());
             for (std::size_t row = 0; row < values.size(); ++row) {
                 rhs[row] =
                     -best.observations[row].normalized_residual;
             }
-        } else {
-            system = normal_matrix(jacobian);
-            for (std::size_t column = 0;
-                 column < values.size(); ++column) {
-                for (std::size_t row = 0;
-                     row < jacobian.size(); ++row) {
-                    rhs[column] -= jacobian[row][column] *
-                        best.observations[row].normalized_residual;
-                }
+            const auto linear = thermox::solve_dense_linear_system(
+                std::move(jacobian), std::move(rhs));
+            if (!linear.success) {
+                response.error = make_error(
+                    "reconciliation_unidentifiable", "reconciliation",
+                    "measurement sensitivity system is singular: " +
+                        linear.message);
+                break;
             }
+            record_factorization_quality(
+                linear.factorization_quality);
+            step = linear.x;
+        } else {
+            std::vector<double> rhs(jacobian.size(), 0.0);
+            for (std::size_t row = 0; row < jacobian.size(); ++row) {
+                rhs[row] =
+                    -best.observations[row].normalized_residual;
+            }
+            const auto least_squares =
+                thermox::solve_dense_least_squares(
+                    std::move(jacobian), std::move(rhs));
+            response.diagnostics.sensitivity_rank =
+                least_squares.rank;
+            response.diagnostics.locally_identifiable =
+                least_squares.rank == values.size();
+            record_factorization_quality(
+                least_squares.factorization_quality);
+            if (!least_squares.success) {
+                response.error = make_error(
+                    "reconciliation_unidentifiable", "reconciliation",
+                    least_squares.message);
+                break;
+            }
+            step = least_squares.x;
         }
-        const auto linear = thermox::solve_dense_linear_system(
-            std::move(system), std::move(rhs));
-        if (!linear.success) {
-            response.error = make_error(
-                "reconciliation_unidentifiable", "reconciliation",
-                "measurement sensitivity system is singular: " +
-                    linear.message);
-            break;
-        }
-        record_factorization_quality(linear.factorization_quality);
         double maximum_scaled_step = 0.0;
         for (std::size_t index = 0;
              index < values.size(); ++index) {
             maximum_scaled_step = std::max(
                 maximum_scaled_step,
-                std::abs(linear.x[index]) /
+                std::abs(step[index]) /
                     (upper[index] - lower[index]));
         }
         if (request.mode ==
@@ -3512,7 +3511,7 @@ SimulationService::run_data_reconciliation(
                  index < candidate.size(); ++index) {
                 candidate[index] = std::clamp(
                     values[index] +
-                        fraction * linear.x[index],
+                        fraction * step[index],
                     lower[index], upper[index]);
             }
             try {
@@ -3611,33 +3610,19 @@ SimulationService::run_data_reconciliation(
     if (request.mode == ReconciliationMode::weighted_measurements) {
         try {
         const auto final_jacobian = sensitivity_at(values, best);
-        thermox::DenseLinearFactorization information;
-        if (!information.factorize(normal_matrix(final_jacobian))) {
+        const auto final_factorization =
+            thermox::solve_dense_least_squares(
+                final_jacobian,
+                std::vector<double>(final_jacobian.size(), 0.0));
+        if (!final_factorization.success) {
             throw std::runtime_error(
-                "final measurement information matrix is singular: " +
-                information.message());
+                "final measurement sensitivity factorization failed: " +
+                final_factorization.message);
         }
+        record_factorization_quality(
+            final_factorization.factorization_quality);
         const std::size_t count = values.size();
-        thermox::Matrix identities(
-            count, std::vector<double>(count, 0.0));
-        for (std::size_t index = 0; index < count; ++index) {
-            identities[index][index] = 1.0;
-        }
-        const auto inverse_columns =
-            information.solve_multiple(identities);
-        thermox::Matrix covariance(
-            count, std::vector<double>(count, 0.0));
-        for (std::size_t column = 0; column < count; ++column) {
-            if (!inverse_columns[column].success) {
-                throw std::runtime_error(
-                    "could not invert final measurement information "
-                    "matrix: " + inverse_columns[column].message);
-            }
-            for (std::size_t row = 0; row < count; ++row) {
-                covariance[row][column] =
-                    inverse_columns[column].x[row];
-            }
-        }
+        const auto& covariance = final_factorization.covariance;
         std::vector<double> standard_uncertainties(count, 0.0);
         for (std::size_t index = 0; index < count; ++index) {
             const double variance = covariance[index][index];

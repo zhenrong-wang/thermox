@@ -18,6 +18,7 @@ add_library(thermox_core
     src/dae_equation_system.cpp
     src/dense_linear_solver.cpp
     src/equation_system.cpp
+    src/least_squares_solver.cpp
     src/nonlinear_solver.cpp
     src/solver_policy_benchmark.cpp
     src/sparse_linear_solver.cpp

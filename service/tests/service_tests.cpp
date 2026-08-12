@@ -3756,6 +3756,9 @@ void test_overdetermined_weighted_reconciliation_service() {
             response.diagnostics.degrees_of_freedom == 1 &&
             response.diagnostics.sensitivity_rank == 1 &&
             response.diagnostics.locally_identifiable &&
+            response.diagnostics
+                .sensitivity_factorization_quality_method ==
+                "reference-householder-cpqr-r-diagonal-ratio" &&
             response.diagnostics.reduced_chi_square_available &&
             std::abs(
                 response.diagnostics.weighted_sum_squares - 0.5) <=
@@ -3763,8 +3766,8 @@ void test_overdetermined_weighted_reconciliation_service() {
             std::abs(
                 response.diagnostics.reduced_chi_square - 0.5) <=
                 1.0e-8,
-        "weighted reconciliation must report redundancy and measurement "
-        "consistency statistics");
+        "weighted reconciliation must report CPQR rank, redundancy, and "
+        "measurement consistency statistics");
     require(
         response.parameter_uncertainties.size() == 1 &&
             std::abs(

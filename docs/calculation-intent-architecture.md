@@ -63,7 +63,10 @@ the equality.
 Weighted-measurement reconciliation is a separate overdetermined statistical mode. It requires at
 least as many measurements as adjustable quantities and minimizes the sum of squared residuals
 normalized by the declared measurement standard uncertainties. A bounded, line-searched
-Gauss-Newton step solves the rectangular sensitivity system through its normal information matrix.
+Gauss-Newton step solves the rectangular sensitivity system with column-pivoted Householder QR.
+Rank and the local covariance kernel are obtained from the same rectangular factorization; the
+implementation does not form the normal information matrix and therefore does not square its
+condition number.
 
 The response reports:
 
@@ -74,17 +77,17 @@ The response reports:
 - pairwise parameter correlations;
 - whether an inferred value is at a bound, where unconstrained covariance interpretation is
   limited;
-- the dense factorization pivot ratio and method, explicitly not mislabeled as a matrix condition
-  number.
+- the rank-revealing factorization's accepted-diagonal ratio and method, explicitly not mislabeled
+  as a matrix condition number.
 
 Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
 automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
 visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
 The current covariance is a local first-order approximation and does not yet include correlated
-measurement covariance, nonlinear confidence regions, or Monte Carlo propagation. The compact
-reference implementation uses normal equations after checking rank on the unmodified rectangular
-sensitivity matrix. A future optimizer backend should use pivoted QR or SVD for strongly
-ill-conditioned large estimation problems without changing this service contract.
+measurement covariance, nonlinear confidence regions, or Monte Carlo propagation. The reference
+implementation uses column-pivoted QR; an optimized sparse QR or SVD backend can replace it for
+very large or extremely ill-conditioned estimation problems without changing this service
+contract.
 
 Case-owned targets make boundary reconciliation explicit:
 

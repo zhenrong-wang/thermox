@@ -1,6 +1,7 @@
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/continuation_solver.hpp"
 #include "thermox/equation_system.hpp"
+#include "thermox/least_squares_solver.hpp"
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/sparse_linear_solver.hpp"
 #include "thermox/sparse_matrix.hpp"
@@ -93,6 +94,53 @@ void test_dense_linear_solver() {
         factorization.quality().reciprocal_pivot_ratio,
         0.5, 1.0e-12,
         "reusable dense factorization retains pivot evidence");
+}
+
+void test_dense_least_squares_solver() {
+    const auto result = thermox::solve_dense_least_squares(
+        {{1.0, 1.0}, {1.0, 2.0}, {1.0, 3.0}},
+        {1.0, 2.0, 2.0});
+    require(result.success, result.message);
+    require(result.rank == 2, "least-squares solve reports full rank");
+    require_near(result.x[0], 2.0 / 3.0, 1.0e-12,
+                 "least-squares intercept");
+    require_near(result.x[1], 0.5, 1.0e-12,
+                 "least-squares slope");
+    require_near(result.covariance[0][0], 7.0 / 3.0, 1.0e-12,
+                 "least-squares covariance 00");
+    require_near(result.covariance[0][1], -1.0, 1.0e-12,
+                 "least-squares covariance 01");
+    require_near(result.covariance[1][1], 0.5, 1.0e-12,
+                 "least-squares covariance 11");
+    require(
+        result.factorization_quality.method ==
+            "reference-householder-cpqr-r-diagonal-ratio",
+        "least-squares solve reports CPQR factorization evidence");
+
+    const auto rank_deficient = thermox::solve_dense_least_squares(
+        {{1.0, 2.0}, {2.0, 4.0}, {3.0, 6.0}},
+        {1.0, 2.0, 3.0});
+    require(!rank_deficient.success && rank_deficient.rank == 1,
+            "least-squares solve rejects a rank-deficient system");
+
+    constexpr double epsilon = 1.0e-8;
+    const thermox::Matrix ill_conditioned{
+        {1.0, 1.0},
+        {1.0, 1.0 + epsilon},
+        {1.0, 1.0 + 2.0 * epsilon},
+        {1.0, 1.0 + 3.0 * epsilon},
+    };
+    std::vector<double> exact_rhs;
+    for (const auto& row : ill_conditioned) {
+        exact_rhs.push_back(2.0 * row[0] - row[1]);
+    }
+    const auto ill_result = thermox::solve_dense_least_squares(
+        ill_conditioned, exact_rhs);
+    require(ill_result.success, ill_result.message);
+    require_near(ill_result.x[0], 2.0, 1.0e-7,
+                 "ill-conditioned least-squares x0");
+    require_near(ill_result.x[1], -1.0, 1.0e-7,
+                 "ill-conditioned least-squares x1");
 }
 
 void test_sparse_linear_solver() {
@@ -2157,6 +2205,7 @@ void test_linear_initialization_propagates_from_explicit_anchor() {
 int main() {
     try {
         test_dense_linear_solver();
+        test_dense_least_squares_solver();
         test_sparse_linear_solver();
         test_reusable_sparse_factorization();
         test_sparse_factorization_resolver_keys_exact_patterns();

@@ -393,9 +393,11 @@ Next:
 15. Add overdetermined weighted reconciliation with sensitivity rank, local identifiability,
     covariance, parameter correlation, reduced chi-square, and propagated independent measurement
     uncertainty while preserving exact hard-equality mode. ✅
-16. Add correlated measurement covariance, active-bound-aware uncertainty, and nonlinear or
-    sampling-based confidence regions where first-order propagation is insufficient; introduce a
-    pivoted-QR/SVD optimizer backend for strongly ill-conditioned rectangular sensitivities.
+16. Replace weighted-reconciliation normal equations with a rank-revealing rectangular
+    column-pivoted QR solve and derive the local covariance kernel from its triangular factor. ✅
+17. Add correlated measurement covariance, active-bound-aware uncertainty, and nonlinear or
+    sampling-based confidence regions where first-order propagation is insufficient; allow a
+    sparse QR/SVD backend for very large rectangular sensitivities.
 
 See `docs/calibration-architecture.md`.
 
