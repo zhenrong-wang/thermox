@@ -982,6 +982,8 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains(
                 "junction.material.splitter.fixed_fraction"),
             "default registry should contain material splitter");
+    require(registry.contains("shaft.combiner.two_driver"),
+            "default registry should contain shaft combiner");
     require(registry.contains("valve.fluid.isenthalpic_pressure_ratio"),
             "default registry should contain fluid valve");
     require(registry.contains("heat_exchanger.fluid.fixed_duty"),
@@ -1093,6 +1095,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
         "shaft.train.two_load",
+        "shaft.combiner.two_driver",
         "shaft.inertia.two_port",
         "generator.electrical.efficiency",
         "control.proportional.normalized",
@@ -7598,6 +7601,14 @@ void test_shaft_train_and_generator_close_power_balance() {
     "media": [],
     "components": [
       {
+        "id": "combiner",
+        "kind": "shaft.combiner.two_driver",
+        "parameters": {
+          "mechanical_efficiency": 0.995,
+          "fixed_loss": {"value": 0.5, "unit": "MW"}
+        }
+      },
+      {
         "id": "train",
         "kind": "shaft.train.two_load",
         "parameters": {
@@ -7620,6 +7631,12 @@ void test_shaft_train_and_generator_close_power_balance() {
     ],
     "connections": [
       {
+        "id": "combined_driver",
+        "from": "combiner.load",
+        "to": "train.driver",
+        "kind": "shaft_link"
+      },
+      {
         "id": "generator_shaft",
         "from": "train.load_2",
         "to": "generator.shaft",
@@ -7637,8 +7654,9 @@ void test_shaft_train_and_generator_close_power_balance() {
     "id": "rated",
     "mode": "steady_state_design",
     "fixed_values": {
-      "train.driver.W_dot": {"value": 300.0, "unit": "MW"},
-      "train.driver.omega": 314.1592653589793,
+      "combiner.driver_a.W_dot": {"value": 190.0, "unit": "MW"},
+      "combiner.driver_a.omega": 314.1592653589793,
+      "combiner.driver_b.W_dot": {"value": 120.0, "unit": "MW"},
       "train.load_1.W_dot": {"value": 40.0, "unit": "MW"}
     }
   }]
@@ -7662,8 +7680,18 @@ void test_shaft_train_and_generator_close_power_balance() {
             std::distance(
                 graph.problem.variable_names.begin(), found)));
     };
+    const double combined_shaft_power =
+        0.995 * (190.0e6 + 120.0e6) - 0.5e6;
+    require_near(
+        value("train.driver.W_dot"),
+        combined_shaft_power, 1.0e-6,
+        "shaft combiner sums multiple stage drivers after losses");
+    require_near(
+        value("combiner.driver_b.omega"),
+        314.1592653589793, 1.0e-10,
+        "shaft combiner enforces common driver speed");
     const double generator_shaft_power =
-        0.99 * 300.0e6 - 40.0e6 - 1.0e6;
+        0.99 * combined_shaft_power - 40.0e6 - 1.0e6;
     require_near(
         value("generator.shaft.W_dot"),
         generator_shaft_power, 1.0e-6,
@@ -7680,13 +7708,25 @@ void test_shaft_train_and_generator_close_power_balance() {
         thermox::physics::
             make_default_property_package_registry());
     const auto graph_result = evaluator.evaluate(result.x);
+    const double combiner_loss =
+        190.0e6 + 120.0e6 - combined_shaft_power;
+    const double train_loss =
+        (1.0 - 0.99) * combined_shaft_power + 1.0e6;
+    require_near(
+        require_result_value(
+            require_component_result(
+                graph_result, "combiner")
+                .metrics,
+            "net_energy_flow"),
+        combiner_loss, 1.0e-6,
+        "shaft-combiner metric attributes mechanical and fixed loss");
     require_near(
         require_result_value(
             require_component_result(
                 graph_result, "train")
                 .metrics,
             "net_energy_flow"),
-        4.0e6, 1.0e-6,
+        train_loss, 1.0e-6,
         "shaft-train metric attributes mechanical and fixed loss");
     require_near(
         require_result_value(
@@ -7700,7 +7740,8 @@ void test_shaft_train_and_generator_close_power_balance() {
         require_result_value(
             graph_result.system_balances,
             "net_boundary_energy_flow"),
-        4.0e6 + 0.02 * generator_shaft_power,
+        combiner_loss + train_loss +
+            0.02 * generator_shaft_power,
         1.0e-6,
         "system boundary energy equals attributed conversion losses");
 }

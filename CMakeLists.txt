@@ -247,6 +247,17 @@ set_tests_properties(
     PROPERTIES PASS_REGULAR_EXPRESSION "\"phase\": \"vapor\""
 )
 if(TARGET thermox_cantera_backend)
+    add_test(NAME platform_cooled_turbine_stage_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json
+            --case design
+            --continuation
+            --format json
+    )
+    set_tests_properties(platform_cooled_turbine_stage_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION
+            "\"net_boundary_mass_flow\".*\"value_si\": 0"
+    )
     add_test(NAME platform_dynamic_material_fluid_hrsg_cli
         COMMAND thermox_cli simulate
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_exhaust_water_hrsg_cell.json

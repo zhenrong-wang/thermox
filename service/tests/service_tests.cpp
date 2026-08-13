@@ -589,7 +589,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 73,
+        response.components.size() == 74,
         "service must expose the complete component registry");
     const auto iso_compressor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -602,6 +602,17 @@ void test_catalog_discovery() {
             iso_compressor->supports_steady &&
             !iso_compressor->supports_transient,
         "catalog must expose the graph-native ISO 2314 compressor");
+    const auto shaft_combiner = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "shaft.combiner.two_driver";
+        });
+    require(
+        shaft_combiner != response.components.end() &&
+            shaft_combiner->supports_steady &&
+            shaft_combiner->ports.size() == 3,
+        "catalog must expose the multi-stage shaft combiner");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

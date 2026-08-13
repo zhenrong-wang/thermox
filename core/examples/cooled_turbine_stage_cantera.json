@@ -1,0 +1,179 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "cooled_turbine_stage_cantera",
+    "name": "Composition-aware cooled turbine stage assembly",
+    "revision": "1",
+    "media": [],
+    "materials": [{
+      "id": "gas",
+      "backend": "cantera",
+      "mechanism": "gri30.yaml",
+      "phase": "gri30",
+      "package_version": "3.2.0",
+      "species": ["N2", "O2"]
+    }],
+    "components": [
+      {
+        "id": "hot_gas",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[N2]": 0.75,
+          "mass_fraction[O2]": 0.25
+        },
+        "materials": {"outlet": "gas"}
+      },
+      {
+        "id": "cooling_air",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[N2]": 0.75,
+          "mass_fraction[O2]": 0.25
+        },
+        "materials": {"outlet": "gas"}
+      },
+      {
+        "id": "exhaust",
+        "kind": "sink.material.boundary",
+        "version": "1.0.0",
+        "materials": {"inlet": "gas"}
+      },
+      {
+        "id": "shaft_load",
+        "kind": "sink.shaft.boundary",
+        "version": "1.0.0"
+      }
+    ],
+    "assemblies": [{
+      "id": "cooled_stage",
+      "label": "Pressure-matched cooling injection and expansion",
+      "ports": [
+        {"name": "inlet", "endpoint": "mixer.inlet_a"},
+        {"name": "cooling_inlet", "endpoint": "cooling_valve.inlet"},
+        {"name": "outlet", "endpoint": "turbine.outlet"},
+        {"name": "shaft", "endpoint": "turbine.shaft"}
+      ],
+      "parameters": [
+        {"name": "cooling_pressure_ratio", "target": "cooling_valve.pressure_ratio"},
+        {"name": "stage_pressure_ratio", "target": "turbine.pressure_ratio"},
+        {"name": "stage_eta_is", "target": "turbine.eta_is"}
+      ],
+      "components": [
+        {
+          "id": "cooling_valve",
+          "kind": "transport.material.frozen_pressure_ratio",
+          "version": "1.0.0",
+          "parameters": {"pressure_ratio": 0.8},
+          "materials": {"inlet": "gas", "outlet": "gas"}
+        },
+        {
+          "id": "mixer",
+          "kind": "junction.material.mixer.two_inlet",
+          "version": "1.0.0",
+          "materials": {
+            "inlet_a": "gas",
+            "inlet_b": "gas",
+            "outlet": "gas"
+          }
+        },
+        {
+          "id": "turbine",
+          "kind": "turbine.material.isentropic_efficiency",
+          "version": "2.0.0",
+          "parameters": {"pressure_ratio": 8.0, "eta_is": 0.9},
+          "materials": {"inlet": "gas", "outlet": "gas"}
+        }
+      ],
+      "connections": [
+        {
+          "id": "cooling_to_mixer",
+          "from": "cooling_valve.outlet",
+          "to": "mixer.inlet_b",
+          "kind": "material_link"
+        },
+        {
+          "id": "mixed_gas_to_turbine",
+          "from": "mixer.outlet",
+          "to": "turbine.inlet",
+          "kind": "material_link"
+        }
+      ]
+    }],
+    "connections": [
+      {
+        "id": "hot_gas_to_stage",
+        "from": "hot_gas.outlet",
+        "to": "cooled_stage.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "cooling_air_to_stage",
+        "from": "cooling_air.outlet",
+        "to": "cooled_stage.cooling_inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "stage_to_exhaust",
+        "from": "cooled_stage.outlet",
+        "to": "exhaust.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "stage_to_load",
+        "from": "cooled_stage.shaft",
+        "to": "shaft_load.inlet",
+        "kind": "shaft_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "parameter_overrides": {
+      "components.cooled_stage.parameters.cooling_pressure_ratio": 0.8,
+      "components.cooled_stage.parameters.stage_pressure_ratio": 8.0,
+      "components.cooled_stage.parameters.stage_eta_is": 0.9
+    },
+    "fixed_values": {
+      "hot_gas.outlet.m_dot[N2]": {"value": 75.0, "unit": "kg/s"},
+      "hot_gas.outlet.p": {"value": 800.0, "unit": "kPa"},
+      "hot_gas.outlet.T": {"value": 1300.0, "unit": "K"},
+      "cooling_air.outlet.m_dot[N2]": {"value": 4.0, "unit": "kg/s"},
+      "cooling_air.outlet.T": {"value": 650.0, "unit": "K"},
+      "shaft_load.inlet.omega": 314.1592653589793
+    },
+    "initial_guesses": {
+      "cooled_stage/mixer.inlet_a.p": {"value": 800.0, "unit": "kPa"},
+      "cooled_stage/mixer.inlet_a.h": {"value": 1100.0, "unit": "kJ/kg"},
+      "cooled_stage/mixer.inlet_a.m_dot[N2]": {"value": 75.0, "unit": "kg/s"},
+      "cooled_stage/mixer.inlet_a.m_dot[O2]": {"value": 25.0, "unit": "kg/s"},
+      "cooled_stage/cooling_valve.inlet.p": {"value": 1000.0, "unit": "kPa"},
+      "cooled_stage/cooling_valve.inlet.h": {"value": 370.0, "unit": "kJ/kg"},
+      "cooled_stage/cooling_valve.inlet.m_dot[N2]": {"value": 4.0, "unit": "kg/s"},
+      "cooled_stage/cooling_valve.inlet.m_dot[O2]": {"value": 1.3333333333333333, "unit": "kg/s"},
+      "cooled_stage/cooling_valve.outlet.p": {"value": 800.0, "unit": "kPa"},
+      "cooled_stage/cooling_valve.outlet.h": {"value": 370.0, "unit": "kJ/kg"},
+      "cooled_stage/cooling_valve.outlet.m_dot[N2]": {"value": 4.0, "unit": "kg/s"},
+      "cooled_stage/cooling_valve.outlet.m_dot[O2]": {"value": 1.3333333333333333, "unit": "kg/s"},
+      "cooled_stage/mixer.inlet_b.p": {"value": 800.0, "unit": "kPa"},
+      "cooled_stage/mixer.inlet_b.h": {"value": 370.0, "unit": "kJ/kg"},
+      "cooled_stage/mixer.inlet_b.m_dot[N2]": {"value": 4.0, "unit": "kg/s"},
+      "cooled_stage/mixer.inlet_b.m_dot[O2]": {"value": 1.3333333333333333, "unit": "kg/s"},
+      "cooled_stage/mixer.outlet.p": {"value": 800.0, "unit": "kPa"},
+      "cooled_stage/mixer.outlet.h": {"value": 900.0, "unit": "kJ/kg"},
+      "cooled_stage/mixer.outlet.m_dot[N2]": {"value": 79.0, "unit": "kg/s"},
+      "cooled_stage/mixer.outlet.m_dot[O2]": {"value": 26.333333333333332, "unit": "kg/s"},
+      "cooled_stage/turbine.inlet.p": {"value": 800.0, "unit": "kPa"},
+      "cooled_stage/turbine.inlet.h": {"value": 900.0, "unit": "kJ/kg"},
+      "cooled_stage/turbine.inlet.m_dot[N2]": {"value": 79.0, "unit": "kg/s"},
+      "cooled_stage/turbine.inlet.m_dot[O2]": {"value": 26.333333333333332, "unit": "kg/s"},
+      "cooled_stage/turbine.outlet.p": {"value": 100.0, "unit": "kPa"},
+      "cooled_stage/turbine.outlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "cooled_stage/turbine.outlet.m_dot[N2]": {"value": 79.0, "unit": "kg/s"},
+      "cooled_stage/turbine.outlet.m_dot[O2]": {"value": 26.333333333333332, "unit": "kg/s"},
+      "cooled_stage/turbine.shaft.W_dot": {"value": 50.0, "unit": "MW"}
+    }
+  }]
+}

@@ -80,6 +80,77 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class TwoDriverShaftCombinerModel final : public ComponentModel {
+public:
+    TwoDriverShaftCombinerModel() {
+        descriptor_.kind = "shaft.combiner.two_driver";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "shaft.combiner";
+        descriptor_.display_name = "Two-driver shaft combiner";
+        descriptor_.category = "Power transmission";
+        descriptor_.model_name =
+            "Common-speed two-driver mechanical power combiner";
+        descriptor_.ports = {
+            {"driver_a", "shaft", "in"},
+            {"driver_b", "shaft", "in"},
+            {"load", "shaft", "out"},
+        };
+        descriptor_.parameters = {
+            {"mechanical_efficiency", "dimensionless", false,
+             1.0, 0.0, 1.0, false, true},
+            {"fixed_loss", "power", false, 0.0, 0.0,
+             std::numeric_limits<double>::infinity(), true, true},
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const double efficiency = parameter_or(
+            context.component, "mechanical_efficiency", 1.0);
+        const double fixed_loss = parameter_or(
+            context.component, "fixed_loss", 0.0);
+        const auto driver_a_power =
+            require_port_variable(context, "driver_a.W_dot");
+        const auto driver_a_speed =
+            require_port_variable(context, "driver_a.omega");
+        const auto driver_b_power =
+            require_port_variable(context, "driver_b.W_dot");
+        const auto driver_b_speed =
+            require_port_variable(context, "driver_b.omega");
+        const auto load_power =
+            require_port_variable(context, "load.W_dot");
+        const auto load_speed =
+            require_port_variable(context, "load.omega");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "driver_b_speed",
+            {{driver_a_speed, 1.0}, {driver_b_speed, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "load_speed",
+            {{driver_a_speed, 1.0}, {load_speed, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "power_balance",
+            {
+                {driver_a_power, efficiency},
+                {driver_b_power, efficiency},
+                {load_power, -1.0},
+            },
+            fixed_loss, 1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class GeneratorModel final : public ComponentModel {
 public:
     GeneratorModel() {
@@ -271,6 +342,8 @@ private:
 void register_power_component_models(ComponentRegistry& registry) {
     registry.register_model(
         std::make_shared<TwoLoadShaftTrainModel>());
+    registry.register_model(
+        std::make_shared<TwoDriverShaftCombinerModel>());
     registry.register_model(std::make_shared<GeneratorModel>());
     registry.register_model(
         std::make_shared<TwoPortShaftInertiaModel>());
