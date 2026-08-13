@@ -4,6 +4,7 @@
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
 #include "thermox/physics/humid_air.hpp"
+#include "thermox/physics/iso2314_equivalent_cooling.hpp"
 #include "thermox/physics/thermochemistry.hpp"
 #include "thermox/physics/water_heos_package.hpp"
 #ifdef THERMOX_TEST_HAS_CANTERA
@@ -100,6 +101,80 @@ void require_near(double actual, double expected, double tolerance,
                   const std::string& message) {
     if (std::abs(actual - expected) > tolerance)
         throw std::runtime_error(message + ": actual=" + std::to_string(actual));
+}
+
+void verify_iso2314_equivalent_cooling() {
+    using thermox::physics::Iso2314EquivalentCoolingInput;
+    using thermox::physics::Iso2314ExtractionState;
+
+    Iso2314EquivalentCoolingInput extraction_case;
+    extraction_case.compressor_inlet_mass_flow_kg_s = 100.0;
+    extraction_case.compressor_inlet_specific_enthalpy_j_kg = 300000.0;
+    extraction_case.compressor_discharge_specific_enthalpy_j_kg = 600000.0;
+    extraction_case.extractions = {
+        Iso2314ExtractionState{"mid", 10.0, 450000.0},
+        Iso2314ExtractionState{"late", 5.0, 540000.0},
+    };
+    const auto extracted = thermox::physics::
+        calculate_iso2314_equivalent_cooling(extraction_case);
+    require_near(
+        extracted.no_extraction_compressor_power_w,
+        30.0e6, 1.0e-9,
+        "ISO 2314 no-extraction compressor work");
+    require_near(
+        extracted.actual_compressor_power_w,
+        28.2e6, 1.0e-9,
+        "ISO 2314 equation 30 extraction-adjusted compressor work");
+    require_near(
+        extracted.equivalent_compressor_mass_flow_kg_s,
+        94.0, 1.0e-12,
+        "ISO 2314 equation 29 equivalent compressor flow");
+    require_near(
+        extracted.equivalent_extraction_mass_flow_kg_s,
+        6.0, 1.0e-12,
+        "ISO 2314 equivalent extraction differs from actual extraction");
+    require_near(
+        extracted.relative_equivalent_flow_difference_md,
+        100.0 / 94.0 - 1.0, 1.0e-12,
+        "ISO 2314 equation 31 md");
+    require_near(
+        extracted.equivalent_extraction_energy_w,
+        1.8e6, 1.0e-9,
+        "ISO 2314 equation 28 equivalent extraction energy");
+
+    auto power_case = extraction_case;
+    power_case.extractions.clear();
+    power_case.compressor_power_w = 28.2e6;
+    const auto from_power = thermox::physics::
+        calculate_iso2314_equivalent_cooling(power_case);
+    require_near(
+        from_power.relative_equivalent_flow_difference_md,
+        extracted.relative_equivalent_flow_difference_md,
+        1.0e-12,
+        "actual compressor power and extraction schedule are equivalent");
+
+    auto md_case = extraction_case;
+    md_case.extractions.clear();
+    md_case.manufacturer_md =
+        extracted.relative_equivalent_flow_difference_md;
+    const auto from_md = thermox::physics::
+        calculate_iso2314_equivalent_cooling(md_case);
+    require_near(
+        from_md.actual_compressor_power_w, 28.2e6, 1.0e-8,
+        "manufacturer md reproduces the equivalent compressor work");
+
+    bool ambiguous_rejected = false;
+    try {
+        auto ambiguous = extraction_case;
+        ambiguous.compressor_power_w = 28.2e6;
+        (void)thermox::physics::calculate_iso2314_equivalent_cooling(
+            ambiguous);
+    } catch (const thermox::physics::Iso2314EquivalentCoolingError&) {
+        ambiguous_rejected = true;
+    }
+    require(
+        ambiguous_rejected,
+        "ISO 2314 equivalent-cooling input must reject ambiguous methods");
 }
 
 void verify_round_trip(const thermox::physics::PropertyPackage& package,
@@ -661,6 +736,7 @@ int main() {
 #ifdef THERMOX_TEST_HAS_CANTERA
     verify_cantera_lower_heating_value();
 #endif
+    verify_iso2314_equivalent_cooling();
     verify_humid_air_ambient_state();
     verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);

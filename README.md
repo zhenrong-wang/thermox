@@ -260,6 +260,10 @@ Implemented in this sprint:
   input, efficiency, heat rate, and correction chains; propagates uncertainty when its inputs are
   available; and reports evidence-qualified GB/T 14100 / ISO 2314 compliance dispositions without
   promoting reported OEM factors to independently derived physics.
+- A generic ISO 2314 equivalent-cooling calculation accepts physical compressor-stage extraction
+  states, independently known compressor power, or a manufacturer-provided `m_d`; reports
+  work-equivalent compressor/cooling flows and `Q_ex`; and preserves the distinction between an
+  equivalent balance quantity and identified physical cooling flow.
 - Composition-aware compressor and turbine residuals cache thermochemistry flashes by their local
   pressure, enthalpy, and species-flow dependencies, preventing unrelated graph perturbations from
   repeatedly invoking expensive backend calculations.

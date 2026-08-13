@@ -680,6 +680,10 @@ Work items:
    - NETL B31A connected HP/IP/LP steam train with gland loss, HP leakage, reheat and LP admission
      mixing, precision-aware condenser boundary, calibrated stage efficiencies, and independent
      stage/aggregate power acceptance checks; ✅
+   - GB/T 14100-2016 / ISO 2314:2009 equations 28-31 equivalent turbine-cooling extraction
+     calculation with detailed extraction-state, compressor-power, and manufacturer-`m_d`
+     evidence paths, strict ambiguity rejection, and explicit equivalent-versus-physical flow
+     semantics; ✅
    - segmented triple-pressure/reheat HRSG boundary decomposition with ten serial gas surfaces,
      three IF97 pressure circuits, cold-reheat/IP make-up mixing, whole-system conservation,
      classified boundary/calibration evidence, and generic terminal-approach rejection of the

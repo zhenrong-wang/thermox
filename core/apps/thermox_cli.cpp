@@ -2,6 +2,7 @@
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/performance_test.hpp"
 #include "thermox/service/engineering_study.hpp"
+#include "thermox/service/iso2314_equivalent_cooling.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -25,6 +26,8 @@ void print_usage(std::ostream& out) {
         << "  thermox_cli performance-test --input <path>"
            " [--format text|json]\n"
         << "  thermox_cli study --input <path>"
+           " [--format text|json]\n"
+        << "  thermox_cli iso2314-equivalent-cooling --input <path>"
            " [--format text|json]\n"
         << "  thermox_cli calibrate --model <path>"
            " --calibration <id>"
@@ -225,6 +228,7 @@ int main(int argc, char** argv) {
 
     if (command != "solve" && command != "simulate" &&
         command != "performance-test" && command != "study" &&
+        command != "iso2314-equivalent-cooling" &&
         command != "calibrate" &&
         command != "reconcile") {
         std::cerr << "Unknown command: " << command << "\n";
@@ -232,6 +236,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (command != "performance-test" && command != "study" &&
+        command != "iso2314-equivalent-cooling" &&
         model_path.empty()) {
         std::cerr << "Missing required --model path\n";
         print_usage(std::cerr);
@@ -247,7 +252,8 @@ int main(int argc, char** argv) {
         print_usage(std::cerr);
         return 2;
     }
-    if ((command == "performance-test" || command == "study") &&
+    if ((command == "performance-test" || command == "study" ||
+         command == "iso2314-equivalent-cooling") &&
         input_path.empty()) {
         std::cerr << "Missing required --input path\n";
         print_usage(std::cerr);
@@ -327,6 +333,35 @@ int main(int argc, char** argv) {
                 }
             }
             return response.succeeded() ? 0 : 1;
+        }
+        if (command == "iso2314-equivalent-cooling") {
+            const auto response = thermox::service::
+                evaluate_iso2314_equivalent_cooling_json(
+                    read_file(input_path));
+            if (format == "json") {
+                std::cout << thermox::service::
+                    serialize_iso2314_equivalent_cooling_response_json(
+                        response);
+            } else {
+                std::cout << "id: " << response.id
+                          << "\ndetermination: "
+                          << thermox::physics::to_string(
+                                 response.calculation.determination)
+                          << "\nequivalent_compressor_mass_flow_kg_s: "
+                          << response.calculation
+                                 .equivalent_compressor_mass_flow_kg_s
+                          << "\nequivalent_extraction_mass_flow_kg_s: "
+                          << response.calculation
+                                 .equivalent_extraction_mass_flow_kg_s
+                          << "\nrelative_equivalent_flow_difference_md: "
+                          << response.calculation
+                                 .relative_equivalent_flow_difference_md
+                          << "\nequivalent_extraction_energy_w: "
+                          << response.calculation
+                                 .equivalent_extraction_energy_w
+                          << "\n";
+            }
+            return 0;
         }
         const std::string model_json = read_file(model_path);
         thermox::service::SimulationService service;

@@ -44,6 +44,11 @@ add_test(
         --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/iso2314_performance_test.json
         --format json)
 add_test(
+    NAME platform_iso2314_equivalent_cooling_cli
+    COMMAND thermox_cli iso2314-equivalent-cooling
+        --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/iso2314_equivalent_cooling.json
+        --format json)
+add_test(
     NAME platform_calibration_cli
     COMMAND thermox_cli calibrate
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/air_compressor.json

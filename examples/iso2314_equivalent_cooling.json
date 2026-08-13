@@ -1,0 +1,20 @@
+{
+  "schema_version": "thermox.iso2314_equivalent_cooling/v1",
+  "id": "illustrative_multistage_extraction",
+  "standard_reference": "GB/T 14100-2016 / ISO 2314:2009, equations 28-31",
+  "compressor_inlet_mass_flow_kg_s": 100.0,
+  "compressor_inlet_specific_enthalpy_j_kg": 300000.0,
+  "compressor_discharge_specific_enthalpy_j_kg": 600000.0,
+  "extractions": [
+    {
+      "id": "mid_stage_cooling",
+      "mass_flow_kg_s": 10.0,
+      "specific_enthalpy_j_kg": 450000.0
+    },
+    {
+      "id": "late_stage_cooling",
+      "mass_flow_kg_s": 5.0,
+      "specific_enthalpy_j_kg": 540000.0
+    }
+  ]
+}

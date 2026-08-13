@@ -6,6 +6,7 @@ add_library(thermox_service
     src/in_memory_artifacts.cpp
     src/in_memory_jobs.cpp
     src/in_memory_projects.cpp
+    src/iso2314_equivalent_cooling.cpp
     src/performance_test.cpp
     src/project_serialization.cpp
     src/projects.cpp
