@@ -2427,6 +2427,19 @@ std::string serialize_data_reconciliation_response_json(
                 ? "true" : "false")
         << ", \"active_bound_count\": "
         << response.diagnostics.active_bound_count
+        << ", \"bound_limited\": "
+        << (response.diagnostics.bound_limited ? "true" : "false")
+        << ", \"active_bound_parameter_ids\": [";
+    for (std::size_t index = 0;
+         index < response.diagnostics
+             .active_bound_parameter_ids.size(); ++index) {
+        if (index != 0) out << ", ";
+        json_string(
+            out,
+            response.diagnostics
+                .active_bound_parameter_ids[index]);
+    }
+    out << "]"
         << ", \"free_uncertainty_parameter_count\": "
         << response.diagnostics.free_uncertainty_parameter_count;
     out << ", \"message\": ";

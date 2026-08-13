@@ -100,6 +100,8 @@ The response reports:
 - pairwise parameter correlations;
 - the active-bound count and the number of locally free parameters included in uncertainty;
 - an explicit uncertainty interpretation for every inferred parameter;
+- whether an unsatisfied hard-equality solve is limited by declared physical
+  bounds, including the stable IDs of all active adjustable quantities;
 - the rank-revealing factorization's accepted-diagonal ratio and method, explicitly not mislabeled
   as a matrix condition number.
 
@@ -186,6 +188,13 @@ The response keeps three result classes separate:
 
 A held-out target cannot also be a hard constraint for the same case. Held-out agreement after
 reconciliation is normally `boundary_constrained`, not automatically `independent_reference`.
+
+Hard reconciliation keeps three failure classes distinct. A rank-deficient sensitivity is
+`reconciliation_unidentifiable`; failure to find a residual-reducing step with no active bound is
+`reconciliation_line_search_failed`; and the same condition with one or more adjustable
+quantities at declared bounds is `reconciliation_bound_limited`. The last result means the
+declared model cannot meet all hard measurements inside the permitted parameter domain. It is not
+reported as nonlinear-solver divergence, and diagnostics identify the active parameter IDs.
 
 ## Caojing interpretation
 

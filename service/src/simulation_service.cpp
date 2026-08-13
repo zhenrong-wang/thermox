@@ -3535,6 +3535,18 @@ SimulationService::run_data_reconciliation(
             1.0e-10 * (upper[index] - lower[index]);
         return upper[index] - values[index] <= tolerance;
     };
+    const auto update_active_bound_diagnostics = [&]() {
+        response.diagnostics.active_bound_parameter_ids.clear();
+        for (std::size_t index = 0;
+             index < values.size(); ++index) {
+            if (at_lower_bound(index) || at_upper_bound(index)) {
+                response.diagnostics.active_bound_parameter_ids
+                    .push_back(definition->parameters[index].id);
+            }
+        }
+        response.diagnostics.active_bound_count =
+            response.diagnostics.active_bound_parameter_ids.size();
+    };
 
     for (int iteration = 0;
          iteration < settings.max_iterations; ++iteration) {
@@ -3744,11 +3756,33 @@ SimulationService::run_data_reconciliation(
         response.diagnostics.iterations = iteration + 1;
         if (!accepted) {
             apply_values(values);
-            response.error = make_error(
-                "reconciliation_line_search_failed",
-                "reconciliation",
-                "no bounded reconciliation step reduced the measurement "
-                "residual");
+            update_active_bound_diagnostics();
+            response.diagnostics.bound_limited =
+                request.mode == ReconciliationMode::hard_equalities &&
+                response.diagnostics.active_bound_count > 0;
+            if (response.diagnostics.bound_limited) {
+                std::string parameter_list;
+                for (const auto& id : response.diagnostics
+                         .active_bound_parameter_ids) {
+                    if (!parameter_list.empty()) {
+                        parameter_list += ", ";
+                    }
+                    parameter_list += id;
+                }
+                response.error = make_error(
+                    "reconciliation_bound_limited",
+                    "reconciliation",
+                    "hard constraints remain unsatisfied and no "
+                    "residual-reducing step exists within declared "
+                    "bounds; active adjustable quantities: " +
+                        parameter_list);
+            } else {
+                response.error = make_error(
+                    "reconciliation_line_search_failed",
+                    "reconciliation",
+                    "no bounded reconciliation step reduced the "
+                    "measurement residual");
+            }
             break;
         }
         if (response.diagnostics.converged) break;
@@ -3771,6 +3805,7 @@ SimulationService::run_data_reconciliation(
                   "iteration budget");
     }
     apply_values(values);
+    update_active_bound_diagnostics();
     response.diagnostics
         .final_maximum_absolute_normalized_constraint =
         maximum_constraint(best);
