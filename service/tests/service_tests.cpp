@@ -589,8 +589,19 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 72,
+        response.components.size() == 73,
         "service must expose the complete component registry");
+    const auto iso_compressor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "compressor.material.iso2314_equivalent_cooling";
+        });
+    require(
+        iso_compressor != response.components.end() &&
+            iso_compressor->supports_steady &&
+            !iso_compressor->supports_transient,
+        "catalog must expose the graph-native ISO 2314 compressor");
     const auto dynamic_cell = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

@@ -40,6 +40,30 @@ Run the illustrative declaration with:
   --format json
 ```
 
+## Graph-native reduced-order component
+
+The default component registry also exposes
+`compressor.material.iso2314_equivalent_cooling` for a coupled steady-state graph. It accepts:
+
+- `pressure_ratio`;
+- `eta_is`, evaluated for the actual no-extraction compressor discharge work;
+- `relative_equivalent_flow_difference_md`.
+
+The component preserves every inlet species flow at its outlet, while its equivalent discharge
+enthalpy and shaft work satisfy
+
+```text
+h_eq - h_in = (h_actual - h_in) / (1 + m_d)
+P_COMP      = m_a1 (h_eq - h_in)
+```
+
+This lets the equivalent work treatment participate in the graph's compressor, combustor,
+turbine, shaft, and generator balances instead of applying a result-side power correction. The
+outlet is deliberately an **equivalent ISO accounting state**, not the physical compressor
+discharge state. Therefore its derived outlet temperature must not be compared directly with a
+measured compressor-discharge temperature. Use a staged extraction/cooling topology when actual
+stage states and cooling-flow destinations are available.
+
 ## Interpretation boundary
 
 This calculation supplies the equivalent cooling term for the ISO combustion balance. It is not a

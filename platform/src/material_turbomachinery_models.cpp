@@ -653,6 +653,155 @@ private:
     bool compressor_{false};
 };
 
+class Iso2314EquivalentCoolingCompressorModel final
+    : public ComponentModel {
+public:
+    Iso2314EquivalentCoolingCompressorModel() {
+        descriptor_.kind =
+            "compressor.material.iso2314_equivalent_cooling";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "compressor.material";
+        descriptor_.display_name =
+            "Compressor (ISO 2314 equivalent cooling)";
+        descriptor_.category = "Turbomachinery";
+        descriptor_.model_name =
+            "Isentropic-efficiency compressor with work-equivalent "
+            "cooling extraction";
+        descriptor_.ports = {
+            {"inlet", "material", "in"},
+            {"outlet", "material", "out"},
+            {"shaft", "shaft", "in"}};
+        descriptor_.parameters = {
+            {"pressure_ratio", "dimensionless", true,
+             std::nullopt, 1.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"eta_is", "dimensionless", true, std::nullopt,
+             0.0, 1.0, false, true},
+            {"relative_equivalent_flow_difference_md",
+             "dimensionless", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), true, true}};
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph,
+            physics::ThermochemistryCapability::state_ps};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto species = require_port_species(context, "inlet");
+        if (species != require_port_species(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must share a species basis");
+        }
+        const auto properties =
+            require_thermochemistry_package(context, "inlet");
+        const auto outlet_properties =
+            require_thermochemistry_package(context, "outlet");
+        if (properties->name() != outlet_properties->name() ||
+            properties->version() != outlet_properties->version() ||
+            properties->mechanism() !=
+                outlet_properties->mechanism() ||
+            properties->phase() != outlet_properties->phase()) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must resolve the same "
+                "thermochemistry package");
+        }
+
+        std::vector<std::size_t> inlet_flows;
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "inlet." + variable);
+            const auto outlet = require_port_variable(
+                context, "outlet." + variable);
+            inlet_flows.push_back(inlet);
+            system.add_linear_equation(
+                prefix + "species_continuity." + name,
+                {{outlet, 1.0}, {inlet, -1.0}}, 0.0, 100.0);
+        }
+
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto shaft_w =
+            require_port_variable(context, "shaft.W_dot");
+        const double pressure_ratio = required_parameter(
+            context.component, "pressure_ratio");
+        const double efficiency = required_parameter(
+            context.component, "eta_is");
+        const double md = required_parameter(
+            context.component,
+            "relative_equivalent_flow_difference_md");
+        const double equivalent_fraction = 1.0 / (1.0 + md);
+
+        system.add_linear_equation(
+            prefix + "pressure_ratio",
+            {{outlet_p, 1.0},
+             {inlet_p, -pressure_ratio}},
+            0.0, 100000.0 * pressure_ratio);
+        const auto isentropic_cache =
+            std::make_shared<IsentropicEvaluationCache>(
+                properties, species, inlet_flows, inlet_p,
+                inlet_h, outlet_p, outlet_h,
+                efficiency / equivalent_fraction, true);
+        system.add_checked_equation(
+            prefix + "iso2314_equivalent_discharge_enthalpy",
+            [isentropic_cache](
+                const std::vector<double>& x,
+                double& residual) {
+                const auto evaluation =
+                    isentropic_cache->evaluate(x);
+                residual = evaluation.residual;
+                return evaluation.status;
+            },
+            1.0e6);
+
+        std::vector<std::size_t> power_variables = inlet_flows;
+        power_variables.push_back(inlet_h);
+        power_variables.push_back(outlet_h);
+        power_variables.push_back(shaft_w);
+        system.add_sparse_equation(
+            prefix + "equivalent_compressor_power",
+            std::move(power_variables),
+            [inlet_flows, inlet_h, outlet_h, shaft_w](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double mass_flow = 0.0;
+                for (const auto variable : inlet_flows) {
+                    mass_flow += x.at(variable);
+                }
+                const double enthalpy_change =
+                    x.at(outlet_h) - x.at(inlet_h);
+                jacobian.push_back({shaft_w, 1.0});
+                for (const auto variable : inlet_flows) {
+                    jacobian.push_back(
+                        {variable, -enthalpy_change});
+                }
+                jacobian.push_back({inlet_h, mass_flow});
+                jacobian.push_back({outlet_h, -mass_flow});
+                return x.at(shaft_w) -
+                    mass_flow * enthalpy_change;
+            },
+            1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class MaterialMapTurbomachineryModel final
     : public ComponentModel {
 public:
@@ -871,6 +1020,8 @@ void register_material_turbomachinery_component_models(
     registry.register_model(
         std::make_shared<MaterialTurbomachineryModel>(
             "turbine.material.isentropic_efficiency", false));
+    registry.register_model(
+        std::make_shared<Iso2314EquivalentCoolingCompressorModel>());
     registry.register_model(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "compressor.material.performance_map", true));

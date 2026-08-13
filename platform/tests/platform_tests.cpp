@@ -1044,6 +1044,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.fluid.performance_map",
         "compressor.fluid.variable_geometry_map",
         "compressor.material.isentropic_efficiency",
+        "compressor.material.iso2314_equivalent_cooling",
         "compressor.material.performance_map",
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
@@ -4196,6 +4197,67 @@ void test_material_compressor_and_turbine() {
         10.0 * (compressor_outlet_h - 300000.0),
         power_solver_tolerance,
         "material compressor closes shaft input power");
+
+    const auto iso_compressor_graph = compile_and_solve(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "iso_equivalent_cooling_compressor",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "machine",
+      "kind": "compressor.material.iso2314_equivalent_cooling",
+      "parameters": {
+        "pressure_ratio": 10.0,
+        "eta_is": 0.8,
+        "relative_equivalent_flow_difference_md": 0.25
+      },
+      "materials": {"inlet": "gas", "outlet": "gas"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "machine.inlet.p": {"value": 100.0, "unit": "kPa"},
+      "machine.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "machine.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "machine.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "machine.shaft.omega": 314.1592653589793
+    }
+  }]
+})json");
+    const auto iso_compressor = thermox::solve_newton(
+        iso_compressor_graph.problem);
+    require(iso_compressor.diagnostics.converged,
+            iso_compressor.diagnostics.message);
+    const auto iso_compressor_value = [&](const std::string& name) {
+        return iso_compressor.x.at(require_variable_index(
+            iso_compressor_graph.problem.variable_names, name));
+    };
+    const double equivalent_outlet_h = 300000.0 +
+        (compressor_outlet_h - 300000.0) / 1.25;
+    require_near(
+        iso_compressor_value("machine.outlet.h"),
+        equivalent_outlet_h, enthalpy_solver_tolerance,
+        "ISO compressor applies the equivalent-flow work relation");
+    require_near(
+        iso_compressor_value("machine.shaft.W_dot"),
+        10.0 * (equivalent_outlet_h - 300000.0),
+        power_solver_tolerance,
+        "ISO compressor closes equivalent compressor power");
+    require_near(
+        iso_compressor_value("machine.outlet.m_dot[N2]"),
+        8.0, 1.0e-10,
+        "ISO compressor preserves nitrogen flow");
+    require_near(
+        iso_compressor_value("machine.outlet.m_dot[O2]"),
+        2.0, 1.0e-10,
+        "ISO compressor preserves oxygen flow");
 
     const auto turbine_graph = compile_and_solve(R"json({
   "schema_version": "thermox.model/v2",
