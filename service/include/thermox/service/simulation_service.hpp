@@ -1257,8 +1257,15 @@ struct DataReconciliationDiagnostics {
     std::size_t sensitivity_rank{0};
     bool locally_identifiable{false};
     std::size_t active_bound_count{0};
-    bool bound_limited{false};
-    std::vector<std::string> active_bound_parameter_ids;
+    bool locally_bound_limited{false};
+    struct ActiveBound {
+        std::string parameter_id;
+        std::string side;
+        double fitted_value_si{0.0};
+        double bound_value_si{0.0};
+        bool limits_local_step{false};
+    };
+    std::vector<ActiveBound> active_bounds;
     std::size_t free_uncertainty_parameter_count{0};
     std::string message;
 };

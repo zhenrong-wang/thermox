@@ -2427,17 +2427,27 @@ std::string serialize_data_reconciliation_response_json(
                 ? "true" : "false")
         << ", \"active_bound_count\": "
         << response.diagnostics.active_bound_count
-        << ", \"bound_limited\": "
-        << (response.diagnostics.bound_limited ? "true" : "false")
-        << ", \"active_bound_parameter_ids\": [";
+        << ", \"locally_bound_limited\": "
+        << (response.diagnostics.locally_bound_limited
+                ? "true" : "false")
+        << ", \"active_bounds\": [";
     for (std::size_t index = 0;
          index < response.diagnostics
-             .active_bound_parameter_ids.size(); ++index) {
+             .active_bounds.size(); ++index) {
         if (index != 0) out << ", ";
-        json_string(
-            out,
-            response.diagnostics
-                .active_bound_parameter_ids[index]);
+        const auto& bound =
+            response.diagnostics.active_bounds[index];
+        out << "{\"parameter_id\": ";
+        json_string(out, bound.parameter_id);
+        out << ", \"side\": ";
+        json_string(out, bound.side);
+        out << ", \"fitted_value_si\": ";
+        json_number(out, bound.fitted_value_si);
+        out << ", \"bound_value_si\": ";
+        json_number(out, bound.bound_value_si);
+        out << ", \"limits_local_step\": "
+            << (bound.limits_local_step ? "true" : "false")
+            << '}';
     }
     out << "]"
         << ", \"free_uncertainty_parameter_count\": "

@@ -3768,7 +3768,7 @@ void test_hard_constraint_data_reconciliation_service() {
         "reconciliation JSON must preserve semantic result separation");
 }
 
-void test_hard_reconciliation_reports_bound_limited_infeasibility() {
+void test_hard_reconciliation_reports_local_bound_limitation() {
     auto model = read_source_file("examples/data_reconciliation.json");
     const std::string feasible =
         "\"value\": 36.229874174599141, \"unit\": \"MW\"";
@@ -3789,11 +3789,15 @@ void test_hard_reconciliation_reports_bound_limited_infeasibility() {
     require(
         response.status ==
                 thermox::service::OperationStatus::solver_failed &&
-            response.error.code == "reconciliation_bound_limited" &&
-            response.diagnostics.bound_limited &&
+            response.error.code ==
+                "reconciliation_locally_bound_limited" &&
+            response.diagnostics.locally_bound_limited &&
             response.diagnostics.active_bound_count == 1 &&
-            response.diagnostics.active_bound_parameter_ids ==
-                std::vector<std::string>{"inferred_airflow"} &&
+            response.diagnostics.active_bounds.size() == 1 &&
+            response.diagnostics.active_bounds.front().parameter_id ==
+                "inferred_airflow" &&
+            response.diagnostics.active_bounds.front().side == "upper" &&
+            response.diagnostics.active_bounds.front().limits_local_step &&
             response.inferred_parameters.size() == 1 &&
             std::abs(
                 response.inferred_parameters.front().fitted_value_si -
@@ -3806,11 +3810,13 @@ void test_hard_reconciliation_reports_bound_limited_infeasibility() {
     const auto json = thermox::service::
         serialize_data_reconciliation_response_json(response);
     require(
-        json.find("\"bound_limited\": true") !=
+        json.find("\"locally_bound_limited\": true") !=
                 std::string::npos &&
             json.find(
-                "\"active_bound_parameter_ids\": "
-                "[\"inferred_airflow\"]") !=
+                "\"parameter_id\": \"inferred_airflow\", "
+                "\"side\": \"upper\"") !=
+                std::string::npos &&
+            json.find("\"limits_local_step\": true") !=
                 std::string::npos,
         "bound-limited diagnostics must survive serialization");
 }
@@ -6030,7 +6036,7 @@ int main() {
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
         test_hard_constraint_data_reconciliation_service();
-        test_hard_reconciliation_reports_bound_limited_infeasibility();
+        test_hard_reconciliation_reports_local_bound_limitation();
         test_overdetermined_weighted_reconciliation_service();
         test_weighted_reconciliation_rejects_rank_deficiency();
         test_weighted_reconciliation_reports_parameter_correlation();

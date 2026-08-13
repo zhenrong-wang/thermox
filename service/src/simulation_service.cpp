@@ -3535,17 +3535,34 @@ SimulationService::run_data_reconciliation(
             1.0e-10 * (upper[index] - lower[index]);
         return upper[index] - values[index] <= tolerance;
     };
-    const auto update_active_bound_diagnostics = [&]() {
-        response.diagnostics.active_bound_parameter_ids.clear();
+    const auto update_active_bound_diagnostics =
+        [&](const std::vector<double>* local_step = nullptr) {
+        response.diagnostics.active_bounds.clear();
         for (std::size_t index = 0;
              index < values.size(); ++index) {
-            if (at_lower_bound(index) || at_upper_bound(index)) {
-                response.diagnostics.active_bound_parameter_ids
-                    .push_back(definition->parameters[index].id);
+            const bool lower_active = at_lower_bound(index);
+            const bool upper_active = at_upper_bound(index);
+            if (!lower_active && !upper_active) continue;
+            const bool lower_limits =
+                local_step != nullptr && lower_active &&
+                (*local_step)[index] < 0.0;
+            const bool upper_limits =
+                local_step != nullptr && upper_active &&
+                (*local_step)[index] > 0.0;
+            if (lower_active) {
+                response.diagnostics.active_bounds.push_back({
+                    definition->parameters[index].id,
+                    "lower", values[index], lower[index],
+                    lower_limits});
+            } else {
+                response.diagnostics.active_bounds.push_back({
+                    definition->parameters[index].id,
+                    "upper", values[index], upper[index],
+                    upper_limits});
             }
         }
         response.diagnostics.active_bound_count =
-            response.diagnostics.active_bound_parameter_ids.size();
+            response.diagnostics.active_bounds.size();
     };
 
     for (int iteration = 0;
@@ -3756,25 +3773,33 @@ SimulationService::run_data_reconciliation(
         response.diagnostics.iterations = iteration + 1;
         if (!accepted) {
             apply_values(values);
-            update_active_bound_diagnostics();
-            response.diagnostics.bound_limited =
+            update_active_bound_diagnostics(&step);
+            response.diagnostics.locally_bound_limited =
                 request.mode == ReconciliationMode::hard_equalities &&
-                response.diagnostics.active_bound_count > 0;
-            if (response.diagnostics.bound_limited) {
+                std::any_of(
+                    response.diagnostics.active_bounds.begin(),
+                    response.diagnostics.active_bounds.end(),
+                    [](const auto& bound) {
+                        return bound.limits_local_step;
+                    });
+            if (response.diagnostics.locally_bound_limited) {
                 std::string parameter_list;
-                for (const auto& id : response.diagnostics
-                         .active_bound_parameter_ids) {
+                for (const auto& bound :
+                     response.diagnostics.active_bounds) {
+                    if (!bound.limits_local_step) continue;
                     if (!parameter_list.empty()) {
                         parameter_list += ", ";
                     }
-                    parameter_list += id;
+                    parameter_list += bound.parameter_id +
+                        " (" + bound.side + ")";
                 }
                 response.error = make_error(
-                    "reconciliation_bound_limited",
+                    "reconciliation_locally_bound_limited",
                     "reconciliation",
                     "hard constraints remain unsatisfied and no "
-                    "residual-reducing step exists within declared "
-                    "bounds; active adjustable quantities: " +
+                    "residual-reducing local Newton step was found "
+                    "within declared bounds; limiting adjustable "
+                    "quantities: " +
                         parameter_list);
             } else {
                 response.error = make_error(
@@ -3805,7 +3830,9 @@ SimulationService::run_data_reconciliation(
                   "iteration budget");
     }
     apply_values(values);
-    update_active_bound_diagnostics();
+    if (!response.diagnostics.locally_bound_limited) {
+        update_active_bound_diagnostics();
+    }
     response.diagnostics
         .final_maximum_absolute_normalized_constraint =
         maximum_constraint(best);
