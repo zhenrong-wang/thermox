@@ -1587,6 +1587,29 @@ void test_cantera_brayton_integration_benchmark() {
         require_port_result(
             response.graph, "turbine", "outlet");
 
+    double combustor_total_mass_flow = 0.0;
+    for (const auto& value : combustor_outlet.primary_values) {
+        if (value.name.starts_with("m_dot[")) {
+            combustor_total_mass_flow += value.value_si;
+        }
+    }
+    require(
+        std::abs(
+            require_result_value(
+                combustor_outlet.derived_values, "m_dot_total")
+                .value_si -
+            combustor_total_mass_flow) < 1.0e-10,
+        "material result must expose total mass flow");
+    double mass_fraction_sum = 0.0;
+    for (const auto& value : combustor_outlet.derived_values) {
+        if (value.name.starts_with("mass_fraction[")) {
+            mass_fraction_sum += value.value_si;
+        }
+    }
+    require(
+        std::abs(mass_fraction_sum - 1.0) < 1.0e-12,
+        "material result species mass fractions must sum to one");
+
     require(
         std::abs(
             require_result_value(

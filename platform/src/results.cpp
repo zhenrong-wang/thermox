@@ -1,6 +1,7 @@
 #include "thermox/platform/results.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <stdexcept>
 #include <utility>
@@ -357,6 +358,17 @@ GraphResult GraphResultEvaluator::evaluate(
             for (auto& fraction : fractions) {
                 fraction /= total_mass_flow;
             }
+            port.derived_values.push_back({
+                "m_dot_total", "mass_flow", total_mass_flow,
+            });
+            for (std::size_t index = 0;
+                 index < backend->second.species.size(); ++index) {
+                port.derived_values.push_back({
+                    "mass_fraction[" +
+                        backend->second.species[index] + "]",
+                    "dimensionless", fractions[index],
+                });
+            }
             const auto properties =
                 backend->second.package->state_ph(
                     require_primary(port, "p").value_si,
@@ -372,8 +384,14 @@ GraphResult GraphResultEvaluator::evaluate(
                     port.port_name + "': " +
                     properties.message);
             }
-            port.derived_values = fluid_derived_values(
+            auto thermodynamic_values = fluid_derived_values(
                 properties.state.thermodynamic);
+            port.derived_values.insert(
+                port.derived_values.end(),
+                std::make_move_iterator(
+                    thermodynamic_values.begin()),
+                std::make_move_iterator(
+                    thermodynamic_values.end()));
             port.derived_values.push_back({
                 "mean_molecular_weight", "molar_mass",
                 properties.state.mean_molecular_weight_kg_mol,

@@ -14,6 +14,11 @@ Every selector names its expected physical dimension. Projection fails if the se
 missing or its dimension differs, preventing a report definition from silently binding to a
 different quantity after a model revision.
 
+Composition-aware material ports expose both their individual species-flow primary values and
+generic derived values: `m_dot_total` plus `mass_fraction[species]` for every declared species.
+This keeps fuel, air, extraction, and exhaust totals selectable without embedding a particular
+reference species or mixture composition in service/UI post-processing.
+
 Steady projections use the final solved graph. Transient projections explicitly select `final`,
 `minimum`, or `maximum` and retain the time of the selected sample. These reductions are generic;
 future integral, average, event, or windowed reductions can extend the contract without changing
