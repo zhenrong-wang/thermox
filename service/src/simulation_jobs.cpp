@@ -63,6 +63,18 @@ void append_calibration_settings(
     append_steady_settings(stream, settings.simulation_solver);
 }
 
+void append_reconciliation_settings(
+    std::ostringstream& stream,
+    const ReconciliationSolverSettings& settings) {
+    stream << settings.max_iterations << '|'
+           << settings.finite_difference_fraction << '|'
+           << settings.constraint_tolerance << '|'
+           << settings.step_tolerance << '|'
+           << settings.objective_relative_tolerance << '|'
+           << settings.minimum_line_search_fraction << '|';
+    append_steady_settings(stream, settings.simulation_solver);
+}
+
 void append_string(
     std::ostringstream& stream,
     const std::string& value) {
@@ -297,6 +309,8 @@ std::string request_fingerprint(
            << request.case_id.size() << ':' << request.case_id << '|'
            << request.calibration_id.size() << ':'
            << request.calibration_id << '|'
+           << request.reconciliation_id.size() << ':'
+           << request.reconciliation_id << '|'
            << request.model_json.size() << ':' << request.model_json << '|';
     stream << request.source_revisions.has_value() << '|';
     if (request.source_revisions) {
@@ -363,6 +377,38 @@ std::string request_fingerprint(
                    << observation.sigma_si << '|';
         }
     }
+    stream << '|' << to_string(request.reconciliation_mode) << '|';
+    append_reconciliation_settings(
+        stream, request.reconciliation_solver);
+    stream << '|'
+           << request.reconciliation_profile_likelihood.enabled << '|'
+           << request.reconciliation_profile_likelihood.objective_increase
+           << '|'
+           << request.reconciliation_profile_likelihood
+                  .maximum_bracket_steps << '|'
+           << request.reconciliation_profile_likelihood
+                  .maximum_bisection_steps << '|'
+           << request.reconciliation_profile_likelihood
+                  .maximum_nuisance_iterations << '|'
+           << request.reconciliation_profile_likelihood
+                  .parameter_ids.size() << '|';
+    for (const auto& id :
+         request.reconciliation_profile_likelihood.parameter_ids) {
+        append_string(stream, id);
+    }
+    stream << request.reconciliation_held_out_cases.size() << '|';
+    for (const auto& held_out :
+         request.reconciliation_held_out_cases) {
+        append_string(stream, held_out.case_id);
+        stream << held_out.observations.size() << '|';
+        for (const auto& observation : held_out.observations) {
+            append_string(stream, observation.id);
+            append_string(stream, observation.target);
+            append_string(stream, observation.dimension);
+            stream << observation.measured_si << '|'
+                   << observation.sigma_si << '|';
+        }
+    }
     stream << '|';
     append_artifacts(stream, request.artifacts);
     stream << '|';
@@ -397,7 +443,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v15) {
+    if (request.schema_version != job_schema_v16) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -432,6 +478,11 @@ void validate_request(const SimulationJobRequest& request) {
                     "calibration jobs require calibration provenance "
                     "and no single-case provenance");
             }
+        } else if (request.mode ==
+                   SimulationJobMode::reconciliation) {
+            throw JobRequestError(
+                "revision-backed reconciliation requires an immutable "
+                "reconciliation revision");
         } else if (source.case_revision_id.empty() ||
                    source.case_checksum.empty() ||
                    !source.calibration_revision_id.empty() ||
@@ -480,6 +531,23 @@ void validate_request(const SimulationJobRequest& request) {
         throw JobRequestError(
             "simulation jobs do not accept calibration inputs");
     }
+    if (request.mode == SimulationJobMode::reconciliation &&
+        (!request.case_id.empty() || request.reconciliation_id.empty() ||
+         !request.result_projections.empty() ||
+         !request.acceptance_criteria.empty())) {
+        throw JobRequestError(
+            "reconciliation jobs require a reconciliation ID and do "
+            "not accept a case ID, result projections, or acceptance "
+            "criteria");
+    }
+    if (request.mode != SimulationJobMode::reconciliation &&
+        (!request.reconciliation_id.empty() ||
+         !request.reconciliation_held_out_cases.empty() ||
+         request.reconciliation_profile_likelihood.enabled)) {
+        throw JobRequestError(
+            "non-reconciliation jobs do not accept reconciliation "
+            "inputs");
+    }
     if (request.mode == SimulationJobMode::steady &&
         std::any_of(
             request.result_projections.begin(),
@@ -522,6 +590,8 @@ std::string to_string(SimulationJobMode mode) {
             return "transient";
         case SimulationJobMode::calibration:
             return "calibration";
+        case SimulationJobMode::reconciliation:
+            return "reconciliation";
     }
     return "unknown";
 }
@@ -615,7 +685,8 @@ SimulationJobService& SimulationJobService::operator=(
 SimulationJobRecord SimulationJobService::submit(
     const SimulationJobRequest& request) {
     validate_request(request);
-    if (request.mode != SimulationJobMode::calibration) {
+    if (request.mode != SimulationJobMode::calibration &&
+        request.mode != SimulationJobMode::reconciliation) {
         ValidateModelRequest validation_request;
         validation_request.model_json = request.model_json;
         validation_request.case_id = request.case_id;
@@ -881,6 +952,47 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             }
             const auto content =
                 serialize_calibration_response_json(response);
+            const auto manifest = impl_->artifacts->put_json(
+                claimed->job_id,
+                response.metadata.result_schema_version,
+                content);
+            require_lease();
+            return impl_->jobs->publish_success(
+                claimed->job_id,
+                claimed->revision,
+                response.metadata,
+                manifest,
+                std::nullopt);
+        }
+
+        if (claimed->request.mode ==
+            SimulationJobMode::reconciliation) {
+            DataReconciliationRequest request;
+            request.model_json = claimed->request.model_json;
+            request.reconciliation_id =
+                claimed->request.reconciliation_id;
+            request.mode = claimed->request.reconciliation_mode;
+            request.solver = claimed->request.reconciliation_solver;
+            request.profile_likelihood = claimed->request
+                .reconciliation_profile_likelihood;
+            request.held_out_cases =
+                claimed->request.reconciliation_held_out_cases;
+            request.artifacts = claimed->request.artifacts;
+            request.components = claimed->request.components;
+            auto response =
+                impl_->simulation.run_data_reconciliation(request);
+            response.metadata.source_revisions =
+                claimed->request.source_revisions;
+            require_lease();
+            if (!response.succeeded()) {
+                return impl_->jobs->publish_failure(
+                    claimed->job_id,
+                    claimed->revision,
+                    response.error,
+                    response.metadata);
+            }
+            const auto content =
+                serialize_data_reconciliation_response_json(response);
             const auto manifest = impl_->artifacts->put_json(
                 claimed->job_id,
                 response.metadata.result_schema_version,

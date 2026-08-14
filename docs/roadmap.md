@@ -300,7 +300,7 @@ Completed structural slices:
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v15` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v16` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -403,7 +403,12 @@ Next:
 19. Add opt-in bounded profile-likelihood intervals with nuisance-parameter re-optimization,
     adaptive threshold bracketing, explicit bound truncation, evaluation budgets, provenance, and
     thin CLI access. ✅
-20. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
+20. Carry data reconciliation through the common `thermox.job/v16` idempotent queue, leased
+    worker, execution-provenance, and checksummed result-artifact boundary without moving
+    reconciliation logic out of the service. ✅
+21. Add a distinct immutable reconciliation revision and production HTTP/Study authoring path;
+    do not relabel reconciliation definitions as calibration revisions.
+22. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
     profiling is insufficient; allow a sparse QR/SVD backend for very large rectangular
     sensitivities.
 

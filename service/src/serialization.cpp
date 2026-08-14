@@ -3022,6 +3022,10 @@ std::string serialize_job_record_json(
     json_string(out, record.request.case_id);
     out << ", \"calibration_id\": ";
     json_string(out, record.request.calibration_id);
+    out << ", \"reconciliation_id\": ";
+    json_string(out, record.request.reconciliation_id);
+    out << ", \"reconciliation_mode\": ";
+    json_string(out, to_string(record.request.reconciliation_mode));
     out << ", \"source_revisions\": ";
     if (record.request.source_revisions) {
         revision_provenance_json(
@@ -3180,6 +3184,8 @@ std::string serialize_job_record_json(
     out << ']';
     out << ", \"validation_prediction_count\": "
         << record.request.calibration_predictions.size();
+    out << ", \"reconciliation_held_out_case_count\": "
+        << record.request.reconciliation_held_out_cases.size();
     out << ", \"fingerprint\": ";
     json_string(out, record.request_fingerprint);
     out << "}";

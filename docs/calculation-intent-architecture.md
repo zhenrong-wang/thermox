@@ -241,3 +241,17 @@ thermox_cli reconcile \
 
 CLI and future HTTP/UI adapters call the same service contract; they do not own reconciliation
 logic.
+
+## Durable execution boundary
+
+`thermox.job/v16` carries data reconciliation through the same Team-scoped idempotency, leased
+worker, checksummed result-artifact, and execution-provenance boundary used by forward simulation
+and calibration. The durable request preserves hard-versus-weighted mode, solver policy, profile
+likelihood policy, and held-out observations; the worker delegates directly to
+`SimulationService::run_data_reconciliation`.
+
+The production HTTP adapter does not accept an unrevisioned reconciliation model body. Project
+submission will be enabled only through a distinct immutable reconciliation revision bound to the
+exact model, Studies, artifacts, and solver policy. This prevents a reconciliation definition from
+being mislabeled as a calibration revision merely because both use adjustable quantities and
+observations.

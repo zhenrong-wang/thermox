@@ -491,7 +491,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v15'
+  schema_version: 'thermox.job/v16'
   job_id: string
   owner: {
     team_id: string
@@ -501,10 +501,12 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v15'
-    mode: 'steady' | 'transient' | 'calibration'
+    schema_version: 'thermox.job/v16'
+    mode: 'steady' | 'transient' | 'calibration' | 'reconciliation'
     case_id: string
     calibration_id: string
+    reconciliation_id: string
+    reconciliation_mode: 'hard_equalities' | 'weighted_measurements'
     source_revisions: RevisionProvenance | null
     engineering_artifacts: Array<{
       id: string
@@ -516,6 +518,7 @@ export interface SimulationJob {
     result_projections: ResultProjection[]
     acceptance_criteria: EngineeringAcceptanceCriterion[]
     validation_prediction_count: number
+    reconciliation_held_out_case_count: number
     fingerprint: string
   }
   worker_id: string | null

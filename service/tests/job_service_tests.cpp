@@ -502,7 +502,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v15\"") != std::string::npos &&
+                  "\"thermox.job/v16\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -568,6 +568,64 @@ void test_calibration_jobs_use_the_worker_artifact_boundary() {
             result->content.find("acceptance_fit") !=
                 std::string::npos,
         "calibration jobs must publish a durable calibration result");
+}
+
+void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
+    auto jobs = thermox::service::make_in_memory_job_repository();
+    auto artifacts =
+        thermox::service::make_in_memory_result_artifact_store();
+    thermox::service::SimulationJobService service(jobs, artifacts);
+
+    thermox::service::SimulationJobRequest request;
+    request.identity = team_a;
+    request.idempotency_key = "reconciliation-run";
+    request.mode =
+        thermox::service::SimulationJobMode::reconciliation;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "fixed_power_relaxed_airflow";
+    request.reconciliation_solver.max_iterations = 6;
+
+    const auto queued = service.submit(request);
+    const auto completed =
+        service.run_next("reconciliation-worker");
+    require(
+        completed && completed->job_id == queued.job_id &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            completed->result_artifact.has_value() &&
+            !completed->result_summary.has_value() &&
+            completed->execution.has_value() &&
+            completed->execution->operation ==
+                "data_reconciliation",
+        "reconciliation must execute through the leased worker and "
+        "publish ordinary execution provenance");
+    const auto result = service.get_result(team_a, queued.job_id);
+    require(
+        result &&
+            result->content.find(
+                "\"calculation_intent\": \"data_reconciliation\"") !=
+                std::string::npos &&
+            result->content.find(
+                "\"reconciliation_id\": "
+                "\"fixed_power_relaxed_airflow\"") !=
+                std::string::npos &&
+            result->content.find("\"converged\": true") !=
+                std::string::npos,
+        "durable reconciliation results must retain intent, identity, "
+        "and convergence evidence");
+    const auto status =
+        thermox::service::serialize_job_record_json(*completed);
+    require(
+        status.find("\"schema_version\": \"thermox.job/v16\"") !=
+                std::string::npos &&
+            status.find("\"mode\": \"reconciliation\"") !=
+                std::string::npos &&
+            status.find(
+                "\"reconciliation_id\": "
+                "\"fixed_power_relaxed_airflow\"") !=
+                std::string::npos,
+        "job status must expose the durable reconciliation identity");
 }
 
 void test_non_ready_submission_is_rejected() {
@@ -1054,6 +1112,7 @@ int main() {
         test_worker_executes_request_scoped_component();
         test_success_publishes_a_readable_artifact();
         test_calibration_jobs_use_the_worker_artifact_boundary();
+        test_reconciliation_jobs_use_the_worker_artifact_boundary();
         test_non_ready_submission_is_rejected();
         test_projection_failure_is_structured();
         test_transient_jobs_use_the_same_artifact_boundary();

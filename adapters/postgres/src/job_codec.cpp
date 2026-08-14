@@ -1183,6 +1183,83 @@ service::CalibrationSolverSettings decode_calibration_settings(
     return value;
 }
 
+Tree reconciliation_settings(
+    const service::ReconciliationSolverSettings& value) {
+    Tree tree;
+    tree.put("max_iterations", value.max_iterations);
+    tree.put(
+        "finite_difference_fraction",
+        value.finite_difference_fraction);
+    tree.put("constraint_tolerance", value.constraint_tolerance);
+    tree.put("step_tolerance", value.step_tolerance);
+    tree.put(
+        "objective_relative_tolerance",
+        value.objective_relative_tolerance);
+    tree.put(
+        "minimum_line_search_fraction",
+        value.minimum_line_search_fraction);
+    tree.add_child(
+        "simulation_solver", steady_settings(value.simulation_solver));
+    return tree;
+}
+
+service::ReconciliationSolverSettings
+decode_reconciliation_settings(const Tree& tree) {
+    service::ReconciliationSolverSettings value;
+    value.max_iterations = tree.get<int>("max_iterations");
+    value.finite_difference_fraction =
+        tree.get<double>("finite_difference_fraction");
+    value.constraint_tolerance =
+        tree.get<double>("constraint_tolerance");
+    value.step_tolerance = tree.get<double>("step_tolerance");
+    value.objective_relative_tolerance =
+        tree.get<double>("objective_relative_tolerance");
+    value.minimum_line_search_fraction =
+        tree.get<double>("minimum_line_search_fraction");
+    value.simulation_solver = decode_steady_settings(
+        tree.get_child("simulation_solver"));
+    return value;
+}
+
+Tree profile_likelihood_settings(
+    const service::ProfileLikelihoodSettings& value) {
+    Tree tree;
+    tree.put("enabled", value.enabled);
+    tree.put("objective_increase", value.objective_increase);
+    tree.put("maximum_bracket_steps", value.maximum_bracket_steps);
+    tree.put("maximum_bisection_steps", value.maximum_bisection_steps);
+    tree.put(
+        "maximum_nuisance_iterations",
+        value.maximum_nuisance_iterations);
+    tree.add_child(
+        "parameter_ids",
+        array(value.parameter_ids, [](const std::string& id) {
+            Tree item;
+            item.put_value(id);
+            return item;
+        }));
+    return tree;
+}
+
+service::ProfileLikelihoodSettings
+decode_profile_likelihood_settings(const Tree& tree) {
+    service::ProfileLikelihoodSettings value;
+    value.enabled = tree.get<bool>("enabled");
+    value.objective_increase = tree.get<double>("objective_increase");
+    value.maximum_bracket_steps =
+        tree.get<int>("maximum_bracket_steps");
+    value.maximum_bisection_steps =
+        tree.get<int>("maximum_bisection_steps");
+    value.maximum_nuisance_iterations =
+        tree.get<int>("maximum_nuisance_iterations");
+    value.parameter_ids = decode_array<std::string>(
+        tree.get_child("parameter_ids"),
+        [](const Tree& item) {
+            return item.get_value<std::string>();
+        });
+    return value;
+}
+
 service::SimulationJobMode decode_mode(
     const std::string& mode) {
     if (mode == "steady") {
@@ -1193,6 +1270,9 @@ service::SimulationJobMode decode_mode(
     }
     if (mode == "calibration") {
         return service::SimulationJobMode::calibration;
+    }
+    if (mode == "reconciliation") {
+        return service::SimulationJobMode::reconciliation;
     }
     throw std::runtime_error(
         "invalid persisted simulation mode: " + mode);
@@ -1316,6 +1396,7 @@ std::string encode_request(
     tree.put("model_json", request.model_json);
     tree.put("case_id", request.case_id);
     tree.put("calibration_id", request.calibration_id);
+    tree.put("reconciliation_id", request.reconciliation_id);
     if (request.source_revisions) {
         Tree source;
         source.put(
@@ -1385,6 +1466,38 @@ std::string encode_request(
                         }));
                 return encoded;
             }));
+    tree.put(
+        "reconciliation_mode",
+        service::to_string(request.reconciliation_mode));
+    tree.add_child(
+        "reconciliation_solver",
+        reconciliation_settings(request.reconciliation_solver));
+    tree.add_child(
+        "reconciliation_profile_likelihood",
+        profile_likelihood_settings(
+            request.reconciliation_profile_likelihood));
+    tree.add_child(
+        "reconciliation_held_out_cases",
+        array(
+            request.reconciliation_held_out_cases,
+            [](const service::StudyPredictionCase& prediction) {
+                Tree encoded;
+                encoded.put("case_id", prediction.case_id);
+                encoded.add_child(
+                    "observations",
+                    array(
+                        prediction.observations,
+                        [](const service::StudyObservation& observation) {
+                            Tree item;
+                            item.put("id", observation.id);
+                            item.put("target", observation.target);
+                            item.put("dimension", observation.dimension);
+                            item.put("measured_si", observation.measured_si);
+                            item.put("sigma_si", observation.sigma_si);
+                            return item;
+                        }));
+                return encoded;
+            }));
     tree.add_child("artifacts", artifact_bundle(request.artifacts));
     tree.add_child(
         "components", component_bundle(request.components));
@@ -1425,6 +1538,8 @@ service::SimulationJobRequest decode_request(
     request.case_id = tree.get<std::string>("case_id");
     request.calibration_id =
         tree.get<std::string>("calibration_id");
+    request.reconciliation_id =
+        tree.get<std::string>("reconciliation_id");
     if (const auto source =
             tree.get_child_optional("source_revisions")) {
         request.source_revisions =
@@ -1458,6 +1573,46 @@ service::SimulationJobRequest decode_request(
     request.calibration_predictions =
         decode_array<service::StudyPredictionCase>(
             tree.get_child("calibration_predictions"),
+            [](const Tree& encoded) {
+                service::StudyPredictionCase prediction;
+                prediction.case_id =
+                    encoded.get<std::string>("case_id");
+                prediction.observations =
+                    decode_array<service::StudyObservation>(
+                        encoded.get_child("observations"),
+                        [](const Tree& item) {
+                            return service::StudyObservation{
+                                item.get<std::string>("id"),
+                                item.get<std::string>("target"),
+                                item.get<std::string>("dimension"),
+                                item.get<double>("measured_si"),
+                                item.get<double>("sigma_si"),
+                            };
+                        });
+                return prediction;
+            });
+    const auto reconciliation_mode =
+        tree.get<std::string>("reconciliation_mode");
+    if (reconciliation_mode == "hard_equalities") {
+        request.reconciliation_mode =
+            service::ReconciliationMode::hard_equalities;
+    } else if (reconciliation_mode == "weighted_measurements") {
+        request.reconciliation_mode =
+            service::ReconciliationMode::weighted_measurements;
+    } else {
+        throw std::runtime_error(
+            "invalid persisted reconciliation mode: " +
+            reconciliation_mode);
+    }
+    request.reconciliation_solver =
+        decode_reconciliation_settings(
+            tree.get_child("reconciliation_solver"));
+    request.reconciliation_profile_likelihood =
+        decode_profile_likelihood_settings(
+            tree.get_child("reconciliation_profile_likelihood"));
+    request.reconciliation_held_out_cases =
+        decode_array<service::StudyPredictionCase>(
+            tree.get_child("reconciliation_held_out_cases"),
             [](const Tree& encoded) {
                 service::StudyPredictionCase prediction;
                 prediction.case_id =
