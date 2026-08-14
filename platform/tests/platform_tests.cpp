@@ -1075,7 +1075,9 @@ void test_component_catalog_exposes_parameter_contracts() {
         "pipe.fluid.darcy_weisbach_heat_transfer",
         "separator.fluid.equilibrium_flash",
         "transport.material.frozen_pressure_ratio",
+        "regulator.material.isenthalpic_network_pressure",
         "combustor.material.adiabatic_equilibrium",
+        "combustor.material.equilibrium_heat_release_efficiency",
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.fluid.dynamic_cell",
@@ -3667,6 +3669,59 @@ void test_material_connector_and_frozen_transport() {
                  "material connector conserves oxygen mass");
     require_near(value("sink.inlet.m_dot[H2O]"), 0.5, 1.0e-10,
                  "material connector conserves water mass");
+
+    const auto regulator_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "material_pressure_regulator",
+    "media": [],
+    "materials": [{
+      "id": "fuel", "backend": "test_thermochemistry",
+      "mechanism": "fuel.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "regulator",
+      "kind": "regulator.material.isenthalpic_network_pressure",
+      "materials": {"inlet": "fuel", "outlet": "fuel"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "regulator.inlet.p": {"value": 3.2, "unit": "MPa"},
+      "regulator.outlet.p": {"value": 1.5, "unit": "MPa"},
+      "regulator.inlet.h": {"value": 450.0, "unit": "kJ/kg"},
+      "regulator.inlet.m_dot[N2]": {"value": 1.0, "unit": "kg/s"},
+      "regulator.inlet.m_dot[O2]": {"value": 0.2, "unit": "kg/s"}
+    }
+  }]
+})json");
+    const auto regulator_graph =
+        thermox::platform::compile_model_graph(
+            regulator_document,
+            thermox::platform::make_default_component_registry(),
+            "design");
+    const auto regulator_result =
+        thermox::solve_newton(regulator_graph.problem);
+    require(
+        regulator_result.diagnostics.converged,
+        regulator_result.diagnostics.message);
+    const auto regulator_value = [&](const std::string& name) {
+        return regulator_result.x.at(require_variable_index(
+            regulator_graph.problem.variable_names, name));
+    };
+    require_near(
+        regulator_value("regulator.outlet.p"), 1.5e6, 1.0e-7,
+        "material regulator accepts downstream network pressure");
+    require_near(
+        regulator_value("regulator.outlet.h"), 450000.0, 1.0e-7,
+        "material regulator preserves enthalpy across pressure reduction");
+    require_near(
+        regulator_value("regulator.outlet.m_dot[N2]"), 1.0, 1.0e-10,
+        "material regulator conserves species flow");
 }
 
 void test_material_mixer_and_fixed_fraction_splitter() {
@@ -4047,6 +4102,87 @@ void test_adiabatic_equilibrium_combustor() {
             combustor.metrics, "net_energy_flow"),
         0.0, 1.0e-4,
         "combustor component metric exposes energy closure");
+
+    const auto efficient_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "equilibrium_combustor_efficiency",
+    "media": [],
+    "materials": [{
+      "id": "reacting_gas",
+      "backend": "test_backend",
+      "mechanism": "test.yaml",
+      "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "combustor",
+      "kind": "combustor.material.equilibrium_heat_release_efficiency",
+      "parameters": {
+        "pressure_ratio": 0.9,
+        "combustion_efficiency": 0.9,
+        "fuel_lower_heating_value": {
+          "value": 10.0,
+          "unit": "MJ/kg"
+        }
+      },
+      "materials": {
+        "air_inlet": "reacting_gas",
+        "fuel_inlet": "reacting_gas",
+        "outlet": "reacting_gas"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "combustor.air_inlet.p": {"value": 100.0, "unit": "kPa"},
+      "combustor.air_inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "combustor.air_inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "combustor.air_inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "combustor.fuel_inlet.h": {"value": 500.0, "unit": "kJ/kg"},
+      "combustor.fuel_inlet.m_dot[N2]": {"value": 1.0, "unit": "kg/s"},
+      "combustor.fuel_inlet.m_dot[O2]": {"value": 1.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+    const auto efficient_graph =
+        thermox::platform::compile_model_graph(
+            efficient_document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            thermox::platform::EngineeringArtifactRegistry{},
+            chemistry, "design");
+    const auto efficient_result =
+        thermox::solve_newton(efficient_graph.problem);
+    require(
+        efficient_result.diagnostics.converged,
+        efficient_result.diagnostics.message);
+    const auto efficient_value = [&](const std::string& name) {
+        return efficient_result.x.at(require_variable_index(
+            efficient_graph.problem.variable_names, name));
+    };
+    require_near(
+        efficient_value("combustor.outlet.h"),
+        2000000.0 / 12.0, 1.0e-5,
+        "combustion efficiency removes declared unreleased fuel heat");
+    const thermox::platform::GraphResultEvaluator efficient_evaluator(
+        efficient_document, efficient_graph,
+        thermox::physics::make_default_property_package_registry(),
+        chemistry);
+    const auto efficient_graph_result =
+        efficient_evaluator.evaluate(efficient_result.x);
+    require_near(
+        require_result_value(
+            require_component_result(
+                efficient_graph_result, "combustor").metrics,
+            "net_energy_flow"),
+        2000000.0, 1.0e-4,
+        "combustor attributes unreleased fuel heat as an energy loss");
 
     auto difficult = document;
     difficult.cases.front().initial_guesses = {

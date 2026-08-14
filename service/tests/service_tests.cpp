@@ -589,8 +589,30 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 74,
+        response.components.size() == 76,
         "service must expose the complete component registry");
+    const auto efficient_combustor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "combustor.material.equilibrium_heat_release_efficiency";
+        });
+    require(
+        efficient_combustor != response.components.end() &&
+            efficient_combustor->supports_steady &&
+            !efficient_combustor->supports_transient,
+        "catalog must expose the heat-release-efficiency combustor");
+    const auto material_regulator = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "regulator.material.isenthalpic_network_pressure";
+        });
+    require(
+        material_regulator != response.components.end() &&
+            material_regulator->supports_steady &&
+            !material_regulator->supports_transient,
+        "catalog must expose the material pressure regulator");
     const auto iso_compressor = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

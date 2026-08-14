@@ -2759,6 +2759,57 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class IsenthalpicMaterialPressureRegulatorModel final
+    : public ComponentModel {
+public:
+    IsenthalpicMaterialPressureRegulatorModel()
+        : descriptor_(make_descriptor(
+              "regulator.material.isenthalpic_network_pressure",
+              {{"inlet", "material", "in"},
+               {"outlet", "material", "out"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto inlet_species =
+            require_port_species(context, "inlet");
+        if (inlet_species !=
+            require_port_species(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "isenthalpic",
+            {{require_port_variable(context, "outlet.h"), 1.0},
+             {require_port_variable(context, "inlet.h"), -1.0}},
+            0.0, 100000.0);
+        for (const auto& species : inlet_species) {
+            const auto variable = "m_dot[" + species + "]";
+            system.add_linear_equation(
+                prefix + "species." + species,
+                {{require_port_variable(
+                      context, "outlet." + variable), 1.0},
+                 {require_port_variable(
+                      context, "inlet." + variable), -1.0}},
+                0.0, 100.0);
+        }
+        system.add_initialization_relation(
+            {{require_port_variable(context, "outlet.p"), 1.0},
+             {require_port_variable(context, "inlet.p"), -1.0}},
+            0.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class TwoInletMaterialMixerModel final : public ComponentModel {
 public:
     TwoInletMaterialMixerModel()
@@ -3037,6 +3088,8 @@ void register_transport_component_models(
         std::make_shared<DarcyWeisbachPipeModel>(true));
     registry.register_model(
         std::make_shared<FrozenMaterialPressureRatioModel>());
+    registry.register_model(std::make_shared<
+        IsenthalpicMaterialPressureRegulatorModel>());
     registry.register_model(
         std::make_shared<TwoInletMaterialMixerModel>());
     registry.register_model(

@@ -25,6 +25,20 @@ The model contains no fuel name, stoichiometric formula, or gas-turbine topology
 per-solve cache ensures all species residual rows share one equilibrium evaluation at a given
 Newton iterate.
 
+For performance-test and reduced-order equipment models, the separate
+`combustor.material.equilibrium_heat_release_efficiency` component additionally requires a
+declared `combustion_efficiency` and `fuel_lower_heating_value`. It removes
+`(1 - combustion_efficiency) * m_fuel * LHV` from the reacting-stream enthalpy balance before the
+same equilibrium calculation. The resulting energy difference is visible as a component and
+system loss. This is an explicit heat-release-efficiency approximation; it does not claim to
+predict unburned-species composition or detailed flame kinetics.
+
+Upstream gaseous-fuel pressure can be represented without forcing it to equal the combustor
+network pressure through `regulator.material.isenthalpic_network_pressure`. The regulator
+conserves species flow and specific enthalpy while allowing its connected downstream system to
+determine outlet pressure. It is a reduced-order throttling boundary; it does not predict valve
+capacity, actuator position, or pressure-control dynamics.
+
 Cantera 3.2.0 is pinned under `modules/properties/cantera`. The adapter is intentionally optional:
 install the pinned Cantera C++ library into an isolated prefix, make its `cantera.pc` visible to
 `pkg-config`, and configure Thermox with:

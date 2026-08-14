@@ -37,14 +37,16 @@ public:
         std::vector<std::size_t> fuel_flow,
         std::size_t air_enthalpy,
         std::size_t fuel_enthalpy,
-        std::size_t outlet_pressure)
+        std::size_t outlet_pressure,
+        double fuel_heat_loss_j_kg)
         : package_(std::move(package)),
           species_(std::move(species)),
           air_flow_(std::move(air_flow)),
           fuel_flow_(std::move(fuel_flow)),
           air_enthalpy_(air_enthalpy),
           fuel_enthalpy_(fuel_enthalpy),
-          outlet_pressure_(outlet_pressure) {}
+          outlet_pressure_(outlet_pressure),
+          fuel_heat_loss_j_kg_(fuel_heat_loss_j_kg) {}
 
     EquilibriumEvaluation evaluate(
         const std::vector<double>& x,
@@ -125,7 +127,8 @@ public:
         }
         const double mixed_enthalpy =
             (air_mass * x.at(air_enthalpy_) +
-             fuel_mass * x.at(fuel_enthalpy_)) /
+             fuel_mass * x.at(fuel_enthalpy_) -
+             fuel_mass * fuel_heat_loss_j_kg_) /
             total_mass;
         const double outlet_pressure = target_problem
             ? x.at(outlet_pressure_)
@@ -156,18 +159,30 @@ private:
     std::size_t air_enthalpy_;
     std::size_t fuel_enthalpy_;
     std::size_t outlet_pressure_;
+    double fuel_heat_loss_j_kg_{0.0};
     mutable std::mutex mutex_;
     mutable std::vector<double> last_key_;
     mutable EquilibriumEvaluation last_;
 };
 
-class AdiabaticEquilibriumCombustorModel final
+class EquilibriumCombustorModel final
     : public ComponentModel {
 public:
-    AdiabaticEquilibriumCombustorModel() {
-        descriptor_.kind =
-            "combustor.material.adiabatic_equilibrium";
+    explicit EquilibriumCombustorModel(
+        bool heat_release_efficiency = false)
+        : heat_release_efficiency_(heat_release_efficiency) {
+        descriptor_.kind = heat_release_efficiency_
+            ? "combustor.material.equilibrium_heat_release_efficiency"
+            : "combustor.material.adiabatic_equilibrium";
         descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "combustor.material";
+        descriptor_.display_name = heat_release_efficiency_
+            ? "Equilibrium combustor (heat-release efficiency)"
+            : "Adiabatic equilibrium combustor";
+        descriptor_.category = "Combustion";
+        descriptor_.model_name = heat_release_efficiency_
+            ? "Equilibrium combustor with declared fuel heat loss"
+            : "Adiabatic equilibrium combustor";
         descriptor_.ports = {
             {"air_inlet", "material", "in"},
             {"fuel_inlet", "material", "in"},
@@ -175,6 +190,15 @@ public:
         descriptor_.parameters = {
             {"pressure_ratio", "dimensionless", true,
              std::nullopt, 0.0, 1.0, false, true}};
+        if (heat_release_efficiency_) {
+            descriptor_.parameters.push_back(
+                {"combustion_efficiency", "dimensionless", true,
+                 std::nullopt, 0.0, 1.0, false, true});
+            descriptor_.parameters.push_back(
+                {"fuel_lower_heating_value", "specific_enthalpy", true,
+                 std::nullopt, 0.0,
+                 std::numeric_limits<double>::infinity(), false, true});
+        }
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::equilibrium_hp};
     }
@@ -242,11 +266,20 @@ public:
         const double pressure_ratio =
             required_parameter(
                 context.component, "pressure_ratio");
+        double fuel_heat_loss_j_kg = 0.0;
+        if (heat_release_efficiency_) {
+            const double efficiency = required_parameter(
+                context.component, "combustion_efficiency");
+            const double lower_heating_value = required_parameter(
+                context.component, "fuel_lower_heating_value");
+            fuel_heat_loss_j_kg =
+                (1.0 - efficiency) * lower_heating_value;
+        }
         const auto cache = std::make_shared<EquilibriumCache>(
             package, species, air_flow, fuel_flow,
             require_port_variable(context, "air_inlet.h"),
             require_port_variable(context, "fuel_inlet.h"),
-            outlet_p);
+            outlet_p, fuel_heat_loss_j_kg);
         const std::string prefix =
             "component." + context.component.id + ".";
         system.add_linear_equation(
@@ -339,6 +372,7 @@ public:
 
 private:
     ComponentModelDescriptor descriptor_;
+    bool heat_release_efficiency_{false};
 };
 
 }  // namespace
@@ -346,7 +380,9 @@ private:
 void register_combustion_component_models(
     ComponentRegistry& registry) {
     registry.register_model(std::make_shared<
-        AdiabaticEquilibriumCombustorModel>());
+        EquilibriumCombustorModel>());
+    registry.register_model(std::make_shared<
+        EquilibriumCombustorModel>(true));
 }
 
 }  // namespace thermox::platform

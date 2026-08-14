@@ -213,6 +213,7 @@ UnitRegistry make_default_unit_registry() {
         {
             accepted("J/kg"),
             accepted("kJ/kg", 1.0e3),
+            accepted("MJ/kg", 1.0e6),
         }));
     registry.register_dimension(dimension(
         "power", "W", display("MW", 1.0e-6),
