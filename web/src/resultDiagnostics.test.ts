@@ -209,8 +209,10 @@ describe('resultDiagnosticSummary', () => {
       model_checksum: 'sha256:model',
       case_revision_id: 'case-r1',
       case_checksum: 'sha256:case',
-      calibration_revision_id: '',
-      calibration_checksum: '',
+            calibration_revision_id: '',
+            calibration_checksum: '',
+            reconciliation_revision_id: '',
+            reconciliation_checksum: '',
     }
     expect(
       exactRevisionProvenance(provenance, provenance, 'model-r1', true),

@@ -58,6 +58,10 @@ The current synchronous service exposes:
   manifests.
 - `thermox.study_revision/v3` artifact-generic, dimensioned operating envelopes bound by the
   service to performance maps, correlations, and regime maps before execution.
+- `thermox.reconciliation_revision/v1` immutable constraint/held-out Study bindings, canonical
+  adjustable/observation definitions, hard-versus-weighted mode, solver/profile policy, and
+  exact model/artifact provenance. Production HTTP publication/submission is the next adapter
+  slice; the project and persistence contracts are already transport-neutral.
 
 The public service DTOs contain only standard C++ data types. Solver and compiler objects do not
 cross this boundary. This keeps local callers simple and permits an RPC adapter to map wire

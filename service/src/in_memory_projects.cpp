@@ -650,6 +650,114 @@ public:
         return records;
     }
 
+    ReconciliationRevisionRecord create_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& reconciliation_id,
+        const std::string& parent_reconciliation_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& constraint_study_revision_ids,
+        const std::vector<std::string>& held_out_study_revision_ids,
+        const std::string& definition_json,
+        ReconciliationMode mode,
+        const ReconciliationSolverSettings& solver,
+        const ProfileLikelihoodSettings& profile_likelihood,
+        const std::string& checksum) override {
+        std::lock_guard lock(mutex_);
+        const auto validate_studies = [&](const auto& ids) {
+            for (const auto& id : ids) {
+                const auto study = study_revisions_.find(id);
+                if (study == study_revisions_.end() ||
+                    study->second.team_id != team_id ||
+                    study->second.project_id != project_id ||
+                    study->second.model_revision_id != model_revision_id) {
+                    throw ProjectStateError(
+                        "reconciliation Study revision was not found");
+                }
+            }
+        };
+        validate_studies(constraint_study_revision_ids);
+        validate_studies(held_out_study_revision_ids);
+        if (!parent_reconciliation_revision_id.empty()) {
+            const auto parent = reconciliation_revisions_.find(
+                parent_reconciliation_revision_id);
+            if (parent == reconciliation_revisions_.end() ||
+                parent->second.team_id != team_id ||
+                parent->second.project_id != project_id ||
+                parent->second.reconciliation_id != reconciliation_id) {
+                throw ProjectStateError(
+                    "parent reconciliation revision was not found");
+            }
+        }
+        const auto key = project_id + '\0' + reconciliation_id;
+        ReconciliationRevisionRecord record;
+        record.reconciliation_revision_id = next_id(
+            "reconciliation-revision",
+            next_reconciliation_revision_id_++);
+        record.reconciliation_id = reconciliation_id;
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.revision_number =
+            ++reconciliation_revision_sequences_[key];
+        record.parent_reconciliation_revision_id =
+            parent_reconciliation_revision_id;
+        record.model_revision_id = model_revision_id;
+        record.constraint_study_revision_ids =
+            constraint_study_revision_ids;
+        record.held_out_study_revision_ids =
+            held_out_study_revision_ids;
+        record.definition_json = definition_json;
+        record.mode = mode;
+        record.solver = solver;
+        record.profile_likelihood = profile_likelihood;
+        record.checksum = checksum;
+        record.created_by_user_id = created_by_user_id;
+        record.created_at = std::chrono::system_clock::now();
+        reconciliation_revisions_.emplace(
+            record.reconciliation_revision_id, record);
+        return record;
+    }
+
+    std::optional<ReconciliationRevisionRecord>
+    get_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto found = reconciliation_revisions_.find(
+            reconciliation_revision_id);
+        if (found == reconciliation_revisions_.end() ||
+            found->second.team_id != team_id ||
+            found->second.project_id != project_id) {
+            return std::nullopt;
+        }
+        return found->second;
+    }
+
+    std::vector<ReconciliationRevisionRecord>
+    list_reconciliation_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        std::lock_guard lock(mutex_);
+        std::vector<ReconciliationRevisionRecord> records;
+        for (const auto& [id, record] : reconciliation_revisions_) {
+            (void)id;
+            if (record.team_id == team_id &&
+                record.project_id == project_id) {
+                records.push_back(record);
+            }
+        }
+        std::sort(records.begin(), records.end(),
+            [](const auto& left, const auto& right) {
+                if (left.reconciliation_id != right.reconciliation_id) {
+                    return left.reconciliation_id < right.reconciliation_id;
+                }
+                return left.revision_number < right.revision_number;
+            });
+        return records;
+    }
+
     RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -774,6 +882,7 @@ private:
     std::uint64_t next_quality_review_id_{1};
     std::uint64_t next_study_revision_id_{1};
     std::uint64_t next_calibration_revision_id_{1};
+    std::uint64_t next_reconciliation_revision_id_{1};
     std::uint64_t next_run_configuration_revision_id_{1};
     std::unordered_map<std::string, ProjectRecord> projects_;
     std::unordered_map<std::string, ModelRevisionRecord>
@@ -787,6 +896,8 @@ private:
     std::unordered_map<std::string, StudyRevisionRecord> study_revisions_;
     std::unordered_map<std::string, CalibrationRevisionRecord>
         calibration_revisions_;
+    std::unordered_map<std::string, ReconciliationRevisionRecord>
+        reconciliation_revisions_;
     std::unordered_map<
         std::string,
         RunConfigurationRevisionRecord>
@@ -801,6 +912,8 @@ private:
         study_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         calibration_revision_sequences_;
+    std::unordered_map<std::string, std::uint64_t>
+        reconciliation_revision_sequences_;
     std::unordered_map<std::string, std::uint64_t>
         run_configuration_revision_sequences_;
 };

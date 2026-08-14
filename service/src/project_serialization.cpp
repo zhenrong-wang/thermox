@@ -764,6 +764,85 @@ void calibration_revision_json(
         << epoch_milliseconds(revision.created_at) << '}';
 }
 
+void reconciliation_solver_json(
+    std::ostringstream& out,
+    const ReconciliationSolverSettings& solver) {
+    out << "{\"max_iterations\": " << solver.max_iterations
+        << ", \"finite_difference_fraction\": "
+        << solver.finite_difference_fraction
+        << ", \"constraint_tolerance\": "
+        << solver.constraint_tolerance
+        << ", \"step_tolerance\": " << solver.step_tolerance
+        << ", \"objective_relative_tolerance\": "
+        << solver.objective_relative_tolerance
+        << ", \"minimum_line_search_fraction\": "
+        << solver.minimum_line_search_fraction
+        << ", \"simulation_solver\": ";
+    steady_solver_json(out, solver.simulation_solver);
+    out << '}';
+}
+
+void reconciliation_revision_json(
+    std::ostringstream& out,
+    const ReconciliationRevisionRecord& revision) {
+    out << "{\"schema_version\": ";
+    json_string(out, revision.schema_version);
+    out << ", \"reconciliation_revision_id\": ";
+    json_string(out, revision.reconciliation_revision_id);
+    out << ", \"reconciliation_id\": ";
+    json_string(out, revision.reconciliation_id);
+    out << ", \"project_id\": ";
+    json_string(out, revision.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, revision.team_id);
+    out << ", \"revision_number\": " << revision.revision_number;
+    out << ", \"parent_reconciliation_revision_id\": ";
+    json_string(out, revision.parent_reconciliation_revision_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, revision.model_revision_id);
+    const auto ids = [&](const char* name,
+                         const std::vector<std::string>& values) {
+        out << ", \"" << name << "\": [";
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            if (index != 0U) out << ", ";
+            json_string(out, values[index]);
+        }
+        out << ']';
+    };
+    ids("constraint_study_revision_ids",
+        revision.constraint_study_revision_ids);
+    ids("held_out_study_revision_ids",
+        revision.held_out_study_revision_ids);
+    out << ", \"definition\": " << revision.definition_json;
+    out << ", \"mode\": ";
+    json_string(out, to_string(revision.mode));
+    out << ", \"solver\": ";
+    reconciliation_solver_json(out, revision.solver);
+    out << ", \"profile_likelihood\": {\"enabled\": "
+        << (revision.profile_likelihood.enabled ? "true" : "false")
+        << ", \"objective_increase\": "
+        << revision.profile_likelihood.objective_increase
+        << ", \"maximum_bracket_steps\": "
+        << revision.profile_likelihood.maximum_bracket_steps
+        << ", \"maximum_bisection_steps\": "
+        << revision.profile_likelihood.maximum_bisection_steps
+        << ", \"maximum_nuisance_iterations\": "
+        << revision.profile_likelihood.maximum_nuisance_iterations
+        << ", \"parameter_ids\": [";
+    for (std::size_t index = 0;
+         index < revision.profile_likelihood.parameter_ids.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        json_string(out, revision.profile_likelihood.parameter_ids[index]);
+    }
+    out << "]}, \"checksum\": ";
+    json_string(out, revision.checksum);
+    out << ", \"created_by_user_id\": ";
+    json_string(out, revision.created_by_user_id);
+    out << ", \"created_at_epoch_ms\": "
+        << epoch_milliseconds(revision.created_at) << '}';
+}
+
 }  // namespace
 
 std::string serialize_project_json(
@@ -954,6 +1033,28 @@ std::string serialize_calibration_revisions_json(
     for (std::size_t index = 0; index < revisions.size(); ++index) {
         if (index != 0U) out << ", ";
         calibration_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_reconciliation_revision_json(
+    const ReconciliationRevisionRecord& revision) {
+    std::ostringstream out;
+    reconciliation_revision_json(out, revision);
+    out << '\n';
+    return out.str();
+}
+
+std::string serialize_reconciliation_revisions_json(
+    const std::vector<ReconciliationRevisionRecord>& revisions) {
+    std::ostringstream out;
+    out << "{\"schema_version\": "
+           "\"thermox.reconciliation_revision_list/v1\", "
+           "\"reconciliation_revisions\": [";
+    for (std::size_t index = 0; index < revisions.size(); ++index) {
+        if (index != 0U) out << ", ";
+        reconciliation_revision_json(out, revisions[index]);
     }
     out << "]}\n";
     return out.str();

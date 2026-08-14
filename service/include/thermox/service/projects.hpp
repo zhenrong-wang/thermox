@@ -31,6 +31,8 @@ inline constexpr char study_revision_schema_v3[] =
     "thermox.study_revision/v3";
 inline constexpr char calibration_revision_schema_v1[] =
     "thermox.calibration_revision/v1";
+inline constexpr char reconciliation_revision_schema_v1[] =
+    "thermox.reconciliation_revision/v1";
 inline constexpr char run_configuration_revision_schema_v3[] =
     "thermox.run_configuration_revision/v3";
 inline constexpr char project_model_validation_schema_v1[] =
@@ -190,6 +192,26 @@ struct CalibrationRevisionRecord {
     std::vector<std::string> validation_study_revision_ids;
     std::string definition_json;
     CalibrationSolverSettings solver;
+    std::string checksum;
+    std::string created_by_user_id;
+    std::chrono::system_clock::time_point created_at;
+};
+
+struct ReconciliationRevisionRecord {
+    std::string schema_version{reconciliation_revision_schema_v1};
+    std::string reconciliation_revision_id;
+    std::string reconciliation_id;
+    std::string project_id;
+    std::string team_id;
+    std::uint64_t revision_number{0};
+    std::string parent_reconciliation_revision_id;
+    std::string model_revision_id;
+    std::vector<std::string> constraint_study_revision_ids;
+    std::vector<std::string> held_out_study_revision_ids;
+    std::string definition_json;
+    ReconciliationMode mode{ReconciliationMode::hard_equalities};
+    ReconciliationSolverSettings solver;
+    ProfileLikelihoodSettings profile_likelihood;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -380,6 +402,31 @@ public:
         const std::string& team_id,
         const std::string& project_id) const = 0;
 
+    virtual ReconciliationRevisionRecord
+    create_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& reconciliation_id,
+        const std::string& parent_reconciliation_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& constraint_study_revision_ids,
+        const std::vector<std::string>& held_out_study_revision_ids,
+        const std::string& definition_json,
+        ReconciliationMode mode,
+        const ReconciliationSolverSettings& solver,
+        const ProfileLikelihoodSettings& profile_likelihood,
+        const std::string& checksum) = 0;
+    virtual std::optional<ReconciliationRevisionRecord>
+    get_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id) const = 0;
+    virtual std::vector<ReconciliationRevisionRecord>
+    list_reconciliation_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const = 0;
+
     virtual RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -543,6 +590,20 @@ struct CreateCalibrationRevisionRequest {
     CalibrationSolverSettings solver;
 };
 
+struct CreateReconciliationRevisionRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string reconciliation_id;
+    std::string parent_reconciliation_revision_id;
+    std::string model_revision_id;
+    std::vector<std::string> constraint_study_revision_ids;
+    std::vector<std::string> held_out_study_revision_ids;
+    std::string definition_json;
+    ReconciliationMode mode{ReconciliationMode::hard_equalities};
+    ReconciliationSolverSettings solver;
+    ProfileLikelihoodSettings profile_likelihood;
+};
+
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
     SimulationComponentBundle components;
@@ -573,6 +634,15 @@ struct ResolvedCalibration {
     std::vector<StudyRevisionRecord> studies;
     std::string executable_model_json;
     std::vector<StudyPredictionCase> validation_predictions;
+    ResolvedEngineeringArtifacts artifacts;
+};
+
+struct ResolvedReconciliation {
+    ReconciliationRevisionRecord reconciliation;
+    ModelRevisionRecord model;
+    std::vector<StudyRevisionRecord> studies;
+    std::string executable_model_json;
+    std::vector<StudyPredictionCase> held_out_cases;
     ResolvedEngineeringArtifacts artifacts;
 };
 
@@ -728,6 +798,18 @@ public:
     list_calibration_revisions(
         const IdentityContext& identity,
         const std::string& project_id) const;
+    [[nodiscard]] ReconciliationRevisionRecord
+    create_reconciliation_revision(
+        const CreateReconciliationRevisionRequest& request) const;
+    [[nodiscard]] std::optional<ReconciliationRevisionRecord>
+    get_reconciliation_revision(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id) const;
+    [[nodiscard]] std::vector<ReconciliationRevisionRecord>
+    list_reconciliation_revisions(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
     [[nodiscard]]
     std::optional<RunConfigurationRevisionRecord>
     get_run_configuration_revision(
@@ -751,6 +833,11 @@ public:
         const IdentityContext& identity,
         const std::string& project_id,
         const std::string& calibration_revision_id) const;
+    [[nodiscard]] std::optional<ResolvedReconciliation>
+    resolve_reconciliation(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id) const;
 
 private:
     std::shared_ptr<ProjectRepository> repository_;
@@ -820,6 +907,10 @@ std::string serialize_calibration_revision_json(
     const CalibrationRevisionRecord& revision);
 std::string serialize_calibration_revisions_json(
     const std::vector<CalibrationRevisionRecord>& revisions);
+std::string serialize_reconciliation_revision_json(
+    const ReconciliationRevisionRecord& revision);
+std::string serialize_reconciliation_revisions_json(
+    const std::vector<ReconciliationRevisionRecord>& revisions);
 std::string serialize_run_configuration_revision_json(
     const RunConfigurationRevisionRecord& revision);
 std::string serialize_run_configuration_revisions_json(

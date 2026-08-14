@@ -345,6 +345,12 @@ std::string request_fingerprint(
         append_string(
             stream,
             request.source_revisions->calibration_checksum);
+        append_string(
+            stream,
+            request.source_revisions->reconciliation_revision_id);
+        append_string(
+            stream,
+            request.source_revisions->reconciliation_checksum);
     }
     append_steady_settings(stream, request.steady_solver);
     stream << '|'
@@ -473,20 +479,31 @@ void validate_request(const SimulationJobRequest& request) {
             if (source.calibration_revision_id.empty() ||
                 source.calibration_checksum.empty() ||
                 !source.case_revision_id.empty() ||
-                !source.case_checksum.empty()) {
+                !source.case_checksum.empty() ||
+                !source.reconciliation_revision_id.empty() ||
+                !source.reconciliation_checksum.empty()) {
                 throw JobRequestError(
                     "calibration jobs require calibration provenance "
                     "and no single-case provenance");
             }
         } else if (request.mode ==
                    SimulationJobMode::reconciliation) {
-            throw JobRequestError(
-                "revision-backed reconciliation requires an immutable "
-                "reconciliation revision");
+            if (source.reconciliation_revision_id.empty() ||
+                source.reconciliation_checksum.empty() ||
+                !source.case_revision_id.empty() ||
+                !source.case_checksum.empty() ||
+                !source.calibration_revision_id.empty() ||
+                !source.calibration_checksum.empty()) {
+                throw JobRequestError(
+                    "reconciliation jobs require reconciliation "
+                    "provenance and no case or calibration provenance");
+            }
         } else if (source.case_revision_id.empty() ||
                    source.case_checksum.empty() ||
                    !source.calibration_revision_id.empty() ||
-                   !source.calibration_checksum.empty()) {
+                   !source.calibration_checksum.empty() ||
+                   !source.reconciliation_revision_id.empty() ||
+                   !source.reconciliation_checksum.empty()) {
             throw JobRequestError(
                 "simulation jobs require case provenance and no "
                 "calibration provenance");

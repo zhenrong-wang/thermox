@@ -1423,6 +1423,12 @@ std::string encode_request(
             "calibration_checksum",
             request.source_revisions->calibration_checksum);
         source.put(
+            "reconciliation_revision_id",
+            request.source_revisions->reconciliation_revision_id);
+        source.put(
+            "reconciliation_checksum",
+            request.source_revisions->reconciliation_checksum);
+        source.put(
             "model_revision_id",
             request.source_revisions->model_revision_id);
         source.put(
@@ -1562,6 +1568,10 @@ service::SimulationJobRequest decode_request(
                     "calibration_revision_id", ""),
                 source->get<std::string>(
                     "calibration_checksum", ""),
+                source->get<std::string>(
+                    "reconciliation_revision_id", ""),
+                source->get<std::string>(
+                    "reconciliation_checksum", ""),
             };
     }
     request.steady_solver = decode_steady_settings(
@@ -1707,6 +1717,12 @@ std::string encode_execution(
             "calibration_checksum",
             execution.source_revisions->calibration_checksum);
         source.put(
+            "reconciliation_revision_id",
+            execution.source_revisions->reconciliation_revision_id);
+        source.put(
+            "reconciliation_checksum",
+            execution.source_revisions->reconciliation_checksum);
+        source.put(
             "model_revision_id",
             execution.source_revisions->model_revision_id);
         source.put(
@@ -1830,6 +1846,10 @@ service::ExecutionMetadata decode_execution(
                     "calibration_revision_id", ""),
                 source->get<std::string>(
                     "calibration_checksum", ""),
+                source->get<std::string>(
+                    "reconciliation_revision_id", ""),
+                source->get<std::string>(
+                    "reconciliation_checksum", ""),
             };
     }
     value.components =

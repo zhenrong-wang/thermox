@@ -1744,6 +1744,133 @@ void test_calibrations_bind_exact_training_studies() {
             "training and validation Study sets must be disjoint");
 }
 
+void test_reconciliations_bind_exact_constraint_studies() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project =
+        service.create_project({team_a, "Reconciliation history", {}});
+    const auto model = service.create_model_revision({
+        team_a, project.project_id, {},
+        read_source_file("core/examples/air_compressor.topology.json"),
+    });
+    const auto design_case = service.create_case_revision({
+        team_a, project.project_id, model.model_revision_id, {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+    const auto held_out_case = service.create_case_revision({
+        team_a, project.project_id, model.model_revision_id, {},
+        R"({"schema_version":"thermox.case/v1","case":{
+          "id":"held-out","mode":"steady_state_design",
+          "fixed_values":{
+            "compressor.inlet.m_dot":{"value":100,"unit":"kg/s"},
+            "compressor.inlet.p":{"value":101.325,"unit":"kPa"},
+            "compressor.inlet.T":{"value":300,"unit":"K"},
+            "compressor.shaft.omega":314.1592653589793},
+          "initial_guesses":{
+            "compressor.outlet.p":{"value":1.2,"unit":"MPa"},
+            "compressor.outlet.h":{"value":650,"unit":"kJ/kg"},
+            "compressor.shaft.W_dot":{"value":35,"unit":"MW"}}
+        }})",
+    });
+    thermox::service::CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.model_revision_id = model.model_revision_id;
+    study_request.intent = design_case.mode;
+    study_request.study_id = "constraint";
+    study_request.case_revision_id = design_case.case_revision_id;
+    const auto constraint_study =
+        service.create_study_revision(study_request);
+    study_request.study_id = "held-out";
+    study_request.case_revision_id = held_out_case.case_revision_id;
+    const auto held_out_study =
+        service.create_study_revision(study_request);
+
+    thermox::service::CreateReconciliationRevisionRequest request;
+    request.identity = team_a;
+    request.project_id = project.project_id;
+    request.reconciliation_id = "power-state-reconciliation";
+    request.model_revision_id = model.model_revision_id;
+    request.constraint_study_revision_ids = {
+        constraint_study.study_revision_id,
+    };
+    request.held_out_study_revision_ids = {
+        held_out_study.study_revision_id,
+    };
+    request.definition_json = R"({
+      "schema_version":"thermox.calibration/v1",
+      "calibration":{
+        "id":"power-state-reconciliation",
+        "parameters":[{
+          "id":"efficiency","scope":"component",
+          "targets":["components.compressor.parameters.eta_is"],
+          "cases":["design"],
+          "bounds":{"lower":0.75,"upper":0.95}
+        }],
+        "observations":[{
+          "id":"required-power","case":"design",
+          "target":"compressor.shaft.W_dot",
+          "measured":{"value":36.229874174599141,"unit":"MW"},
+          "sigma":{"value":0.1,"unit":"MW"}
+        },{
+          "id":"held-out-power","case":"held-out",
+          "target":"compressor.shaft.W_dot",
+          "measured":{"value":36.229874174599141,"unit":"MW"},
+          "sigma":{"value":0.1,"unit":"MW"}
+        }]
+      }
+    })";
+    request.solver.max_iterations = 6;
+    const auto first =
+        service.create_reconciliation_revision(request);
+    request.parent_reconciliation_revision_id =
+        first.reconciliation_revision_id;
+    const auto second =
+        service.create_reconciliation_revision(request);
+    require(
+        first.revision_number == 1U && second.revision_number == 2U &&
+            first.checksum == second.checksum &&
+            service.list_reconciliation_revisions(
+                team_a, project.project_id).size() == 2U &&
+            !service.get_reconciliation_revision(
+                team_b, project.project_id,
+                first.reconciliation_revision_id),
+        "reconciliations must be immutable, deterministic, and Team scoped");
+    const auto resolved = service.resolve_reconciliation(
+        team_a, project.project_id,
+        first.reconciliation_revision_id);
+    require(
+        resolved && resolved->studies.size() == 2U &&
+            resolved->held_out_cases.size() == 1U &&
+            resolved->held_out_cases.front().observations.size() == 1U,
+        "reconciliation resolution must separate constraints from "
+        "held-out evidence");
+    thermox::service::DataReconciliationRequest execution;
+    execution.model_json = resolved->executable_model_json;
+    execution.reconciliation_id = first.reconciliation_id;
+    execution.mode = first.mode;
+    execution.solver = first.solver;
+    execution.profile_likelihood = first.profile_likelihood;
+    execution.held_out_cases = resolved->held_out_cases;
+    const auto result = thermox::service::SimulationService{
+        thermox::service::make_default_simulation_runtime()}
+        .run_data_reconciliation(execution);
+    require(
+        result.succeeded() && result.diagnostics.converged &&
+            result.held_out_results.size() == 1U,
+        "resolved reconciliation revisions must execute through the "
+        "ordinary reconciliation service");
+    const auto serialized = thermox::service::
+        serialize_reconciliation_revision_json(first);
+    require(
+        serialized.find("thermox.reconciliation_revision/v1") !=
+                std::string::npos &&
+            serialized.find("\"mode\": \"hard_equalities\"") !=
+                std::string::npos,
+        "reconciliation serialization must expose intent and policy");
+}
+
 void test_graph_edits_publish_valid_child_revisions() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -2200,6 +2327,7 @@ int main() {
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();
         test_calibrations_bind_exact_training_studies();
+        test_reconciliations_bind_exact_constraint_studies();
         test_graph_edits_publish_valid_child_revisions();
         test_case_edits_publish_atomic_child_revisions();
         test_revision_backed_validation_resolves_exact_inputs();

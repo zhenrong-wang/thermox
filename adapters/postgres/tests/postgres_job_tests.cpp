@@ -104,6 +104,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "016_performance_map_quality_reviews.sql",
              "017_study_artifact_qualifications.sql",
              "018_study_operating_envelopes.sql",
+             "019_reconciliation_revisions.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -163,6 +164,7 @@ SimulationJobRequest request(
             "sha256:" + std::string(64, '1'),
             "case-revision-postgres",
             "sha256:" + std::string(64, '2'),
+            {}, {}, {}, {}, {}, {}, {}, {},
         };
     value.steady_solver.max_iterations = 17;
     value.steady_solver.structural_decomposition_policy =
@@ -307,6 +309,7 @@ thermox::service::ExecutionMetadata execution() {
             "sha256:" + std::string(64, '1'),
             "case-revision-postgres",
             "sha256:" + std::string(64, '2'),
+            {}, {}, {}, {}, {}, {}, {}, {},
         };
     return value;
 }
@@ -1014,6 +1017,64 @@ void test_projects_and_immutable_model_revisions(
                 calibration.calibration_revision_id),
         "PostgreSQL calibrations must preserve Study bindings, "
         "solver policy, and Team isolation");
+
+    thermox::service::CreateReconciliationRevisionRequest
+        reconciliation_request;
+    reconciliation_request.identity = team_a;
+    reconciliation_request.project_id = project.project_id;
+    reconciliation_request.reconciliation_id =
+        "postgres-power-reconciliation";
+    reconciliation_request.model_revision_id = first.model_revision_id;
+    reconciliation_request.constraint_study_revision_ids = {
+        study.study_revision_id,
+    };
+    reconciliation_request.definition_json = R"json({
+      "schema_version":"thermox.calibration/v1",
+      "calibration":{
+        "id":"postgres-power-reconciliation",
+        "parameters":[{
+          "id":"efficiency","scope":"component",
+          "targets":["components.compressor.parameters.eta_is"],
+          "cases":["design"],
+          "bounds":{"lower":0.75,"upper":0.95}
+        }],
+        "observations":[{
+          "id":"required-power","case":"design",
+          "target":"compressor.shaft.W_dot",
+          "measured":{"value":36.229874174599141,"unit":"MW"},
+          "sigma":{"value":0.1,"unit":"MW"}
+        }]
+      }
+    })json";
+    reconciliation_request.solver.max_iterations = 9;
+    reconciliation_request.profile_likelihood.enabled = true;
+    reconciliation_request.profile_likelihood.parameter_ids = {
+        "efficiency",
+    };
+    const auto reconciliation =
+        projects.create_reconciliation_revision(
+            reconciliation_request);
+    const auto loaded_reconciliation =
+        projects.get_reconciliation_revision(
+            team_a, project.project_id,
+            reconciliation.reconciliation_revision_id);
+    const auto resolved_reconciliation =
+        projects.resolve_reconciliation(
+            team_a, project.project_id,
+            reconciliation.reconciliation_revision_id);
+    require(
+        loaded_reconciliation && resolved_reconciliation &&
+            loaded_reconciliation->constraint_study_revision_ids ==
+                reconciliation_request.constraint_study_revision_ids &&
+            loaded_reconciliation->solver.max_iterations == 9 &&
+            loaded_reconciliation->profile_likelihood.enabled &&
+            projects.list_reconciliation_revisions(
+                team_a, project.project_id).size() == 1U &&
+            !projects.get_reconciliation_revision(
+                team_b, project.project_id,
+                reconciliation.reconciliation_revision_id),
+        "PostgreSQL reconciliations must preserve Study bindings, "
+        "solver/profile policy, composition, and Team isolation");
 
     thermox::service::CreateRunConfigurationRevisionRequest
         run_request;

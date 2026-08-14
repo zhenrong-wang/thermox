@@ -223,6 +223,70 @@ service::CalibrationSolverSettings decode_calibration_solver(
     return value;
 }
 
+Tree reconciliation_policy_tree(
+    const service::ReconciliationSolverSettings& solver,
+    const service::ProfileLikelihoodSettings& profile) {
+    Tree tree;
+    tree.put("max_iterations", solver.max_iterations);
+    tree.put("finite_difference_fraction",
+             solver.finite_difference_fraction);
+    tree.put("constraint_tolerance", solver.constraint_tolerance);
+    tree.put("step_tolerance", solver.step_tolerance);
+    tree.put("objective_relative_tolerance",
+             solver.objective_relative_tolerance);
+    tree.put("minimum_line_search_fraction",
+             solver.minimum_line_search_fraction);
+    tree.add_child("simulation_solver",
+                   steady_solver_tree(solver.simulation_solver));
+    tree.put("profile.enabled", profile.enabled);
+    tree.put("profile.objective_increase", profile.objective_increase);
+    tree.put("profile.maximum_bracket_steps",
+             profile.maximum_bracket_steps);
+    tree.put("profile.maximum_bisection_steps",
+             profile.maximum_bisection_steps);
+    tree.put("profile.maximum_nuisance_iterations",
+             profile.maximum_nuisance_iterations);
+    Tree ids;
+    for (const auto& id : profile.parameter_ids) {
+        Tree item;
+        item.put_value(id);
+        ids.push_back({"", item});
+    }
+    tree.add_child("profile.parameter_ids", ids);
+    return tree;
+}
+
+void decode_reconciliation_policy(
+    const Tree& tree,
+    service::ReconciliationSolverSettings& solver,
+    service::ProfileLikelihoodSettings& profile) {
+    solver.max_iterations = tree.get<int>("max_iterations");
+    solver.finite_difference_fraction =
+        tree.get<double>("finite_difference_fraction");
+    solver.constraint_tolerance =
+        tree.get<double>("constraint_tolerance");
+    solver.step_tolerance = tree.get<double>("step_tolerance");
+    solver.objective_relative_tolerance =
+        tree.get<double>("objective_relative_tolerance");
+    solver.minimum_line_search_fraction =
+        tree.get<double>("minimum_line_search_fraction");
+    solver.simulation_solver = decode_steady_solver(
+        tree.get_child("simulation_solver"));
+    profile.enabled = tree.get<bool>("profile.enabled");
+    profile.objective_increase =
+        tree.get<double>("profile.objective_increase");
+    profile.maximum_bracket_steps =
+        tree.get<int>("profile.maximum_bracket_steps");
+    profile.maximum_bisection_steps =
+        tree.get<int>("profile.maximum_bisection_steps");
+    profile.maximum_nuisance_iterations =
+        tree.get<int>("profile.maximum_nuisance_iterations");
+    for (const auto& entry : tree.get_child("profile.parameter_ids")) {
+        profile.parameter_ids.push_back(
+            entry.second.get_value<std::string>());
+    }
+}
+
 std::string result_projections_payload(
     const std::vector<service::ResultProjection>& projections) {
     if (projections.empty()) {
@@ -630,6 +694,32 @@ service::CalibrationRevisionRecord decode_calibration_revision(
     return record;
 }
 
+service::ReconciliationRevisionRecord decode_reconciliation_revision(
+    const PGresult* result,
+    int row = 0) {
+    service::ReconciliationRevisionRecord record;
+    record.reconciliation_revision_id = field(result, row, 0);
+    record.reconciliation_id = field(result, row, 1);
+    record.project_id = field(result, row, 2);
+    record.team_id = field(result, row, 3);
+    record.revision_number = std::stoull(field(result, row, 4));
+    record.parent_reconciliation_revision_id =
+        optional_field(result, row, 5);
+    record.model_revision_id = field(result, row, 6);
+    record.definition_json = field(result, row, 7);
+    const auto mode = field(result, row, 8);
+    record.mode = mode == "hard_equalities"
+        ? service::ReconciliationMode::hard_equalities
+        : service::ReconciliationMode::weighted_measurements;
+    decode_reconciliation_policy(
+        read_tree(field(result, row, 9)),
+        record.solver, record.profile_likelihood);
+    record.checksum = field(result, row, 10);
+    record.created_by_user_id = field(result, row, 11);
+    record.created_at = decode_time(field(result, row, 12));
+    return record;
+}
+
 service::RunConfigurationRevisionRecord
 decode_run_configuration_revision(
     const PGresult* result,
@@ -711,6 +801,13 @@ constexpr const char calibration_revision_columns[] =
     "checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)::bigint::text";
 
+constexpr const char reconciliation_revision_columns[] =
+    "reconciliation_revision_id, reconciliation_id, project_id, "
+    "team_id, revision_number, parent_reconciliation_revision_id, "
+    "model_revision_id, definition_payload, mode, policy_payload, "
+    "checksum, created_by_user_id, "
+    "floor(extract(epoch FROM created_at) * 1000)::bigint::text";
+
 constexpr const char run_configuration_revision_columns[] =
     "run_configuration_revision_id, run_configuration_id, "
     "project_id, team_id, revision_number, "
@@ -744,7 +841,9 @@ public:
             "to_regclass("
             "'thermox_study_artifact_qualifications')::text, "
             "to_regclass("
-            "'thermox_run_configuration_revisions')::text");
+            "'thermox_run_configuration_revisions')::text, "
+            "to_regclass("
+            "'thermox_reconciliation_revisions')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
             PQgetisnull(schema.get(), 0, 1) ||
             PQgetisnull(schema.get(), 0, 2) ||
@@ -752,7 +851,8 @@ public:
             PQgetisnull(schema.get(), 0, 4) ||
             PQgetisnull(schema.get(), 0, 5) ||
             PQgetisnull(schema.get(), 0, 6) ||
-            PQgetisnull(schema.get(), 0, 7)) {
+            PQgetisnull(schema.get(), 0, 7) ||
+            PQgetisnull(schema.get(), 0, 8)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -1704,6 +1804,146 @@ public:
         return records;
     }
 
+    service::ReconciliationRevisionRecord
+    create_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& created_by_user_id,
+        const std::string& project_id,
+        const std::string& reconciliation_id,
+        const std::string& parent_reconciliation_revision_id,
+        const std::string& model_revision_id,
+        const std::vector<std::string>& constraint_study_revision_ids,
+        const std::vector<std::string>& held_out_study_revision_ids,
+        const std::string& definition_json,
+        service::ReconciliationMode mode,
+        const service::ReconciliationSolverSettings& solver,
+        const service::ProfileLikelihoodSettings& profile_likelihood,
+        const std::string& checksum) override {
+        auto connection = connect(connection_string_);
+        (void)execute(connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
+        if (!parent_reconciliation_revision_id.empty()) {
+            const auto parent = execute(
+                connection.get(),
+                "SELECT 1 FROM thermox_reconciliation_revisions "
+                "WHERE team_id=$1 AND project_id=$2 "
+                "AND reconciliation_id=$3 "
+                "AND reconciliation_revision_id=$4",
+                {team_id.c_str(), project_id.c_str(),
+                 reconciliation_id.c_str(),
+                 parent_reconciliation_revision_id.c_str()});
+            if (PQntuples(parent.get()) == 0) {
+                throw service::ProjectStateError(
+                    "parent reconciliation revision was not found");
+            }
+        }
+        const auto number = execute(
+            connection.get(),
+            "SELECT coalesce(max(revision_number),0)+1 FROM "
+            "thermox_reconciliation_revisions WHERE team_id=$1 "
+            "AND project_id=$2 AND reconciliation_id=$3",
+            {team_id.c_str(), project_id.c_str(),
+             reconciliation_id.c_str()});
+        const auto revision_number = field(number.get(), 0, 0);
+        const char* parent = parent_reconciliation_revision_id.empty()
+            ? nullptr : parent_reconciliation_revision_id.c_str();
+        const auto policy = write_tree(
+            reconciliation_policy_tree(solver, profile_likelihood));
+        const auto sql = std::string(
+            "INSERT INTO thermox_reconciliation_revisions (") +
+            "reconciliation_id,project_id,team_id,revision_number,"
+            "parent_reconciliation_revision_id,model_revision_id,"
+            "definition_payload,mode,policy_payload,checksum,"
+            "created_by_user_id) VALUES ($1,$2,$3,$4::bigint,$5,$6,"
+            "$7::jsonb,$8,$9::jsonb,$10,$11) RETURNING " +
+            reconciliation_revision_columns;
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {reconciliation_id.c_str(), project_id.c_str(),
+             team_id.c_str(), revision_number.c_str(), parent,
+             model_revision_id.c_str(), definition_json.c_str(),
+             service::to_string(mode).c_str(), policy.c_str(),
+             checksum.c_str(), created_by_user_id.c_str()});
+        auto record = decode_reconciliation_revision(result.get());
+        const auto insert_studies = [&](const auto& ids,
+                                        const char* role) {
+            for (std::size_t index = 0; index < ids.size(); ++index) {
+                const auto position = std::to_string(index);
+                (void)execute(
+                    connection.get(),
+                    "INSERT INTO thermox_reconciliation_studies ("
+                    "reconciliation_revision_id,project_id,team_id,"
+                    "role,position,study_revision_id) VALUES ("
+                    "$1,$2,$3,$4,$5::integer,$6)",
+                    {record.reconciliation_revision_id.c_str(),
+                     project_id.c_str(), team_id.c_str(), role,
+                     position.c_str(), ids[index].c_str()},
+                    PGRES_COMMAND_OK);
+            }
+        };
+        insert_studies(constraint_study_revision_ids, "constraint");
+        insert_studies(held_out_study_revision_ids, "held_out");
+        (void)execute(connection.get(), "COMMIT", {}, PGRES_COMMAND_OK);
+        record.constraint_study_revision_ids =
+            constraint_study_revision_ids;
+        record.held_out_study_revision_ids = held_out_study_revision_ids;
+        return record;
+    }
+
+    std::optional<service::ReconciliationRevisionRecord>
+    get_reconciliation_revision(
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            reconciliation_revision_columns +
+            " FROM thermox_reconciliation_revisions WHERE team_id=$1 "
+            "AND project_id=$2 AND reconciliation_revision_id=$3";
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {team_id.c_str(), project_id.c_str(),
+             reconciliation_revision_id.c_str()});
+        if (PQntuples(result.get()) == 0) return std::nullopt;
+        auto record = decode_reconciliation_revision(result.get());
+        record.constraint_study_revision_ids =
+            reconciliation_study_ids(
+                connection.get(), team_id, project_id,
+                reconciliation_revision_id, "constraint");
+        record.held_out_study_revision_ids =
+            reconciliation_study_ids(
+                connection.get(), team_id, project_id,
+                reconciliation_revision_id, "held_out");
+        return record;
+    }
+
+    std::vector<service::ReconciliationRevisionRecord>
+    list_reconciliation_revisions(
+        const std::string& team_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto sql = std::string("SELECT ") +
+            reconciliation_revision_columns +
+            " FROM thermox_reconciliation_revisions WHERE team_id=$1 "
+            "AND project_id=$2 ORDER BY reconciliation_id,revision_number";
+        const auto result = execute(
+            connection.get(), sql.c_str(),
+            {team_id.c_str(), project_id.c_str()});
+        std::vector<service::ReconciliationRevisionRecord> records;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            auto record = decode_reconciliation_revision(result.get(), row);
+            record.constraint_study_revision_ids =
+                reconciliation_study_ids(
+                    connection.get(), team_id, project_id,
+                    record.reconciliation_revision_id, "constraint");
+            record.held_out_study_revision_ids =
+                reconciliation_study_ids(
+                    connection.get(), team_id, project_id,
+                    record.reconciliation_revision_id, "held_out");
+            records.push_back(std::move(record));
+        }
+        return records;
+    }
+
     service::RunConfigurationRevisionRecord
     create_run_configuration_revision(
         const std::string& team_id,
@@ -1879,6 +2119,28 @@ private:
             "ORDER BY position",
             {team_id.c_str(), project_id.c_str(),
              calibration_revision_id.c_str(), role});
+        std::vector<std::string> ids;
+        for (int row = 0; row < PQntuples(result.get()); ++row) {
+            ids.push_back(field(result.get(), row, 0));
+        }
+        return ids;
+    }
+
+    static std::vector<std::string> reconciliation_study_ids(
+        PGconn* connection,
+        const std::string& team_id,
+        const std::string& project_id,
+        const std::string& reconciliation_revision_id,
+        const char* role) {
+        const auto result = execute(
+            connection,
+            "SELECT study_revision_id FROM "
+            "thermox_reconciliation_studies "
+            "WHERE team_id = $1 AND project_id = $2 "
+            "AND reconciliation_revision_id = $3 AND role = $4 "
+            "ORDER BY position",
+            {team_id.c_str(), project_id.c_str(),
+             reconciliation_revision_id.c_str(), role});
         std::vector<std::string> ids;
         for (int row = 0; row < PQntuples(result.get()); ++row) {
             ids.push_back(field(result.get(), row, 0));

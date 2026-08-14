@@ -277,3 +277,9 @@ revisions are now resolved through `EngineeringArtifactContentStore`; its object
 stored bytes against the PostgreSQL manifest before decoding them into service DTOs. The older
 `EngineeringArtifactResolver` remains useful for deployment-installed references and embedded
 callers, while production revision-backed HTTP jobs carry verified inline snapshots.
+
+`thermox.reconciliation_revision/v1` is persisted separately from calibration. It owns exact
+constraint and held-out Study bindings, a canonical adjustable/observation definition,
+hard-versus-weighted mode, solver/profile policy, and checksum. PostgreSQL migration 019 stores
+the revision and its ordered Study roles under Team/project foreign keys. Resolved durable jobs
+retain the reconciliation revision ID and checksum in execution provenance.

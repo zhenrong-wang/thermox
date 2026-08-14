@@ -256,6 +256,10 @@ void revision_provenance_json(
     json_string(out, source.calibration_revision_id);
     out << ", \"calibration_checksum\": ";
     json_string(out, source.calibration_checksum);
+    out << ", \"reconciliation_revision_id\": ";
+    json_string(out, source.reconciliation_revision_id);
+    out << ", \"reconciliation_checksum\": ";
+    json_string(out, source.reconciliation_checksum);
     out << ", \"model_revision_id\": ";
     json_string(out, source.model_revision_id);
     out << ", \"model_checksum\": ";

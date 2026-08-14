@@ -3158,6 +3158,8 @@ Response Api::handle(const Request& request) const {
                         resolved->calibration
                             .calibration_revision_id,
                         resolved->calibration.checksum,
+                        {},
+                        {},
                     };
                 command.calibration_solver =
                     resolved->calibration.solver;
@@ -3207,6 +3209,8 @@ Response Api::handle(const Request& request) const {
                     resolved->configuration.checksum,
                     resolved->study.study_revision_id,
                     resolved->study.checksum,
+                    {},
+                    {},
                     {},
                     {},
                 };

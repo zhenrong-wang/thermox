@@ -52,6 +52,7 @@ thermox::service::SimulationJobRequest steady_request(
             "sha256:" + std::string(64, '1'),
             "case-revision-job-test",
             "sha256:" + std::string(64, '2'),
+            {}, {}, {}, {}, {}, {}, {}, {},
         };
     return request;
 }
@@ -585,6 +586,15 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
         read_source_file("examples/data_reconciliation.json");
     request.reconciliation_id = "fixed_power_relaxed_airflow";
     request.reconciliation_solver.max_iterations = 6;
+    thermox::service::RevisionProvenance source;
+    source.project_id = "project-job-test";
+    source.model_revision_id = "model-revision-job-test";
+    source.model_checksum = "sha256:" + std::string(64, '1');
+    source.reconciliation_revision_id =
+        "reconciliation-revision-job-test";
+    source.reconciliation_checksum =
+        "sha256:" + std::string(64, '4');
+    request.source_revisions = source;
 
     const auto queued = service.submit(request);
     const auto completed =
@@ -597,7 +607,10 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
             !completed->result_summary.has_value() &&
             completed->execution.has_value() &&
             completed->execution->operation ==
-                "data_reconciliation",
+                "data_reconciliation" &&
+            completed->execution->source_revisions
+                    ->reconciliation_revision_id ==
+                "reconciliation-revision-job-test",
         "reconciliation must execute through the leased worker and "
         "publish ordinary execution provenance");
     const auto result = service.get_result(team_a, queued.job_id);

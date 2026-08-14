@@ -406,9 +406,12 @@ Next:
 20. Carry data reconciliation through the common `thermox.job/v16` idempotent queue, leased
     worker, execution-provenance, and checksummed result-artifact boundary without moving
     reconciliation logic out of the service. ✅
-21. Add a distinct immutable reconciliation revision and production HTTP/Study authoring path;
-    do not relabel reconciliation definitions as calibration revisions.
-22. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
+21. Add a distinct immutable reconciliation revision with disjoint constraint/held-out Study
+    bindings, exact artifact snapshots, solver/profile policy, in-memory and PostgreSQL
+    persistence, executable resolution, and reconciliation-specific job provenance. ✅
+22. Add thin production HTTP and web Study authoring/submission for immutable reconciliation
+    revisions; never accept an unrevisioned production model body.
+23. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
     profiling is insufficient; allow a sparse QR/SVD backend for very large rectangular
     sensitivities.
 

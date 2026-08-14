@@ -480,6 +480,8 @@ export interface RevisionProvenance {
   case_checksum: string
   calibration_revision_id: string
   calibration_checksum: string
+  reconciliation_revision_id: string
+  reconciliation_checksum: string
 }
 
 export interface ResultSummaryValue {

@@ -405,6 +405,69 @@ std::string calibration_identity(
     return out.str();
 }
 
+void validate_reconciliation_solver(
+    const ReconciliationSolverSettings& value,
+    const ProfileLikelihoodSettings& profile) {
+    validate_steady_solver(value.simulation_solver);
+    if (value.max_iterations <= 0 ||
+        !std::isfinite(value.finite_difference_fraction) ||
+        value.finite_difference_fraction <= 0.0 ||
+        value.finite_difference_fraction >= 1.0 ||
+        !std::isfinite(value.constraint_tolerance) ||
+        value.constraint_tolerance <= 0.0 ||
+        !std::isfinite(value.step_tolerance) ||
+        value.step_tolerance <= 0.0 ||
+        !std::isfinite(value.objective_relative_tolerance) ||
+        value.objective_relative_tolerance <= 0.0 ||
+        !std::isfinite(value.minimum_line_search_fraction) ||
+        value.minimum_line_search_fraction <= 0.0 ||
+        value.minimum_line_search_fraction >= 1.0 ||
+        (profile.enabled &&
+         (!std::isfinite(profile.objective_increase) ||
+          profile.objective_increase <= 0.0 ||
+          profile.maximum_bracket_steps <= 0 ||
+          profile.maximum_bisection_steps <= 0 ||
+          profile.maximum_nuisance_iterations <= 0))) {
+        throw ProjectRequestError(
+            "invalid reconciliation solver settings");
+    }
+}
+
+std::string reconciliation_identity(
+    const CreateReconciliationRevisionRequest& request,
+    const std::vector<std::string>& constraints,
+    const std::vector<std::string>& held_out,
+    const std::string& definition_json) {
+    std::ostringstream out;
+    const auto append = [&](const std::string& value) {
+        out << value.size() << ':' << value << '|';
+    };
+    append(request.reconciliation_id);
+    append(request.model_revision_id);
+    append(to_string(request.mode));
+    for (const auto& id : constraints) append(id);
+    out << "held_out|";
+    for (const auto& id : held_out) append(id);
+    append(definition_json);
+    const auto& solver = request.solver;
+    out << std::setprecision(17)
+        << solver.max_iterations << '|'
+        << solver.finite_difference_fraction << '|'
+        << solver.constraint_tolerance << '|'
+        << solver.step_tolerance << '|'
+        << solver.objective_relative_tolerance << '|'
+        << solver.minimum_line_search_fraction << '|';
+    append_steady(out, solver.simulation_solver);
+    const auto& profile = request.profile_likelihood;
+    out << profile.enabled << '|'
+        << profile.objective_increase << '|'
+        << profile.maximum_bracket_steps << '|'
+        << profile.maximum_bisection_steps << '|'
+        << profile.maximum_nuisance_iterations << '|';
+    for (const auto& id : profile.parameter_ids) append(id);
+    return out.str();
+}
+
 }  // namespace
 
 std::string to_string(
@@ -2022,6 +2085,197 @@ ProjectService::list_calibration_revisions(
         identity.team_id, project_id);
 }
 
+ReconciliationRevisionRecord
+ProjectService::create_reconciliation_revision(
+    const CreateReconciliationRevisionRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() ||
+        request.reconciliation_id.empty() ||
+        request.model_revision_id.empty() ||
+        request.definition_json.empty() ||
+        request.constraint_study_revision_ids.empty()) {
+        throw ProjectRequestError(
+            "project, reconciliation, model revision, definition, and "
+            "constraint Studies must not be empty");
+    }
+    validate_reconciliation_solver(
+        request.solver, request.profile_likelihood);
+    auto constraints = request.constraint_study_revision_ids;
+    auto held_out = request.held_out_study_revision_ids;
+    std::sort(constraints.begin(), constraints.end());
+    std::sort(held_out.begin(), held_out.end());
+    if (std::adjacent_find(constraints.begin(), constraints.end()) !=
+            constraints.end() ||
+        std::adjacent_find(held_out.begin(), held_out.end()) !=
+            held_out.end()) {
+        throw ProjectRequestError(
+            "reconciliation Study revision IDs must be unique");
+    }
+    std::vector<std::string> overlap;
+    std::set_intersection(
+        constraints.begin(), constraints.end(),
+        held_out.begin(), held_out.end(),
+        std::back_inserter(overlap));
+    if (!overlap.empty()) {
+        throw ProjectRequestError(
+            "constraint and held-out Studies must be disjoint");
+    }
+    const auto model = repository_->get_model_revision(
+        request.identity.team_id, request.project_id,
+        request.model_revision_id);
+    if (!model) throw ProjectStateError("model revision was not found");
+
+    std::vector<platform::CaseDefinition> cases;
+    std::set<std::string> constraint_case_ids;
+    std::set<std::string> held_out_case_ids;
+    std::optional<std::vector<std::string>> artifact_snapshot;
+    const auto collect = [&](const std::vector<std::string>& ids,
+                             bool is_constraint) {
+        for (const auto& id : ids) {
+            const auto study = repository_->get_study_revision(
+                request.identity.team_id, request.project_id, id);
+            if (!study ||
+                study->model_revision_id != request.model_revision_id) {
+                throw ProjectStateError(
+                    "reconciliation Study was not found for the model");
+            }
+            if (run_mode(study->intent) != "steady") {
+                throw ProjectRequestError(
+                    "reconciliation currently supports steady Studies only");
+            }
+            if (!artifact_snapshot) {
+                artifact_snapshot = study->artifact_revision_ids;
+            } else if (*artifact_snapshot !=
+                       study->artifact_revision_ids) {
+                throw ProjectRequestError(
+                    "all reconciliation Studies must bind the same "
+                    "engineering artifact revisions");
+            }
+            const auto simulation_case =
+                repository_->get_case_revision(
+                    request.identity.team_id, request.project_id,
+                    request.model_revision_id, study->case_revision_id);
+            if (!simulation_case) {
+                throw ProjectStateError(
+                    "reconciliation Study case was not found");
+            }
+            auto parsed = platform::parse_case_document_text(
+                simulation_case->canonical_case_json, units_);
+            auto& case_ids = is_constraint
+                ? constraint_case_ids : held_out_case_ids;
+            if (!case_ids.insert(parsed.id).second) {
+                throw ProjectRequestError(
+                    "reconciliation Studies must bind distinct case IDs");
+            }
+            if (std::none_of(cases.begin(), cases.end(),
+                    [&](const auto& item) { return item.id == parsed.id; })) {
+                cases.push_back(std::move(parsed));
+            }
+        }
+    };
+    collect(constraints, true);
+    collect(held_out, false);
+
+    try {
+        auto definition = platform::parse_calibration_document_text(
+            request.definition_json, units_);
+        if (definition.id != request.reconciliation_id) {
+            throw ProjectRequestError(
+                "reconciliation definition ID does not match "
+                "reconciliation_id");
+        }
+        std::set<std::string> observed_cases;
+        std::size_t constraint_observations = 0;
+        for (const auto& observation : definition.observations) {
+            observed_cases.insert(observation.case_id);
+            if (constraint_case_ids.contains(observation.case_id)) {
+                ++constraint_observations;
+            } else if (!held_out_case_ids.contains(observation.case_id)) {
+                throw ProjectRequestError(
+                    "reconciliation observations must reference a "
+                    "bound constraint or held-out Study case");
+            }
+        }
+        if (request.mode == ReconciliationMode::hard_equalities &&
+            constraint_observations != definition.parameters.size()) {
+            throw ProjectRequestError(
+                "hard reconciliation requires one constraint "
+                "observation per adjustable quantity");
+        }
+        if (request.mode == ReconciliationMode::weighted_measurements &&
+            constraint_observations < definition.parameters.size()) {
+            throw ProjectRequestError(
+                "weighted reconciliation requires at least as many "
+                "constraint observations as adjustable quantities");
+        }
+        for (const auto& case_id : constraint_case_ids) {
+            if (!observed_cases.contains(case_id)) {
+                throw ProjectRequestError(
+                    "constraint Study case has no reconciliation "
+                    "observation: " + case_id);
+            }
+        }
+        for (const auto& case_id : held_out_case_ids) {
+            if (!observed_cases.contains(case_id)) {
+                throw ProjectRequestError(
+                    "held-out Study case has no reconciliation "
+                    "observation: " + case_id);
+            }
+        }
+        auto composed = platform::parse_topology_document_text(
+            model->canonical_model_json, units_);
+        composed.schema_version = "thermox.model/v2";
+        composed.cases = std::move(cases);
+        composed.calibrations = {definition};
+        (void)platform::parse_model_document_text(
+            detail::serialize_model_document_json(composed), units_);
+        const auto canonical_definition =
+            detail::serialize_calibration_document_json(definition);
+        return repository_->create_reconciliation_revision(
+            request.identity.team_id, request.identity.user_id,
+            request.project_id, request.reconciliation_id,
+            request.parent_reconciliation_revision_id,
+            request.model_revision_id, constraints, held_out,
+            canonical_definition, request.mode, request.solver,
+            request.profile_likelihood,
+            checksum(reconciliation_identity(
+                request, constraints, held_out,
+                canonical_definition)));
+    } catch (const ProjectRequestError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid reconciliation revision: ") +
+            error.what());
+    }
+}
+
+std::optional<ReconciliationRevisionRecord>
+ProjectService::get_reconciliation_revision(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& reconciliation_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || reconciliation_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and reconciliation revision IDs must not be empty");
+    }
+    return repository_->get_reconciliation_revision(
+        identity.team_id, project_id, reconciliation_revision_id);
+}
+
+std::vector<ReconciliationRevisionRecord>
+ProjectService::list_reconciliation_revisions(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError("project ID must not be empty");
+    }
+    return repository_->list_reconciliation_revisions(
+        identity.team_id, project_id);
+}
+
 std::optional<RunConfigurationRevisionRecord>
 ProjectService::get_run_configuration_revision(
     const IdentityContext& identity,
@@ -2272,6 +2526,123 @@ ProjectService::resolve_calibration(
     } catch (const std::exception& error) {
         throw ProjectStateError(
             std::string("persisted calibration composition failed: ") +
+            error.what());
+    }
+}
+
+std::optional<ResolvedReconciliation>
+ProjectService::resolve_reconciliation(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& reconciliation_revision_id) const {
+    const auto reconciliation = get_reconciliation_revision(
+        identity, project_id, reconciliation_revision_id);
+    if (!reconciliation) return std::nullopt;
+    const auto model = repository_->get_model_revision(
+        identity.team_id, project_id,
+        reconciliation->model_revision_id);
+    if (!model) {
+        throw ProjectStateError(
+            "persisted reconciliation model revision was not found");
+    }
+    std::vector<StudyRevisionRecord> studies;
+    std::vector<platform::CaseDefinition> cases;
+    std::set<std::string> constraint_case_ids;
+    std::set<std::string> held_out_case_ids;
+    std::optional<std::vector<std::string>> artifact_ids;
+    const auto collect = [&](const std::vector<std::string>& ids,
+                             bool constraint) {
+        for (const auto& id : ids) {
+            const auto study = repository_->get_study_revision(
+                identity.team_id, project_id, id);
+            if (!study ||
+                study->model_revision_id != model->model_revision_id) {
+                throw ProjectStateError(
+                    "persisted reconciliation Study was not found");
+            }
+            if (!artifact_ids) {
+                artifact_ids = study->artifact_revision_ids;
+            } else if (*artifact_ids != study->artifact_revision_ids) {
+                throw ProjectStateError(
+                    "persisted reconciliation Studies have "
+                    "incompatible artifact revisions");
+            }
+            const auto simulation_case =
+                repository_->get_case_revision(
+                    identity.team_id, project_id,
+                    model->model_revision_id, study->case_revision_id);
+            if (!simulation_case) {
+                throw ProjectStateError(
+                    "persisted reconciliation case was not found");
+            }
+            auto parsed = platform::parse_case_document_text(
+                simulation_case->canonical_case_json, units_);
+            (constraint ? constraint_case_ids : held_out_case_ids)
+                .insert(parsed.id);
+            if (std::none_of(cases.begin(), cases.end(),
+                    [&](const auto& item) { return item.id == parsed.id; })) {
+                cases.push_back(std::move(parsed));
+            }
+            studies.push_back(*study);
+        }
+    };
+    collect(reconciliation->constraint_study_revision_ids, true);
+    collect(reconciliation->held_out_study_revision_ids, false);
+    const auto artifacts = resolve_artifact_revisions(
+        identity, project_id,
+        artifact_ids.value_or(std::vector<std::string>{}));
+    if (!artifacts) {
+        throw ProjectStateError(
+            "persisted reconciliation artifacts were not found");
+    }
+    try {
+        auto document = platform::parse_topology_document_text(
+            model->canonical_model_json, units_);
+        document.schema_version = "thermox.model/v2";
+        document.cases = std::move(cases);
+        auto definition = platform::parse_calibration_document_text(
+            reconciliation->definition_json, units_);
+        std::vector<StudyPredictionCase> held_out;
+        auto constraint_definition = definition;
+        constraint_definition.observations.clear();
+        for (const auto& observation : definition.observations) {
+            if (constraint_case_ids.contains(observation.case_id)) {
+                constraint_definition.observations.push_back(observation);
+                continue;
+            }
+            if (!held_out_case_ids.contains(observation.case_id)) {
+                throw ProjectStateError(
+                    "persisted reconciliation observation is not bound "
+                    "to a reconciliation Study");
+            }
+            auto prediction = std::find_if(
+                held_out.begin(), held_out.end(),
+                [&](const auto& item) {
+                    return item.case_id == observation.case_id;
+                });
+            if (prediction == held_out.end()) {
+                held_out.push_back({observation.case_id, {}});
+                prediction = std::prev(held_out.end());
+            }
+            prediction->observations.push_back({
+                observation.id,
+                observation.target,
+                observation.measured.dimension,
+                observation.measured.value_si,
+                observation.sigma.value_si,
+            });
+        }
+        document.calibrations = {std::move(constraint_definition)};
+        const auto executable =
+            detail::serialize_model_document_json(document);
+        (void)platform::parse_model_document_text(executable, units_);
+        return ResolvedReconciliation{
+            *reconciliation, *model, std::move(studies), executable,
+            std::move(held_out), *artifacts,
+        };
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string("persisted reconciliation composition failed: ") +
             error.what());
     }
 }
