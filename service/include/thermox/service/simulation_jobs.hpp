@@ -57,6 +57,8 @@ struct SimulationJobRequest {
         ReconciliationMode::hard_equalities};
     ReconciliationSolverSettings reconciliation_solver;
     ProfileLikelihoodSettings reconciliation_profile_likelihood;
+    JointConfidenceRegionSettings
+        reconciliation_joint_confidence_region;
     std::vector<StudyPredictionCase> reconciliation_held_out_cases;
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;

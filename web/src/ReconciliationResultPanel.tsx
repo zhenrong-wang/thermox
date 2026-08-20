@@ -96,6 +96,15 @@ export function ReconciliationResultPanel({
                     <small>{interval.message}</small>
                   </article>
                 ))}
+                {result.joint_confidence_region && (
+                  <article>
+                    <div><strong>Joint parameter region</strong><code>local ellipsoid</code></div>
+                    <span>{result.joint_confidence_region.succeeded
+                      ? `${result.joint_confidence_region.parameter_ids.length} parameters · Δobjective ${value(result.joint_confidence_region.requested_objective_increase)}`
+                      : 'unavailable'}</span>
+                    <small>{result.joint_confidence_region.message}. {result.joint_confidence_region.interpretation}</small>
+                  </article>
+                )}
               </div>
             </section>
           </>

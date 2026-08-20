@@ -1822,6 +1822,11 @@ void test_reconciliations_bind_exact_constraint_studies() {
       }
     })";
     request.solver.max_iterations = 6;
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.joint_confidence_region.enabled = true;
+    request.joint_confidence_region.objective_increase = 1.0;
+    request.joint_confidence_region.parameter_ids = {"efficiency"};
     const auto first =
         service.create_reconciliation_revision(request);
     request.parent_reconciliation_revision_id =
@@ -1852,12 +1857,15 @@ void test_reconciliations_bind_exact_constraint_studies() {
     execution.mode = first.mode;
     execution.solver = first.solver;
     execution.profile_likelihood = first.profile_likelihood;
+    execution.joint_confidence_region = first.joint_confidence_region;
     execution.held_out_cases = resolved->held_out_cases;
     const auto result = thermox::service::SimulationService{
         thermox::service::make_default_simulation_runtime()}
         .run_data_reconciliation(execution);
     require(
         result.succeeded() && result.diagnostics.converged &&
+            result.joint_confidence_region.has_value() &&
+            result.joint_confidence_region->succeeded &&
             result.held_out_results.size() == 1U,
         "resolved reconciliation revisions must execute through the "
         "ordinary reconciliation service");
@@ -1866,7 +1874,9 @@ void test_reconciliations_bind_exact_constraint_studies() {
     require(
         serialized.find("thermox.reconciliation_revision/v1") !=
                 std::string::npos &&
-            serialized.find("\"mode\": \"hard_equalities\"") !=
+            serialized.find("\"mode\": \"weighted_measurements\"") !=
+                std::string::npos &&
+            serialized.find("\"joint_confidence_region\":") !=
                 std::string::npos,
         "reconciliation serialization must expose intent and policy");
 }

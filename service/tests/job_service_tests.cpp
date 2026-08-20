@@ -584,8 +584,15 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
         thermox::service::SimulationJobMode::reconciliation;
     request.model_json =
         read_source_file("examples/data_reconciliation.json");
-    request.reconciliation_id = "fixed_power_relaxed_airflow";
+    request.reconciliation_id = "weighted_airflow_efficiency";
+    request.reconciliation_mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
     request.reconciliation_solver.max_iterations = 6;
+    request.reconciliation_joint_confidence_region.enabled = true;
+    request.reconciliation_joint_confidence_region.objective_increase =
+        2.0;
+    request.reconciliation_joint_confidence_region.parameter_ids = {
+        "airflow", "efficiency"};
     thermox::service::RevisionProvenance source;
     source.project_id = "project-job-test";
     source.model_revision_id = "model-revision-job-test";
@@ -621,9 +628,12 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
                 std::string::npos &&
             result->content.find(
                 "\"reconciliation_id\": "
-                "\"fixed_power_relaxed_airflow\"") !=
+                "\"weighted_airflow_efficiency\"") !=
                 std::string::npos &&
             result->content.find("\"converged\": true") !=
+                std::string::npos &&
+            result->content.find(
+                "\"joint_confidence_region\": {") !=
                 std::string::npos,
         "durable reconciliation results must retain intent, identity, "
         "and convergence evidence");
@@ -636,7 +646,7 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
                 std::string::npos &&
             status.find(
                 "\"reconciliation_id\": "
-                "\"fixed_power_relaxed_airflow\"") !=
+                "\"weighted_airflow_efficiency\"") !=
                 std::string::npos,
         "job status must expose the durable reconciliation identity");
 }

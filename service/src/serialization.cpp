@@ -2610,7 +2610,52 @@ std::string serialize_data_reconciliation_response_json(
         json_string(out, interval.message);
         out << "}";
     }
-    out << "],\n  \"held_out_results\": [";
+    out << "],\n  \"joint_confidence_region\": ";
+    if (!response.joint_confidence_region.has_value()) {
+        out << "null";
+    } else {
+        const auto& region = *response.joint_confidence_region;
+        out << "{\"parameter_ids\": [";
+        for (std::size_t index = 0;
+             index < region.parameter_ids.size(); ++index) {
+            if (index != 0) out << ", ";
+            json_string(out, region.parameter_ids[index]);
+        }
+        out << "], \"dimensions\": [";
+        for (std::size_t index = 0;
+             index < region.dimensions.size(); ++index) {
+            if (index != 0) out << ", ";
+            json_string(out, region.dimensions[index]);
+        }
+        out << "], \"center_si\": [";
+        for (std::size_t index = 0;
+             index < region.center_si.size(); ++index) {
+            if (index != 0) out << ", ";
+            json_number(out, region.center_si[index]);
+        }
+        out << "], \"covariance_si\": [";
+        for (std::size_t row = 0;
+             row < region.covariance_si.size(); ++row) {
+            if (row != 0) out << ", ";
+            out << '[';
+            for (std::size_t column = 0;
+                 column < region.covariance_si[row].size(); ++column) {
+                if (column != 0) out << ", ";
+                json_number(out, region.covariance_si[row][column]);
+            }
+            out << ']';
+        }
+        out << "], \"requested_objective_increase\": ";
+        json_number(out, region.requested_objective_increase);
+        out << ", \"succeeded\": "
+            << (region.succeeded ? "true" : "false")
+            << ", \"interpretation\": ";
+        json_string(out, region.interpretation);
+        out << ", \"message\": ";
+        json_string(out, region.message);
+        out << '}';
+    }
+    out << ",\n  \"held_out_results\": [";
     for (std::size_t index = 0;
          index < response.held_out_results.size(); ++index) {
         if (index != 0) out << ", ";

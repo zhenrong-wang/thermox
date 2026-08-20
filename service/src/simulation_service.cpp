@@ -30,6 +30,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -1198,7 +1199,8 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const ReconciliationSolverSettings& settings,
     ReconciliationMode mode,
-    const ProfileLikelihoodSettings& profile) {
+    const ProfileLikelihoodSettings& profile,
+    const JointConfidenceRegionSettings& joint_region) {
     SolverProvenance provenance{
         mode == ReconciliationMode::hard_equalities
             ? "thermox.reconciliation-newton/v1"
@@ -1225,6 +1227,10 @@ SolverProvenance solver_provenance(
              static_cast<double>(profile.maximum_bisection_steps)},
             {"profile_likelihood.maximum_nuisance_iterations",
              static_cast<double>(profile.maximum_nuisance_iterations)},
+            {"joint_confidence_region.enabled",
+             joint_region.enabled ? 1.0 : 0.0},
+            {"joint_confidence_region.objective_increase",
+             joint_region.objective_increase},
         },
     };
     const auto simulation =
@@ -3175,7 +3181,11 @@ SimulationService::run_data_reconciliation(
           request.profile_likelihood.objective_increase <= 0.0 ||
           request.profile_likelihood.maximum_bracket_steps <= 0 ||
           request.profile_likelihood.maximum_bisection_steps <= 0 ||
-          request.profile_likelihood.maximum_nuisance_iterations <= 0))) {
+          request.profile_likelihood.maximum_nuisance_iterations <= 0)) ||
+        (request.joint_confidence_region.enabled &&
+         (!std::isfinite(
+              request.joint_confidence_region.objective_increase) ||
+          request.joint_confidence_region.objective_increase <= 0.0))) {
         response.error = make_error(
             "invalid_reconciliation_settings", "request",
             "invalid data-reconciliation solver settings");
@@ -3221,6 +3231,12 @@ SimulationService::run_data_reconciliation(
             request.mode != ReconciliationMode::weighted_measurements) {
             throw std::invalid_argument(
                 "profile likelihood requires weighted-measurements "
+                "reconciliation mode");
+        }
+        if (request.joint_confidence_region.enabled &&
+            request.mode != ReconciliationMode::weighted_measurements) {
+            throw std::invalid_argument(
+                "joint confidence regions require weighted-measurements "
                 "reconciliation mode");
         }
         if (request.mode == ReconciliationMode::hard_equalities &&
@@ -3269,6 +3285,24 @@ SimulationService::run_data_reconciliation(
                 }
             }
         }
+        if (request.joint_confidence_region.enabled) {
+            std::set<std::string> parameter_ids;
+            for (const auto& parameter : definition->parameters) {
+                parameter_ids.insert(parameter.id);
+            }
+            std::set<std::string> requested_ids;
+            for (const auto& id :
+                 request.joint_confidence_region.parameter_ids) {
+                if (id.empty() ||
+                    !requested_ids.insert(id).second ||
+                    !parameter_ids.contains(id)) {
+                    throw std::invalid_argument(
+                        "joint-confidence-region parameter IDs must be "
+                        "unique and reference declared adjustable "
+                        "quantities: " + id);
+                }
+            }
+        }
         std::set<std::pair<std::string, std::string>> hard_targets;
         for (const auto& observation : definition->observations) {
             hard_targets.emplace(
@@ -3308,7 +3342,8 @@ SimulationService::run_data_reconciliation(
             document, request.schema_version, "",
             "data_reconciliation",
             solver_provenance(
-                settings, request.mode, request.profile_likelihood),
+                settings, request.mode, request.profile_likelihood,
+                request.joint_confidence_region),
             runtime->impl_->fingerprint,
             runtime->impl_->components,
             runtime->impl_->properties);
@@ -3965,6 +4000,77 @@ SimulationService::run_data_reconciliation(
                     correlation,
                 });
             }
+        }
+        if (request.joint_confidence_region.enabled) {
+            ReconciliationJointConfidenceRegion region;
+            region.requested_objective_increase =
+                request.joint_confidence_region.objective_increase;
+            region.interpretation =
+                "local_asymptotic_weighted_least_squares_ellipsoid; "
+                "delta_parameter^T covariance^-1 delta_parameter <= "
+                "requested_objective_increase; no coverage probability "
+                "is inferred";
+
+            std::vector<std::size_t> selected_indices;
+            if (request.joint_confidence_region.parameter_ids.empty()) {
+                selected_indices.resize(count);
+                std::iota(
+                    selected_indices.begin(), selected_indices.end(), 0U);
+            } else {
+                for (const auto& requested_id :
+                     request.joint_confidence_region.parameter_ids) {
+                    const auto found = std::find_if(
+                        definition->parameters.begin(),
+                        definition->parameters.end(),
+                        [&](const auto& parameter) {
+                            return parameter.id == requested_id;
+                        });
+                    selected_indices.push_back(
+                        static_cast<std::size_t>(std::distance(
+                            definition->parameters.begin(), found)));
+                }
+            }
+
+            std::vector<std::optional<std::size_t>> free_positions(count);
+            for (std::size_t position = 0;
+                 position < free_indices.size(); ++position) {
+                free_positions[free_indices[position]] = position;
+            }
+            bool selected_bound_active = false;
+            for (const auto index : selected_indices) {
+                const auto& parameter = definition->parameters[index];
+                region.parameter_ids.push_back(parameter.id);
+                region.dimensions.push_back(
+                    parameter.lower_bound->dimension);
+                region.center_si.push_back(values[index]);
+                selected_bound_active =
+                    selected_bound_active || bound_active[index];
+            }
+            if (selected_bound_active) {
+                region.message =
+                    "a selected parameter is bound-active; a two-sided "
+                    "local covariance ellipsoid is not valid";
+            } else {
+                region.covariance_si.assign(
+                    selected_indices.size(),
+                    std::vector<double>(selected_indices.size(), 0.0));
+                for (std::size_t row = 0;
+                     row < selected_indices.size(); ++row) {
+                    for (std::size_t column = 0;
+                         column < selected_indices.size(); ++column) {
+                        region.covariance_si[row][column] =
+                            free_covariance[*free_positions[
+                                selected_indices[row]]]
+                                           [*free_positions[
+                                               selected_indices[column]]];
+                    }
+                }
+                region.succeeded = true;
+                region.message =
+                    "local joint covariance ellipsoid computed from the "
+                    "whitened free-parameter sensitivity";
+            }
+            response.joint_confidence_region = std::move(region);
         }
         } catch (const std::exception& ex) {
         response.status = OperationStatus::solver_failed;

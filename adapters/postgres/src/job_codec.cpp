@@ -1260,6 +1260,34 @@ decode_profile_likelihood_settings(const Tree& tree) {
     return value;
 }
 
+Tree joint_confidence_region_settings(
+    const service::JointConfidenceRegionSettings& value) {
+    Tree tree;
+    tree.put("enabled", value.enabled);
+    tree.put("objective_increase", value.objective_increase);
+    tree.add_child(
+        "parameter_ids",
+        array(value.parameter_ids, [](const std::string& id) {
+            Tree item;
+            item.put_value(id);
+            return item;
+        }));
+    return tree;
+}
+
+service::JointConfidenceRegionSettings
+decode_joint_confidence_region_settings(const Tree& tree) {
+    service::JointConfidenceRegionSettings value;
+    value.enabled = tree.get<bool>("enabled");
+    value.objective_increase = tree.get<double>("objective_increase");
+    value.parameter_ids = decode_array<std::string>(
+        tree.get_child("parameter_ids"),
+        [](const Tree& item) {
+            return item.get_value<std::string>();
+        });
+    return value;
+}
+
 service::SimulationJobMode decode_mode(
     const std::string& mode) {
     if (mode == "steady") {
@@ -1483,6 +1511,10 @@ std::string encode_request(
         profile_likelihood_settings(
             request.reconciliation_profile_likelihood));
     tree.add_child(
+        "reconciliation_joint_confidence_region",
+        joint_confidence_region_settings(
+            request.reconciliation_joint_confidence_region));
+    tree.add_child(
         "reconciliation_held_out_cases",
         array(
             request.reconciliation_held_out_cases,
@@ -1620,6 +1652,11 @@ service::SimulationJobRequest decode_request(
     request.reconciliation_profile_likelihood =
         decode_profile_likelihood_settings(
             tree.get_child("reconciliation_profile_likelihood"));
+    if (const auto region = tree.get_child_optional(
+            "reconciliation_joint_confidence_region")) {
+        request.reconciliation_joint_confidence_region =
+            decode_joint_confidence_region_settings(*region);
+    }
     request.reconciliation_held_out_cases =
         decode_array<service::StudyPredictionCase>(
             tree.get_child("reconciliation_held_out_cases"),

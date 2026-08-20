@@ -38,6 +38,8 @@ void print_usage(std::ostream& out) {
            " [--profile-likelihood]"
            " [--profile-objective-increase <value>]"
            " [--profile-parameter <id>]"
+           " [--joint-region-objective-increase <value>]"
+           " [--joint-region-parameter <id>]"
            " [--mode hard-equalities|weighted-measurements]"
            " [--max-iterations <count>]"
            " [--format text|json]\n";
@@ -179,6 +181,8 @@ int main(int argc, char** argv) {
     bool profile_likelihood = false;
     std::string profile_objective_increase_text;
     std::vector<std::string> profile_parameter_ids;
+    std::string joint_region_objective_increase_text;
+    std::vector<std::string> joint_region_parameter_ids;
     auto structural_policy = thermox::service::
         StructuralDecompositionPolicy::automatic;
 
@@ -205,6 +209,12 @@ int main(int argc, char** argv) {
             profile_objective_increase_text = argv[++i];
         } else if (arg == "--profile-parameter" && i + 1 < argc) {
             profile_parameter_ids.emplace_back(argv[++i]);
+        } else if (arg == "--joint-region-objective-increase" &&
+                   i + 1 < argc) {
+            joint_region_objective_increase_text = argv[++i];
+        } else if (arg == "--joint-region-parameter" &&
+                   i + 1 < argc) {
+            joint_region_parameter_ids.emplace_back(argv[++i]);
         } else if (arg == "--end-time" && i + 1 < argc) {
             end_time_text = argv[++i];
         } else if (arg == "--format" && i + 1 < argc) {
@@ -404,6 +414,19 @@ int main(int argc, char** argv) {
                         profile_objective_increase_text,
                         "--profile-objective-increase");
                 request.profile_likelihood.enabled = true;
+            }
+            request.joint_confidence_region.parameter_ids =
+                joint_region_parameter_ids;
+            if (!joint_region_objective_increase_text.empty()) {
+                request.joint_confidence_region.objective_increase =
+                    parse_positive_number(
+                        joint_region_objective_increase_text,
+                        "--joint-region-objective-increase");
+                request.joint_confidence_region.enabled = true;
+            } else if (!joint_region_parameter_ids.empty()) {
+                throw std::invalid_argument(
+                    "--joint-region-parameter requires an explicit "
+                    "--joint-region-objective-increase");
             }
             const auto response =
                 service.run_data_reconciliation(request);

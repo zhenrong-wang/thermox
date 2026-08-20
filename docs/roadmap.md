@@ -411,9 +411,10 @@ Next:
     persistence, executable resolution, and reconciliation-specific job provenance. ✅
 22. Add thin production HTTP and web Study authoring/submission for immutable reconciliation
     revisions; never accept an unrevisioned production model body. ✅
-23. Add simultaneous multidimensional or sampling-based confidence regions where one-dimensional
-    profiling is insufficient; allow a sparse QR/SVD backend for very large rectangular
-    sensitivities.
+23. Add an opt-in simultaneous local covariance ellipsoid with an explicit objective-increase
+    contour, selected-parameter ordering, active-bound refusal, immutable policy, durable
+    execution, and HTTP/CLI/web evidence. ✅ Sampling-based nonlinear regions and a sparse QR/SVD
+    backend for very large rectangular sensitivities remain separate follow-up milestones.
 
 See `docs/calibration-architecture.md`.
 

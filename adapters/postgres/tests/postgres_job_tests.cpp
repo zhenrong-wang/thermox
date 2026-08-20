@@ -1075,6 +1075,14 @@ void test_projects_and_immutable_model_revisions(
     reconciliation_request.profile_likelihood.parameter_ids = {
         "efficiency",
     };
+    reconciliation_request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    reconciliation_request.joint_confidence_region.enabled = true;
+    reconciliation_request.joint_confidence_region.objective_increase =
+        1.0;
+    reconciliation_request.joint_confidence_region.parameter_ids = {
+        "efficiency",
+    };
     const auto reconciliation =
         projects.create_reconciliation_revision(
             reconciliation_request);
@@ -1092,6 +1100,9 @@ void test_projects_and_immutable_model_revisions(
                 reconciliation_request.constraint_study_revision_ids &&
             loaded_reconciliation->solver.max_iterations == 9 &&
             loaded_reconciliation->profile_likelihood.enabled &&
+            loaded_reconciliation->joint_confidence_region.enabled &&
+            loaded_reconciliation->joint_confidence_region.parameter_ids ==
+                std::vector<std::string>({"efficiency"}) &&
             projects.list_reconciliation_revisions(
                 team_a, project.project_id).size() == 1U &&
             !projects.get_reconciliation_revision(

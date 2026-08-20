@@ -212,6 +212,7 @@ struct ReconciliationRevisionRecord {
     ReconciliationMode mode{ReconciliationMode::hard_equalities};
     ReconciliationSolverSettings solver;
     ProfileLikelihoodSettings profile_likelihood;
+    JointConfidenceRegionSettings joint_confidence_region;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -416,6 +417,7 @@ public:
         ReconciliationMode mode,
         const ReconciliationSolverSettings& solver,
         const ProfileLikelihoodSettings& profile_likelihood,
+        const JointConfidenceRegionSettings& joint_confidence_region,
         const std::string& checksum) = 0;
     virtual std::optional<ReconciliationRevisionRecord>
     get_reconciliation_revision(
@@ -602,6 +604,7 @@ struct CreateReconciliationRevisionRequest {
     ReconciliationMode mode{ReconciliationMode::hard_equalities};
     ReconciliationSolverSettings solver;
     ProfileLikelihoodSettings profile_likelihood;
+    JointConfidenceRegionSettings joint_confidence_region;
 };
 
 struct ResolvedEngineeringArtifacts {

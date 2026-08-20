@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { reconciliationReadiness } from './reconciliationAuthoring'
+import {
+  jointConfidenceRegionIssues,
+  reconciliationReadiness,
+} from './reconciliationAuthoring'
 import type { CalibrationDocument, CaseRevision, StudyRevision } from './types'
 
 const cases = [
@@ -42,5 +45,20 @@ describe('reconciliation calculation readiness', () => {
     expect(result.ready).toBe(false)
     expect(result.issues.join(' ')).toContain('both constrained and held out')
     expect(result.issues.join(' ')).toContain('one constrained observation')
+  })
+
+  it('requires explicit coherent joint-region policy', () => {
+    expect(jointConfidenceRegionIssues(
+      true, 'weighted_measurements', 2, ['fuel_flow', 'efficiency'],
+    )).toEqual([])
+    expect(jointConfidenceRegionIssues(
+      true, 'hard_equalities', 0, ['fuel_flow', 'fuel_flow'],
+    ).join(' ')).toContain('requires weighted measurements')
+    expect(jointConfidenceRegionIssues(
+      true, 'hard_equalities', 0, ['fuel_flow', 'fuel_flow'],
+    ).join(' ')).toContain('finite and positive')
+    expect(jointConfidenceRegionIssues(
+      true, 'hard_equalities', 0, ['fuel_flow', 'fuel_flow'],
+    ).join(' ')).toContain('must be unique')
   })
 })

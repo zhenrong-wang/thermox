@@ -913,7 +913,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"(","constraint_study_revision_ids":[")" +
             study_revision_id +
             R"("],"held_out_study_revision_ids":[],)"
-            R"("mode":"hard_equalities",)"
+            R"("mode":"weighted_measurements",)"
             R"("definition":{"schema_version":"thermox.calibration/v1",)"
             R"("calibration":{"id":"http-balance",)"
             R"("parameters":[{"id":"efficiency","scope":"component",)"
@@ -924,14 +924,17 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("measured":{"value":35.0,"unit":"MW"},)"
             R"("sigma":{"value":0.5,"unit":"MW"}}]}},)"
             R"("solver":{"max_iterations":9},)"
-            R"("profile_likelihood":{"enabled":false}})" );
+            R"("profile_likelihood":{"enabled":false},)"
+            R"("joint_confidence_region":{"enabled":true,)"
+            R"("objective_increase":1.0,)"
+            R"("parameter_ids":["efficiency"]}})" );
     const auto reconciliation_created = api.handle(
         authenticated(std::move(reconciliation_upload)));
     require(
         reconciliation_created.status == 201 &&
             reconciliation_created.headers.contains("Location") &&
             reconciliation_created.body.find(
-                "\"mode\": \"hard_equalities\"") !=
+                "\"mode\": \"weighted_measurements\"") !=
                 std::string::npos &&
             reconciliation_created.body.find(
                 "\"max_iterations\": 9") != std::string::npos,
@@ -995,6 +998,9 @@ void test_tenant_scoped_asynchronous_jobs() {
             reconciliation_result.body.find("http-balance") !=
                 std::string::npos &&
             reconciliation_result.body.find("locally_identifiable") !=
+                std::string::npos &&
+            reconciliation_result.body.find(
+                "\"joint_confidence_region\": {") !=
                 std::string::npos,
         "reconciliation evidence must cross the artifact boundary");
     const auto reconciliation_jobs = api.handle(authenticated({

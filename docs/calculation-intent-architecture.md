@@ -154,6 +154,27 @@ reduced chi-square or known missing physics remains visible and can invalidate t
 even when the profile calculation itself succeeds; Thermox does not rescale the likelihood or
 rename the interval to hide poor agreement.
 
+### Simultaneous local confidence regions
+
+Weighted reconciliation can optionally publish a joint local region for a selected ordered set
+of adjustable quantities. The result contains the fitted SI-coordinate center and the selected
+submatrix of the covariance computed from the covariance-whitened free-parameter sensitivity. It
+defines the ellipsoid
+
+`delta_parameter^T covariance^-1 delta_parameter <= requested_objective_increase`.
+
+The objective increase is mandatory and explicit. Thermox does not translate it into a coverage
+percentage because that translation depends on degrees of freedom and statistical assumptions
+that belong to the engineering analysis. The response is labeled local and asymptotic, and is not
+independent validation evidence. A selected bound-active parameter makes the two-sided region
+unavailable rather than producing a misleading truncated Gaussian ellipsoid; profile likelihood
+remains the appropriate bounded one-dimensional path.
+
+The region is disabled by default. An empty parameter list selects every adjustable quantity;
+otherwise the declared order is preserved in the center, dimensions, and covariance rows and
+columns. The policy is part of immutable reconciliation identity and solver provenance and passes
+unchanged through durable jobs, HTTP, CLI, and the web evidence view.
+
 The thin CLI exposes the same service contract:
 
 ```sh
@@ -161,14 +182,20 @@ thermox_cli reconcile --model model.json \
   --reconciliation weighted_fit --mode weighted-measurements \
   --profile-likelihood --profile-parameter airflow \
   --profile-objective-increase 3.841458820694124 --format json
+
+thermox_cli reconcile --model model.json \
+  --reconciliation weighted_fit --mode weighted-measurements \
+  --joint-region-objective-increase 5.991464547107979 \
+  --joint-region-parameter airflow --joint-region-parameter efficiency \
+  --format json
 ```
 
 Known measurement uncertainties are treated as input standard uncertainties, so covariance is not
 automatically rescaled to force reduced chi-square to one. A large reduced chi-square remains
 visible as evidence of inconsistent measurements, underestimated uncertainty, or missing physics.
-The free-parameter covariance is a local first-order approximation. Profile likelihood provides
-bounded one-dimensional nonlinear intervals, but simultaneous multidimensional confidence
-regions and Monte Carlo propagation remain future work. The reference
+The free-parameter covariance and its simultaneous ellipsoid are local first-order
+approximations. Profile likelihood provides bounded one-dimensional nonlinear intervals, while
+sampling-based nonlinear regions and Monte Carlo propagation remain future work. The reference
 implementation uses column-pivoted QR; an optimized sparse QR or SVD backend can replace it for
 very large or extremely ill-conditioned estimation problems without changing this service
 contract.
@@ -246,15 +273,16 @@ logic.
 
 `thermox.job/v16` carries data reconciliation through the same Team-scoped idempotency, leased
 worker, checksummed result-artifact, and execution-provenance boundary used by forward simulation
-and calibration. The durable request preserves hard-versus-weighted mode, solver policy, profile
-likelihood policy, and held-out observations; the worker delegates directly to
-`SimulationService::run_data_reconciliation`.
+and calibration. The durable request preserves hard-versus-weighted mode, solver policy,
+profile-likelihood and joint-region policies, and held-out observations; the worker delegates
+directly to `SimulationService::run_data_reconciliation`.
 
 The project domain persists a distinct `thermox.reconciliation_revision/v1`. Constraint and
 held-out Study sets must be disjoint, bind the same exact model and artifact snapshot, and use
 steady cases with distinct case IDs. The revision owns hard-versus-weighted mode, solver settings,
-profile-likelihood policy, canonical adjustable/observation definition, and immutable checksum.
-Resolution composes only constraint observations into the solver model and projects held-out
+profile-likelihood and joint-region policies, canonical adjustable/observation definition, and
+immutable checksum. Resolution composes only constraint observations into the solver model and
+projects held-out
 observations into post-reconciliation evidence.
 
 The production HTTP adapter never accepts an unrevisioned reconciliation model body. It

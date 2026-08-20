@@ -280,7 +280,7 @@ callers, while production revision-backed HTTP jobs carry verified inline snapsh
 
 `thermox.reconciliation_revision/v1` is persisted separately from calibration. It owns exact
 constraint and held-out Study bindings, a canonical adjustable/observation definition,
-hard-versus-weighted mode, solver/profile policy, and checksum. PostgreSQL migration 019 stores
+hard-versus-weighted mode, solver/profile/joint-region policy, and checksum. PostgreSQL migration 019 stores
 the revision and its ordered Study roles under Team/project foreign keys. Resolved durable jobs
 retain the reconciliation revision ID and checksum in execution provenance.
 Migration 020 adds that immutable reconciliation identity to the job history index so production

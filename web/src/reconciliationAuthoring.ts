@@ -12,6 +12,26 @@ export interface ReconciliationReadiness {
   adjustableQuantityCount: number
 }
 
+export function jointConfidenceRegionIssues(
+  enabled: boolean,
+  mode: ReconciliationMode,
+  objectiveIncrease: number,
+  parameterIds: string[],
+): string[] {
+  if (!enabled) return []
+  const issues: string[] = []
+  if (mode !== 'weighted_measurements') {
+    issues.push('A joint confidence region requires weighted measurements.')
+  }
+  if (!Number.isFinite(objectiveIncrease) || objectiveIncrease <= 0) {
+    issues.push('Joint-region objective increase must be finite and positive.')
+  }
+  if (new Set(parameterIds).size !== parameterIds.length) {
+    issues.push('Joint-region parameter IDs must be unique.')
+  }
+  return issues
+}
+
 export function reconciliationReadiness(
   definition: CalibrationDocument,
   mode: ReconciliationMode,

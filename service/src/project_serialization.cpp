@@ -835,6 +835,18 @@ void reconciliation_revision_json(
         if (index != 0U) out << ", ";
         json_string(out, revision.profile_likelihood.parameter_ids[index]);
     }
+    out << "]}, \"joint_confidence_region\": {\"enabled\": "
+        << (revision.joint_confidence_region.enabled ? "true" : "false")
+        << ", \"objective_increase\": "
+        << revision.joint_confidence_region.objective_increase
+        << ", \"parameter_ids\": [";
+    for (std::size_t index = 0;
+         index < revision.joint_confidence_region.parameter_ids.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        json_string(
+            out, revision.joint_confidence_region.parameter_ids[index]);
+    }
     out << "]}, \"checksum\": ";
     json_string(out, revision.checksum);
     out << ", \"created_by_user_id\": ";

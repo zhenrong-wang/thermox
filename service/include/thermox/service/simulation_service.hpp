@@ -1216,6 +1216,15 @@ struct ProfileLikelihoodSettings {
     std::vector<std::string> parameter_ids;
 };
 
+struct JointConfidenceRegionSettings {
+    bool enabled{false};
+    // Explicit increase in the weighted least-squares objective defining
+    // the local ellipsoid. No coverage probability is inferred from it.
+    double objective_increase{0.0};
+    // Empty selects every declared adjustable quantity.
+    std::vector<std::string> parameter_ids;
+};
+
 enum class ReconciliationMode {
     hard_equalities,
     weighted_measurements,
@@ -1234,6 +1243,7 @@ struct DataReconciliationRequest {
     ReconciliationMode mode{ReconciliationMode::hard_equalities};
     ReconciliationSolverSettings solver;
     ProfileLikelihoodSettings profile_likelihood;
+    JointConfidenceRegionSettings joint_confidence_region;
     std::vector<StudyPredictionCase> held_out_cases;
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;
@@ -1305,6 +1315,17 @@ struct ReconciliationProfileInterval {
     std::string message;
 };
 
+struct ReconciliationJointConfidenceRegion {
+    std::vector<std::string> parameter_ids;
+    std::vector<std::string> dimensions;
+    std::vector<double> center_si;
+    std::vector<std::vector<double>> covariance_si;
+    double requested_objective_increase{0.0};
+    bool succeeded{false};
+    std::string interpretation;
+    std::string message;
+};
+
 struct DataReconciliationResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
@@ -1322,6 +1343,8 @@ struct DataReconciliationResponse {
         parameter_correlations;
     std::vector<ReconciliationProfileInterval>
         profile_likelihood_intervals;
+    std::optional<ReconciliationJointConfidenceRegion>
+        joint_confidence_region;
     std::vector<StudyCaseResult> held_out_results;
     std::string reconciled_model_json;
 

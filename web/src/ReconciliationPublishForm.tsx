@@ -6,7 +6,10 @@ import type {
   ReconciliationMode,
   StudyRevision,
 } from './types'
-import { reconciliationReadiness } from './reconciliationAuthoring'
+import {
+  jointConfidenceRegionIssues,
+  reconciliationReadiness,
+} from './reconciliationAuthoring'
 
 interface ReconciliationPublishFormProps {
   modelRevisionId: string
@@ -37,6 +40,10 @@ export function ReconciliationPublishForm({
   const [maxIterations, setMaxIterations] = useState(12)
   const [profileEnabled, setProfileEnabled] = useState(false)
   const [profileParameterIds, setProfileParameterIds] = useState('')
+  const [jointRegionEnabled, setJointRegionEnabled] = useState(false)
+  const [jointRegionObjectiveIncrease, setJointRegionObjectiveIncrease] =
+    useState('1')
+  const [jointRegionParameterIds, setJointRegionParameterIds] = useState('')
   const [definitionText, setDefinitionText] = useState(() =>
     JSON.stringify(
       {
@@ -114,6 +121,17 @@ export function ReconciliationPublishForm({
     try {
       const definition = JSON.parse(definitionText) as CalibrationDocument
       definition.calibration.id = reconciliationId
+      const jointParameterIds = jointRegionParameterIds
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const jointIssues = jointConfidenceRegionIssues(
+        jointRegionEnabled,
+        mode,
+        Number(jointRegionObjectiveIncrease),
+        jointParameterIds,
+      )
+      if (jointIssues.length) throw new Error(jointIssues.join(' '))
       await onSubmit({
         schema_version: 'thermox.reconciliation_revision.create/v1',
         reconciliation_id: reconciliationId,
@@ -130,6 +148,13 @@ export function ReconciliationPublishForm({
             .split(',')
             .map((item) => item.trim())
             .filter(Boolean),
+        },
+        joint_confidence_region: {
+          enabled: jointRegionEnabled,
+          objective_increase: jointRegionEnabled
+            ? Number(jointRegionObjectiveIncrease)
+            : 0,
+          parameter_ids: jointParameterIds,
         },
       })
     } catch (reason) {
@@ -166,7 +191,11 @@ export function ReconciliationPublishForm({
           <label>
             Measurement treatment
             <select value={mode}
-              onChange={(event) => setMode(event.target.value as ReconciliationMode)}>
+              onChange={(event) => {
+                const next = event.target.value as ReconciliationMode
+                setMode(next)
+                if (next !== 'weighted_measurements') setJointRegionEnabled(false)
+              }}>
               <option value="hard_equalities">Hard equalities</option>
               <option value="weighted_measurements">Weighted measurements</option>
             </select>
@@ -181,6 +210,12 @@ export function ReconciliationPublishForm({
               onChange={(event) => setProfileEnabled(event.target.checked)} />
             Profile-likelihood evidence
           </label>
+          <label className="checkbox-label">
+            <input type="checkbox" checked={jointRegionEnabled}
+              disabled={mode !== 'weighted_measurements'}
+              onChange={(event) => setJointRegionEnabled(event.target.checked)} />
+            Local joint confidence region
+          </label>
         </div>
         {profileEnabled && (
           <label>
@@ -188,6 +223,29 @@ export function ReconciliationPublishForm({
             <input value={profileParameterIds}
               onChange={(event) => setProfileParameterIds(event.target.value)} />
           </label>
+        )}
+        {jointRegionEnabled && (
+          <fieldset>
+            <legend>Local joint covariance ellipsoid</legend>
+            <p className="form-note">
+              Supply an objective increase explicitly. Thermox does not infer a
+              coverage percentage; this is local sensitivity evidence, not an
+              independent validation result.
+            </p>
+            <div className="form-grid">
+              <label>
+                Objective increase
+                <input type="number" min="0" step="any" required
+                  value={jointRegionObjectiveIncrease}
+                  onChange={(event) => setJointRegionObjectiveIncrease(event.target.value)} />
+              </label>
+              <label>
+                Parameter IDs (comma separated; blank means all)
+                <input value={jointRegionParameterIds}
+                  onChange={(event) => setJointRegionParameterIds(event.target.value)} />
+              </label>
+            </div>
+          </fieldset>
         )}
         <fieldset>
           <legend>Evidence partition</legend>

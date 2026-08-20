@@ -402,6 +402,18 @@ std::string request_fingerprint(
          request.reconciliation_profile_likelihood.parameter_ids) {
         append_string(stream, id);
     }
+    stream << request.reconciliation_joint_confidence_region.enabled
+           << '|'
+           << request.reconciliation_joint_confidence_region
+                  .objective_increase
+           << '|'
+           << request.reconciliation_joint_confidence_region
+                  .parameter_ids.size()
+           << '|';
+    for (const auto& id :
+         request.reconciliation_joint_confidence_region.parameter_ids) {
+        append_string(stream, id);
+    }
     stream << request.reconciliation_held_out_cases.size() << '|';
     for (const auto& held_out :
          request.reconciliation_held_out_cases) {
@@ -560,7 +572,8 @@ void validate_request(const SimulationJobRequest& request) {
     if (request.mode != SimulationJobMode::reconciliation &&
         (!request.reconciliation_id.empty() ||
          !request.reconciliation_held_out_cases.empty() ||
-         request.reconciliation_profile_likelihood.enabled)) {
+         request.reconciliation_profile_likelihood.enabled ||
+         request.reconciliation_joint_confidence_region.enabled)) {
         throw JobRequestError(
             "non-reconciliation jobs do not accept reconciliation "
             "inputs");
@@ -992,6 +1005,8 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             request.solver = claimed->request.reconciliation_solver;
             request.profile_likelihood = claimed->request
                 .reconciliation_profile_likelihood;
+            request.joint_confidence_region = claimed->request
+                .reconciliation_joint_confidence_region;
             request.held_out_cases =
                 claimed->request.reconciliation_held_out_cases;
             request.artifacts = claimed->request.artifacts;

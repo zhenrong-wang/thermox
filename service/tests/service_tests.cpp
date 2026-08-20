@@ -3956,6 +3956,82 @@ void test_weighted_reconciliation_reports_parameter_correlation() {
         "uncertainties and material parameter correlation");
 }
 
+void test_weighted_reconciliation_reports_joint_confidence_region() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_airflow_efficiency";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.joint_confidence_region.enabled = true;
+    request.joint_confidence_region.objective_increase = 2.0;
+    request.joint_confidence_region.parameter_ids = {
+        "efficiency", "airflow"};
+
+    const auto response = service.run_data_reconciliation(request);
+    require(
+        response.succeeded() &&
+            response.joint_confidence_region.has_value(),
+        "weighted reconciliation must produce an explicitly requested "
+        "joint region");
+    const auto& region = *response.joint_confidence_region;
+    const auto uncertainty_for = [&](const std::string& id) {
+        const auto found = std::find_if(
+            response.parameter_uncertainties.begin(),
+            response.parameter_uncertainties.end(),
+            [&](const auto& uncertainty) {
+                return uncertainty.parameter_id == id;
+            });
+        require(
+            found != response.parameter_uncertainties.end() &&
+                found->standard_uncertainty_si.has_value(),
+            "joint-region parameter must have a local standard "
+            "uncertainty");
+        return *found->standard_uncertainty_si;
+    };
+    require(
+        region.succeeded &&
+            region.parameter_ids ==
+                std::vector<std::string>({"efficiency", "airflow"}) &&
+            region.dimensions.size() == 2 &&
+            region.center_si.size() == 2 &&
+            region.covariance_si.size() == 2 &&
+            region.covariance_si[0].size() == 2 &&
+            region.covariance_si[1].size() == 2 &&
+            std::abs(region.requested_objective_increase - 2.0) <
+                1.0e-12 &&
+            region.covariance_si[0][0] > 0.0 &&
+            region.covariance_si[1][1] > 0.0 &&
+            std::abs(
+                region.covariance_si[0][0] -
+                std::pow(uncertainty_for("efficiency"), 2)) <
+                1.0e-12 &&
+            std::abs(
+                region.covariance_si[1][1] -
+                std::pow(uncertainty_for("airflow"), 2)) <
+                1.0e-12 &&
+            std::abs(
+                region.covariance_si[0][1] -
+                region.covariance_si[1][0]) < 1.0e-12 &&
+            region.interpretation.find(
+                "no coverage probability is inferred") !=
+                std::string::npos,
+        "joint region must preserve requested parameter order and expose "
+        "a finite symmetric local covariance contour without inventing "
+        "coverage");
+    const auto json = thermox::service::
+        serialize_data_reconciliation_response_json(response);
+    require(
+        json.find("\"joint_confidence_region\": {") !=
+                std::string::npos &&
+            json.find("\"requested_objective_increase\": 2") !=
+                std::string::npos &&
+            json.find("\"covariance_si\": [[") !=
+                std::string::npos,
+        "joint-region evidence must survive result serialization");
+}
+
 void test_weighted_reconciliation_applies_measurement_correlation() {
     thermox::service::SimulationService service;
     thermox::service::DataReconciliationRequest request;
@@ -4089,6 +4165,9 @@ void test_weighted_reconciliation_reports_active_bound_uncertainty() {
     request.profile_likelihood.maximum_bisection_steps = 8;
     request.profile_likelihood.maximum_nuisance_iterations = 3;
     request.profile_likelihood.parameter_ids = {"bounded_airflow"};
+    request.joint_confidence_region.enabled = true;
+    request.joint_confidence_region.objective_increase = 1.0;
+    request.joint_confidence_region.parameter_ids = {"bounded_airflow"};
 
     const auto response = service.run_data_reconciliation(request);
     require(
@@ -4111,6 +4190,14 @@ void test_weighted_reconciliation_reports_active_bound_uncertainty() {
             response.parameter_correlations.empty(),
         "a constrained optimum must not receive an unconstrained "
         "symmetric standard uncertainty");
+    require(
+        response.joint_confidence_region.has_value() &&
+            !response.joint_confidence_region->succeeded &&
+            response.joint_confidence_region->covariance_si.empty() &&
+            response.joint_confidence_region->message.find(
+                "bound-active") != std::string::npos,
+        "a bound-active parameter must not receive a misleading "
+        "two-sided joint covariance ellipsoid");
     require(
         response.profile_likelihood_intervals.size() == 1 &&
             response.profile_likelihood_intervals.front().succeeded &&
@@ -4149,6 +4236,37 @@ void test_profile_likelihood_rejects_invalid_intent() {
                 "requires weighted-measurements") != std::string::npos,
         "profile likelihood must reject hard-equality intent rather "
         "than invent a measurement likelihood");
+}
+
+void test_joint_confidence_region_rejects_invalid_policy() {
+    thermox::service::SimulationService service;
+    thermox::service::DataReconciliationRequest request;
+    request.model_json =
+        read_source_file("examples/data_reconciliation.json");
+    request.reconciliation_id = "weighted_airflow_efficiency";
+    request.mode = thermox::service::
+        ReconciliationMode::weighted_measurements;
+    request.joint_confidence_region.enabled = true;
+
+    auto response = service.run_data_reconciliation(request);
+    require(
+        response.status ==
+                thermox::service::OperationStatus::invalid_request &&
+            response.error.code == "invalid_reconciliation_settings",
+        "an enabled joint region must require an explicit positive "
+        "objective increase");
+
+    request.joint_confidence_region.objective_increase = 1.0;
+    request.joint_confidence_region.parameter_ids = {"missing"};
+    response = service.run_data_reconciliation(request);
+    require(
+        response.status ==
+                thermox::service::OperationStatus::invalid_model &&
+            response.error.message.find(
+                "joint-confidence-region parameter IDs") !=
+                std::string::npos,
+        "joint-region selection must reference declared adjustable "
+        "quantities");
 }
 
 std::string independent_study_model(
@@ -6062,10 +6180,12 @@ int main() {
         test_overdetermined_weighted_reconciliation_service();
         test_weighted_reconciliation_rejects_rank_deficiency();
         test_weighted_reconciliation_reports_parameter_correlation();
+        test_weighted_reconciliation_reports_joint_confidence_region();
         test_weighted_reconciliation_applies_measurement_correlation();
         test_model_rejects_invalid_measurement_correlation();
         test_weighted_reconciliation_reports_active_bound_uncertainty();
         test_profile_likelihood_rejects_invalid_intent();
+        test_joint_confidence_region_rejects_invalid_policy();
         test_engineering_study_freezes_before_prediction();
         test_map_correction_is_calibrated_then_frozen();
         test_component_version_is_enforced();

@@ -407,7 +407,8 @@ std::string calibration_identity(
 
 void validate_reconciliation_solver(
     const ReconciliationSolverSettings& value,
-    const ProfileLikelihoodSettings& profile) {
+    const ProfileLikelihoodSettings& profile,
+    const JointConfidenceRegionSettings& joint_region) {
     validate_steady_solver(value.simulation_solver);
     if (value.max_iterations <= 0 ||
         !std::isfinite(value.finite_difference_fraction) ||
@@ -427,7 +428,10 @@ void validate_reconciliation_solver(
           profile.objective_increase <= 0.0 ||
           profile.maximum_bracket_steps <= 0 ||
           profile.maximum_bisection_steps <= 0 ||
-          profile.maximum_nuisance_iterations <= 0))) {
+          profile.maximum_nuisance_iterations <= 0)) ||
+        (joint_region.enabled &&
+         (!std::isfinite(joint_region.objective_increase) ||
+          joint_region.objective_increase <= 0.0))) {
         throw ProjectRequestError(
             "invalid reconciliation solver settings");
     }
@@ -465,6 +469,11 @@ std::string reconciliation_identity(
         << profile.maximum_bisection_steps << '|'
         << profile.maximum_nuisance_iterations << '|';
     for (const auto& id : profile.parameter_ids) append(id);
+    out << "joint_region|" << request.joint_confidence_region.enabled
+        << '|' << request.joint_confidence_region.objective_increase
+        << '|';
+    for (const auto& id :
+         request.joint_confidence_region.parameter_ids) append(id);
     return out.str();
 }
 
@@ -2099,7 +2108,15 @@ ProjectService::create_reconciliation_revision(
             "constraint Studies must not be empty");
     }
     validate_reconciliation_solver(
-        request.solver, request.profile_likelihood);
+        request.solver, request.profile_likelihood,
+        request.joint_confidence_region);
+    if ((request.profile_likelihood.enabled ||
+         request.joint_confidence_region.enabled) &&
+        request.mode != ReconciliationMode::weighted_measurements) {
+        throw ProjectRequestError(
+            "profile likelihood and joint confidence regions require "
+            "weighted-measurements reconciliation mode");
+    }
     auto constraints = request.constraint_study_revision_ids;
     auto held_out = request.held_out_study_revision_ids;
     std::sort(constraints.begin(), constraints.end());
@@ -2184,6 +2201,34 @@ ProjectService::create_reconciliation_revision(
                 "reconciliation definition ID does not match "
                 "reconciliation_id");
         }
+        const auto validate_selected_parameters =
+            [&](const std::vector<std::string>& selected,
+                const char* policy_name) {
+                std::set<std::string> declared;
+                for (const auto& parameter : definition.parameters) {
+                    declared.insert(parameter.id);
+                }
+                std::set<std::string> unique;
+                for (const auto& id : selected) {
+                    if (id.empty() || !unique.insert(id).second ||
+                        !declared.contains(id)) {
+                        throw ProjectRequestError(
+                            std::string(policy_name) +
+                            " parameter IDs must be unique and reference "
+                            "declared adjustable quantities: " + id);
+                    }
+                }
+            };
+        if (request.profile_likelihood.enabled) {
+            validate_selected_parameters(
+                request.profile_likelihood.parameter_ids,
+                "profile-likelihood");
+        }
+        if (request.joint_confidence_region.enabled) {
+            validate_selected_parameters(
+                request.joint_confidence_region.parameter_ids,
+                "joint-confidence-region");
+        }
         std::set<std::string> observed_cases;
         std::size_t constraint_observations = 0;
         for (const auto& observation : definition.observations) {
@@ -2238,6 +2283,7 @@ ProjectService::create_reconciliation_revision(
             request.model_revision_id, constraints, held_out,
             canonical_definition, request.mode, request.solver,
             request.profile_likelihood,
+            request.joint_confidence_region,
             checksum(reconciliation_identity(
                 request, constraints, held_out,
                 canonical_definition)));

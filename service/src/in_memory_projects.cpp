@@ -663,6 +663,7 @@ public:
         ReconciliationMode mode,
         const ReconciliationSolverSettings& solver,
         const ProfileLikelihoodSettings& profile_likelihood,
+        const JointConfidenceRegionSettings& joint_confidence_region,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
         const auto validate_studies = [&](const auto& ids) {
@@ -711,6 +712,7 @@ public:
         record.mode = mode;
         record.solver = solver;
         record.profile_likelihood = profile_likelihood;
+        record.joint_confidence_region = joint_confidence_region;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;
         record.created_at = std::chrono::system_clock::now();

@@ -454,6 +454,12 @@ export interface ProfileLikelihoodSettings {
   parameter_ids: string[]
 }
 
+export interface JointConfidenceRegionSettings {
+  enabled: boolean
+  objective_increase: number
+  parameter_ids: string[]
+}
+
 export interface ReconciliationRevision {
   schema_version: 'thermox.reconciliation_revision/v1'
   reconciliation_revision_id: string
@@ -469,6 +475,7 @@ export interface ReconciliationRevision {
   mode: ReconciliationMode
   solver: ReconciliationSolverSettings
   profile_likelihood: ProfileLikelihoodSettings
+  joint_confidence_region: JointConfidenceRegionSettings
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
@@ -492,6 +499,7 @@ export interface CreateReconciliationRevision {
     simulation_solver?: Partial<SteadySolverSettings>
   }
   profile_likelihood?: Partial<ProfileLikelihoodSettings>
+  joint_confidence_region?: Partial<JointConfidenceRegionSettings>
 }
 
 export interface ReconciliationResult {
@@ -560,6 +568,16 @@ export interface ReconciliationResult {
     succeeded: boolean
     message: string
   }>
+  joint_confidence_region: {
+    parameter_ids: string[]
+    dimensions: string[]
+    center_si: number[]
+    covariance_si: number[][]
+    requested_objective_increase: number
+    succeeded: boolean
+    interpretation: string
+    message: string
+  } | null
   held_out_results: Array<{
     case_id: string
     weighted_sum_squares: number

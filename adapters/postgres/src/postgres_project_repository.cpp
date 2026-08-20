@@ -225,7 +225,8 @@ service::CalibrationSolverSettings decode_calibration_solver(
 
 Tree reconciliation_policy_tree(
     const service::ReconciliationSolverSettings& solver,
-    const service::ProfileLikelihoodSettings& profile) {
+    const service::ProfileLikelihoodSettings& profile,
+    const service::JointConfidenceRegionSettings& joint_region) {
     Tree tree;
     tree.put("max_iterations", solver.max_iterations);
     tree.put("finite_difference_fraction",
@@ -253,13 +254,25 @@ Tree reconciliation_policy_tree(
         ids.push_back({"", item});
     }
     tree.add_child("profile.parameter_ids", ids);
+    tree.put("joint_region.enabled", joint_region.enabled);
+    tree.put(
+        "joint_region.objective_increase",
+        joint_region.objective_increase);
+    Tree joint_ids;
+    for (const auto& id : joint_region.parameter_ids) {
+        Tree item;
+        item.put_value(id);
+        joint_ids.push_back({"", item});
+    }
+    tree.add_child("joint_region.parameter_ids", joint_ids);
     return tree;
 }
 
 void decode_reconciliation_policy(
     const Tree& tree,
     service::ReconciliationSolverSettings& solver,
-    service::ProfileLikelihoodSettings& profile) {
+    service::ProfileLikelihoodSettings& profile,
+    service::JointConfidenceRegionSettings& joint_region) {
     solver.max_iterations = tree.get<int>("max_iterations");
     solver.finite_difference_fraction =
         tree.get<double>("finite_difference_fraction");
@@ -284,6 +297,16 @@ void decode_reconciliation_policy(
     for (const auto& entry : tree.get_child("profile.parameter_ids")) {
         profile.parameter_ids.push_back(
             entry.second.get_value<std::string>());
+    }
+    joint_region.enabled = tree.get<bool>("joint_region.enabled", false);
+    joint_region.objective_increase =
+        tree.get<double>("joint_region.objective_increase", 0.0);
+    if (const auto ids =
+            tree.get_child_optional("joint_region.parameter_ids")) {
+        for (const auto& entry : *ids) {
+            joint_region.parameter_ids.push_back(
+                entry.second.get_value<std::string>());
+        }
     }
 }
 
@@ -713,7 +736,8 @@ service::ReconciliationRevisionRecord decode_reconciliation_revision(
         : service::ReconciliationMode::weighted_measurements;
     decode_reconciliation_policy(
         read_tree(field(result, row, 9)),
-        record.solver, record.profile_likelihood);
+        record.solver, record.profile_likelihood,
+        record.joint_confidence_region);
     record.checksum = field(result, row, 10);
     record.created_by_user_id = field(result, row, 11);
     record.created_at = decode_time(field(result, row, 12));
@@ -1818,6 +1842,8 @@ public:
         service::ReconciliationMode mode,
         const service::ReconciliationSolverSettings& solver,
         const service::ProfileLikelihoodSettings& profile_likelihood,
+        const service::JointConfidenceRegionSettings&
+            joint_confidence_region,
         const std::string& checksum) override {
         auto connection = connect(connection_string_);
         (void)execute(connection.get(), "BEGIN", {}, PGRES_COMMAND_OK);
@@ -1847,7 +1873,8 @@ public:
         const char* parent = parent_reconciliation_revision_id.empty()
             ? nullptr : parent_reconciliation_revision_id.c_str();
         const auto policy = write_tree(
-            reconciliation_policy_tree(solver, profile_likelihood));
+            reconciliation_policy_tree(
+                solver, profile_likelihood, joint_confidence_region));
         const auto sql = std::string(
             "INSERT INTO thermox_reconciliation_revisions (") +
             "reconciliation_id,project_id,team_id,revision_number,"

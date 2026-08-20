@@ -1871,6 +1871,7 @@ parse_create_reconciliation_request(const Request& request) {
         "parent_reconciliation_revision_id", "model_revision_id",
         "constraint_study_revision_ids", "held_out_study_revision_ids",
         "definition", "mode", "solver", "profile_likelihood",
+        "joint_confidence_region",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1991,6 +1992,36 @@ parse_create_reconciliation_request(const Request& request) {
                 if (!key.empty()) {
                     throw std::invalid_argument(
                         "profile_likelihood.parameter_ids must be an array");
+                }
+                value.parameter_ids.push_back(
+                    parameter.get_value<std::string>());
+            }
+        }
+    }
+    if (const auto region =
+            tree.get_child_optional("joint_confidence_region")) {
+        const std::set<std::string> region_allowed = {
+            "enabled", "objective_increase", "parameter_ids",
+        };
+        for (const auto& [key, unused] : *region) {
+            (void)unused;
+            if (!region_allowed.contains(key)) {
+                throw std::invalid_argument(
+                    "unknown joint confidence region field: " + key);
+            }
+        }
+        auto& value = command.joint_confidence_region;
+        value.enabled = region->get("enabled", value.enabled);
+        value.objective_increase = region->get(
+            "objective_increase", value.objective_increase);
+        if (const auto parameters =
+                region->get_child_optional("parameter_ids")) {
+            value.parameter_ids.clear();
+            for (const auto& [key, parameter] : *parameters) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        "joint_confidence_region.parameter_ids must be "
+                        "an array");
                 }
                 value.parameter_ids.push_back(
                     parameter.get_value<std::string>());
@@ -3399,6 +3430,8 @@ Response Api::handle(const Request& request) const {
                     resolved->reconciliation.solver;
                 command.reconciliation_profile_likelihood =
                     resolved->reconciliation.profile_likelihood;
+                command.reconciliation_joint_confidence_region =
+                    resolved->reconciliation.joint_confidence_region;
                 command.reconciliation_held_out_cases =
                     resolved->held_out_cases;
                 command.artifacts = resolved->artifacts.snapshot;
