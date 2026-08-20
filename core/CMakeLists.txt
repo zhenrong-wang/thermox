@@ -14,6 +14,7 @@ option(
     OFF
 )
 add_library(thermox_core
+    src/bounded_least_squares_optimizer.cpp
     src/continuation_solver.cpp
     src/dae_equation_system.cpp
     src/dense_cholesky.cpp

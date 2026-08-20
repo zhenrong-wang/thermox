@@ -3702,6 +3702,12 @@ void test_bounded_calibration_service() {
         "posterior sensitivity");
     require(
         response.diagnostics.sensitivity_evaluations >= 1 &&
+            response.diagnostics.accepted_steps >= 1 &&
+            response.diagnostics.final_trust_region_radius > 0.0 &&
+            response.diagnostics
+                .optimizer_factorization_quality_available &&
+            response.diagnostics.optimizer_reciprocal_pivot_ratio >
+                0.0 &&
             response.diagnostics.uncertainty_available &&
             response.diagnostics
                 .sensitivity_factorization_quality_available &&
@@ -3724,15 +3730,23 @@ void test_bounded_calibration_service() {
         "calibration must return a reusable fitted model");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.coordinate-search/v1" &&
+            "thermox.trust-region-least-squares/v1" &&
             std::any_of(
                 response.metadata.solver.settings.begin(),
                 response.metadata.solver.settings.end(),
                 [](const auto& setting) {
                     return setting.name ==
                         "minimum_continuation_fraction";
+                }) &&
+            std::any_of(
+                response.metadata.solver.settings.begin(),
+                response.metadata.solver.settings.end(),
+                [](const auto& setting) {
+                    return setting.name ==
+                        "initial_trust_region_radius";
                 }),
-        "calibration provenance must record continuation settings");
+        "calibration provenance must record trust-region and "
+        "continuation settings");
     const auto json =
         thermox::service::serialize_calibration_response_json(
             response);
@@ -3740,6 +3754,10 @@ void test_bounded_calibration_service() {
         json.find("\"normalized_residual\":") !=
                 std::string::npos &&
             json.find("\"locally_data_identifiable\": true") !=
+                std::string::npos &&
+            json.find("\"accepted_steps\":") !=
+                std::string::npos &&
+            json.find("\"final_trust_region_radius\":") !=
                 std::string::npos &&
             json.find("\"parameter_uncertainties\":") !=
                 std::string::npos &&
@@ -3815,6 +3833,21 @@ void test_calibration_separates_data_and_prior_identifiability() {
             response.parameter_uncertainties.size() == 2,
         "declared independent priors must regularize the local posterior "
         "without changing the data-identifiability verdict");
+
+    for (auto& parameter :
+         calibration.at("parameters").as_array()) {
+        parameter.as_object().erase("prior");
+    }
+    request.model_json = boost::json::serialize(model);
+    const auto unidentifiable = service.run_calibration(request);
+    require(
+        !unidentifiable.succeeded() &&
+            unidentifiable.error.code ==
+                "calibration_optimizer_failed" &&
+            unidentifiable.error.message.find("not identifiable") !=
+                std::string::npos,
+        "trust-region calibration must reject an underdetermined "
+        "measurement sensitivity instead of inventing regularization");
 }
 
 void test_hard_constraint_data_reconciliation_service() {
@@ -4597,7 +4630,8 @@ void test_engineering_study_freezes_before_prediction() {
         independent_study_model(baseline_power) +
         R"json(,"calibration_id":"baseline_fit",
           "calibration_solver":{"max_iterations":20,
-            "finite_difference_fraction":0.0002},
+            "finite_difference_fraction":0.0002,
+            "initial_trust_region_radius":0.3},
           "prediction_cases":[{"case_id":"validation",
             "observations":[{"id":"validation_power",
               "target":"compressor.shaft.W_dot","dimension":"power",
@@ -4612,6 +4646,9 @@ void test_engineering_study_freezes_before_prediction() {
             std::abs(
                 parsed.calibration_solver.finite_difference_fraction -
                 2.0e-4) < 1.0e-15 &&
+            std::abs(
+                parsed.calibration_solver.initial_trust_region_radius -
+                0.3) < 1.0e-15 &&
             parsed.prediction_cases.size() == 1 &&
             parsed.prediction_cases.front().observations.size() == 1,
         "declarative engineering-study input must preserve the frozen "

@@ -832,14 +832,22 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("target":"compressor.shaft.W_dot",)"
             R"("measured":{"value":35.0,"unit":"MW"},)"
             R"("sigma":{"value":0.5,"unit":"MW"}}]}},)"
-            R"("solver":{"max_iterations":11}})");
+            R"("solver":{"max_iterations":11,)"
+            R"("initial_trust_region_radius":0.3}})");
     const auto calibration_created = api.handle(
         authenticated(std::move(calibration_upload)));
+    const auto calibration_created_json =
+        boost::json::parse(calibration_created.body);
+    const double calibration_trust_radius =
+        calibration_created_json.as_object()
+            .at("solver").as_object()
+            .at("initial_trust_region_radius").as_double();
     require(
         calibration_created.status == 201 &&
             calibration_created.headers.contains("Location") &&
             calibration_created.body.find(
                 "\"max_iterations\": 11") != std::string::npos &&
+            std::abs(calibration_trust_radius - 0.3) < 1.0e-15 &&
             calibration_created.body.find(study_revision_id) !=
                 std::string::npos,
         "calibration routes must bind immutable training Studies: " +

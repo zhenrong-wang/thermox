@@ -101,10 +101,14 @@ composition-aware material ports both expose derived temperature, so measured ga
 temperatures can participate in gas-turbine calibration without becoming connector unknowns.
 
 The service executes bounded, multi-case estimation by repeatedly invoking the ordinary steady
-simulation workflow. Its dependency-free reference optimizer is a deterministic coordinate search:
-candidate solve failures are rejected, every observation is weighted by its declared uncertainty,
-declared correlations whiten the joint residual, and priors contribute normalized penalty
-residuals. Evaluations and case solves remain sequential to bound host resource use.
+simulation workflow. Its optimizer boundary is a generic scaled, bounded nonlinear least-squares
+contract in the numerical core. The reference implementation uses rank-revealing Gauss-Newton
+steps inside an adaptive trust region: candidate solve failures shrink the region, every
+observation is weighted by its declared uncertainty, declared correlations whiten the joint
+residual, and priors contribute normalized penalty residuals. Evaluations and case solves remain
+sequential to bound host resource use. The numerical callback receives the accepted reference
+point, allowing service-owned continuation and warm starts without exposing thermal-system state
+to the optimizer.
 
 Each accepted case solution is retained as a named-variable warm start. A candidate parameter move
 first attempts the requested endpoint; on failure, adaptive continuation halves the move and walks
@@ -138,7 +142,7 @@ thermox_cli calibrate \
 
 `--max-iterations` is an execution budget, not a convergence claim. A successful response can
 therefore contain `diagnostics.converged=false` when the best feasible fitted model is returned
-after the bounded coordinate search reaches that budget. Callers must retain the convergence
+after the trust-region solver reaches that budget. Callers must retain the convergence
 flag, objective history summary, and observation residuals when qualifying the result.
 
 `EngineeringStudyRequest` formalizes that independent workflow. It runs one named calibration,
@@ -185,11 +189,11 @@ evaluates held-out residuals only after each prediction solve. The CLI is a thin
 service contract. `sigma_si` is the declared normalization scale; callers must state whether it is
 a traceable standard uncertainty, an acceptance tolerance, or an exploratory scale.
 
-Coordinate search is intended for a small number of engineering calibration parameters. A later
-optimizer interface can add trust-region least squares without changing the delivered
-covariance/identifiability, model, component, property, or observation contracts. Transient
-estimation is also a later workflow; the first implementation intentionally accepts steady cases
-only. The numeric solver and component models remain unaware of calibration campaigns.
+The current dense rank-revealing trust-region implementation is intended for small and moderate
+engineering parameter sets. Sparse QR/SVD implementations can replace it behind the same residual
+callback and evidence contracts without changing model, component, property, or observation
+contracts. Transient estimation is also a later workflow; the first implementation intentionally
+accepts steady cases only. Component models remain unaware of calibration campaigns.
 
 ## Evidence classification
 

@@ -1070,10 +1070,14 @@ struct StructuralPolicyAuditResponse {
 
 struct CalibrationSolverSettings {
     int max_iterations{20};
-    double initial_step_fraction{0.1};
-    double minimum_step_fraction{1.0e-4};
-    double step_reduction{0.5};
     double finite_difference_fraction{1.0e-4};
+    double initial_trust_region_radius{0.25};
+    double minimum_trust_region_radius{1.0e-6};
+    double maximum_trust_region_radius{1.0};
+    double acceptance_ratio{1.0e-4};
+    double gradient_tolerance{1.0e-6};
+    double step_tolerance{1.0e-6};
+    double objective_relative_tolerance{1.0e-8};
     double minimum_continuation_fraction{1.0 / 64.0};
     double continuation_growth{1.5};
     SteadySolverSettings simulation_solver;
@@ -1116,6 +1120,13 @@ struct CalibrationDiagnostics {
     int iterations{0};
     int objective_evaluations{0};
     int sensitivity_evaluations{0};
+    int accepted_steps{0};
+    int rejected_steps{0};
+    double final_projected_gradient_norm{0.0};
+    double final_trust_region_radius{0.0};
+    bool optimizer_factorization_quality_available{false};
+    double optimizer_reciprocal_pivot_ratio{0.0};
+    std::string optimizer_factorization_quality_method;
     std::size_t measurement_correlation_count{0};
     bool measurement_covariance_applied{false};
     std::size_t adjustable_parameter_count{0};

@@ -238,8 +238,8 @@ Implemented in this sprint:
 - Service validation resolves calibration observations against registered graph results, while
   the result layer derives thermodynamic temperature and composition metadata for reacting
   material ports through the selected thermochemistry backend.
-- A bounded multi-case calibration service performs sequential uncertainty-weighted coordinate
-  search through ordinary steady simulations and returns fitted parameters, residual attribution,
+- A bounded multi-case calibration service performs sequential uncertainty-weighted trust-region
+  least squares through ordinary steady simulations and returns fitted parameters, residual attribution,
   measurement-only and prior-augmented sensitivity rank, bound-aware local covariance/correlation,
   execution provenance, and a reusable canonical fitted model. The thin CLI exposes the same
   service through `calibrate --model ... --calibration ... --max-iterations ...` for bounded local

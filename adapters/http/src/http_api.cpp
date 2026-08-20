@@ -1821,9 +1821,12 @@ parse_create_calibration_request(const Request& request) {
     command.definition_json = boost::json::serialize(*typed_definition);
     if (const auto solver = tree.get_child_optional("solver")) {
         const std::set<std::string> solver_allowed = {
-            "max_iterations", "initial_step_fraction",
-            "minimum_step_fraction", "step_reduction",
-            "finite_difference_fraction",
+            "max_iterations", "finite_difference_fraction",
+            "initial_trust_region_radius",
+            "minimum_trust_region_radius",
+            "maximum_trust_region_radius", "acceptance_ratio",
+            "gradient_tolerance", "step_tolerance",
+            "objective_relative_tolerance",
             "minimum_continuation_fraction", "continuation_growth",
             "simulation_solver",
         };
@@ -1837,15 +1840,27 @@ parse_create_calibration_request(const Request& request) {
         auto& value = command.solver;
         value.max_iterations =
             solver->get("max_iterations", value.max_iterations);
-        value.initial_step_fraction = solver->get(
-            "initial_step_fraction", value.initial_step_fraction);
-        value.minimum_step_fraction = solver->get(
-            "minimum_step_fraction", value.minimum_step_fraction);
-        value.step_reduction =
-            solver->get("step_reduction", value.step_reduction);
         value.finite_difference_fraction = solver->get(
             "finite_difference_fraction",
             value.finite_difference_fraction);
+        value.initial_trust_region_radius = solver->get(
+            "initial_trust_region_radius",
+            value.initial_trust_region_radius);
+        value.minimum_trust_region_radius = solver->get(
+            "minimum_trust_region_radius",
+            value.minimum_trust_region_radius);
+        value.maximum_trust_region_radius = solver->get(
+            "maximum_trust_region_radius",
+            value.maximum_trust_region_radius);
+        value.acceptance_ratio = solver->get(
+            "acceptance_ratio", value.acceptance_ratio);
+        value.gradient_tolerance = solver->get(
+            "gradient_tolerance", value.gradient_tolerance);
+        value.step_tolerance = solver->get(
+            "step_tolerance", value.step_tolerance);
+        value.objective_relative_tolerance = solver->get(
+            "objective_relative_tolerance",
+            value.objective_relative_tolerance);
         value.minimum_continuation_fraction = solver->get(
             "minimum_continuation_fraction",
             value.minimum_continuation_fraction);

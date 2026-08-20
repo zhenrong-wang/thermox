@@ -708,13 +708,20 @@ void calibration_solver_json(
     std::ostringstream& out,
     const CalibrationSolverSettings& solver) {
     out << "{\"max_iterations\": " << solver.max_iterations
-        << ", \"initial_step_fraction\": "
-        << solver.initial_step_fraction
-        << ", \"minimum_step_fraction\": "
-        << solver.minimum_step_fraction
-        << ", \"step_reduction\": " << solver.step_reduction
         << ", \"finite_difference_fraction\": "
         << solver.finite_difference_fraction
+        << ", \"initial_trust_region_radius\": "
+        << solver.initial_trust_region_radius
+        << ", \"minimum_trust_region_radius\": "
+        << solver.minimum_trust_region_radius
+        << ", \"maximum_trust_region_radius\": "
+        << solver.maximum_trust_region_radius
+        << ", \"acceptance_ratio\": " << solver.acceptance_ratio
+        << ", \"gradient_tolerance\": "
+        << solver.gradient_tolerance
+        << ", \"step_tolerance\": " << solver.step_tolerance
+        << ", \"objective_relative_tolerance\": "
+        << solver.objective_relative_tolerance
         << ", \"minimum_continuation_fraction\": "
         << solver.minimum_continuation_fraction
         << ", \"continuation_growth\": "

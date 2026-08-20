@@ -1154,11 +1154,19 @@ Tree calibration_settings(
     const service::CalibrationSolverSettings& value) {
     Tree tree;
     tree.put("max_iterations", value.max_iterations);
-    tree.put("initial_step_fraction", value.initial_step_fraction);
-    tree.put("minimum_step_fraction", value.minimum_step_fraction);
-    tree.put("step_reduction", value.step_reduction);
     tree.put("finite_difference_fraction",
              value.finite_difference_fraction);
+    tree.put("initial_trust_region_radius",
+             value.initial_trust_region_radius);
+    tree.put("minimum_trust_region_radius",
+             value.minimum_trust_region_radius);
+    tree.put("maximum_trust_region_radius",
+             value.maximum_trust_region_radius);
+    tree.put("acceptance_ratio", value.acceptance_ratio);
+    tree.put("gradient_tolerance", value.gradient_tolerance);
+    tree.put("step_tolerance", value.step_tolerance);
+    tree.put("objective_relative_tolerance",
+             value.objective_relative_tolerance);
     tree.put("minimum_continuation_fraction",
              value.minimum_continuation_fraction);
     tree.put("continuation_growth", value.continuation_growth);
@@ -1171,13 +1179,19 @@ service::CalibrationSolverSettings decode_calibration_settings(
     const Tree& tree) {
     service::CalibrationSolverSettings value;
     value.max_iterations = tree.get<int>("max_iterations");
-    value.initial_step_fraction =
-        tree.get<double>("initial_step_fraction");
-    value.minimum_step_fraction =
-        tree.get<double>("minimum_step_fraction");
-    value.step_reduction = tree.get<double>("step_reduction");
     value.finite_difference_fraction =
         tree.get<double>("finite_difference_fraction");
+    value.initial_trust_region_radius =
+        tree.get<double>("initial_trust_region_radius");
+    value.minimum_trust_region_radius =
+        tree.get<double>("minimum_trust_region_radius");
+    value.maximum_trust_region_radius =
+        tree.get<double>("maximum_trust_region_radius");
+    value.acceptance_ratio = tree.get<double>("acceptance_ratio");
+    value.gradient_tolerance = tree.get<double>("gradient_tolerance");
+    value.step_tolerance = tree.get<double>("step_tolerance");
+    value.objective_relative_tolerance =
+        tree.get<double>("objective_relative_tolerance");
     value.minimum_continuation_fraction =
         tree.get<double>("minimum_continuation_fraction");
     value.continuation_growth =

@@ -45,6 +45,43 @@ void parse_calibration_solver(
                 "less than 1");
         }
     }
+    const auto positive_setting =
+        [&](const char* name, double& destination) {
+        if (!value.contains(name)) return;
+        destination = value.at(name).get<double>();
+        require_positive_finite(
+            destination,
+            "calibration_solver." + std::string(name));
+    };
+    positive_setting(
+        "initial_trust_region_radius",
+        settings.initial_trust_region_radius);
+    positive_setting(
+        "minimum_trust_region_radius",
+        settings.minimum_trust_region_radius);
+    positive_setting(
+        "maximum_trust_region_radius",
+        settings.maximum_trust_region_radius);
+    positive_setting(
+        "gradient_tolerance", settings.gradient_tolerance);
+    positive_setting("step_tolerance", settings.step_tolerance);
+    positive_setting(
+        "objective_relative_tolerance",
+        settings.objective_relative_tolerance);
+    if (value.contains("acceptance_ratio")) {
+        settings.acceptance_ratio =
+            value.at("acceptance_ratio").get<double>();
+    }
+    if (settings.minimum_trust_region_radius >=
+            settings.initial_trust_region_radius ||
+        settings.maximum_trust_region_radius <
+            settings.initial_trust_region_radius ||
+        !std::isfinite(settings.acceptance_ratio) ||
+        settings.acceptance_ratio < 0.0 ||
+        settings.acceptance_ratio >= 1.0) {
+        throw EngineeringStudyRequestError(
+            "calibration_solver trust-region settings are invalid");
+    }
 }
 
 void parse_prediction_solver(

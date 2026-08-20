@@ -110,9 +110,10 @@ gas-turbine- or cycle-specific workflow. Compiled components may supply anchor-a
 paths behind the same contract, and the result reports whether one was used; solver policy does
 not move into a transport or UI.
 
-Calibration is also service orchestration: the service applies bounded candidate parameters to
-model copies, invokes ordinary steady simulations sequentially across the observation cases, and
-forms an uncertainty-weighted objective. It returns the fitted canonical model and residual
+Calibration is also service orchestration: the service exposes uncertainty-weighted residuals to
+the numerical core's bounded trust-region least-squares callback, applies candidate parameters to
+model copies, and invokes ordinary steady simulations sequentially across observation cases. It
+returns the fitted canonical model and residual
 attribution, while post-fit sensitivity diagnostics distinguish what measurements identify from
 what declared priors regularize and provide bound-aware local covariance when justified. Neither
 the platform compiler nor the nonlinear solver owns calibration behavior.

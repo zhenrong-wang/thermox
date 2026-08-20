@@ -55,10 +55,14 @@ void append_calibration_settings(
     std::ostringstream& stream,
     const CalibrationSolverSettings& settings) {
     stream << settings.max_iterations << '|'
-           << settings.initial_step_fraction << '|'
-           << settings.minimum_step_fraction << '|'
-           << settings.step_reduction << '|'
            << settings.finite_difference_fraction << '|'
+           << settings.initial_trust_region_radius << '|'
+           << settings.minimum_trust_region_radius << '|'
+           << settings.maximum_trust_region_radius << '|'
+           << settings.acceptance_ratio << '|'
+           << settings.gradient_tolerance << '|'
+           << settings.step_tolerance << '|'
+           << settings.objective_relative_tolerance << '|'
            << settings.minimum_continuation_fraction << '|'
            << settings.continuation_growth << '|';
     append_steady_settings(stream, settings.simulation_solver);

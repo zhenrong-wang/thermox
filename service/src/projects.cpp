@@ -363,16 +363,26 @@ void validate_calibration_solver(
     const CalibrationSolverSettings& value) {
     validate_steady_solver(value.simulation_solver);
     if (value.max_iterations <= 0 ||
-        !std::isfinite(value.initial_step_fraction) ||
-        value.initial_step_fraction <= 0.0 ||
-        !std::isfinite(value.minimum_step_fraction) ||
-        value.minimum_step_fraction <= 0.0 ||
-        value.minimum_step_fraction > value.initial_step_fraction ||
-        !std::isfinite(value.step_reduction) ||
-        value.step_reduction <= 0.0 || value.step_reduction >= 1.0 ||
         !std::isfinite(value.finite_difference_fraction) ||
         value.finite_difference_fraction <= 0.0 ||
         value.finite_difference_fraction >= 1.0 ||
+        !std::isfinite(value.initial_trust_region_radius) ||
+        value.initial_trust_region_radius <= 0.0 ||
+        !std::isfinite(value.minimum_trust_region_radius) ||
+        value.minimum_trust_region_radius <= 0.0 ||
+        value.minimum_trust_region_radius >=
+            value.initial_trust_region_radius ||
+        !std::isfinite(value.maximum_trust_region_radius) ||
+        value.maximum_trust_region_radius <
+            value.initial_trust_region_radius ||
+        !std::isfinite(value.acceptance_ratio) ||
+        value.acceptance_ratio < 0.0 || value.acceptance_ratio >= 1.0 ||
+        !std::isfinite(value.gradient_tolerance) ||
+        value.gradient_tolerance <= 0.0 ||
+        !std::isfinite(value.step_tolerance) ||
+        value.step_tolerance <= 0.0 ||
+        !std::isfinite(value.objective_relative_tolerance) ||
+        value.objective_relative_tolerance <= 0.0 ||
         !std::isfinite(value.minimum_continuation_fraction) ||
         value.minimum_continuation_fraction <= 0.0 ||
         value.minimum_continuation_fraction > 1.0 ||
@@ -399,10 +409,14 @@ std::string calibration_identity(
     append(definition_json);
     const auto& solver = request.solver;
     out << std::setprecision(17) << solver.max_iterations << '|'
-        << solver.initial_step_fraction << '|'
-        << solver.minimum_step_fraction << '|'
-        << solver.step_reduction << '|'
         << solver.finite_difference_fraction << '|'
+        << solver.initial_trust_region_radius << '|'
+        << solver.minimum_trust_region_radius << '|'
+        << solver.maximum_trust_region_radius << '|'
+        << solver.acceptance_ratio << '|'
+        << solver.gradient_tolerance << '|'
+        << solver.step_tolerance << '|'
+        << solver.objective_relative_tolerance << '|'
         << solver.minimum_continuation_fraction << '|'
         << solver.continuation_growth << '|';
     append_steady(out, solver.simulation_solver);

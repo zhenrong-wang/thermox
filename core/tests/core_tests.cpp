@@ -1,3 +1,4 @@
+#include "thermox/bounded_least_squares_optimizer.hpp"
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/dense_cholesky.hpp"
 #include "thermox/continuation_solver.hpp"
@@ -167,6 +168,63 @@ void test_dense_least_squares_solver() {
                  "ill-conditioned least-squares x0");
     require_near(ill_result.x[1], -1.0, 1.0e-7,
                  "ill-conditioned least-squares x1");
+}
+
+void test_bounded_nonlinear_least_squares_optimizer() {
+    int referenced_evaluations = 0;
+    const auto result = thermox::solve_bounded_nonlinear_least_squares(
+        [&](const std::vector<double>& x,
+            const std::vector<double>* reference) {
+            if (reference != nullptr) ++referenced_evaluations;
+            return thermox::BoundedResidualEvaluation{
+                true,
+                {10.0 * (x[1] - x[0] * x[0]), 1.0 - x[0]},
+                "ok",
+            };
+        },
+        {-1.2, 1.0}, {-2.0, -1.0}, {2.0, 3.0},
+        {.max_iterations = 60});
+    require(result.success, result.message);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require_near(result.x[0], 1.0, 2.0e-5,
+                 "bounded least-squares Rosenbrock x");
+    require_near(result.x[1], 1.0, 2.0e-5,
+                 "bounded least-squares Rosenbrock y");
+    require(
+        result.final_objective < result.initial_objective &&
+            result.diagnostics.accepted_steps > 0 &&
+            result.diagnostics.sensitivity_evaluations > 0 &&
+            referenced_evaluations > 0,
+        "bounded least-squares reports trust-region and callback evidence");
+
+    const auto bounded =
+        thermox::solve_bounded_nonlinear_least_squares(
+            [](const std::vector<double>& x,
+               const std::vector<double>*) {
+                return thermox::BoundedResidualEvaluation{
+                    true, {x[0] - 2.0}, "ok"};
+            },
+            {0.25}, {0.0}, {1.0});
+    require(
+        bounded.success && bounded.diagnostics.converged,
+        "bounded least-squares must converge at an active bound");
+    require_near(bounded.x[0], 1.0, 1.0e-10,
+                 "bounded least-squares active-bound solution");
+
+    const auto singular =
+        thermox::solve_bounded_nonlinear_least_squares(
+            [](const std::vector<double>& x,
+               const std::vector<double>*) {
+                return thermox::BoundedResidualEvaluation{
+                    true, {x[0] + x[1] - 1.0}, "ok"};
+            },
+            {0.0, 0.0}, {-1.0, -1.0}, {1.0, 1.0});
+    require(
+        !singular.success &&
+            singular.message.find("not identifiable") !=
+                std::string::npos,
+        "bounded least-squares rejects a rank-deficient free sensitivity");
 }
 
 void test_sparse_linear_solver() {
@@ -2233,6 +2291,7 @@ int main() {
         test_dense_linear_solver();
         test_dense_cholesky_whitening();
         test_dense_least_squares_solver();
+        test_bounded_nonlinear_least_squares_optimizer();
         test_sparse_linear_solver();
         test_reusable_sparse_factorization();
         test_sparse_factorization_resolver_keys_exact_patterns();

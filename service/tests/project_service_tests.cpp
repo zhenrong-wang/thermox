@@ -1695,9 +1695,13 @@ void test_calibrations_bind_exact_training_studies() {
         "calibrations must be immutable and bind exact Team-scoped Studies");
     require(
         thermox::service::serialize_calibration_revision_json(first)
-                .find("\"thermox.calibration/v1\"") !=
-            std::string::npos,
-        "calibration serialization must expose its canonical definition");
+                    .find("\"thermox.calibration/v1\"") !=
+                std::string::npos &&
+            thermox::service::serialize_calibration_revision_json(first)
+                    .find("\"initial_trust_region_radius\"") !=
+                std::string::npos,
+        "calibration serialization must expose its canonical definition "
+        "and optimizer policy");
     const auto resolved = service.resolve_calibration(
         team_a, project.project_id, first.calibration_revision_id);
     require(

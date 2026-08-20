@@ -6,6 +6,7 @@
 #include "artifact_payload.hpp"
 
 #include "thermox/nonlinear_solver.hpp"
+#include "thermox/bounded_least_squares_optimizer.hpp"
 #include "thermox/dense_cholesky.hpp"
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/least_squares_solver.hpp"
@@ -1172,17 +1173,23 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const CalibrationSolverSettings& settings) {
     SolverProvenance provenance{
-        "thermox.coordinate-search/v1",
+        "thermox.trust-region-least-squares/v1",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
-            {"initial_step_fraction",
-             settings.initial_step_fraction},
-            {"minimum_step_fraction",
-             settings.minimum_step_fraction},
-            {"step_reduction", settings.step_reduction},
             {"finite_difference_fraction",
              settings.finite_difference_fraction},
+            {"initial_trust_region_radius",
+             settings.initial_trust_region_radius},
+            {"minimum_trust_region_radius",
+             settings.minimum_trust_region_radius},
+            {"maximum_trust_region_radius",
+             settings.maximum_trust_region_radius},
+            {"acceptance_ratio", settings.acceptance_ratio},
+            {"gradient_tolerance", settings.gradient_tolerance},
+            {"step_tolerance", settings.step_tolerance},
+            {"objective_relative_tolerance",
+             settings.objective_relative_tolerance},
             {"minimum_continuation_fraction",
              settings.minimum_continuation_fraction},
             {"continuation_growth",
@@ -2856,19 +2863,27 @@ CalibrationResponse SimulationService::run_calibration(
     }
     const auto& settings = request.solver;
     if (settings.max_iterations <= 0 ||
-        !std::isfinite(settings.initial_step_fraction) ||
-        settings.initial_step_fraction <= 0.0 ||
-        settings.initial_step_fraction > 1.0 ||
-        !std::isfinite(settings.minimum_step_fraction) ||
-        settings.minimum_step_fraction <= 0.0 ||
-        settings.minimum_step_fraction >=
-            settings.initial_step_fraction ||
-        !std::isfinite(settings.step_reduction) ||
-        settings.step_reduction <= 0.0 ||
-        settings.step_reduction >= 1.0 ||
         !std::isfinite(settings.finite_difference_fraction) ||
         settings.finite_difference_fraction <= 0.0 ||
         settings.finite_difference_fraction >= 1.0 ||
+        !std::isfinite(settings.initial_trust_region_radius) ||
+        settings.initial_trust_region_radius <= 0.0 ||
+        !std::isfinite(settings.minimum_trust_region_radius) ||
+        settings.minimum_trust_region_radius <= 0.0 ||
+        settings.minimum_trust_region_radius >=
+            settings.initial_trust_region_radius ||
+        !std::isfinite(settings.maximum_trust_region_radius) ||
+        settings.maximum_trust_region_radius <
+            settings.initial_trust_region_radius ||
+        !std::isfinite(settings.acceptance_ratio) ||
+        settings.acceptance_ratio < 0.0 ||
+        settings.acceptance_ratio >= 1.0 ||
+        !std::isfinite(settings.gradient_tolerance) ||
+        settings.gradient_tolerance <= 0.0 ||
+        !std::isfinite(settings.step_tolerance) ||
+        settings.step_tolerance <= 0.0 ||
+        !std::isfinite(settings.objective_relative_tolerance) ||
+        settings.objective_relative_tolerance <= 0.0 ||
         !std::isfinite(
             settings.minimum_continuation_fraction) ||
         settings.minimum_continuation_fraction <= 0.0 ||
@@ -2967,7 +2982,6 @@ CalibrationResponse SimulationService::run_calibration(
     std::vector<double> initial;
     std::vector<double> lower;
     std::vector<double> upper;
-    std::vector<double> steps;
     try {
         for (const auto& parameter : calibration->parameters) {
             if (!parameter.lower_bound.has_value() ||
@@ -2987,9 +3001,6 @@ CalibrationResponse SimulationService::run_calibration(
             initial.push_back(value);
             lower.push_back(parameter.lower_bound->value_si);
             upper.push_back(parameter.upper_bound->value_si);
-            steps.push_back(
-                settings.initial_step_fraction *
-                (upper.back() - lower.back()));
         }
     } catch (const std::exception& ex) {
         response.status = OperationStatus::invalid_model;
@@ -3024,6 +3035,13 @@ CalibrationResponse SimulationService::run_calibration(
             runtime->impl_->thermochemistry,
             warm_starts);
     };
+    const auto evaluate_counted =
+        [&](const std::vector<double>& candidate,
+            const std::map<std::string, CalibrationState>*
+                warm_starts) {
+        ++response.diagnostics.objective_evaluations;
+        return evaluate_at(candidate, warm_starts);
+    };
     const auto continue_to =
         [&](const std::vector<double>& from,
             const std::vector<double>& target,
@@ -3044,16 +3062,14 @@ CalibrationResponse SimulationService::run_calibration(
                     next * (target[index] - from[index]);
             }
             try {
-                result = evaluate_at(
+                result = evaluate_counted(
                     candidate, &current_warm_starts);
-                ++response.diagnostics.objective_evaluations;
                 progress = next;
                 current_warm_starts = result.case_states;
                 fraction = std::min(
                     1.0 - progress,
                     fraction * settings.continuation_growth);
             } catch (const std::exception&) {
-                ++response.diagnostics.objective_evaluations;
                 fraction *= 0.5;
                 if (fraction <
                     settings.minimum_continuation_fraction) {
@@ -3063,84 +3079,143 @@ CalibrationResponse SimulationService::run_calibration(
         }
         return result;
     };
-
-    ObjectiveEvaluation best;
+    thermox::DenseCholeskyFactorization calibration_whitener;
     try {
-        best = evaluate_at(values, nullptr);
-        response.diagnostics.initial_objective = best.value;
-        response.diagnostics.objective_evaluations = 1;
+        calibration_whitener = measurement_whitener(*calibration);
     } catch (const std::exception& ex) {
-        response.status = OperationStatus::solver_failed;
         response.error = make_error(
-            "calibration_baseline_failed", "calibration", ex.what());
+            "invalid_measurement_covariance", "validation", ex.what());
         return response;
     }
+    const auto residuals_from =
+        [&](const ObjectiveEvaluation& evaluation,
+            const std::vector<double>& candidate) {
+        std::vector<double> residuals;
+        residuals.reserve(
+            evaluation.observations.size() +
+            response.diagnostics.prior_count);
+        for (const auto& observation : evaluation.observations) {
+            residuals.push_back(observation.normalized_residual);
+        }
+        const auto whitened = calibration_whitener.solve_lower(
+            std::move(residuals));
+        if (!whitened.success) {
+            throw std::runtime_error(
+                "could not whiten calibration residuals: " +
+                whitened.message);
+        }
+        residuals = whitened.x;
+        for (std::size_t index = 0;
+             index < calibration->parameters.size(); ++index) {
+            const auto& parameter = calibration->parameters[index];
+            if (!parameter.prior_mean.has_value()) continue;
+            residuals.push_back(
+                (candidate[index] - parameter.prior_mean->value_si) /
+                parameter.prior_sigma->value_si);
+        }
+        return residuals;
+    };
 
-    for (int iteration = 0;
-         iteration < settings.max_iterations; ++iteration) {
-        bool improved = false;
-        for (std::size_t index = 0; index < values.size();
-             ++index) {
-            const auto base_values = values;
-            const auto base_evaluation = best;
-            const double original = values[index];
-            double selected = original;
-            ObjectiveEvaluation selected_evaluation =
-                base_evaluation;
-            for (const double direction : {-1.0, 1.0}) {
-                const double trial = std::clamp(
-                    original + direction * steps[index],
-                    lower[index], upper[index]);
-                if (trial == original) continue;
-                auto target_values = base_values;
-                target_values[index] = trial;
-                try {
-                    auto evaluation = continue_to(
-                        base_values, target_values,
-                        base_evaluation.case_states);
-                    if (evaluation.value <
-                        selected_evaluation.value) {
-                        selected = trial;
-                        selected_evaluation =
-                            std::move(evaluation);
-                    }
-                } catch (const std::exception&) {
+    std::map<std::vector<double>, ObjectiveEvaluation> evaluations;
+    const auto residual_callback =
+        [&](const std::vector<double>& candidate,
+            const std::vector<double>* reference) {
+        try {
+            const auto existing = evaluations.find(candidate);
+            if (existing != evaluations.end()) {
+                return thermox::BoundedResidualEvaluation{
+                    true,
+                    residuals_from(existing->second, candidate),
+                    "ok",
+                };
+            }
+            ObjectiveEvaluation evaluation;
+            if (reference != nullptr) {
+                const auto origin = evaluations.find(*reference);
+                if (origin != evaluations.end()) {
+                    evaluation = continue_to(
+                        *reference, candidate,
+                        origin->second.case_states);
+                } else {
+                    evaluation = evaluate_counted(candidate, nullptr);
                 }
+            } else {
+                evaluation = evaluate_counted(candidate, nullptr);
             }
-            values[index] = selected;
-            if (selected != original) {
-                improved = true;
-                best = std::move(selected_evaluation);
-            }
-            apply_values(values);
+            const auto residuals = residuals_from(evaluation, candidate);
+            evaluations.insert_or_assign(candidate, std::move(evaluation));
+            return thermox::BoundedResidualEvaluation{
+                true, residuals, "ok"};
+        } catch (const std::exception& ex) {
+            return thermox::BoundedResidualEvaluation{
+                false, {}, ex.what()};
         }
-        response.diagnostics.iterations = iteration + 1;
-        if (!improved) {
-            for (auto& step : steps) {
-                step *= settings.step_reduction;
-            }
-        }
-        bool small = true;
-        for (std::size_t index = 0; index < steps.size();
-             ++index) {
-            small = small &&
-                steps[index] <=
-                    settings.minimum_step_fraction *
-                        (upper[index] - lower[index]);
-        }
-        if (small) {
-            response.diagnostics.converged = true;
-            response.diagnostics.message =
-                "bounded coordinate search step tolerance reached";
-            break;
-        }
+    };
+    const auto optimized =
+        thermox::solve_bounded_nonlinear_least_squares(
+            residual_callback, values, lower, upper,
+            {
+                .max_iterations = settings.max_iterations,
+                .finite_difference_fraction =
+                    settings.finite_difference_fraction,
+                .initial_trust_region_radius =
+                    settings.initial_trust_region_radius,
+                .minimum_trust_region_radius =
+                    settings.minimum_trust_region_radius,
+                .maximum_trust_region_radius =
+                    settings.maximum_trust_region_radius,
+                .acceptance_ratio = settings.acceptance_ratio,
+                .gradient_tolerance = settings.gradient_tolerance,
+                .step_tolerance = settings.step_tolerance,
+                .objective_relative_tolerance =
+                    settings.objective_relative_tolerance,
+            });
+    if (!optimized.success) {
+        if (!optimized.x.empty()) apply_values(optimized.x);
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "calibration_optimizer_failed", "calibration",
+            optimized.message);
+        return response;
     }
-    if (!response.diagnostics.converged) {
-        response.diagnostics.message =
-            "bounded coordinate search reached iteration limit";
+    values = optimized.x;
+    const auto fitted = evaluations.find(values);
+    if (fitted == evaluations.end()) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "calibration_optimizer_state_missing", "calibration",
+            "optimizer result has no corresponding physical evaluation");
+        return response;
     }
+    ObjectiveEvaluation best = fitted->second;
+    response.diagnostics.converged =
+        optimized.diagnostics.converged;
+    response.diagnostics.iterations =
+        optimized.diagnostics.iterations;
+    response.diagnostics.sensitivity_evaluations =
+        optimized.diagnostics.sensitivity_evaluations;
+    response.diagnostics.accepted_steps =
+        optimized.diagnostics.accepted_steps;
+    response.diagnostics.rejected_steps =
+        optimized.diagnostics.rejected_steps;
+    response.diagnostics.final_projected_gradient_norm =
+        optimized.diagnostics.final_projected_gradient_norm;
+    response.diagnostics.final_trust_region_radius =
+        optimized.diagnostics.final_trust_region_radius;
+    response.diagnostics.optimizer_factorization_quality_available =
+        optimized.diagnostics.factorization_quality.available;
+    response.diagnostics.optimizer_reciprocal_pivot_ratio =
+        optimized.diagnostics.factorization_quality
+            .reciprocal_pivot_ratio;
+    response.diagnostics.optimizer_factorization_quality_method =
+        optimized.diagnostics.factorization_quality.method;
+    response.diagnostics.message =
+        optimized.diagnostics.message;
+    response.diagnostics.initial_objective =
+        optimized.initial_objective;
     apply_values(values);
-    response.diagnostics.final_objective = best.value;
+    response.diagnostics.final_objective =
+        optimized.final_objective;
 
     const auto numerical_rank = [](const thermox::Matrix& matrix) {
         if (matrix.empty() || matrix.front().empty()) {

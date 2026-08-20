@@ -2218,6 +2218,29 @@ std::string serialize_calibration_response_json(
         << response.diagnostics.objective_evaluations
         << ", \"sensitivity_evaluations\": "
         << response.diagnostics.sensitivity_evaluations
+        << ", \"accepted_steps\": "
+        << response.diagnostics.accepted_steps
+        << ", \"rejected_steps\": "
+        << response.diagnostics.rejected_steps
+        << ", \"final_projected_gradient_norm\": ";
+    json_number(
+        out, response.diagnostics.final_projected_gradient_norm);
+    out << ", \"final_trust_region_radius\": ";
+    json_number(
+        out, response.diagnostics.final_trust_region_radius);
+    out << ", \"optimizer_factorization_quality_available\": "
+        << (response.diagnostics
+                    .optimizer_factorization_quality_available
+                ? "true" : "false")
+        << ", \"optimizer_reciprocal_pivot_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.optimizer_reciprocal_pivot_ratio);
+    out << ", \"optimizer_factorization_quality_method\": ";
+    json_string(
+        out,
+        response.diagnostics.optimizer_factorization_quality_method);
+    out
         << ", \"measurement_correlation_count\": "
         << response.diagnostics.measurement_correlation_count
         << ", \"measurement_covariance_applied\": "

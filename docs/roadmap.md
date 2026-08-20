@@ -417,6 +417,9 @@ Next:
     contour, selected-parameter ordering, active-bound refusal, immutable policy, durable
     execution, and HTTP/CLI/web evidence. ✅ Sampling-based nonlinear regions and a sparse QR/SVD
     backend for very large rectangular sensitivities remain separate follow-up milestones.
+24. Replace service-owned coordinate search with a scaled, bounded trust-region least-squares
+    optimizer in the numerical core; preserve service-owned continuation through reference-point
+    callbacks and carry trust-region policy and diagnostics through durable execution. ✅
 
 See `docs/calibration-architecture.md`.
 
