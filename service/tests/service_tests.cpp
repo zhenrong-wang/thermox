@@ -9,6 +9,9 @@
 #include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
 
+#include <boost/json.hpp>
+#include <boost/json/src.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -3688,6 +3691,31 @@ void test_bounded_calibration_service() {
             response.diagnostics.initial_objective,
         "calibration must reduce the weighted objective");
     require(
+        response.diagnostics.adjustable_parameter_count == 1 &&
+            response.diagnostics.measurement_count == 2 &&
+            response.diagnostics.prior_count == 1 &&
+            response.diagnostics.data_sensitivity_rank == 1 &&
+            response.diagnostics.locally_data_identifiable &&
+            response.diagnostics.posterior_sensitivity_rank == 1 &&
+            response.diagnostics.locally_posterior_identifiable,
+        "calibration must distinguish and report full-rank data and "
+        "posterior sensitivity");
+    require(
+        response.diagnostics.sensitivity_evaluations >= 1 &&
+            response.diagnostics.uncertainty_available &&
+            response.diagnostics
+                .sensitivity_factorization_quality_available &&
+            response.parameter_uncertainties.size() == 1 &&
+            response.parameter_uncertainties.front()
+                .standard_uncertainty_si.has_value() &&
+            *response.parameter_uncertainties.front()
+                    .standard_uncertainty_si > 0.0 &&
+            !response.parameter_uncertainties.front().bound_active &&
+            response.parameter_uncertainties.front().interpretation ==
+                "local_posterior_linearized",
+        "calibration must report an evidence-labelled local posterior "
+        "uncertainty for a free identifiable parameter");
+    require(
         response.parameters.front().fitted_value_si >= 0.75 &&
             response.parameters.front().fitted_value_si <= 0.95,
         "fitted parameter must remain inside declared bounds");
@@ -3711,9 +3739,82 @@ void test_bounded_calibration_service() {
     require(
         json.find("\"normalized_residual\":") !=
                 std::string::npos &&
+            json.find("\"locally_data_identifiable\": true") !=
+                std::string::npos &&
+            json.find("\"parameter_uncertainties\":") !=
+                std::string::npos &&
             json.find("\"fitted_model_json\":") !=
                 std::string::npos,
         "calibration JSON must expose residuals and fitted model");
+
+    auto iteration_limited = request;
+    iteration_limited.solver.max_iterations = 1;
+    const auto limited_response =
+        service.run_calibration(iteration_limited);
+    require(
+        limited_response.succeeded() &&
+            !limited_response.diagnostics.converged &&
+            limited_response.diagnostics.data_sensitivity_rank == 1 &&
+            !limited_response.diagnostics.uncertainty_available &&
+            limited_response.parameter_uncertainties.size() == 1 &&
+            limited_response.parameter_uncertainties.front()
+                    .interpretation ==
+                "unavailable_fit_not_converged",
+        "iteration-limited calibration must retain local rank while "
+        "withholding fitted-parameter covariance");
+}
+
+void test_calibration_separates_data_and_prior_identifiability() {
+    auto model = boost::json::parse(
+        read_source_file("core/examples/air_compressor.json"));
+    auto& calibration = model.as_object()
+        .at("calibrations").as_array().at(0).as_object();
+    auto& observations = calibration.at("observations").as_array();
+    observations.erase(observations.begin() + 1);
+    calibration.at("parameters").as_array().push_back(
+        boost::json::parse(R"({
+          "id": "design_airflow",
+          "scope": "system",
+          "targets": [
+            "cases.design.fixed_values.compressor.inlet.m_dot"
+          ],
+          "cases": ["design"],
+          "bounds": {
+            "lower": {"value": 90.0, "unit": "kg/s"},
+            "upper": {"value": 110.0, "unit": "kg/s"}
+          },
+          "prior": {
+            "mean": {"value": 100.0, "unit": "kg/s"},
+            "sigma": {"value": 2.0, "unit": "kg/s"}
+          }
+        })"));
+
+    thermox::service::SimulationService service;
+    thermox::service::CalibrationRequest request;
+    request.model_json = boost::json::serialize(model);
+    request.calibration_id = "acceptance_fit";
+    request.solver.max_iterations = 40;
+    const auto response = service.run_calibration(request);
+
+    require(
+        response.succeeded(),
+        "prior-regularized calibration must return a fitted result: " +
+            response.error.message);
+    require(
+        response.diagnostics.adjustable_parameter_count == 2 &&
+            response.diagnostics.measurement_count == 1 &&
+            response.diagnostics.prior_count == 2 &&
+            response.diagnostics.data_sensitivity_rank == 1 &&
+            !response.diagnostics.locally_data_identifiable,
+        "one measurement must not be reported as identifying two "
+        "parameters");
+    require(
+        response.diagnostics.posterior_sensitivity_rank == 2 &&
+            response.diagnostics.locally_posterior_identifiable &&
+            response.diagnostics.uncertainty_available &&
+            response.parameter_uncertainties.size() == 2,
+        "declared independent priors must regularize the local posterior "
+        "without changing the data-identifiability verdict");
 }
 
 void test_hard_constraint_data_reconciliation_service() {
@@ -4495,7 +4596,8 @@ void test_engineering_study_freezes_before_prediction() {
         + "\"model_document\":" +
         independent_study_model(baseline_power) +
         R"json(,"calibration_id":"baseline_fit",
-          "calibration_solver":{"max_iterations":20},
+          "calibration_solver":{"max_iterations":20,
+            "finite_difference_fraction":0.0002},
           "prediction_cases":[{"case_id":"validation",
             "observations":[{"id":"validation_power",
               "target":"compressor.shaft.W_dot","dimension":"power",
@@ -4507,6 +4609,9 @@ void test_engineering_study_freezes_before_prediction() {
     require(
         parsed.calibration_id == "baseline_fit" &&
             parsed.calibration_solver.max_iterations == 20 &&
+            std::abs(
+                parsed.calibration_solver.finite_difference_fraction -
+                2.0e-4) < 1.0e-15 &&
             parsed.prediction_cases.size() == 1 &&
             parsed.prediction_cases.front().observations.size() == 1,
         "declarative engineering-study input must preserve the frozen "
@@ -6175,6 +6280,7 @@ int main() {
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
+        test_calibration_separates_data_and_prior_identifiability();
         test_hard_constraint_data_reconciliation_service();
         test_hard_reconciliation_reports_local_bound_limitation();
         test_overdetermined_weighted_reconciliation_service();

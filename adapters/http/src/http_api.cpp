@@ -1823,6 +1823,7 @@ parse_create_calibration_request(const Request& request) {
         const std::set<std::string> solver_allowed = {
             "max_iterations", "initial_step_fraction",
             "minimum_step_fraction", "step_reduction",
+            "finite_difference_fraction",
             "minimum_continuation_fraction", "continuation_growth",
             "simulation_solver",
         };
@@ -1842,6 +1843,9 @@ parse_create_calibration_request(const Request& request) {
             "minimum_step_fraction", value.minimum_step_fraction);
         value.step_reduction =
             solver->get("step_reduction", value.step_reduction);
+        value.finite_difference_fraction = solver->get(
+            "finite_difference_fraction",
+            value.finite_difference_fraction);
         value.minimum_continuation_fraction = solver->get(
             "minimum_continuation_fraction",
             value.minimum_continuation_fraction);

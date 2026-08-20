@@ -367,7 +367,9 @@ Next:
    ordinary simulation workflow. ✅
 4. Report fitted parameters, per-observation residuals, fitted canonical models, and complete
    provenance. ✅
-5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer.
+5. Add covariance and identifiability diagnostics behind a replaceable least-squares optimizer. ✅
+   *(measurement-only rank is reported separately from prior-augmented posterior rank; local
+   covariance excludes bound-active parameters and carries an explicit evidence interpretation)*
 6. Add topology-aware/continuation initialization for large reacting graphs so calibration
    candidates begin from component-consistent neighboring states. ✅ *(connector-domain
    propagation now removes duplicate port guesses; component-owned nonlinear seed policies remain

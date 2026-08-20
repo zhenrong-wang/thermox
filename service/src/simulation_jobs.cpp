@@ -58,6 +58,7 @@ void append_calibration_settings(
            << settings.initial_step_fraction << '|'
            << settings.minimum_step_fraction << '|'
            << settings.step_reduction << '|'
+           << settings.finite_difference_fraction << '|'
            << settings.minimum_continuation_fraction << '|'
            << settings.continuation_growth << '|';
     append_steady_settings(stream, settings.simulation_solver);

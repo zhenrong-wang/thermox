@@ -370,6 +370,9 @@ void validate_calibration_solver(
         value.minimum_step_fraction > value.initial_step_fraction ||
         !std::isfinite(value.step_reduction) ||
         value.step_reduction <= 0.0 || value.step_reduction >= 1.0 ||
+        !std::isfinite(value.finite_difference_fraction) ||
+        value.finite_difference_fraction <= 0.0 ||
+        value.finite_difference_fraction >= 1.0 ||
         !std::isfinite(value.minimum_continuation_fraction) ||
         value.minimum_continuation_fraction <= 0.0 ||
         value.minimum_continuation_fraction > 1.0 ||
@@ -399,6 +402,7 @@ std::string calibration_identity(
         << solver.initial_step_fraction << '|'
         << solver.minimum_step_fraction << '|'
         << solver.step_reduction << '|'
+        << solver.finite_difference_fraction << '|'
         << solver.minimum_continuation_fraction << '|'
         << solver.continuation_growth << '|';
     append_steady(out, solver.simulation_solver);

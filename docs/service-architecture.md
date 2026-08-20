@@ -113,7 +113,9 @@ not move into a transport or UI.
 Calibration is also service orchestration: the service applies bounded candidate parameters to
 model copies, invokes ordinary steady simulations sequentially across the observation cases, and
 forms an uncertainty-weighted objective. It returns the fitted canonical model and residual
-attribution. Neither the platform compiler nor the nonlinear solver owns calibration behavior.
+attribution, while post-fit sensitivity diagnostics distinguish what measurements identify from
+what declared priors regularize and provide bound-aware local covariance when justified. Neither
+the platform compiler nor the nonlinear solver owns calibration behavior.
 Engineering studies compose calibration with independent steady prediction cases: calibration
 cases cannot be reused as predictions, the fitted canonical model is frozen before prediction,
 and measurements are evaluated only against completed graph results.

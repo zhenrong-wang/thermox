@@ -713,6 +713,8 @@ void calibration_solver_json(
         << ", \"minimum_step_fraction\": "
         << solver.minimum_step_fraction
         << ", \"step_reduction\": " << solver.step_reduction
+        << ", \"finite_difference_fraction\": "
+        << solver.finite_difference_fraction
         << ", \"minimum_continuation_fraction\": "
         << solver.minimum_continuation_fraction
         << ", \"continuation_growth\": "

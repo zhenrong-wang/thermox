@@ -115,6 +115,17 @@ The response includes initial/fitted values, bounds, per-observation physical an
 residuals, objective diagnostics, complete execution settings, and a canonical fitted model that
 can be submitted directly for independent validation runs.
 
+After fitting, the service evaluates a bounded finite-difference sensitivity through the same
+simulation path. It reports measurement-only sensitivity rank separately from the rank after
+declared parameter priors are appended. This distinction is intentional: a prior can make a local
+posterior well posed, but it cannot make the plant measurements identify a parameter. For the
+locally free, full-rank posterior subspace, the rank-revealing least-squares factorization returns
+standard uncertainties and correlations without forming normal equations. Bound-active parameters
+are labelled explicitly and receive no symmetric two-sided uncertainty. Failure of this evidence
+calculation does not discard an otherwise valid fit; it produces `uncertainty_available=false`
+with a diagnostic message. Covariance is likewise withheld when the reference optimizer reaches
+its iteration budget without convergence, although the local sensitivity ranks remain visible.
+
 The thin command-line adapter exposes the same service workflow for local and batch use:
 
 ```sh
@@ -175,10 +186,10 @@ service contract. `sigma_si` is the declared normalization scale; callers must s
 a traceable standard uncertainty, an acceptance tolerance, or an exploratory scale.
 
 Coordinate search is intended for a small number of engineering calibration parameters. A later
-optimizer interface can add trust-region least squares and covariance/identifiability analysis
-without changing model, component, property, or observation contracts. Transient estimation is
-also a later workflow; the first implementation intentionally accepts steady cases only. The
-numeric solver and component models remain unaware of calibration campaigns.
+optimizer interface can add trust-region least squares without changing the delivered
+covariance/identifiability, model, component, property, or observation contracts. Transient
+estimation is also a later workflow; the first implementation intentionally accepts steady cases
+only. The numeric solver and component models remain unaware of calibration campaigns.
 
 ## Evidence classification
 

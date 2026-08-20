@@ -390,6 +390,7 @@ export interface CalibrationSolverSettings {
   initial_step_fraction: number
   minimum_step_fraction: number
   step_reduction: number
+  finite_difference_fraction: number
   minimum_continuation_fraction: number
   continuation_growth: number
   simulation_solver: SteadySolverSettings

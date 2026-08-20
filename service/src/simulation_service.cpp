@@ -1181,6 +1181,8 @@ SolverProvenance solver_provenance(
             {"minimum_step_fraction",
              settings.minimum_step_fraction},
             {"step_reduction", settings.step_reduction},
+            {"finite_difference_fraction",
+             settings.finite_difference_fraction},
             {"minimum_continuation_fraction",
              settings.minimum_continuation_fraction},
             {"continuation_growth",
@@ -2864,6 +2866,9 @@ CalibrationResponse SimulationService::run_calibration(
         !std::isfinite(settings.step_reduction) ||
         settings.step_reduction <= 0.0 ||
         settings.step_reduction >= 1.0 ||
+        !std::isfinite(settings.finite_difference_fraction) ||
+        settings.finite_difference_fraction <= 0.0 ||
+        settings.finite_difference_fraction >= 1.0 ||
         !std::isfinite(
             settings.minimum_continuation_fraction) ||
         settings.minimum_continuation_fraction <= 0.0 ||
@@ -2941,6 +2946,17 @@ CalibrationResponse SimulationService::run_calibration(
             calibration->measurement_correlations.size();
         response.diagnostics.measurement_covariance_applied =
             !calibration->measurement_correlations.empty();
+        response.diagnostics.adjustable_parameter_count =
+            calibration->parameters.size();
+        response.diagnostics.measurement_count =
+            calibration->observations.size();
+        response.diagnostics.prior_count = static_cast<std::size_t>(
+            std::count_if(
+                calibration->parameters.begin(),
+                calibration->parameters.end(),
+                [](const auto& parameter) {
+                    return parameter.prior_mean.has_value();
+                }));
     } catch (const std::exception& ex) {
         response.error = make_error(
             "unknown_calibration", "request", ex.what());
@@ -3125,6 +3141,234 @@ CalibrationResponse SimulationService::run_calibration(
     }
     apply_values(values);
     response.diagnostics.final_objective = best.value;
+
+    const auto numerical_rank = [](const thermox::Matrix& matrix) {
+        if (matrix.empty() || matrix.front().empty()) {
+            return std::size_t{0};
+        }
+        const std::size_t rows = matrix.size();
+        const std::size_t columns = matrix.front().size();
+        if (rows >= columns) {
+            return thermox::solve_dense_least_squares(
+                       matrix, std::vector<double>(rows, 0.0))
+                .rank;
+        }
+        thermox::Matrix transpose(
+            columns, std::vector<double>(rows, 0.0));
+        for (std::size_t row = 0; row < rows; ++row) {
+            for (std::size_t column = 0; column < columns; ++column) {
+                transpose[column][row] = matrix[row][column];
+            }
+        }
+        return thermox::solve_dense_least_squares(
+                   std::move(transpose),
+                   std::vector<double>(columns, 0.0))
+            .rank;
+    };
+    try {
+        thermox::Matrix data_sensitivity(
+            best.observations.size(),
+            std::vector<double>(values.size(), 0.0));
+        for (std::size_t column = 0; column < values.size(); ++column) {
+            const double range = upper[column] - lower[column];
+            const double delta =
+                settings.finite_difference_fraction * range;
+            const bool can_subtract = values[column] - delta >= lower[column];
+            const bool can_add = values[column] + delta <= upper[column];
+            if (!can_subtract && !can_add) {
+                throw std::runtime_error(
+                    "could not perturb bounded calibration parameter '" +
+                    calibration->parameters[column].id + "'");
+            }
+
+            ObjectiveEvaluation negative;
+            ObjectiveEvaluation positive;
+            if (can_subtract) {
+                auto candidate = values;
+                candidate[column] -= delta;
+                ++response.diagnostics.objective_evaluations;
+                ++response.diagnostics.sensitivity_evaluations;
+                negative = evaluate_at(candidate, &best.case_states);
+            }
+            if (can_add) {
+                auto candidate = values;
+                candidate[column] += delta;
+                ++response.diagnostics.objective_evaluations;
+                ++response.diagnostics.sensitivity_evaluations;
+                positive = evaluate_at(candidate, &best.case_states);
+            }
+            for (std::size_t row = 0;
+                 row < data_sensitivity.size(); ++row) {
+                if (can_subtract && can_add) {
+                    data_sensitivity[row][column] =
+                        (positive.observations[row].normalized_residual -
+                         negative.observations[row].normalized_residual) /
+                        (2.0 * delta);
+                } else if (can_add) {
+                    data_sensitivity[row][column] =
+                        (positive.observations[row].normalized_residual -
+                         best.observations[row].normalized_residual) /
+                        delta;
+                } else {
+                    data_sensitivity[row][column] =
+                        (best.observations[row].normalized_residual -
+                         negative.observations[row].normalized_residual) /
+                        delta;
+                }
+            }
+        }
+        apply_values(values);
+
+        const auto whitener = measurement_whitener(*calibration);
+        auto whitened_data = whitener.whiten_rows(data_sensitivity);
+        if (whitened_data.empty()) {
+            throw std::runtime_error(
+                "could not whiten final calibration sensitivity");
+        }
+        response.diagnostics.data_sensitivity_rank =
+            numerical_rank(whitened_data);
+        response.diagnostics.locally_data_identifiable =
+            response.diagnostics.data_sensitivity_rank == values.size();
+
+        auto posterior_sensitivity = whitened_data;
+        for (std::size_t index = 0;
+             index < calibration->parameters.size(); ++index) {
+            const auto& parameter = calibration->parameters[index];
+            if (!parameter.prior_mean.has_value()) continue;
+            std::vector<double> prior_row(values.size(), 0.0);
+            prior_row[index] = 1.0 / parameter.prior_sigma->value_si;
+            posterior_sensitivity.push_back(std::move(prior_row));
+        }
+        response.diagnostics.posterior_sensitivity_rank =
+            numerical_rank(posterior_sensitivity);
+        response.diagnostics.locally_posterior_identifiable =
+            response.diagnostics.posterior_sensitivity_rank ==
+            values.size();
+
+        std::vector<bool> bound_active(values.size(), false);
+        std::vector<std::size_t> free_indices;
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            const double tolerance = 1.0e-10 *
+                (upper[index] - lower[index]);
+            bound_active[index] =
+                values[index] - lower[index] <= tolerance ||
+                upper[index] - values[index] <= tolerance;
+            if (!bound_active[index]) free_indices.push_back(index);
+        }
+        response.diagnostics.active_bound_count =
+            values.size() - free_indices.size();
+        response.diagnostics.free_uncertainty_parameter_count =
+            free_indices.size();
+
+        std::vector<std::optional<double>> standard_uncertainties(
+            values.size());
+        thermox::Matrix free_covariance;
+        if (free_indices.empty()) {
+            response.diagnostics.uncertainty_message =
+                "all fitted parameters are bound-active; two-sided local "
+                "uncertainty is not estimated";
+        } else if (!response.diagnostics.converged) {
+            response.diagnostics.uncertainty_message =
+                "calibration optimizer did not converge; local rank is "
+                "reported but fitted-parameter covariance is withheld";
+        } else {
+            thermox::Matrix free_sensitivity(
+                posterior_sensitivity.size(),
+                std::vector<double>(free_indices.size(), 0.0));
+            for (std::size_t row = 0;
+                 row < posterior_sensitivity.size(); ++row) {
+                for (std::size_t column = 0;
+                     column < free_indices.size(); ++column) {
+                    free_sensitivity[row][column] =
+                        posterior_sensitivity[row][free_indices[column]];
+                }
+            }
+            const auto factorization = thermox::solve_dense_least_squares(
+                std::move(free_sensitivity),
+                std::vector<double>(posterior_sensitivity.size(), 0.0));
+            if (!factorization.success) {
+                response.diagnostics.uncertainty_message =
+                    "free-parameter posterior sensitivity is not full "
+                    "rank: " + factorization.message;
+            } else {
+                response.diagnostics.uncertainty_available = true;
+                response.diagnostics.uncertainty_message =
+                    response.diagnostics.prior_count == 0U
+                        ? "local linearized covariance from declared "
+                          "measurement uncertainty"
+                        : "local posterior covariance from declared "
+                          "measurement uncertainty and parameter priors";
+                response.diagnostics
+                    .sensitivity_factorization_quality_available =
+                    factorization.factorization_quality.available;
+                response.diagnostics
+                    .sensitivity_reciprocal_pivot_ratio =
+                    factorization.factorization_quality
+                        .reciprocal_pivot_ratio;
+                response.diagnostics
+                    .sensitivity_factorization_quality_method =
+                    factorization.factorization_quality.method;
+                free_covariance = factorization.covariance;
+                for (std::size_t index = 0;
+                     index < free_indices.size(); ++index) {
+                    const double variance = free_covariance[index][index];
+                    if (!std::isfinite(variance) || variance < 0.0) {
+                        throw std::runtime_error(
+                            "calibration covariance has an invalid "
+                            "diagonal value");
+                    }
+                    standard_uncertainties[free_indices[index]] =
+                        std::sqrt(variance);
+                }
+            }
+        }
+
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            response.parameter_uncertainties.push_back({
+                calibration->parameters[index].id,
+                calibration->parameters[index]
+                    .lower_bound->dimension,
+                standard_uncertainties[index],
+                bound_active[index],
+                bound_active[index]
+                    ? "bound_active_one_sided_not_estimated"
+                    : (response.diagnostics.uncertainty_available
+                           ? (response.diagnostics.prior_count == 0U
+                                  ? "local_measurement_linearized"
+                                  : "local_posterior_linearized")
+                           : (!response.diagnostics.converged
+                                  ? "unavailable_fit_not_converged"
+                                  : "unavailable_rank_deficient")),
+            });
+        }
+        if (response.diagnostics.uncertainty_available) {
+            for (std::size_t first = 0;
+                 first < free_indices.size(); ++first) {
+                for (std::size_t second = first + 1;
+                     second < free_indices.size(); ++second) {
+                    const double denominator =
+                        *standard_uncertainties[free_indices[first]] *
+                        *standard_uncertainties[free_indices[second]];
+                    response.parameter_correlations.push_back({
+                        calibration->parameters[free_indices[first]].id,
+                        calibration->parameters[free_indices[second]].id,
+                        denominator > 0.0
+                            ? std::clamp(
+                                  free_covariance[first][second] /
+                                      denominator,
+                                  -1.0, 1.0)
+                            : 0.0,
+                    });
+                }
+            }
+        }
+    } catch (const std::exception& ex) {
+        apply_values(values);
+        response.diagnostics.uncertainty_available = false;
+        response.diagnostics.uncertainty_message =
+            std::string("local sensitivity analysis failed: ") + ex.what();
+    }
+
     response.observations = std::move(best.observations);
     for (std::size_t index = 0;
          index < calibration->parameters.size(); ++index) {

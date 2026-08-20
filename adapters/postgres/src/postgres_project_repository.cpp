@@ -197,6 +197,8 @@ Tree calibration_solver_tree(
     tree.put("initial_step_fraction", value.initial_step_fraction);
     tree.put("minimum_step_fraction", value.minimum_step_fraction);
     tree.put("step_reduction", value.step_reduction);
+    tree.put("finite_difference_fraction",
+             value.finite_difference_fraction);
     tree.put("minimum_continuation_fraction",
              value.minimum_continuation_fraction);
     tree.put("continuation_growth", value.continuation_growth);
@@ -214,6 +216,8 @@ service::CalibrationSolverSettings decode_calibration_solver(
     value.minimum_step_fraction =
         tree.get<double>("minimum_step_fraction");
     value.step_reduction = tree.get<double>("step_reduction");
+    value.finite_difference_fraction =
+        tree.get<double>("finite_difference_fraction");
     value.minimum_continuation_fraction =
         tree.get<double>("minimum_continuation_fraction");
     value.continuation_growth =

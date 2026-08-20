@@ -2216,11 +2216,51 @@ std::string serialize_calibration_response_json(
         << response.diagnostics.iterations
         << ", \"objective_evaluations\": "
         << response.diagnostics.objective_evaluations
+        << ", \"sensitivity_evaluations\": "
+        << response.diagnostics.sensitivity_evaluations
         << ", \"measurement_correlation_count\": "
         << response.diagnostics.measurement_correlation_count
         << ", \"measurement_covariance_applied\": "
         << (response.diagnostics.measurement_covariance_applied
                 ? "true" : "false")
+        << ", \"adjustable_parameter_count\": "
+        << response.diagnostics.adjustable_parameter_count
+        << ", \"measurement_count\": "
+        << response.diagnostics.measurement_count
+        << ", \"prior_count\": "
+        << response.diagnostics.prior_count
+        << ", \"data_sensitivity_rank\": "
+        << response.diagnostics.data_sensitivity_rank
+        << ", \"locally_data_identifiable\": "
+        << (response.diagnostics.locally_data_identifiable
+                ? "true" : "false")
+        << ", \"posterior_sensitivity_rank\": "
+        << response.diagnostics.posterior_sensitivity_rank
+        << ", \"locally_posterior_identifiable\": "
+        << (response.diagnostics.locally_posterior_identifiable
+                ? "true" : "false")
+        << ", \"active_bound_count\": "
+        << response.diagnostics.active_bound_count
+        << ", \"free_uncertainty_parameter_count\": "
+        << response.diagnostics.free_uncertainty_parameter_count
+        << ", \"sensitivity_factorization_quality_available\": "
+        << (response.diagnostics
+                    .sensitivity_factorization_quality_available
+                ? "true" : "false")
+        << ", \"sensitivity_reciprocal_pivot_ratio\": ";
+    json_number(
+        out,
+        response.diagnostics.sensitivity_reciprocal_pivot_ratio);
+    out << ", \"sensitivity_factorization_quality_method\": ";
+    json_string(
+        out,
+        response.diagnostics.sensitivity_factorization_quality_method);
+    out << ", \"uncertainty_available\": "
+        << (response.diagnostics.uncertainty_available
+                ? "true" : "false")
+        << ", \"uncertainty_message\": ";
+    json_string(out, response.diagnostics.uncertainty_message);
+    out
         << ", \"initial_objective\": ";
     json_number(out, response.diagnostics.initial_objective);
     out << ", \"final_objective\": ";
@@ -2277,6 +2317,40 @@ std::string serialize_calibration_response_json(
         out << ", \"normalized_residual\": ";
         json_number(out, observation.normalized_residual);
         out << "}";
+    }
+    out << "],\n  \"parameter_uncertainties\": [";
+    for (std::size_t i = 0;
+         i < response.parameter_uncertainties.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& uncertainty = response.parameter_uncertainties[i];
+        out << "{\"parameter_id\": ";
+        json_string(out, uncertainty.parameter_id);
+        out << ", \"dimension\": ";
+        json_string(out, uncertainty.dimension);
+        out << ", \"standard_uncertainty_si\": ";
+        if (uncertainty.standard_uncertainty_si.has_value()) {
+            json_number(out, *uncertainty.standard_uncertainty_si);
+        } else {
+            out << "null";
+        }
+        out << ", \"bound_active\": "
+            << (uncertainty.bound_active ? "true" : "false")
+            << ", \"interpretation\": ";
+        json_string(out, uncertainty.interpretation);
+        out << '}';
+    }
+    out << "],\n  \"parameter_correlations\": [";
+    for (std::size_t i = 0;
+         i < response.parameter_correlations.size(); ++i) {
+        if (i != 0) out << ", ";
+        const auto& correlation = response.parameter_correlations[i];
+        out << "{\"first_parameter_id\": ";
+        json_string(out, correlation.first_parameter_id);
+        out << ", \"second_parameter_id\": ";
+        json_string(out, correlation.second_parameter_id);
+        out << ", \"correlation\": ";
+        json_number(out, correlation.correlation);
+        out << '}';
     }
     out << "],\n  \"fitted_model_json\": ";
     json_string(out, response.fitted_model_json);

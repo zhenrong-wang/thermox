@@ -1073,6 +1073,7 @@ struct CalibrationSolverSettings {
     double initial_step_fraction{0.1};
     double minimum_step_fraction{1.0e-4};
     double step_reduction{0.5};
+    double finite_difference_fraction{1.0e-4};
     double minimum_continuation_fraction{1.0 / 64.0};
     double continuation_growth{1.5};
     SteadySolverSettings simulation_solver;
@@ -1114,11 +1115,40 @@ struct CalibrationDiagnostics {
     bool converged{false};
     int iterations{0};
     int objective_evaluations{0};
+    int sensitivity_evaluations{0};
     std::size_t measurement_correlation_count{0};
     bool measurement_covariance_applied{false};
+    std::size_t adjustable_parameter_count{0};
+    std::size_t measurement_count{0};
+    std::size_t prior_count{0};
+    std::size_t data_sensitivity_rank{0};
+    bool locally_data_identifiable{false};
+    std::size_t posterior_sensitivity_rank{0};
+    bool locally_posterior_identifiable{false};
+    std::size_t active_bound_count{0};
+    std::size_t free_uncertainty_parameter_count{0};
+    bool sensitivity_factorization_quality_available{false};
+    double sensitivity_reciprocal_pivot_ratio{0.0};
+    std::string sensitivity_factorization_quality_method;
+    bool uncertainty_available{false};
+    std::string uncertainty_message;
     double initial_objective{0.0};
     double final_objective{0.0};
     std::string message;
+};
+
+struct CalibrationParameterUncertainty {
+    std::string parameter_id;
+    std::string dimension;
+    std::optional<double> standard_uncertainty_si;
+    bool bound_active{false};
+    std::string interpretation;
+};
+
+struct CalibrationParameterCorrelation {
+    std::string first_parameter_id;
+    std::string second_parameter_id;
+    double correlation{0.0};
 };
 
 struct CalibrationResponse {
@@ -1129,6 +1159,10 @@ struct CalibrationResponse {
     CalibrationDiagnostics diagnostics;
     std::vector<CalibrationParameterEstimate> parameters;
     std::vector<CalibrationObservationResidual> observations;
+    std::vector<CalibrationParameterUncertainty>
+        parameter_uncertainties;
+    std::vector<CalibrationParameterCorrelation>
+        parameter_correlations;
     std::string fitted_model_json;
 
     [[nodiscard]] bool succeeded() const {

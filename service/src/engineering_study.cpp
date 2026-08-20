@@ -33,6 +33,18 @@ void parse_calibration_solver(
                 "calibration_solver.max_iterations must be in [1, 1000]");
         }
     }
+    if (value.contains("finite_difference_fraction")) {
+        settings.finite_difference_fraction =
+            value.at("finite_difference_fraction").get<double>();
+        require_positive_finite(
+            settings.finite_difference_fraction,
+            "calibration_solver.finite_difference_fraction");
+        if (settings.finite_difference_fraction >= 1.0) {
+            throw EngineeringStudyRequestError(
+                "calibration_solver.finite_difference_fraction must be "
+                "less than 1");
+        }
+    }
 }
 
 void parse_prediction_solver(
