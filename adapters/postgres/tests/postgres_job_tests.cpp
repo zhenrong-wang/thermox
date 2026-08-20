@@ -105,6 +105,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "017_study_artifact_qualifications.sql",
              "018_study_operating_envelopes.sql",
              "019_reconciliation_revisions.sql",
+             "020_reconciliation_jobs.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -477,6 +478,29 @@ void test_indexed_history_query(
             jobs->list("team-b", {}).jobs.size() == 1U,
         "PostgreSQL history filters and ownership must use "
         "indexed Team-scoped metadata");
+    auto reconciliation_request =
+        request("team-a", "history-reconciliation");
+    reconciliation_request.mode =
+        thermox::service::SimulationJobMode::reconciliation;
+    reconciliation_request.case_id.clear();
+    reconciliation_request.reconciliation_id = "balance-postgres-a";
+    reconciliation_request.source_revisions->case_revision_id.clear();
+    reconciliation_request.source_revisions->case_checksum.clear();
+    reconciliation_request.source_revisions
+        ->reconciliation_revision_id = "reconciliation-postgres-a";
+    reconciliation_request.source_revisions->reconciliation_checksum =
+        "sha256:" + std::string(64, '7');
+    const auto reconciliation_job = jobs->create_or_get(
+        reconciliation_request, "history-fingerprint-reconciliation");
+    query = {};
+    query.reconciliation_revision_id = "reconciliation-postgres-a";
+    const auto reconciliation_filtered = jobs->list("team-a", query);
+    require(
+        reconciliation_filtered.jobs.size() == 1U &&
+            reconciliation_filtered.jobs.front().job_id ==
+                reconciliation_job.job_id,
+        "PostgreSQL reconciliation history must use immutable "
+        "revision provenance");
 }
 
 void test_atomic_claim_and_terminal_publication(

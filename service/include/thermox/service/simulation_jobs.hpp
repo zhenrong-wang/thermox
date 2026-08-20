@@ -107,6 +107,7 @@ struct SimulationJobQuery {
     std::string project_id;
     std::string run_configuration_revision_id;
     std::string calibration_revision_id;
+    std::string reconciliation_revision_id;
     std::optional<SimulationJobState> state;
     std::size_t limit{50};
     std::optional<SimulationJobCursor> before;

@@ -16,6 +16,7 @@ import type {
   CalibrationRevisionList,
   CorrelationArtifactDefinition,
   CreateCalibrationRevision,
+  CreateReconciliationRevision,
   CreateRunConfiguration,
   CreateStudyRevision,
   GraphEditOperation,
@@ -24,6 +25,9 @@ import type {
   PerformanceMapArtifactDefinition,
   ProjectModelValidation,
   ProjectList,
+  ReconciliationResult,
+  ReconciliationRevision,
+  ReconciliationRevisionList,
   RunConfigurationRevision,
   RunConfigurationRevisionList,
   SimulationJob,
@@ -429,6 +433,30 @@ export const api = {
       request,
       signal,
     ),
+  reconciliationRevisions: (projectId: string, signal?: AbortSignal) =>
+    getJson<ReconciliationRevisionList>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/reconciliation-revisions`,
+      signal,
+    ),
+  reconciliationRevision: (
+    projectId: string,
+    revisionId: string,
+    signal?: AbortSignal,
+  ) =>
+    getJson<ReconciliationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/reconciliation-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  createReconciliationRevision: (
+    projectId: string,
+    request: CreateReconciliationRevision,
+    signal?: AbortSignal,
+  ) =>
+    postJson<ReconciliationRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/reconciliation-revisions`,
+      request,
+      signal,
+    ),
   runConfigurationRevisions: (
     projectId: string,
     signal?: AbortSignal,
@@ -499,6 +527,23 @@ export const api = {
       signal,
     )
   },
+  reconciliationJobs: (
+    projectId: string,
+    reconciliationRevisionId: string,
+    state?: SimulationJobState,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      reconciliation_revision_id: reconciliationRevisionId,
+      limit: '50',
+    })
+    if (state) query.set('state', state)
+    return getJson<SimulationJobPage>(
+      `/api/v1/jobs?${query.toString()}`,
+      signal,
+    )
+  },
   simulationJob: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationJob>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}`,
@@ -506,6 +551,11 @@ export const api = {
     ),
   simulationResult: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationResult>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
+      signal,
+    ),
+  reconciliationResult: (jobId: string, signal?: AbortSignal) =>
+    getJson<ReconciliationResult>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
       signal,
     ),
@@ -548,6 +598,22 @@ export const api = {
     const query = new URLSearchParams({
       project_id: projectId,
       calibration_revision_id: calibrationRevisionId,
+    })
+    return postEmptyJson<SimulationJob>(
+      `/api/v1/jobs?${query.toString()}`,
+      { 'Idempotency-Key': idempotencyKey },
+      signal,
+    )
+  },
+  submitReconciliation: (
+    projectId: string,
+    reconciliationRevisionId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      project_id: projectId,
+      reconciliation_revision_id: reconciliationRevisionId,
     })
     return postEmptyJson<SimulationJob>(
       `/api/v1/jobs?${query.toString()}`,

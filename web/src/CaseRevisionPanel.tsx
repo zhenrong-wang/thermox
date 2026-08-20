@@ -3,6 +3,7 @@ import type {
   CaseRevision,
   StudyRevision,
   SimulationJob,
+  ReconciliationRevision,
 } from './types'
 
 interface CaseRevisionPanelProps {
@@ -12,12 +13,17 @@ interface CaseRevisionPanelProps {
   studies: StudyRevision[]
   calibrations: CalibrationRevision[]
   calibrationJobs: SimulationJob[]
+  reconciliations: ReconciliationRevision[]
+  reconciliationJobs: SimulationJob[]
   canPublishStudy: boolean
   onSelect: (revisionId: string) => void
   onCreate: () => void
   onPublishStudy: () => void
   onPublishCalibration: () => void
   onRunCalibration: (revision: CalibrationRevision) => void
+  onPublishReconciliation: () => void
+  onRunReconciliation: (revision: ReconciliationRevision) => void
+  onInspectReconciliationResult: (job: SimulationJob) => void
 }
 
 export function CaseRevisionPanel({
@@ -27,12 +33,17 @@ export function CaseRevisionPanel({
   studies,
   calibrations,
   calibrationJobs,
+  reconciliations,
+  reconciliationJobs,
   canPublishStudy,
   onSelect,
   onCreate,
   onPublishStudy,
   onPublishCalibration,
   onRunCalibration,
+  onPublishReconciliation,
+  onRunReconciliation,
+  onInspectReconciliationResult,
 }: CaseRevisionPanelProps) {
   return (
     <div className="case-revision-panel">
@@ -159,8 +170,49 @@ export function CaseRevisionPanel({
           </div>
         ))}
       </div>
+      <header className="study-revision-heading">
+        <div>
+          <span className="eyebrow">Measured-system inference</span>
+          <h2>Data reconciliations</h2>
+          <p>{reconciliations.length} immutable revisions</p>
+        </div>
+        <button type="button" className="resource-button"
+          disabled={publishing || studies.length === 0}
+          onClick={onPublishReconciliation}>Publish</button>
+      </header>
+      <div className="case-revision-list">
+        {!reconciliations.length && (
+          <div className="case-list-empty">
+            <strong>No reconciliation definitions</strong>
+            <span>Partition Studies into constraints and independent held-out evidence.</span>
+          </div>
+        )}
+        {reconciliations.map((revision) => {
+          const job = reconciliationJobs.find((candidate) =>
+            candidate.request.source_revisions?.reconciliation_revision_id ===
+              revision.reconciliation_revision_id)
+          return (
+            <div className="case-revision-card"
+              key={revision.reconciliation_revision_id}>
+              <div>
+                <strong>{revision.reconciliation_id}</strong>
+                <span>r{revision.revision_number}</span>
+              </div>
+              <small>{revision.mode.replaceAll('_', ' ')} · {revision.constraint_study_revision_ids.length} constrained · {revision.held_out_study_revision_ids.length} held out · {job?.state ?? 'not run'}</small>
+              <button type="button" className="resource-button"
+                onClick={() => onRunReconciliation(revision)}>Run</button>
+              {job?.state === 'succeeded' && (
+                <button type="button" className="resource-button"
+                  onClick={() => onInspectReconciliationResult(job)}>
+                  Evidence
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
       <footer>
-        <span>Case → Study → calibration</span>
+        <span>Case → Study → declared calculation intent</span>
         <code>immutable provenance</code>
       </footer>
     </div>

@@ -257,7 +257,10 @@ profile-likelihood policy, canonical adjustable/observation definition, and immu
 Resolution composes only constraint observations into the solver model and projects held-out
 observations into post-reconciliation evidence.
 
-The production HTTP adapter still does not accept an unrevisioned reconciliation model body. Its
-next thin route will create/read these revisions and submit only a resolved revision identity.
-This prevents a reconciliation definition from being mislabeled as a calibration revision merely
-because both use adjustable quantities and observations.
+The production HTTP adapter never accepts an unrevisioned reconciliation model body. It
+creates/reads immutable reconciliation revisions and submits only a resolved revision identity.
+The web workspace exposes the same contract: engineers select constrained versus held-out Study
+revisions, choose hard or weighted measurement treatment, and inspect inferred, constrained,
+held-out, uncertainty, and identifiability evidence. This prevents a reconciliation definition
+from being mislabeled as a calibration revision merely because both use adjustable quantities and
+observations.

@@ -283,3 +283,6 @@ constraint and held-out Study bindings, a canonical adjustable/observation defin
 hard-versus-weighted mode, solver/profile policy, and checksum. PostgreSQL migration 019 stores
 the revision and its ordered Study roles under Team/project foreign keys. Resolved durable jobs
 retain the reconciliation revision ID and checksum in execution provenance.
+Migration 020 adds that immutable reconciliation identity to the job history index so production
+history queries can retrieve one campaign without scanning or mixing unrelated calibration and
+forward jobs.

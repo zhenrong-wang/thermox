@@ -8,6 +8,8 @@ import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CaseWorkspace } from './CaseWorkspace'
 import { CalibrationPublishForm } from './CalibrationPublishForm'
+import { ReconciliationPublishForm } from './ReconciliationPublishForm'
+import { ReconciliationResultPanel } from './ReconciliationResultPanel'
 import { ComponentForm } from './ComponentForm'
 import { ComponentLibrary } from './ComponentLibrary'
 import { ConnectionForm } from './ConnectionForm'
@@ -69,6 +71,7 @@ import type {
   ConnectionDefinition,
   CreateRunConfiguration,
   CreateCalibrationRevision,
+  CreateReconciliationRevision,
   CreateStudyRevision,
   EngineeringAcceptanceCriterion,
   GraphEditOperation,
@@ -79,6 +82,8 @@ import type {
   ProjectModelValidation,
   ProjectComponentCatalogEntry,
   Project,
+  ReconciliationResult,
+  ReconciliationRevision,
   RunConfigurationRevision,
   ResultProjection,
   SimulationJob,
@@ -166,6 +171,19 @@ function App() {
   >([])
   const [addingCalibration, setAddingCalibration] = useState(false)
   const [calibrationJobs, setCalibrationJobs] = useState<SimulationJob[]>([])
+  const [reconciliationRevisions, setReconciliationRevisions] = useState<
+    ReconciliationRevision[]
+  >([])
+  const [addingReconciliation, setAddingReconciliation] = useState(false)
+  const [reconciliationJobs, setReconciliationJobs] = useState<SimulationJob[]>([])
+  const [reconciliationResult, setReconciliationResult] =
+    useState<ReconciliationResult>()
+  const [reconciliationResultLoading, setReconciliationResultLoading] =
+    useState(false)
+  const [reconciliationResultError, setReconciliationResultError] =
+    useState('')
+  const [showingReconciliationResult, setShowingReconciliationResult] =
+    useState(false)
   const [validating, setValidating] = useState(false)
   const [runConfigurationRevisions, setRunConfigurationRevisions] = useState<
     RunConfigurationRevision[]
@@ -286,13 +304,16 @@ function App() {
   useEffect(() => {
     setCalibrationRevisions([])
     setCalibrationJobs([])
+    setReconciliationRevisions([])
+    setReconciliationJobs([])
     if (!selectedProjectId) return
     const controller = new AbortController()
     Promise.all([
       api.calibrationRevisions(selectedProjectId, controller.signal),
+      api.reconciliationRevisions(selectedProjectId, controller.signal),
       api.projectJobs(selectedProjectId, controller.signal),
     ])
-      .then(([response, jobs]) => {
+      .then(([response, reconciliations, jobs]) => {
         setCalibrationRevisions(
           [...response.calibration_revisions].sort(
             (left, right) =>
@@ -301,6 +322,15 @@ function App() {
         )
         setCalibrationJobs(
           jobs.jobs.filter((job) => job.request.mode === 'calibration'),
+        )
+        setReconciliationRevisions(
+          [...reconciliations.reconciliation_revisions].sort(
+            (left, right) =>
+              right.created_at_epoch_ms - left.created_at_epoch_ms,
+          ),
+        )
+        setReconciliationJobs(
+          jobs.jobs.filter((job) => job.request.mode === 'reconciliation'),
         )
       })
       .catch((reason: unknown) => {
@@ -542,6 +572,13 @@ function App() {
       ),
     [calibrationRevisions, selectedRevisionId],
   )
+  const visibleReconciliations = useMemo(
+    () =>
+      reconciliationRevisions.filter(
+        (revision) => revision.model_revision_id === selectedRevisionId,
+      ),
+    [reconciliationRevisions, selectedRevisionId],
+  )
   const selectedRunStudy = useMemo(
     () =>
       studyRevisions.find(
@@ -666,6 +703,9 @@ function App() {
   const calibrationActiveJobCount = calibrationJobs.filter(
     (job) => job.state === 'queued' || job.state === 'running',
   ).length
+  const reconciliationActiveJobCount = reconciliationJobs.filter(
+    (job) => job.state === 'queued' || job.state === 'running',
+  ).length
   const succeededJobCount = simulationJobs.filter(
     (job) => job.state === 'succeeded',
   ).length
@@ -737,7 +777,7 @@ function App() {
     if (
       workspaceView !== 'studies' ||
       !selectedProjectId ||
-      calibrationActiveJobCount === 0
+      calibrationActiveJobCount + reconciliationActiveJobCount === 0
     ) return
     const timer = window.setInterval(() => {
       void api.projectJobs(selectedProjectId)
@@ -745,13 +785,21 @@ function App() {
           setCalibrationJobs(
             page.jobs.filter((job) => job.request.mode === 'calibration'),
           )
+          setReconciliationJobs(
+            page.jobs.filter((job) => job.request.mode === 'reconciliation'),
+          )
         })
         .catch((reason: unknown) => {
           setCaseOperationError(errorMessage(reason))
         })
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [calibrationActiveJobCount, selectedProjectId, workspaceView])
+  }, [
+    calibrationActiveJobCount,
+    reconciliationActiveJobCount,
+    selectedProjectId,
+    workspaceView,
+  ])
 
   useEffect(() => {
     if (workspaceView !== 'results') return
@@ -1312,6 +1360,71 @@ function App() {
     } catch (reason) {
       setCaseOperationError(errorMessage(reason))
       setCaseOperationStatus('')
+    }
+  }
+
+  async function publishReconciliation(
+    request: CreateReconciliationRevision,
+  ) {
+    if (!selectedProjectId || !selectedRevisionId) {
+      throw new Error('Select an exact topology revision first.')
+    }
+    setCasePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    try {
+      const revision = await api.createReconciliationRevision(
+        selectedProjectId,
+        request,
+      )
+      setReconciliationRevisions((current) => [revision, ...current])
+      setAddingReconciliation(false)
+      setCaseOperationStatus(
+        `Published reconciliation ${revision.reconciliation_id} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      throw new Error(message)
+    } finally {
+      setCasePublishing(false)
+    }
+  }
+
+  async function runReconciliation(revision: ReconciliationRevision) {
+    if (!selectedProjectId) return
+    setCaseOperationError('')
+    setCaseOperationStatus('Submitting data reconciliation…')
+    try {
+      const job = await api.submitReconciliation(
+        selectedProjectId,
+        revision.reconciliation_revision_id,
+        crypto.randomUUID(),
+      )
+      setReconciliationJobs((current) => [
+        job,
+        ...current.filter((item) => item.job_id !== job.job_id),
+      ])
+      setCaseOperationStatus(
+        `Reconciliation job ${job.job_id} is ${job.state}.`,
+      )
+    } catch (reason) {
+      setCaseOperationError(errorMessage(reason))
+      setCaseOperationStatus('')
+    }
+  }
+
+  async function inspectReconciliationResult(job: SimulationJob) {
+    setShowingReconciliationResult(true)
+    setReconciliationResult(undefined)
+    setReconciliationResultError('')
+    setReconciliationResultLoading(true)
+    try {
+      setReconciliationResult(await api.reconciliationResult(job.job_id))
+    } catch (reason) {
+      setReconciliationResultError(errorMessage(reason))
+    } finally {
+      setReconciliationResultLoading(false)
     }
   }
 
@@ -2196,6 +2309,8 @@ function App() {
               studies={visibleStudies}
               calibrations={visibleCalibrations}
               calibrationJobs={calibrationJobs}
+              reconciliations={visibleReconciliations}
+              reconciliationJobs={reconciliationJobs}
               selectedId={selectedCaseRevisionId}
               publishing={casePublishing}
               canPublishStudy={exactRevisionCompiled}
@@ -2207,6 +2322,13 @@ function App() {
               onPublishCalibration={() => setAddingCalibration(true)}
               onRunCalibration={(revision) => {
                 void runCalibration(revision)
+              }}
+              onPublishReconciliation={() => setAddingReconciliation(true)}
+              onRunReconciliation={(revision) => {
+                void runReconciliation(revision)
+              }}
+              onInspectReconciliationResult={(job) => {
+                void inspectReconciliationResult(job)
               }}
             />
           ) : null}
@@ -2387,6 +2509,23 @@ function App() {
           cases={caseRevisions}
           onCancel={() => setAddingCalibration(false)}
           onSubmit={publishCalibration}
+        />
+      )}
+      {addingReconciliation && selectedRevisionId && (
+        <ReconciliationPublishForm
+          modelRevisionId={selectedRevisionId}
+          studies={visibleStudies}
+          cases={caseRevisions}
+          onCancel={() => setAddingReconciliation(false)}
+          onSubmit={publishReconciliation}
+        />
+      )}
+      {showingReconciliationResult && (
+        <ReconciliationResultPanel
+          result={reconciliationResult}
+          loading={reconciliationResultLoading}
+          error={reconciliationResultError}
+          onClose={() => setShowingReconciliationResult(false)}
         />
       )}
       {(addingRunConfiguration || revisingRunConfiguration) &&

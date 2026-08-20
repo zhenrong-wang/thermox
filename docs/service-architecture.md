@@ -246,12 +246,15 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}/study-revisions/{revision_id}` | Read an exact study revision |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/calibration-revisions` | List/publish immutable calibration campaigns bound to exact model and Study revisions |
 | `GET` | `/api/v1/projects/{project_id}/calibration-revisions/{revision_id}` | Read an exact calibration definition, dataset split, and solver policy |
+| `GET`, `POST` | `/api/v1/projects/{project_id}/reconciliation-revisions` | List/publish immutable reconciliation intent with disjoint constraint and held-out Studies |
+| `GET` | `/api/v1/projects/{project_id}/reconciliation-revisions/{revision_id}` | Read exact measurement treatment, adjustable quantities, evidence partition, and solver/profile policy |
 | `POST` | `/api/v1/models/validate?case_id=...` | Compile-aware model validation |
 | `POST` | `/api/v1/simulations/structural-policy-audit?case_id=...&policies=monolithic,tearing&normalized_solution_tolerance=...` | Development-only synchronous, read-only comparison against a monolithic baseline; disabled by production API defaults |
 | `GET`, `POST` | `/api/v1/jobs?project_id=...&run_configuration_revision_id=...` | List or submit run-configuration-backed asynchronous jobs |
 | `POST` | `/api/v1/jobs?project_id=...&calibration_revision_id=...` | Submit a calibration-revision-backed asynchronous job |
+| `GET`, `POST` | `/api/v1/jobs?project_id=...&reconciliation_revision_id=...` | List or submit reconciliation-revision-backed asynchronous jobs |
 | `GET` | `/api/v1/jobs/{job_id}` | Read Team-scoped job status |
-| `GET` | `/api/v1/jobs/{job_id}/result` | Retrieve a succeeded simulation or calibration result |
+| `GET` | `/api/v1/jobs/{job_id}/result` | Retrieve a succeeded simulation, calibration, or reconciliation result |
 
 The structural-policy audit compiles the submitted model/case/artifact set once, then executes the
 factory-neutral core audit against that compiled problem. Its versioned response retains compilation

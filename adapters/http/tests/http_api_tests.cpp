@@ -901,6 +901,116 @@ void test_tenant_scoped_asynchronous_jobs() {
             calibration_result.body.find("http-acceptance-fit") !=
                 std::string::npos,
         "calibration results must cross the durable artifact boundary");
+    auto reconciliation_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/reconciliation-revisions",
+        std::string{
+            R"({"schema_version":)"
+            R"("thermox.reconciliation_revision.create/v1",)"
+            R"("reconciliation_id":"http-balance",)"
+            R"("model_revision_id":")"} +
+            model.model_revision_id +
+            R"(","constraint_study_revision_ids":[")" +
+            study_revision_id +
+            R"("],"held_out_study_revision_ids":[],)"
+            R"("mode":"hard_equalities",)"
+            R"("definition":{"schema_version":"thermox.calibration/v1",)"
+            R"("calibration":{"id":"http-balance",)"
+            R"("parameters":[{"id":"efficiency","scope":"component",)"
+            R"("targets":["components.compressor.parameters.eta_is"],)"
+            R"("cases":["design"],"bounds":{"lower":0.75,"upper":0.95}}],)"
+            R"("observations":[{"id":"shaft-power","case":"design",)"
+            R"("target":"compressor.shaft.W_dot",)"
+            R"("measured":{"value":35.0,"unit":"MW"},)"
+            R"("sigma":{"value":0.5,"unit":"MW"}}]}},)"
+            R"("solver":{"max_iterations":9},)"
+            R"("profile_likelihood":{"enabled":false}})" );
+    const auto reconciliation_created = api.handle(
+        authenticated(std::move(reconciliation_upload)));
+    require(
+        reconciliation_created.status == 201 &&
+            reconciliation_created.headers.contains("Location") &&
+            reconciliation_created.body.find(
+                "\"mode\": \"hard_equalities\"") !=
+                std::string::npos &&
+            reconciliation_created.body.find(
+                "\"max_iterations\": 9") != std::string::npos,
+        "reconciliation routes must publish immutable calculation intent: " +
+            std::to_string(reconciliation_created.status) + " " +
+            reconciliation_created.body);
+    const auto reconciliation_detail = api.handle(authenticated({
+        "GET", reconciliation_created.headers.at("Location"), {}, {},
+    }));
+    const auto reconciliation_history = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project.project_id +
+            "/reconciliation-revisions",
+        {}, {},
+    }));
+    require(
+        reconciliation_detail.status == 200 &&
+            reconciliation_history.status == 200 &&
+            reconciliation_history.body.find("http-balance") !=
+                std::string::npos &&
+            api.handle(authenticated(
+                {"GET", reconciliation_created.headers.at("Location"),
+                 {}, {}},
+                "user-b", "team-b")).status == 404,
+        "reconciliation revisions must support scoped detail and history");
+    const auto reconciliation_revision_id =
+        reconciliation_created.headers.at("Location").substr(
+            reconciliation_created.headers.at("Location").find_last_of('/') +
+            1U);
+    thermox::http::Request reconciliation_submission{
+        "POST",
+        "/api/v1/jobs?project_id=" + project.project_id +
+            "&reconciliation_revision_id=" +
+            reconciliation_revision_id,
+        {{"Idempotency-Key", "http-reconciliation-job-1"}},
+        {},
+    };
+    const auto reconciliation_queued = api.handle(
+        authenticated(reconciliation_submission));
+    require(
+        reconciliation_queued.status == 202 &&
+            reconciliation_queued.body.find(
+                "\"mode\": \"reconciliation\"") !=
+                std::string::npos &&
+            reconciliation_queued.body.find(reconciliation_revision_id) !=
+                std::string::npos,
+        "reconciliation revisions must submit provenance-bound jobs");
+    const auto reconciliation_completed =
+        job_service->run_next("http-reconciliation-worker");
+    require(
+        reconciliation_completed &&
+            reconciliation_completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "the common worker must execute reconciliation jobs");
+    const auto reconciliation_result = api.handle(authenticated({
+        "GET", reconciliation_queued.headers.at("Location") + "/result",
+        {}, {},
+    }));
+    require(
+        reconciliation_result.status == 200 &&
+            reconciliation_result.body.find("http-balance") !=
+                std::string::npos &&
+            reconciliation_result.body.find("locally_identifiable") !=
+                std::string::npos,
+        "reconciliation evidence must cross the artifact boundary");
+    const auto reconciliation_jobs = api.handle(authenticated({
+        "GET",
+        "/api/v1/jobs?project_id=" + project.project_id +
+            "&reconciliation_revision_id=" +
+            reconciliation_revision_id,
+        {}, {},
+    }));
+    require(
+        reconciliation_jobs.status == 200 &&
+            reconciliation_jobs.body.find(reconciliation_revision_id) !=
+                std::string::npos &&
+            reconciliation_jobs.body.find(calibration_revision_id) ==
+                std::string::npos,
+        "reconciliation job history must filter by immutable provenance");
     auto run_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/run-configuration-revisions",

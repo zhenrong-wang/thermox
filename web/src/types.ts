@@ -431,6 +431,151 @@ export interface CreateCalibrationRevision {
   }
 }
 
+export type ReconciliationMode =
+  | 'hard_equalities'
+  | 'weighted_measurements'
+
+export interface ReconciliationSolverSettings {
+  max_iterations: number
+  finite_difference_fraction: number
+  constraint_tolerance: number
+  step_tolerance: number
+  objective_relative_tolerance: number
+  minimum_line_search_fraction: number
+  simulation_solver: SteadySolverSettings
+}
+
+export interface ProfileLikelihoodSettings {
+  enabled: boolean
+  objective_increase: number
+  maximum_bracket_steps: number
+  maximum_bisection_steps: number
+  maximum_nuisance_iterations: number
+  parameter_ids: string[]
+}
+
+export interface ReconciliationRevision {
+  schema_version: 'thermox.reconciliation_revision/v1'
+  reconciliation_revision_id: string
+  reconciliation_id: string
+  project_id: string
+  team_id: string
+  revision_number: number
+  parent_reconciliation_revision_id: string
+  model_revision_id: string
+  constraint_study_revision_ids: string[]
+  held_out_study_revision_ids: string[]
+  definition: CalibrationDocument
+  mode: ReconciliationMode
+  solver: ReconciliationSolverSettings
+  profile_likelihood: ProfileLikelihoodSettings
+  checksum: string
+  created_by_user_id: string
+  created_at_epoch_ms: number
+}
+
+export interface ReconciliationRevisionList {
+  schema_version: 'thermox.reconciliation_revision_list/v1'
+  reconciliation_revisions: ReconciliationRevision[]
+}
+
+export interface CreateReconciliationRevision {
+  schema_version: 'thermox.reconciliation_revision.create/v1'
+  reconciliation_id: string
+  parent_reconciliation_revision_id: string
+  model_revision_id: string
+  constraint_study_revision_ids: string[]
+  held_out_study_revision_ids: string[]
+  definition: CalibrationDocument
+  mode: ReconciliationMode
+  solver?: Omit<Partial<ReconciliationSolverSettings>, 'simulation_solver'> & {
+    simulation_solver?: Partial<SteadySolverSettings>
+  }
+  profile_likelihood?: Partial<ProfileLikelihoodSettings>
+}
+
+export interface ReconciliationResult {
+  schema_version: 'thermox.result/v3'
+  status: 'succeeded'
+  calculation_intent: 'data_reconciliation'
+  reconciliation_mode: ReconciliationMode
+  reconciliation_id: string
+  diagnostics: {
+    converged: boolean
+    iterations: number
+    model_evaluations: number
+    final_maximum_absolute_normalized_constraint: number
+    adjustable_quantity_count: number
+    measurement_count: number
+    degrees_of_freedom: number
+    weighted_sum_squares: number
+    reduced_chi_square_available: boolean
+    reduced_chi_square: number
+    locally_identifiable: boolean
+    active_bound_count: number
+    locally_bound_limited: boolean
+    message: string
+  }
+  inferred_parameters: Array<{
+    id: string
+    scope: string
+    dimension: string
+    initial_value_si: number
+    inferred_value_si: number
+    lower_bound_si: number
+    upper_bound_si: number
+    targets: string[]
+  }>
+  hard_constraints: Array<{
+    id: string
+    case_id: string
+    target: string
+    dimension: string
+    required_si: number
+    solved_si: number
+    residual_si: number
+    normalized_residual: number
+  }>
+  weighted_measurements: Array<{
+    id: string
+    case_id: string
+    target: string
+    dimension: string
+    measured_si: number
+    reconciled_si: number
+    residual_si: number
+    normalized_residual: number
+  }>
+  parameter_uncertainties: Array<{
+    parameter_id: string
+    dimension: string
+    standard_uncertainty_si: number | null
+    bound_active: boolean
+    interpretation: string
+  }>
+  profile_likelihood_intervals: Array<{
+    parameter_id: string
+    dimension: string
+    estimate_si: number
+    succeeded: boolean
+    message: string
+  }>
+  held_out_results: Array<{
+    case_id: string
+    weighted_sum_squares: number
+    observations: Array<{
+      id: string
+      target: string
+      dimension: string
+      measured_si: number
+      predicted_si: number
+      sigma_si: number
+      residual_si: number
+      normalized_residual: number
+    }>
+  }>
+}
+
 export interface RunConfigurationRevision {
   schema_version: 'thermox.run_configuration_revision/v3'
   run_configuration_revision_id: string

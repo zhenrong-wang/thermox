@@ -1855,6 +1855,151 @@ parse_create_calibration_request(const Request& request) {
     return command;
 }
 
+service::CreateReconciliationRevisionRequest
+parse_create_reconciliation_request(const Request& request) {
+    boost::property_tree::ptree tree;
+    std::istringstream input(request.body);
+    try {
+        boost::property_tree::read_json(input, tree);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid reconciliation revision JSON: ") +
+            error.what());
+    }
+    const std::set<std::string> allowed = {
+        "schema_version", "reconciliation_id",
+        "parent_reconciliation_revision_id", "model_revision_id",
+        "constraint_study_revision_ids", "held_out_study_revision_ids",
+        "definition", "mode", "solver", "profile_likelihood",
+    };
+    for (const auto& [key, unused] : tree) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "unknown reconciliation revision field: " + key);
+        }
+    }
+    if (tree.get<std::string>("schema_version", "") !=
+        "thermox.reconciliation_revision.create/v1") {
+        throw std::invalid_argument(
+            "unsupported reconciliation revision create schema_version");
+    }
+    service::CreateReconciliationRevisionRequest command;
+    command.reconciliation_id =
+        tree.get<std::string>("reconciliation_id", "");
+    command.parent_reconciliation_revision_id = tree.get<std::string>(
+        "parent_reconciliation_revision_id", "");
+    command.model_revision_id =
+        tree.get<std::string>("model_revision_id", "");
+    const auto parse_ids = [&](const char* name,
+                               std::vector<std::string>& target) {
+        if (const auto values = tree.get_child_optional(name)) {
+            for (const auto& [key, value] : *values) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        std::string(name) + " must be an array");
+                }
+                target.push_back(value.get_value<std::string>());
+            }
+        }
+    };
+    parse_ids("constraint_study_revision_ids",
+              command.constraint_study_revision_ids);
+    parse_ids("held_out_study_revision_ids",
+              command.held_out_study_revision_ids);
+    const auto mode = tree.get<std::string>("mode", "hard_equalities");
+    if (mode == "hard_equalities") {
+        command.mode = service::ReconciliationMode::hard_equalities;
+    } else if (mode == "weighted_measurements") {
+        command.mode = service::ReconciliationMode::weighted_measurements;
+    } else {
+        throw std::invalid_argument("unsupported reconciliation mode");
+    }
+    const auto typed_root = boost::json::parse(request.body);
+    if (!typed_root.is_object()) {
+        throw std::invalid_argument(
+            "reconciliation revision body must be an object");
+    }
+    const auto* typed_definition =
+        typed_root.as_object().if_contains("definition");
+    if (typed_definition == nullptr || !typed_definition->is_object()) {
+        throw std::invalid_argument("definition must be an object");
+    }
+    command.definition_json = boost::json::serialize(*typed_definition);
+    if (const auto solver = tree.get_child_optional("solver")) {
+        const std::set<std::string> solver_allowed = {
+            "max_iterations", "finite_difference_fraction",
+            "constraint_tolerance", "step_tolerance",
+            "objective_relative_tolerance",
+            "minimum_line_search_fraction", "simulation_solver",
+        };
+        for (const auto& [key, unused] : *solver) {
+            (void)unused;
+            if (!solver_allowed.contains(key)) {
+                throw std::invalid_argument(
+                    "unknown reconciliation solver field: " + key);
+            }
+        }
+        auto& value = command.solver;
+        value.max_iterations =
+            solver->get("max_iterations", value.max_iterations);
+        value.finite_difference_fraction = solver->get(
+            "finite_difference_fraction", value.finite_difference_fraction);
+        value.constraint_tolerance = solver->get(
+            "constraint_tolerance", value.constraint_tolerance);
+        value.step_tolerance =
+            solver->get("step_tolerance", value.step_tolerance);
+        value.objective_relative_tolerance = solver->get(
+            "objective_relative_tolerance",
+            value.objective_relative_tolerance);
+        value.minimum_line_search_fraction = solver->get(
+            "minimum_line_search_fraction",
+            value.minimum_line_search_fraction);
+        if (const auto simulation =
+                solver->get_child_optional("simulation_solver")) {
+            parse_steady_solver(*simulation, value.simulation_solver);
+        }
+    }
+    if (const auto profile = tree.get_child_optional("profile_likelihood")) {
+        const std::set<std::string> profile_allowed = {
+            "enabled", "objective_increase", "maximum_bracket_steps",
+            "maximum_bisection_steps", "maximum_nuisance_iterations",
+            "parameter_ids",
+        };
+        for (const auto& [key, unused] : *profile) {
+            (void)unused;
+            if (!profile_allowed.contains(key)) {
+                throw std::invalid_argument(
+                    "unknown profile likelihood field: " + key);
+            }
+        }
+        auto& value = command.profile_likelihood;
+        value.enabled = profile->get("enabled", value.enabled);
+        value.objective_increase = profile->get(
+            "objective_increase", value.objective_increase);
+        value.maximum_bracket_steps = profile->get(
+            "maximum_bracket_steps", value.maximum_bracket_steps);
+        value.maximum_bisection_steps = profile->get(
+            "maximum_bisection_steps", value.maximum_bisection_steps);
+        value.maximum_nuisance_iterations = profile->get(
+            "maximum_nuisance_iterations",
+            value.maximum_nuisance_iterations);
+        if (const auto parameters =
+                profile->get_child_optional("parameter_ids")) {
+            value.parameter_ids.clear();
+            for (const auto& [key, parameter] : *parameters) {
+                if (!key.empty()) {
+                    throw std::invalid_argument(
+                        "profile_likelihood.parameter_ids must be an array");
+                }
+                value.parameter_ids.push_back(
+                    parameter.get_value<std::string>());
+            }
+        }
+    }
+    return command;
+}
+
 Response project_response(
     const service::ProjectRecord& project,
     int status) {
@@ -1975,6 +2120,20 @@ Response calibration_revision_response(
     response.headers["Location"] =
         "/api/v1/projects/" + revision.project_id +
         "/calibration-revisions/" + revision.calibration_revision_id;
+    return response;
+}
+
+Response reconciliation_revision_response(
+    const service::ReconciliationRevisionRecord& revision,
+    int status) {
+    auto response = json_response(
+        status,
+        service::serialize_reconciliation_revision_json(revision));
+    response.headers["ETag"] = "\"" + revision.checksum + "\"";
+    response.headers["Location"] =
+        "/api/v1/projects/" + revision.project_id +
+        "/reconciliation-revisions/" +
+        revision.reconciliation_revision_id;
     return response;
 }
 
@@ -2208,6 +2367,8 @@ Response Api::handle(const Request& request) const {
                 "/study-revisions";
             constexpr std::string_view calibrations_segment =
                 "/calibration-revisions";
+            constexpr std::string_view reconciliations_segment =
+                "/reconciliation-revisions";
             if (remainder == component_catalog_segment) {
                 reject_unknown_query(target.query, {});
                 if (method != "get") {
@@ -2333,6 +2494,38 @@ Response Api::handle(const Request& request) const {
                 response.headers["Allow"] = "GET, POST";
                 return response;
             }
+            if (remainder == reconciliations_segment) {
+                if (!impl_->projects->get_project(identity, project_id)) {
+                    return error_response(
+                        404, "project_not_found", "project was not found");
+                }
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    return json_response(
+                        200,
+                        service::serialize_reconciliation_revisions_json(
+                            impl_->projects
+                                ->list_reconciliation_revisions(
+                                    identity, project_id)));
+                }
+                if (method == "post") {
+                    require_json_request(
+                        request, impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_create_reconciliation_request(request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    return reconciliation_revision_response(
+                        impl_->projects
+                            ->create_reconciliation_revision(command),
+                        201);
+                }
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "reconciliation revisions only support GET and POST");
+                response.headers["Allow"] = "GET, POST";
+                return response;
+            }
             const std::string study_detail_prefix =
                 std::string(studies_segment) + "/";
             if (remainder.starts_with(study_detail_prefix)) {
@@ -2393,6 +2586,35 @@ Response Api::handle(const Request& request) const {
                         "calibration revision was not found");
                 }
                 return calibration_revision_response(*revision, 200);
+            }
+            const std::string reconciliation_detail_prefix =
+                std::string(reconciliations_segment) + "/";
+            if (remainder.starts_with(reconciliation_detail_prefix)) {
+                reject_unknown_query(target.query, {});
+                if (method != "get") {
+                    auto response = error_response(
+                        405, "method_not_allowed",
+                        "reconciliation revision detail only supports GET");
+                    response.headers["Allow"] = "GET";
+                    return response;
+                }
+                const auto revision_id = remainder.substr(
+                    reconciliation_detail_prefix.size());
+                if (revision_id.empty() ||
+                    revision_id.find('/') != std::string::npos) {
+                    return error_response(
+                        404, "route_not_found",
+                        "no route matches the request target");
+                }
+                const auto revision = impl_->projects
+                    ->get_reconciliation_revision(
+                        identity, project_id, revision_id);
+                if (!revision) {
+                    return error_response(
+                        404, "reconciliation_revision_not_found",
+                        "reconciliation revision was not found");
+                }
+                return reconciliation_revision_response(*revision, 200);
             }
             const std::string run_configuration_detail_prefix =
                 std::string(run_configurations_segment) + "/";
@@ -3060,6 +3282,7 @@ Response Api::handle(const Request& request) const {
                         "project_id",
                         "run_configuration_revision_id",
                         "calibration_revision_id",
+                        "reconciliation_revision_id",
                         "state",
                         "limit",
                         "cursor",
@@ -3076,6 +3299,10 @@ Response Api::handle(const Request& request) const {
                     optional_query(
                         target.query,
                         "calibration_revision_id");
+                query.reconciliation_revision_id =
+                    optional_query(
+                        target.query,
+                        "reconciliation_revision_id");
                 query.state = optional_job_state(target.query);
                 query.limit = optional_history_limit(target.query);
                 const auto cursor =
@@ -3106,6 +3333,7 @@ Response Api::handle(const Request& request) const {
                     "project_id",
                     "run_configuration_revision_id",
                     "calibration_revision_id",
+                    "reconciliation_revision_id",
                 });
             if (!request.body.empty()) {
                 throw std::invalid_argument(
@@ -3123,12 +3351,62 @@ Response Api::handle(const Request& request) const {
                 optional_query(
                     target.query,
                     "calibration_revision_id");
-            if (project_id.empty() ||
-                (run_configuration_revision_id.empty() ==
-                 calibration_revision_id.empty())) {
+            const auto reconciliation_revision_id =
+                optional_query(
+                    target.query,
+                    "reconciliation_revision_id");
+            const auto execution_revision_count =
+                static_cast<int>(!run_configuration_revision_id.empty()) +
+                static_cast<int>(!calibration_revision_id.empty()) +
+                static_cast<int>(!reconciliation_revision_id.empty());
+            if (project_id.empty() || execution_revision_count != 1) {
                 throw std::invalid_argument(
                     "project_id and exactly one execution revision "
                     "ID are required");
+            }
+            if (!reconciliation_revision_id.empty()) {
+                const auto resolved =
+                    impl_->projects->resolve_reconciliation(
+                        identity, project_id,
+                        reconciliation_revision_id);
+                if (!resolved) {
+                    return error_response(
+                        404, "reconciliation_revision_not_found",
+                        "reconciliation revision was not found");
+                }
+                service::SimulationJobRequest command;
+                command.identity = identity;
+                command.idempotency_key =
+                    required_header(request, "idempotency-key");
+                command.mode =
+                    service::SimulationJobMode::reconciliation;
+                command.model_json = resolved->executable_model_json;
+                command.reconciliation_id =
+                    resolved->reconciliation.reconciliation_id;
+                command.source_revisions =
+                    service::RevisionProvenance{
+                        project_id,
+                        resolved->model.model_revision_id,
+                        resolved->model.checksum,
+                        {}, {}, {}, {}, {}, {}, {}, {},
+                        resolved->reconciliation
+                            .reconciliation_revision_id,
+                        resolved->reconciliation.checksum,
+                    };
+                command.reconciliation_mode =
+                    resolved->reconciliation.mode;
+                command.reconciliation_solver =
+                    resolved->reconciliation.solver;
+                command.reconciliation_profile_likelihood =
+                    resolved->reconciliation.profile_likelihood;
+                command.reconciliation_held_out_cases =
+                    resolved->held_out_cases;
+                command.artifacts = resolved->artifacts.snapshot;
+                command.components = resolved->artifacts.components;
+                const auto record = impl_->jobs->submit(command);
+                return job_record_response(
+                    record,
+                    service::is_terminal(record.state) ? 200 : 202);
             }
             if (!calibration_revision_id.empty()) {
                 const auto resolved =

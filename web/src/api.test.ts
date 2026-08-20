@@ -64,6 +64,58 @@ describe('assembly template authoring API', () => {
   })
 })
 
+describe('reconciliation revision API', () => {
+  it('publishes intent and submits only its immutable revision identity', async () => {
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) =>
+      new Response(JSON.stringify({
+        schema_version: 'thermox.reconciliation_revision/v1',
+        reconciliation_revision_id: 'reconciliation-r1',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const definition = {
+      schema_version: 'thermox.calibration/v1' as const,
+      calibration: { id: 'balance', parameters: [], observations: [] },
+    }
+
+    await api.createReconciliationRevision('project/a', {
+      schema_version: 'thermox.reconciliation_revision.create/v1',
+      reconciliation_id: 'balance',
+      parent_reconciliation_revision_id: '',
+      model_revision_id: 'model-r1',
+      constraint_study_revision_ids: ['study-r1'],
+      held_out_study_revision_ids: ['study-r2'],
+      definition,
+      mode: 'weighted_measurements',
+    })
+    await api.submitReconciliation(
+      'project/a', 'reconciliation-r1', 'idempotency-1',
+    )
+
+    const [publishPath, publishRequest] = fetchMock.mock.calls[0]
+    expect(publishPath).toBe(
+      '/api/v1/projects/project%2Fa/reconciliation-revisions',
+    )
+    expect(publishRequest).toMatchObject({
+      method: 'POST',
+      body: expect.stringContaining('held_out_study_revision_ids'),
+    })
+    const [submitPath, submitRequest] = fetchMock.mock.calls[1]
+    const submitUrl = new URL(String(submitPath), 'http://thermox.local')
+    expect(submitUrl.searchParams.get('reconciliation_revision_id')).toBe(
+      'reconciliation-r1',
+    )
+    expect(submitRequest).toMatchObject({ method: 'POST' })
+    expect(submitRequest).not.toHaveProperty('body')
+    expect(submitRequest?.headers).toMatchObject({
+      'Idempotency-Key': 'idempotency-1',
+    })
+  })
+})
+
 describe('correlation artifact authoring API', () => {
   it('retrieves an exact immutable artifact payload for revision editing', async () => {
     const content = {
