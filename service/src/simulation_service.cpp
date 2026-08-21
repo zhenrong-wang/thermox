@@ -1171,9 +1171,12 @@ SolverProvenance solver_provenance(
 }
 
 SolverProvenance solver_provenance(
+    const TransientSolverSettings& settings);
+
+SolverProvenance solver_provenance(
     const CalibrationSolverSettings& settings) {
     SolverProvenance provenance{
-        "thermox.trust-region-least-squares/v1",
+        "thermox.trust-region-least-squares/v2",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1197,10 +1200,17 @@ SolverProvenance solver_provenance(
         },
     };
     const auto simulation =
-        solver_provenance(settings.simulation_solver);
+        solver_provenance(settings.steady_simulation_solver);
     for (const auto& setting : simulation.settings) {
         provenance.settings.push_back({
-            "simulation." + setting.name, setting.value});
+            "steady_simulation." + setting.name, setting.value});
+    }
+    const auto transient =
+        solver_provenance(settings.transient_simulation_solver);
+    for (const auto& setting : transient.settings) {
+        provenance.settings.push_back({
+            "transient_simulation." + setting.name,
+            setting.value});
     }
     return provenance;
 }
@@ -1615,14 +1625,37 @@ using CalibrationState =
     std::map<std::string, double, std::less<>>;
 
 struct CalibrationCaseSolution {
-    platform::GraphResult graph;
+    std::optional<platform::GraphResult> steady_graph;
+    std::map<double, platform::GraphResult> transient_graphs;
     CalibrationState state;
 };
+
+const platform::GraphResult& calibration_graph_at(
+    const CalibrationCaseSolution& solution,
+    const std::optional<platform::ScalarValue>& time) {
+    if (!time.has_value()) {
+        if (!solution.steady_graph.has_value()) {
+            throw std::logic_error(
+                "steady calibration result is missing");
+        }
+        return *solution.steady_graph;
+    }
+    const auto found = solution.transient_graphs.find(
+        time->value_si);
+    if (found == solution.transient_graphs.end()) {
+        throw std::logic_error(
+            "transient calibration result is missing at time " +
+            std::to_string(time->value_si));
+    }
+    return found->second;
+}
 
 CalibrationCaseSolution solve_calibration_case(
     const platform::ModelDocument& document,
     const std::string& case_id,
-    const SteadySolverSettings& settings,
+    const SteadySolverSettings& steady_settings,
+    const TransientSolverSettings& transient_settings,
+    const std::vector<double>& observation_times,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
     const platform::EngineeringArtifactRegistry& engineering_artifacts,
@@ -1631,40 +1664,87 @@ CalibrationCaseSolution solve_calibration_case(
     const CalibrationState* warm_start) {
     const auto* simulation_case =
         selected_case(document, case_id);
-    if (validation_mode(simulation_case) != "steady") {
-        throw std::invalid_argument(
-            "calibration currently requires steady cases: " +
-            case_id);
-    }
-    auto graph = platform::compile_model_graph(
-        document, components, properties, engineering_artifacts,
-        thermochemistry, case_id);
-    if (warm_start != nullptr) {
-        for (std::size_t index = 0;
-             index < graph.problem.variable_names.size(); ++index) {
-            const auto value = warm_start->find(
-                graph.problem.variable_names[index]);
-            if (value != warm_start->end()) {
-                graph.problem.initial_guess[index] = value->second;
+    const auto mode = validation_mode(simulation_case);
+    CalibrationCaseSolution solution;
+    if (mode == "steady") {
+        if (!observation_times.empty()) {
+            throw std::invalid_argument(
+                "steady calibration case cannot have observation times: " +
+                case_id);
+        }
+        auto graph = platform::compile_model_graph(
+            document, components, properties, engineering_artifacts,
+            thermochemistry, case_id);
+        if (warm_start != nullptr) {
+            for (std::size_t index = 0;
+                 index < graph.problem.variable_names.size(); ++index) {
+                const auto value = warm_start->find(
+                    graph.problem.variable_names[index]);
+                if (value != warm_start->end()) {
+                    graph.problem.initial_guess[index] = value->second;
+                }
             }
         }
+        const auto solve = solve_newton(
+            graph.problem, to_core(steady_settings));
+        if (!solve.diagnostics.converged) {
+            throw std::runtime_error(
+                "calibration case '" + case_id +
+                "' failed to solve: " +
+                solve.diagnostics.message);
+        }
+        const platform::GraphResultEvaluator evaluator(
+            document, graph, properties, thermochemistry);
+        solution.steady_graph = evaluator.evaluate(solve.x);
+        for (std::size_t index = 0;
+             index < graph.problem.variable_names.size(); ++index) {
+            solution.state.emplace(
+                graph.problem.variable_names[index], solve.x[index]);
+        }
+        return solution;
     }
-    const auto solve = solve_newton(
-        graph.problem, to_core(settings));
-    if (!solve.diagnostics.converged) {
+
+    if (observation_times.empty()) {
+        throw std::invalid_argument(
+            "transient calibration case requires observation times: " +
+            case_id);
+    }
+    auto graph = platform::compile_transient_model_graph(
+        document, components, properties, engineering_artifacts,
+        thermochemistry, case_id);
+    auto options = to_core(transient_settings);
+    if (observation_times.back() <= options.start_time) {
+        throw std::invalid_argument(
+            "transient calibration case '" + case_id +
+            "' latest observation time must be greater than the "
+            "integration start time");
+    }
+    options.end_time = observation_times.back();
+    options.required_output_times = observation_times;
+    const auto solve = integrate_dae(graph.problem, options);
+    if (!solve.diagnostics.success) {
         throw std::runtime_error(
             "calibration case '" + case_id +
-            "' failed to solve: " +
+            "' failed to integrate: " +
             solve.diagnostics.message);
     }
     const platform::GraphResultEvaluator evaluator(
         document, graph, properties, thermochemistry);
-    CalibrationCaseSolution solution;
-    solution.graph = evaluator.evaluate(solve.x);
-    for (std::size_t index = 0;
-         index < graph.problem.variable_names.size(); ++index) {
-        solution.state.emplace(
-            graph.problem.variable_names[index], solve.x[index]);
+    std::size_t next_time = 0;
+    for (const auto& sample : solve.trajectory) {
+        if (next_time >= observation_times.size()) break;
+        if (sample.time == observation_times[next_time]) {
+            solution.transient_graphs.emplace(
+                sample.time,
+                evaluator.evaluate(
+                    sample.state, sample.derivative));
+            ++next_time;
+        }
+    }
+    if (next_time != observation_times.size()) {
+        throw std::runtime_error(
+            "transient calibration case '" + case_id +
+            "' did not produce every required observation time");
     }
     return solution;
 }
@@ -1714,7 +1794,8 @@ thermox::DenseCholeskyFactorization measurement_whitener(
 ObjectiveEvaluation evaluate_calibration_objective(
     const platform::ModelDocument& document,
     const platform::CalibrationDefinition& calibration,
-    const SteadySolverSettings& settings,
+    const SteadySolverSettings& steady_settings,
+    const TransientSolverSettings& transient_settings,
     const platform::ComponentRegistry& components,
     const physics::PropertyPackageRegistry& properties,
     const platform::EngineeringArtifactRegistry& engineering_artifacts,
@@ -1736,15 +1817,34 @@ ObjectiveEvaluation evaluate_calibration_objective(
                     warm_start = &found->second;
                 }
             }
+            std::vector<double> observation_times;
+            for (const auto& candidate : calibration.observations) {
+                if (candidate.case_id == observation.case_id &&
+                    candidate.time.has_value()) {
+                    observation_times.push_back(
+                        candidate.time->value_si);
+                }
+            }
+            std::sort(
+                observation_times.begin(), observation_times.end());
+            observation_times.erase(
+                std::unique(
+                    observation_times.begin(), observation_times.end()),
+                observation_times.end());
             case_results.emplace(
                 observation.case_id,
                 solve_calibration_case(
-                    document, observation.case_id, settings,
+                    document, observation.case_id,
+                    steady_settings,
+                    transient_settings,
+                    observation_times,
                     components, properties, engineering_artifacts,
                     thermochemistry, warm_start));
         }
         const auto& predicted = require_graph_value(
-            case_results.at(observation.case_id).graph,
+            calibration_graph_at(
+                case_results.at(observation.case_id),
+                observation.time),
             observation.target);
         const double residual =
             predicted.value_si - observation.measured.value_si;
@@ -1761,6 +1861,9 @@ ObjectiveEvaluation evaluate_calibration_objective(
             observation.sigma.value_si,
             residual,
             normalized,
+            observation.time.has_value()
+                ? std::optional<double>(observation.time->value_si)
+                : std::nullopt,
         });
     }
     const auto whitener = measurement_whitener(calibration);
@@ -2896,7 +2999,8 @@ CalibrationResponse SimulationService::run_calibration(
         return response;
     }
     try {
-        (void)to_core(settings.simulation_solver);
+        (void)to_core(settings.steady_simulation_solver);
+        (void)to_core(settings.transient_simulation_solver);
     } catch (const std::exception& ex) {
         response.error = make_error(
             "invalid_solver_settings", "request", ex.what());
@@ -3028,7 +3132,8 @@ CalibrationResponse SimulationService::run_calibration(
         apply_values(candidate);
         return evaluate_calibration_objective(
             document, *calibration,
-            settings.simulation_solver,
+            settings.steady_simulation_solver,
+            settings.transient_simulation_solver,
             runtime->impl_->components,
             runtime->impl_->properties,
             engineering_artifacts,
@@ -3731,6 +3836,7 @@ SimulationService::run_data_reconciliation(
         apply_values(candidate);
         auto result = evaluate_calibration_objective(
             document, *definition, settings.simulation_solver,
+            TransientSolverSettings{},
             runtime->impl_->components,
             runtime->impl_->properties, engineering_artifacts,
             runtime->impl_->thermochemistry, warm_starts);
@@ -4740,6 +4846,7 @@ SimulationService::run_data_reconciliation(
                     observation.sigma_si,
                     residual,
                     normalized,
+                    std::nullopt,
                 });
             }
         } catch (const std::exception& ex) {
@@ -4901,6 +5008,7 @@ SimulationService::run_engineering_study(
                     observation.sigma_si,
                     residual,
                     normalized,
+                    std::nullopt,
                 });
             }
         } catch (const std::exception& ex) {

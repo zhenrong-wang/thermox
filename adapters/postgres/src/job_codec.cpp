@@ -1171,7 +1171,11 @@ Tree calibration_settings(
              value.minimum_continuation_fraction);
     tree.put("continuation_growth", value.continuation_growth);
     tree.add_child(
-        "simulation_solver", steady_settings(value.simulation_solver));
+        "steady_simulation_solver",
+        steady_settings(value.steady_simulation_solver));
+    tree.add_child(
+        "transient_simulation_solver",
+        transient_settings(value.transient_simulation_solver));
     return tree;
 }
 
@@ -1196,8 +1200,10 @@ service::CalibrationSolverSettings decode_calibration_settings(
         tree.get<double>("minimum_continuation_fraction");
     value.continuation_growth =
         tree.get<double>("continuation_growth");
-    value.simulation_solver = decode_steady_settings(
-        tree.get_child("simulation_solver"));
+    value.steady_simulation_solver = decode_steady_settings(
+        tree.get_child("steady_simulation_solver"));
+    value.transient_simulation_solver = decode_transient_settings(
+        tree.get_child("transient_simulation_solver"));
     return value;
 }
 

@@ -2,6 +2,7 @@
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/sparse_linear_solver.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <iostream>
@@ -427,6 +428,42 @@ void test_native_bdf_rejects_unsupported_order() {
     throw std::runtime_error("native BDF must reject orders above two");
 }
 
+void test_adaptive_integration_honors_required_output_times() {
+    auto options = thermox::TimeIntegrationOptions{};
+    options.end_time = 1.0;
+    options.initial_step = 0.23;
+    options.max_step = 0.4;
+    options.required_output_times = {0.17, 0.51, 0.93};
+
+    const auto result = thermox::integrate_dae(
+        make_decay_problem(), options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    for (const double required_time : options.required_output_times) {
+        const auto sample = std::find_if(
+            result.trajectory.begin(), result.trajectory.end(),
+            [&](const auto& candidate) {
+                return candidate.time == required_time;
+            });
+        require(
+            sample != result.trajectory.end(),
+            "adaptive integration must emit the exact required output time " +
+                std::to_string(required_time));
+    }
+
+    options.required_output_times = {0.5, 0.4};
+    try {
+        (void)thermox::integrate_dae(make_decay_problem(), options);
+    } catch (const std::invalid_argument& error) {
+        require(
+            std::string(error.what()).find("strictly increasing") !=
+                std::string::npos,
+            "invalid output schedule diagnostic must explain ordering");
+        return;
+    }
+    throw std::runtime_error(
+        "adaptive integration must reject an unordered output schedule");
+}
+
 void test_index_one_dae_consistent_initialization_and_integration() {
     thermox::DaeProblem problem;
     problem.variable_names = {"inventory", "algebraic_flow"};
@@ -561,6 +598,7 @@ int main() {
         test_adaptive_error_control_uses_physical_variable_scales();
         test_variable_order_bdf2_improves_smooth_accuracy();
         test_native_bdf_rejects_unsupported_order();
+        test_adaptive_integration_honors_required_output_times();
         test_index_one_dae_consistent_initialization_and_integration();
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();

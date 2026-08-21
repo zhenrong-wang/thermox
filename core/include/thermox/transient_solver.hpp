@@ -113,6 +113,11 @@ struct TimeIntegrationOptions {
     // Native variable-order BDF currently supports orders 1 and 2.
     int maximum_order{2};
     bool compute_consistent_initial_conditions{true};
+    // Optional, strictly increasing times at which the adaptive integrator
+    // must emit an accepted state. Values must lie in [start_time,
+    // end_time]. This is intended for measurement-aligned simulation and
+    // avoids treating a nearby adaptive step as an observation sample.
+    std::vector<double> required_output_times;
     SolverOptions nonlinear_options = [] {
         SolverOptions options;
         options.residual_tolerance = 1.0e-8;

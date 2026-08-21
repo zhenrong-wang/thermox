@@ -105,6 +105,9 @@ struct CalibrationObservationDefinition {
     std::string target;
     ScalarValue measured;
     ScalarValue sigma;
+    // Required for transient cases and forbidden for steady cases.
+    // Stored in SI seconds with dimension "time".
+    std::optional<ScalarValue> time;
 };
 
 struct MeasurementCorrelationDefinition {

@@ -134,6 +134,22 @@ void validate_integration_options(const TimeIntegrationOptions& options) {
         throw std::invalid_argument(
             "native BDF maximum_order must be 1 or 2");
     }
+    double previous_output_time =
+        -std::numeric_limits<double>::infinity();
+    for (const double output_time : options.required_output_times) {
+        if (!std::isfinite(output_time) ||
+            output_time < options.start_time ||
+            output_time > options.end_time) {
+            throw std::invalid_argument(
+                "required_output_times must be finite and lie within "
+                "[start_time, end_time]");
+        }
+        if (output_time <= previous_output_time) {
+            throw std::invalid_argument(
+                "required_output_times must be strictly increasing");
+        }
+        previous_output_time = output_time;
+    }
 }
 
 struct ImplicitStepResult {
@@ -907,6 +923,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     double time = options.start_time;
     double step = std::clamp(options.initial_step, options.min_step, options.max_step);
     result.trajectory.push_back(DaeState{time, state, derivative});
+    std::size_t next_required_output = 0;
+    while (next_required_output < options.required_output_times.size() &&
+           options.required_output_times[next_required_output] <= time) {
+        ++next_required_output;
+    }
     std::vector<double> previous_event_values;
     previous_event_values.reserve(problem.events.size());
     for (const auto& event : problem.events) {
@@ -931,6 +952,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             break;
         }
         step = std::min(step, options.end_time - time);
+        if (next_required_output < options.required_output_times.size()) {
+            step = std::min(
+                step,
+                options.required_output_times[next_required_output] - time);
+        }
         if (step < options.min_step && options.end_time - time > options.min_step) {
             result.diagnostics.message = "time step fell below min_step";
             result.diagnostics.final_time = time;
@@ -1081,6 +1107,19 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         result.diagnostics.maximum_accepted_error_norm = std::max(
             result.diagnostics.maximum_accepted_error_norm, error);
         result.trajectory.push_back(DaeState{time, state, derivative});
+        if (next_required_output < options.required_output_times.size()) {
+            const double required_time =
+                options.required_output_times[next_required_output];
+            const double output_roundoff =
+                16.0 * std::numeric_limits<double>::epsilon() *
+                std::max({1.0, std::abs(time),
+                          std::abs(required_time)});
+            if (std::abs(time - required_time) <= output_roundoff) {
+                result.trajectory.back().time = required_time;
+                time = required_time;
+                ++next_required_output;
+            }
+        }
 
         bool terminal_event = false;
         std::size_t earliest_terminal_index = std::numeric_limits<std::size_t>::max();

@@ -995,6 +995,18 @@ CalibrationObservationDefinition parse_calibration_observation(
         require_member(value, "sigma"),
         "calibration observation '" + observation.id +
             "'.sigma");
+    if (const auto* time = find_member(value, "time")) {
+        observation.time = parse_scalar_value(
+            *time,
+            "calibration observation '" + observation.id +
+                "'.time");
+        if (observation.time->dimension != "time" ||
+            observation.time->value_si < 0.0) {
+            throw std::invalid_argument(
+                "calibration observation '" + observation.id +
+                "' time must be a non-negative time quantity");
+        }
+    }
     if (observation.sigma.value_si <= 0.0) {
         throw std::invalid_argument(
             "calibration observation '" + observation.id +
@@ -1186,6 +1198,21 @@ void validate_calibrations(ModelDocument& document) {
                     observation.id +
                     "' references unknown case: " +
                     observation.case_id);
+            }
+            const auto simulation_case = std::find_if(
+                document.cases.begin(), document.cases.end(),
+                [&](const auto& candidate) {
+                    return candidate.id == observation.case_id;
+                });
+            const bool transient =
+                simulation_case->mode.find("transient") !=
+                std::string::npos;
+            if (transient != observation.time.has_value()) {
+                throw std::invalid_argument(
+                    "calibration observation '" + observation.id +
+                    (transient
+                         ? "' must declare time for its transient case"
+                         : "' must not declare time for its steady case"));
             }
         }
         std::map<std::string, std::size_t, std::less<>>

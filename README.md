@@ -234,12 +234,15 @@ Implemented in this sprint:
 - Calibration campaigns select explicit component/connection parameter targets without changing
   their physical ownership, can explicitly estimate case-owned fixed boundaries and parameter
   overrides, and carry component/system sharing scope, cases, bounds, priors, measured graph
-  observations, and uncertainties through canonical service serialization.
+  observations, optional transient observation times, and uncertainties through canonical service
+  serialization.
 - Service validation resolves calibration observations against registered graph results, while
   the result layer derives thermodynamic temperature and composition metadata for reacting
   material ports through the selected thermochemistry backend.
 - A bounded multi-case calibration service performs sequential uncertainty-weighted trust-region
-  least squares through ordinary steady simulations and returns fitted parameters, residual attribution,
+  least squares through ordinary steady or transient simulations. Adaptive DAE runs land exactly
+  on declared measurement times rather than substituting nearby integration steps. The service
+  returns fitted parameters, residual attribution,
   measurement-only and prior-augmented sensitivity rank, bound-aware local covariance/correlation,
   execution provenance, and a reusable canonical fitted model. The thin CLI exposes the same
   service through `calibrate --model ... --calibration ... --max-iterations ...` for bounded local

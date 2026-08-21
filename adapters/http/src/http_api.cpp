@@ -1828,7 +1828,7 @@ parse_create_calibration_request(const Request& request) {
             "gradient_tolerance", "step_tolerance",
             "objective_relative_tolerance",
             "minimum_continuation_fraction", "continuation_growth",
-            "simulation_solver",
+            "steady_simulation_solver", "transient_simulation_solver",
         };
         for (const auto& [key, unused] : *solver) {
             (void)unused;
@@ -1867,8 +1867,14 @@ parse_create_calibration_request(const Request& request) {
         value.continuation_growth = solver->get(
             "continuation_growth", value.continuation_growth);
         if (const auto simulation =
-                solver->get_child_optional("simulation_solver")) {
-            parse_steady_solver(*simulation, value.simulation_solver);
+                solver->get_child_optional("steady_simulation_solver")) {
+            parse_steady_solver(
+                *simulation, value.steady_simulation_solver);
+        }
+        if (const auto simulation = solver->get_child_optional(
+                "transient_simulation_solver")) {
+            parse_transient_solver(
+                *simulation, value.transient_simulation_solver);
         }
     }
     return command;

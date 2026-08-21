@@ -381,6 +381,7 @@ export interface CalibrationDocument {
       target: string
       measured: ScalarValue
       sigma: ScalarValue
+      time?: ScalarValue
     }>
   }
 }
@@ -397,7 +398,8 @@ export interface CalibrationSolverSettings {
   objective_relative_tolerance: number
   minimum_continuation_fraction: number
   continuation_growth: number
-  simulation_solver: SteadySolverSettings
+  steady_simulation_solver: SteadySolverSettings
+  transient_simulation_solver: TransientSolverSettings
 }
 
 export interface CalibrationRevision {
@@ -431,8 +433,9 @@ export interface CreateCalibrationRevision {
   training_study_revision_ids: string[]
   validation_study_revision_ids: string[]
   definition: CalibrationDocument
-  solver?: Omit<Partial<CalibrationSolverSettings>, 'simulation_solver'> & {
-    simulation_solver?: Partial<SteadySolverSettings>
+  solver?: Omit<Partial<CalibrationSolverSettings>, 'steady_simulation_solver' | 'transient_simulation_solver'> & {
+    steady_simulation_solver?: Partial<SteadySolverSettings>
+    transient_simulation_solver?: Partial<TransientSolverSettings>
   }
 }
 

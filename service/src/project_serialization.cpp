@@ -726,8 +726,11 @@ void calibration_solver_json(
         << solver.minimum_continuation_fraction
         << ", \"continuation_growth\": "
         << solver.continuation_growth
-        << ", \"simulation_solver\": ";
-    steady_solver_json(out, solver.simulation_solver);
+        << ", \"steady_simulation_solver\": ";
+    steady_solver_json(out, solver.steady_simulation_solver);
+    out << ", \"transient_simulation_solver\": ";
+    transient_solver_json(
+        out, solver.transient_simulation_solver);
     out << '}';
 }
 

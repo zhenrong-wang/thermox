@@ -1068,6 +1068,27 @@ struct StructuralPolicyAuditResponse {
     }
 };
 
+struct TransientSolverSettings {
+    double start_time{0.0};
+    double end_time{1.0};
+    double initial_step{1.0e-3};
+    double min_step{1.0e-9};
+    double max_step{0.1};
+    // Dimensionless multiplier applied to each DAE differential
+    // variable's declared physical scale.
+    double absolute_tolerance{1.0e-7};
+    double relative_tolerance{1.0e-5};
+    int max_steps{100000};
+    int max_consecutive_rejections{20};
+    int maximum_order{2};
+    bool compute_consistent_initial_conditions{true};
+    SteadySolverSettings nonlinear_solver = [] {
+        SteadySolverSettings settings;
+        settings.residual_tolerance = 1.0e-8;
+        return settings;
+    }();
+};
+
 struct CalibrationSolverSettings {
     int max_iterations{20};
     double finite_difference_fraction{1.0e-4};
@@ -1080,7 +1101,8 @@ struct CalibrationSolverSettings {
     double objective_relative_tolerance{1.0e-8};
     double minimum_continuation_fraction{1.0 / 64.0};
     double continuation_growth{1.5};
-    SteadySolverSettings simulation_solver;
+    SteadySolverSettings steady_simulation_solver;
+    TransientSolverSettings transient_simulation_solver;
 };
 
 struct CalibrationRequest {
@@ -1113,6 +1135,7 @@ struct CalibrationObservationResidual {
     double sigma_si{0.0};
     double residual_si{0.0};
     double normalized_residual{0.0};
+    std::optional<double> time_si;
 };
 
 struct CalibrationDiagnostics {
@@ -1396,27 +1419,6 @@ struct DataReconciliationResponse {
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;
     }
-};
-
-struct TransientSolverSettings {
-    double start_time{0.0};
-    double end_time{1.0};
-    double initial_step{1.0e-3};
-    double min_step{1.0e-9};
-    double max_step{0.1};
-    // Dimensionless multiplier applied to each DAE differential
-    // variable's declared physical scale.
-    double absolute_tolerance{1.0e-7};
-    double relative_tolerance{1.0e-5};
-    int max_steps{100000};
-    int max_consecutive_rejections{20};
-    int maximum_order{2};
-    bool compute_consistent_initial_conditions{true};
-    SteadySolverSettings nonlinear_solver = [] {
-        SteadySolverSettings settings;
-        settings.residual_tolerance = 1.0e-8;
-        return settings;
-    }();
 };
 
 struct TransientSimulationRequest {

@@ -3730,7 +3730,7 @@ void test_bounded_calibration_service() {
         "calibration must return a reusable fitted model");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.trust-region-least-squares/v1" &&
+            "thermox.trust-region-least-squares/v2" &&
             std::any_of(
                 response.metadata.solver.settings.begin(),
                 response.metadata.solver.settings.end(),
@@ -3780,6 +3780,115 @@ void test_bounded_calibration_service() {
                 "unavailable_fit_not_converged",
         "iteration-limited calibration must retain local rank while "
         "withholding fitted-parameter covariance");
+}
+
+void test_transient_calibration_recovers_dynamic_parameter() {
+    thermox::service::SimulationService service;
+    thermox::service::CalibrationRequest request;
+    request.calibration_id = "lag_fit";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "transient_calibration",
+    "media": [],
+    "components": [{
+      "id": "lag",
+      "kind": "custom.signal.calibration_lag",
+      "parameters": {"tau": {"value": 1.0, "unit": "s"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "step",
+    "mode": "dynamic_transient",
+    "fixed_values": {"lag.input.value": 1.0},
+    "initial_guesses": {"lag.filtered": 0.0}
+  }],
+  "calibrations": [{
+    "id": "lag_fit",
+    "parameters": [{
+      "id": "time_constant",
+      "scope": "component",
+      "targets": ["components.lag.parameters.tau"],
+      "cases": ["step"],
+      "bounds": {
+        "lower": {"value": 0.5, "unit": "s"},
+        "upper": {"value": 4.0, "unit": "s"}
+      }
+    }],
+    "observations": [{
+      "id": "sample_0_5",
+      "case": "step",
+      "target": "lag.output.value",
+      "time": {"value": 0.5, "unit": "s"},
+      "measured": {"value": 0.2211992169, "unit": "1"},
+      "sigma": {"value": 0.002, "unit": "1"}
+    }, {
+      "id": "sample_1_0",
+      "case": "step",
+      "target": "lag.output.value",
+      "time": {"value": 1.0, "unit": "s"},
+      "measured": {"value": 0.3934693403, "unit": "1"},
+      "sigma": {"value": 0.002, "unit": "1"}
+    }]
+  }]
+})json";
+
+    thermox::service::ExpressionComponentInput component;
+    component.schema_version = "thermox.expression_component/v3";
+    component.kind = "custom.signal.calibration_lag";
+    component.version = "1.0.0";
+    component.template_kind = "control.first_order_lag";
+    component.display_name = "Calibratable first-order lag";
+    component.category = "Project controls";
+    component.model_name = "Transient calibration fixture";
+    component.supports_steady = false;
+    component.supports_transient = true;
+    component.ports = {
+        {"input", "signal", "in", 1},
+        {"output", "signal", "out", 1},
+    };
+    component.parameters = {{
+        "tau", "time", true, std::nullopt, 0.0,
+        std::numeric_limits<double>::infinity(), false, true}};
+    component.internal_variables = {{
+        "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
+        -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity(), "dimensionless"}};
+    component.transient_equations = {
+        {"state_balance",
+         "parameter.tau * derivative.internal.filtered + "
+         "internal.filtered - input.value", 1.0},
+        {"output", "output.value - internal.filtered", 1.0},
+    };
+    request.components.expression_components.push_back(component);
+    request.solver.max_iterations = 12;
+    request.solver.transient_simulation_solver.end_time = 0.2;
+    request.solver.transient_simulation_solver.initial_step = 0.02;
+    request.solver.transient_simulation_solver.max_step = 0.1;
+
+    const auto response = service.run_calibration(request);
+    require(
+        response.succeeded(),
+        "transient calibration must succeed: " +
+            response.error.message);
+    require(
+        response.diagnostics.converged &&
+            response.parameters.size() == 1 &&
+            std::abs(
+                response.parameters.front().fitted_value_si - 2.0) <
+                0.03,
+        "transient calibration must recover the known time constant");
+    require(
+        response.observations.size() == 2 &&
+            response.observations[0].time_si == 0.5 &&
+            response.observations[1].time_si == 1.0,
+        "transient calibration residuals must retain exact sample times");
+    const auto json =
+        thermox::service::serialize_calibration_response_json(response);
+    require(
+        json.find("\"time_si\": 0.5") != std::string::npos,
+        "transient calibration JSON must expose observation time");
 }
 
 void test_calibration_separates_data_and_prior_identifiability() {
@@ -6317,6 +6426,7 @@ int main() {
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
+        test_transient_calibration_recovers_dynamic_parameter();
         test_calibration_separates_data_and_prior_identifiability();
         test_hard_constraint_data_reconciliation_service();
         test_hard_reconciliation_reports_local_bound_limitation();

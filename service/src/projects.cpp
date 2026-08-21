@@ -361,7 +361,8 @@ std::string study_identity(
 
 void validate_calibration_solver(
     const CalibrationSolverSettings& value) {
-    validate_steady_solver(value.simulation_solver);
+    validate_steady_solver(value.steady_simulation_solver);
+    validate_transient_solver(value.transient_simulation_solver);
     if (value.max_iterations <= 0 ||
         !std::isfinite(value.finite_difference_fraction) ||
         value.finite_difference_fraction <= 0.0 ||
@@ -419,7 +420,21 @@ std::string calibration_identity(
         << solver.objective_relative_tolerance << '|'
         << solver.minimum_continuation_fraction << '|'
         << solver.continuation_growth << '|';
-    append_steady(out, solver.simulation_solver);
+    append_steady(out, solver.steady_simulation_solver);
+    const auto& transient = solver.transient_simulation_solver;
+    out << '|' << transient.start_time
+        << '|' << transient.end_time
+        << '|' << transient.initial_step
+        << '|' << transient.min_step
+        << '|' << transient.max_step
+        << '|' << transient.absolute_tolerance
+        << '|' << transient.relative_tolerance
+        << '|' << transient.max_steps
+        << '|' << transient.max_consecutive_rejections
+        << '|' << transient.maximum_order
+        << '|' << transient.compute_consistent_initial_conditions
+        << '|';
+    append_steady(out, transient.nonlinear_solver);
     return out.str();
 }
 

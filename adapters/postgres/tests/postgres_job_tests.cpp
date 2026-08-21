@@ -1024,6 +1024,10 @@ void test_projects_and_immutable_model_revisions(
       }
     })json";
     calibration_request.solver.max_iterations = 13;
+    calibration_request.solver.transient_simulation_solver.end_time =
+        42.0;
+    calibration_request.solver.transient_simulation_solver.max_step =
+        0.25;
     const auto calibration =
         projects.create_calibration_revision(calibration_request);
     const auto loaded_calibration = projects.get_calibration_revision(
@@ -1034,6 +1038,10 @@ void test_projects_and_immutable_model_revisions(
             loaded_calibration->training_study_revision_ids ==
                 calibration_request.training_study_revision_ids &&
             loaded_calibration->solver.max_iterations == 13 &&
+            loaded_calibration->solver
+                    .transient_simulation_solver.end_time == 42.0 &&
+            loaded_calibration->solver
+                    .transient_simulation_solver.max_step == 0.25 &&
             projects.list_calibration_revisions(
                 team_a, project.project_id).size() == 1U &&
             !projects.get_calibration_revision(

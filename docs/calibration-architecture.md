@@ -70,6 +70,25 @@ An observation identifies a case, a graph result target, a measured value, and i
 }
 ```
 
+A transient-case observation additionally declares its physical sample time:
+
+```json
+{
+  "id": "drum_level_30s",
+  "case": "load_step",
+  "target": "drum.level.value",
+  "time": {"value": 30.0, "unit": "s"},
+  "measured": {"value": 0.42, "unit": "m"},
+  "sigma": {"value": 0.005, "unit": "m"}
+}
+```
+
+Time is required for transient cases and forbidden for steady cases. It is not a sample index or
+nearest-step hint. The adaptive DAE integrator treats the sorted unique observation times as
+required output boundaries, derives each case horizon from its latest observation, and emits
+accepted states at those exact times. The configured transient start time still defines the
+trajectory origin and must precede the latest observation.
+
 Uncertainty is part of the contract so estimation can weight unlike measurements without treating
 all field values as exact.
 
@@ -93,6 +112,7 @@ Model-document parsing currently validates:
 - ordered bounds;
 - positive prior and observation uncertainties;
 - measured-value and uncertainty dimensions;
+- a non-negative time quantity on every transient observation and no time on steady observations;
 - unique, known correlation pairs and a positive-definite measurement correlation matrix.
 
 Service validation additionally resolves observation paths against the active component registry
@@ -100,8 +120,10 @@ and checks that measured dimensions match the exposed primary or derived result.
 composition-aware material ports both expose derived temperature, so measured gas-path
 temperatures can participate in gas-turbine calibration without becoming connector unknowns.
 
-The service executes bounded, multi-case estimation by repeatedly invoking the ordinary steady
-simulation workflow. Its optimizer boundary is a generic scaled, bounded nonlinear least-squares
+The service executes bounded, multi-case estimation by repeatedly invoking the ordinary steady or
+transient simulation workflow selected by each case. All observations for one transient case are
+grouped into one trajectory solve, including multiple targets at the same sample time. Its
+optimizer boundary is a generic scaled, bounded nonlinear least-squares
 contract in the numerical core. The reference implementation uses rank-revealing Gauss-Newton
 steps inside an adaptive trust region: candidate solve failures shrink the region, every
 observation is weighted by its declared uncertainty, declared correlations whiten the joint
@@ -110,7 +132,7 @@ sequential to bound host resource use. The numerical callback receives the accep
 point, allowing service-owned continuation and warm starts without exposing thermal-system state
 to the optimizer.
 
-Each accepted case solution is retained as a named-variable warm start. A candidate parameter move
+Each accepted steady case solution is retained as a named-variable warm start. A candidate parameter move
 first attempts the requested endpoint; on failure, adaptive continuation halves the move and walks
 through converged neighboring states before retrying the endpoint. Continuation controls and all
 underlying Newton settings are recorded in execution provenance.
@@ -192,8 +214,10 @@ a traceable standard uncertainty, an acceptance tolerance, or an exploratory sca
 The current dense rank-revealing trust-region implementation is intended for small and moderate
 engineering parameter sets. Sparse QR/SVD implementations can replace it behind the same residual
 callback and evidence contracts without changing model, component, property, or observation
-contracts. Transient estimation is also a later workflow; the first implementation intentionally
-accepts steady cases only. Component models remain unaware of calibration campaigns.
+contracts. Transient estimation currently fits deterministic, time-point trajectory observations.
+It does not yet implement process-noise models, sequential filtering, adjoint sensitivities,
+event-time estimation, or trajectory warm starts across parameter candidates. Component models
+remain unaware of calibration campaigns.
 
 ## Evidence classification
 

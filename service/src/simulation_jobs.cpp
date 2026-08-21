@@ -65,7 +65,21 @@ void append_calibration_settings(
            << settings.objective_relative_tolerance << '|'
            << settings.minimum_continuation_fraction << '|'
            << settings.continuation_growth << '|';
-    append_steady_settings(stream, settings.simulation_solver);
+    append_steady_settings(stream, settings.steady_simulation_solver);
+    const auto& transient = settings.transient_simulation_solver;
+    stream << '|' << transient.start_time
+           << '|' << transient.end_time
+           << '|' << transient.initial_step
+           << '|' << transient.min_step
+           << '|' << transient.max_step
+           << '|' << transient.absolute_tolerance
+           << '|' << transient.relative_tolerance
+           << '|' << transient.max_steps
+           << '|' << transient.max_consecutive_rejections
+           << '|' << transient.maximum_order
+           << '|' << transient.compute_consistent_initial_conditions
+           << '|';
+    append_steady_settings(stream, transient.nonlinear_solver);
 }
 
 void append_reconciliation_settings(
@@ -933,7 +947,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 request.calibration_solver =
                     claimed->request.calibration_solver;
                 request.prediction_solver = claimed->request
-                    .calibration_solver.simulation_solver;
+                    .calibration_solver.steady_simulation_solver;
                 request.prediction_cases =
                     claimed->request.calibration_predictions;
                 request.artifacts = claimed->request.artifacts;

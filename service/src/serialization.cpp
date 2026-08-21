@@ -177,6 +177,10 @@ void calibration_definition_json(
         scalar_value(out, observation.measured);
         out << ", \"sigma\": ";
         scalar_value(out, observation.sigma);
+        if (observation.time.has_value()) {
+            out << ", \"time\": ";
+            scalar_value(out, *observation.time);
+        }
         out << "}" << (index + 1U == calibration.observations.size()
                               ? "\n"
                               : ",\n");
@@ -1210,6 +1214,10 @@ std::string serialize_model_document_json(
                 scalar_value(out, observation.measured);
                 out << ", \"sigma\": ";
                 scalar_value(out, observation.sigma);
+                if (observation.time.has_value()) {
+                    out << ", \"time\": ";
+                    scalar_value(out, *observation.time);
+                }
                 out << "}"
                     << (j + 1 ==
                                 calibration.observations.size()
@@ -2339,6 +2347,10 @@ std::string serialize_calibration_response_json(
         json_number(out, observation.residual_si);
         out << ", \"normalized_residual\": ";
         json_number(out, observation.normalized_residual);
+        if (observation.time_si.has_value()) {
+            out << ", \"time_si\": ";
+            json_number(out, *observation.time_si);
+        }
         out << "}";
     }
     out << "],\n  \"parameter_uncertainties\": [";

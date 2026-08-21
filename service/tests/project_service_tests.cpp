@@ -1678,6 +1678,8 @@ void test_calibrations_bind_exact_training_studies() {
         }]
       }
     })";
+    request.solver.transient_simulation_solver.end_time = 12.0;
+    request.solver.transient_simulation_solver.max_step = 0.2;
     const auto first = service.create_calibration_revision(request);
     request.parent_calibration_revision_id =
         first.calibration_revision_id;
@@ -1687,6 +1689,8 @@ void test_calibrations_bind_exact_training_studies() {
             first.checksum == second.checksum &&
             first.training_study_revision_ids ==
                 std::vector<std::string>{study.study_revision_id} &&
+            first.solver.transient_simulation_solver.end_time == 12.0 &&
+            first.solver.transient_simulation_solver.max_step == 0.2 &&
             service.list_calibration_revisions(
                 team_a, project.project_id).size() == 2U &&
             !service.get_calibration_revision(
@@ -1699,6 +1703,9 @@ void test_calibrations_bind_exact_training_studies() {
                 std::string::npos &&
             thermox::service::serialize_calibration_revision_json(first)
                     .find("\"initial_trust_region_radius\"") !=
+                std::string::npos &&
+            thermox::service::serialize_calibration_revision_json(first)
+                    .find("\"transient_simulation_solver\"") !=
                 std::string::npos,
         "calibration serialization must expose its canonical definition "
         "and optimizer policy");
@@ -1720,7 +1727,8 @@ void test_calibrations_bind_exact_training_studies() {
     execution.model_json = resolved->executable_model_json;
     execution.calibration_id = first.calibration_id;
     execution.calibration_solver = first.solver;
-    execution.prediction_solver = first.solver.simulation_solver;
+    execution.prediction_solver =
+        first.solver.steady_simulation_solver;
     execution.prediction_cases = resolved->validation_predictions;
     const auto execution_result =
         thermox::service::SimulationService{
