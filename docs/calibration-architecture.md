@@ -169,7 +169,9 @@ flag, objective history summary, and observation residuals when qualifying the r
 
 `EngineeringStudyRequest` formalizes that independent workflow. It runs one named calibration,
 freezes the returned canonical model, executes each declared prediction case sequentially through
-the ordinary steady service, and evaluates prediction observations only after the solve. A case
+the ordinary steady or transient service selected by the case mode, and evaluates prediction
+observations only after the solve. Transient observations carry `time_si`; their unique times are
+passed to the adaptive integrator as exact required output boundaries. A case
 referenced by calibration observations is rejected as a prediction case, preventing accidental
 training/validation overlap. Changing a prediction measurement cannot change the predicted state.
 The response preserves the complete calibration and per-case graph results while reporting
@@ -183,19 +185,24 @@ request:
 
 ```json
 {
-  "schema_version": "thermox.engineering_study/v1",
+  "schema_version": "thermox.engineering_study/v2",
   "model_document": {"schema_version": "thermox.model/v2", "model": {}, "cases": [], "calibrations": []},
   "calibration_id": "baseline_fit",
   "calibration_solver": {"max_iterations": 20},
-  "prediction_solver": {"maximum_iterations": 80},
+  "steady_prediction_solver": {"max_iterations": 80},
+  "transient_prediction_solver": {
+    "initial_step": 0.01,
+    "max_step": 0.5
+  },
   "prediction_cases": [{
-    "case_id": "held_out",
+    "case_id": "held_out_transient",
     "observations": [{
-      "id": "held_out_power",
-      "target": "generator.electrical.P",
-      "dimension": "power",
-      "measured_si": 250000000.0,
-      "sigma_si": 2500000.0
+      "id": "held_out_level_30s",
+      "target": "drum.level.value",
+      "dimension": "length",
+      "measured_si": 0.42,
+      "sigma_si": 0.005,
+      "time_si": 30.0
     }]
   }]
 }
@@ -208,7 +215,9 @@ thermox_cli study --input study.json --format json
 The parser does not copy prediction observations into the model or optimizer. The service rejects
 any prediction case used by a calibration observation, freezes the fitted canonical model, and
 evaluates held-out residuals only after each prediction solve. The CLI is a thin adapter over this
-service contract. `sigma_si` is the declared normalization scale; callers must state whether it is
+service contract. `time_si` is required only when the referenced prediction case is transient.
+Study results discriminate `steady_simulation` from `transient_simulation` and retain the complete
+trajectory evidence. `sigma_si` is the declared normalization scale; callers must state whether it is
 a traceable standard uncertainty, an acceptance tolerance, or an exploratory scale.
 
 The current dense rank-revealing trust-region implementation is intended for small and moderate

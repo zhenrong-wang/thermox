@@ -7,8 +7,8 @@
 
 namespace thermox::service {
 
-inline constexpr char engineering_study_request_schema_v1[] =
-    "thermox.engineering_study/v1";
+inline constexpr char engineering_study_request_schema_v2[] =
+    "thermox.engineering_study/v2";
 
 class EngineeringStudyRequestError : public std::runtime_error {
 public:

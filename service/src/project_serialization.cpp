@@ -276,6 +276,13 @@ void transient_solver_json(
         << (solver.compute_consistent_initial_conditions
                 ? "true"
                 : "false")
+        << ", \"required_output_times\": [";
+    for (std::size_t index = 0;
+         index < solver.required_output_times.size(); ++index) {
+        if (index != 0U) out << ", ";
+        out << solver.required_output_times[index];
+    }
+    out << "]"
         << ", \"nonlinear_solver\": ";
     steady_solver_json(out, solver.nonlinear_solver);
     out << '}';

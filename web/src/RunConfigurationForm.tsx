@@ -56,7 +56,9 @@ const steadyFields: Array<{
 const transientFields: Array<{
   key: Exclude<
     keyof TransientSolverSettings,
-    'compute_consistent_initial_conditions' | 'nonlinear_solver'
+    | 'compute_consistent_initial_conditions'
+    | 'required_output_times'
+    | 'nonlinear_solver'
   >
   label: string
   integer?: boolean

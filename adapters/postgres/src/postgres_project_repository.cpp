@@ -160,6 +160,13 @@ Tree transient_solver_tree(
     tree.put(
         "compute_consistent_initial_conditions",
         value.compute_consistent_initial_conditions);
+    Tree output_times;
+    for (const double output_time : value.required_output_times) {
+        Tree item;
+        item.put_value(output_time);
+        output_times.push_back({"", item});
+    }
+    tree.add_child("required_output_times", output_times);
     tree.add_child(
         "nonlinear_solver",
         steady_solver_tree(value.nonlinear_solver));
@@ -185,6 +192,12 @@ service::TransientSolverSettings decode_transient_solver(
     value.compute_consistent_initial_conditions =
         tree.get<bool>(
             "compute_consistent_initial_conditions");
+    for (const auto& [key, item] :
+         tree.get_child("required_output_times")) {
+        (void)key;
+        value.required_output_times.push_back(
+            item.get_value<double>());
+    }
     value.nonlinear_solver = decode_steady_solver(
         tree.get_child("nonlinear_solver"));
     return value;

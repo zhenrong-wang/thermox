@@ -1121,6 +1121,15 @@ Tree transient_settings(
         "compute_consistent_initial_conditions",
         value.compute_consistent_initial_conditions);
     tree.add_child(
+        "required_output_times",
+        array(
+            value.required_output_times,
+            [](double output_time) {
+                Tree item;
+                item.put_value(output_time);
+                return item;
+            }));
+    tree.add_child(
         "nonlinear_solver",
         steady_settings(value.nonlinear_solver));
     return tree;
@@ -1145,6 +1154,11 @@ service::TransientSolverSettings decode_transient_settings(
     value.compute_consistent_initial_conditions =
         tree.get<bool>(
             "compute_consistent_initial_conditions");
+    value.required_output_times = decode_array<double>(
+        tree.get_child("required_output_times"),
+        [](const Tree& item) {
+            return item.get_value<double>();
+        });
     value.nonlinear_solver = decode_steady_settings(
         tree.get_child("nonlinear_solver"));
     return value;
@@ -1520,6 +1534,10 @@ std::string encode_request(
                             item.put("dimension", observation.dimension);
                             item.put("measured_si", observation.measured_si);
                             item.put("sigma_si", observation.sigma_si);
+                            if (observation.time_si.has_value()) {
+                                item.put(
+                                    "time_si", *observation.time_si);
+                            }
                             return item;
                         }));
                 return encoded;
@@ -1647,12 +1665,17 @@ service::SimulationJobRequest decode_request(
                     decode_array<service::StudyObservation>(
                         encoded.get_child("observations"),
                         [](const Tree& item) {
+                            const auto encoded_time =
+                                item.get_optional<double>("time_si");
                             return service::StudyObservation{
                                 item.get<std::string>("id"),
                                 item.get<std::string>("target"),
                                 item.get<std::string>("dimension"),
                                 item.get<double>("measured_si"),
                                 item.get<double>("sigma_si"),
+                                encoded_time
+                                    ? std::optional<double>(*encoded_time)
+                                    : std::nullopt,
                             };
                         });
                 return prediction;
@@ -1698,6 +1721,7 @@ service::SimulationJobRequest decode_request(
                                 item.get<std::string>("dimension"),
                                 item.get<double>("measured_si"),
                                 item.get<double>("sigma_si"),
+                                std::nullopt,
                             };
                         });
                 return prediction;

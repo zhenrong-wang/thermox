@@ -228,6 +228,16 @@ void validate_transient_solver(
         throw ProjectRequestError(
             "invalid transient solver settings");
     }
+    double previous = -std::numeric_limits<double>::infinity();
+    for (const double output_time : value.required_output_times) {
+        if (!std::isfinite(output_time) ||
+            output_time < value.start_time ||
+            output_time > value.end_time || output_time <= previous) {
+            throw ProjectRequestError(
+                "invalid transient required output times");
+        }
+        previous = output_time;
+    }
 }
 
 void append_steady(
@@ -271,7 +281,11 @@ std::string run_configuration_identity(
         << '|' << transient.maximum_order
         << '|' <<
             transient.compute_consistent_initial_conditions
-        << '|';
+        << '|' << transient.required_output_times.size() << '|';
+    for (const double output_time :
+         transient.required_output_times) {
+        out << output_time << '|';
+    }
     append_steady(out, transient.nonlinear_solver);
     return out.str();
 }
@@ -433,7 +447,11 @@ std::string calibration_identity(
         << '|' << transient.max_consecutive_rejections
         << '|' << transient.maximum_order
         << '|' << transient.compute_consistent_initial_conditions
-        << '|';
+        << '|' << transient.required_output_times.size() << '|';
+    for (const double output_time :
+         transient.required_output_times) {
+        out << output_time << '|';
+    }
     append_steady(out, transient.nonlinear_solver);
     return out.str();
 }
@@ -2591,6 +2609,10 @@ ProjectService::resolve_calibration(
                 observation.measured.dimension,
                 observation.measured.value_si,
                 observation.sigma.value_si,
+                observation.time.has_value()
+                    ? std::optional<double>(
+                          observation.time->value_si)
+                    : std::nullopt,
             });
         }
         document.calibrations = {std::move(training_definition)};
@@ -2709,6 +2731,7 @@ ProjectService::resolve_reconciliation(
                 observation.measured.dimension,
                 observation.measured.value_si,
                 observation.sigma.value_si,
+                std::nullopt,
             });
         }
         document.calibrations = {std::move(constraint_definition)};

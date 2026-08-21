@@ -1390,6 +1390,7 @@ void parse_transient_solver(
         "max_consecutive_rejections",
         "maximum_order",
         "compute_consistent_initial_conditions",
+        "required_output_times",
         "nonlinear_solver",
     };
     for (const auto& [key, unused] : tree) {
@@ -1420,6 +1421,18 @@ void parse_transient_solver(
     solver.compute_consistent_initial_conditions = tree.get(
         "compute_consistent_initial_conditions",
         solver.compute_consistent_initial_conditions);
+    if (const auto output_times =
+            tree.get_child_optional("required_output_times")) {
+        solver.required_output_times.clear();
+        for (const auto& [key, item] : *output_times) {
+            if (!key.empty()) {
+                throw std::invalid_argument(
+                    "required_output_times must be an array");
+            }
+            solver.required_output_times.push_back(
+                item.get_value<double>());
+        }
+    }
     if (const auto nonlinear =
             tree.get_child_optional("nonlinear_solver")) {
         parse_steady_solver(*nonlinear, solver.nonlinear_solver);

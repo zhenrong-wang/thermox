@@ -171,6 +171,7 @@ SimulationJobRequest request(
     value.steady_solver.structural_decomposition_policy =
         thermox::service::StructuralDecompositionPolicy::blocks;
     value.transient_solver.end_time = 12.5;
+    value.transient_solver.required_output_times = {1.25, 7.5};
 
     thermox::service::PerformanceMapArtifactInput map;
     map.id = "compressor-map";
@@ -381,6 +382,8 @@ void test_idempotency_and_tenant_scope(
             repeated.request.components.expression_components
                     .front().transient_equations.front().name ==
                 "state_balance" &&
+            repeated.request.transient_solver.required_output_times ==
+                std::vector<double>{1.25, 7.5} &&
             std::isinf(
                 repeated.request.components.expression_components
                     .front().parameters.front().lower_bound) &&
@@ -1028,6 +1031,8 @@ void test_projects_and_immutable_model_revisions(
         42.0;
     calibration_request.solver.transient_simulation_solver.max_step =
         0.25;
+    calibration_request.solver.transient_simulation_solver
+        .required_output_times = {2.0, 8.0};
     const auto calibration =
         projects.create_calibration_revision(calibration_request);
     const auto loaded_calibration = projects.get_calibration_revision(
@@ -1042,6 +1047,9 @@ void test_projects_and_immutable_model_revisions(
                     .transient_simulation_solver.end_time == 42.0 &&
             loaded_calibration->solver
                     .transient_simulation_solver.max_step == 0.25 &&
+            loaded_calibration->solver.transient_simulation_solver
+                    .required_output_times ==
+                std::vector<double>{2.0, 8.0} &&
             projects.list_calibration_revisions(
                 team_a, project.project_id).size() == 1U &&
             !projects.get_calibration_revision(
@@ -1128,6 +1136,7 @@ void test_projects_and_immutable_model_revisions(
     run_request.steady_solver.max_iterations = 41;
     run_request.steady_solver.structural_decomposition_policy =
         thermox::service::StructuralDecompositionPolicy::blocks;
+    run_request.transient_solver.required_output_times = {0.2, 0.8};
     const auto run =
         projects.create_run_configuration_revision(run_request);
     const auto loaded =
@@ -1142,6 +1151,8 @@ void test_projects_and_immutable_model_revisions(
             loaded->steady_solver
                 .structural_decomposition_policy ==
                 thermox::service::StructuralDecompositionPolicy::blocks &&
+            loaded->transient_solver.required_output_times ==
+                std::vector<double>{0.2, 0.8} &&
             loaded->checksum == run.checksum &&
             projects
                     .list_run_configuration_revisions(

@@ -244,6 +244,7 @@ export interface TransientSolverSettings {
   max_consecutive_rejections: number
   maximum_order: number
   compute_consistent_initial_conditions: boolean
+  required_output_times: number[]
   nonlinear_solver: SteadySolverSettings
 }
 

@@ -1082,6 +1082,7 @@ struct TransientSolverSettings {
     int max_consecutive_rejections{20};
     int maximum_order{2};
     bool compute_consistent_initial_conditions{true};
+    std::vector<double> required_output_times;
     SteadySolverSettings nonlinear_solver = [] {
         SteadySolverSettings settings;
         settings.residual_tolerance = 1.0e-8;
@@ -1204,12 +1205,36 @@ struct CalibrationResponse {
     }
 };
 
+struct TransientSimulationRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string case_id;
+    TransientSolverSettings solver;
+    SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
+};
+
+struct TransientSimulationResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    ExecutionMetadata metadata;
+    TimeIntegrationDiagnostics diagnostics;
+    std::vector<StateSample> trajectory;
+    std::vector<EventValue> events;
+    ThermalFeasibilitySummary thermal_feasibility;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct StudyObservation {
     std::string id;
     std::string target;
     std::string dimension;
     double measured_si{0.0};
     double sigma_si{0.0};
+    std::optional<double> time_si;
 };
 
 struct StudyPredictionCase {
@@ -1222,7 +1247,8 @@ struct EngineeringStudyRequest {
     std::string model_json;
     std::string calibration_id;
     CalibrationSolverSettings calibration_solver;
-    SteadySolverSettings prediction_solver;
+    SteadySolverSettings steady_prediction_solver;
+    TransientSolverSettings transient_prediction_solver;
     std::vector<StudyPredictionCase> prediction_cases;
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;
@@ -1230,7 +1256,9 @@ struct EngineeringStudyRequest {
 
 struct StudyCaseResult {
     std::string case_id;
-    SteadySimulationResponse simulation;
+    std::string mode;
+    std::optional<SteadySimulationResponse> steady_simulation;
+    std::optional<TransientSimulationResponse> transient_simulation;
     std::vector<CalibrationObservationResidual> observations;
     double weighted_sum_squares{0.0};
 };
@@ -1415,29 +1443,6 @@ struct DataReconciliationResponse {
         joint_confidence_region;
     std::vector<StudyCaseResult> held_out_results;
     std::string reconciled_model_json;
-
-    [[nodiscard]] bool succeeded() const {
-        return status == OperationStatus::succeeded;
-    }
-};
-
-struct TransientSimulationRequest {
-    std::string schema_version{command_schema_v1};
-    std::string model_json;
-    std::string case_id;
-    TransientSolverSettings solver;
-    SimulationArtifactBundle artifacts;
-    SimulationComponentBundle components;
-};
-
-struct TransientSimulationResponse {
-    OperationStatus status{OperationStatus::invalid_request};
-    ServiceError error;
-    ExecutionMetadata metadata;
-    TimeIntegrationDiagnostics diagnostics;
-    std::vector<StateSample> trajectory;
-    std::vector<EventValue> events;
-    ThermalFeasibilitySummary thermal_feasibility;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

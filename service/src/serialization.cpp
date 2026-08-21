@@ -2458,12 +2458,25 @@ std::string serialize_engineering_study_response_json(
             out << ", \"normalized_residual\": ";
             json_number(
                 out, observation.normalized_residual);
+            if (observation.time_si.has_value()) {
+                out << ", \"time_si\": ";
+                json_number(out, *observation.time_si);
+            }
             out << "}";
         }
-        out << "], \"simulation\": "
-            << serialize_steady_response_json(
-                   prediction.simulation)
-            << "}";
+        out << "], \"mode\": ";
+        json_string(out, prediction.mode);
+        if (prediction.steady_simulation.has_value()) {
+            out << ", \"steady_simulation\": "
+                << serialize_steady_response_json(
+                       *prediction.steady_simulation);
+        }
+        if (prediction.transient_simulation.has_value()) {
+            out << ", \"transient_simulation\": "
+                << serialize_transient_response_json(
+                       *prediction.transient_simulation);
+        }
+        out << "}";
     }
     out << "]\n}\n";
     return out.str();
@@ -2798,8 +2811,9 @@ std::string serialize_data_reconciliation_response_json(
             json_number(out, observation.normalized_residual);
             out << "}";
         }
-        out << "], \"simulation\": "
-            << serialize_steady_response_json(result.simulation)
+        out << "], \"steady_simulation\": "
+            << serialize_steady_response_json(
+                   *result.steady_simulation)
             << "}";
     }
     out << "],\n  \"reconciled_model_json\": ";

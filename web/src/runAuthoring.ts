@@ -62,6 +62,7 @@ export const defaultTransientSolver: TransientSolverSettings = {
   max_consecutive_rejections: 20,
   maximum_order: 2,
   compute_consistent_initial_conditions: true,
+  required_output_times: [],
   nonlinear_solver: { ...defaultSteadySolver },
 }
 

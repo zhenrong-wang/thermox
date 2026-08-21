@@ -3803,6 +3803,11 @@ void test_transient_calibration_recovers_dynamic_parameter() {
     "mode": "dynamic_transient",
     "fixed_values": {"lag.input.value": 1.0},
     "initial_guesses": {"lag.filtered": 0.0}
+  }, {
+    "id": "held_out",
+    "mode": "dynamic_transient",
+    "fixed_values": {"lag.input.value": 1.0},
+    "initial_guesses": {"lag.filtered": 0.0}
   }],
   "calibrations": [{
     "id": "lag_fit",
@@ -3889,6 +3894,55 @@ void test_transient_calibration_recovers_dynamic_parameter() {
     require(
         json.find("\"time_si\": 0.5") != std::string::npos,
         "transient calibration JSON must expose observation time");
+
+    thermox::service::EngineeringStudyRequest study;
+    study.model_json = request.model_json;
+    study.calibration_id = request.calibration_id;
+    study.calibration_solver = request.solver;
+    study.transient_prediction_solver.initial_step = 0.02;
+    study.transient_prediction_solver.max_step = 0.1;
+    study.prediction_cases = {{
+        "held_out",
+        {{
+            "held_out_0_75",
+            "lag.output.value",
+            "dimensionless",
+            0.3127107212,
+            0.002,
+            0.75,
+        }},
+    }};
+    study.components = request.components;
+    const auto validation = service.run_engineering_study(study);
+    require(
+        validation.succeeded(),
+        "transient engineering study must succeed: " +
+            validation.error.message);
+    require(
+        validation.predictions.size() == 1 &&
+            validation.predictions.front().mode == "transient" &&
+            !validation.predictions.front()
+                 .steady_simulation.has_value() &&
+            validation.predictions.front()
+                .transient_simulation->succeeded() &&
+            validation.predictions.front()
+                    .observations.front().time_si == 0.75 &&
+            std::abs(validation.predictions.front()
+                         .observations.front().normalized_residual) <
+                1.0,
+        "frozen dynamic fit must predict an exact-time held-out "
+        "transient observation");
+    const auto validation_json =
+        thermox::service::serialize_engineering_study_response_json(
+            validation);
+    require(
+        validation_json.find("\"mode\": \"transient\"") !=
+                std::string::npos &&
+            validation_json.find("\"transient_simulation\":") !=
+                std::string::npos &&
+            validation_json.find("\"time_si\": 0.75") !=
+                std::string::npos,
+        "engineering-study JSON must discriminate transient evidence");
 }
 
 void test_calibration_separates_data_and_prior_identifiability() {
@@ -4685,7 +4739,7 @@ void test_engineering_study_freezes_before_prediction() {
         response.calibration.succeeded() &&
             response.predictions.size() == 1 &&
             response.predictions.front()
-                    .simulation.succeeded() &&
+                    .steady_simulation->succeeded() &&
             response.diagnostics.prediction_case_count == 1 &&
             response.diagnostics.observation_count == 1,
         "study response must preserve calibration and prediction results");
@@ -4734,13 +4788,15 @@ void test_engineering_study_freezes_before_prediction() {
         "calibration cases must not be reused as independent predictions");
 
     const std::string declared =
-        std::string{"{\"schema_version\":\"thermox.engineering_study/v1\","}
+        std::string{"{\"schema_version\":\"thermox.engineering_study/v2\","}
         + "\"model_document\":" +
         independent_study_model(baseline_power) +
         R"json(,"calibration_id":"baseline_fit",
           "calibration_solver":{"max_iterations":20,
             "finite_difference_fraction":0.0002,
-            "initial_trust_region_radius":0.3},
+            "initial_trust_region_radius":0.3,
+            "transient_simulation_solver":{"max_step":0.2}},
+          "steady_prediction_solver":{"max_iterations":81},
           "prediction_cases":[{"case_id":"validation",
             "observations":[{"id":"validation_power",
               "target":"compressor.shaft.W_dot","dimension":"power",
@@ -4758,6 +4814,9 @@ void test_engineering_study_freezes_before_prediction() {
             std::abs(
                 parsed.calibration_solver.initial_trust_region_radius -
                 0.3) < 1.0e-15 &&
+            parsed.calibration_solver.transient_simulation_solver
+                    .max_step == 0.2 &&
+            parsed.steady_prediction_solver.max_iterations == 81 &&
             parsed.prediction_cases.size() == 1 &&
             parsed.prediction_cases.front().observations.size() == 1,
         "declarative engineering-study input must preserve the frozen "
@@ -4771,6 +4830,26 @@ void test_engineering_study_freezes_before_prediction() {
                     .observations.front().residual_si) < 5000.0,
         "declarative engineering-study execution must use the same "
         "service path as direct callers");
+
+    auto obsolete_declaration = declared;
+    const auto solver_name = obsolete_declaration.find(
+        "steady_prediction_solver");
+    obsolete_declaration.replace(
+        solver_name,
+        std::string{"steady_prediction_solver"}.size(),
+        "prediction_solver");
+    try {
+        (void)thermox::service::parse_engineering_study_request_json(
+            obsolete_declaration);
+        throw std::runtime_error(
+            "obsolete engineering-study field must be rejected");
+    } catch (const thermox::service::EngineeringStudyRequestError& ex) {
+        require(
+            std::string(ex.what()).find(
+                "unknown engineering-study field") !=
+                std::string::npos,
+            "engineering-study v2 must reject obsolete field names");
+    }
 }
 
 void test_map_correction_is_calibrated_then_frozen() {
@@ -5368,6 +5447,7 @@ void test_transient_expression_component_flows_through_service() {
     request.solver.end_time = 1.0;
     request.solver.initial_step = 0.1;
     request.solver.max_step = 0.2;
+    request.solver.required_output_times = {0.37, 0.83};
 
     const auto response = service.run_transient(request);
     require(response.succeeded(),
@@ -5380,6 +5460,26 @@ void test_transient_expression_component_flows_through_service() {
                 lag.internal_values.front().value_si > 0.35 &&
                 lag.internal_values.front().value_si < 0.45,
             "service must expose the integrated declared internal state");
+    for (const double output_time :
+         request.solver.required_output_times) {
+        require(
+            std::any_of(
+                response.trajectory.begin(), response.trajectory.end(),
+                [&](const auto& sample) {
+                    return sample.time == output_time;
+                }),
+            "transient service must preserve an exact required output "
+            "time");
+    }
+    require(
+        std::any_of(
+            response.metadata.solver.settings.begin(),
+            response.metadata.solver.settings.end(),
+            [](const auto& setting) {
+                return setting.name == "required_output_time_count" &&
+                    setting.value == 2.0;
+            }),
+        "transient provenance must record the output schedule");
 }
 
 void test_steady_service() {
@@ -5815,7 +5915,7 @@ void test_transient_service() {
         "transient result must identify operation");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.dae-bdf/v12",
+            "thermox.dae-bdf/v13",
         "transient result must record solver contract");
     require(
         response.diagnostics.maximum_order_used == 2 &&

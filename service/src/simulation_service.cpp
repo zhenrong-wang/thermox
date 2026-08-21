@@ -1054,6 +1054,19 @@ TimeIntegrationOptions to_core(
         settings.maximum_order > 2) {
         throw std::invalid_argument("invalid transient solver settings");
     }
+    double previous_output_time =
+        -std::numeric_limits<double>::infinity();
+    for (const double output_time : settings.required_output_times) {
+        if (!std::isfinite(output_time) ||
+            output_time < settings.start_time ||
+            output_time > settings.end_time ||
+            output_time <= previous_output_time) {
+            throw std::invalid_argument(
+                "transient required_output_times must be finite, "
+                "strictly increasing, and within the integration interval");
+        }
+        previous_output_time = output_time;
+    }
     TimeIntegrationOptions options;
     options.start_time = settings.start_time;
     options.end_time = settings.end_time;
@@ -1068,6 +1081,7 @@ TimeIntegrationOptions to_core(
     options.maximum_order = settings.maximum_order;
     options.compute_consistent_initial_conditions =
         settings.compute_consistent_initial_conditions;
+    options.required_output_times = settings.required_output_times;
     options.nonlinear_options = to_core(settings.nonlinear_solver);
     return options;
 }
@@ -1264,7 +1278,7 @@ SolverProvenance solver_provenance(
 SolverProvenance solver_provenance(
     const TransientSolverSettings& settings) {
     auto provenance = SolverProvenance{
-        "thermox.dae-bdf/v12",
+        "thermox.dae-bdf/v13",
         {
             {"start_time", settings.start_time},
             {"end_time", settings.end_time},
@@ -1285,6 +1299,15 @@ SolverProvenance solver_provenance(
                  : 0.0},
         },
     };
+    provenance.settings.push_back({
+        "required_output_time_count",
+        static_cast<double>(settings.required_output_times.size())});
+    for (std::size_t index = 0;
+         index < settings.required_output_times.size(); ++index) {
+        provenance.settings.push_back({
+            "required_output_time." + std::to_string(index),
+            settings.required_output_times[index]});
+    }
     const auto nonlinear =
         solver_provenance(settings.nonlinear_solver);
     for (const auto& setting : nonlinear.settings) {
@@ -4806,6 +4829,7 @@ SimulationService::run_data_reconciliation(
     for (const auto& held_out_case : request.held_out_cases) {
         StudyCaseResult result;
         result.case_id = held_out_case.case_id;
+        result.mode = "steady";
         SteadySimulationRequest simulation;
         simulation.schema_version = request.schema_version;
         simulation.model_json = response.reconciled_model_json;
@@ -4813,19 +4837,20 @@ SimulationService::run_data_reconciliation(
         simulation.solver = settings.simulation_solver;
         simulation.artifacts = request.artifacts;
         simulation.components = request.components;
-        result.simulation = run_steady(simulation);
-        if (!result.simulation.succeeded()) {
-            response.status = result.simulation.status;
+        result.steady_simulation = run_steady(simulation);
+        if (!result.steady_simulation->succeeded()) {
+            response.status = result.steady_simulation->status;
             response.error = make_error(
                 "reconciliation_held_out_solve_failed", "held_out",
-                result.simulation.error.message);
+                result.steady_simulation->error.message);
             return response;
         }
         try {
             for (const auto& observation :
                  held_out_case.observations) {
                 const auto& predicted = require_graph_value(
-                    result.simulation.graph, observation.target);
+                    result.steady_simulation->graph,
+                    observation.target);
                 if (predicted.dimension != observation.dimension) {
                     throw std::invalid_argument(
                         "held-out observation dimension does not match "
@@ -4880,12 +4905,12 @@ SimulationService::run_engineering_study(
 
     std::set<std::string> case_ids;
     std::set<std::string> observation_ids;
+    platform::ModelDocument study_document;
     try {
-        const auto document =
-            platform::parse_model_document_text(
-                request.model_json, impl_->runtime->impl_->units);
+        study_document = platform::parse_model_document_text(
+            request.model_json, impl_->runtime->impl_->units);
         const auto& calibration = require_calibration(
-            document, request.calibration_id);
+            study_document, request.calibration_id);
         std::set<std::string> calibration_cases;
         for (const auto& observation :
              calibration.observations) {
@@ -4909,6 +4934,8 @@ SimulationService::run_engineering_study(
                     "prediction case '" + prediction.case_id +
                     "' must declare observations");
             }
+            const auto mode = validation_mode(
+                selected_case(study_document, prediction.case_id));
             for (const auto& observation :
                  prediction.observations) {
                 if (observation.id.empty() ||
@@ -4923,6 +4950,19 @@ SimulationService::run_engineering_study(
                         "study observations require unique IDs, "
                         "targets, dimensions, finite measurements, "
                         "and positive finite uncertainties");
+                }
+                if (mode == "transient") {
+                    if (!observation.time_si.has_value() ||
+                        !std::isfinite(*observation.time_si) ||
+                        *observation.time_si < 0.0) {
+                        throw std::invalid_argument(
+                            "transient study observations require a "
+                            "non-negative finite time_si");
+                    }
+                } else if (observation.time_si.has_value()) {
+                    throw std::invalid_argument(
+                        "steady study observations must not declare "
+                        "time_si");
                 }
             }
         }
@@ -4949,33 +4989,90 @@ SimulationService::run_engineering_study(
     for (const auto& prediction : request.prediction_cases) {
         StudyCaseResult result;
         result.case_id = prediction.case_id;
-        SteadySimulationRequest simulation;
-        simulation.schema_version = request.schema_version;
-        simulation.model_json =
-            response.calibration.fitted_model_json;
-        simulation.case_id = prediction.case_id;
-        simulation.solver = request.prediction_solver;
-        simulation.artifacts = request.artifacts;
-        simulation.components = request.components;
-        result.simulation = run_steady(simulation);
-        if (!result.simulation.succeeded()) {
+        result.mode = validation_mode(
+            selected_case(study_document, prediction.case_id));
+        if (result.mode == "steady") {
+            SteadySimulationRequest simulation;
+            simulation.schema_version = request.schema_version;
+            simulation.model_json =
+                response.calibration.fitted_model_json;
+            simulation.case_id = prediction.case_id;
+            simulation.solver = request.steady_prediction_solver;
+            simulation.artifacts = request.artifacts;
+            simulation.components = request.components;
+            result.steady_simulation = run_steady(simulation);
+        } else {
+            TransientSimulationRequest simulation;
+            simulation.schema_version = request.schema_version;
+            simulation.model_json =
+                response.calibration.fitted_model_json;
+            simulation.case_id = prediction.case_id;
+            simulation.solver = request.transient_prediction_solver;
+            simulation.solver.required_output_times.clear();
+            for (const auto& observation : prediction.observations) {
+                simulation.solver.required_output_times.push_back(
+                    *observation.time_si);
+            }
+            std::sort(
+                simulation.solver.required_output_times.begin(),
+                simulation.solver.required_output_times.end());
+            simulation.solver.required_output_times.erase(
+                std::unique(
+                    simulation.solver.required_output_times.begin(),
+                    simulation.solver.required_output_times.end()),
+                simulation.solver.required_output_times.end());
+            simulation.solver.end_time =
+                simulation.solver.required_output_times.back();
+            simulation.artifacts = request.artifacts;
+            simulation.components = request.components;
+            result.transient_simulation = run_transient(simulation);
+        }
+        const bool prediction_succeeded =
+            result.mode == "steady"
+                ? result.steady_simulation->succeeded()
+                : result.transient_simulation->succeeded();
+        if (!prediction_succeeded) {
             response.predictions.push_back(std::move(result));
-            response.status =
-                response.predictions.back().simulation.status;
+            const auto& failed = response.predictions.back();
+            response.status = failed.mode == "steady"
+                ? failed.steady_simulation->status
+                : failed.transient_simulation->status;
+            const auto& failure = failed.mode == "steady"
+                ? failed.steady_simulation->error
+                : failed.transient_simulation->error;
             response.error = make_error(
                 "study_prediction_failed",
                 "prediction",
                 "prediction case '" + prediction.case_id +
                     "' failed: " +
-                    response.predictions.back()
-                        .simulation.error.message);
+                    failure.message);
             return response;
         }
         try {
             for (const auto& observation :
                  prediction.observations) {
+                const GraphResult* graph = nullptr;
+                if (result.mode == "steady") {
+                    graph = &result.steady_simulation->graph;
+                } else {
+                    const auto sample = std::find_if(
+                        result.transient_simulation->trajectory.begin(),
+                        result.transient_simulation->trajectory.end(),
+                        [&](const auto& candidate) {
+                            return candidate.time ==
+                                *observation.time_si;
+                        });
+                    if (sample ==
+                        result.transient_simulation->trajectory.end()) {
+                        throw std::runtime_error(
+                            "transient study result is missing exact "
+                            "observation time " +
+                            std::to_string(*observation.time_si));
+                    }
+                    graph = &sample->graph;
+                }
                 const auto& predicted = require_graph_value(
-                    result.simulation.graph,
+                    *graph,
                     observation.target);
                 if (predicted.dimension !=
                     observation.dimension) {
@@ -5008,7 +5105,7 @@ SimulationService::run_engineering_study(
                     observation.sigma_si,
                     residual,
                     normalized,
-                    std::nullopt,
+                    observation.time_si,
                 });
             }
         } catch (const std::exception& ex) {

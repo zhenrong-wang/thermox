@@ -78,7 +78,11 @@ void append_calibration_settings(
            << '|' << transient.max_consecutive_rejections
            << '|' << transient.maximum_order
            << '|' << transient.compute_consistent_initial_conditions
-           << '|';
+           << '|' << transient.required_output_times.size() << '|';
+    for (const double output_time :
+         transient.required_output_times) {
+        stream << output_time << '|';
+    }
     append_steady_settings(stream, transient.nonlinear_solver);
 }
 
@@ -385,7 +389,12 @@ std::string request_fingerprint(
            << request.transient_solver.maximum_order << '|'
            << request.transient_solver
                   .compute_consistent_initial_conditions
+           << '|' << request.transient_solver.required_output_times.size()
            << '|';
+    for (const double output_time :
+         request.transient_solver.required_output_times) {
+        stream << output_time << '|';
+    }
     append_steady_settings(
         stream, request.transient_solver.nonlinear_solver);
     stream << '|';
@@ -399,7 +408,11 @@ std::string request_fingerprint(
             append_string(stream, observation.target);
             append_string(stream, observation.dimension);
             stream << observation.measured_si << '|'
-                   << observation.sigma_si << '|';
+                   << observation.sigma_si << '|'
+                   << observation.time_si.has_value() << '|';
+            if (observation.time_si.has_value()) {
+                stream << *observation.time_si << '|';
+            }
         }
     }
     stream << '|' << to_string(request.reconciliation_mode) << '|';
@@ -946,8 +959,10 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 request.calibration_id = claimed->request.calibration_id;
                 request.calibration_solver =
                     claimed->request.calibration_solver;
-                request.prediction_solver = claimed->request
+                request.steady_prediction_solver = claimed->request
                     .calibration_solver.steady_simulation_solver;
+                request.transient_prediction_solver = claimed->request
+                    .calibration_solver.transient_simulation_solver;
                 request.prediction_cases =
                     claimed->request.calibration_predictions;
                 request.artifacts = claimed->request.artifacts;
@@ -957,8 +972,16 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 response.calibration.metadata.source_revisions =
                     claimed->request.source_revisions;
                 for (auto& prediction : response.predictions) {
-                    prediction.simulation.metadata.source_revisions =
-                        claimed->request.source_revisions;
+                    if (prediction.steady_simulation.has_value()) {
+                        prediction.steady_simulation->metadata
+                            .source_revisions =
+                            claimed->request.source_revisions;
+                    }
+                    if (prediction.transient_simulation.has_value()) {
+                        prediction.transient_simulation->metadata
+                            .source_revisions =
+                            claimed->request.source_revisions;
+                    }
                 }
                 require_lease();
                 if (!response.succeeded()) {

@@ -1421,6 +1421,7 @@ void test_run_configurations_bind_complete_execution_intent() {
     request.steady_solver.max_iterations = 37;
     request.steady_solver.structural_decomposition_policy =
         thermox::service::StructuralDecompositionPolicy::blocks;
+    request.transient_solver.required_output_times = {0.25, 0.75};
     const auto first =
         service.create_run_configuration_revision(request);
     request.parent_run_configuration_revision_id =
@@ -1443,6 +1444,8 @@ void test_run_configurations_bind_complete_execution_intent() {
             first.steady_solver
                 .structural_decomposition_policy ==
                 thermox::service::StructuralDecompositionPolicy::blocks &&
+            first.transient_solver.required_output_times ==
+                std::vector<double>{0.25, 0.75} &&
             resolved &&
             resolved->study.artifact_qualification_requirements.size() ==
                 1U &&
@@ -1680,6 +1683,8 @@ void test_calibrations_bind_exact_training_studies() {
     })";
     request.solver.transient_simulation_solver.end_time = 12.0;
     request.solver.transient_simulation_solver.max_step = 0.2;
+    request.solver.transient_simulation_solver.required_output_times = {
+        2.0, 9.0};
     const auto first = service.create_calibration_revision(request);
     request.parent_calibration_revision_id =
         first.calibration_revision_id;
@@ -1691,6 +1696,9 @@ void test_calibrations_bind_exact_training_studies() {
                 std::vector<std::string>{study.study_revision_id} &&
             first.solver.transient_simulation_solver.end_time == 12.0 &&
             first.solver.transient_simulation_solver.max_step == 0.2 &&
+            first.solver.transient_simulation_solver
+                    .required_output_times ==
+                std::vector<double>{2.0, 9.0} &&
             service.list_calibration_revisions(
                 team_a, project.project_id).size() == 2U &&
             !service.get_calibration_revision(
@@ -1727,8 +1735,10 @@ void test_calibrations_bind_exact_training_studies() {
     execution.model_json = resolved->executable_model_json;
     execution.calibration_id = first.calibration_id;
     execution.calibration_solver = first.solver;
-    execution.prediction_solver =
+    execution.steady_prediction_solver =
         first.solver.steady_simulation_solver;
+    execution.transient_prediction_solver =
+        first.solver.transient_simulation_solver;
     execution.prediction_cases = resolved->validation_predictions;
     const auto execution_result =
         thermox::service::SimulationService{

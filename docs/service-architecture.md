@@ -49,6 +49,7 @@ The current synchronous service exposes:
   case, solver contract, effective solver-setting provenance, and request engineering-artifact
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
+- exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v16` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
   and data-reconciliation jobs with required

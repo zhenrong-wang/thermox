@@ -834,7 +834,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("sigma":{"value":0.5,"unit":"MW"}}]}},)"
             R"("solver":{"max_iterations":11,)"
             R"("initial_trust_region_radius":0.3,)"
-            R"("transient_simulation_solver":{"end_time":15.0,"max_step":0.25}}})");
+            R"("transient_simulation_solver":{"end_time":15.0,"max_step":0.25,)"
+            R"("required_output_times":[2.0,10.0]}}})");
     const auto calibration_created = api.handle(
         authenticated(std::move(calibration_upload)));
     const auto calibration_created_json =
@@ -849,6 +850,11 @@ void test_tenant_scoped_asynchronous_jobs() {
                 .at("solver").as_object()
                 .at("transient_simulation_solver").as_object()
                 .at("end_time").as_int64());
+    const auto& calibration_output_times =
+        calibration_created_json.as_object()
+            .at("solver").as_object()
+            .at("transient_simulation_solver").as_object()
+            .at("required_output_times").as_array();
     require(
         calibration_created.status == 201 &&
             calibration_created.headers.contains("Location") &&
@@ -856,6 +862,7 @@ void test_tenant_scoped_asynchronous_jobs() {
                 "\"max_iterations\": 11") != std::string::npos &&
             std::abs(calibration_trust_radius - 0.3) < 1.0e-15 &&
             std::abs(calibration_transient_end_time - 15.0) < 1.0e-15 &&
+            calibration_output_times.size() == 2U &&
             calibration_created.body.find(study_revision_id) !=
                 std::string::npos,
         "calibration routes must bind immutable training Studies: " +
@@ -1043,7 +1050,8 @@ void test_tenant_scoped_asynchronous_jobs() {
             R"("study_revision_id":")"} +
             study_revision_id +
             R"(","steady_solver":{"max_iterations":37,)"
-            R"("structural_decomposition_policy":"blocks"}})");
+            R"("structural_decomposition_policy":"blocks"},)"
+            R"("transient_solver":{"required_output_times":[0.25,0.75]}})");
     const auto run_created = api.handle(
         authenticated(std::move(run_upload)));
     require(
@@ -1054,6 +1062,9 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos &&
             run_created.body.find(
                 "\"structural_decomposition_policy\": \"blocks\"") !=
+                std::string::npos &&
+            run_created.body.find(
+                "\"required_output_times\": [0.25, 0.75]") !=
                 std::string::npos &&
             run_created.body.find(study_revision_id) !=
                 std::string::npos,
