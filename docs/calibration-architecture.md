@@ -23,6 +23,7 @@ Every adjustable value references the physical parameter consumed by an equation
 components.<component-id>.parameters.<parameter-name>
 connections.<connection-id>.parameters.<parameter-name>
 cases.<case-id>.fixed_values.<graph-variable>
+cases.<case-id>.initial_guesses.<graph-variable>
 cases.<case-id>.parameter_overrides.<component-parameter-path>
 ```
 
@@ -38,6 +39,14 @@ estimated operating-point boundary should be a separate calibration parameter. S
 parameters remain component- or connection-owned and can still be fitted over those same cases.
 Case-owned parameter overrides use the parallel `parameter_overrides` path when the estimated
 quantity is an operating configuration such as guide-vane angle rather than a graph boundary.
+
+Transient campaigns may estimate an uncertain physical initial condition through the
+`initial_guesses` path. The target must be a differential state in a dynamic case. During
+consistent DAE initialization, Thermox preserves that state value while solving its initial
+derivative and all algebraic variables. Algebraic initial guesses are therefore rejected as
+calibration parameters: they are numerical seeds that the initializer recomputes, not independently
+identifiable physical conditions. Bounds, priors, sharing, and uncertainty use the same generic
+calibration contract as every other parameter.
 
 Effects with a recognizable physical owner remain explicit graph elements. Shaft loss belongs to a
 shaft-train component, generator loss to a generator, bleed and cooling flows to topology, duct
@@ -116,7 +125,9 @@ Model-document parsing currently validates:
 - unique, known correlation pairs and a positive-definite measurement correlation matrix.
 
 Service validation additionally resolves observation paths against the active component registry
-and checks that measured dimensions match the exposed primary or derived result. Fluid and
+and checks that measured dimensions match the exposed primary or derived result. It also compiles
+every case-owned initial-condition target against the active transient component registry and
+requires the target to be a differential DAE state. Fluid and
 composition-aware material ports both expose derived temperature, so measured gas-path
 temperatures can participate in gas-turbine calibration without becoming connector unknowns.
 

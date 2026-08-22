@@ -3064,6 +3064,10 @@ CalibrationResponse SimulationService::run_calibration(
         platform::validate_calibration_observation_contracts(
             document, runtime->impl_->components,
             runtime->impl_->thermochemistry);
+        platform::validate_calibration_initial_state_contracts(
+            document, runtime->impl_->components,
+            runtime->impl_->properties, engineering_artifacts,
+            runtime->impl_->thermochemistry);
         response.calibration_id = request.calibration_id;
         response.metadata = execution_metadata(
             document, request.schema_version, "", "calibration",

@@ -851,17 +851,29 @@ const ScalarValue& calibration_target_value(
             connection_prefix, document.connections, "connection");
     }
     constexpr std::string_view fixed_value_marker{".fixed_values."};
+    constexpr std::string_view initial_guess_marker{".initial_guesses."};
     constexpr std::string_view override_marker{".parameter_overrides."};
     const std::string_view path{target};
     if (path.starts_with(case_prefix)) {
         auto marker = path.find(
             fixed_value_marker, case_prefix.size());
         auto value_marker = fixed_value_marker;
-        bool fixed_value = true;
+        enum class CaseValueKind {
+            fixed_value,
+            initial_guess,
+            parameter_override,
+        };
+        auto value_kind = CaseValueKind::fixed_value;
+        if (marker == std::string_view::npos) {
+            marker = path.find(
+                initial_guess_marker, case_prefix.size());
+            value_marker = initial_guess_marker;
+            value_kind = CaseValueKind::initial_guess;
+        }
         if (marker == std::string_view::npos) {
             marker = path.find(override_marker, case_prefix.size());
             value_marker = override_marker;
-            fixed_value = false;
+            value_kind = CaseValueKind::parameter_override;
         }
         if (marker == std::string_view::npos ||
             marker == case_prefix.size() ||
@@ -869,6 +881,7 @@ const ScalarValue& calibration_target_value(
             throw std::invalid_argument(
                 "case calibration target must use "
                 "cases.<id>.fixed_values.<variable> or "
+                "cases.<id>.initial_guesses.<variable> or "
                 "cases.<id>.parameter_overrides.<parameter-path>: " +
                 target);
         }
@@ -879,9 +892,11 @@ const ScalarValue& calibration_target_value(
             path.substr(marker + value_marker.size())};
         for (const auto& operating_case : document.cases) {
             if (operating_case.id != case_id) continue;
-            const auto& values = fixed_value
+            const auto& values = value_kind == CaseValueKind::fixed_value
                 ? operating_case.fixed_values
-                : operating_case.parameter_overrides;
+                : value_kind == CaseValueKind::initial_guess
+                    ? operating_case.initial_guesses
+                    : operating_case.parameter_overrides;
             const auto value = values.find(variable);
             if (value == values.end()) {
                 throw std::invalid_argument(
@@ -897,6 +912,7 @@ const ScalarValue& calibration_target_value(
         "calibration target must use components.<id>.parameters.<name> "
         "or connections.<id>.parameters.<name>, or "
         "cases.<id>.fixed_values.<variable> or "
+        "cases.<id>.initial_guesses.<variable> or "
         "cases.<id>.parameter_overrides.<parameter-path>: " + target);
 }
 

@@ -15,6 +15,17 @@ void validate_calibration_observation_contracts(
     const physics::ThermochemistryPackageRegistry&
         thermochemistry_registry);
 
+// Initial-condition parameters are meaningful only for differential states.
+// Algebraic initial values are recomputed by consistent DAE initialization and
+// therefore cannot be identifiable calibration parameters.
+void validate_calibration_initial_state_contracts(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry);
+
 ScalarValue& require_calibration_parameter_target(
     ModelDocument& document,
     const std::string& target);

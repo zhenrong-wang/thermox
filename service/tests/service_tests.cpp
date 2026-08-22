@@ -3782,7 +3782,7 @@ void test_bounded_calibration_service() {
         "withholding fitted-parameter covariance");
 }
 
-void test_transient_calibration_recovers_dynamic_parameter() {
+void test_transient_calibration_recovers_parameter_and_initial_state() {
     thermox::service::SimulationService service;
     thermox::service::CalibrationRequest request;
     request.calibration_id = "lag_fit";
@@ -3802,12 +3802,12 @@ void test_transient_calibration_recovers_dynamic_parameter() {
     "id": "step",
     "mode": "dynamic_transient",
     "fixed_values": {"lag.input.value": 1.0},
-    "initial_guesses": {"lag.filtered": 0.0}
+    "initial_guesses": {"lag.filtered": 0.1}
   }, {
     "id": "held_out",
     "mode": "dynamic_transient",
     "fixed_values": {"lag.input.value": 1.0},
-    "initial_guesses": {"lag.filtered": 0.0}
+    "initial_guesses": {"lag.filtered": 0.3}
   }],
   "calibrations": [{
     "id": "lag_fit",
@@ -3820,20 +3820,36 @@ void test_transient_calibration_recovers_dynamic_parameter() {
         "lower": {"value": 0.5, "unit": "s"},
         "upper": {"value": 4.0, "unit": "s"}
       }
+    }, {
+      "id": "initial_filtered_value",
+      "scope": "system",
+      "targets": ["cases.step.initial_guesses.lag.filtered"],
+      "cases": ["step"],
+      "bounds": {
+        "lower": {"value": 0.0, "unit": "1"},
+        "upper": {"value": 0.8, "unit": "1"}
+      }
     }],
     "observations": [{
-      "id": "sample_0_5",
+      "id": "sample_0_25",
       "case": "step",
       "target": "lag.output.value",
-      "time": {"value": 0.5, "unit": "s"},
-      "measured": {"value": 0.2211992169, "unit": "1"},
+      "time": {"value": 0.25, "unit": "s"},
+      "measured": {"value": 0.3822521682, "unit": "1"},
+      "sigma": {"value": 0.002, "unit": "1"}
+    }, {
+      "id": "sample_0_6",
+      "case": "step",
+      "target": "lag.output.value",
+      "time": {"value": 0.6, "unit": "s"},
+      "measured": {"value": 0.4814272455, "unit": "1"},
       "sigma": {"value": 0.002, "unit": "1"}
     }, {
       "id": "sample_1_0",
       "case": "step",
       "target": "lag.output.value",
       "time": {"value": 1.0, "unit": "s"},
-      "measured": {"value": 0.3934693403, "unit": "1"},
+      "measured": {"value": 0.5754285382, "unit": "1"},
       "sigma": {"value": 0.002, "unit": "1"}
     }]
   }]
@@ -3879,20 +3895,25 @@ void test_transient_calibration_recovers_dynamic_parameter() {
             response.error.message);
     require(
         response.diagnostics.converged &&
-            response.parameters.size() == 1 &&
+            response.parameters.size() == 2 &&
             std::abs(
                 response.parameters.front().fitted_value_si - 2.0) <
-                0.03,
-        "transient calibration must recover the known time constant");
+                0.04 &&
+            std::abs(
+                response.parameters.at(1).fitted_value_si - 0.3) <
+                0.01,
+        "transient calibration must jointly recover the time constant "
+        "and differential initial state");
     require(
-        response.observations.size() == 2 &&
-            response.observations[0].time_si == 0.5 &&
-            response.observations[1].time_si == 1.0,
+        response.observations.size() == 3 &&
+            response.observations[0].time_si == 0.25 &&
+            response.observations[1].time_si == 0.6 &&
+            response.observations[2].time_si == 1.0,
         "transient calibration residuals must retain exact sample times");
     const auto json =
         thermox::service::serialize_calibration_response_json(response);
     require(
-        json.find("\"time_si\": 0.5") != std::string::npos,
+        json.find("\"time_si\": 0.25") != std::string::npos,
         "transient calibration JSON must expose observation time");
 
     thermox::service::EngineeringStudyRequest study;
@@ -3907,7 +3928,7 @@ void test_transient_calibration_recovers_dynamic_parameter() {
             "held_out_0_75",
             "lag.output.value",
             "dimensionless",
-            0.3127107212,
+            0.5188977120,
             0.002,
             0.75,
         }},
@@ -3943,6 +3964,38 @@ void test_transient_calibration_recovers_dynamic_parameter() {
             validation_json.find("\"time_si\": 0.75") !=
                 std::string::npos,
         "engineering-study JSON must discriminate transient evidence");
+
+    auto algebraic_initial_state = request;
+    const std::string declared_initial =
+        "\"initial_guesses\": {\"lag.filtered\": 0.1}";
+    const auto declared_position =
+        algebraic_initial_state.model_json.find(declared_initial);
+    require(
+        declared_position != std::string::npos,
+        "transient calibration fixture must expose its initial state");
+    algebraic_initial_state.model_json.replace(
+        declared_position, declared_initial.size(),
+        "\"initial_guesses\": {\"lag.filtered\": 0.1, "
+        "\"lag.output.value\": 0.1}");
+    const std::string differential_target =
+        "cases.step.initial_guesses.lag.filtered";
+    const auto target_position =
+        algebraic_initial_state.model_json.find(differential_target);
+    require(
+        target_position != std::string::npos,
+        "transient calibration fixture must expose its target path");
+    algebraic_initial_state.model_json.replace(
+        target_position, differential_target.size(),
+        "cases.step.initial_guesses.lag.output.value");
+    const auto rejected =
+        service.run_calibration(algebraic_initial_state);
+    require(
+        rejected.status ==
+                thermox::service::OperationStatus::invalid_model &&
+            rejected.error.message.find("differential state") !=
+                std::string::npos,
+        "calibration must reject algebraic values as estimated initial "
+        "conditions");
 }
 
 void test_calibration_separates_data_and_prior_identifiability() {
@@ -6526,7 +6579,7 @@ int main() {
         test_structurally_singular_validation_diagnostic();
         test_calibration_observation_contract_validation();
         test_bounded_calibration_service();
-        test_transient_calibration_recovers_dynamic_parameter();
+        test_transient_calibration_recovers_parameter_and_initial_state();
         test_calibration_separates_data_and_prior_identifiability();
         test_hard_constraint_data_reconciliation_service();
         test_hard_reconciliation_reports_local_bound_limitation();

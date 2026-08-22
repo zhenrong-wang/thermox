@@ -1,6 +1,7 @@
 #include "thermox/platform/calibration.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <stdexcept>
 #include <string_view>
@@ -262,6 +263,66 @@ void validate_calibration_observation_contracts(
     }
 }
 
+void validate_calibration_initial_state_contracts(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry) {
+    constexpr std::string_view case_prefix{"cases."};
+    constexpr std::string_view marker{".initial_guesses."};
+    std::map<std::string, CompiledTransientModelGraph> compiled_cases;
+
+    for (const auto& calibration : document.calibrations) {
+        for (const auto& parameter : calibration.parameters) {
+            for (const auto& target : parameter.targets) {
+                const std::string_view path{target};
+                if (!path.starts_with(case_prefix)) continue;
+                const auto split = path.find(
+                    marker, case_prefix.size());
+                if (split == std::string_view::npos) continue;
+
+                const std::string case_id{path.substr(
+                    case_prefix.size(),
+                    split - case_prefix.size())};
+                const std::string variable{
+                    path.substr(split + marker.size())};
+                auto graph = compiled_cases.find(case_id);
+                if (graph == compiled_cases.end()) {
+                    graph = compiled_cases.emplace(
+                        case_id,
+                        compile_transient_model_graph(
+                            document, registry, property_registry,
+                            artifact_registry,
+                            thermochemistry_registry, case_id))
+                                .first;
+                }
+                const auto& problem = graph->second.problem;
+                const auto found = std::find(
+                    problem.variable_names.begin(),
+                    problem.variable_names.end(), variable);
+                if (found == problem.variable_names.end()) {
+                    throw std::invalid_argument(
+                        "calibration initial-state target references "
+                        "unknown transient variable: " + target);
+                }
+                const auto index = static_cast<std::size_t>(
+                    std::distance(problem.variable_names.begin(), found));
+                const auto kind = problem.variable_kinds.empty()
+                    ? DaeVariableKind::differential
+                    : problem.variable_kinds.at(index);
+                if (kind != DaeVariableKind::differential) {
+                    throw std::invalid_argument(
+                        "calibration initial-state target must reference "
+                        "a differential state, not an algebraic variable: " +
+                        target);
+                }
+            }
+        }
+    }
+}
+
 ScalarValue& require_calibration_parameter_target(
     ModelDocument& document,
     const std::string& target) {
@@ -301,17 +362,29 @@ ScalarValue& require_calibration_parameter_target(
     }
     constexpr std::string_view case_prefix{"cases."};
     constexpr std::string_view fixed_value_marker{".fixed_values."};
+    constexpr std::string_view initial_guess_marker{".initial_guesses."};
     constexpr std::string_view override_marker{".parameter_overrides."};
     const std::string_view path{target};
     if (path.starts_with(case_prefix)) {
         auto split = path.find(
             fixed_value_marker, case_prefix.size());
         auto value_marker = fixed_value_marker;
-        bool fixed_value = true;
+        enum class CaseValueKind {
+            fixed_value,
+            initial_guess,
+            parameter_override,
+        };
+        auto value_kind = CaseValueKind::fixed_value;
+        if (split == std::string_view::npos) {
+            split = path.find(
+                initial_guess_marker, case_prefix.size());
+            value_marker = initial_guess_marker;
+            value_kind = CaseValueKind::initial_guess;
+        }
         if (split == std::string_view::npos) {
             split = path.find(override_marker, case_prefix.size());
             value_marker = override_marker;
-            fixed_value = false;
+            value_kind = CaseValueKind::parameter_override;
         }
         if (split == std::string_view::npos ||
             split == case_prefix.size() ||
@@ -327,9 +400,11 @@ ScalarValue& require_calibration_parameter_target(
             path.substr(split + value_marker.size())};
         for (auto& operating_case : document.cases) {
             if (operating_case.id != case_id) continue;
-            auto& values = fixed_value
+            auto& values = value_kind == CaseValueKind::fixed_value
                 ? operating_case.fixed_values
-                : operating_case.parameter_overrides;
+                : value_kind == CaseValueKind::initial_guess
+                    ? operating_case.initial_guesses
+                    : operating_case.parameter_overrides;
             const auto value = values.find(variable);
             if (value != values.end()) {
                 return value->second;

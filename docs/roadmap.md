@@ -420,6 +420,9 @@ Next:
 24. Replace service-owned coordinate search with a scaled, bounded trust-region least-squares
     optimizer in the numerical core; preserve service-owned continuation through reference-point
     callbacks and carry trust-region policy and diagnostics through durable execution. ✅
+25. Estimate bounded, prior-aware differential initial conditions jointly with physical model
+    parameters through exact-time transient observations, while rejecting algebraic initialization
+    seeds that consistent DAE initialization necessarily recomputes. ✅
 
 See `docs/calibration-architecture.md`.
 
