@@ -2180,6 +2180,15 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     "graph variable dimension '" +
                     variable_dimensions.at(event.target) + "'");
             }
+            if (event.hysteresis.has_value() &&
+                event.hysteresis->dimension !=
+                    variable_dimensions.at(event.target)) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id + "' state event '" +
+                    event.id + "' hysteresis dimension does not match "
+                    "graph variable dimension '" +
+                    variable_dimensions.at(event.target) + "'");
+            }
             const auto direction = event.direction == "rising"
                 ? EventDirection::rising
                 : event.direction == "falling"
@@ -2216,6 +2225,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 direction,
                 event.terminal,
                 std::move(transition),
+                event.priority,
+                event.hysteresis.has_value()
+                    ? event.hysteresis->value_si
+                    : 0.0,
             });
         }
         for (const auto& [_, schedule] :

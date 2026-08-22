@@ -72,6 +72,11 @@ struct DaeEvent {
         double time,
         std::vector<double>& state,
         std::vector<double>& derivative)> transition;
+    // Simultaneous transitions execute in ascending priority order so the
+    // highest-priority action has final authority over shared inputs.
+    int priority{0};
+    // Event-surface distance required on the inactive side before rearming.
+    double hysteresis{0.0};
 };
 
 struct DaeProblem {
@@ -156,6 +161,7 @@ struct DetectedEvent {
     std::vector<double> state;
     bool terminal{false};
     bool transitioned{false};
+    int priority{0};
 };
 
 struct TimeIntegrationDiagnostics {

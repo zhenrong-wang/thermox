@@ -100,6 +100,8 @@ struct StateEventDefinition {
     ScalarValue threshold;
     std::string direction;
     bool terminal{false};
+    int priority{0};
+    std::optional<ScalarValue> hysteresis;
     std::vector<Action> actions;
 };
 

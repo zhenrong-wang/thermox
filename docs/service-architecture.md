@@ -57,6 +57,8 @@ The current synchronous service exposes:
   nonterminal evidence capture, and terminal protective-trip behavior;
 - typed event-driven `set_input` transitions over declared algebraic boundaries and controls, with
   post-transition graph evidence and no service-owned physics logic;
+- dimensioned directed-event hysteresis and explicit simultaneous-transition priority projected
+  through canonical models and durable transient event evidence;
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v16` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
   and data-reconciliation jobs with required

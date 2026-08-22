@@ -800,6 +800,79 @@ void test_event_transition_reinitializes_and_restarts_integration() {
         "sequential repeat execution");
 }
 
+void test_event_priority_and_hysteresis_prevent_chatter() {
+    thermox::DaeProblem problem;
+    problem.variable_names = {"position"};
+    problem.residual_names = {"constant_rate"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::differential};
+    problem.initial_state = {0.0};
+    problem.initial_derivative = {1.0};
+    problem.variable_scales = {1.0};
+    problem.derivative_scales = {1.0};
+    problem.residual_scales = {1.0};
+    problem.residual = [](
+        double, const std::vector<double>&,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        residual[0] = derivative[0] - 1.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double, const std::vector<double>&,
+        const std::vector<double>&, double derivative_coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = derivative_coefficient;
+        return thermox::EvaluationStatus::success();
+    };
+    const auto surface = [](
+        double, const std::vector<double>& state) {
+        return state[0] - 0.5;
+    };
+    problem.events.push_back(thermox::DaeEvent{
+        "low_priority_reset", surface,
+        thermox::EventDirection::rising, false,
+        [](double, std::vector<double>& state,
+           std::vector<double>&) {
+            state[0] = 0.45;
+            return thermox::EvaluationStatus::success();
+        },
+        1,
+        0.02});
+    problem.events.push_back(thermox::DaeEvent{
+        "high_priority_reset", surface,
+        thermox::EventDirection::rising, false,
+        [](double, std::vector<double>& state,
+           std::vector<double>&) {
+            state[0] = 0.49;
+            return thermox::EvaluationStatus::success();
+        },
+        10,
+        0.02});
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.7;
+    options.initial_step = 0.05;
+    options.max_step = 0.05;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.events.size() == 2U,
+        "simultaneous hysteretic events must fire once each without "
+        "immediate reset chatter");
+    require(
+        result.events[0].priority == 1 &&
+            result.events[1].priority == 10,
+        "detected events must preserve their declared priorities");
+    require_near(
+        result.events[0].state[0], 0.49, 1.0e-9,
+        "the highest-priority simultaneous transition must have final "
+        "authority over the reinitialized state");
+    require_near(
+        result.trajectory.back().state[0], 0.69, 2.0e-3,
+        "integration must continue once after the prioritized reset");
+}
+
 }  // namespace
 
 int main() {
@@ -820,6 +893,7 @@ int main() {
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();
         test_event_transition_reinitializes_and_restarts_integration();
+        test_event_priority_and_hysteresis_prevent_chatter();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

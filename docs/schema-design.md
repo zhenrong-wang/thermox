@@ -265,6 +265,8 @@ state_events:
     threshold: {value: 130, unit: bar}
     direction: rising
     terminal: true
+    priority: 100
+    hysteresis: {value: 2, unit: bar}
     actions:
       - type: set_input
         target: trip_valve.command.value
@@ -385,6 +387,15 @@ and continues unless the event is terminal. Result events report `transitioned: 
 were applied. Compiled hybrid problems reset their discrete input overrides before each sequential
 execution. Component parameter mutation and topology/equation-set replacement remain outside this
 contract; those require explicit component mode variables rather than rebuilding a graph mid-solve.
+
+`hysteresis` is an optional nonnegative distance in the observed variable's dimension. After a
+directed event fires, it cannot fire again until the surface retreats by at least that distance on
+the inactive side. This prevents numerical noise or a small state reset from chattering around a
+trip threshold. Nonzero hysteresis requires `rising` or `falling`; bidirectional behavior should be
+modeled as two explicit thresholds. When multiple transitions occur at the same detected time,
+Thermox executes them in ascending integer `priority` order, preserving declaration order for ties.
+Consequently the highest-priority action has final authority when simultaneous actions write the
+same input. Event results retain the declared priority as execution evidence.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`

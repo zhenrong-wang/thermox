@@ -146,6 +146,11 @@ void state_events(
         json_string(out, event.direction);
         out << ", \"terminal\": "
             << (event.terminal ? "true" : "false");
+        out << ", \"priority\": " << event.priority;
+        if (event.hysteresis.has_value()) {
+            out << ", \"hysteresis\": ";
+            scalar_value(out, *event.hysteresis);
+        }
         if (!event.actions.empty()) {
             out << ", \"actions\": [";
             for (std::size_t action_index = 0;
@@ -3051,7 +3056,8 @@ std::string serialize_transient_response_json(
         out << ", \"terminal\": "
             << (event.terminal ? "true" : "false")
             << ", \"transitioned\": "
-            << (event.transitioned ? "true" : "false") << "}";
+            << (event.transitioned ? "true" : "false")
+            << ", \"priority\": " << event.priority << "}";
     }
     out << "]\n}\n";
     return out.str();

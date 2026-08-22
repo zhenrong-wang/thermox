@@ -843,6 +843,7 @@ struct EventValue {
     GraphResult graph;
     bool terminal{false};
     bool transitioned{false};
+    int priority{0};
 };
 
 struct ValidateModelRequest {

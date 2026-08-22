@@ -405,6 +405,22 @@ double require_number_value(const JsonValue& value, const std::string& field_nam
     return value.number;
 }
 
+int optional_integer(
+    const JsonValue& object,
+    const std::string& key,
+    int default_value) {
+    const auto* value = find_member(object, key);
+    if (value == nullptr) return default_value;
+    const double number = require_number_value(*value, key);
+    if (std::floor(number) != number ||
+        number < static_cast<double>(std::numeric_limits<int>::min()) ||
+        number > static_cast<double>(std::numeric_limits<int>::max())) {
+        throw std::invalid_argument(
+            "field '" + key + "' must be an integer");
+    }
+    return static_cast<int>(number);
+}
+
 std::string require_unit(const JsonValue& value, const std::string& field_name) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("field '" + field_name + "' must be a number or {value, unit}");
@@ -826,6 +842,25 @@ StateEventDefinition parse_state_event(
             "' direction must be 'any', 'rising', or 'falling'");
     }
     event.terminal = require_boolean(value, "terminal");
+    event.priority = optional_integer(value, "priority", 0);
+    if (const auto* hysteresis = find_member(value, "hysteresis")) {
+        event.hysteresis = parse_scalar_value(
+            *hysteresis,
+            "case '" + case_id + "'.state_events." +
+                event.id + ".hysteresis");
+        if (event.hysteresis->value_si < 0.0) {
+            throw std::invalid_argument(
+                "case '" + case_id + "' state event '" +
+                event.id + "' hysteresis must be nonnegative");
+        }
+        if (event.direction == "any" &&
+            event.hysteresis->value_si > 0.0) {
+            throw std::invalid_argument(
+                "case '" + case_id + "' state event '" +
+                event.id + "' cannot combine direction 'any' with "
+                "nonzero hysteresis");
+        }
+    }
     if (const auto* actions = optional_array_member(value, "actions")) {
         std::set<std::string> action_targets;
         for (const auto& action_value : actions->array) {

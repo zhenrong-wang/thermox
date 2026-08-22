@@ -5651,6 +5651,8 @@ void test_transient_expression_component_flows_through_service() {
         "\"threshold\": 0.1, "
         "\"direction\": \"rising\", "
         "\"terminal\": true, "
+        "\"priority\": 20, "
+        "\"hysteresis\": 0.01, "
         "\"actions\": [{\"type\": \"set_input\", "
         "\"target\": \"lag.input.value\", "
         "\"value\": 0.0}]}],\n    ");
@@ -5661,6 +5663,7 @@ void test_transient_expression_component_flows_through_service() {
             trip_response.events.front().name == "high_output_trip" &&
             trip_response.events.front().terminal &&
             trip_response.events.front().transitioned &&
+            trip_response.events.front().priority == 20 &&
             trip_response.events.front().time > 0.68 &&
             trip_response.events.front().time < 0.74 &&
             trip_response.trajectory.back().time ==
@@ -5678,6 +5681,9 @@ void test_transient_expression_component_flows_through_service() {
     require(
         reparsed_trip.cases.front().state_events.size() == 1U &&
             reparsed_trip.cases.front().state_events.front().terminal &&
+            reparsed_trip.cases.front().state_events.front().priority == 20 &&
+            reparsed_trip.cases.front().state_events.front()
+                    .hysteresis.has_value() &&
             reparsed_trip.cases.front().state_events.front()
                     .actions.size() == 1U,
         "canonical model serialization must preserve state-triggered "

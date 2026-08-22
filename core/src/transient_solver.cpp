@@ -111,6 +111,17 @@ void validate_dae_problem(const DaeProblem& problem) {
         if (event.name.empty() || !event.evaluate) {
             throw std::invalid_argument("DAE events require a name and evaluation callback");
         }
+        if (!std::isfinite(event.hysteresis) ||
+            event.hysteresis < 0.0) {
+            throw std::invalid_argument(
+                "DAE event hysteresis must be finite and nonnegative");
+        }
+        if (event.direction == EventDirection::any &&
+            event.hysteresis > 0.0) {
+            throw std::invalid_argument(
+                "direction-independent DAE events do not support "
+                "nonzero hysteresis");
+        }
     }
     double previous_breakpoint =
         -std::numeric_limits<double>::infinity();
@@ -986,6 +997,8 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     for (const auto& event : problem.events) {
         previous_event_values.push_back(event.evaluate(time, state));
     }
+    std::vector<bool> event_armed(problem.events.size(), true);
+    std::vector<int> event_blocked_side(problem.events.size(), 0);
     std::vector<double> older_state;
     double previous_accepted_step = 0.0;
     bool has_bdf2_history = false;
@@ -1244,6 +1257,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             DetectedEvent detected;
             std::size_t definition_index{0};
             bool at_discontinuity{false};
+            int crossing_side{0};
         };
         std::vector<EventCandidate> event_candidates;
         for (std::size_t i = 0; i < problem.events.size(); ++i) {
@@ -1258,6 +1272,17 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             const double continuous_value = lands_on_discontinuity
                 ? event.evaluate(continuous_time, continuous_state)
                 : current_value;
+
+            if (!event_armed[i]) {
+                const bool rearmed =
+                    event_blocked_side[i] > 0
+                        ? current_value <= -event.hysteresis
+                        : current_value >= event.hysteresis;
+                if (rearmed) {
+                    event_armed[i] = true;
+                    event_blocked_side[i] = 0;
+                }
+            }
 
             const auto record_event = [&] (
                 double before_value,
@@ -1285,11 +1310,13 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 detected.terminal = event.terminal;
                 detected.transitioned =
                     static_cast<bool>(event.transition);
+                detected.priority = event.priority;
                 event_candidates.push_back(EventCandidate{
-                    std::move(detected), i, at_discontinuity});
+                    std::move(detected), i, at_discontinuity,
+                    before_value < after_value ? 1 : -1});
             };
 
-            if (event_crossed(
+            if (event_armed[i] && event_crossed(
                     previous_event_values[i], continuous_value,
                     event.direction)) {
                 record_event(
@@ -1297,7 +1324,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     previous_time, continuous_time,
                     previous_state, continuous_state, false);
             }
-            if (lands_on_discontinuity &&
+            if (event_armed[i] && lands_on_discontinuity &&
                 event_crossed(
                     continuous_value, current_value, event.direction)) {
                 record_event(
@@ -1329,6 +1356,9 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 candidate.detected.time <=
                     stopping_event_time + stopping_roundoff) {
                 result.events.push_back(candidate.detected);
+                event_armed[candidate.definition_index] = false;
+                event_blocked_side[candidate.definition_index] =
+                    candidate.crossing_side;
             }
         }
 
@@ -1353,14 +1383,24 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             time = stopping_event_time;
 
             bool terminal_event = false;
+            std::vector<const EventCandidate*> simultaneous;
             for (const auto& candidate : event_candidates) {
                 if (std::abs(
                         candidate.detected.time - stopping_event_time) >
                     stopping_roundoff) {
                     continue;
                 }
+                simultaneous.push_back(&candidate);
+            }
+            std::stable_sort(
+                simultaneous.begin(), simultaneous.end(),
+                [&](const auto* left, const auto* right) {
+                    return problem.events[left->definition_index].priority <
+                        problem.events[right->definition_index].priority;
+                });
+            for (const auto* candidate : simultaneous) {
                 const auto& definition =
-                    problem.events[candidate.definition_index];
+                    problem.events[candidate->definition_index];
                 terminal_event = terminal_event || definition.terminal;
                 if (!definition.transition) continue;
                 const auto status =

@@ -155,6 +155,7 @@ targets index-1 systems.
 - exact-time, right-continuous event reporting for crossings caused by declared discontinuities;
 - accepted-crossing transition callbacks followed by consistent DAE reinitialization, event-time
   rollback, required-time cursor restoration, and a safe BDF1 restart;
+- deterministic simultaneous-transition ordering and direction-aware hysteretic event rearming;
 - deterministic reset of residual-owned discrete modes before sequential integrations.
 
 The variable-order integrator is the dependency-free native backend. The DAE callback and metadata

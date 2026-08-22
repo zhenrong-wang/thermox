@@ -435,6 +435,8 @@ Next:
 29. Add generic accepted-event transition callbacks and typed case-owned `set_input` actions, with
     deterministic discrete-state reset, post-transition consistent DAE initialization, BDF restart,
     canonical persistence, and graph-native transition evidence. ✅
+30. Add unit-aware directional hysteresis, deterministic simultaneous-transition priority,
+    chatter-resistant event rearming, canonical persistence, and durable priority evidence. ✅
 
 See `docs/calibration-architecture.md`.
 
