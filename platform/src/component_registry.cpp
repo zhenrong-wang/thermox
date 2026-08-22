@@ -371,6 +371,42 @@ std::optional<double> case_scalar_value(const CaseDefinition* active_case,
     return it->second.value_si;
 }
 
+std::optional<double> case_schedule_initial_value(
+    const CaseDefinition* active_case,
+    const std::string& key) {
+    if (active_case == nullptr) return std::nullopt;
+    const auto schedule = active_case->input_schedules.find(key);
+    if (schedule == active_case->input_schedules.end() ||
+        schedule->second.points.empty()) {
+        return std::nullopt;
+    }
+    return schedule->second.points.front().value.value_si;
+}
+
+double interpolate_input_schedule(
+    const InputScheduleDefinition& schedule,
+    double time) {
+    if (time <= schedule.points.front().time.value_si) {
+        return schedule.points.front().value.value_si;
+    }
+    if (time >= schedule.points.back().time.value_si) {
+        return schedule.points.back().value.value_si;
+    }
+    const auto upper = std::upper_bound(
+        schedule.points.begin(), schedule.points.end(), time,
+        [](double candidate,
+           const InputSchedulePointDefinition& point) {
+            return candidate < point.time.value_si;
+        });
+    const auto lower = std::prev(upper);
+    const double fraction =
+        (time - lower->time.value_si) /
+        (upper->time.value_si - lower->time.value_si);
+    return lower->value.value_si +
+        fraction *
+            (upper->value.value_si - lower->value.value_si);
+}
+
 std::map<
     std::string,
     std::map<std::string, ScalarValue>>
@@ -1108,6 +1144,13 @@ CompiledModelGraph compile_flat_model_graph(
         thermochemistry_registry,
     const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
+    if (active_case != nullptr &&
+        !active_case->input_schedules.empty()) {
+        throw std::invalid_argument(
+            "case '" + active_case->id +
+            "' declares input_schedules and requires transient "
+            "compilation");
+    }
 
     EquationSystemBuilder system;
     CompiledModelGraph graph;
@@ -1725,6 +1768,8 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
 
     std::map<std::string, std::size_t> variable_indices;
     std::map<std::size_t, DaeVariableKind> variable_kinds;
+    std::map<std::string, std::string> variable_dimensions;
+    std::map<std::string, double> variable_scales;
     auto medium_properties =
         create_medium_properties(document, property_registry);
     const auto parameter_overrides =
@@ -1822,6 +1867,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 if (const auto value =
                         case_scalar_value(active_case, full_name, false)) {
                     initial = *value;
+                } else if (const auto scheduled =
+                               case_schedule_initial_value(
+                                   active_case, full_name)) {
+                    initial = *scheduled;
                 } else if (const auto fixed =
                                case_scalar_value(active_case, full_name, true)) {
                     initial = *fixed;
@@ -1841,6 +1890,9 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     spec.scale, derivative_scale);
                 variable_indices.emplace(full_name, index);
                 variable_kinds.emplace(index, kind);
+                variable_dimensions.emplace(
+                    full_name, spec.dimension);
+                variable_scales.emplace(full_name, spec.scale);
                 context.port_variables.emplace(
                     port.name + "." + spec.name, index);
                 graph.port_variables.push_back(
@@ -1861,6 +1913,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             if (const auto value =
                     case_scalar_value(active_case, full_name, false)) {
                 initial = *value;
+            } else if (const auto scheduled =
+                           case_schedule_initial_value(
+                               active_case, full_name)) {
+                initial = *scheduled;
             } else if (const auto fixed =
                            case_scalar_value(active_case, full_name, true)) {
                 initial = *fixed;
@@ -1872,6 +1928,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 variable.upper_bound);
             variable_indices.emplace(full_name, index);
             variable_kinds.emplace(index, variable.kind);
+            variable_dimensions.emplace(
+                full_name, variable.dimension);
+            variable_scales.emplace(
+                full_name, variable.state_scale);
             context.internal_variables.emplace(variable.name, index);
             graph.internal_variables.push_back(
                 CompiledInternalVariable{component.id, variable.name,
@@ -1925,6 +1985,11 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     if (active_case != nullptr) {
         for (const auto& [key, scalar] :
              active_case->fixed_values) {
+            if (active_case->input_schedules.contains(key)) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id +
+                    "' cannot both fix and schedule variable: " + key);
+            }
             const auto variable_it = variable_indices.find(key);
             if (variable_it == variable_indices.end()) {
                 throw std::invalid_argument(
@@ -1948,6 +2013,52 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             graph.fixed_value_equations.push_back(
                 system.residuals().at(residual_index).name);
         }
+        for (const auto& [key, schedule] :
+             active_case->input_schedules) {
+            const auto variable_it = variable_indices.find(key);
+            if (variable_it == variable_indices.end()) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id +
+                    "' input schedule references unknown variable: " +
+                    key);
+            }
+            if (variable_kinds.at(variable_it->second) ==
+                DaeVariableKind::differential) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id +
+                    "' cannot schedule differential variable '" + key +
+                    "'; schedule its algebraic boundary or control input");
+            }
+            for (const auto& point : schedule.points) {
+                if (point.value.dimension !=
+                    variable_dimensions.at(key)) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' input schedule dimension for '" + key +
+                        "' does not match graph variable dimension '" +
+                        variable_dimensions.at(key) + "'");
+                }
+            }
+            const std::string residual_name =
+                "scheduled." + active_case->id + "." + key;
+            const std::size_t residual_index =
+                system.add_sparse_equation(
+                    residual_name, {variable_it->second},
+                    [index = variable_it->second, schedule](
+                        double time,
+                        const std::vector<double>& state,
+                        const std::vector<double>&,
+                        double& residual,
+                        std::vector<DaeEquationPartial>& jacobian) {
+                        residual = state.at(index) -
+                            interpolate_input_schedule(schedule, time);
+                        jacobian.push_back({index, 1.0, 0.0});
+                        return EvaluationStatus::success();
+                    },
+                    variable_scales.at(key));
+            graph.scheduled_value_equations.push_back(
+                system.residuals().at(residual_index).name);
+        }
         for (const auto& [key, _] :
              active_case->initial_guesses) {
             if (variable_indices.find(key) ==
@@ -1963,6 +2074,23 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     graph.structure =
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
+    if (active_case != nullptr) {
+        for (const auto& [_, schedule] :
+             active_case->input_schedules) {
+            for (const auto& point : schedule.points) {
+                graph.problem.time_breakpoints.push_back(
+                    point.time.value_si);
+            }
+        }
+        std::sort(
+            graph.problem.time_breakpoints.begin(),
+            graph.problem.time_breakpoints.end());
+        graph.problem.time_breakpoints.erase(
+            std::unique(
+                graph.problem.time_breakpoints.begin(),
+                graph.problem.time_breakpoints.end()),
+            graph.problem.time_breakpoints.end());
+    }
     return graph;
 }
 

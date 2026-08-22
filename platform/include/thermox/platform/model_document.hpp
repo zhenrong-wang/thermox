@@ -76,12 +76,25 @@ struct AssemblyDefinition {
     std::vector<AssemblyParameterDefinition> parameters;
 };
 
+struct InputSchedulePointDefinition {
+    ScalarValue time;
+    ScalarValue value;
+};
+
+struct InputScheduleDefinition {
+    // The first/last values are held outside the declared knot interval.
+    // Piecewise-linear interpolation is continuous at every knot.
+    std::string interpolation;
+    std::vector<InputSchedulePointDefinition> points;
+};
+
 struct CaseDefinition {
     std::string id;
     std::string label;
     std::string mode;
     std::map<std::string, ScalarValue> parameter_overrides;
     std::map<std::string, ScalarValue> fixed_values;
+    std::map<std::string, InputScheduleDefinition> input_schedules;
     std::map<std::string, ScalarValue> initial_guesses;
     std::map<std::string, ScalarValue> solver_options;
 };

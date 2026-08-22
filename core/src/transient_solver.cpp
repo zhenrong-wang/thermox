@@ -112,6 +112,19 @@ void validate_dae_problem(const DaeProblem& problem) {
             throw std::invalid_argument("DAE events require a name and evaluation callback");
         }
     }
+    double previous_breakpoint =
+        -std::numeric_limits<double>::infinity();
+    for (const double breakpoint : problem.time_breakpoints) {
+        if (!std::isfinite(breakpoint)) {
+            throw std::invalid_argument(
+                "DAE time breakpoints must be finite");
+        }
+        if (breakpoint <= previous_breakpoint) {
+            throw std::invalid_argument(
+                "DAE time breakpoints must be strictly increasing");
+        }
+        previous_breakpoint = breakpoint;
+    }
 }
 
 void validate_integration_options(const TimeIntegrationOptions& options) {
@@ -928,6 +941,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
            options.required_output_times[next_required_output] <= time) {
         ++next_required_output;
     }
+    std::size_t next_time_breakpoint = 0;
+    while (next_time_breakpoint < problem.time_breakpoints.size() &&
+           problem.time_breakpoints[next_time_breakpoint] <= time) {
+        ++next_time_breakpoint;
+    }
     std::vector<double> previous_event_values;
     previous_event_values.reserve(problem.events.size());
     for (const auto& event : problem.events) {
@@ -956,6 +974,11 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             step = std::min(
                 step,
                 options.required_output_times[next_required_output] - time);
+        }
+        if (next_time_breakpoint < problem.time_breakpoints.size()) {
+            step = std::min(
+                step,
+                problem.time_breakpoints[next_time_breakpoint] - time);
         }
         if (step < options.min_step && options.end_time - time > options.min_step) {
             result.diagnostics.message = "time step fell below min_step";
@@ -1118,6 +1141,21 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 result.trajectory.back().time = required_time;
                 time = required_time;
                 ++next_required_output;
+            }
+        }
+        if (next_time_breakpoint < problem.time_breakpoints.size()) {
+            const double breakpoint =
+                problem.time_breakpoints[next_time_breakpoint];
+            const double breakpoint_roundoff =
+                16.0 * std::numeric_limits<double>::epsilon() *
+                std::max({1.0, std::abs(time),
+                          std::abs(breakpoint)});
+            if (std::abs(time - breakpoint) <=
+                breakpoint_roundoff) {
+                result.trajectory.back().time = breakpoint;
+                time = breakpoint;
+                ++next_time_breakpoint;
+                has_bdf2_history = false;
             }
         }
 

@@ -89,6 +89,10 @@ struct DaeProblem {
     DaeSparseJacobianValuesSubsetFunction
         sparse_jacobian_values_subset;
     std::vector<DaeEvent> events;
+    // Problem-owned times where a time-dependent residual changes slope or
+    // regime. The adaptive integrator lands exactly on each in-range value
+    // and restarts multistep history before continuing.
+    std::vector<double> time_breakpoints;
 };
 
 struct DaeInitializationResult {

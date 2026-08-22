@@ -230,6 +230,7 @@ struct CompiledTransientModelGraph {
     std::vector<CompiledInternalVariable> internal_variables;
     std::vector<CompiledConnectionEquation> connection_equations;
     std::vector<std::string> fixed_value_equations;
+    std::vector<std::string> scheduled_value_equations;
     ProblemStructureReport structure;
     DaeProblem problem;
 };

@@ -251,6 +251,14 @@ fixed_values:
   generator.P_e:
     value: 450
     unit: MW
+input_schedules:
+  load_setpoint.outlet.value:
+    interpolation: linear
+    points:
+      - time: {value: 0, unit: s}
+        value: 1.0
+      - time: {value: 30, unit: s}
+        value: 0.75
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -338,6 +346,13 @@ Transient-capable component descriptors additionally declare:
 Cases use `initial_guesses` to initialize differential states. A transient case cannot place a
 differential state in `fixed_values`, because that would constrain it for the entire trajectory
 rather than initialize it.
+
+Dynamic cases may use `input_schedules` to prescribe time-varying algebraic boundaries or control
+inputs. Each target is a canonical graph-variable path and declares at least two strictly ordered,
+dimensionally compatible time/value points. The current interpolation contract is `linear`; values
+are held at the first and last knots outside the declared interval. A target cannot also appear in
+`fixed_values`, and differential states remain owned by their accumulation equations rather than
+being directly scheduled.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`

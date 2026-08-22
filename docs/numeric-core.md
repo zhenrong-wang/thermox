@@ -142,6 +142,9 @@ targets index-1 systems.
   constraints at every implicit stage;
 - bounded Newton solves at every implicit stage;
 - rejected-step recovery;
+- exact landing on problem-owned time breakpoints with a safe BDF1 history restart, allowing
+  time-dependent physics and boundary schedules to change slope without a multistep stencil
+  crossing the knot;
 - trajectory, nonlinear-work, accepted-error, and limiting-state diagnostics;
 - rising, falling, and direction-independent events;
 - terminal events with an interpolated terminal state.

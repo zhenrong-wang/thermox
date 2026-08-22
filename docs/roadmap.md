@@ -423,6 +423,9 @@ Next:
 25. Estimate bounded, prior-aware differential initial conditions jointly with physical model
     parameters through exact-time transient observations, while rejecting algebraic initialization
     seeds that consistent DAE initialization necessarily recomputes. ✅
+26. Add typed, case-owned piecewise-linear boundary/control schedules, dimension-aware graph
+    compilation, canonical persistence, and problem-owned DAE knot landing with safe multistep
+    restart. ✅
 
 See `docs/calibration-architecture.md`.
 

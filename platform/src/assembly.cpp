@@ -203,10 +203,11 @@ std::string rewrite_public_variable(
     return found->second + key.substr(second);
 }
 
-void rewrite_scalar_keys(
-    std::map<std::string, ScalarValue>& values,
+template <typename Value>
+void rewrite_case_keys(
+    std::map<std::string, Value>& values,
     const std::map<std::string, std::string>& public_ports) {
-    std::map<std::string, ScalarValue> rewritten;
+    std::map<std::string, Value> rewritten;
     for (auto& [key, value] : values) {
         const auto expanded = rewrite_public_variable(key, public_ports);
         if (!rewritten.emplace(expanded, std::move(value)).second) {
@@ -252,9 +253,11 @@ ModelDocument flatten_model_document(const ModelDocument& document) {
     }
 
     for (auto& simulation_case : result.cases) {
-        rewrite_scalar_keys(
+        rewrite_case_keys(
             simulation_case.fixed_values, public_ports);
-        rewrite_scalar_keys(
+        rewrite_case_keys(
+            simulation_case.input_schedules, public_ports);
+        rewrite_case_keys(
             simulation_case.initial_guesses, public_ports);
         std::map<std::string, ScalarValue> overrides;
         for (auto& [key, value] :

@@ -464,6 +464,41 @@ void test_adaptive_integration_honors_required_output_times() {
         "adaptive integration must reject an unordered output schedule");
 }
 
+void test_adaptive_integration_honors_problem_time_breakpoints() {
+    auto problem = make_decay_problem();
+    problem.time_breakpoints = {0.37, 0.71};
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 1.0;
+    options.initial_step = 0.29;
+    options.max_step = 0.4;
+
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    for (const double breakpoint : problem.time_breakpoints) {
+        require(
+            std::any_of(
+                result.trajectory.begin(), result.trajectory.end(),
+                [&](const auto& sample) {
+                    return sample.time == breakpoint;
+                }),
+            "adaptive integration must land exactly on a problem-owned "
+            "time breakpoint");
+    }
+
+    problem.time_breakpoints = {0.5, 0.4};
+    try {
+        (void)thermox::integrate_dae(problem, options);
+    } catch (const std::invalid_argument& error) {
+        require(
+            std::string(error.what()).find("strictly increasing") !=
+                std::string::npos,
+            "invalid problem breakpoint diagnostic must explain ordering");
+        return;
+    }
+    throw std::runtime_error(
+        "adaptive integration must reject unordered problem breakpoints");
+}
+
 void test_index_one_dae_consistent_initialization_and_integration() {
     thermox::DaeProblem problem;
     problem.variable_names = {"inventory", "algebraic_flow"};
@@ -599,6 +634,7 @@ int main() {
         test_variable_order_bdf2_improves_smooth_accuracy();
         test_native_bdf_rejects_unsupported_order();
         test_adaptive_integration_honors_required_output_times();
+        test_adaptive_integration_honors_problem_time_breakpoints();
         test_index_one_dae_consistent_initialization_and_integration();
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();

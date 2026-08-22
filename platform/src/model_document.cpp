@@ -7,6 +7,7 @@
 #include <cmath>
 #include <fstream>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -731,6 +732,66 @@ AssemblyDefinition parse_assembly(
     return assembly;
 }
 
+InputScheduleDefinition parse_input_schedule(
+    const JsonValue& value,
+    const std::string& field_name) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "field '" + field_name + "' must be an object");
+    }
+    InputScheduleDefinition schedule;
+    schedule.interpolation = require_string(value, "interpolation");
+    if (schedule.interpolation != "linear") {
+        throw std::invalid_argument(
+            "field '" + field_name +
+            ".interpolation' must be 'linear'");
+    }
+    const auto points = require_array_member(value, "points");
+    if (points.array.size() < 2U) {
+        throw std::invalid_argument(
+            "field '" + field_name +
+            ".points' must contain at least two points");
+    }
+    double previous_time =
+        -std::numeric_limits<double>::infinity();
+    std::string value_dimension;
+    for (std::size_t index = 0; index < points.array.size(); ++index) {
+        const auto& point = points.array[index];
+        if (point.type != JsonValue::Type::Object) {
+            throw std::invalid_argument(
+                "field '" + field_name + ".points[" +
+                std::to_string(index) + "]' must be an object");
+        }
+        const std::string point_name = field_name + ".points[" +
+            std::to_string(index) + "]";
+        auto time = parse_scalar_value(
+            require_member(point, "time"), point_name + ".time");
+        auto scheduled_value = parse_scalar_value(
+            require_member(point, "value"), point_name + ".value");
+        if (time.dimension != "time") {
+            throw std::invalid_argument(
+                "field '" + point_name +
+                ".time' must have time dimension");
+        }
+        if (time.value_si <= previous_time) {
+            throw std::invalid_argument(
+                "field '" + field_name +
+                ".points' times must be strictly increasing");
+        }
+        if (value_dimension.empty()) {
+            value_dimension = scheduled_value.dimension;
+        } else if (scheduled_value.dimension != value_dimension) {
+            throw std::invalid_argument(
+                "field '" + field_name +
+                ".points' values must have one dimension");
+        }
+        previous_time = time.value_si;
+        schedule.points.push_back({
+            std::move(time), std::move(scheduled_value)});
+    }
+    return schedule;
+}
+
 CaseDefinition parse_case(const JsonValue& value) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("cases entries must be objects");
@@ -747,6 +808,18 @@ CaseDefinition parse_case(const JsonValue& value) {
     }
     if (const JsonValue* fixed_values = optional_object_member(value, "fixed_values")) {
         c.fixed_values = parse_scalar_map(*fixed_values, "case '" + c.id + "'.fixed_values");
+    }
+    if (const JsonValue* input_schedules =
+            optional_object_member(value, "input_schedules")) {
+        for (const auto& [target, schedule] :
+             input_schedules->object) {
+            c.input_schedules.emplace(
+                target,
+                parse_input_schedule(
+                    schedule,
+                    "case '" + c.id +
+                        "'.input_schedules." + target));
+        }
     }
     if (const JsonValue* initial_guesses = optional_object_member(value, "initial_guesses")) {
         c.initial_guesses = parse_scalar_map(*initial_guesses, "case '" + c.id + "'.initial_guesses");

@@ -94,6 +94,40 @@ void scalar_map(
     out << "}";
 }
 
+void input_schedule_map(
+    std::ostream& out,
+    const std::map<
+        std::string,
+        platform::InputScheduleDefinition>& schedules,
+    std::string_view indent) {
+    out << "{";
+    if (!schedules.empty()) out << "\n";
+    std::size_t schedule_index = 0;
+    for (const auto& [target, schedule] : schedules) {
+        out << indent;
+        json_string(out, target);
+        out << ": {\"interpolation\": ";
+        json_string(out, schedule.interpolation);
+        out << ", \"points\": [";
+        for (std::size_t index = 0;
+             index < schedule.points.size(); ++index) {
+            if (index != 0U) out << ", ";
+            out << "{\"time\": ";
+            scalar_value(out, schedule.points[index].time);
+            out << ", \"value\": ";
+            scalar_value(out, schedule.points[index].value);
+            out << "}";
+        }
+        out << "]}"
+            << (++schedule_index == schedules.size()
+                    ? "\n" : ",\n");
+    }
+    if (!schedules.empty()) {
+        out << std::string(indent.size() - 2, ' ');
+    }
+    out << "}";
+}
+
 void calibration_definition_json(
     std::ostream& out,
     const platform::CalibrationDefinition& calibration,
@@ -1048,6 +1082,11 @@ std::string serialize_case_document_json(
         scalar_map(
             out, simulation_case.fixed_values, "      ");
     }
+    if (!simulation_case.input_schedules.empty()) {
+        out << ",\n    \"input_schedules\": ";
+        input_schedule_map(
+            out, simulation_case.input_schedules, "      ");
+    }
     if (!simulation_case.initial_guesses.empty()) {
         out << ",\n    \"initial_guesses\": ";
         scalar_map(
@@ -1102,6 +1141,12 @@ std::string serialize_model_document_json(
         if (!simulation_case.fixed_values.empty()) {
             out << ",\n      \"fixed_values\": ";
             scalar_map(out, simulation_case.fixed_values, "        ");
+        }
+        if (!simulation_case.input_schedules.empty()) {
+            out << ",\n      \"input_schedules\": ";
+            input_schedule_map(
+                out, simulation_case.input_schedules,
+                "        ");
         }
         if (!simulation_case.initial_guesses.empty()) {
             out << ",\n      \"initial_guesses\": ";

@@ -9,6 +9,8 @@
 #include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
 
+#include "../src/serialization_internal.hpp"
+
 #include <boost/json.hpp>
 #include <boost/json/src.hpp>
 
@@ -5465,7 +5467,15 @@ void test_transient_expression_component_flows_through_service() {
   "cases": [{
     "id": "step",
     "mode": "dynamic_transient",
-    "fixed_values": {"lag.input.value": 1.0},
+    "input_schedules": {
+      "lag.input.value": {
+        "interpolation": "linear",
+        "points": [
+          {"time": {"value": 0.0, "unit": "s"}, "value": 0.0},
+          {"time": {"value": 0.5, "unit": "s"}, "value": 1.0}
+        ]
+      }
+    },
     "initial_guesses": {"lag.filtered": 0.0}
   }]
 })json";
@@ -5506,12 +5516,29 @@ void test_transient_expression_component_flows_through_service() {
     require(response.succeeded(),
             "request-scoped transient expression must solve: " +
                 response.error.message);
+    const auto parsed_schedule =
+        thermox::platform::parse_model_document_text(
+            request.model_json);
+    const auto canonical_schedule =
+        thermox::service::detail::serialize_model_document_json(
+            parsed_schedule);
+    const auto reparsed_schedule =
+        thermox::platform::parse_model_document_text(
+            canonical_schedule);
+    require(
+        reparsed_schedule.cases.front().input_schedules.size() == 1U &&
+            reparsed_schedule.cases.front().input_schedules.begin()
+                    ->second.points.size() == 2U &&
+            reparsed_schedule.cases.front().input_schedules.begin()
+                    ->second.points.back().time.value_si == 0.5,
+        "canonical model serialization must preserve typed input "
+        "schedules");
     const auto& lag = require_component_result(
         response.trajectory.back().graph, "lag");
     require(lag.internal_values.size() == 1 &&
                 lag.internal_values.front().name == "filtered" &&
-                lag.internal_values.front().value_si > 0.35 &&
-                lag.internal_values.front().value_si < 0.45,
+                lag.internal_values.front().value_si > 0.28 &&
+                lag.internal_values.front().value_si < 0.34,
             "service must expose the integrated declared internal state");
     for (const double output_time :
          request.solver.required_output_times) {
@@ -5524,6 +5551,71 @@ void test_transient_expression_component_flows_through_service() {
             "transient service must preserve an exact required output "
             "time");
     }
+    const auto ramp_sample = std::find_if(
+        response.trajectory.begin(), response.trajectory.end(),
+        [](const auto& sample) {
+            return sample.time == 0.37;
+        });
+    require(
+        ramp_sample != response.trajectory.end() &&
+            std::abs(
+                require_result_value(
+                    require_port_result(
+                        ramp_sample->graph, "lag", "input")
+                        .primary_values,
+                    "value")
+                    .value_si -
+                0.74) < 1.0e-10,
+        "piecewise-linear input schedule must interpolate the graph "
+        "boundary at an exact requested sample time");
+    require(
+        std::any_of(
+            response.trajectory.begin(), response.trajectory.end(),
+            [](const auto& sample) {
+                return sample.time == 0.5;
+            }),
+        "transient service must land exactly on a declared input-schedule "
+        "knot even when it is not a requested output time");
+
+    auto differential_schedule = request;
+    const auto scheduled_target =
+        differential_schedule.model_json.find("lag.input.value");
+    require(
+        scheduled_target != std::string::npos,
+        "scheduled-input fixture must expose its graph target");
+    differential_schedule.model_json.replace(
+        scheduled_target, std::string("lag.input.value").size(),
+        "lag.filtered");
+    const auto rejected_schedule =
+        service.run_transient(differential_schedule);
+    require(
+        rejected_schedule.status ==
+                thermox::service::OperationStatus::compilation_failed &&
+            rejected_schedule.error.message.find(
+                "cannot schedule differential variable") !=
+                std::string::npos,
+        "input schedules must reject differential states and remain "
+        "limited to algebraic boundaries or control inputs");
+
+    auto unordered_schedule = request;
+    const std::string second_knot =
+        "{\"value\": 0.5, \"unit\": \"s\"}";
+    const auto second_knot_position =
+        unordered_schedule.model_json.find(second_knot);
+    require(
+        second_knot_position != std::string::npos,
+        "scheduled-input fixture must expose its second knot");
+    unordered_schedule.model_json.replace(
+        second_knot_position, second_knot.size(),
+        "{\"value\": -0.1, \"unit\": \"s\"}");
+    const auto rejected_order =
+        service.run_transient(unordered_schedule);
+    require(
+        rejected_order.status ==
+                thermox::service::OperationStatus::invalid_model &&
+            rejected_order.error.message.find("strictly increasing") !=
+                std::string::npos,
+        "input schedule declarations must reject unordered knot times");
     require(
         std::any_of(
             response.metadata.solver.settings.begin(),
