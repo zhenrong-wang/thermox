@@ -6,6 +6,7 @@
 #include <cmath>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -350,7 +351,6 @@ void test_adaptive_error_control_uses_physical_variable_scales() {
         jacobian[0][0] = derivative_coefficient + 10.0;
         return thermox::EvaluationStatus::success();
     };
-
     thermox::TimeIntegrationOptions options;
     options.end_time = 1.0;
     options.initial_step = 1.0;
@@ -715,6 +715,91 @@ void test_terminal_event_stops_integration() {
             "terminal event stops before end_time");
 }
 
+void test_event_transition_reinitializes_and_restarts_integration() {
+    const auto command = std::make_shared<double>(1.0);
+    thermox::DaeProblem problem;
+    problem.variable_names = {"inventory", "command"};
+    problem.residual_names = {"inventory_balance", "command_mode"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::differential,
+        thermox::DaeVariableKind::algebraic};
+    problem.initial_state = {0.0, 1.0};
+    problem.initial_derivative = {1.0, 0.0};
+    problem.variable_scales = {1.0, 1.0};
+    problem.derivative_scales = {1.0, 1.0};
+    problem.residual_scales = {1.0, 1.0};
+    problem.residual = [command](
+        double, const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        residual[0] = derivative[0] - state[1];
+        residual[1] = state[1] - *command;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double, const std::vector<double>&,
+        const std::vector<double>&, double derivative_coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = derivative_coefficient;
+        jacobian[0][1] = -1.0;
+        jacobian[1][1] = 1.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.reset_discrete_state = [command]() {
+        *command = 1.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.events.push_back(thermox::DaeEvent{
+        "reverse_command",
+        [](double, const std::vector<double>& state) {
+            return state[0] - 0.5;
+        },
+        thermox::EventDirection::rising,
+        false,
+        [command](double, std::vector<double>&,
+                  std::vector<double>&) {
+            *command = -1.0;
+            return thermox::EvaluationStatus::success();
+        }});
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 1.0;
+    options.initial_step = 0.12;
+    options.max_step = 0.12;
+    options.required_output_times = {0.6};
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.events.size() == 1U &&
+            result.events.front().transitioned &&
+            !result.events.front().terminal,
+        "a nonterminal event transition must be reported exactly once");
+    require_near(
+        result.events.front().time, 0.5, 3.0e-2,
+        "the transition must occur at the state threshold");
+    require_near(
+        result.events.front().state[1], -1.0, 1.0e-9,
+        "event evidence must contain the consistently reinitialized "
+        "post-transition algebraic state");
+    require_near(
+        result.trajectory.back().state[0], 0.0, 4.0e-2,
+        "integration must continue under the transitioned residual mode");
+    require_near(
+        result.trajectory.back().state[1], -1.0, 1.0e-9,
+        "the transitioned algebraic mode must remain active");
+    require(
+        std::any_of(
+            result.trajectory.begin(), result.trajectory.end(),
+            [](const auto& sample) { return sample.time == 0.6; }),
+        "event-time rollback must preserve later required output times");
+    const auto repeated = thermox::integrate_dae(problem, options);
+    require(
+        repeated.diagnostics.success &&
+            repeated.events.size() == 1U,
+        "a hybrid DAE problem must reset its discrete mode before a "
+        "sequential repeat execution");
+}
+
 }  // namespace
 
 int main() {
@@ -734,6 +819,7 @@ int main() {
         test_index_one_dae_consistent_initialization_and_integration();
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();
+        test_event_transition_reinitializes_and_restarts_integration();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

@@ -5650,13 +5650,17 @@ void test_transient_expression_component_flows_through_service() {
         "\"target\": \"lag.filtered\", "
         "\"threshold\": 0.1, "
         "\"direction\": \"rising\", "
-        "\"terminal\": true}],\n    ");
+        "\"terminal\": true, "
+        "\"actions\": [{\"type\": \"set_input\", "
+        "\"target\": \"lag.input.value\", "
+        "\"value\": 0.0}]}],\n    ");
     const auto trip_response = service.run_transient(trip_request);
     require(
         trip_response.succeeded() &&
             trip_response.events.size() == 1U &&
             trip_response.events.front().name == "high_output_trip" &&
             trip_response.events.front().terminal &&
+            trip_response.events.front().transitioned &&
             trip_response.events.front().time > 0.68 &&
             trip_response.events.front().time < 0.74 &&
             trip_response.trajectory.back().time ==
@@ -5673,7 +5677,9 @@ void test_transient_expression_component_flows_through_service() {
         thermox::platform::parse_model_document_text(canonical_trip);
     require(
         reparsed_trip.cases.front().state_events.size() == 1U &&
-            reparsed_trip.cases.front().state_events.front().terminal,
+            reparsed_trip.cases.front().state_events.front().terminal &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.size() == 1U,
         "canonical model serialization must preserve state-triggered "
         "event declarations");
 

@@ -65,6 +65,13 @@ struct DaeEvent {
     std::function<double(double time, const std::vector<double>& state)> evaluate;
     EventDirection direction{EventDirection::any};
     bool terminal{false};
+    // Optional accepted-crossing transition. It may change discrete data
+    // captured by the residual and may reset state values. The integrator
+    // restores consistent algebraic states and derivatives afterward.
+    std::function<EvaluationStatus(
+        double time,
+        std::vector<double>& state,
+        std::vector<double>& derivative)> transition;
 };
 
 struct DaeProblem {
@@ -89,6 +96,9 @@ struct DaeProblem {
     DaeSparseJacobianValuesSubsetFunction
         sparse_jacobian_values_subset;
     std::vector<DaeEvent> events;
+    // Restores residual-owned discrete modes before each integration so a
+    // compiled problem is deterministic across sequential executions.
+    std::function<EvaluationStatus()> reset_discrete_state;
     // Problem-owned times where a time-dependent residual changes slope or
     // regime. The adaptive integrator lands exactly on each in-range value
     // and restarts multistep history before continuing.
@@ -145,6 +155,7 @@ struct DetectedEvent {
     double time{0.0};
     std::vector<double> state;
     bool terminal{false};
+    bool transitioned{false};
 };
 
 struct TimeIntegrationDiagnostics {

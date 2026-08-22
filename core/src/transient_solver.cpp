@@ -815,6 +815,15 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                        std::numeric_limits<double>::infinity(), "upper_bounds");
 
     DaeSolveResult result;
+    if (problem.reset_discrete_state) {
+        const auto status = problem.reset_discrete_state();
+        if (!status.ok()) {
+            result.diagnostics.message =
+                "discrete-state reset failed: " + status.message;
+            result.diagnostics.final_time = options.start_time;
+            return result;
+        }
+    }
     SolverOptions nonlinear_options = options.nonlinear_options;
     if ((problem.sparse_jacobian_pattern.has_value() ||
          problem.sparse_jacobian) &&
@@ -1231,9 +1240,12 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             }
         }
 
-        bool terminal_event = false;
-        std::size_t earliest_terminal_index = std::numeric_limits<std::size_t>::max();
-        bool earliest_terminal_at_discontinuity = false;
+        struct EventCandidate {
+            DetectedEvent detected;
+            std::size_t definition_index{0};
+            bool at_discontinuity{false};
+        };
+        std::vector<EventCandidate> event_candidates;
         for (std::size_t i = 0; i < problem.events.size(); ++i) {
             const auto& event = problem.events[i];
             const double current_value = event.evaluate(time, state);
@@ -1271,15 +1283,10 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                         fraction * (after_state[j] - before_state[j]);
                 }
                 detected.terminal = event.terminal;
-                result.events.push_back(std::move(detected));
-                terminal_event = terminal_event || event.terminal;
-                if (event.terminal &&
-                    (earliest_terminal_index == std::numeric_limits<std::size_t>::max() ||
-                     result.events.back().time <
-                         result.events[earliest_terminal_index].time)) {
-                    earliest_terminal_index = result.events.size() - 1;
-                    earliest_terminal_at_discontinuity = at_discontinuity;
-                }
+                detected.transitioned =
+                    static_cast<bool>(event.transition);
+                event_candidates.push_back(EventCandidate{
+                    std::move(detected), i, at_discontinuity});
             };
 
             if (event_crossed(
@@ -1298,27 +1305,136 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     time, time,
                     state_before_discontinuity, state, true);
             }
-            previous_event_values[i] = current_value;
         }
-        if (terminal_event) {
-            const DetectedEvent& earliest_terminal =
-                result.events[earliest_terminal_index];
-            const double event_step = earliest_terminal.time - previous_time;
-            state = earliest_terminal.state;
-            if (!earliest_terminal_at_discontinuity) {
+
+        double stopping_event_time =
+            std::numeric_limits<double>::infinity();
+        const std::size_t event_result_begin = result.events.size();
+        for (const auto& candidate : event_candidates) {
+            const auto& definition =
+                problem.events[candidate.definition_index];
+            if (definition.terminal || definition.transition) {
+                stopping_event_time = std::min(
+                    stopping_event_time, candidate.detected.time);
+            }
+        }
+        const double stopping_roundoff =
+            std::isfinite(stopping_event_time)
+                ? 16.0 * std::numeric_limits<double>::epsilon() *
+                    std::max({1.0, std::abs(stopping_event_time),
+                              std::abs(time)})
+                : 0.0;
+        for (const auto& candidate : event_candidates) {
+            if (!std::isfinite(stopping_event_time) ||
+                candidate.detected.time <=
+                    stopping_event_time + stopping_roundoff) {
+                result.events.push_back(candidate.detected);
+            }
+        }
+
+        if (std::isfinite(stopping_event_time)) {
+            const auto anchor = std::find_if(
+                event_candidates.begin(), event_candidates.end(),
+                [&](const auto& candidate) {
+                    return std::abs(
+                        candidate.detected.time - stopping_event_time) <=
+                        stopping_roundoff;
+                });
+            state = anchor->detected.state;
+            const double event_step = stopping_event_time - previous_time;
+            if (!anchor->at_discontinuity) {
                 derivative.assign(size, 0.0);
             }
-            if (!earliest_terminal_at_discontinuity && event_step > 0.0) {
+            if (!anchor->at_discontinuity && event_step > 0.0) {
                 for (std::size_t i = 0; i < size; ++i) {
                     derivative[i] = (state[i] - previous_state[i]) / event_step;
                 }
             }
-            time = earliest_terminal.time;
+            time = stopping_event_time;
+
+            bool terminal_event = false;
+            for (const auto& candidate : event_candidates) {
+                if (std::abs(
+                        candidate.detected.time - stopping_event_time) >
+                    stopping_roundoff) {
+                    continue;
+                }
+                const auto& definition =
+                    problem.events[candidate.definition_index];
+                terminal_event = terminal_event || definition.terminal;
+                if (!definition.transition) continue;
+                const auto status =
+                    definition.transition(time, state, derivative);
+                if (!status.ok()) {
+                    result.diagnostics.message =
+                        "event transition '" + definition.name +
+                        "' failed: " + status.message;
+                    result.diagnostics.final_time = time;
+                    return result;
+                }
+            }
+
+            DaeProblem reinitialization_problem = problem;
+            reinitialization_problem.initial_state = state;
+            reinitialization_problem.initial_derivative = derivative;
+            auto initialized = make_consistent_initial_conditions(
+                reinitialization_problem, time, nonlinear_options);
+            accumulate_nonlinear_diagnostics(
+                initialized.diagnostics);
+            if (!initialized.diagnostics.converged) {
+                result.diagnostics.message =
+                    "consistent event reinitialization failed at time " +
+                    std::to_string(time) + ": " +
+                    initialized.diagnostics.message;
+                result.diagnostics.final_time = time;
+                return result;
+            }
+            state = std::move(initialized.state);
+            derivative = std::move(initialized.derivative);
+            for (std::size_t i = event_result_begin;
+                 i < result.events.size(); ++i) {
+                if (std::abs(result.events[i].time - time) <=
+                    stopping_roundoff) {
+                    result.events[i].state = state;
+                }
+            }
+
             result.trajectory.back() = DaeState{time, state, derivative};
-            result.diagnostics.success = true;
-            result.diagnostics.final_time = time;
-            result.diagnostics.message = "terminal event detected";
-            return result;
+            if (terminal_event) {
+                result.diagnostics.success = true;
+                result.diagnostics.final_time = time;
+                result.diagnostics.message = "terminal event detected";
+                return result;
+            }
+
+            older_state = previous_state;
+            previous_accepted_step = event_step;
+            has_bdf2_history = false;
+            next_required_output = static_cast<std::size_t>(
+                std::upper_bound(
+                    options.required_output_times.begin(),
+                    options.required_output_times.end(), time) -
+                options.required_output_times.begin());
+            next_time_breakpoint = static_cast<std::size_t>(
+                std::upper_bound(
+                    problem.time_breakpoints.begin(),
+                    problem.time_breakpoints.end(), time) -
+                problem.time_breakpoints.begin());
+            next_time_discontinuity = static_cast<std::size_t>(
+                std::upper_bound(
+                    problem.time_discontinuities.begin(),
+                    problem.time_discontinuities.end(), time) -
+                problem.time_discontinuities.begin());
+            for (std::size_t i = 0; i < problem.events.size(); ++i) {
+                previous_event_values[i] =
+                    problem.events[i].evaluate(time, state);
+            }
+            continue;
+        }
+
+        for (std::size_t i = 0; i < problem.events.size(); ++i) {
+            previous_event_values[i] =
+                problem.events[i].evaluate(time, state);
         }
 
         const double factor =

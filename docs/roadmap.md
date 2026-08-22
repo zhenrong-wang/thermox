@@ -432,6 +432,9 @@ Next:
 28. Add typed, case-owned state-threshold events with dimensional target validation, directional
     crossing, nonterminal evidence, terminal protective trips, canonical persistence, and exact
     right-continuous event handling at scheduled discontinuities. ✅
+29. Add generic accepted-event transition callbacks and typed case-owned `set_input` actions, with
+    deterministic discrete-state reset, post-transition consistent DAE initialization, BDF restart,
+    canonical persistence, and graph-native transition evidence. ✅
 
 See `docs/calibration-architecture.md`.
 

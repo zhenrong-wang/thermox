@@ -842,6 +842,7 @@ struct EventValue {
     double time{0.0};
     GraphResult graph;
     bool terminal{false};
+    bool transitioned{false};
 };
 
 struct ValidateModelRequest {

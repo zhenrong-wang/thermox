@@ -125,7 +125,8 @@ The browser only enables new run authoring after the service compiler has valida
 topology, case, and artifact-revision set.
 
 Approval policy, dimension algebra across compound expressions, constrained property functions,
-component-owned expression event surfaces, event-triggered discrete modes, and richer equation
+component-owned expression event surfaces, component equation-set replacement, and richer equation
 syntax assistance require later versioned contracts. Cases can already declare dimensioned
-threshold events over compiled graph variables without embedding event behavior in a component.
+threshold events and typed algebraic input transitions over compiled graph variables without
+embedding event behavior in a component.
 Arbitrary Python is not part of this path.

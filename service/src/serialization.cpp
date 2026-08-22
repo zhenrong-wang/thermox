@@ -145,7 +145,24 @@ void state_events(
         out << ", \"direction\": ";
         json_string(out, event.direction);
         out << ", \"terminal\": "
-            << (event.terminal ? "true" : "false") << "}"
+            << (event.terminal ? "true" : "false");
+        if (!event.actions.empty()) {
+            out << ", \"actions\": [";
+            for (std::size_t action_index = 0;
+                 action_index < event.actions.size(); ++action_index) {
+                if (action_index != 0U) out << ", ";
+                const auto& action = event.actions[action_index];
+                out << "{\"type\": ";
+                json_string(out, action.type);
+                out << ", \"target\": ";
+                json_string(out, action.target);
+                out << ", \"value\": ";
+                scalar_value(out, action.value);
+                out << "}";
+            }
+            out << "]";
+        }
+        out << "}"
             << (index + 1U == events.size() ? "\n" : ",\n");
     }
     if (!events.empty()) {
@@ -3032,7 +3049,9 @@ std::string serialize_transient_response_json(
         out << ", \"graph\": ";
         graph_result_json(out, event.graph);
         out << ", \"terminal\": "
-            << (event.terminal ? "true" : "false") << "}";
+            << (event.terminal ? "true" : "false")
+            << ", \"transitioned\": "
+            << (event.transitioned ? "true" : "false") << "}";
     }
     out << "]\n}\n";
     return out.str();

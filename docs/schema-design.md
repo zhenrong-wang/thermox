@@ -265,6 +265,10 @@ state_events:
     threshold: {value: 130, unit: bar}
     direction: rising
     terminal: true
+    actions:
+      - type: set_input
+        target: trip_valve.command.value
+        value: 0.0
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -371,8 +375,16 @@ and compares it with a dimensionally compatible threshold. `direction` selects `
 or `any`. A nonterminal event records engineering evidence while integration continues; a terminal
 event records the event and stops the trajectory at its detected state. Events caused by a
 right-continuous scheduled jump are stamped at the exact discontinuity with the post-jump state.
-Event-triggered parameter changes and equation-mode switching are intentionally a later, explicit
-hybrid-system contract rather than hidden callback behavior.
+
+An event may declare one or more typed `set_input` actions. Each target must already be an
+algebraic boundary/control input declared by `fixed_values` or `input_schedules`, and the action
+value must match that graph variable's physical dimension. At the accepted crossing, the solver
+applies all actions in declaration order, preserves differential states unless a native transition
+explicitly resets them, consistently reinitializes algebraic states and derivatives, restarts BDF1,
+and continues unless the event is terminal. Result events report `transitioned: true` when actions
+were applied. Compiled hybrid problems reset their discrete input overrides before each sequential
+execution. Component parameter mutation and topology/equation-set replacement remain outside this
+contract; those require explicit component mode variables rather than rebuilding a graph mid-solve.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`

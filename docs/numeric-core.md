@@ -150,8 +150,12 @@ targets index-1 systems.
   exact jump time, and then restarts integration at BDF1;
 - trajectory, nonlinear-work, accepted-error, and limiting-state diagnostics;
 - rising, falling, and direction-independent events;
-- terminal events with an interpolated terminal state for continuous crossings;
-- exact-time, right-continuous event reporting for crossings caused by declared discontinuities.
+- terminal events with an interpolated differential state and consistently reinitialized
+  algebraic state/derivative at continuous crossings;
+- exact-time, right-continuous event reporting for crossings caused by declared discontinuities;
+- accepted-crossing transition callbacks followed by consistent DAE reinitialization, event-time
+  rollback, required-time cursor restoration, and a safe BDF1 restart;
+- deterministic reset of residual-owned discrete modes before sequential integrations.
 
 The variable-order integrator is the dependency-free native backend. The DAE callback and metadata
 contract remains independent of the stepper so an IDA-style backend with mature order 1-5 control

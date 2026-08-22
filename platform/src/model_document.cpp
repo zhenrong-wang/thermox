@@ -826,6 +826,32 @@ StateEventDefinition parse_state_event(
             "' direction must be 'any', 'rising', or 'falling'");
     }
     event.terminal = require_boolean(value, "terminal");
+    if (const auto* actions = optional_array_member(value, "actions")) {
+        std::set<std::string> action_targets;
+        for (const auto& action_value : actions->array) {
+            if (action_value.type != JsonValue::Type::Object) {
+                throw std::invalid_argument(
+                    "case '" + case_id + "' state event '" +
+                    event.id + "' actions must be objects");
+            }
+            StateEventDefinition::Action action;
+            action.type = require_string(action_value, "type");
+            if (action.type != "set_input") {
+                throw std::invalid_argument(
+                    "case '" + case_id + "' state event '" +
+                    event.id + "' action type must be 'set_input'");
+            }
+            action.target = require_string(action_value, "target");
+            require_unique_id(
+                action.target, action_targets,
+                "set_input target in state event '" + event.id + "'");
+            action.value = parse_scalar_value(
+                require_member(action_value, "value"),
+                "case '" + case_id + "'.state_events." +
+                    event.id + ".actions.value");
+            event.actions.push_back(std::move(action));
+        }
+    }
     return event;
 }
 

@@ -5280,6 +5280,7 @@ TransientSimulationResponse SimulationService::run_transient(
                 copy_graph_result(
                     evaluator.evaluate(event.state)),
                 event.terminal,
+                event.transitioned,
             };
             const auto event_feasibility =
                 audit_counterflow_thermal_feasibility(

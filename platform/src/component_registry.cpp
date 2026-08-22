@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <numeric>
 #include <set>
 #include <stdexcept>
@@ -1986,6 +1987,51 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     mark_unconnected_system_boundaries(
         graph.port_variables, connection_counts);
 
+    const auto transitioned_input_values =
+        std::make_shared<std::map<std::string, double>>();
+    std::set<std::string> transitioned_input_targets;
+    if (active_case != nullptr) {
+        for (const auto& event : active_case->state_events) {
+            for (const auto& action : event.actions) {
+                if (!active_case->fixed_values.contains(action.target) &&
+                    !active_case->input_schedules.contains(action.target)) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' set_input action target must be declared in "
+                        "fixed_values or input_schedules: " +
+                        action.target);
+                }
+                const auto variable = variable_indices.find(action.target);
+                if (variable == variable_indices.end()) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' action references unknown graph variable: " +
+                        action.target);
+                }
+                if (variable_kinds.at(variable->second) ==
+                    DaeVariableKind::differential) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' cannot set differential variable: " +
+                        action.target);
+                }
+                if (action.value.dimension !=
+                    variable_dimensions.at(action.target)) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' action value dimension does not match graph "
+                        "variable dimension '" +
+                        variable_dimensions.at(action.target) + "'");
+                }
+                transitioned_input_targets.insert(action.target);
+            }
+        }
+    }
+
     if (active_case != nullptr) {
         for (const auto& [key, scalar] :
              active_case->fixed_values) {
@@ -2008,12 +2054,36 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     "' cannot fix differential variable '" + key +
                     "'; use initial_guesses for its initial state");
             }
-            const std::size_t residual_index =
-                system.add_linear_equation(
+            std::size_t residual_index = 0;
+            if (transitioned_input_targets.contains(key)) {
+                residual_index = system.add_sparse_equation(
+                    "fixed." + active_case->id + "." + key,
+                    {variable_it->second},
+                    [index = variable_it->second, key,
+                     initial_value = scalar.value_si,
+                     transitioned_input_values](
+                        double, const std::vector<double>& state,
+                        const std::vector<double>&, double& residual,
+                        std::vector<DaeEquationPartial>& jacobian) {
+                        const auto override_value =
+                            transitioned_input_values->find(key);
+                        const double target =
+                            override_value ==
+                                    transitioned_input_values->end()
+                                ? initial_value
+                                : override_value->second;
+                        residual = state.at(index) - target;
+                        jacobian.push_back({index, 1.0, 0.0});
+                        return EvaluationStatus::success();
+                    },
+                    std::max(std::abs(scalar.value_si), 1.0));
+            } else {
+                residual_index = system.add_linear_equation(
                     "fixed." + active_case->id + "." + key,
                     {{variable_it->second, 1.0, 0.0}},
                     scalar.value_si,
                     std::max(std::abs(scalar.value_si), 1.0));
+            }
             graph.fixed_value_equations.push_back(
                 system.residuals().at(residual_index).name);
         }
@@ -2048,14 +2118,21 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             const std::size_t residual_index =
                 system.add_sparse_equation(
                     residual_name, {variable_it->second},
-                    [index = variable_it->second, schedule](
+                    [index = variable_it->second, key, schedule,
+                     transitioned_input_values](
                         double time,
                         const std::vector<double>& state,
                         const std::vector<double>&,
                         double& residual,
                         std::vector<DaeEquationPartial>& jacobian) {
-                        residual = state.at(index) -
-                            interpolate_input_schedule(schedule, time);
+                        const auto override_value =
+                            transitioned_input_values->find(key);
+                        const double target =
+                            override_value ==
+                                    transitioned_input_values->end()
+                                ? interpolate_input_schedule(schedule, time)
+                                : override_value->second;
+                        residual = state.at(index) - target;
                         jacobian.push_back({index, 1.0, 0.0});
                         return EvaluationStatus::success();
                     },
@@ -2079,6 +2156,13 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     if (active_case != nullptr) {
+        if (!transitioned_input_targets.empty()) {
+            graph.problem.reset_discrete_state =
+                [transitioned_input_values]() {
+                    transitioned_input_values->clear();
+                    return EvaluationStatus::success();
+                };
+        }
         for (const auto& event : active_case->state_events) {
             const auto variable = variable_indices.find(event.target);
             if (variable == variable_indices.end()) {
@@ -2101,6 +2185,27 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 : event.direction == "falling"
                     ? EventDirection::falling
                     : EventDirection::any;
+            std::function<EvaluationStatus(
+                double, std::vector<double>&,
+                std::vector<double>&)> transition;
+            if (!event.actions.empty()) {
+                std::vector<std::pair<std::string, double>> updates;
+                updates.reserve(event.actions.size());
+                for (const auto& action : event.actions) {
+                    updates.emplace_back(
+                        action.target, action.value.value_si);
+                }
+                transition =
+                    [transitioned_input_values,
+                     updates = std::move(updates)](
+                        double, std::vector<double>&,
+                        std::vector<double>&) {
+                        for (const auto& [target, value] : updates) {
+                            (*transitioned_input_values)[target] = value;
+                        }
+                        return EvaluationStatus::success();
+                    };
+            }
             graph.problem.events.push_back(DaeEvent{
                 event.id,
                 [index = variable->second,
@@ -2110,6 +2215,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 },
                 direction,
                 event.terminal,
+                std::move(transition),
             });
         }
         for (const auto& [_, schedule] :

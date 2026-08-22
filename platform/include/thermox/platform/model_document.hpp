@@ -89,11 +89,18 @@ struct InputScheduleDefinition {
 };
 
 struct StateEventDefinition {
+    struct Action {
+        std::string type;
+        std::string target;
+        ScalarValue value;
+    };
+
     std::string id;
     std::string target;
     ScalarValue threshold;
     std::string direction;
     bool terminal{false};
+    std::vector<Action> actions;
 };
 
 struct CaseDefinition {

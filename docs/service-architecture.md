@@ -55,6 +55,8 @@ The current synchronous service exposes:
   the adaptive DAE solver;
 - typed case-owned state-threshold events with dimensional validation, directional crossing,
   nonterminal evidence capture, and terminal protective-trip behavior;
+- typed event-driven `set_input` transitions over declared algebraic boundaries and controls, with
+  post-transition graph evidence and no service-owned physics logic;
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v16` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
   and data-reconciliation jobs with required
