@@ -128,6 +128,32 @@ void input_schedule_map(
     out << "}";
 }
 
+void state_events(
+    std::ostream& out,
+    const std::vector<platform::StateEventDefinition>& events,
+    std::string_view indent) {
+    out << "[";
+    if (!events.empty()) out << "\n";
+    for (std::size_t index = 0; index < events.size(); ++index) {
+        const auto& event = events[index];
+        out << indent << "{\"id\": ";
+        json_string(out, event.id);
+        out << ", \"target\": ";
+        json_string(out, event.target);
+        out << ", \"threshold\": ";
+        scalar_value(out, event.threshold);
+        out << ", \"direction\": ";
+        json_string(out, event.direction);
+        out << ", \"terminal\": "
+            << (event.terminal ? "true" : "false") << "}"
+            << (index + 1U == events.size() ? "\n" : ",\n");
+    }
+    if (!events.empty()) {
+        out << std::string(indent.size() - 2, ' ');
+    }
+    out << "]";
+}
+
 void calibration_definition_json(
     std::ostream& out,
     const platform::CalibrationDefinition& calibration,
@@ -1092,6 +1118,11 @@ std::string serialize_case_document_json(
         scalar_map(
             out, simulation_case.initial_guesses, "      ");
     }
+    if (!simulation_case.state_events.empty()) {
+        out << ",\n    \"state_events\": ";
+        state_events(
+            out, simulation_case.state_events, "      ");
+    }
     if (!simulation_case.solver_options.empty()) {
         out << ",\n    \"solver_options\": ";
         scalar_map(
@@ -1151,6 +1182,11 @@ std::string serialize_model_document_json(
         if (!simulation_case.initial_guesses.empty()) {
             out << ",\n      \"initial_guesses\": ";
             scalar_map(out, simulation_case.initial_guesses, "        ");
+        }
+        if (!simulation_case.state_events.empty()) {
+            out << ",\n      \"state_events\": ";
+            state_events(
+                out, simulation_case.state_events, "        ");
         }
         if (!simulation_case.solver_options.empty()) {
             out << ",\n      \"solver_options\": ";

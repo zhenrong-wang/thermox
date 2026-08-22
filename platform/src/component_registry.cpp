@@ -1148,10 +1148,11 @@ CompiledModelGraph compile_flat_model_graph(
     const std::string& case_id) {
     const CaseDefinition* active_case = select_case(document, case_id);
     if (active_case != nullptr &&
-        !active_case->input_schedules.empty()) {
+        (!active_case->input_schedules.empty() ||
+         !active_case->state_events.empty())) {
         throw std::invalid_argument(
             "case '" + active_case->id +
-            "' declares input_schedules and requires transient "
+            "' declares dynamic schedules/events and requires transient "
             "compilation");
     }
 
@@ -2078,6 +2079,39 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     if (active_case != nullptr) {
+        for (const auto& event : active_case->state_events) {
+            const auto variable = variable_indices.find(event.target);
+            if (variable == variable_indices.end()) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id + "' state event '" +
+                    event.id +
+                    "' references unknown graph variable: " +
+                    event.target);
+            }
+            if (event.threshold.dimension !=
+                variable_dimensions.at(event.target)) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id + "' state event '" +
+                    event.id + "' threshold dimension does not match "
+                    "graph variable dimension '" +
+                    variable_dimensions.at(event.target) + "'");
+            }
+            const auto direction = event.direction == "rising"
+                ? EventDirection::rising
+                : event.direction == "falling"
+                    ? EventDirection::falling
+                    : EventDirection::any;
+            graph.problem.events.push_back(DaeEvent{
+                event.id,
+                [index = variable->second,
+                 threshold = event.threshold.value_si](
+                    double, const std::vector<double>& state) {
+                    return state.at(index) - threshold;
+                },
+                direction,
+                event.terminal,
+            });
+        }
         for (const auto& [_, schedule] :
              active_case->input_schedules) {
             for (const auto& point : schedule.points) {

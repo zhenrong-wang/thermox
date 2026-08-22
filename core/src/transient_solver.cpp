@@ -1170,6 +1170,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         has_bdf2_history = true;
         state = std::move(second_half.state);
         derivative = std::move(second_half.derivative);
+        std::vector<double> state_before_discontinuity;
         ++result.diagnostics.accepted_steps;
         result.diagnostics.maximum_order_used = std::max(
             result.diagnostics.maximum_order_used, trial_order);
@@ -1180,6 +1181,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             const double discontinuity =
                 problem.time_discontinuities[next_time_discontinuity];
             time = discontinuity;
+            state_before_discontinuity = state;
             DaeProblem reinitialization_problem = problem;
             reinitialization_problem.initial_state = state;
             reinitialization_problem.initial_derivative = derivative;
@@ -1231,21 +1233,42 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
 
         bool terminal_event = false;
         std::size_t earliest_terminal_index = std::numeric_limits<std::size_t>::max();
+        bool earliest_terminal_at_discontinuity = false;
         for (std::size_t i = 0; i < problem.events.size(); ++i) {
             const auto& event = problem.events[i];
             const double current_value = event.evaluate(time, state);
-            if (event_crossed(previous_event_values[i], current_value, event.direction)) {
+            const double continuous_time = lands_on_discontinuity
+                ? std::nextafter(
+                      time, -std::numeric_limits<double>::infinity())
+                : time;
+            const std::vector<double>& continuous_state =
+                lands_on_discontinuity ? state_before_discontinuity : state;
+            const double continuous_value = lands_on_discontinuity
+                ? event.evaluate(continuous_time, continuous_state)
+                : current_value;
+
+            const auto record_event = [&] (
+                double before_value,
+                double after_value,
+                double before_time,
+                double after_time,
+                const std::vector<double>& before_state,
+                const std::vector<double>& after_state,
+                bool at_discontinuity) {
                 const double denominator =
-                    std::abs(previous_event_values[i]) + std::abs(current_value);
+                    std::abs(before_value) + std::abs(after_value);
                 const double fraction =
-                    denominator == 0.0 ? 1.0 : std::abs(previous_event_values[i]) / denominator;
+                    at_discontinuity || denominator == 0.0
+                        ? 1.0
+                        : std::abs(before_value) / denominator;
                 DetectedEvent detected;
                 detected.name = event.name;
-                detected.time = previous_time + fraction * step;
+                detected.time = before_time + fraction * (after_time - before_time);
                 detected.state.resize(size);
                 for (std::size_t j = 0; j < size; ++j) {
                     detected.state[j] =
-                        previous_state[j] + fraction * (state[j] - previous_state[j]);
+                        before_state[j] +
+                        fraction * (after_state[j] - before_state[j]);
                 }
                 detected.terminal = event.terminal;
                 result.events.push_back(std::move(detected));
@@ -1255,7 +1278,25 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                      result.events.back().time <
                          result.events[earliest_terminal_index].time)) {
                     earliest_terminal_index = result.events.size() - 1;
+                    earliest_terminal_at_discontinuity = at_discontinuity;
                 }
+            };
+
+            if (event_crossed(
+                    previous_event_values[i], continuous_value,
+                    event.direction)) {
+                record_event(
+                    previous_event_values[i], continuous_value,
+                    previous_time, continuous_time,
+                    previous_state, continuous_state, false);
+            }
+            if (lands_on_discontinuity &&
+                event_crossed(
+                    continuous_value, current_value, event.direction)) {
+                record_event(
+                    continuous_value, current_value,
+                    time, time,
+                    state_before_discontinuity, state, true);
             }
             previous_event_values[i] = current_value;
         }
@@ -1264,8 +1305,10 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 result.events[earliest_terminal_index];
             const double event_step = earliest_terminal.time - previous_time;
             state = earliest_terminal.state;
-            derivative.assign(size, 0.0);
-            if (event_step > 0.0) {
+            if (!earliest_terminal_at_discontinuity) {
+                derivative.assign(size, 0.0);
+            }
+            if (!earliest_terminal_at_discontinuity && event_step > 0.0) {
                 for (std::size_t i = 0; i < size; ++i) {
                     derivative[i] = (state[i] - previous_state[i]) / event_step;
                 }

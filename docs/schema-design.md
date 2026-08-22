@@ -259,6 +259,12 @@ input_schedules:
         value: 1.0
       - time: {value: 30, unit: s}
         value: 0.75
+state_events:
+  - id: high_pressure_trip
+    target: steam_drum.pressure
+    threshold: {value: 130, unit: bar}
+    direction: rising
+    terminal: true
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -359,6 +365,14 @@ At a `previous` knot, the DAE solver integrates to the left limit under the old 
 all differential states, then consistently resolves algebraic states and state derivatives under
 the new command at the same physical time. This makes trips, valve commands, set-point steps, and
 load changes explicit without approximating them as arbitrarily steep ramps.
+
+Dynamic cases may also declare `state_events`. An event observes one canonical DAE graph variable
+and compares it with a dimensionally compatible threshold. `direction` selects `rising`, `falling`,
+or `any`. A nonterminal event records engineering evidence while integration continues; a terminal
+event records the event and stops the trajectory at its detected state. Events caused by a
+right-continuous scheduled jump are stamped at the exact discontinuity with the post-jump state.
+Event-triggered parameter changes and equation-mode switching are intentionally a later, explicit
+hybrid-system contract rather than hidden callback behavior.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`

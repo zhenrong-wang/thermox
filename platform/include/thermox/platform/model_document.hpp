@@ -88,6 +88,14 @@ struct InputScheduleDefinition {
     std::vector<InputSchedulePointDefinition> points;
 };
 
+struct StateEventDefinition {
+    std::string id;
+    std::string target;
+    ScalarValue threshold;
+    std::string direction;
+    bool terminal{false};
+};
+
 struct CaseDefinition {
     std::string id;
     std::string label;
@@ -96,6 +104,7 @@ struct CaseDefinition {
     std::map<std::string, ScalarValue> fixed_values;
     std::map<std::string, InputScheduleDefinition> input_schedules;
     std::map<std::string, ScalarValue> initial_guesses;
+    std::vector<StateEventDefinition> state_events;
     std::map<std::string, ScalarValue> solver_options;
 };
 

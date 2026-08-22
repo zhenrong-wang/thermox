@@ -376,6 +376,15 @@ std::string require_string(const JsonValue& object, const std::string& key) {
     return value.string;
 }
 
+bool require_boolean(const JsonValue& object, const std::string& key) {
+    const JsonValue& value = require_member(object, key);
+    if (value.type != JsonValue::Type::Bool) {
+        throw std::invalid_argument(
+            "field '" + key + "' must be a boolean");
+    }
+    return value.boolean;
+}
+
 std::string require_string_value(
     const JsonValue& value,
     const std::string& field_name) {
@@ -793,6 +802,33 @@ InputScheduleDefinition parse_input_schedule(
     return schedule;
 }
 
+StateEventDefinition parse_state_event(
+    const JsonValue& value,
+    const std::string& case_id) {
+    if (value.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "case '" + case_id +
+            "'.state_events entries must be objects");
+    }
+    StateEventDefinition event;
+    event.id = require_string(value, "id");
+    event.target = require_string(value, "target");
+    event.threshold = parse_scalar_value(
+        require_member(value, "threshold"),
+        "case '" + case_id + "'.state_events." +
+            event.id + ".threshold");
+    event.direction = require_string(value, "direction");
+    if (event.direction != "any" &&
+        event.direction != "rising" &&
+        event.direction != "falling") {
+        throw std::invalid_argument(
+            "case '" + case_id + "' state event '" + event.id +
+            "' direction must be 'any', 'rising', or 'falling'");
+    }
+    event.terminal = require_boolean(value, "terminal");
+    return event;
+}
+
 CaseDefinition parse_case(const JsonValue& value) {
     if (value.type != JsonValue::Type::Object) {
         throw std::invalid_argument("cases entries must be objects");
@@ -824,6 +860,17 @@ CaseDefinition parse_case(const JsonValue& value) {
     }
     if (const JsonValue* initial_guesses = optional_object_member(value, "initial_guesses")) {
         c.initial_guesses = parse_scalar_map(*initial_guesses, "case '" + c.id + "'.initial_guesses");
+    }
+    if (const auto* state_events =
+            optional_array_member(value, "state_events")) {
+        std::set<std::string> event_ids;
+        for (const auto& event_value : state_events->array) {
+            auto event = parse_state_event(event_value, c.id);
+            require_unique_id(
+                event.id, event_ids,
+                "state event in case '" + c.id + "'");
+            c.state_events.push_back(std::move(event));
+        }
     }
     if (const JsonValue* solver_options = optional_object_member(value, "solver_options")) {
         c.solver_options = parse_scalar_map(*solver_options, "case '" + c.id + "'.solver_options", true);

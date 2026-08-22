@@ -429,6 +429,9 @@ Next:
 27. Add right-continuous sample-and-hold schedules for steps and trips, with left-limit advancement,
     differential-state preservation, same-time algebraic/derivative reinitialization, and safe BDF
     restart at every discontinuity. ✅
+28. Add typed, case-owned state-threshold events with dimensional target validation, directional
+    crossing, nonterminal evidence, terminal protective trips, canonical persistence, and exact
+    right-continuous event handling at scheduled discontinuities. ✅
 
 See `docs/calibration-architecture.md`.
 

@@ -259,6 +259,10 @@ ModelDocument flatten_model_document(const ModelDocument& document) {
             simulation_case.input_schedules, public_ports);
         rewrite_case_keys(
             simulation_case.initial_guesses, public_ports);
+        for (auto& event : simulation_case.state_events) {
+            event.target = rewrite_public_variable(
+                event.target, public_ports);
+        }
         std::map<std::string, ScalarValue> overrides;
         for (auto& [key, value] :
              simulation_case.parameter_overrides) {

@@ -5635,6 +5635,48 @@ void test_transient_expression_component_flows_through_service() {
         "post-knot trajectory must integrate the held command only after "
         "the discontinuity");
 
+    auto trip_request = held_schedule;
+    const std::string initial_state_declaration =
+        "\"initial_guesses\": {\"lag.filtered\": 0.0}";
+    const auto initial_state_position =
+        trip_request.model_json.find(initial_state_declaration);
+    require(
+        initial_state_position != std::string::npos,
+        "transient fixture must expose its initial-state declaration");
+    trip_request.model_json.insert(
+        initial_state_position,
+        "\"state_events\": [{"
+        "\"id\": \"high_output_trip\", "
+        "\"target\": \"lag.filtered\", "
+        "\"threshold\": 0.1, "
+        "\"direction\": \"rising\", "
+        "\"terminal\": true}],\n    ");
+    const auto trip_response = service.run_transient(trip_request);
+    require(
+        trip_response.succeeded() &&
+            trip_response.events.size() == 1U &&
+            trip_response.events.front().name == "high_output_trip" &&
+            trip_response.events.front().terminal &&
+            trip_response.events.front().time > 0.68 &&
+            trip_response.events.front().time < 0.74 &&
+            trip_response.trajectory.back().time ==
+                trip_response.events.front().time,
+        "case-owned state event must stop the ordinary transient solve "
+        "at the rising threshold");
+    const auto parsed_trip =
+        thermox::platform::parse_model_document_text(
+            trip_request.model_json);
+    const auto canonical_trip =
+        thermox::service::detail::serialize_model_document_json(
+            parsed_trip);
+    const auto reparsed_trip =
+        thermox::platform::parse_model_document_text(canonical_trip);
+    require(
+        reparsed_trip.cases.front().state_events.size() == 1U &&
+            reparsed_trip.cases.front().state_events.front().terminal,
+        "canonical model serialization must preserve state-triggered "
+        "event declarations");
+
     auto differential_schedule = request;
     const auto scheduled_target =
         differential_schedule.model_json.find("lag.input.value");

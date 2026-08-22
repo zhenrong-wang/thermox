@@ -53,6 +53,8 @@ The current synchronous service exposes:
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by
   the adaptive DAE solver;
+- typed case-owned state-threshold events with dimensional validation, directional crossing,
+  nonterminal evidence capture, and terminal protective-trip behavior;
 - deterministic runtime-catalog fingerprints and native application composition.
 - `thermox.job/v16` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
   and data-reconciliation jobs with required

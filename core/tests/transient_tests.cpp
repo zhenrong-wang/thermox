@@ -534,6 +534,13 @@ void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
     };
     problem.time_breakpoints = {0.5};
     problem.time_discontinuities = {0.5};
+    problem.events.push_back(thermox::DaeEvent{
+        "command_enabled",
+        [](double, const std::vector<double>& state) {
+            return state[1] - 0.5;
+        },
+        thermox::EventDirection::rising,
+        false});
 
     thermox::TimeIntegrationOptions options;
     options.end_time = 1.0;
@@ -561,6 +568,16 @@ void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
         result.trajectory.back().state[0], 0.5, 1.0e-6,
         "differential state must integrate the post-knot command only "
         "after the discontinuity");
+    require(
+        result.events.size() == 1,
+        "an algebraic jump must produce exactly one state event");
+    require_near(
+        result.events.front().time, 0.5, 0.0,
+        "an event caused by an algebraic jump must occur at the exact "
+        "discontinuity time");
+    require_near(
+        result.events.front().state[1], 1.0, 1.0e-9,
+        "a jump event must report the right-continuous post-jump state");
 
     problem.time_breakpoints.clear();
     try {
