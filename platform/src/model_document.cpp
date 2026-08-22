@@ -741,10 +741,11 @@ InputScheduleDefinition parse_input_schedule(
     }
     InputScheduleDefinition schedule;
     schedule.interpolation = require_string(value, "interpolation");
-    if (schedule.interpolation != "linear") {
+    if (schedule.interpolation != "linear" &&
+        schedule.interpolation != "previous") {
         throw std::invalid_argument(
             "field '" + field_name +
-            ".interpolation' must be 'linear'");
+            ".interpolation' must be 'linear' or 'previous'");
     }
     const auto points = require_array_member(value, "points");
     if (points.array.size() < 2U) {

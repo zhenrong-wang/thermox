@@ -93,6 +93,11 @@ struct DaeProblem {
     // regime. The adaptive integrator lands exactly on each in-range value
     // and restarts multistep history before continuing.
     std::vector<double> time_breakpoints;
+    // Right-continuous discontinuities. Each must also be a time breakpoint.
+    // The integrator advances to its left limit, preserves differential
+    // states, and performs a consistent algebraic/derivative reinitialization
+    // at the exact declared time.
+    std::vector<double> time_discontinuities;
 };
 
 struct DaeInitializationResult {

@@ -499,6 +499,84 @@ void test_adaptive_integration_honors_problem_time_breakpoints() {
         "adaptive integration must reject unordered problem breakpoints");
 }
 
+void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
+    thermox::DaeProblem problem;
+    problem.variable_names = {"inventory", "command"};
+    problem.residual_names = {"inventory_balance", "command_schedule"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::differential,
+        thermox::DaeVariableKind::algebraic};
+    problem.initial_state = {0.0, 0.0};
+    problem.initial_derivative = {0.0, 0.0};
+    problem.variable_scales = {1.0, 1.0};
+    problem.derivative_scales = {1.0, 1.0};
+    problem.residual_scales = {1.0, 1.0};
+    problem.residual = [](
+        double time,
+        const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        const double command = time < 0.5 ? 0.0 : 1.0;
+        residual[0] = derivative[0] - state[1];
+        residual[1] = state[1] - command;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double,
+        const std::vector<double>&,
+        const std::vector<double>&,
+        double derivative_coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = derivative_coefficient;
+        jacobian[0][1] = -1.0;
+        jacobian[1][1] = 1.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.time_breakpoints = {0.5};
+    problem.time_discontinuities = {0.5};
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 1.0;
+    options.initial_step = 0.3;
+    options.max_step = 0.3;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    const auto knot = std::find_if(
+        result.trajectory.begin(), result.trajectory.end(),
+        [](const auto& sample) {
+            return sample.time == 0.5;
+        });
+    require(
+        knot != result.trajectory.end(),
+        "discontinuous DAE input must emit its exact knot");
+    require_near(
+        knot->state[0], 0.0, 1.0e-9,
+        "differential state must not integrate the new command before "
+        "its right-continuous knot");
+    require_near(
+        knot->state[1], 1.0, 1.0e-9,
+        "algebraic state must be consistently reinitialized to the new "
+        "command at the knot");
+    require_near(
+        result.trajectory.back().state[0], 0.5, 1.0e-6,
+        "differential state must integrate the post-knot command only "
+        "after the discontinuity");
+
+    problem.time_breakpoints.clear();
+    try {
+        (void)thermox::integrate_dae(problem, options);
+    } catch (const std::invalid_argument& error) {
+        require(
+            std::string(error.what()).find("must also be a time breakpoint") !=
+                std::string::npos,
+            "discontinuity validation must require exact breakpoint "
+            "ownership");
+        return;
+    }
+    throw std::runtime_error(
+        "DAE discontinuities without breakpoints must be rejected");
+}
+
 void test_index_one_dae_consistent_initialization_and_integration() {
     thermox::DaeProblem problem;
     problem.variable_names = {"inventory", "algebraic_flow"};
@@ -635,6 +713,7 @@ int main() {
         test_native_bdf_rejects_unsupported_order();
         test_adaptive_integration_honors_required_output_times();
         test_adaptive_integration_honors_problem_time_breakpoints();
+        test_discontinuity_preserves_state_and_reinitializes_algebraics();
         test_index_one_dae_consistent_initialization_and_integration();
         test_adaptive_error_control_uses_differential_states_only();
         test_terminal_event_stops_integration();

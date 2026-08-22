@@ -399,6 +399,9 @@ double interpolate_input_schedule(
             return candidate < point.time.value_si;
         });
     const auto lower = std::prev(upper);
+    if (schedule.interpolation == "previous") {
+        return lower->value.value_si;
+    }
     const double fraction =
         (time - lower->time.value_si) /
         (upper->time.value_si - lower->time.value_si);
@@ -2081,6 +2084,13 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 graph.problem.time_breakpoints.push_back(
                     point.time.value_si);
             }
+            if (schedule.interpolation == "previous") {
+                for (std::size_t index = 1;
+                     index < schedule.points.size(); ++index) {
+                    graph.problem.time_discontinuities.push_back(
+                        schedule.points[index].time.value_si);
+                }
+            }
         }
         std::sort(
             graph.problem.time_breakpoints.begin(),
@@ -2090,6 +2100,14 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 graph.problem.time_breakpoints.begin(),
                 graph.problem.time_breakpoints.end()),
             graph.problem.time_breakpoints.end());
+        std::sort(
+            graph.problem.time_discontinuities.begin(),
+            graph.problem.time_discontinuities.end());
+        graph.problem.time_discontinuities.erase(
+            std::unique(
+                graph.problem.time_discontinuities.begin(),
+                graph.problem.time_discontinuities.end()),
+            graph.problem.time_discontinuities.end());
     }
     return graph;
 }

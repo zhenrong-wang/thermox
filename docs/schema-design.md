@@ -253,7 +253,7 @@ fixed_values:
     unit: MW
 input_schedules:
   load_setpoint.outlet.value:
-    interpolation: linear
+    interpolation: previous
     points:
       - time: {value: 0, unit: s}
         value: 1.0
@@ -349,10 +349,16 @@ rather than initialize it.
 
 Dynamic cases may use `input_schedules` to prescribe time-varying algebraic boundaries or control
 inputs. Each target is a canonical graph-variable path and declares at least two strictly ordered,
-dimensionally compatible time/value points. The current interpolation contract is `linear`; values
-are held at the first and last knots outside the declared interval. A target cannot also appear in
-`fixed_values`, and differential states remain owned by their accumulation equations rather than
-being directly scheduled.
+dimensionally compatible time/value points. `linear` provides continuous ramps. `previous`
+provides right-continuous sample-and-hold commands: the new point value applies at its exact time
+and remains active until the next point. Values are held at the first and last knots outside the
+declared interval. A target cannot also appear in `fixed_values`, and differential states remain
+owned by their accumulation equations rather than being directly scheduled.
+
+At a `previous` knot, the DAE solver integrates to the left limit under the old command, preserves
+all differential states, then consistently resolves algebraic states and state derivatives under
+the new command at the same physical time. This makes trips, valve commands, set-point steps, and
+load changes explicit without approximating them as arbitrarily steep ramps.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`

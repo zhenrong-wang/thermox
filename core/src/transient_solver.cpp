@@ -125,6 +125,26 @@ void validate_dae_problem(const DaeProblem& problem) {
         }
         previous_breakpoint = breakpoint;
     }
+    double previous_discontinuity =
+        -std::numeric_limits<double>::infinity();
+    for (const double discontinuity : problem.time_discontinuities) {
+        if (!std::isfinite(discontinuity)) {
+            throw std::invalid_argument(
+                "DAE time discontinuities must be finite");
+        }
+        if (discontinuity <= previous_discontinuity) {
+            throw std::invalid_argument(
+                "DAE time discontinuities must be strictly increasing");
+        }
+        if (!std::binary_search(
+                problem.time_breakpoints.begin(),
+                problem.time_breakpoints.end(), discontinuity)) {
+            throw std::invalid_argument(
+                "each DAE time discontinuity must also be a time "
+                "breakpoint");
+        }
+        previous_discontinuity = discontinuity;
+    }
 }
 
 void validate_integration_options(const TimeIntegrationOptions& options) {
@@ -946,6 +966,12 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
            problem.time_breakpoints[next_time_breakpoint] <= time) {
         ++next_time_breakpoint;
     }
+    std::size_t next_time_discontinuity = 0;
+    while (next_time_discontinuity <
+               problem.time_discontinuities.size() &&
+           problem.time_discontinuities[next_time_discontinuity] <= time) {
+        ++next_time_discontinuity;
+    }
     std::vector<double> previous_event_values;
     previous_event_values.reserve(problem.events.size());
     for (const auto& event : problem.events) {
@@ -986,16 +1012,37 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             return result;
         }
 
+        const double trial_end_time = time + step;
+        bool lands_on_discontinuity = false;
+        double residual_end_time = trial_end_time;
+        if (next_time_discontinuity <
+            problem.time_discontinuities.size()) {
+            const double discontinuity =
+                problem.time_discontinuities[next_time_discontinuity];
+            const double discontinuity_roundoff =
+                16.0 * std::numeric_limits<double>::epsilon() *
+                std::max({1.0, std::abs(trial_end_time),
+                          std::abs(discontinuity)});
+            lands_on_discontinuity =
+                std::abs(trial_end_time - discontinuity) <=
+                discontinuity_roundoff;
+            if (lands_on_discontinuity) {
+                residual_end_time = std::nextafter(
+                    discontinuity,
+                    -std::numeric_limits<double>::infinity());
+            }
+        }
+
         const int trial_order =
             options.maximum_order >= 2 && has_bdf2_history ? 2 : 1;
         auto full = trial_order == 2
             ? solve_bdf2_step(
-                  problem, time + step, step, state, older_state,
+                  problem, residual_end_time, step, state, older_state,
                   previous_accepted_step, variable_scales,
                   residual_scales, lower_bounds, upper_bounds,
                   nonlinear_options)
             : solve_backward_euler_step(
-                  problem, time + step, step, state, derivative,
+                  problem, residual_end_time, step, state, derivative,
                   variable_scales, residual_scales, lower_bounds,
                   upper_bounds, nonlinear_options);
         accumulate_nonlinear_diagnostics(full.diagnostics);
@@ -1020,12 +1067,12 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         if (full.success && first_half.success) {
             second_half = trial_order == 2
                 ? solve_bdf2_step(
-                      problem, time + step, 0.5 * step,
+                      problem, residual_end_time, 0.5 * step,
                       first_half.state, state, 0.5 * step,
                       variable_scales, residual_scales, lower_bounds,
                       upper_bounds, nonlinear_options)
                 : solve_backward_euler_step(
-                      problem, time + step, 0.5 * step,
+                      problem, residual_end_time, 0.5 * step,
                       first_half.state, first_half.derivative,
                       variable_scales, residual_scales, lower_bounds,
                       upper_bounds, nonlinear_options);
@@ -1129,6 +1176,29 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         result.diagnostics.last_step = step;
         result.diagnostics.maximum_accepted_error_norm = std::max(
             result.diagnostics.maximum_accepted_error_norm, error);
+        if (lands_on_discontinuity) {
+            const double discontinuity =
+                problem.time_discontinuities[next_time_discontinuity];
+            time = discontinuity;
+            DaeProblem reinitialization_problem = problem;
+            reinitialization_problem.initial_state = state;
+            reinitialization_problem.initial_derivative = derivative;
+            auto initialized = make_consistent_initial_conditions(
+                reinitialization_problem, time, nonlinear_options);
+            accumulate_nonlinear_diagnostics(initialized.diagnostics);
+            if (!initialized.diagnostics.converged) {
+                result.diagnostics.message =
+                    "consistent discontinuity reinitialization failed at "
+                    "time " + std::to_string(time) + ": " +
+                    initialized.diagnostics.message;
+                result.diagnostics.final_time = time;
+                return result;
+            }
+            state = std::move(initialized.state);
+            derivative = std::move(initialized.derivative);
+            ++next_time_discontinuity;
+            has_bdf2_history = false;
+        }
         result.trajectory.push_back(DaeState{time, state, derivative});
         if (next_required_output < options.required_output_times.size()) {
             const double required_time =

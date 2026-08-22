@@ -426,6 +426,9 @@ Next:
 26. Add typed, case-owned piecewise-linear boundary/control schedules, dimension-aware graph
     compilation, canonical persistence, and problem-owned DAE knot landing with safe multistep
     restart. ✅
+27. Add right-continuous sample-and-hold schedules for steps and trips, with left-limit advancement,
+    differential-state preservation, same-time algebraic/derivative reinitialization, and safe BDF
+    restart at every discontinuity. ✅
 
 See `docs/calibration-architecture.md`.
 

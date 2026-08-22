@@ -5577,6 +5577,64 @@ void test_transient_expression_component_flows_through_service() {
         "transient service must land exactly on a declared input-schedule "
         "knot even when it is not a requested output time");
 
+    auto held_schedule = request;
+    const std::string linear_interpolation =
+        "\"interpolation\": \"linear\"";
+    const auto interpolation_position =
+        held_schedule.model_json.find(linear_interpolation);
+    require(
+        interpolation_position != std::string::npos,
+        "scheduled-input fixture must expose its interpolation policy");
+    held_schedule.model_json.replace(
+        interpolation_position, linear_interpolation.size(),
+        "\"interpolation\": \"previous\"");
+    const auto held_response = service.run_transient(held_schedule);
+    require(
+        held_response.succeeded(),
+        "right-continuous held input schedule must solve: " +
+            held_response.error.message);
+    const auto held_before = std::find_if(
+        held_response.trajectory.begin(), held_response.trajectory.end(),
+        [](const auto& sample) {
+            return sample.time == 0.37;
+        });
+    const auto held_knot = std::find_if(
+        held_response.trajectory.begin(), held_response.trajectory.end(),
+        [](const auto& sample) {
+            return sample.time == 0.5;
+        });
+    require(
+        held_before != held_response.trajectory.end() &&
+            require_result_value(
+                require_port_result(
+                    held_before->graph, "lag", "input")
+                    .primary_values,
+                "value")
+                    .value_si == 0.0,
+        "previous interpolation must retain the prior command before "
+        "the knot");
+    require(
+        held_knot != held_response.trajectory.end() &&
+            require_result_value(
+                require_port_result(
+                    held_knot->graph, "lag", "input")
+                    .primary_values,
+                "value")
+                    .value_si == 1.0 &&
+            std::abs(
+                require_component_result(
+                    held_knot->graph, "lag")
+                    .internal_values.front().value_si) < 1.0e-9,
+        "right-continuous knot must update algebraic commands without "
+        "jumping differential states");
+    const auto& held_final = require_component_result(
+        held_response.trajectory.back().graph, "lag");
+    require(
+        held_final.internal_values.front().value_si > 0.20 &&
+            held_final.internal_values.front().value_si < 0.24,
+        "post-knot trajectory must integrate the held command only after "
+        "the discontinuity");
+
     auto differential_schedule = request;
     const auto scheduled_target =
         differential_schedule.model_json.find("lag.input.value");

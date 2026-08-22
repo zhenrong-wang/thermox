@@ -145,6 +145,9 @@ targets index-1 systems.
 - exact landing on problem-owned time breakpoints with a safe BDF1 history restart, allowing
   time-dependent physics and boundary schedules to change slope without a multistep stencil
   crossing the knot;
+- right-continuous discontinuity handling that advances under the left-limit residual, preserves
+  differential states, consistently reinitializes algebraic states and state derivatives at the
+  exact jump time, and then restarts integration at BDF1;
 - trajectory, nonlinear-work, accepted-error, and limiting-state diagnostics;
 - rising, falling, and direction-independent events;
 - terminal events with an interpolated terminal state.
