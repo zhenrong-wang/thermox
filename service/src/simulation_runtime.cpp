@@ -137,6 +137,10 @@ std::string catalog_fingerprint(
             hash_number(hash, variable.lower_bound);
             hash_number(hash, variable.upper_bound);
         }
+        for (const auto& mode : descriptor.supported_modes) {
+            hash_text(hash, mode);
+        }
+        hash_text(hash, descriptor.default_mode);
         hash_text(
             hash,
             descriptor.supports_steady ? "steady" : "not_steady");

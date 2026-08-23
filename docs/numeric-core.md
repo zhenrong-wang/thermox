@@ -245,6 +245,13 @@ The physics/model compiler remains responsible for:
 
 The numeric core does not know about fluids, phases, turbines, reactors, or units.
 
+Hybrid component behavior is represented without teaching the numeric kernel about equipment
+modes. The platform owns discrete mode state and supplies mode-dependent residual/Jacobian
+callbacks on a fixed DAE graph. A detected event applies its typed transition, preserves
+differential state, requests consistent algebraic/derivative reinitialization, and restarts the
+multistep history. The existing event priority, hysteresis, and exact-time discontinuity contracts
+therefore apply equally to input transitions and component mode switches.
+
 ## Structural policy audit
 
 `benchmark_structural_policies` is an explicit SDK audit utility for comparing structural solve
@@ -287,3 +294,5 @@ different nonlinear algorithms under a structural-policy label.
   provider or continuation policy.
 - Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.
+- State-reset maps, variable-structure topology changes, and automatic index reduction are not
+  part of the current fixed-topology hybrid DAE contract.

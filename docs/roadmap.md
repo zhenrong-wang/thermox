@@ -98,7 +98,26 @@ Production follow-ons:
 Runtime extensibility now includes the safe `thermox.expression_component/v3` contract for
 index-1 transient residuals, internal algebraic/differential states, state rates, time, bounds,
 scales, and sparse analytic DAE Jacobians. Constrained property functions, thermochemistry,
-species-expanded variables, and discrete events remain follow-ons.
+species-expanded variables, and project-defined mode-specific equation sets remain follow-ons.
+
+## Fixed-topology hybrid component modes
+
+Goal: let registered equipment change operating equations during a transient without rebuilding
+the thermal-system graph. ✅
+
+Delivered:
+
+1. Registry-owned finite mode sets and a required default mode, published through the runtime
+   catalog and included in its deterministic fingerprint. ✅
+2. Case-owned initial component modes plus typed event-driven `set_mode` transitions with strict
+   component/mode validation and canonical serialization. ✅
+3. Fixed-topology DAE transitions that preserve differential states, consistently reinitialize
+   algebraic states and derivatives, restart integration history, and reset discrete state between
+   executions. ✅
+4. Native first-order actuator tracking/failsafe-decay modes verified against analytical crossing
+   time and post-transition dynamics. ✅
+5. Project-defined mode-specific safe expression equation sets, state-reset maps, and
+   variable-structure topology changes remain explicit follow-ons.
 
 ## System-agnostic transient platform milestone
 

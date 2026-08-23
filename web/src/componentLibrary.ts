@@ -17,6 +17,10 @@ export function componentMatchesFilter(
     component.category.toLowerCase().includes(query) ||
     component.model_name.toLowerCase().includes(query) ||
     component.system_boundary_role.toLowerCase().includes(query) ||
+    component.default_mode.toLowerCase().includes(query) ||
+    component.supported_modes.some((mode) =>
+      mode.toLowerCase().includes(query),
+    ) ||
     component.ports.some(
       (port) =>
         port.name.toLowerCase().includes(query) ||

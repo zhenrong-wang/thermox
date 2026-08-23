@@ -22,6 +22,8 @@ const compressor: CatalogComponent = {
   system_boundary_role: 'internal',
   supports_steady: true,
   supports_transient: true,
+  supported_modes: [],
+  default_mode: '',
   ports: [
     { name: 'inlet', domain: 'fluid', direction: 'in', maximum_connections: 1 },
     { name: 'outlet', domain: 'fluid', direction: 'out', maximum_connections: 1 },

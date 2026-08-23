@@ -107,6 +107,8 @@ struct ComponentModelDescriptor {
     bool supports_transient{false};
     std::vector<TransientVariableDescriptor> transient_variables;
     std::vector<InternalVariableDescriptor> internal_variables;
+    std::vector<std::string> supported_modes;
+    std::string default_mode;
 };
 
 struct ComponentCompileContext {
@@ -122,6 +124,7 @@ struct ComponentCompileContext {
         port_thermochemistry;
     std::map<std::string, std::shared_ptr<const EngineeringArtifact>>
         artifacts;
+    std::function<std::string()> active_mode;
 };
 
 class ComponentModel {

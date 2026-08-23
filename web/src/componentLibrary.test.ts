@@ -12,6 +12,8 @@ const component: CatalogComponent = {
   system_boundary_role: 'internal',
   supports_steady: true,
   supports_transient: false,
+  supported_modes: [],
+  default_mode: '',
   ports: [
     {
       name: 'inlet',
@@ -39,5 +41,14 @@ describe('component library presentation', () => {
     expect(componentMatchesFilter(component, 'inlet')).toBe(true)
     expect(componentMatchesFilter(component, 'shaft')).toBe(true)
     expect(componentMatchesFilter(component, 'reactor')).toBe(false)
+  })
+
+  it('finds registered operating modes', () => {
+    const hybrid = {
+      ...component,
+      supported_modes: ['tracking', 'failsafe'],
+      default_mode: 'tracking',
+    }
+    expect(componentMatchesFilter(hybrid, 'failsafe')).toBe(true)
   })
 })

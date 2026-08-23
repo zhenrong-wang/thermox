@@ -259,6 +259,8 @@ input_schedules:
         value: 1.0
       - time: {value: 30, unit: s}
         value: 0.75
+component_modes:
+  trip_valve: open
 state_events:
   - id: high_pressure_trip
     target: steam_drum.pressure
@@ -271,6 +273,9 @@ state_events:
       - type: set_input
         target: trip_valve.command.value
         value: 0.0
+      - type: set_mode
+        target: trip_valve
+        mode: closed
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -324,7 +329,7 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v10`, including physical-template identity, calculation-model labels,
+`thermox.catalog/v11`, including physical-template identity, calculation-model labels,
 internal-state names, dimensions, kinds, connector link contracts,
 numerical connector metadata, and a deterministic
 runtime fingerprint. Optional model behavior reads
@@ -355,6 +360,12 @@ Transient-capable component descriptors additionally declare:
   derivative scales;
 - transient residual and sparse Jacobian assembly.
 
+A descriptor may also register a finite set of operating `supported_modes` and exactly one
+`default_mode`. A case can select an initial mode per component through `component_modes`.
+Compilation rejects unknown components, mode declarations on mode-less models, and unsupported
+mode names. Modes select component-owned residual behavior while retaining the same compiled
+variables, connectors, and Jacobian incidence; they do not mutate graph topology.
+
 Cases use `initial_guesses` to initialize differential states. A transient case cannot place a
 differential state in `fixed_values`, because that would constrain it for the entire trajectory
 rather than initialize it.
@@ -378,15 +389,17 @@ or `any`. A nonterminal event records engineering evidence while integration con
 event records the event and stops the trajectory at its detected state. Events caused by a
 right-continuous scheduled jump are stamped at the exact discontinuity with the post-jump state.
 
-An event may declare one or more typed `set_input` actions. Each target must already be an
+An event may declare typed `set_input` and `set_mode` actions. Each `set_input` target must already be an
 algebraic boundary/control input declared by `fixed_values` or `input_schedules`, and the action
-value must match that graph variable's physical dimension. At the accepted crossing, the solver
+value must match that graph variable's physical dimension. A `set_mode` target is a component ID,
+and its requested mode must be registered by that component model. For expanded assemblies, this
+low-level declaration uses the canonical flattened child component ID. At the accepted crossing, the solver
 applies all actions in declaration order, preserves differential states unless a native transition
 explicitly resets them, consistently reinitializes algebraic states and derivatives, restarts BDF1,
 and continues unless the event is terminal. Result events report `transitioned: true` when actions
-were applied. Compiled hybrid problems reset their discrete input overrides before each sequential
-execution. Component parameter mutation and topology/equation-set replacement remain outside this
-contract; those require explicit component mode variables rather than rebuilding a graph mid-solve.
+were applied. Compiled hybrid problems reset their discrete input overrides and component modes to
+their case-owned initial values before each sequential execution. Parameter mutation and graph
+topology replacement remain outside this contract.
 
 `hysteresis` is an optional nonnegative distance in the observed variable's dimension. After a
 directed event fires, it cannot fire again until the surface retreats by at least that distance on

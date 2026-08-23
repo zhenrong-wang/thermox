@@ -6,13 +6,29 @@ import {
 import type { Catalog, TopologyDocument } from './types'
 
 const catalog = {
+  schema_version: 'thermox.catalog/v11',
+  status: 'succeeded',
+  fingerprint: 'test',
+  unit_dimensions: [],
+  property_backends: [],
+  thermochemistry_backends: [],
+  connector_domains: [],
+  correlation_templates: [],
+  correlation_family_templates: [],
+  regime_map_templates: [],
   components: [
     {
       kind: 'test.compressor',
       version: '1.0.0',
+      template_kind: 'compressor',
+      display_name: 'Test compressor',
+      category: 'Turbomachinery',
+      model_name: 'Test model',
       system_boundary_role: 'none',
       supports_steady: true,
       supports_transient: false,
+      supported_modes: [],
+      default_mode: '',
       ports: [
         {
           name: 'inlet',
@@ -36,7 +52,7 @@ const catalog = {
       artifacts: [{ role: 'map', required: true, artifact_type: 'perfmap' }],
     },
   ],
-} as Catalog
+} satisfies Catalog
 
 function topology(component: TopologyDocument['model']['components'][number]) {
   return {

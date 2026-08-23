@@ -487,6 +487,27 @@ std::map<std::string, ScalarValue> parse_scalar_map(const JsonValue& object,
     return scalars;
 }
 
+std::map<std::string, std::string> parse_string_map(
+    const JsonValue& object,
+    const std::string& field_name) {
+    if (object.type != JsonValue::Type::Object) {
+        throw std::invalid_argument(
+            "field '" + field_name + "' must be an object");
+    }
+    std::map<std::string, std::string> values;
+    for (const auto& [key, value] : object.object) {
+        const auto parsed = require_string_value(
+            value, field_name + "." + key);
+        if (parsed.empty()) {
+            throw std::invalid_argument(
+                "field '" + field_name + "." + key +
+                "' must be non-empty");
+        }
+        values.emplace(key, parsed);
+    }
+    return values;
+}
+
 std::string optional_string(const JsonValue& object, const std::string& key) {
     const JsonValue* value = find_member(object, key);
     if (value == nullptr) {
@@ -871,19 +892,25 @@ StateEventDefinition parse_state_event(
             }
             StateEventDefinition::Action action;
             action.type = require_string(action_value, "type");
-            if (action.type != "set_input") {
+            if (action.type != "set_input" &&
+                action.type != "set_mode") {
                 throw std::invalid_argument(
                     "case '" + case_id + "' state event '" +
-                    event.id + "' action type must be 'set_input'");
+                    event.id + "' action type must be 'set_input' or "
+                    "'set_mode'");
             }
             action.target = require_string(action_value, "target");
             require_unique_id(
                 action.target, action_targets,
-                "set_input target in state event '" + event.id + "'");
-            action.value = parse_scalar_value(
-                require_member(action_value, "value"),
-                "case '" + case_id + "'.state_events." +
-                    event.id + ".actions.value");
+                "action target in state event '" + event.id + "'");
+            if (action.type == "set_input") {
+                action.value = parse_scalar_value(
+                    require_member(action_value, "value"),
+                    "case '" + case_id + "'.state_events." +
+                        event.id + ".actions.value");
+            } else {
+                action.mode = require_string(action_value, "mode");
+            }
             event.actions.push_back(std::move(action));
         }
     }
@@ -921,6 +948,12 @@ CaseDefinition parse_case(const JsonValue& value) {
     }
     if (const JsonValue* initial_guesses = optional_object_member(value, "initial_guesses")) {
         c.initial_guesses = parse_scalar_map(*initial_guesses, "case '" + c.id + "'.initial_guesses");
+    }
+    if (const auto* component_modes =
+            optional_object_member(value, "component_modes")) {
+        c.component_modes = parse_string_map(
+            *component_modes,
+            "case '" + c.id + "'.component_modes");
     }
     if (const auto* state_events =
             optional_array_member(value, "state_events")) {

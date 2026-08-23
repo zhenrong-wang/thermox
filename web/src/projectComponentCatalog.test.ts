@@ -20,6 +20,8 @@ const native = {
   system_boundary_role: 'source',
   supports_steady: true,
   supports_transient: false,
+  supported_modes: [],
+  default_mode: '',
   ports: [],
   parameters: [],
   artifacts: [],
@@ -110,7 +112,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v10',
+  schema_version: 'thermox.catalog/v11',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],

@@ -94,6 +94,26 @@ void scalar_map(
     out << "}";
 }
 
+void string_map(
+    std::ostream& out,
+    const std::map<std::string, std::string>& values,
+    std::string_view indent) {
+    out << "{";
+    if (!values.empty()) out << "\n";
+    std::size_t index = 0;
+    for (const auto& [name, value] : values) {
+        out << indent;
+        json_string(out, name);
+        out << ": ";
+        json_string(out, value);
+        out << (++index == values.size() ? "\n" : ",\n");
+    }
+    if (!values.empty()) {
+        out << std::string(indent.size() - 2, ' ');
+    }
+    out << "}";
+}
+
 void input_schedule_map(
     std::ostream& out,
     const std::map<
@@ -161,8 +181,13 @@ void state_events(
                 json_string(out, action.type);
                 out << ", \"target\": ";
                 json_string(out, action.target);
-                out << ", \"value\": ";
-                scalar_value(out, action.value);
+                if (action.type == "set_input") {
+                    out << ", \"value\": ";
+                    scalar_value(out, action.value);
+                } else {
+                    out << ", \"mode\": ";
+                    json_string(out, action.mode);
+                }
                 out << "}";
             }
             out << "]";
@@ -1140,6 +1165,11 @@ std::string serialize_case_document_json(
         scalar_map(
             out, simulation_case.initial_guesses, "      ");
     }
+    if (!simulation_case.component_modes.empty()) {
+        out << ",\n    \"component_modes\": ";
+        string_map(
+            out, simulation_case.component_modes, "      ");
+    }
     if (!simulation_case.state_events.empty()) {
         out << ",\n    \"state_events\": ";
         state_events(
@@ -1204,6 +1234,12 @@ std::string serialize_model_document_json(
         if (!simulation_case.initial_guesses.empty()) {
             out << ",\n      \"initial_guesses\": ";
             scalar_map(out, simulation_case.initial_guesses, "        ");
+        }
+        if (!simulation_case.component_modes.empty()) {
+            out << ",\n      \"component_modes\": ";
+            string_map(
+                out, simulation_case.component_modes,
+                "        ");
         }
         if (!simulation_case.state_events.empty()) {
             out << ",\n      \"state_events\": ";
@@ -1452,7 +1488,15 @@ std::string serialize_catalog_response_json(
             << (component.supports_steady ? "true" : "false")
             << ", \"supports_transient\": "
             << (component.supports_transient ? "true" : "false")
-            << ", \"ports\": [";
+            << ", \"supported_modes\": [";
+        for (std::size_t j = 0;
+             j < component.supported_modes.size(); ++j) {
+            if (j != 0U) out << ", ";
+            json_string(out, component.supported_modes[j]);
+        }
+        out << "], \"default_mode\": ";
+        json_string(out, component.default_mode);
+        out << ", \"ports\": [";
         for (std::size_t j = 0; j < component.ports.size(); ++j) {
             if (j != 0) out << ", ";
             const auto& port = component.ports[j];

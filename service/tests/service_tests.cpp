@@ -588,7 +588,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v10,
+            thermox::service::catalog_schema_v11,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -939,6 +939,20 @@ void test_catalog_discovery() {
             bounded_pi->ports.size() == 3 &&
             bounded_pi->internal_variables.size() == 1,
         "catalog must expose bounded PI anti-windup state and ports");
+    const auto first_order_lag = std::find_if(
+        response.components.begin(),
+        response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "control.first_order_lag.normalized";
+        });
+    require(
+        first_order_lag != response.components.end() &&
+            first_order_lag->supported_modes ==
+                std::vector<std::string>{
+                    "tracking", "decay_to_zero"} &&
+            first_order_lag->default_mode == "tracking",
+        "catalog must expose registered component operating modes");
     const auto mapped_compressor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -1195,7 +1209,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v10\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v11\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -5688,6 +5702,31 @@ void test_transient_expression_component_flows_through_service() {
                     .actions.size() == 1U,
         "canonical model serialization must preserve state-triggered "
         "event declarations");
+
+    auto hybrid_trip = parsed_trip;
+    hybrid_trip.cases.front().component_modes.emplace(
+        "lag", "tracking");
+    thermox::platform::StateEventDefinition::Action mode_action;
+    mode_action.type = "set_mode";
+    mode_action.target = "lag";
+    mode_action.mode = "decay_to_zero";
+    hybrid_trip.cases.front().state_events.front().actions.push_back(
+        std::move(mode_action));
+    const auto canonical_hybrid_trip =
+        thermox::service::detail::serialize_model_document_json(
+            hybrid_trip);
+    const auto reparsed_hybrid_trip =
+        thermox::platform::parse_model_document_text(
+            canonical_hybrid_trip);
+    require(
+        reparsed_hybrid_trip.cases.front().component_modes.at("lag") ==
+                "tracking" &&
+            reparsed_hybrid_trip.cases.front().state_events.front()
+                    .actions.back().type == "set_mode" &&
+            reparsed_hybrid_trip.cases.front().state_events.front()
+                    .actions.back().mode == "decay_to_zero",
+        "canonical model serialization must preserve component modes "
+        "and typed mode transitions");
 
     auto differential_schedule = request;
     const auto scheduled_target =

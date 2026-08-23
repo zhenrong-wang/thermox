@@ -16,7 +16,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v10[] = "thermox.catalog/v10";
+inline constexpr char catalog_schema_v11[] = "thermox.catalog/v11";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
@@ -120,6 +120,8 @@ struct ComponentType {
         required_thermochemistry_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
+    std::vector<std::string> supported_modes;
+    std::string default_mode;
 };
 
 struct PropertyBackendType {
@@ -279,7 +281,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v10};
+    std::string schema_version{catalog_schema_v11};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;

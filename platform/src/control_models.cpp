@@ -107,6 +107,9 @@ public:
             {"response", "value", DaeVariableKind::differential,
              1.0},
         };
+        descriptor_.supported_modes = {
+            "tracking", "decay_to_zero"};
+        descriptor_.default_mode = "tracking";
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -122,11 +125,21 @@ public:
             require_port_variable(context, "command.value");
         const auto response =
             require_port_variable(context, "response.value");
-        system.add_linear_equation(
-            "component." + context.component.id +
-                ".steady_response",
-            {{response, 1.0}, {command, -gain}},
-            0.0, 1.0);
+        const std::string mode = context.active_mode
+            ? context.active_mode()
+            : "tracking";
+        if (mode == "tracking") {
+            system.add_linear_equation(
+                "component." + context.component.id +
+                    ".steady_response",
+                {{response, 1.0}, {command, -gain}},
+                0.0, 1.0);
+        } else {
+            system.add_linear_equation(
+                "component." + context.component.id +
+                    ".steady_decay_target",
+                {{response, 1.0}}, 0.0, 1.0);
+        }
     }
 
     void add_transient_equations(
@@ -140,12 +153,32 @@ public:
             require_port_variable(context, "command.value");
         const auto response =
             require_port_variable(context, "response.value");
-        system.add_linear_equation(
+        const auto active_mode = context.active_mode;
+        system.add_sparse_equation(
             "component." + context.component.id +
                 ".first_order_response",
-            {{response, 1.0, time_constant},
-             {command, -gain, 0.0}},
-            0.0, 1.0);
+            {command, response},
+            [active_mode, gain, time_constant, command, response](
+                double, const std::vector<double>& state,
+                const std::vector<double>& derivative,
+                double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                const std::string mode = active_mode
+                    ? active_mode()
+                    : "tracking";
+                residual = time_constant * derivative.at(response) +
+                    state.at(response);
+                jacobian.push_back(
+                    {response, 1.0, time_constant});
+                if (mode == "tracking") {
+                    residual -= gain * state.at(command);
+                    jacobian.push_back({command, -gain, 0.0});
+                } else {
+                    jacobian.push_back({command, 0.0, 0.0});
+                }
+                return EvaluationStatus::success();
+            },
+            1.0);
     }
 
 private:

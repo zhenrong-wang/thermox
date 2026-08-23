@@ -384,6 +384,39 @@ std::optional<double> case_schedule_initial_value(
     return schedule->second.points.front().value.value_si;
 }
 
+std::string selected_component_mode(
+    const ComponentModelDescriptor& descriptor,
+    const CaseDefinition* active_case,
+    const std::string& component_id) {
+    const auto override_mode = active_case == nullptr
+        ? std::map<std::string, std::string>::const_iterator{}
+        : active_case->component_modes.find(component_id);
+    const bool has_override = active_case != nullptr &&
+        override_mode != active_case->component_modes.end();
+    if (descriptor.supported_modes.empty()) {
+        if (has_override) {
+            throw std::invalid_argument(
+                "case '" + active_case->id + "' assigns mode '" +
+                override_mode->second + "' to component '" +
+                component_id + "', whose model does not declare modes");
+        }
+        return {};
+    }
+    const std::string selected = has_override
+        ? override_mode->second
+        : descriptor.default_mode;
+    if (std::find(
+            descriptor.supported_modes.begin(),
+            descriptor.supported_modes.end(), selected) ==
+        descriptor.supported_modes.end()) {
+        throw std::invalid_argument(
+            "component '" + component_id + "' requests unsupported "
+            "mode '" + selected + "' for model '" +
+            descriptor.kind + "'");
+    }
+    return selected;
+}
+
 double interpolate_input_schedule(
     const InputScheduleDefinition& schedule,
     double time) {
@@ -975,6 +1008,22 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
         throw std::invalid_argument("component model kind must not be empty");
     }
     validate_component_descriptor(model->descriptor());
+    std::set<std::string> mode_names;
+    for (const auto& mode : model->descriptor().supported_modes) {
+        if (mode.empty() || !mode_names.insert(mode).second) {
+            throw std::invalid_argument(
+                "component model modes must be non-empty and unique: " +
+                kind);
+        }
+    }
+    if (model->descriptor().supported_modes.empty() !=
+        model->descriptor().default_mode.empty() ||
+        (!model->descriptor().default_mode.empty() &&
+         !mode_names.contains(model->descriptor().default_mode))) {
+        throw std::invalid_argument(
+            "component model default mode must name one supported mode: " +
+            kind);
+    }
     for (const auto& port : model->descriptor().ports) {
         (void)require_connector_domain(port.domain);
     }
@@ -1171,6 +1220,7 @@ CompiledModelGraph compile_flat_model_graph(
     const auto parameter_overrides =
         case_parameter_overrides(
             document, registry, active_case);
+    std::set<std::string> seen_component_modes;
 
     for (const ComponentDefinition& declared_component :
          document.components) {
@@ -1186,7 +1236,18 @@ CompiledModelGraph compile_flat_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}, {}, {}};
+        const auto selected_mode = selected_component_mode(
+            model.descriptor(), active_case, component.id);
+        if (!selected_mode.empty()) {
+            const auto mode =
+                std::make_shared<std::string>(selected_mode);
+            context.active_mode = [mode]() { return *mode; };
+        }
+        if (active_case != nullptr &&
+            active_case->component_modes.contains(component.id)) {
+            seen_component_modes.insert(component.id);
+        }
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -1333,6 +1394,19 @@ CompiledModelGraph compile_flat_model_graph(
             context, model, artifact_registry);
         validate_property_capabilities(context, model);
         model.add_equations(context, system);
+    }
+    if (active_case != nullptr &&
+        seen_component_modes.size() !=
+            active_case->component_modes.size()) {
+        for (const auto& [component_id, _] :
+             active_case->component_modes) {
+            if (!seen_component_modes.contains(component_id)) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id +
+                    "' component_modes references unknown component: " +
+                    component_id);
+            }
+        }
     }
 
     std::map<std::string, std::size_t> connection_counts;
@@ -1780,6 +1854,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     const auto parameter_overrides =
         case_parameter_overrides(
             document, registry, active_case);
+    std::map<std::string, std::shared_ptr<std::string>>
+        component_mode_states;
+    std::map<std::string, std::string> initial_component_modes;
+    std::set<std::string> seen_component_modes;
 
     for (const ComponentDefinition& declared_component :
          document.components) {
@@ -1796,7 +1874,21 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}, {}, {}};
+        const auto selected_mode = selected_component_mode(
+            model.descriptor(), active_case, component.id);
+        if (!selected_mode.empty()) {
+            const auto mode =
+                std::make_shared<std::string>(selected_mode);
+            component_mode_states.emplace(component.id, mode);
+            initial_component_modes.emplace(
+                component.id, selected_mode);
+            context.active_mode = [mode]() { return *mode; };
+        }
+        if (active_case != nullptr &&
+            active_case->component_modes.contains(component.id)) {
+            seen_component_modes.insert(component.id);
+        }
         for (const auto& port : model.descriptor().ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
@@ -1948,6 +2040,19 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         validate_property_capabilities(context, model);
         model.add_transient_equations(context, system);
     }
+    if (active_case != nullptr &&
+        seen_component_modes.size() !=
+            active_case->component_modes.size()) {
+        for (const auto& [component_id, _] :
+             active_case->component_modes) {
+            if (!seen_component_modes.contains(component_id)) {
+                throw std::invalid_argument(
+                    "case '" + active_case->id +
+                    "' component_modes references unknown component: " +
+                    component_id);
+            }
+        }
+    }
 
     std::map<std::string, std::size_t> connection_counts;
     for (const ConnectionDefinition& connection :
@@ -1993,6 +2098,32 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     if (active_case != nullptr) {
         for (const auto& event : active_case->state_events) {
             for (const auto& action : event.actions) {
+                if (action.type == "set_mode") {
+                    const auto mode_state =
+                        component_mode_states.find(action.target);
+                    if (mode_state == component_mode_states.end()) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_mode target does not declare component "
+                            "modes: " + action.target);
+                    }
+                    const auto& component =
+                        find_component(document, action.target);
+                    const auto& modes = registry.require_model(
+                        component.kind).descriptor().supported_modes;
+                    if (std::find(
+                            modes.begin(), modes.end(), action.mode) ==
+                        modes.end()) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' requests unsupported mode '" +
+                            action.mode + "' for component '" +
+                            action.target + "'");
+                    }
+                    continue;
+                }
                 if (!active_case->fixed_values.contains(action.target) &&
                     !active_case->input_schedules.contains(action.target)) {
                     throw std::invalid_argument(
@@ -2156,10 +2287,18 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
     if (active_case != nullptr) {
-        if (!transitioned_input_targets.empty()) {
+        if (!transitioned_input_targets.empty() ||
+            !component_mode_states.empty()) {
             graph.problem.reset_discrete_state =
-                [transitioned_input_values]() {
+                [transitioned_input_values,
+                 component_mode_states,
+                 initial_component_modes]() {
                     transitioned_input_values->clear();
+                    for (const auto& [component_id, initial_mode] :
+                         initial_component_modes) {
+                        *component_mode_states.at(component_id) =
+                            initial_mode;
+                    }
                     return EvaluationStatus::success();
                 };
         }
@@ -2199,18 +2338,33 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 std::vector<double>&)> transition;
             if (!event.actions.empty()) {
                 std::vector<std::pair<std::string, double>> updates;
+                std::vector<std::pair<
+                    std::shared_ptr<std::string>, std::string>>
+                    mode_updates;
                 updates.reserve(event.actions.size());
+                mode_updates.reserve(event.actions.size());
                 for (const auto& action : event.actions) {
-                    updates.emplace_back(
-                        action.target, action.value.value_si);
+                    if (action.type == "set_input") {
+                        updates.emplace_back(
+                            action.target, action.value.value_si);
+                    } else {
+                        mode_updates.emplace_back(
+                            component_mode_states.at(action.target),
+                            action.mode);
+                    }
                 }
                 transition =
                     [transitioned_input_values,
-                     updates = std::move(updates)](
+                     updates = std::move(updates),
+                     mode_updates = std::move(mode_updates)](
                         double, std::vector<double>&,
                         std::vector<double>&) {
                         for (const auto& [target, value] : updates) {
                             (*transitioned_input_values)[target] = value;
+                        }
+                        for (const auto& [mode_state, mode] :
+                             mode_updates) {
+                            *mode_state = mode;
                         }
                         return EvaluationStatus::success();
                     };

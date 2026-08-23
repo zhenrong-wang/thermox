@@ -2421,6 +2421,8 @@ CatalogResponse SimulationService::get_catalog(
         component.supports_steady = descriptor.supports_steady;
         component.supports_transient =
             descriptor.supports_transient;
+        component.supported_modes = descriptor.supported_modes;
+        component.default_mode = descriptor.default_mode;
         for (const auto& port : descriptor.ports) {
             component.ports.push_back(
                 {port.name, port.domain, port.direction,

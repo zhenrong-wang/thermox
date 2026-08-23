@@ -317,7 +317,15 @@ void component_type_json(
         << (component.supports_steady ? "true" : "false")
         << ", \"supports_transient\": "
         << (component.supports_transient ? "true" : "false")
-        << ", \"ports\": [";
+        << ", \"supported_modes\": [";
+    for (std::size_t index = 0;
+         index < component.supported_modes.size(); ++index) {
+        if (index != 0U) out << ", ";
+        json_string(out, component.supported_modes[index]);
+    }
+    out << "], \"default_mode\": ";
+    json_string(out, component.default_mode);
+    out << ", \"ports\": [";
     for (std::size_t index = 0;
          index < component.ports.size(); ++index) {
         if (index != 0U) out << ", ";

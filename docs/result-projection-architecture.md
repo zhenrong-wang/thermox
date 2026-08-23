@@ -51,7 +51,7 @@ sample currently projected onto the topology. The browser does not interpolate m
 invent values.
 
 Result artifacts and summaries remain canonical SI. The runtime unit registry publishes SI and
-engineering display descriptors through `thermox.catalog/v10`. A browser-local display profile
+engineering display descriptors through `thermox.catalog/v11`. A browser-local display profile
 applies those reversible dimension-keyed conversions to summaries, overlays, tables, and
 transient derivatives; offset units apply their offset only to absolute values. Unknown
 dimensions are shown unchanged rather than assigned a guessed unit. The browser's built-in table

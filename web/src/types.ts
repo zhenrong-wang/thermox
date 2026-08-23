@@ -49,6 +49,24 @@ export interface CaseDocument {
     mode: string
     parameter_overrides?: Record<string, ScalarValue>
     fixed_values?: Record<string, ScalarValue>
+    input_schedules?: Record<string, {
+      interpolation: 'linear' | 'previous'
+      points: Array<{ time: ScalarValue; value: ScalarValue }>
+    }>
+    component_modes?: Record<string, string>
+    state_events?: Array<{
+      id: string
+      target: string
+      threshold: ScalarValue
+      direction: 'any' | 'rising' | 'falling'
+      terminal: boolean
+      priority?: number
+      hysteresis?: ScalarValue
+      actions?: Array<
+        | { type: 'set_input'; target: string; value: ScalarValue }
+        | { type: 'set_mode'; target: string; mode: string }
+      >
+    }>
     initial_guesses?: Record<string, ScalarValue>
     solver_options?: Record<string, ScalarValue>
   }
@@ -1314,6 +1332,8 @@ export interface CatalogComponent {
   system_boundary_role: string
   supports_steady: boolean
   supports_transient: boolean
+  supported_modes: string[]
+  default_mode: string
   ports: CatalogPort[]
   parameters: CatalogParameter[]
   artifacts: Array<{
@@ -1421,7 +1441,7 @@ export interface CatalogCorrelationFamilyTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v10'
+  schema_version: 'thermox.catalog/v11'
   status: string
   fingerprint: string
   components: CatalogComponent[]

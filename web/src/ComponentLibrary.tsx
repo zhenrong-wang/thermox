@@ -203,6 +203,7 @@ export function ComponentLibrary({
                     <div>
                       <span className="kind-family">{component.model_name}</span>
                       {component.supports_transient && <span className="transient-badge">transient</span>}
+                      {component.supported_modes.length > 0 && <span className="transient-badge">modes: {component.supported_modes.join(' / ')}</span>}
                       {component.source_artifact_revision_id && <span className="project-badge">project</span>}
                     </div>
                     <div className="port-summary">

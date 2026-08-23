@@ -93,6 +93,7 @@ struct StateEventDefinition {
         std::string type;
         std::string target;
         ScalarValue value;
+        std::string mode;
     };
 
     std::string id;
@@ -112,6 +113,7 @@ struct CaseDefinition {
     std::map<std::string, ScalarValue> parameter_overrides;
     std::map<std::string, ScalarValue> fixed_values;
     std::map<std::string, InputScheduleDefinition> input_schedules;
+    std::map<std::string, std::string> component_modes;
     std::map<std::string, ScalarValue> initial_guesses;
     std::vector<StateEventDefinition> state_events;
     std::map<std::string, ScalarValue> solver_options;

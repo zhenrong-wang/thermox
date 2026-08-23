@@ -323,6 +323,25 @@ void test_normalized_control_chain_steady_and_transient() {
       "mode": "dynamic_transient",
       "fixed_values": {"sensor.outlet.value": 1.0},
       "initial_guesses": {"actuator.response.value": 0.0}
+    },
+    {
+      "id": "mode_switch",
+      "mode": "dynamic_transient",
+      "fixed_values": {"sensor.outlet.value": 1.0},
+      "component_modes": {"actuator": "tracking"},
+      "initial_guesses": {"actuator.response.value": 0.0},
+      "state_events": [{
+        "id": "actuator_failsafe",
+        "target": "actuator.response.value",
+        "threshold": 0.2,
+        "direction": "rising",
+        "terminal": false,
+        "actions": [{
+          "type": "set_mode",
+          "target": "actuator",
+          "mode": "decay_to_zero"
+        }]
+      }]
     }
   ]
 })json");
@@ -381,6 +400,51 @@ void test_normalized_control_chain_steady_and_transient() {
         1.0 - std::exp(-1.0),
         2.0e-3,
         "first-order lag follows its analytic response");
+
+    const auto switched =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "mode_switch");
+    const auto switched_response = variable_index(
+        switched.problem.variable_names,
+        "actuator.response.value");
+    const auto switched_result =
+        thermox::integrate_dae(switched.problem, options);
+    require(
+        switched_result.diagnostics.success,
+        switched_result.diagnostics.message);
+    require(
+        switched_result.events.size() == 1U &&
+            switched_result.events.front().name ==
+                "actuator_failsafe" &&
+            switched_result.events.front().transitioned &&
+            !switched_result.events.front().terminal,
+        "nonterminal set_mode event must transition exactly once");
+    require_near(
+        switched_result.events.front().time,
+        -2.0 * std::log(0.8),
+        2.0e-3,
+        "mode transition occurs at the declared state threshold");
+    require_near(
+        switched_result.trajectory.back().state.at(switched_response),
+        0.2 * std::exp(
+            -(options.end_time -
+              switched_result.events.front().time) / 2.0),
+        2.0e-3,
+        "post-event state follows the decay mode equation");
+
+    auto invalid_mode = document;
+    invalid_mode.cases.back().component_modes["actuator"] =
+        "unregistered";
+    bool rejected_invalid_mode = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            invalid_mode, registry, "mode_switch");
+    } catch (const std::invalid_argument&) {
+        rejected_invalid_mode = true;
+    }
+    require(
+        rejected_invalid_mode,
+        "transient compilation must reject unregistered component modes");
 }
 
 }  // namespace
