@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <utility>
 
 namespace thermox::service {
 namespace {
@@ -117,6 +118,102 @@ bool requires_port(ResultValueScope scope) {
         scope == ResultValueScope::port_derived;
 }
 
+struct SignalSample {
+    double time{0.0};
+    double value{0.0};
+    bool discontinuous_from_previous{false};
+};
+
+std::pair<double, double> resolve_window(
+    const ResultProjection& projection,
+    const std::vector<StateSample>& trajectory,
+    const std::vector<EventValue>& events) {
+    const double first = trajectory.front().time;
+    const double last = trajectory.back().time;
+    if (!projection.window) return {first, last};
+    const auto& window = *projection.window;
+    double anchor = 0.0;
+    if (window.anchor == ResultWindowAnchor::event) {
+        std::size_t occurrence = 0U;
+        const auto found = std::find_if(
+            events.begin(), events.end(), [&](const EventValue& event) {
+                if (event.name != window.event_name) return false;
+                return occurrence++ == window.event_occurrence;
+            });
+        if (found == events.end()) {
+            throw ResultProjectionError(
+                "result projection '" + projection.id +
+                "' cannot find event occurrence '" +
+                window.event_name + "' #" +
+                std::to_string(window.event_occurrence));
+        }
+        if (!std::isfinite(found->time)) {
+            throw ResultProjectionError(
+                "result projection '" + projection.id +
+                "' matched a non-finite event time");
+        }
+        anchor = found->time;
+    }
+    const double start = anchor + window.start_time;
+    const double end = anchor + window.end_time;
+    if (!std::isfinite(start) || !std::isfinite(end) ||
+        start < first || end > last) {
+        throw ResultProjectionError(
+            "result projection '" + projection.id +
+            "' window lies outside the trajectory");
+    }
+    if (projection.aggregation != ResultAggregation::final) {
+        const auto crossed_transition = std::find_if(
+            events.begin(), events.end(), [&](const EventValue& event) {
+                return event.transitioned &&
+                    std::isfinite(event.time) &&
+                    event.time > start && event.time <= end;
+            });
+        if (crossed_transition != events.end()) {
+            throw ResultProjectionError(
+                "result projection '" + projection.id +
+                "' spans state transition '" +
+                crossed_transition->name +
+                "'; begin a reduction window at or after the event");
+        }
+    }
+    return {start, end};
+}
+
+double interpolate(
+    const std::vector<SignalSample>& signal, double time) {
+    const auto upper = std::lower_bound(
+        signal.begin(), signal.end(), time,
+        [](const SignalSample& sample, double candidate) {
+            return sample.time < candidate;
+        });
+    if (upper == signal.end()) return signal.back().value;
+    if (upper->time == time || upper == signal.begin()) {
+        return upper->value;
+    }
+    const auto& left = *(upper - 1);
+    const double fraction =
+        (time - left.time) / (upper->time - left.time);
+    return left.value + fraction * (upper->value - left.value);
+}
+
+std::vector<SignalSample> clipped_signal(
+    const std::vector<SignalSample>& signal,
+    double start,
+    double end) {
+    std::vector<SignalSample> clipped;
+    clipped.push_back({start, interpolate(signal, start), false});
+    for (const auto& sample : signal) {
+        if (sample.time > start && sample.time < end) {
+            clipped.push_back(sample);
+        }
+    }
+    if (end > start) {
+        clipped.push_back({end, interpolate(signal, end), false});
+    }
+    return clipped;
+}
+
 }  // namespace
 
 std::string to_string(ResultValueScope scope) {
@@ -169,6 +266,10 @@ std::string to_string(ResultAggregation aggregation) {
             return "minimum";
         case ResultAggregation::maximum:
             return "maximum";
+        case ResultAggregation::mean:
+            return "mean";
+        case ResultAggregation::root_mean_square:
+            return "root_mean_square";
     }
     return "unknown";
 }
@@ -184,8 +285,32 @@ ResultAggregation result_aggregation_from_string(
     if (value == "maximum") {
         return ResultAggregation::maximum;
     }
+    if (value == "mean") {
+        return ResultAggregation::mean;
+    }
+    if (value == "root_mean_square") {
+        return ResultAggregation::root_mean_square;
+    }
     throw ResultProjectionError(
         "unsupported result projection aggregation: " + value);
+}
+
+std::string to_string(ResultWindowAnchor anchor) {
+    switch (anchor) {
+        case ResultWindowAnchor::simulation:
+            return "simulation";
+        case ResultWindowAnchor::event:
+            return "event";
+    }
+    return "unknown";
+}
+
+ResultWindowAnchor result_window_anchor_from_string(
+    const std::string& value) {
+    if (value == "simulation") return ResultWindowAnchor::simulation;
+    if (value == "event") return ResultWindowAnchor::event;
+    throw ResultProjectionError(
+        "unsupported result window anchor: " + value);
 }
 
 void validate_result_projections(
@@ -221,6 +346,38 @@ void validate_result_projections(
             throw ResultProjectionError(
                 "result projection '" + projection.id +
                 "' has an invalid port selector");
+        }
+        if (projection.window) {
+            const auto& window = *projection.window;
+            if (!std::isfinite(window.start_time) ||
+                !std::isfinite(window.end_time) ||
+                window.start_time > window.end_time) {
+                throw ResultProjectionError(
+                    "result projection '" + projection.id +
+                    "' has an invalid time window");
+            }
+            if (window.anchor == ResultWindowAnchor::simulation &&
+                (!window.event_name.empty() ||
+                 window.event_occurrence != 0U)) {
+                throw ResultProjectionError(
+                    "simulation-anchored result windows cannot select "
+                    "an event");
+            }
+            if (window.anchor == ResultWindowAnchor::event &&
+                (window.event_name.empty() ||
+                 window.start_time < 0.0)) {
+                throw ResultProjectionError(
+                    "event-anchored result windows require an event "
+                    "name and non-negative offsets");
+            }
+            if ((projection.aggregation == ResultAggregation::mean ||
+                 projection.aggregation ==
+                     ResultAggregation::root_mean_square) &&
+                window.start_time == window.end_time) {
+                throw ResultProjectionError(
+                    "mean and root-mean-square result windows must have "
+                    "positive duration");
+            }
         }
     }
 }
@@ -455,6 +612,10 @@ ResultSummary project_steady_result(
                 "steady result projections only support final "
                 "aggregation");
         }
+        if (projection.window) {
+            throw ResultProjectionError(
+                "steady result projections cannot define a time window");
+        }
         const auto& value = resolve(graph, projection);
         summary.values.push_back({
             projection.id,
@@ -463,6 +624,11 @@ ResultSummary project_steady_result(
             projection.aggregation,
             false,
             0.0,
+            false,
+            0.0,
+            0.0,
+            {},
+            0U,
         });
     }
     return summary;
@@ -470,52 +636,131 @@ ResultSummary project_steady_result(
 
 ResultSummary project_transient_result(
     const std::vector<StateSample>& trajectory,
+    const std::vector<EventValue>& events,
     const std::vector<ResultProjection>& projections) {
     validate_result_projections(projections);
     if (!projections.empty() && trajectory.empty()) {
         throw ResultProjectionError(
             "transient result projection requires a trajectory");
     }
+    for (std::size_t index = 0; index < trajectory.size(); ++index) {
+        if (!std::isfinite(trajectory[index].time) ||
+            (index > 0U &&
+             trajectory[index].time <= trajectory[index - 1U].time)) {
+            throw ResultProjectionError(
+                "transient result projection requires finite, strictly "
+                "increasing trajectory times");
+        }
+    }
     ResultSummary summary;
     summary.mode = "transient";
     summary.values.reserve(projections.size());
     for (const auto& projection : projections) {
-        std::size_t selected = trajectory.size() - 1U;
+        std::vector<SignalSample> signal;
+        signal.reserve(trajectory.size());
+        for (const auto& sample : trajectory) {
+            signal.push_back({
+                sample.time,
+                resolve(sample.graph, projection).value_si,
+                sample.discontinuous_from_previous,
+            });
+        }
+        const auto [start, end] =
+            resolve_window(projection, trajectory, events);
         if (projection.aggregation != ResultAggregation::final) {
-            for (std::size_t index = 0;
-                 index < trajectory.size();
-                 ++index) {
-                const double candidate =
-                    resolve(trajectory[index].graph, projection)
-                        .value_si;
-                const double current =
-                    resolve(trajectory[selected].graph, projection)
-                        .value_si;
-                if ((projection.aggregation ==
-                         ResultAggregation::minimum &&
-                     candidate < current) ||
-                    (projection.aggregation ==
-                         ResultAggregation::maximum &&
-                     candidate > current)) {
-                    selected = index;
-                }
+            const auto discontinuity = std::find_if(
+                signal.begin(), signal.end(), [&](const SignalSample& sample) {
+                    return sample.discontinuous_from_previous &&
+                        sample.time > start && sample.time <= end;
+                });
+            if (discontinuity != signal.end()) {
+                throw ResultProjectionError(
+                    "result projection '" + projection.id +
+                    "' spans a trajectory discontinuity at time " +
+                    std::to_string(discontinuity->time));
             }
         }
-        const auto& value =
-            resolve(trajectory[selected].graph, projection);
-        if (!std::isfinite(trajectory[selected].time)) {
-            throw ResultProjectionError(
-                "transient result projection selected a "
-                "non-finite sample time");
+        const auto clipped = clipped_signal(signal, start, end);
+        double value = clipped.back().value;
+        double sample_time = end;
+        bool has_sample_time = true;
+        if (projection.aggregation == ResultAggregation::minimum ||
+            projection.aggregation == ResultAggregation::maximum) {
+            auto selected = clipped.begin();
+            for (auto candidate = clipped.begin() + 1;
+                 candidate != clipped.end(); ++candidate) {
+                if ((projection.aggregation ==
+                         ResultAggregation::minimum &&
+                     candidate->value < selected->value) ||
+                    (projection.aggregation ==
+                         ResultAggregation::maximum &&
+                     candidate->value > selected->value)) {
+                    selected = candidate;
+                }
+            }
+            const auto& sample = *selected;
+            value = sample.value;
+            sample_time = sample.time;
+        } else if (projection.aggregation == ResultAggregation::mean ||
+                   projection.aggregation ==
+                       ResultAggregation::root_mean_square) {
+            if (end <= start) {
+                throw ResultProjectionError(
+                    "mean and root-mean-square result windows must have "
+                    "positive duration");
+            }
+            double integral = 0.0;
+            for (std::size_t index = 1U;
+                 index < clipped.size(); ++index) {
+                const auto& left = clipped[index - 1U];
+                const auto& right = clipped[index];
+                const double duration = right.time - left.time;
+                integral += projection.aggregation ==
+                        ResultAggregation::mean
+                    ? 0.5 * duration * (left.value + right.value)
+                    : duration / 3.0 *
+                        (left.value * left.value +
+                         left.value * right.value +
+                         right.value * right.value);
+            }
+            value = integral / (end - start);
+            if (projection.aggregation ==
+                ResultAggregation::root_mean_square) {
+                value = std::sqrt(std::max(0.0, value));
+            }
+            has_sample_time = false;
+            sample_time = 0.0;
         }
-        summary.values.push_back({
+        if (!std::isfinite(value)) {
+            throw ResultProjectionError(
+                "result projection '" + projection.id +
+                "' produced a non-finite reduction");
+        }
+        ProjectedResultValue projected{
             projection.id,
-            value.dimension,
-            value.value_si,
+            projection.dimension,
+            value,
             projection.aggregation,
-            true,
-            trajectory[selected].time,
-        });
+            has_sample_time,
+            sample_time,
+            false,
+            0.0,
+            0.0,
+            {},
+            0U,
+        };
+        projected.has_window = projection.window.has_value() ||
+            projection.aggregation != ResultAggregation::final;
+        projected.window_start_time = start;
+        projected.window_end_time = end;
+        if (projection.window && projection.window->anchor ==
+                ResultWindowAnchor::event) {
+            projected.window_anchor_event_name =
+                projection.window->event_name;
+            projected.window_anchor_event_occurrence =
+                projection.window->event_occurrence;
+        }
+        summary.values.push_back(std::move(projected));
     }
     return summary;
 }

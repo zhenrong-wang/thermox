@@ -93,7 +93,7 @@ describe('result exploration', () => {
 
   it('exports every transient sample and builds a stable signal series', () => {
     const result = {
-      schema_version: 'thermox.result/v3',
+      schema_version: 'thermox.result/v4',
       status: 'succeeded',
       trajectory: [
         { time: 0, graph: graph(300) },
@@ -116,7 +116,7 @@ describe('result exploration', () => {
 
   it('exports a steady graph as sample zero without a time value', () => {
     const result = {
-      schema_version: 'thermox.result/v3',
+      schema_version: 'thermox.result/v4',
       status: 'succeeded',
       graph: graph(410),
     } as unknown as SteadySimulationResult

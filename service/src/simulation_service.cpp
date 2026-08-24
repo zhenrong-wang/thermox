@@ -5308,6 +5308,7 @@ TransientSimulationResponse SimulationService::run_transient(
                 copy_graph_result(
                     evaluator.evaluate(
                         sample.state, sample.derivative)),
+                sample.discontinuous_from_previous,
             };
             const auto snapshot_feasibility =
                 audit_counterflow_thermal_feasibility(

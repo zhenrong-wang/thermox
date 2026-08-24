@@ -274,7 +274,7 @@ operating scope and rationale. A later decision may name the review it supersede
 remain immutable. Supersession is constrained to the same Team, Project, and artifact revision.
 
 Review status does not change map interpolation, extrapolation, or physical bounds, and it does not
-turn invalid source data into a valid artifact. A `thermox.study_revision/v3` may optionally bind an
+turn invalid source data into a valid artifact. A `thermox.study_revision/v4` may optionally bind an
 exact review to an exact selected artifact and list `approved` and/or
 `approved_with_conditions` as acceptable. Study publication verifies the evidence, incorporates the
 canonical policy into the Study checksum, and run resolution verifies it again. A rejected review

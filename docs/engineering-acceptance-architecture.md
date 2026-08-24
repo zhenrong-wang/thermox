@@ -78,7 +78,7 @@ This first contract supports absolute scalar intervals. It intentionally does no
 - generated engineering reports.
 
 Pairwise comparison across successful Study jobs is provided by the service-owned
-`thermox.job_comparison/v1` contract; see `study-comparison-architecture.md`.
+`thermox.job_comparison/v2` contract; see `study-comparison-architecture.md`.
 
 Those features should extend the Study-owned criterion/evaluation model rather than enter the
 numeric kernel or individual component implementations.

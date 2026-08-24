@@ -189,7 +189,7 @@ export interface ProjectModelValidation {
   case_checksum: string
   artifact_revisions: ArtifactRevision[]
   validation: {
-    schema_version: 'thermox.result/v3'
+    schema_version: 'thermox.result/v4'
     status: string
     error: {
       schema_version: string
@@ -277,7 +277,20 @@ export type ResultValueScope =
   | 'port_primary'
   | 'port_derived'
 
-export type ResultAggregation = 'final' | 'minimum' | 'maximum'
+export type ResultAggregation =
+  | 'final'
+  | 'minimum'
+  | 'maximum'
+  | 'mean'
+  | 'root_mean_square'
+
+export interface ResultWindow {
+  anchor: 'simulation' | 'event'
+  start_time: number
+  end_time: number
+  event_name: string
+  event_occurrence: number
+}
 
 export interface ResultProjection {
   id: string
@@ -287,6 +300,7 @@ export interface ResultProjection {
   value_name: string
   dimension: string
   aggregation: ResultAggregation
+  window?: ResultWindow
 }
 
 export interface EngineeringAcceptanceCriterion {
@@ -323,7 +337,7 @@ export interface EngineeringAcceptanceSummary {
 }
 
 export interface StudyRevision {
-  schema_version: 'thermox.study_revision/v3'
+  schema_version: 'thermox.study_revision/v4'
   study_revision_id: string
   study_id: string
   project_id: string
@@ -369,7 +383,7 @@ export interface StudyRevisionList {
 }
 
 export interface CreateStudyRevision {
-  schema_version: 'thermox.study_revision.create/v3'
+  schema_version: 'thermox.study_revision.create/v4'
   study_id: string
   parent_study_revision_id: string
   model_revision_id: string
@@ -533,7 +547,7 @@ export interface CreateReconciliationRevision {
 }
 
 export interface ReconciliationResult {
-  schema_version: 'thermox.result/v3'
+  schema_version: 'thermox.result/v4'
   status: 'succeeded'
   calculation_intent: 'data_reconciliation'
   reconciliation_mode: ReconciliationMode
@@ -683,10 +697,16 @@ export interface ResultSummaryValue {
   value_si: number
   aggregation: ResultAggregation
   sample_time: number | null
+  window: {
+    start_time: number
+    end_time: number
+    anchor_event_name: string | null
+    anchor_event_occurrence: number
+  } | null
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v16'
+  schema_version: 'thermox.job/v17'
   job_id: string
   owner: {
     team_id: string
@@ -696,7 +716,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v16'
+    schema_version: 'thermox.job/v17'
     mode: 'steady' | 'transient' | 'calibration' | 'reconciliation'
     case_id: string
     calibration_id: string
@@ -779,7 +799,7 @@ export interface SimulationJob {
     checksum: string
   } | null
   result_summary: {
-    schema_version: 'thermox.result_summary/v2'
+    schema_version: 'thermox.result_summary/v3'
     mode: 'steady' | 'transient'
     values: ResultSummaryValue[]
     engineering_acceptance: EngineeringAcceptanceSummary | null
@@ -798,6 +818,7 @@ export type ComparedValueStatus =
   | 'candidate_only'
   | 'dimension_mismatch'
   | 'aggregation_mismatch'
+  | 'window_mismatch'
 
 export interface ComparedResultValue {
   id: string
@@ -806,6 +827,8 @@ export interface ComparedResultValue {
   candidate_dimension: string
   baseline_aggregation: ResultAggregation | null
   candidate_aggregation: ResultAggregation | null
+  baseline_window: ResultSummaryValue['window']
+  candidate_window: ResultSummaryValue['window']
   baseline_value_si: number | null
   candidate_value_si: number | null
   absolute_delta_si: number | null
@@ -813,7 +836,7 @@ export interface ComparedResultValue {
 }
 
 export interface SimulationJobComparison {
-  schema_version: 'thermox.job_comparison/v1'
+  schema_version: 'thermox.job_comparison/v2'
   team_id: string
   project_id: string
   baseline_job_id: string
@@ -887,7 +910,7 @@ export interface ThermalFeasibilitySummary {
 }
 
 export interface SteadySimulationResult {
-  schema_version: 'thermox.result/v3'
+  schema_version: 'thermox.result/v4'
   status: 'succeeded'
   error: {
     schema_version: string
@@ -980,11 +1003,12 @@ export interface SteadySimulationResult {
 
 export interface TransientGraphSample {
   time: number
+  discontinuous_from_previous: boolean
   graph: GraphResult
 }
 
 export interface TransientSimulationResult {
-  schema_version: 'thermox.result/v3'
+  schema_version: 'thermox.result/v4'
   status: 'succeeded'
   error: {
     schema_version: string

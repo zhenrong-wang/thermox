@@ -558,8 +558,9 @@ void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
             return sample.time == 0.5;
         });
     require(
-        knot != result.trajectory.end(),
-        "discontinuous DAE input must emit its exact knot");
+        knot != result.trajectory.end() &&
+            knot->discontinuous_from_previous,
+        "discontinuous DAE input must emit and mark its exact knot");
     require_near(
         knot->state[0], 0.0, 1.0e-9,
         "differential state must not integrate the new command before "

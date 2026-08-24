@@ -745,7 +745,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/study-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.study_revision.create/v3",)"
+            R"("thermox.study_revision.create/v4",)"
             R"("study_id":"http-design-study",)"
             R"("model_revision_id":")"} +
             model.model_revision_id +
@@ -1436,7 +1436,7 @@ void test_authored_component_job_workflow() {
                 "/study-revisions",
             std::string{
                 R"({"schema_version":)"
-                R"("thermox.study_revision.create/v3",)"
+                R"("thermox.study_revision.create/v4",)"
                 R"("study_id":"authored-gain-study",)"
                 R"("model_revision_id":")"} +
                 model.model_revision_id +
@@ -1590,7 +1590,7 @@ void test_authored_component_job_workflow() {
     require(
         comparison.status == 200 &&
             comparison.body.find(
-                "\"thermox.job_comparison/v1\"") !=
+                "\"thermox.job_comparison/v2\"") !=
                 std::string::npos &&
             comparison.body.find("\"matched_count\": 1") !=
                 std::string::npos &&

@@ -20,6 +20,8 @@ std::string to_string(ComparedValueStatus status) {
             return "dimension_mismatch";
         case ComparedValueStatus::aggregation_mismatch:
             return "aggregation_mismatch";
+        case ComparedValueStatus::window_mismatch:
+            return "window_mismatch";
     }
     return "unknown";
 }
@@ -97,6 +99,16 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
         value_ids.emplace(id);
     }
     comparison.values.reserve(value_ids.size());
+    const auto window_evidence = [](const ProjectedResultValue& source)
+        -> std::optional<ResultWindowEvidence> {
+        if (!source.has_window) return std::nullopt;
+        return ResultWindowEvidence{
+            source.window_start_time,
+            source.window_end_time,
+            source.window_anchor_event_name,
+            source.window_anchor_event_occurrence,
+        };
+    };
     for (const auto& id : value_ids) {
         const auto baseline_found = baseline_values.find(id);
         const auto candidate_found = candidate_values.find(id);
@@ -107,6 +119,7 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
             value.status = ComparedValueStatus::candidate_only;
             value.candidate_dimension = candidate_value.dimension;
             value.candidate_aggregation = candidate_value.aggregation;
+            value.candidate_window = window_evidence(candidate_value);
             value.candidate_value_si = candidate_value.value_si;
             ++comparison.candidate_only_count;
         } else if (candidate_found == candidate_values.end()) {
@@ -114,6 +127,7 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
             value.status = ComparedValueStatus::baseline_only;
             value.baseline_dimension = baseline_value.dimension;
             value.baseline_aggregation = baseline_value.aggregation;
+            value.baseline_window = window_evidence(baseline_value);
             value.baseline_value_si = baseline_value.value_si;
             ++comparison.baseline_only_count;
         } else {
@@ -123,6 +137,8 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
             value.candidate_dimension = candidate_value.dimension;
             value.baseline_aggregation = baseline_value.aggregation;
             value.candidate_aggregation = candidate_value.aggregation;
+            value.baseline_window = window_evidence(baseline_value);
+            value.candidate_window = window_evidence(candidate_value);
             value.baseline_value_si = baseline_value.value_si;
             value.candidate_value_si = candidate_value.value_si;
             if (baseline_value.dimension != candidate_value.dimension) {
@@ -131,6 +147,9 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
             } else if (baseline_value.aggregation !=
                        candidate_value.aggregation) {
                 value.status = ComparedValueStatus::aggregation_mismatch;
+                ++comparison.incompatible_count;
+            } else if (value.baseline_window != value.candidate_window) {
+                value.status = ComparedValueStatus::window_mismatch;
                 ++comparison.incompatible_count;
             } else {
                 value.status = ComparedValueStatus::matched;

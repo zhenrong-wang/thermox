@@ -1961,7 +1961,7 @@ std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2063,7 +2063,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2384,7 +2384,7 @@ std::string serialize_calibration_response_json(
     const CalibrationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2572,7 +2572,7 @@ std::string serialize_engineering_study_response_json(
     const EngineeringStudyResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2661,7 +2661,7 @@ std::string serialize_data_reconciliation_response_json(
     const DataReconciliationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3001,7 +3001,7 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v3);
+    json_string(out, result_schema_v4);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3111,6 +3111,8 @@ std::string serialize_transient_response_json(
         const auto& sample = response.trajectory[i];
         out << "{\"time\": ";
         json_number(out, sample.time);
+        out << ", \"discontinuous_from_previous\": "
+            << (sample.discontinuous_from_previous ? "true" : "false");
         out << ", \"graph\": ";
         graph_result_json(out, sample.graph);
         out << "}";
@@ -3163,6 +3165,23 @@ std::string serialize_result_summary_json(
             json_number(out, value.sample_time);
         } else {
             out << "null";
+        }
+        out << ", \"window\": ";
+        if (!value.has_window) {
+            out << "null";
+        } else {
+            out << "{\"start_time\": ";
+            json_number(out, value.window_start_time);
+            out << ", \"end_time\": ";
+            json_number(out, value.window_end_time);
+            out << ", \"anchor_event_name\": ";
+            if (value.window_anchor_event_name.empty()) {
+                out << "null";
+            } else {
+                json_string(out, value.window_anchor_event_name);
+            }
+            out << ", \"anchor_event_occurrence\": "
+                << value.window_anchor_event_occurrence << '}';
         }
         out << '}';
     }
@@ -3497,6 +3516,18 @@ std::string serialize_job_record_json(
         json_string(out, projection.dimension);
         out << ", \"aggregation\": ";
         json_string(out, to_string(projection.aggregation));
+        if (projection.window) {
+            out << ", \"window\": {\"anchor\": ";
+            json_string(out, to_string(projection.window->anchor));
+            out << ", \"start_time\": "
+                << projection.window->start_time
+                << ", \"end_time\": "
+                << projection.window->end_time
+                << ", \"event_name\": ";
+            json_string(out, projection.window->event_name);
+            out << ", \"event_occurrence\": "
+                << projection.window->event_occurrence << '}';
+        }
         out << '}';
     }
     out << ']';
@@ -3668,6 +3699,25 @@ std::string serialize_job_comparison_json(
         optional_aggregation(out, value.baseline_aggregation);
         out << ", \"candidate_aggregation\": ";
         optional_aggregation(out, value.candidate_aggregation);
+        const auto window = [&](const std::optional<ResultWindowEvidence>& item) {
+            if (!item) {
+                out << "null";
+                return;
+            }
+            out << "{\"start_time\": ";
+            json_number(out, item->start_time);
+            out << ", \"end_time\": ";
+            json_number(out, item->end_time);
+            out << ", \"anchor_event_name\": ";
+            if (item->anchor_event_name.empty()) out << "null";
+            else json_string(out, item->anchor_event_name);
+            out << ", \"anchor_event_occurrence\": "
+                << item->anchor_event_occurrence << '}';
+        };
+        out << ", \"baseline_window\": ";
+        window(value.baseline_window);
+        out << ", \"candidate_window\": ";
+        window(value.candidate_window);
         out << ", \"baseline_value_si\": ";
         optional_number(out, value.baseline_value_si);
         out << ", \"candidate_value_si\": ";

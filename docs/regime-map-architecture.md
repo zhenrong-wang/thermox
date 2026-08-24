@@ -45,7 +45,7 @@ publication accepts `artifact_type=thermox.regime_map` and
 `artifact_schema_version=thermox.regime_map/v2`, canonicalizes and validates the payload before
 content-addressed persistence, and resolves an exact revision into job snapshots. Regions,
 branches, priorities, and criteria participate in job idempotency fingerprints and PostgreSQL job
-encoding. The containing job contract is `thermox.job/v16`.
+encoding. The containing job contract is `thermox.job/v17`.
 
 An immutable Study may apply a dimensioned operating envelope to any declared regime-map input.
 The policy is distinct from the source map's classification criteria: it restricts where that exact

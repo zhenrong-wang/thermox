@@ -365,6 +365,18 @@ std::string result_projections_payload(
         value.put(
             "aggregation",
             service::to_string(projection.aggregation));
+        if (projection.window) {
+            Tree window;
+            window.put(
+                "anchor", service::to_string(projection.window->anchor));
+            window.put("start_time", projection.window->start_time);
+            window.put("end_time", projection.window->end_time);
+            window.put("event_name", projection.window->event_name);
+            window.put(
+                "event_occurrence",
+                projection.window->event_occurrence);
+            value.add_child("window", window);
+        }
         values.push_back({"", value});
     }
     Tree wrapper;
@@ -397,6 +409,18 @@ decode_result_projections(const std::string& payload) {
         projection.aggregation =
             service::result_aggregation_from_string(
                 value.get<std::string>("aggregation"));
+        if (const auto encoded = value.get_child_optional("window")) {
+            service::ResultWindow window;
+            window.anchor = service::result_window_anchor_from_string(
+                encoded->get<std::string>("anchor"));
+            window.start_time = encoded->get<double>("start_time");
+            window.end_time = encoded->get<double>("end_time");
+            window.event_name =
+                encoded->get<std::string>("event_name", "");
+            window.event_occurrence =
+                encoded->get<std::size_t>("event_occurrence", 0U);
+            projection.window = std::move(window);
+        }
         projections.push_back(std::move(projection));
     }
     service::validate_result_projections(projections);

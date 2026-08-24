@@ -505,7 +505,7 @@ void test_success_publishes_a_readable_artifact() {
     const auto& manifest = *completed->result_artifact;
     require(
         manifest.schema_version ==
-                thermox::service::result_schema_v3 &&
+                thermox::service::result_schema_v4 &&
             manifest.media_type == "application/json" &&
             manifest.byte_size > 0 &&
             manifest.checksum.starts_with("fnv1a64:"),
@@ -518,7 +518,7 @@ void test_success_publishes_a_readable_artifact() {
                 manifest.artifact_id &&
             result->content.size() == manifest.byte_size &&
             result->content.find("\"schema_version\": "
-                                 "\"thermox.result/v3\"") !=
+                                 "\"thermox.result/v4\"") !=
                 std::string::npos,
         "the application service must retrieve a published "
         "artifact through its manifest");
@@ -530,7 +530,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v16\"") != std::string::npos &&
+                  "\"thermox.job/v17\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -667,7 +667,7 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
     const auto status =
         thermox::service::serialize_job_record_json(*completed);
     require(
-        status.find("\"schema_version\": \"thermox.job/v16\"") !=
+        status.find("\"schema_version\": \"thermox.job/v17\"") !=
                 std::string::npos &&
             status.find("\"mode\": \"reconciliation\"") !=
                 std::string::npos &&
@@ -1080,6 +1080,9 @@ void test_completed_study_jobs_compare_by_projected_identity() {
          thermox::service::ResultAggregation::final, false, 0.0},
         {"baseline_only", "pressure", 1.0e5,
          thermox::service::ResultAggregation::final, false, 0.0},
+        {"windowed_mean", "temperature", 400.0,
+         thermox::service::ResultAggregation::mean, false, 0.0,
+         true, 0.0, 5.0, "load_step", 0U},
     };
     baseline_summary.engineering_acceptance =
         thermox::service::EngineeringAcceptanceSummary{
@@ -1093,13 +1096,16 @@ void test_completed_study_jobs_compare_by_projected_identity() {
          thermox::service::ResultAggregation::final, false, 0.0},
         {"candidate_only", "mass_flow", 25.0,
          thermox::service::ResultAggregation::final, false, 0.0},
+        {"windowed_mean", "temperature", 405.0,
+         thermox::service::ResultAggregation::mean, false, 0.0,
+         true, 0.0, 10.0, "load_step", 0U},
     };
     candidate_summary.engineering_acceptance =
         thermox::service::EngineeringAcceptanceSummary{
             true, 1, 0, {}};
     const thermox::service::ResultArtifactManifest manifest{
         "comparison-artifact", "application/json",
-        thermox::service::result_schema_v3, 2, "checksum"};
+        thermox::service::result_schema_v4, 2, "checksum"};
     const auto claimed_baseline = jobs->claim_next("comparison-worker");
     require(
         claimed_baseline && claimed_baseline->job_id == baseline.job_id,
@@ -1119,7 +1125,7 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         team_a, baseline.job_id, candidate.job_id);
     require(
         comparison && comparison->matched_count == 1U &&
-            comparison->incompatible_count == 1U &&
+            comparison->incompatible_count == 2U &&
             comparison->baseline_only_count == 1U &&
             comparison->candidate_only_count == 1U &&
             comparison->values.front().id == "baseline_only" &&
@@ -1144,11 +1150,15 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         thermox::service::serialize_job_comparison_json(*comparison);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job_comparison/v1\"") !=
+                  "\"thermox.job_comparison/v2\"") !=
                 std::string::npos &&
             json.find("\"relative_delta\": 0.10000000000000001") !=
                 std::string::npos &&
             json.find("\"dimension_mismatch\"") !=
+                std::string::npos &&
+            json.find("\"window_mismatch\"") !=
+                std::string::npos &&
+            json.find("\"baseline_window\": {") !=
                 std::string::npos,
         "comparison JSON must retain versioned deltas and explicit "
         "incompatibility evidence");

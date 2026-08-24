@@ -185,7 +185,74 @@ export function StudyPublishForm({
                   <option value="final">final</option>
                   <option value="minimum">minimum</option>
                   <option value="maximum">maximum</option>
+                  <option value="mean">mean</option>
+                  <option value="root_mean_square">root mean square</option>
                 </select>
+                {transient && (
+                  <label className="projection-window-toggle">
+                    <input type="checkbox"
+                      checked={projection.window !== undefined}
+                      onChange={(event) => update(index, {
+                        window: event.target.checked ? {
+                          anchor: 'simulation',
+                          start_time: 0,
+                          end_time: 1,
+                          event_name: '',
+                          event_occurrence: 0,
+                        } : undefined,
+                      })} />
+                    window
+                  </label>
+                )}
+                {transient && projection.window && (
+                  <>
+                    <select aria-label="Projection window anchor"
+                      value={projection.window.anchor}
+                      onChange={(event) => update(index, {
+                        window: {
+                          ...projection.window!,
+                          anchor: event.target.value as 'simulation' | 'event',
+                          event_name: event.target.value === 'event'
+                            ? projection.window!.event_name
+                            : '',
+                          event_occurrence: event.target.value === 'event'
+                            ? projection.window!.event_occurrence
+                            : 0,
+                        },
+                      })}>
+                      <option value="simulation">simulation time</option>
+                      <option value="event">event relative</option>
+                    </select>
+                    <input aria-label="Projection window start" type="number"
+                      step="any" value={projection.window.start_time}
+                      onChange={(event) => update(index, { window: {
+                        ...projection.window!, start_time: Number(event.target.value),
+                      } })} />
+                    <input aria-label="Projection window end" type="number"
+                      step="any" value={projection.window.end_time}
+                      onChange={(event) => update(index, { window: {
+                        ...projection.window!, end_time: Number(event.target.value),
+                      } })} />
+                    {projection.window.anchor === 'event' && (
+                      <>
+                        <input aria-label="Projection window event"
+                          value={projection.window.event_name}
+                          placeholder="Event name"
+                          onChange={(event) => update(index, { window: {
+                            ...projection.window!, event_name: event.target.value,
+                          } })} />
+                        <input aria-label="Projection window occurrence"
+                          type="number" min="0" step="1"
+                          title="Zero-based event occurrence"
+                          value={projection.window.event_occurrence}
+                          onChange={(event) => update(index, { window: {
+                            ...projection.window!,
+                            event_occurrence: Number(event.target.value),
+                          } })} />
+                      </>
+                    )}
+                  </>
+                )}
                 <button type="button" className="projection-remove"
                   onClick={() => setProjections((current) =>
                     current.filter((_, item) => item !== index))}>×</button>

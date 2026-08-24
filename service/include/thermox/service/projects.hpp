@@ -27,8 +27,8 @@ inline constexpr char artifact_revision_content_schema_v1[] =
     "thermox.artifact_revision_content/v1";
 inline constexpr char performance_map_quality_review_schema_v1[] =
     "thermox.performance_map_quality_review/v1";
-inline constexpr char study_revision_schema_v3[] =
-    "thermox.study_revision/v3";
+inline constexpr char study_revision_schema_v4[] =
+    "thermox.study_revision/v4";
 inline constexpr char calibration_revision_schema_v1[] =
     "thermox.calibration_revision/v1";
 inline constexpr char reconciliation_revision_schema_v1[] =
@@ -157,7 +157,7 @@ struct ArtifactOperatingEnvelope {
 };
 
 struct StudyRevisionRecord {
-    std::string schema_version{study_revision_schema_v3};
+    std::string schema_version{study_revision_schema_v4};
     std::string study_revision_id;
     std::string study_id;
     std::string project_id;

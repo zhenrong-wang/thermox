@@ -1443,7 +1443,7 @@ std::vector<service::ResultProjection> parse_result_projections(
     const boost::property_tree::ptree& tree) {
     const std::set<std::string> fields = {
         "id", "scope", "component_id", "port_name",
-        "value_name", "dimension", "aggregation",
+        "value_name", "dimension", "aggregation", "window",
     };
     std::vector<service::ResultProjection> result;
     for (const auto& [key, value] : tree) {
@@ -1474,6 +1474,33 @@ std::vector<service::ResultProjection> parse_result_projections(
             projection.aggregation =
                 service::result_aggregation_from_string(
                     value.get<std::string>("aggregation", "final"));
+            if (const auto encoded =
+                    value.get_child_optional("window")) {
+                const std::set<std::string> window_fields = {
+                    "anchor", "start_time", "end_time",
+                    "event_name", "event_occurrence",
+                };
+                for (const auto& [field, unused] : *encoded) {
+                    (void)unused;
+                    if (!window_fields.contains(field)) {
+                        throw std::invalid_argument(
+                            "unknown result projection window field: " +
+                            field);
+                    }
+                }
+                service::ResultWindow window;
+                window.anchor =
+                    service::result_window_anchor_from_string(
+                        encoded->get<std::string>("anchor", "simulation"));
+                window.start_time =
+                    encoded->get<double>("start_time");
+                window.end_time = encoded->get<double>("end_time");
+                window.event_name =
+                    encoded->get<std::string>("event_name", "");
+                window.event_occurrence =
+                    encoded->get<std::size_t>("event_occurrence", 0U);
+                projection.window = std::move(window);
+            }
         } catch (const service::ResultProjectionError& error) {
             throw std::invalid_argument(error.what());
         }
@@ -1608,7 +1635,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.study_revision.create/v3") {
+        "thermox.study_revision.create/v4") {
         throw std::invalid_argument(
             "unsupported study create schema_version");
     }

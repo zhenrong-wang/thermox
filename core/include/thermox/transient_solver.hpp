@@ -158,6 +158,7 @@ struct DaeState {
     double time{0.0};
     std::vector<double> state;
     std::vector<double> derivative;
+    bool discontinuous_from_previous{false};
 };
 
 struct DetectedEvent {

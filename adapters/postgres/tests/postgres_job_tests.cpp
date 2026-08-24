@@ -333,7 +333,25 @@ thermox::service::ExecutionMetadata execution() {
 void test_idempotency_and_tenant_scope(
     const std::shared_ptr<
         thermox::service::SimulationJobRepository>& jobs) {
-    const auto first_request = request("team-a", "shared-key");
+    auto first_request = request("team-a", "shared-key");
+    first_request.mode =
+        thermox::service::SimulationJobMode::transient;
+    first_request.result_projections = {{
+        "windowed_temperature",
+        thermox::service::ResultValueScope::port_derived,
+        "compressor",
+        "outlet",
+        "T",
+        "temperature",
+        thermox::service::ResultAggregation::mean,
+        thermox::service::ResultWindow{
+            thermox::service::ResultWindowAnchor::event,
+            0.25,
+            1.25,
+            "load_step",
+            2U,
+        },
+    }};
     const auto first =
         jobs->create_or_get(first_request, "fingerprint-a");
     const auto repeated =
@@ -413,6 +431,12 @@ void test_idempotency_and_tenant_scope(
                 "bypass" &&
             repeated.request.transient_solver.required_output_times ==
                 std::vector<double>{1.25, 7.5} &&
+            repeated.request.result_projections.size() == 1U &&
+            repeated.request.result_projections.front().window &&
+            repeated.request.result_projections.front().window
+                    ->event_name == "load_step" &&
+            repeated.request.result_projections.front().window
+                    ->event_occurrence == 2U &&
             std::isinf(
                 repeated.request.components.expression_components
                     .front().parameters.front().lower_bound) &&
@@ -568,20 +592,25 @@ void test_atomic_claim_and_terminal_publication(
     const thermox::service::ResultArtifactManifest manifest{
         "artifact-a",
         "application/json",
-        thermox::service::result_schema_v3,
+        thermox::service::result_schema_v4,
         42,
         "sha256:test",
     };
     thermox::service::ResultSummary summary;
-    summary.mode = "steady";
+    summary.mode = "transient";
     summary.values = {
         {
             "net_power",
             "power",
             42.0,
-            thermox::service::ResultAggregation::final,
+            thermox::service::ResultAggregation::mean,
             false,
             0.0,
+            true,
+            2.5,
+            7.5,
+            "load_step",
+            1U,
         },
     };
     thermox::service::EngineeringAcceptanceResult criterion;
@@ -614,6 +643,11 @@ void test_atomic_claim_and_terminal_publication(
             succeeded.result_summary->values.size() == 1U &&
             succeeded.result_summary->values.front().value_si ==
                 42.0 &&
+            succeeded.result_summary->values.front().has_window &&
+            succeeded.result_summary->values.front().window_start_time ==
+                2.5 &&
+            succeeded.result_summary->values.front()
+                    .window_anchor_event_name == "load_step" &&
             succeeded.result_summary->engineering_acceptance &&
             succeeded.result_summary->engineering_acceptance
                     ->criteria.front().lower_margin_si == -8.0 &&
@@ -651,12 +685,12 @@ void test_expired_lease_recovery_and_fencing(
         request("team-a", "lease-recovery"),
         "fingerprint-lease-recovery");
     const auto first =
-        jobs->claim_next("worker-dead", 20ms);
+        jobs->claim_next("worker-dead", 200ms);
     require(
         first && first->job_id == queued.job_id &&
             first->attempt == 1,
         "first lease attempt must be claimed");
-    std::this_thread::sleep_for(30ms);
+    std::this_thread::sleep_for(300ms);
 
     bool fenced = false;
     try {
@@ -698,7 +732,7 @@ void test_expired_lease_recovery_and_fencing(
         "new fencing revision");
 
     const auto second =
-        jobs->claim_next("worker-dead-again", 20ms);
+        jobs->claim_next("worker-dead-again", 200ms);
     require(
         second && second->attempt == 2 &&
             second->revision == requeued->revision + 1,
@@ -708,16 +742,16 @@ void test_expired_lease_recovery_and_fencing(
             second->job_id,
             second->revision,
             second->worker_id,
-            40ms),
+            400ms),
         "the current worker must be able to renew a live lease");
     require(
         !jobs->renew_lease(
             second->job_id,
             second->revision,
             "other-worker",
-            40ms),
+            400ms),
         "another worker must not renew the claimed lease");
-    std::this_thread::sleep_for(50ms);
+    std::this_thread::sleep_for(450ms);
     require(
         jobs->recover_expired(2, exhausted) == 1,
         "the exhausted second attempt must be recovered");
@@ -1027,6 +1061,57 @@ void test_projects_and_immutable_model_revisions(
                  .has_value(),
         "PostgreSQL studies must preserve exact bindings and "
         "Team isolation");
+
+    auto transient_case_json = simulation_case.str();
+    const auto case_id = transient_case_json.find("\"id\": \"design\"");
+    const auto case_mode =
+        transient_case_json.find("steady_state_design");
+    require(
+        case_id != std::string::npos && case_mode != std::string::npos,
+        "case fixture must declare an ID and mode");
+    transient_case_json.replace(
+        case_id, std::string{"\"id\": \"design\""}.size(),
+        "\"id\": \"transient\"");
+    transient_case_json.replace(
+        transient_case_json.find("steady_state_design"),
+        std::string{"steady_state_design"}.size(),
+        "dynamic_transient");
+    const auto transient_case = projects.create_case_revision({
+        team_a,
+        project.project_id,
+        first.model_revision_id,
+        {},
+        transient_case_json,
+    });
+    auto transient_study_request = study_request;
+    transient_study_request.study_id = "postgres-transient-study";
+    transient_study_request.case_revision_id =
+        transient_case.case_revision_id;
+    transient_study_request.intent = transient_case.mode;
+    transient_study_request.result_projections.front().aggregation =
+        thermox::service::ResultAggregation::mean;
+    transient_study_request.result_projections.front().window =
+        thermox::service::ResultWindow{
+            thermox::service::ResultWindowAnchor::event,
+            0.0,
+            5.0,
+            "load_step",
+            1U,
+        };
+    const auto transient_study =
+        projects.create_study_revision(transient_study_request);
+    const auto loaded_transient_study = projects.get_study_revision(
+        team_a, project.project_id,
+        transient_study.study_revision_id);
+    require(
+        loaded_transient_study &&
+            loaded_transient_study->result_projections.front().window &&
+            loaded_transient_study->result_projections.front().window
+                    ->event_name == "load_step" &&
+            loaded_transient_study->result_projections.front().window
+                    ->event_occurrence == 1U,
+        "PostgreSQL Studies must preserve typed event-window "
+        "projection definitions");
 
     thermox::service::CreateCalibrationRevisionRequest
         calibration_request;

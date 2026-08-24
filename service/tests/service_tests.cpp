@@ -2509,6 +2509,7 @@ void test_dynamic_equilibrium_two_phase_material_fluid_cell() {
     const auto transient_approach_projection =
         thermox::service::project_transient_result(
             response.trajectory,
+            response.events,
             {{
                 "minimum_evaporator_approach",
                 thermox::service::ResultValueScope::component_metric,
@@ -5644,6 +5645,7 @@ void test_transient_expression_component_flows_through_service() {
         "the knot");
     require(
         held_knot != held_response.trajectory.end() &&
+            held_knot->discontinuous_from_previous &&
             require_result_value(
                 require_port_result(
                     held_knot->graph, "lag", "input")
@@ -5655,7 +5657,8 @@ void test_transient_expression_component_flows_through_service() {
                     held_knot->graph, "lag")
                     .internal_values.front().value_si) < 1.0e-9,
         "right-continuous knot must update algebraic commands without "
-        "jumping differential states");
+        "jumping differential states and must retain discontinuity "
+        "evidence");
     const auto& held_final = require_component_result(
         held_response.trajectory.back().graph, "lag");
     require(
@@ -5831,7 +5834,7 @@ void test_steady_service() {
         "steady result must identify operation");
     require(
         response.metadata.result_schema_version ==
-            thermox::service::result_schema_v3,
+            thermox::service::result_schema_v4,
         "steady result contract must be versioned");
     require(
         response.metadata.platform_version == "0.2.0",
@@ -5983,7 +5986,7 @@ void test_steady_service() {
             std::string::npos,
         "steady JSON must expose service status");
     require(
-        json.find("\"schema_version\": \"thermox.result/v3\"") !=
+        json.find("\"schema_version\": \"thermox.result/v4\"") !=
             std::string::npos,
         "steady JSON must expose result schema");
     require(
@@ -6425,7 +6428,7 @@ void test_system_agnostic_result_projection() {
         projection_graph(0.41), steady_projections);
     require(
         steady.schema_version ==
-                thermox::service::result_summary_schema_v2 &&
+                thermox::service::result_summary_schema_v3 &&
             steady.mode == "steady" &&
             steady.values.size() == 2U &&
             steady.values[0].value_si == 0.41 &&
@@ -6437,7 +6440,7 @@ void test_system_agnostic_result_projection() {
     require(
         steady_json.find(
             "\"schema_version\": "
-            "\"thermox.result_summary/v2\"") !=
+            "\"thermox.result_summary/v3\"") !=
                 std::string::npos &&
             steady_json.find(
                 "\"id\": \"cycle_efficiency\"") !=
@@ -6483,7 +6486,7 @@ void test_system_agnostic_result_projection() {
     };
     const auto transient =
         thermox::service::project_transient_result(
-            trajectory, transient_projections);
+            trajectory, {}, transient_projections);
     require(
         transient.values.size() == 3U &&
             transient.values[0].value_si == 0.25 &&
@@ -6494,6 +6497,105 @@ void test_system_agnostic_result_projection() {
             transient.values[2].sample_time == 2.0,
         "transient summaries must apply explicit reductions and "
         "retain the selected sample time");
+
+    auto windowed = transient_projections.front();
+    windowed.id = "windowed_mean_efficiency";
+    windowed.aggregation = ResultAggregation::mean;
+    windowed.window = thermox::service::ResultWindow{
+        thermox::service::ResultWindowAnchor::event,
+        0.25,
+        1.25,
+        "load_step",
+        0U,
+    };
+    const auto reductions =
+        thermox::service::project_transient_result(
+            trajectory,
+            {{"load_step", 0.5, {}, false, true, 0}},
+            {windowed, ResultProjection{
+                "windowed_rms_efficiency",
+                ResultValueScope::kpi,
+                {}, {}, "net_efficiency", "dimensionless",
+                ResultAggregation::root_mean_square,
+                thermox::service::ResultWindow{
+                    thermox::service::ResultWindowAnchor::simulation,
+                    0.5, 1.5, {}, 0U,
+                },
+            }});
+    const double expected_mean = 0.2828125;
+    const double expected_rms = std::sqrt(
+        (0.5 / 3.0 * (0.325 * 0.325 + 0.325 * 0.25 +
+                       0.25 * 0.25) +
+         0.5 / 3.0 * (0.25 * 0.25 + 0.25 * 0.30 +
+                       0.30 * 0.30)));
+    require(
+        reductions.values.size() == 2U &&
+            std::abs(reductions.values[0].value_si - expected_mean) <
+                1.0e-12 &&
+            std::abs(reductions.values[1].value_si - expected_rms) <
+                1.0e-12 &&
+            reductions.values[0].has_window &&
+            reductions.values[0].window_start_time == 0.75 &&
+            reductions.values[0].window_end_time == 1.75 &&
+            reductions.values[0].window_anchor_event_name ==
+                "load_step" &&
+            !reductions.values[0].has_sample_time,
+        "transient reductions must interpolate exact window boundaries "
+        "and retain event-relative evidence");
+    bool missing_event_rejected = false;
+    try {
+        (void)thermox::service::project_transient_result(
+            trajectory, {}, {windowed});
+    } catch (const thermox::service::ResultProjectionError&) {
+        missing_event_rejected = true;
+    }
+    auto unordered = trajectory;
+    unordered[2].time = unordered[1].time;
+    bool unordered_rejected = false;
+    try {
+        (void)thermox::service::project_transient_result(
+            unordered, {}, transient_projections);
+    } catch (const thermox::service::ResultProjectionError&) {
+        unordered_rejected = true;
+    }
+    require(
+        missing_event_rejected && unordered_rejected,
+        "transient reductions must reject unresolved event anchors and "
+        "non-monotonic trajectory evidence");
+    auto spanning_transition = windowed;
+    spanning_transition.window = thermox::service::ResultWindow{
+        thermox::service::ResultWindowAnchor::simulation,
+        0.0,
+        1.5,
+        {},
+        0U,
+    };
+    bool transition_span_rejected = false;
+    try {
+        (void)thermox::service::project_transient_result(
+            trajectory,
+            {{"state_reset", 1.0, {}, false, true, 0}},
+            {spanning_transition});
+    } catch (const thermox::service::ResultProjectionError&) {
+        transition_span_rejected = true;
+    }
+    require(
+        transition_span_rejected,
+        "non-final reductions must not interpolate across an "
+        "instantaneous state transition");
+    auto discontinuous = trajectory;
+    discontinuous[1].discontinuous_from_previous = true;
+    bool scheduled_span_rejected = false;
+    try {
+        (void)thermox::service::project_transient_result(
+            discontinuous, {}, {spanning_transition});
+    } catch (const thermox::service::ResultProjectionError&) {
+        scheduled_span_rejected = true;
+    }
+    require(
+        scheduled_span_rejected,
+        "non-final reductions must not interpolate across a scheduled "
+        "trajectory discontinuity");
 
     const std::vector<thermox::service::EngineeringAcceptanceCriterion>
         criteria{

@@ -9,8 +9,8 @@
 
 namespace thermox::service {
 
-inline constexpr char result_summary_schema_v2[] =
-    "thermox.result_summary/v2";
+inline constexpr char result_summary_schema_v3[] =
+    "thermox.result_summary/v3";
 
 enum class ResultValueScope {
     system_balance,
@@ -29,11 +29,31 @@ enum class ResultAggregation {
     final,
     minimum,
     maximum,
+    mean,
+    root_mean_square,
 };
 
 std::string to_string(ResultAggregation aggregation);
 ResultAggregation result_aggregation_from_string(
     const std::string& value);
+
+enum class ResultWindowAnchor {
+    simulation,
+    event,
+};
+
+std::string to_string(ResultWindowAnchor anchor);
+ResultWindowAnchor result_window_anchor_from_string(
+    const std::string& value);
+
+struct ResultWindow {
+    ResultWindowAnchor anchor{ResultWindowAnchor::simulation};
+    double start_time{0.0};
+    double end_time{0.0};
+    std::string event_name;
+    std::size_t event_occurrence{0};
+    bool operator==(const ResultWindow&) const = default;
+};
 
 struct ResultProjection {
     std::string id;
@@ -43,6 +63,7 @@ struct ResultProjection {
     std::string value_name;
     std::string dimension;
     ResultAggregation aggregation{ResultAggregation::final};
+    std::optional<ResultWindow> window;
 };
 
 struct ProjectedResultValue {
@@ -52,6 +73,11 @@ struct ProjectedResultValue {
     ResultAggregation aggregation{ResultAggregation::final};
     bool has_sample_time{false};
     double sample_time{0.0};
+    bool has_window{false};
+    double window_start_time{0.0};
+    double window_end_time{0.0};
+    std::string window_anchor_event_name;
+    std::size_t window_anchor_event_occurrence{0};
 };
 
 struct EngineeringAcceptanceCriterion {
@@ -88,7 +114,7 @@ struct EngineeringAcceptanceSummary {
 };
 
 struct ResultSummary {
-    std::string schema_version{result_summary_schema_v2};
+    std::string schema_version{result_summary_schema_v3};
     std::string mode;
     std::vector<ProjectedResultValue> values;
     std::optional<EngineeringAcceptanceSummary>
@@ -120,6 +146,7 @@ ResultSummary project_steady_result(
 
 ResultSummary project_transient_result(
     const std::vector<StateSample>& trajectory,
+    const std::vector<EventValue>& events,
     const std::vector<ResultProjection>& projections);
 
 }  // namespace thermox::service

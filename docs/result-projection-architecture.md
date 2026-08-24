@@ -19,14 +19,32 @@ generic derived values: `m_dot_total` plus `mass_fraction[species]` for every de
 This keeps fuel, air, extraction, and exhaust totals selectable without embedding a particular
 reference species or mixture composition in service/UI post-processing.
 
-Steady projections use the final solved graph. Transient projections explicitly select `final`,
-`minimum`, or `maximum` and retain the time of the selected sample. These reductions are generic;
-future integral, average, event, or windowed reductions can extend the contract without changing
-the graph or solver.
+Steady projections use the final solved graph. Transient projections select `final`, `minimum`,
+`maximum`, `mean`, or `root_mean_square`. A projection can reduce the complete trajectory, an
+absolute simulation-time window, or a window anchored to a named event occurrence. Exact window
+boundaries and event-relative offsets are canonical SI seconds and are linearly interpolated from
+graph-native samples. Event occurrences are zero-based. Extrema and final values retain
+their evaluation time; mean and RMS values retain the resolved window instead of inventing a
+representative sample time.
+
+Event-relative windows currently require non-negative offsets. An offset of zero evaluates the
+post-transition sample recorded at the event. Pre-event interpolation is deliberately rejected:
+an instantaneous state reset is discontinuous, so interpolating backward across it would create a
+physically false value. For the same reason, minimum, maximum, mean, and RMS reductions reject any
+window that starts before and spans a state-transition event; a new window can begin exactly at
+that event and use its post-transition state. Mean otherwise uses trapezoidal integration of the
+piecewise-linear signal. RMS uses the exact integral of the square of each linear segment. Both
+preserve the selected value's physical dimension.
+
+`thermox.result/v4` marks every trajectory sample whose right-continuous state follows a scheduled
+input discontinuity or event transition. Non-final reductions apply the same span rejection to
+these solver-native markers, including schedule knots that do not happen to trigger a named event.
+This prevents server-side interpolation from smearing an instantaneous boundary change across the
+preceding integration interval.
 
 Projection definitions are stored in immutable run-configuration revisions and participate in
 their checksums. Submission snapshots them into the immutable job request. After a successful
-solve, the worker materializes `thermox.result_summary/v2` before writing the full result artifact,
+solve, the worker materializes `thermox.result_summary/v3` before writing the full result artifact,
 then publishes the summary, artifact manifest, and terminal job revision atomically. A missing or
 dimensionally incompatible selector produces a structured result-stage job failure.
 
@@ -34,8 +52,12 @@ This keeps summary policy owned by the run definition rather than the HTTP API, 
 particular UI. Run-history and status responses can display the compact summary without loading or
 parsing the full result artifact from object storage.
 
+Comparisons align multiple selected signals by projection ID. Dimension, aggregation, and resolved
+window evidence must all match before Thermox reports a numerical delta; incompatible windows are
+reported explicitly rather than compared as if they represented the same engineering quantity.
+
 The thin Results workspace displays the compact summary as the run's configured reductions. It
-requests the full `thermox.result/v3` artifact only when a user selects a succeeded job, then joins
+requests the full `thermox.result/v4` artifact only when a user selects a succeeded job, then joins
 the immutable projection selectors to the current steady graph or selected transient sample for
 the node overlay. The same graph feeds system-balance, KPI, component, internal-state, and
 port/stream tables. The browser does not derive thermal-cycle semantics: custom components,

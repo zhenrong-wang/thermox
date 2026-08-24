@@ -269,6 +269,15 @@ export function ExecutionHistory({
                           <code>{formatResultValue(displayed.value)}</code>
                           <span>{displayed.unit}</span>
                           <small>{value.aggregation}</small>
+                          {value.window && (
+                            <small>
+                              t={formatResultValue(value.window.start_time)}…
+                              {formatResultValue(value.window.end_time)} s
+                              {value.window.anchor_event_name
+                                ? ` after ${value.window.anchor_event_name} #${value.window.anchor_event_occurrence}`
+                                : ''}
+                            </small>
+                          )}
                         </div>
                       )
                     })()

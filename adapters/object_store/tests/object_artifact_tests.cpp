@@ -51,14 +51,14 @@ void test_provider_neutral_result_contract() {
         thermox::object_store::make_object_result_artifact_store(
             objects, "tenant-results");
     const std::string content =
-        R"({"schema_version":"thermox.result/v3","value":42})";
+        R"({"schema_version":"thermox.result/v4","value":42})";
     const auto first = artifacts->put_json(
         "job/unsafe:id",
-        thermox::service::result_schema_v3,
+        thermox::service::result_schema_v4,
         content);
     const auto repeated = artifacts->put_json(
         "job/unsafe:id",
-        thermox::service::result_schema_v3,
+        thermox::service::result_schema_v4,
         content);
     require(
         first.artifact_id == repeated.artifact_id &&

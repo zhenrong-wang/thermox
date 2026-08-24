@@ -521,6 +521,14 @@ std::string request_fingerprint(
         append_string(stream, projection.value_name);
         append_string(stream, projection.dimension);
         append_string(stream, to_string(projection.aggregation));
+        stream << projection.window.has_value() << '|';
+        if (projection.window) {
+            append_string(stream, to_string(projection.window->anchor));
+            stream << projection.window->start_time << '|'
+                   << projection.window->end_time << '|';
+            append_string(stream, projection.window->event_name);
+            stream << projection.window->event_occurrence << '|';
+        }
     }
     stream << '|' << request.acceptance_criteria.size() << '|';
     for (const auto& criterion : request.acceptance_criteria) {
@@ -542,7 +550,7 @@ std::string request_fingerprint(
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v16) {
+    if (request.schema_version != job_schema_v17) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -665,11 +673,12 @@ void validate_request(const SimulationJobRequest& request) {
             request.result_projections.end(),
             [](const auto& projection) {
                 return projection.aggregation !=
-                    ResultAggregation::final;
+                        ResultAggregation::final ||
+                    projection.window.has_value();
             })) {
         throw JobRequestError(
-            "steady jobs only support final result projection "
-            "aggregation");
+            "steady jobs only support unwindowed final result "
+            "projections");
     }
 }
 
@@ -1153,6 +1162,7 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
             : std::optional<ResultSummary>{
                   project_transient_result(
                       response.trajectory,
+                      response.events,
                       claimed->request.result_projections)};
         if (summary &&
             !claimed->request.acceptance_criteria.empty()) {

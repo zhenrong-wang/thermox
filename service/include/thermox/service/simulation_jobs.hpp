@@ -15,9 +15,9 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v16[] = "thermox.job/v16";
-inline constexpr char job_comparison_schema_v1[] =
-    "thermox.job_comparison/v1";
+inline constexpr char job_schema_v17[] = "thermox.job/v17";
+inline constexpr char job_comparison_schema_v2[] =
+    "thermox.job_comparison/v2";
 
 enum class SimulationJobMode {
     steady,
@@ -40,7 +40,7 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v16};
+    std::string schema_version{job_schema_v17};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
@@ -70,7 +70,7 @@ struct SimulationJobRequest {
 struct ResultArtifactManifest {
     std::string artifact_id;
     std::string media_type{"application/json"};
-    std::string schema_version{result_schema_v3};
+    std::string schema_version{result_schema_v4};
     std::uint64_t byte_size{0};
     std::string checksum;
 };
@@ -81,7 +81,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v16};
+    std::string schema_version{job_schema_v17};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;
@@ -126,9 +126,18 @@ enum class ComparedValueStatus {
     candidate_only,
     dimension_mismatch,
     aggregation_mismatch,
+    window_mismatch,
 };
 
 std::string to_string(ComparedValueStatus status);
+
+struct ResultWindowEvidence {
+    double start_time{0.0};
+    double end_time{0.0};
+    std::string anchor_event_name;
+    std::size_t anchor_event_occurrence{0};
+    bool operator==(const ResultWindowEvidence&) const = default;
+};
 
 struct ComparedResultValue {
     std::string id;
@@ -137,6 +146,8 @@ struct ComparedResultValue {
     std::string candidate_dimension;
     std::optional<ResultAggregation> baseline_aggregation;
     std::optional<ResultAggregation> candidate_aggregation;
+    std::optional<ResultWindowEvidence> baseline_window;
+    std::optional<ResultWindowEvidence> candidate_window;
     std::optional<double> baseline_value_si;
     std::optional<double> candidate_value_si;
     std::optional<double> absolute_delta_si;
@@ -150,7 +161,7 @@ struct EngineeringAcceptanceComparison {
 };
 
 struct SimulationJobComparison {
-    std::string schema_version{job_comparison_schema_v1};
+    std::string schema_version{job_comparison_schema_v2};
     std::string team_id;
     std::string project_id;
     std::string baseline_job_id;

@@ -771,6 +771,18 @@ void study_revision_json(
         json_string(out, projection.dimension);
         out << ", \"aggregation\": ";
         json_string(out, to_string(projection.aggregation));
+        if (projection.window) {
+            out << ", \"window\": {\"anchor\": ";
+            json_string(out, to_string(projection.window->anchor));
+            out << ", \"start_time\": "
+                << projection.window->start_time
+                << ", \"end_time\": "
+                << projection.window->end_time
+                << ", \"event_name\": ";
+            json_string(out, projection.window->event_name);
+            out << ", \"event_occurrence\": "
+                << projection.window->event_occurrence << '}';
+        }
         out << '}';
     }
     out << "], \"acceptance_criteria\": [";

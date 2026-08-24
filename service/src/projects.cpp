@@ -350,6 +350,14 @@ std::string study_identity(
         append(projection.value_name);
         append(projection.dimension);
         append(to_string(projection.aggregation));
+        out << projection.window.has_value() << '|';
+        if (projection.window) {
+            append(to_string(projection.window->anchor));
+            out << projection.window->start_time << '|'
+                << projection.window->end_time << '|';
+            append(projection.window->event_name);
+            out << projection.window->event_occurrence << '|';
+        }
     }
     out << request.acceptance_criteria.size() << '|';
     for (const auto& criterion : request.acceptance_criteria) {
@@ -1910,11 +1918,12 @@ StudyRevisionRecord ProjectService::create_study_revision(
             request.result_projections.end(),
             [](const auto& projection) {
                 return projection.aggregation !=
-                    ResultAggregation::final;
+                        ResultAggregation::final ||
+                    projection.window.has_value();
             })) {
         throw ProjectRequestError(
-            "steady studies only support final result projection "
-            "aggregation");
+            "steady studies only support unwindowed final result "
+            "projections");
     }
     return repository_->create_study_revision(
         request.identity.team_id,

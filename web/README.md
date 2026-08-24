@@ -32,7 +32,7 @@ The workspace currently provides:
 - optimistic queued/running-job cancellation, structured worker errors, result summaries, and
   result-artifact manifests;
 - bounded four-second refresh only while the Runs workspace contains an active job;
-- on-demand retrieval of successful `thermox.result/v3` artifacts through the service;
+- on-demand retrieval of successful `thermox.result/v4` artifacts through the service;
 - read-only projected-result overlays on the bound system topology;
 - system balance, KPI, component, internal-state, and port/stream result tables;
 - searchable scope-filtered graph-value inspection across system, component, internal, and port

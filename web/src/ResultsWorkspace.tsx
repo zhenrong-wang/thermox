@@ -422,6 +422,13 @@ export function ResultsWorkspace({
                   <span>{value.id}</span>
                   <strong>{formatResultValue(displayed.value)}</strong>
                   <small>{displayed.unit}</small>
+                  <small>{value.aggregation}</small>
+                  {value.window && (
+                    <small>
+                      t={formatResultValue(value.window.start_time)}…
+                      {formatResultValue(value.window.end_time)} s
+                    </small>
+                  )}
                 </div>
               )
             })}

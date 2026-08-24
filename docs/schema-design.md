@@ -296,7 +296,7 @@ operating inputs, not hidden calibration values; the canonical model retains the
 
 `solver_options` in a case are descriptive model metadata. The service command owns executable
 solver settings; Thermox never silently merges case metadata with command defaults. Every
-effective command setting is recorded in `thermox.result/v3`.
+effective command setting is recorded in `thermox.result/v4`.
 
 Case modes:
 
@@ -504,7 +504,7 @@ residuals:
 ## 9. Result schema
 
 ```yaml
-schema_version: thermox.result/v3
+schema_version: thermox.result/v4
 graph:
   components:
     - component_id: st_hp
@@ -571,6 +571,6 @@ Minimum validation before compilation:
   during early development.
 - Component `kind` + `version` identifies equation semantics.
 - Model revisions are immutable once used for a simulation result.
-- Simulation results use `thermox.result/v3` and record the platform build, model and command
+- Simulation results use `thermox.result/v4` and record the platform build, model and command
   schemas, catalog fingerprint, requested and resolved component/property versions, connector
   contracts, solver contract, and every effective solver setting.

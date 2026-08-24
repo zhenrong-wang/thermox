@@ -3900,7 +3900,8 @@ code {
 }
 
 .comparison-status.dimension_mismatch,
-.comparison-status.aggregation_mismatch {
+.comparison-status.aggregation_mismatch,
+.comparison-status.window_mismatch {
   background: #fae8e6;
   color: #994d47;
 }

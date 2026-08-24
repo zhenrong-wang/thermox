@@ -1499,6 +1499,15 @@ Tree result_projection(
     tree.put("dimension", value.dimension);
     tree.put(
         "aggregation", service::to_string(value.aggregation));
+    if (value.window) {
+        Tree window;
+        window.put("anchor", service::to_string(value.window->anchor));
+        window.put("start_time", value.window->start_time);
+        window.put("end_time", value.window->end_time);
+        window.put("event_name", value.window->event_name);
+        window.put("event_occurrence", value.window->event_occurrence);
+        tree.add_child("window", window);
+    }
     return tree;
 }
 
@@ -1519,6 +1528,18 @@ service::ResultProjection decode_result_projection(
     value.aggregation =
         service::result_aggregation_from_string(
             tree.get<std::string>("aggregation"));
+    if (const auto encoded = tree.get_child_optional("window")) {
+        service::ResultWindow window;
+        window.anchor = service::result_window_anchor_from_string(
+            encoded->get<std::string>("anchor"));
+        window.start_time = encoded->get<double>("start_time");
+        window.end_time = encoded->get<double>("end_time");
+        window.event_name =
+            encoded->get<std::string>("event_name", "");
+        window.event_occurrence =
+            encoded->get<std::size_t>("event_occurrence", 0U);
+        value.window = std::move(window);
+    }
     return value;
 }
 
@@ -2167,6 +2188,17 @@ std::string encode_result_summary(
                     value.has_sample_time);
                 encoded.put(
                     "sample_time", value.sample_time);
+                encoded.put("has_window", value.has_window);
+                encoded.put(
+                    "window_start_time", value.window_start_time);
+                encoded.put(
+                    "window_end_time", value.window_end_time);
+                encoded.put(
+                    "window_anchor_event_name",
+                    value.window_anchor_event_name);
+                encoded.put(
+                    "window_anchor_event_occurrence",
+                    value.window_anchor_event_occurrence);
                 return encoded;
             }));
     if (summary.engineering_acceptance) {
@@ -2220,7 +2252,7 @@ service::ResultSummary decode_result_summary(
         tree.get<std::string>("schema_version");
     summary.mode = tree.get<std::string>("mode");
     if (summary.schema_version !=
-            service::result_summary_schema_v2 ||
+            service::result_summary_schema_v3 ||
         (summary.mode != "steady" &&
          summary.mode != "transient")) {
         throw std::runtime_error(
@@ -2244,8 +2276,40 @@ service::ResultSummary decode_result_summary(
                     encoded.get<bool>("has_sample_time");
                 value.sample_time =
                     encoded.get<double>("sample_time");
+                value.has_window =
+                    encoded.get<bool>("has_window");
+                value.window_start_time =
+                    encoded.get<double>("window_start_time");
+                value.window_end_time =
+                    encoded.get<double>("window_end_time");
+                value.window_anchor_event_name = encoded.get<std::string>(
+                    "window_anchor_event_name", "");
+                value.window_anchor_event_occurrence =
+                    encoded.get<std::size_t>(
+                        "window_anchor_event_occurrence", 0U);
                 return value;
             });
+    for (const auto& value : summary.values) {
+        if (value.id.empty() || value.dimension.empty() ||
+            !std::isfinite(value.value_si) ||
+            (value.has_sample_time &&
+             !std::isfinite(value.sample_time)) ||
+            (value.has_window &&
+             (!std::isfinite(value.window_start_time) ||
+              !std::isfinite(value.window_end_time) ||
+              value.window_start_time > value.window_end_time)) ||
+            (!value.has_window &&
+             (value.window_start_time != 0.0 ||
+              value.window_end_time != 0.0 ||
+              !value.window_anchor_event_name.empty() ||
+              value.window_anchor_event_occurrence != 0U)) ||
+            (summary.mode == "steady" &&
+             (value.has_sample_time || value.has_window))) {
+            throw std::runtime_error(
+                "persisted result summary contains invalid value "
+                "evidence");
+        }
+    }
     if (const auto encoded =
             tree.get_child_optional("engineering_acceptance")) {
         service::EngineeringAcceptanceSummary acceptance;

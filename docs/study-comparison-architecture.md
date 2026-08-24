@@ -26,10 +26,12 @@ Comparing repeat executions of the same Study is also valid for reproducibility 
 Values align by stable result-projection ID. Every ID in the union of both summaries appears in
 the response with one status:
 
-- `matched`: dimension and aggregation agree;
+- `matched`: dimension, aggregation, and resolved time window agree;
 - `baseline_only` or `candidate_only`: the other Study did not declare that output;
 - `dimension_mismatch`: equal ID but different physical dimensions;
 - `aggregation_mismatch`: equal ID but different transient aggregation semantics.
+- `window_mismatch`: equal ID and reduction, but different resolved absolute/event-relative
+  windows.
 
 Only matched values receive numeric deltas. `absolute_delta_si` is candidate minus baseline in
 canonical SI. `relative_delta` is that delta divided by the absolute baseline value; it is null
@@ -46,7 +48,7 @@ per-projection numerical deltas.
 ## Interface and persistence boundary
 
 `POST /api/v1/job-comparisons` accepts baseline and candidate job IDs and returns
-`thermox.job_comparison/v1`. The Analyze workspace presents the same service response with display
+`thermox.job_comparison/v2`. The Analyze workspace presents the same service response with display
 unit conversion. The comparison is currently a deterministic read model and is not persisted.
 
 Generated reports, approvals, comments, or signed snapshots are durable business artifacts and

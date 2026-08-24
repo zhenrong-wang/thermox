@@ -82,7 +82,7 @@ logarithm are reported as recoverable physical evaluations.
 
 Equation content has a deterministic implementation fingerprint. The service includes it in the
 runtime catalog fingerprint, so changing a custom equation changes validation and execution
-provenance even if its public descriptor is unchanged. `thermox.job/v16` also snapshots the complete
+provenance even if its public descriptor is unchanged. `thermox.job/v17` also snapshots the complete
 request-scoped bundle and includes it in the idempotency fingerprint. A worker therefore
 reconstructs exactly the submitted component implementation after a process restart.
 

@@ -1279,7 +1279,7 @@ function App() {
       (revision) => revision.study_id === studyId,
     )
     const request: CreateStudyRevision = {
-      schema_version: 'thermox.study_revision.create/v3',
+      schema_version: 'thermox.study_revision.create/v4',
       study_id: studyId,
       parent_study_revision_id: parent?.study_revision_id ?? '',
       model_revision_id: selectedRevisionId,
