@@ -5463,6 +5463,84 @@ void test_expression_component_is_request_scoped() {
         "compilation");
 }
 
+void test_request_scoped_entropy_expression_solves() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.case_id = "design";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "service_isentropic_expression",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "expander",
+      "kind": "custom.fluid.service_isentropic_expander",
+      "media": {"inlet": "air", "outlet": "air"},
+      "parameters": {"pressure_ratio": 0.5}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "expander.inlet.m_dot": {"value": 12.0, "unit": "kg/s"},
+      "expander.inlet.p": {"value": 2.0, "unit": "bar"},
+      "expander.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json";
+    thermox::service::ExpressionComponentInput component;
+    component.schema_version = "thermox.expression_component/v5";
+    component.kind =
+        "custom.fluid.service_isentropic_expander";
+    component.version = "1.0.0";
+    component.template_kind = "custom.fluid.isentropic_expander";
+    component.display_name = "Service isentropic expander";
+    component.category = "Project turbomachinery";
+    component.model_name = "Entropy p-h closure";
+    component.ports = {
+        {"inlet", "fluid", "in", 1},
+        {"outlet", "fluid", "out", 1},
+    };
+    component.parameters = {{
+        "pressure_ratio", "dimensionless", true,
+        std::nullopt, 0.0, 1.0, false, true}};
+    component.equations = {
+        {"mass_balance", "outlet.m_dot - inlet.m_dot", 10.0},
+        {"pressure_law",
+         "outlet.p - inlet.p * parameter.pressure_ratio",
+         100000.0},
+        {"isentropic_closure",
+         "property.entropy_ph(outlet.p, outlet.h) - "
+         "property.entropy_ph(inlet.p, inlet.h)",
+         1000.0},
+    };
+    request.components.expression_components.push_back(
+        std::move(component));
+
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "request-scoped entropy expression must solve through the "
+        "service: " + response.error.message);
+    const auto& outlet = require_port_result(
+        response.graph, "expander", "outlet");
+    const double expected = 300000.0 * std::pow(
+        0.5, 287.0 / 1004.5);
+    require(
+        std::abs(
+            require_result_value(
+                outlet.primary_values, "h").value_si -
+            expected) < 1.0e-5,
+        "service result graph must expose the entropy-constrained "
+        "outlet enthalpy");
+}
+
 void test_transient_expression_component_flows_through_service() {
     thermox::service::SimulationService service;
     thermox::service::TransientSimulationRequest request;
@@ -6993,6 +7071,7 @@ int main() {
         test_injectable_native_runtime();
         test_expression_component_flows_through_service_runtime();
         test_expression_component_is_request_scoped();
+        test_request_scoped_entropy_expression_solves();
         test_transient_expression_component_flows_through_service();
         test_steady_service();
         test_structural_policy_audit_service();

@@ -40,6 +40,7 @@ enum class NodeKind {
     property_temperature_ph,
     property_density_ph,
     property_internal_energy_ph,
+    property_entropy_ph,
 };
 
 struct ExpressionNode {
@@ -201,7 +202,8 @@ DimensionInference infer_dimension(
     auto right = infer_dimension(*node.right, symbols);
     if (node.kind == NodeKind::property_temperature_ph ||
         node.kind == NodeKind::property_density_ph ||
-        node.kind == NodeKind::property_internal_energy_ph) {
+        node.kind == NodeKind::property_internal_energy_ph ||
+        node.kind == NodeKind::property_entropy_ph) {
         if (!same_dimension(
                 left.signature, physical_dimension("pressure")) ||
             !same_dimension(
@@ -216,6 +218,11 @@ DimensionInference infer_dimension(
         }
         if (node.kind == NodeKind::property_density_ph) {
             return {physical_dimension("density"), std::nullopt};
+        }
+        if (node.kind == NodeKind::property_entropy_ph) {
+            return {
+                physical_dimension("specific_entropy"),
+                std::nullopt};
         }
         return {
             physical_dimension("specific_internal_energy"),
@@ -468,6 +475,9 @@ private:
                 if (identifier == "property.internal_energy_ph") {
                     return NodeKind::property_internal_energy_ph;
                 }
+                if (identifier == "property.entropy_ph") {
+                    return NodeKind::property_entropy_ph;
+                }
                 return std::nullopt;
             }();
             if (property_kind) {
@@ -691,7 +701,8 @@ Evaluation evaluate(
     Evaluation out;
     if (node.kind == NodeKind::property_temperature_ph ||
         node.kind == NodeKind::property_density_ph ||
-        node.kind == NodeKind::property_internal_energy_ph) {
+        node.kind == NodeKind::property_internal_energy_ph ||
+        node.kind == NodeKind::property_entropy_ph) {
         const auto package = properties.find(node.symbol);
         if (package == properties.end() || !package->second) {
             return failure(
@@ -725,6 +736,12 @@ Evaluation evaluate(
                 .density_wrt_pressure_at_enthalpy;
             enthalpy_derivative = state.derivatives
                 .density_wrt_enthalpy_at_pressure;
+        } else if (node.kind == NodeKind::property_entropy_ph) {
+            out.value = state.state.entropy_j_kg_k;
+            pressure_derivative = state.derivatives
+                .entropy_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .entropy_wrt_enthalpy_at_pressure;
         } else {
             out.value = state.state.internal_energy_j_kg;
             pressure_derivative = state.derivatives

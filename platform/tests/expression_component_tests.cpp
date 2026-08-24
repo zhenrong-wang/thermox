@@ -250,6 +250,87 @@ void test_expression_component_uses_port_bound_properties() {
         "property-backed custom pressure loss converges");
 }
 
+void test_expression_component_supports_isentropic_closure() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p * parameter.pressure_ratio");
+    definition.descriptor.kind =
+        "custom.fluid.isentropic_expander";
+    definition.descriptor.template_kind =
+        "custom.fluid.isentropic_expander";
+    definition.equations[2] = {
+        "isentropic_closure",
+        "property.entropy_ph(outlet.p, outlet.h) - "
+        "property.entropy_ph(inlet.p, inlet.h)",
+        1000.0,
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "custom_isentropic_expander",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "expander",
+      "kind": "custom.fluid.isentropic_expander",
+      "media": {"inlet": "air", "outlet": "air"},
+      "parameters": {"pressure_ratio": 0.5}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "expander.inlet.m_dot": {"value": 12.0, "unit": "kg/s"},
+      "expander.inlet.p": {"value": 2.0, "unit": "bar"},
+      "expander.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "entropy p-h functions must chain provider derivatives into "
+        "the sparse Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "custom isentropic entropy closure must converge");
+    const auto outlet_enthalpy = [&]() {
+        for (std::size_t index = 0;
+             index < graph.problem.variable_names.size(); ++index) {
+            if (graph.problem.variable_names[index] ==
+                "expander.outlet.h") {
+                return solved.x.at(index);
+            }
+        }
+        throw std::runtime_error(
+            "missing custom expander outlet enthalpy");
+    }();
+    constexpr double cp = 1004.5;
+    constexpr double gas_constant = 287.0;
+    const double expected = 300000.0 * std::pow(
+        0.5, gas_constant / cp);
+    require(
+        std::abs(outlet_enthalpy - expected) < 1.0e-5,
+        "entropy closure must reproduce the ideal-gas isentropic "
+        "enthalpy relation: solved=" +
+            std::to_string(outlet_enthalpy) +
+            ", expected=" + std::to_string(expected));
+}
+
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
     auto registry =
         thermox::platform::make_default_component_registry();
@@ -943,6 +1024,7 @@ int main() {
     try {
         test_expression_component_compiles_and_solves();
         test_expression_component_uses_port_bound_properties();
+        test_expression_component_supports_isentropic_closure();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();

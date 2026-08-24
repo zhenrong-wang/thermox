@@ -94,6 +94,10 @@ IdealGasPropertyPackage::state_ph_derivatives(
         0.0;
     derivatives.internal_energy_wrt_enthalpy_at_pressure =
         cv / cp_;
+    derivatives.entropy_wrt_pressure_at_enthalpy =
+        -gas_constant_ / pressure;
+    derivatives.entropy_wrt_enthalpy_at_pressure =
+        1.0 / state.state.temperature_k;
     return {
         state.state, derivatives,
         PropertyDerivativeSource::analytic,

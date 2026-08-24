@@ -17,7 +17,9 @@ An expression can reference:
 - `abs(x)`, `sqrt(x)`, `exp(x)`, `log(x)`, and `pow(x, y)`;
 - the constrained p-h calls `property.temperature_ph(<port>.p, <port>.h)`,
   `property.density_ph(<port>.p, <port>.h)`, and
-  `property.internal_energy_ph(<port>.p, <port>.h)`.
+  `property.internal_energy_ph(<port>.p, <port>.h)`; and
+- `property.entropy_ph(<port>.p, <port>.h)` for isentropic and entropy-balance
+  closures.
 
 Each expression is a residual whose target value is zero. For example, a steady fluid
 pressure-loss component can declare:
@@ -200,6 +202,10 @@ Canvas rendering, instance editing, validation, and run authoring resolve the de
 the topology instance's exact kind/version rather than substituting the newest project revision.
 The browser only enables new run authoring after the service compiler has validated that exact
 topology, case, and artifact-revision set.
+
+The entropy primitive lets a project-defined compressor or expander introduce an isentropic
+reference enthalpy as an ordinary algebraic unknown and impose equal inlet/reference entropy. It
+does not bypass the registered property provider or embed a particular fluid formulation.
 
 Approval policy, additional property functions backed by derivative contracts, general
 cross-component algebraic reset expressions, variable-structure transitions, and richer equation

@@ -251,13 +251,23 @@ PhDerivativesResult coolprop_state_ph_derivatives(
             state.first_partial_deriv(
                 CoolProp::iUmass, CoolProp::iHmass,
                 CoolProp::iP);
+        derivatives.entropy_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::iSmass, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.entropy_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::iSmass, CoolProp::iHmass,
+                CoolProp::iP);
         const double values[]{
             derivatives.temperature_wrt_pressure_at_enthalpy,
             derivatives.temperature_wrt_enthalpy_at_pressure,
             derivatives.density_wrt_pressure_at_enthalpy,
             derivatives.density_wrt_enthalpy_at_pressure,
             derivatives.internal_energy_wrt_pressure_at_enthalpy,
-            derivatives.internal_energy_wrt_enthalpy_at_pressure};
+            derivatives.internal_energy_wrt_enthalpy_at_pressure,
+            derivatives.entropy_wrt_pressure_at_enthalpy,
+            derivatives.entropy_wrt_enthalpy_at_pressure};
         if (!std::all_of(
                 std::begin(values), std::end(values),
                 [](double value) { return std::isfinite(value); })) {
