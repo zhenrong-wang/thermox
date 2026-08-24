@@ -528,6 +528,84 @@ void test_expression_component_supports_heat_capacity_rate() {
         "analytical outlet enthalpy");
 }
 
+void test_expression_component_supports_transport_properties() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p");
+    definition.descriptor.kind =
+        "custom.fluid.transport_match";
+    definition.descriptor.template_kind =
+        "custom.fluid.transport_match";
+    definition.equations[2] = {
+        "transport_match",
+        "property.viscosity_ph(outlet.p, outlet.h) / "
+        "property.viscosity_ph(inlet.p, inlet.h) + "
+        "property.thermal_conductivity_ph(outlet.p, outlet.h) / "
+        "property.thermal_conductivity_ph(inlet.p, inlet.h) - 2",
+        1.0,
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "custom_transport_match",
+    "media": [{
+      "id": "steam",
+      "backend": "water_steam_if97",
+      "substance": "Steam"
+    }],
+    "components": [{
+      "id": "target",
+      "kind": "custom.fluid.transport_match",
+      "media": {"inlet": "steam", "outlet": "steam"},
+      "parameters": {"pressure_ratio": 1.0}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "target.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "target.inlet.p": {"value": 60.0, "unit": "bar"},
+      "target.inlet.h": {"value": 3.2, "unit": "MJ/kg"}
+    },
+    "initial_guesses": {
+      "target.outlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "target.outlet.p": {"value": 60.0, "unit": "bar"},
+      "target.outlet.h": {"value": 3.2, "unit": "MJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "transport property expressions must provide a consistent "
+        "sparse Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "custom transport-property equation must converge");
+
+    auto ideal_document = document;
+    ideal_document.media.front().backend =
+        "ideal_gas_mixture";
+    ideal_document.media.front().substance = "Air";
+    require_invalid(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                ideal_document, registry, "design");
+        },
+        "transport");
+}
+
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
     auto registry =
         thermox::platform::make_default_component_registry();
@@ -1224,6 +1302,7 @@ int main() {
         test_expression_component_supports_isentropic_closure();
         test_expression_component_supports_two_phase_quality_closure();
         test_expression_component_supports_heat_capacity_rate();
+        test_expression_component_supports_transport_properties();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();

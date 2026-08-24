@@ -343,6 +343,76 @@ void verify_ph_derivatives(
         1.0e-12, "dcp/dh at constant p");
 }
 
+void verify_ph_transport_derivatives(
+    const thermox::physics::PropertyPackage& package,
+    double pressure, double temperature) {
+    const auto pt = package.state_pt(pressure, temperature);
+    require(pt.ok(), "transport derivative reference PT state");
+    const double enthalpy = pt.state.enthalpy_j_kg;
+    const auto result = thermox::physics::
+        state_ph_transport_derivatives_with_fallback(
+            package, pressure, enthalpy);
+    require(
+        result.ok(), std::string(package.name()) +
+            " p-h transport derivatives: " + result.message);
+    require(
+        result.source == thermox::physics::
+            PropertyDerivativeSource::finite_difference,
+        "transport derivatives must report finite-difference provenance");
+    require(
+        result.state.viscosity_pa_s > 0.0 &&
+            result.state.thermal_conductivity_w_m_k > 0.0,
+        "transport derivative base state must be physical");
+
+    const double pressure_step =
+        std::max(pressure * 1.0e-5, 1.0);
+    const double enthalpy_step =
+        std::max(std::abs(enthalpy) * 1.0e-5, 1.0e-2);
+    const auto pressure_lower =
+        package.state_ph(pressure - pressure_step, enthalpy);
+    const auto pressure_upper =
+        package.state_ph(pressure + pressure_step, enthalpy);
+    const auto enthalpy_lower =
+        package.state_ph(pressure, enthalpy - enthalpy_step);
+    const auto enthalpy_upper =
+        package.state_ph(pressure, enthalpy + enthalpy_step);
+    require(
+        pressure_lower.ok() && pressure_upper.ok() &&
+            enthalpy_lower.ok() && enthalpy_upper.ok(),
+        "transport derivative reference stencil");
+    const auto central = [](double lower, double upper, double step) {
+        return (upper - lower) / (2.0 * step);
+    };
+    require_relative_near(
+        result.derivatives.viscosity_wrt_pressure_at_enthalpy,
+        central(
+            pressure_lower.state.viscosity_pa_s,
+            pressure_upper.state.viscosity_pa_s, pressure_step),
+        2.0e-3, 1.0e-16, "dmu/dp at constant h");
+    require_relative_near(
+        result.derivatives.viscosity_wrt_enthalpy_at_pressure,
+        central(
+            enthalpy_lower.state.viscosity_pa_s,
+            enthalpy_upper.state.viscosity_pa_s, enthalpy_step),
+        2.0e-3, 1.0e-16, "dmu/dh at constant p");
+    require_relative_near(
+        result.derivatives
+            .thermal_conductivity_wrt_pressure_at_enthalpy,
+        central(
+            pressure_lower.state.thermal_conductivity_w_m_k,
+            pressure_upper.state.thermal_conductivity_w_m_k,
+            pressure_step),
+        2.0e-3, 1.0e-14, "dk/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .thermal_conductivity_wrt_enthalpy_at_pressure,
+        central(
+            enthalpy_lower.state.thermal_conductivity_w_m_k,
+            enthalpy_upper.state.thermal_conductivity_w_m_k,
+            enthalpy_step),
+        2.0e-3, 1.0e-14, "dk/dh at constant p");
+}
+
 void verify_solver_bridge(const thermox::physics::PropertyPackage& package,
                           double pressure, double target_temperature,
                           double initial_temperature, double tolerance) {
@@ -796,6 +866,17 @@ int main() {
     verify_ph_derivatives(
         water_heos, 6e6, 700.0, 2.0e-4,
         thermox::physics::PropertyDerivativeSource::analytic);
+    verify_ph_transport_derivatives(co2, 20e6, 700.0);
+    verify_ph_transport_derivatives(if97, 6e6, 700.0);
+    verify_ph_transport_derivatives(water_heos, 6e6, 700.0);
+    require(
+        thermox::physics::
+            state_ph_transport_derivatives_with_fallback(
+                ideal_gas, 2e5, 600000.0)
+                .status ==
+            thermox::physics::PropertyStatus::unsupported,
+        "transport derivatives must reject providers without the "
+        "transport capability");
     verify_co2_cycle_points(co2);
     verify_thermochemistry_contracts();
 #ifdef THERMOX_TEST_HAS_CANTERA

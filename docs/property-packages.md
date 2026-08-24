@@ -184,6 +184,14 @@ heat-capacity partials for thermal correlations. A third-party backend can repla
 simply by
 advertising and implementing the analytic capability; no component changes are required.
 
+Transport-property p-h derivatives use a separate provider-neutral result contract. A package
+must advertise both `state_ph` and `transport`; Thermox then constructs bounded central or
+same-phase one-sided derivatives for dynamic viscosity and thermal conductivity. Non-positive or
+non-finite transport values fail explicitly. The result records finite-difference provenance and
+does not weaken or misrepresent the separate analytic thermodynamic derivative capability. Safe
+expression components use this path for custom Reynolds/Prandtl, pressure-loss, and heat-transfer
+closures.
+
 ## Saturation contract and next extensions
 
 The property interface and both real-fluid adapters expose an explicit

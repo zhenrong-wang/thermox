@@ -5604,11 +5604,30 @@ void test_request_scoped_quality_expression_solves() {
          100000.0},
         {"quality_closure",
          "property.vapor_quality_ph(outlet.p, outlet.h) - "
-         "parameter.target_quality",
+         "parameter.target_quality + "
+         "0 * property.viscosity_ph(outlet.p, outlet.h) / "
+         "property.viscosity_ph(outlet.p, outlet.h) + "
+         "0 * property.thermal_conductivity_ph(outlet.p, outlet.h) / "
+         "property.thermal_conductivity_ph(outlet.p, outlet.h)",
          1.0},
     };
     request.components.expression_components.push_back(
         std::move(component));
+
+    thermox::service::ValidateModelRequest transport_validation;
+    transport_validation.model_json = request.model_json;
+    transport_validation.case_id = request.case_id;
+    transport_validation.components = request.components;
+    const auto validated =
+        service.validate_model(transport_validation);
+    require(
+        validated.succeeded(),
+        "request-scoped transport-property functions must compile "
+        "through the service: " + validated.error.message);
+    request.components.expression_components.front()
+        .equations.back().expression =
+        "property.vapor_quality_ph(outlet.p, outlet.h) - "
+        "parameter.target_quality";
 
     const auto response = service.run_steady(request);
     require(

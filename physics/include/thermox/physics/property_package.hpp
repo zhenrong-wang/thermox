@@ -83,6 +83,26 @@ struct PhDerivativesResult {
     }
 };
 
+struct PhTransportDerivatives {
+    double viscosity_wrt_pressure_at_enthalpy{0.0};
+    double viscosity_wrt_enthalpy_at_pressure{0.0};
+    double thermal_conductivity_wrt_pressure_at_enthalpy{0.0};
+    double thermal_conductivity_wrt_enthalpy_at_pressure{0.0};
+};
+
+struct PhTransportDerivativesResult {
+    ThermodynamicState state;
+    PhTransportDerivatives derivatives;
+    PropertyDerivativeSource source{
+        PropertyDerivativeSource::finite_difference};
+    PropertyStatus status{PropertyStatus::backend_error};
+    std::string message;
+
+    [[nodiscard]] bool ok() const {
+        return status == PropertyStatus::success;
+    }
+};
+
 struct SaturationResult {
     ThermodynamicState liquid;
     ThermodynamicState vapor;
@@ -122,6 +142,16 @@ public:
 };
 
 [[nodiscard]] PhDerivativesResult state_ph_derivatives_with_fallback(
+    const PropertyPackage& properties,
+    double pressure_pa,
+    double enthalpy_j_kg);
+
+// Transport-property derivatives are deliberately separate from the
+// thermodynamic derivative capability. Providers that expose transport state
+// values receive this bounded, phase-aware p-h fallback without claiming that
+// their native thermodynamic derivative API differentiates transport models.
+[[nodiscard]] PhTransportDerivativesResult
+state_ph_transport_derivatives_with_fallback(
     const PropertyPackage& properties,
     double pressure_pa,
     double enthalpy_j_kg);

@@ -43,6 +43,8 @@ enum class NodeKind {
     property_entropy_ph,
     property_vapor_quality_ph,
     property_cp_ph,
+    property_viscosity_ph,
+    property_thermal_conductivity_ph,
 };
 
 struct ExpressionNode {
@@ -57,6 +59,7 @@ struct ParsedExpression {
     std::shared_ptr<const ExpressionNode> root;
     std::set<std::string> symbols;
     std::set<std::string> property_ports;
+    std::set<std::string> transport_property_ports;
 };
 
 using DimensionSignature = std::map<std::string, double>;
@@ -207,7 +210,9 @@ DimensionInference infer_dimension(
         node.kind == NodeKind::property_internal_energy_ph ||
         node.kind == NodeKind::property_entropy_ph ||
         node.kind == NodeKind::property_vapor_quality_ph ||
-        node.kind == NodeKind::property_cp_ph) {
+        node.kind == NodeKind::property_cp_ph ||
+        node.kind == NodeKind::property_viscosity_ph ||
+        node.kind == NodeKind::property_thermal_conductivity_ph) {
         if (!same_dimension(
                 left.signature, physical_dimension("pressure")) ||
             !same_dimension(
@@ -234,6 +239,17 @@ DimensionInference infer_dimension(
         if (node.kind == NodeKind::property_cp_ph) {
             return {
                 physical_dimension("specific_heat_capacity"),
+                std::nullopt};
+        }
+        if (node.kind == NodeKind::property_viscosity_ph) {
+            return {
+                physical_dimension("dynamic_viscosity"),
+                std::nullopt};
+        }
+        if (node.kind ==
+            NodeKind::property_thermal_conductivity_ph) {
+            return {
+                physical_dimension("thermal_conductivity"),
                 std::nullopt};
         }
         return {
@@ -332,7 +348,8 @@ public:
         }
         return {
             std::move(root), std::move(symbols_),
-            std::move(property_ports_)};
+            std::move(property_ports_),
+            std::move(transport_property_ports_)};
     }
 
 private:
@@ -496,6 +513,13 @@ private:
                 if (identifier == "property.cp_ph") {
                     return NodeKind::property_cp_ph;
                 }
+                if (identifier == "property.viscosity_ph") {
+                    return NodeKind::property_viscosity_ph;
+                }
+                if (identifier ==
+                    "property.thermal_conductivity_ph") {
+                    return NodeKind::property_thermal_conductivity_ph;
+                }
                 return std::nullopt;
             }();
             if (property_kind) {
@@ -523,6 +547,13 @@ private:
                          " arguments must reference the same fluid port");
                 }
                 property_ports_.insert(pressure_port);
+                if (*property_kind ==
+                        NodeKind::property_viscosity_ph ||
+                    *property_kind ==
+                        NodeKind::property_thermal_conductivity_ph) {
+                    transport_property_ports_.insert(
+                        pressure_port);
+                }
                 return node(
                     *property_kind, std::move(first),
                     std::move(second), 0.0,
@@ -601,6 +632,7 @@ private:
     std::size_t node_count_{0};
     std::set<std::string> symbols_;
     std::set<std::string> property_ports_;
+    std::set<std::string> transport_property_ports_;
 };
 
 struct Evaluation {
@@ -722,7 +754,9 @@ Evaluation evaluate(
         node.kind == NodeKind::property_internal_energy_ph ||
         node.kind == NodeKind::property_entropy_ph ||
         node.kind == NodeKind::property_vapor_quality_ph ||
-        node.kind == NodeKind::property_cp_ph) {
+        node.kind == NodeKind::property_cp_ph ||
+        node.kind == NodeKind::property_viscosity_ph ||
+        node.kind == NodeKind::property_thermal_conductivity_ph) {
         const auto package = properties.find(node.symbol);
         if (package == properties.end() || !package->second) {
             return failure(
@@ -730,9 +764,50 @@ Evaluation evaluate(
                     node.symbol + "'",
                 true);
         }
-        const auto state =
-            physics::state_ph_derivatives_with_fallback(
-                *package->second, left.value, right.value);
+        if (node.kind == NodeKind::property_viscosity_ph ||
+            node.kind ==
+                NodeKind::property_thermal_conductivity_ph) {
+            const auto transport =
+                physics::state_ph_transport_derivatives_with_fallback(
+                    *package->second, left.value, right.value);
+            if (!transport.ok()) {
+                const bool fatal =
+                    transport.status ==
+                        physics::PropertyStatus::backend_error ||
+                    transport.status ==
+                        physics::PropertyStatus::unsupported;
+                return failure(
+                    "transport property function on port '" +
+                        node.symbol + "' failed: " +
+                        transport.message,
+                    fatal);
+            }
+            if (node.kind == NodeKind::property_viscosity_ph) {
+                out.value = transport.state.viscosity_pa_s;
+                add_scaled(
+                    out.derivatives, left.derivatives,
+                    transport.derivatives
+                        .viscosity_wrt_pressure_at_enthalpy);
+                add_scaled(
+                    out.derivatives, right.derivatives,
+                    transport.derivatives
+                        .viscosity_wrt_enthalpy_at_pressure);
+            } else {
+                out.value = transport.state
+                    .thermal_conductivity_w_m_k;
+                add_scaled(
+                    out.derivatives, left.derivatives,
+                    transport.derivatives
+                        .thermal_conductivity_wrt_pressure_at_enthalpy);
+                add_scaled(
+                    out.derivatives, right.derivatives,
+                    transport.derivatives
+                        .thermal_conductivity_wrt_enthalpy_at_pressure);
+            }
+            return out;
+        }
+        const auto state = physics::state_ph_derivatives_with_fallback(
+            *package->second, left.value, right.value);
         if (!state.ok()) {
             const bool fatal =
                 state.status == physics::PropertyStatus::backend_error ||
@@ -1020,6 +1095,7 @@ public:
         ParsedModeEquationSets mode_transient_equations,
         std::vector<ParsedEvent> events,
         std::set<std::string> property_ports,
+        std::set<std::string> transport_property_ports,
         std::string fingerprint)
         : descriptor_(std::move(descriptor)),
           equations_(std::move(equations)),
@@ -1029,6 +1105,8 @@ public:
               std::move(mode_transient_equations)),
           events_(std::move(events)),
           property_ports_(std::move(property_ports)),
+          transport_property_ports_(
+              std::move(transport_property_ports)),
           fingerprint_(std::move(fingerprint)) {}
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -1043,8 +1121,11 @@ public:
     bool requires_property_capability_on_port(
         physics::PropertyCapability capability,
         std::string_view port) const override {
-        return capability == physics::PropertyCapability::state_ph &&
-            property_ports_.contains(std::string{port});
+        if (capability == physics::PropertyCapability::state_ph) {
+            return property_ports_.contains(std::string{port});
+        }
+        return capability == physics::PropertyCapability::transport &&
+            transport_property_ports_.contains(std::string{port});
     }
 
     void add_equations(
@@ -1428,6 +1509,7 @@ private:
     ParsedModeEquationSets mode_transient_equations_;
     std::vector<ParsedEvent> events_;
     std::set<std::string> property_ports_;
+    std::set<std::string> transport_property_ports_;
     std::string fingerprint_;
 };
 
@@ -1697,6 +1779,7 @@ make_expression_component_model(
     }
 
     std::set<std::string> property_ports;
+    std::set<std::string> transport_property_ports;
     const auto validate_property_ports = [&](
         const ParsedExpression& expression) {
         for (const auto& port : expression.property_ports) {
@@ -1709,6 +1792,9 @@ make_expression_component_model(
             }
             property_ports.insert(port);
         }
+        transport_property_ports.insert(
+            expression.transport_property_ports.begin(),
+            expression.transport_property_ports.end());
     };
     for (const auto& parameter : descriptor.parameters) {
         if (parameter.name.find('{') != std::string::npos ||
@@ -2174,6 +2260,10 @@ make_expression_component_model(
         descriptor.required_property_capabilities.push_back(
             physics::PropertyCapability::state_ph);
     }
+    if (!transport_property_ports.empty()) {
+        descriptor.required_property_capabilities.push_back(
+            physics::PropertyCapability::transport);
+    }
 
     return std::make_shared<ExpressionComponentModel>(
         std::move(descriptor), std::move(equations),
@@ -2182,6 +2272,7 @@ make_expression_component_model(
         std::move(mode_transient_equations),
         std::move(events),
         std::move(property_ports),
+        std::move(transport_property_ports),
         fingerprint);
 }
 

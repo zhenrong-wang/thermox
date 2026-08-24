@@ -23,7 +23,10 @@ An expression can reference:
 - `property.vapor_quality_ph(<port>.p, <port>.h)` for explicitly two-phase
   quality closures; and
 - `property.cp_ph(<port>.p, <port>.h)` for heat-capacity-rate and thermal
-  correlation closures.
+  correlation closures; and
+- `property.viscosity_ph(<port>.p, <port>.h)` and
+  `property.thermal_conductivity_ph(<port>.p, <port>.h)` for transport,
+  Reynolds/Prandtl, pressure-loss, and heat-transfer correlations.
 
 Each expression is a residual whose target value is zero. For example, a steady fluid
 pressure-loss component can declare:
@@ -46,8 +49,9 @@ enthalpy equaling power are recognized. Extension-defined dimension names remain
 dimensions and still receive equality and cancellation checks.
 
 Property calls must use the direct pressure and enthalpy symbols of the same declared fluid port.
-Registration derives the component's `state_ph` capability requirement; graph compilation binds
-that port to its selected registered property package and rejects unsupported media before solving.
+Registration derives the component's `state_ph` capability requirement and additionally derives
+`transport` for viscosity or conductivity calls; graph compilation binds that port to its selected
+registered property package and rejects unsupported media before solving.
 Evaluation uses the backend-neutral p-h derivative contract, including its bounded documented
 fallback where an analytic provider derivative is unavailable, and chains those derivatives into
 the expression's fixed sparse Jacobian row. Invalid or out-of-range thermodynamic states are
@@ -169,7 +173,7 @@ failures therefore produce an explicit integration diagnostic instead of being t
 non-crossing value.
 
 The safe contract does not currently expose thermochemistry calls, artifact access, parameter
-templates, species-expanded material variables, or derivative-free transport-property calls.
+templates, or species-expanded material variables.
 Deployment code can register definitions at the trusted composition root through
 `register_expression_component`; application code can supply the same safe definition through a
 request bundle.
@@ -218,6 +222,11 @@ The constant-pressure heat-capacity primitive requires a positive finite provide
 the same analytic-or-bounded p-h derivative path. It supports user-defined thermal equations such
 as `m_dot * cp * delta_T`; it does not silently replace the exact enthalpy balance when heat
 capacity varies materially across the modeled interval.
+The viscosity and thermal-conductivity primitives require the provider's explicit `transport`
+capability and positive finite values. Their Jacobians use a bounded, phase-preserving p-h finite
+difference contract kept separate from the provider's thermodynamic derivative claim. This makes
+transport correlations solver-compatible without implying that a backend analytically
+differentiates its transport formulation.
 
 Approval policy, additional property functions backed by derivative contracts, general
 cross-component algebraic reset expressions, variable-structure transitions, and richer equation
