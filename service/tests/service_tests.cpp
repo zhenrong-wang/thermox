@@ -5517,7 +5517,8 @@ void test_request_scoped_entropy_expression_solves() {
          100000.0},
         {"isentropic_closure",
          "property.entropy_ph(outlet.p, outlet.h) - "
-         "property.entropy_ph(inlet.p, inlet.h)",
+         "property.entropy_ph(inlet.p, inlet.h) + "
+         "0 * property.cp_ph(inlet.p, inlet.h)",
          1000.0},
     };
     request.components.expression_components.push_back(

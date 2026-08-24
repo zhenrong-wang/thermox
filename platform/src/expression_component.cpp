@@ -42,6 +42,7 @@ enum class NodeKind {
     property_internal_energy_ph,
     property_entropy_ph,
     property_vapor_quality_ph,
+    property_cp_ph,
 };
 
 struct ExpressionNode {
@@ -205,7 +206,8 @@ DimensionInference infer_dimension(
         node.kind == NodeKind::property_density_ph ||
         node.kind == NodeKind::property_internal_energy_ph ||
         node.kind == NodeKind::property_entropy_ph ||
-        node.kind == NodeKind::property_vapor_quality_ph) {
+        node.kind == NodeKind::property_vapor_quality_ph ||
+        node.kind == NodeKind::property_cp_ph) {
         if (!same_dimension(
                 left.signature, physical_dimension("pressure")) ||
             !same_dimension(
@@ -228,6 +230,11 @@ DimensionInference infer_dimension(
         }
         if (node.kind == NodeKind::property_vapor_quality_ph) {
             return {{}, std::nullopt};
+        }
+        if (node.kind == NodeKind::property_cp_ph) {
+            return {
+                physical_dimension("specific_heat_capacity"),
+                std::nullopt};
         }
         return {
             physical_dimension("specific_internal_energy"),
@@ -486,6 +493,9 @@ private:
                 if (identifier == "property.vapor_quality_ph") {
                     return NodeKind::property_vapor_quality_ph;
                 }
+                if (identifier == "property.cp_ph") {
+                    return NodeKind::property_cp_ph;
+                }
                 return std::nullopt;
             }();
             if (property_kind) {
@@ -711,7 +721,8 @@ Evaluation evaluate(
         node.kind == NodeKind::property_density_ph ||
         node.kind == NodeKind::property_internal_energy_ph ||
         node.kind == NodeKind::property_entropy_ph ||
-        node.kind == NodeKind::property_vapor_quality_ph) {
+        node.kind == NodeKind::property_vapor_quality_ph ||
+        node.kind == NodeKind::property_cp_ph) {
         const auto package = properties.find(node.symbol);
         if (package == properties.end() || !package->second) {
             return failure(
@@ -767,6 +778,19 @@ Evaluation evaluate(
                 .vapor_quality_wrt_pressure_at_enthalpy;
             enthalpy_derivative = state.derivatives
                 .vapor_quality_wrt_enthalpy_at_pressure;
+        } else if (node.kind == NodeKind::property_cp_ph) {
+            if (!std::isfinite(state.state.cp_j_kg_k) ||
+                state.state.cp_j_kg_k <= 0.0) {
+                return failure(
+                    "constant-pressure heat-capacity property "
+                    "function on port '" + node.symbol +
+                        "' requires a positive finite value");
+            }
+            out.value = state.state.cp_j_kg_k;
+            pressure_derivative = state.derivatives
+                .cp_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .cp_wrt_enthalpy_at_pressure;
         } else {
             out.value = state.state.internal_energy_j_kg;
             pressure_derivative = state.derivatives

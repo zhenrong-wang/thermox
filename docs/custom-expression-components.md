@@ -21,7 +21,9 @@ An expression can reference:
 - `property.entropy_ph(<port>.p, <port>.h)` for isentropic and entropy-balance
   closures; and
 - `property.vapor_quality_ph(<port>.p, <port>.h)` for explicitly two-phase
-  quality closures.
+  quality closures; and
+- `property.cp_ph(<port>.p, <port>.h)` for heat-capacity-rate and thermal
+  correlation closures.
 
 Each expression is a residual whose target value is zero. For example, a steady fluid
 pressure-loss component can declare:
@@ -212,6 +214,10 @@ The vapor-quality primitive is defined only when the provider reports a two-phas
 quality in `[0, 1]`. Single-phase trials are recoverable physical evaluation failures, so a model
 must provide a physically compatible initial state or continuation path rather than interpreting a
 provider's single-phase quality sentinel as an engineering value.
+The constant-pressure heat-capacity primitive requires a positive finite provider value and uses
+the same analytic-or-bounded p-h derivative path. It supports user-defined thermal equations such
+as `m_dot * cp * delta_T`; it does not silently replace the exact enthalpy balance when heat
+capacity varies materially across the modeled interval.
 
 Approval policy, additional property functions backed by derivative contracts, general
 cross-component algebraic reset expressions, variable-structure transitions, and richer equation

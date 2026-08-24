@@ -279,6 +279,10 @@ void verify_ph_derivatives(
         [](const thermox::physics::ThermodynamicState& state) {
             return state.vapor_quality;
         };
+    const auto cp =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.cp_j_kg_k;
+        };
     require_relative_near(
         result.derivatives
             .temperature_wrt_pressure_at_enthalpy,
@@ -329,6 +333,14 @@ void verify_ph_derivatives(
             .vapor_quality_wrt_enthalpy_at_pressure,
         enthalpy_partial(vapor_quality), relative_tolerance,
         1.0e-12, "dx/dh at constant p");
+    require_relative_near(
+        result.derivatives.cp_wrt_pressure_at_enthalpy,
+        pressure_partial(cp), relative_tolerance,
+        1.0e-12, "dcp/dp at constant h");
+    require_relative_near(
+        result.derivatives.cp_wrt_enthalpy_at_pressure,
+        enthalpy_partial(cp), relative_tolerance,
+        1.0e-12, "dcp/dh at constant p");
 }
 
 void verify_solver_bridge(const thermox::physics::PropertyPackage& package,
@@ -530,7 +542,9 @@ void verify_if97_derivatives_near_vapor_boundary(
             std::isfinite(result.derivatives.entropy_wrt_pressure_at_enthalpy) &&
             std::isfinite(result.derivatives.entropy_wrt_enthalpy_at_pressure) &&
             std::isfinite(result.derivatives.vapor_quality_wrt_pressure_at_enthalpy) &&
-            std::isfinite(result.derivatives.vapor_quality_wrt_enthalpy_at_pressure),
+            std::isfinite(result.derivatives.vapor_quality_wrt_enthalpy_at_pressure) &&
+            std::isfinite(result.derivatives.cp_wrt_pressure_at_enthalpy) &&
+            std::isfinite(result.derivatives.cp_wrt_enthalpy_at_pressure),
         "IF97 one-sided boundary derivatives must remain finite");
     require_relative_near(
         result.derivatives

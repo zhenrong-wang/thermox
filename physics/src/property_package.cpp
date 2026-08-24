@@ -134,6 +134,10 @@ PhDerivativesResult state_ph_derivatives_with_fallback(
         [](const ThermodynamicState& state) {
             return state.vapor_quality;
         };
+    const auto cp =
+        [](const ThermodynamicState& state) {
+            return state.cp_j_kg_k;
+        };
     const PropertyResult* failed = nullptr;
     failed = partial(
         pressure_lower, pressure_upper, pressure_step,
@@ -170,6 +174,13 @@ PhDerivativesResult state_ph_derivatives_with_fallback(
     }
     if (failed == nullptr) {
         failed = partial(
+            pressure_lower, pressure_upper, pressure_step,
+            cp,
+            result.derivatives
+                .cp_wrt_pressure_at_enthalpy);
+    }
+    if (failed == nullptr) {
+        failed = partial(
             enthalpy_lower, enthalpy_upper, enthalpy_step,
             temperature,
             result.derivatives
@@ -202,6 +213,13 @@ PhDerivativesResult state_ph_derivatives_with_fallback(
             vapor_quality,
             result.derivatives
                 .vapor_quality_wrt_enthalpy_at_pressure);
+    }
+    if (failed == nullptr) {
+        failed = partial(
+            enthalpy_lower, enthalpy_upper, enthalpy_step,
+            cp,
+            result.derivatives
+                .cp_wrt_enthalpy_at_pressure);
     }
     if (failed != nullptr) {
         return {

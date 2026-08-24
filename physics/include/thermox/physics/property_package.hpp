@@ -67,6 +67,8 @@ struct PhStateDerivatives {
     double entropy_wrt_enthalpy_at_pressure{0.0};
     double vapor_quality_wrt_pressure_at_enthalpy{0.0};
     double vapor_quality_wrt_enthalpy_at_pressure{0.0};
+    double cp_wrt_pressure_at_enthalpy{0.0};
+    double cp_wrt_enthalpy_at_pressure{0.0};
 };
 
 struct PhDerivativesResult {

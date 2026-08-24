@@ -447,6 +447,87 @@ void test_expression_component_supports_two_phase_quality_closure() {
             liquid_status.message);
 }
 
+void test_expression_component_supports_heat_capacity_rate() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p");
+    definition.descriptor.kind =
+        "custom.fluid.constant_cp_heater";
+    definition.descriptor.template_kind =
+        "custom.fluid.heater";
+    definition.descriptor.ports.push_back(
+        {"heat", "heat", "in"});
+    definition.equations[2] = {
+        "heat_capacity_rate",
+        "heat.Q_dot - inlet.m_dot * "
+        "property.cp_ph(inlet.p, inlet.h) * "
+        "(property.temperature_ph(outlet.p, outlet.h) - "
+        "property.temperature_ph(inlet.p, inlet.h))",
+        1.0e6,
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "custom_constant_cp_heater",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "heater",
+      "kind": "custom.fluid.constant_cp_heater",
+      "media": {"inlet": "air", "outlet": "air"},
+      "parameters": {"pressure_ratio": 1.0}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "heater.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "heater.inlet.p": {"value": 2.0, "unit": "bar"},
+      "heater.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "heater.heat.Q_dot": {"value": 1.0, "unit": "MW"},
+      "heater.heat.T": {"value": 500.0, "unit": "K"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "heat-capacity p-h functions must provide a consistent sparse "
+        "Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "custom heat-capacity-rate equation must converge");
+    const auto outlet_enthalpy = [&]() {
+        for (std::size_t index = 0;
+             index < graph.problem.variable_names.size(); ++index) {
+            if (graph.problem.variable_names[index] ==
+                "heater.outlet.h") {
+                return solved.x.at(index);
+            }
+        }
+        throw std::runtime_error(
+            "missing constant-cp heater outlet enthalpy");
+    }();
+    require(
+        std::abs(outlet_enthalpy - 400000.0) < 1.0e-5,
+        "constant-cp heat-capacity-rate closure must reproduce its "
+        "analytical outlet enthalpy");
+}
+
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
     auto registry =
         thermox::platform::make_default_component_registry();
@@ -1142,6 +1223,7 @@ int main() {
         test_expression_component_uses_port_bound_properties();
         test_expression_component_supports_isentropic_closure();
         test_expression_component_supports_two_phase_quality_closure();
+        test_expression_component_supports_heat_capacity_rate();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();
