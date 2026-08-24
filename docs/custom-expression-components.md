@@ -128,6 +128,7 @@ Approval policy, dimension algebra across compound expressions, constrained prop
 component-owned expression event surfaces, project-defined mode-specific equation sets, and richer
 equation syntax assistance require later versioned contracts. Native registered components can
 already expose fixed-topology operating modes, while cases can declare dimensioned threshold
-events, typed algebraic input transitions, and validated native-component mode switches without
-embedding event behavior in a project expression component.
+events, typed algebraic input transitions, constant resets of declared differential states, and
+validated native-component mode switches without embedding event behavior in a project expression
+component.
 Arbitrary Python is not part of this path.

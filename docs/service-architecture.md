@@ -294,6 +294,6 @@ application boundary.
 
 The runtime catalog also publishes every native component's `supported_modes` and `default_mode`.
 Canonical case documents retain initial `component_modes`; canonical state-event actions retain
-typed `set_mode` transitions. These declarations flow through the ordinary
+typed `set_mode` transitions and dimensioned `set_state` resets. These declarations flow through the ordinary
 parse/validate/snapshot/fingerprint/result path, so CLI, HTTP, worker, and future RPC clients invoke
 one application contract rather than owning hybrid-simulation logic themselves.

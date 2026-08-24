@@ -2098,6 +2098,15 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     if (active_case != nullptr) {
         for (const auto& event : active_case->state_events) {
             for (const auto& action : event.actions) {
+                if (action.type != "set_input" &&
+                    action.type != "set_mode" &&
+                    action.type != "set_state") {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' declares unsupported action type: " +
+                        action.type);
+                }
                 if (action.type == "set_mode") {
                     const auto mode_state =
                         component_mode_states.find(action.target);
@@ -2121,6 +2130,46 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                             "' requests unsupported mode '" +
                             action.mode + "' for component '" +
                             action.target + "'");
+                    }
+                    continue;
+                }
+                if (action.type == "set_state") {
+                    const auto variable =
+                        variable_indices.find(action.target);
+                    if (variable == variable_indices.end()) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_state action references unknown graph "
+                            "variable: " + action.target);
+                    }
+                    if (variable_kinds.at(variable->second) !=
+                        DaeVariableKind::differential) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_state action target must be a "
+                            "differential variable: " + action.target);
+                    }
+                    if (action.value.dimension !=
+                        variable_dimensions.at(action.target)) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_state value dimension does not match "
+                            "graph variable dimension '" +
+                            variable_dimensions.at(action.target) + "'");
+                    }
+                    const auto& descriptor =
+                        system.variables().at(variable->second);
+                    if (!std::isfinite(action.value.value_si) ||
+                        action.value.value_si < descriptor.lower_bound ||
+                        action.value.value_si > descriptor.upper_bound) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_state value is outside bounds for "
+                            "graph variable: " + action.target);
                     }
                     continue;
                 }
@@ -2157,6 +2206,17 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                         "' action value dimension does not match graph "
                         "variable dimension '" +
                         variable_dimensions.at(action.target) + "'");
+                }
+                const auto& descriptor =
+                    system.variables().at(variable->second);
+                if (!std::isfinite(action.value.value_si) ||
+                    action.value.value_si < descriptor.lower_bound ||
+                    action.value.value_si > descriptor.upper_bound) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id +
+                        "' set_input value is outside bounds for graph "
+                        "variable: " + action.target);
                 }
                 transitioned_input_targets.insert(action.target);
             }
@@ -2337,34 +2397,47 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 double, std::vector<double>&,
                 std::vector<double>&)> transition;
             if (!event.actions.empty()) {
-                std::vector<std::pair<std::string, double>> updates;
-                std::vector<std::pair<
-                    std::shared_ptr<std::string>, std::string>>
-                    mode_updates;
-                updates.reserve(event.actions.size());
-                mode_updates.reserve(event.actions.size());
+                using CompiledTransitionAction = std::function<void(
+                    std::vector<double>&, std::vector<double>&)>;
+                std::vector<CompiledTransitionAction> actions;
+                actions.reserve(event.actions.size());
                 for (const auto& action : event.actions) {
                     if (action.type == "set_input") {
-                        updates.emplace_back(
-                            action.target, action.value.value_si);
+                        actions.push_back(
+                            [transitioned_input_values,
+                             target = action.target,
+                             value = action.value.value_si](
+                                std::vector<double>&,
+                                std::vector<double>&) {
+                                (*transitioned_input_values)[target] =
+                                    value;
+                            });
+                    } else if (action.type == "set_mode") {
+                        actions.push_back(
+                            [mode_state = component_mode_states.at(
+                                 action.target),
+                             mode = action.mode](
+                                std::vector<double>&,
+                                std::vector<double>&) {
+                                *mode_state = mode;
+                            });
                     } else {
-                        mode_updates.emplace_back(
-                            component_mode_states.at(action.target),
-                            action.mode);
+                        actions.push_back(
+                            [index = variable_indices.at(action.target),
+                             value = action.value.value_si](
+                                std::vector<double>& state,
+                                std::vector<double>& derivative) {
+                                state.at(index) = value;
+                                derivative.at(index) = 0.0;
+                            });
                     }
                 }
                 transition =
-                    [transitioned_input_values,
-                     updates = std::move(updates),
-                     mode_updates = std::move(mode_updates)](
-                        double, std::vector<double>&,
-                        std::vector<double>&) {
-                        for (const auto& [target, value] : updates) {
-                            (*transitioned_input_values)[target] = value;
-                        }
-                        for (const auto& [mode_state, mode] :
-                             mode_updates) {
-                            *mode_state = mode;
+                    [actions = std::move(actions)](
+                        double, std::vector<double>& state,
+                        std::vector<double>& derivative) {
+                        for (const auto& action : actions) {
+                            action(state, derivative);
                         }
                         return EvaluationStatus::success();
                     };

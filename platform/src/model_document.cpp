@@ -893,17 +893,19 @@ StateEventDefinition parse_state_event(
             StateEventDefinition::Action action;
             action.type = require_string(action_value, "type");
             if (action.type != "set_input" &&
-                action.type != "set_mode") {
+                action.type != "set_mode" &&
+                action.type != "set_state") {
                 throw std::invalid_argument(
                     "case '" + case_id + "' state event '" +
                     event.id + "' action type must be 'set_input' or "
-                    "'set_mode'");
+                    "'set_mode' or 'set_state'");
             }
             action.target = require_string(action_value, "target");
             require_unique_id(
                 action.target, action_targets,
                 "action target in state event '" + event.id + "'");
-            if (action.type == "set_input") {
+            if (action.type == "set_input" ||
+                action.type == "set_state") {
                 action.value = parse_scalar_value(
                     require_member(action_value, "value"),
                     "case '" + case_id + "'.state_events." +

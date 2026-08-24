@@ -181,7 +181,8 @@ void state_events(
                 json_string(out, action.type);
                 out << ", \"target\": ";
                 json_string(out, action.target);
-                if (action.type == "set_input") {
+                if (action.type == "set_input" ||
+                    action.type == "set_state") {
                     out << ", \"value\": ";
                     scalar_value(out, action.value);
                 } else {

@@ -111,12 +111,14 @@ Delivered:
    catalog and included in its deterministic fingerprint. ✅
 2. Case-owned initial component modes plus typed event-driven `set_mode` transitions with strict
    component/mode validation and canonical serialization. ✅
-3. Fixed-topology DAE transitions that preserve differential states, consistently reinitialize
-   algebraic states and derivatives, restart integration history, and reset discrete state between
-   executions. ✅
+3. Fixed-topology DAE transitions that preserve differential states unless explicitly reset,
+   consistently reinitialize algebraic states and derivatives, restart integration history, and
+   reset discrete state between executions. ✅
 4. Native first-order actuator tracking/failsafe-decay modes verified against analytical crossing
    time and post-transition dynamics. ✅
-5. Project-defined mode-specific safe expression equation sets, state-reset maps, and
+5. Typed constant `set_state` actions for registered differential variables, with dimension,
+   finiteness, and bound validation plus post-reset trajectory evidence. ✅
+6. Project-defined mode-specific safe expression equation sets, state-dependent reset maps, and
    variable-structure topology changes remain explicit follow-ons.
 
 ## System-agnostic transient platform milestone
@@ -456,6 +458,12 @@ Next:
     canonical persistence, and graph-native transition evidence. ✅
 30. Add unit-aware directional hysteresis, deterministic simultaneous-transition priority,
     chatter-resistant event rearming, canonical persistence, and durable priority evidence. ✅
+31. Add registry-owned component operating modes, case-owned initial modes, typed `set_mode`
+    actions, fixed-topology equation switching, catalog discovery, and analytical dynamic
+    verification. ✅
+32. Add typed constant differential `set_state` actions with variable-kind, dimension, finiteness,
+    and bound validation; preserve unreset states and publish the consistently reinitialized event
+    state. ✅
 
 See `docs/calibration-architecture.md`.
 

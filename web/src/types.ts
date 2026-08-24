@@ -65,6 +65,7 @@ export interface CaseDocument {
       actions?: Array<
         | { type: 'set_input'; target: string; value: ScalarValue }
         | { type: 'set_mode'; target: string; mode: string }
+        | { type: 'set_state'; target: string; value: ScalarValue }
       >
     }>
     initial_guesses?: Record<string, ScalarValue>

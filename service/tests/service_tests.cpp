@@ -5513,7 +5513,7 @@ void test_transient_expression_component_flows_through_service() {
     component.internal_variables = {{
         "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
         -std::numeric_limits<double>::infinity(),
-        std::numeric_limits<double>::infinity(), "dimensionless"}};
+        1.0, "dimensionless"}};
     component.transient_equations = {
         {"state_balance",
          "parameter.tau * derivative.internal.filtered + "
@@ -5669,6 +5669,8 @@ void test_transient_expression_component_flows_through_service() {
         "\"hysteresis\": 0.01, "
         "\"actions\": [{\"type\": \"set_input\", "
         "\"target\": \"lag.input.value\", "
+        "\"value\": 0.0}, {\"type\": \"set_state\", "
+        "\"target\": \"lag.filtered\", "
         "\"value\": 0.0}]}],\n    ");
     const auto trip_response = service.run_transient(trip_request);
     require(
@@ -5681,7 +5683,11 @@ void test_transient_expression_component_flows_through_service() {
             trip_response.events.front().time > 0.68 &&
             trip_response.events.front().time < 0.74 &&
             trip_response.trajectory.back().time ==
-                trip_response.events.front().time,
+                trip_response.events.front().time &&
+            std::abs(
+                require_component_result(
+                    trip_response.trajectory.back().graph, "lag")
+                    .internal_values.front().value_si) < 1.0e-10,
         "case-owned state event must stop the ordinary transient solve "
         "at the rising threshold");
     const auto parsed_trip =
@@ -5699,9 +5705,30 @@ void test_transient_expression_component_flows_through_service() {
             reparsed_trip.cases.front().state_events.front()
                     .hysteresis.has_value() &&
             reparsed_trip.cases.front().state_events.front()
-                    .actions.size() == 1U,
+                    .actions.size() == 2U &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.back().type == "set_state" &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.back().target == "lag.filtered",
         "canonical model serialization must preserve state-triggered "
         "event declarations");
+
+    auto invalid_reset_document = parsed_trip;
+    invalid_reset_document.cases.front().state_events.front()
+        .actions.back().value.value_si = 2.0;
+    auto invalid_reset_request = trip_request;
+    invalid_reset_request.model_json =
+        thermox::service::detail::serialize_model_document_json(
+            invalid_reset_document);
+    const auto invalid_reset_response =
+        service.run_transient(invalid_reset_request);
+    require(
+        invalid_reset_response.status ==
+                thermox::service::OperationStatus::compilation_failed &&
+            invalid_reset_response.error.message.find(
+                "set_state value is outside bounds") !=
+                std::string::npos,
+        "set_state compilation must enforce registered state bounds");
 
     auto hybrid_trip = parsed_trip;
     hybrid_trip.cases.front().component_modes.emplace(

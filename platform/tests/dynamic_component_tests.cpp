@@ -340,6 +340,10 @@ void test_normalized_control_chain_steady_and_transient() {
           "type": "set_mode",
           "target": "actuator",
           "mode": "decay_to_zero"
+        }, {
+          "type": "set_state",
+          "target": "actuator.response.value",
+          "value": 0.05
         }]
       }]
     }
@@ -418,19 +422,25 @@ void test_normalized_control_chain_steady_and_transient() {
                 "actuator_failsafe" &&
             switched_result.events.front().transitioned &&
             !switched_result.events.front().terminal,
-        "nonterminal set_mode event must transition exactly once");
+        "nonterminal mode/state event must transition exactly once");
     require_near(
         switched_result.events.front().time,
         -2.0 * std::log(0.8),
         2.0e-3,
         "mode transition occurs at the declared state threshold");
     require_near(
+        switched_result.events.front().state.at(switched_response),
+        0.05,
+        1.0e-10,
+        "event evidence must retain the consistently reinitialized "
+        "state reset");
+    require_near(
         switched_result.trajectory.back().state.at(switched_response),
-        0.2 * std::exp(
+        0.05 * std::exp(
             -(options.end_time -
               switched_result.events.front().time) / 2.0),
         2.0e-3,
-        "post-event state follows the decay mode equation");
+        "post-event state follows the reset value and decay equation");
 
     auto invalid_mode = document;
     invalid_mode.cases.back().component_modes["actuator"] =
@@ -445,6 +455,24 @@ void test_normalized_control_chain_steady_and_transient() {
     require(
         rejected_invalid_mode,
         "transient compilation must reject unregistered component modes");
+
+    auto invalid_reset = document;
+    thermox::platform::StateEventDefinition::Action reset_action;
+    reset_action.type = "set_state";
+    reset_action.target = "sensor.outlet.value";
+    reset_action.value = {0.0, "dimensionless", "dimensionless"};
+    invalid_reset.cases.back().state_events.front().actions.push_back(
+        std::move(reset_action));
+    bool rejected_algebraic_reset = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            invalid_reset, registry, "mode_switch");
+    } catch (const std::invalid_argument&) {
+        rejected_algebraic_reset = true;
+    }
+    require(
+        rejected_algebraic_reset,
+        "set_state must reject algebraic graph variables");
 }
 
 }  // namespace

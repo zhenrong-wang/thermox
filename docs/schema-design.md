@@ -276,6 +276,9 @@ state_events:
       - type: set_mode
         target: trip_valve
         mode: closed
+      - type: set_state
+        target: trip_controller.integral_error
+        value: 0.0
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -389,13 +392,16 @@ or `any`. A nonterminal event records engineering evidence while integration con
 event records the event and stops the trajectory at its detected state. Events caused by a
 right-continuous scheduled jump are stamped at the exact discontinuity with the post-jump state.
 
-An event may declare typed `set_input` and `set_mode` actions. Each `set_input` target must already be an
+An event may declare typed `set_input`, `set_mode`, and `set_state` actions. Each `set_input` target must already be an
 algebraic boundary/control input declared by `fixed_values` or `input_schedules`, and the action
-value must match that graph variable's physical dimension. A `set_mode` target is a component ID,
+value must be finite, match that graph variable's physical dimension, and respect its registered
+bounds. A `set_mode` target is a component ID,
 and its requested mode must be registered by that component model. For expanded assemblies, this
-low-level declaration uses the canonical flattened child component ID. At the accepted crossing, the solver
-applies all actions in declaration order, preserves differential states unless a native transition
-explicitly resets them, consistently reinitializes algebraic states and derivatives, restarts BDF1,
+low-level declaration uses the canonical flattened child component ID. A `set_state` target must be
+a differential graph variable; its finite, dimensionally compatible value must lie inside the
+state's registered bounds. At the accepted crossing, the solver applies all actions in declaration
+order, preserves every differential state not explicitly reset, consistently reinitializes
+algebraic states and derivatives, restarts BDF1,
 and continues unless the event is terminal. Result events report `transitioned: true` when actions
 were applied. Compiled hybrid problems reset their discrete input overrides and component modes to
 their case-owned initial values before each sequential execution. Parameter mutation and graph
@@ -408,7 +414,8 @@ trip threshold. Nonzero hysteresis requires `rising` or `falling`; bidirectional
 modeled as two explicit thresholds. When multiple transitions occur at the same detected time,
 Thermox executes them in ascending integer `priority` order, preserving declaration order for ties.
 Consequently the highest-priority action has final authority when simultaneous actions write the
-same input. Event results retain the declared priority as execution evidence.
+same input, component mode, or differential state. Event results retain the declared priority as
+execution evidence and the consistently reinitialized post-transition state.
 
 `volume.fluid.rigid_adiabatic` and `volume.fluid.rigid_heat_transfer` are transient-only. Both
 store `mass` and `total_energy` as differential states and use algebraic `pressure` and `enthalpy`
