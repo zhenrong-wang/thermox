@@ -43,6 +43,8 @@ enum class NodeKind {
     property_entropy_ph,
     property_vapor_quality_ph,
     property_cp_ph,
+    property_cv_ph,
+    property_speed_of_sound_ph,
     property_viscosity_ph,
     property_thermal_conductivity_ph,
 };
@@ -211,6 +213,8 @@ DimensionInference infer_dimension(
         node.kind == NodeKind::property_entropy_ph ||
         node.kind == NodeKind::property_vapor_quality_ph ||
         node.kind == NodeKind::property_cp_ph ||
+        node.kind == NodeKind::property_cv_ph ||
+        node.kind == NodeKind::property_speed_of_sound_ph ||
         node.kind == NodeKind::property_viscosity_ph ||
         node.kind == NodeKind::property_thermal_conductivity_ph) {
         if (!same_dimension(
@@ -240,6 +244,14 @@ DimensionInference infer_dimension(
             return {
                 physical_dimension("specific_heat_capacity"),
                 std::nullopt};
+        }
+        if (node.kind == NodeKind::property_cv_ph) {
+            return {
+                physical_dimension("specific_heat_capacity"),
+                std::nullopt};
+        }
+        if (node.kind == NodeKind::property_speed_of_sound_ph) {
+            return {physical_dimension("speed"), std::nullopt};
         }
         if (node.kind == NodeKind::property_viscosity_ph) {
             return {
@@ -513,6 +525,12 @@ private:
                 if (identifier == "property.cp_ph") {
                     return NodeKind::property_cp_ph;
                 }
+                if (identifier == "property.cv_ph") {
+                    return NodeKind::property_cv_ph;
+                }
+                if (identifier == "property.speed_of_sound_ph") {
+                    return NodeKind::property_speed_of_sound_ph;
+                }
                 if (identifier == "property.viscosity_ph") {
                     return NodeKind::property_viscosity_ph;
                 }
@@ -755,6 +773,8 @@ Evaluation evaluate(
         node.kind == NodeKind::property_entropy_ph ||
         node.kind == NodeKind::property_vapor_quality_ph ||
         node.kind == NodeKind::property_cp_ph ||
+        node.kind == NodeKind::property_cv_ph ||
+        node.kind == NodeKind::property_speed_of_sound_ph ||
         node.kind == NodeKind::property_viscosity_ph ||
         node.kind == NodeKind::property_thermal_conductivity_ph) {
         const auto package = properties.find(node.symbol);
@@ -866,6 +886,33 @@ Evaluation evaluate(
                 .cp_wrt_pressure_at_enthalpy;
             enthalpy_derivative = state.derivatives
                 .cp_wrt_enthalpy_at_pressure;
+        } else if (node.kind == NodeKind::property_cv_ph) {
+            if (!std::isfinite(state.state.cv_j_kg_k) ||
+                state.state.cv_j_kg_k <= 0.0) {
+                return failure(
+                    "constant-volume heat-capacity property "
+                    "function on port '" + node.symbol +
+                        "' requires a positive finite value");
+            }
+            out.value = state.state.cv_j_kg_k;
+            pressure_derivative = state.derivatives
+                .cv_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .cv_wrt_enthalpy_at_pressure;
+        } else if (
+            node.kind == NodeKind::property_speed_of_sound_ph) {
+            if (!std::isfinite(state.state.speed_of_sound_m_s) ||
+                state.state.speed_of_sound_m_s <= 0.0) {
+                return failure(
+                    "speed-of-sound property function on port '" +
+                        node.symbol +
+                        "' requires a positive finite value");
+            }
+            out.value = state.state.speed_of_sound_m_s;
+            pressure_derivative = state.derivatives
+                .speed_of_sound_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .speed_of_sound_wrt_enthalpy_at_pressure;
         } else {
             out.value = state.state.internal_energy_j_kg;
             pressure_derivative = state.derivatives

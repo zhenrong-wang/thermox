@@ -98,6 +98,9 @@ IdealGasPropertyPackage::state_ph_derivatives(
         -gas_constant_ / pressure;
     derivatives.entropy_wrt_enthalpy_at_pressure =
         1.0 / state.state.temperature_k;
+    derivatives.speed_of_sound_wrt_pressure_at_enthalpy = 0.0;
+    derivatives.speed_of_sound_wrt_enthalpy_at_pressure =
+        state.state.speed_of_sound_m_s / (2.0 * enthalpy);
     return {
         state.state, derivatives,
         PropertyDerivativeSource::analytic,

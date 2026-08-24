@@ -5518,7 +5518,10 @@ void test_request_scoped_entropy_expression_solves() {
         {"isentropic_closure",
          "property.entropy_ph(outlet.p, outlet.h) - "
          "property.entropy_ph(inlet.p, inlet.h) + "
-         "0 * property.cp_ph(inlet.p, inlet.h)",
+         "0 * property.cv_ph(inlet.p, inlet.h) + "
+         "0 * property.cp_ph(inlet.p, inlet.h) * "
+         "property.speed_of_sound_ph(inlet.p, inlet.h) / "
+         "property.speed_of_sound_ph(inlet.p, inlet.h)",
          1000.0},
     };
     request.components.expression_components.push_back(

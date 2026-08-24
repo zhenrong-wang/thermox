@@ -23,7 +23,10 @@ An expression can reference:
 - `property.vapor_quality_ph(<port>.p, <port>.h)` for explicitly two-phase
   quality closures; and
 - `property.cp_ph(<port>.p, <port>.h)` for heat-capacity-rate and thermal
-  correlation closures; and
+  correlation closures;
+- `property.cv_ph(<port>.p, <port>.h)` and
+  `property.speed_of_sound_ph(<port>.p, <port>.h)` for heat-capacity-ratio,
+  Mach-number, choking, nozzle, and compressible-loss closures; and
 - `property.viscosity_ph(<port>.p, <port>.h)` and
   `property.thermal_conductivity_ph(<port>.p, <port>.h)` for transport,
   Reynolds/Prandtl, pressure-loss, and heat-transfer correlations.
@@ -222,6 +225,10 @@ The constant-pressure heat-capacity primitive requires a positive finite provide
 the same analytic-or-bounded p-h derivative path. It supports user-defined thermal equations such
 as `m_dot * cp * delta_T`; it does not silently replace the exact enthalpy balance when heat
 capacity varies materially across the modeled interval.
+Constant-volume heat capacity and speed of sound likewise require positive finite provider values
+and use the thermodynamic p-h derivative path. Together with `cp_ph`, they support backend-owned
+heat-capacity ratio and compressible-flow equations without assuming an ideal gas or embedding a
+fluid-specific gamma in the component template.
 The viscosity and thermal-conductivity primitives require the provider's explicit `transport`
 capability and positive finite values. Their Jacobians use a bounded, phase-preserving p-h finite
 difference contract kept separate from the provider's thermodynamic derivative claim. This makes

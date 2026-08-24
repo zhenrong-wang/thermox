@@ -686,16 +686,16 @@ Work items:
      roots, and transcendental functions, including SI-derived equivalence and opaque extension
      dimensions; ✅
    - constrained same-port p-h temperature, density, internal-energy, entropy, constant-pressure
-     heat capacity, explicitly two-phase vapor quality, dynamic viscosity, and thermal
-     conductivity functions with derived
+     heat capacities, speed of sound, explicitly two-phase vapor quality, dynamic viscosity, and
+     thermal conductivity functions with derived
      capability requirements, provider binding, analytic/fallback derivative chaining, fixed
      sparsity, and recoverable-versus-fatal property status propagation; ✅
    - checked component-owned expression event surfaces, directional hysteresis, deterministic
      priority, bounded atomic state-reset expressions, optional mode actions, immutable artifact
      and job persistence, and analytical post-transition verification; ✅
-   - entropy-backed isentropic, quality-backed two-phase, heat-capacity-rate, and transport-ratio
-     project closures are covered; approval policy and further derivative-backed property
-     functions remain follow-ons.
+   - entropy-backed isentropic, quality-backed two-phase, heat-capacity-rate, compressible
+     Mach/gamma, and transport-ratio project closures are covered; approval policy and further
+     derivative-backed property functions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -526,6 +527,106 @@ void test_expression_component_supports_heat_capacity_rate() {
         std::abs(outlet_enthalpy - 400000.0) < 1.0e-5,
         "constant-cp heat-capacity-rate closure must reproduce its "
         "analytical outlet enthalpy");
+}
+
+void test_expression_component_supports_compressible_properties() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p");
+    definition.descriptor.kind =
+        "custom.fluid.compressible_target";
+    definition.descriptor.template_kind =
+        "custom.fluid.compressible_target";
+    definition.descriptor.parameters.push_back({
+        "velocity", "speed", true, std::nullopt,
+        0.0, std::numeric_limits<double>::infinity(), false, true});
+    definition.descriptor.parameters.push_back({
+        "target_mach", "dimensionless", true, std::nullopt,
+        0.0, std::numeric_limits<double>::infinity(), false, true});
+    definition.descriptor.parameters.push_back({
+        "gamma_reference", "dimensionless", true, std::nullopt,
+        1.0, std::numeric_limits<double>::infinity(), false, true});
+    definition.equations[2] = {
+        "compressible_target",
+        "parameter.velocity / "
+        "property.speed_of_sound_ph(outlet.p, outlet.h) - "
+        "parameter.target_mach + "
+        "property.cp_ph(outlet.p, outlet.h) / "
+        "property.cv_ph(outlet.p, outlet.h) - "
+        "parameter.gamma_reference",
+        1.0,
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "custom_compressible_target",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "target",
+      "kind": "custom.fluid.compressible_target",
+      "media": {"inlet": "air", "outlet": "air"},
+      "parameters": {
+        "pressure_ratio": 1.0,
+        "velocity": 300.0,
+        "target_mach": 0.5,
+        "gamma_reference": 1.4
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "target.inlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "target.inlet.p": {"value": 2.0, "unit": "bar"},
+      "target.inlet.h": {"value": 900.0, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "target.outlet.m_dot": {"value": 10.0, "unit": "kg/s"},
+      "target.outlet.p": {"value": 2.0, "unit": "bar"},
+      "target.outlet.h": {"value": 900.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "cv and speed-of-sound expressions must provide a "
+        "consistent sparse Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "custom compressible-property equation must converge");
+    const double expected_enthalpy =
+        300.0 * 300.0 * 1004.5 /
+        (0.5 * 0.5 * 1.4 * 287.0);
+    for (std::size_t index = 0;
+         index < graph.problem.variable_names.size(); ++index) {
+        if (graph.problem.variable_names[index] ==
+            "target.outlet.h") {
+            require(
+                std::abs(
+                    solved.x.at(index) - expected_enthalpy) < 1.0e-5,
+                "compressible target must reproduce the analytical "
+                "ideal-gas enthalpy");
+            return;
+        }
+    }
+    throw std::runtime_error(
+        "missing compressible target outlet enthalpy");
 }
 
 void test_expression_component_supports_transport_properties() {
@@ -1302,6 +1403,7 @@ int main() {
         test_expression_component_supports_isentropic_closure();
         test_expression_component_supports_two_phase_quality_closure();
         test_expression_component_supports_heat_capacity_rate();
+        test_expression_component_supports_compressible_properties();
         test_expression_component_supports_transport_properties();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();

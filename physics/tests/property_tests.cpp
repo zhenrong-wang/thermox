@@ -283,6 +283,14 @@ void verify_ph_derivatives(
         [](const thermox::physics::ThermodynamicState& state) {
             return state.cp_j_kg_k;
         };
+    const auto cv =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.cv_j_kg_k;
+        };
+    const auto speed_of_sound =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.speed_of_sound_m_s;
+        };
     require_relative_near(
         result.derivatives
             .temperature_wrt_pressure_at_enthalpy,
@@ -341,6 +349,24 @@ void verify_ph_derivatives(
         result.derivatives.cp_wrt_enthalpy_at_pressure,
         enthalpy_partial(cp), relative_tolerance,
         1.0e-12, "dcp/dh at constant p");
+    require_relative_near(
+        result.derivatives.cv_wrt_pressure_at_enthalpy,
+        pressure_partial(cv), relative_tolerance,
+        1.0e-12, "dcv/dp at constant h");
+    require_relative_near(
+        result.derivatives.cv_wrt_enthalpy_at_pressure,
+        enthalpy_partial(cv), relative_tolerance,
+        1.0e-12, "dcv/dh at constant p");
+    require_relative_near(
+        result.derivatives
+            .speed_of_sound_wrt_pressure_at_enthalpy,
+        pressure_partial(speed_of_sound), relative_tolerance,
+        1.0e-12, "da/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .speed_of_sound_wrt_enthalpy_at_pressure,
+        enthalpy_partial(speed_of_sound), relative_tolerance,
+        1.0e-12, "da/dh at constant p");
 }
 
 void verify_ph_transport_derivatives(

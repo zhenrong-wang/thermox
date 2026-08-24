@@ -267,6 +267,22 @@ PhDerivativesResult coolprop_state_ph_derivatives(
             state.first_partial_deriv(
                 CoolProp::iCpmass, CoolProp::iHmass,
                 CoolProp::iP);
+        derivatives.cv_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::iCvmass, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.cv_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::iCvmass, CoolProp::iHmass,
+                CoolProp::iP);
+        derivatives.speed_of_sound_wrt_pressure_at_enthalpy =
+            state.first_partial_deriv(
+                CoolProp::ispeed_sound, CoolProp::iP,
+                CoolProp::iHmass);
+        derivatives.speed_of_sound_wrt_enthalpy_at_pressure =
+            state.first_partial_deriv(
+                CoolProp::ispeed_sound, CoolProp::iHmass,
+                CoolProp::iP);
         const double values[]{
             derivatives.temperature_wrt_pressure_at_enthalpy,
             derivatives.temperature_wrt_enthalpy_at_pressure,
@@ -279,7 +295,11 @@ PhDerivativesResult coolprop_state_ph_derivatives(
             derivatives.vapor_quality_wrt_pressure_at_enthalpy,
             derivatives.vapor_quality_wrt_enthalpy_at_pressure,
             derivatives.cp_wrt_pressure_at_enthalpy,
-            derivatives.cp_wrt_enthalpy_at_pressure};
+            derivatives.cp_wrt_enthalpy_at_pressure,
+            derivatives.cv_wrt_pressure_at_enthalpy,
+            derivatives.cv_wrt_enthalpy_at_pressure,
+            derivatives.speed_of_sound_wrt_pressure_at_enthalpy,
+            derivatives.speed_of_sound_wrt_enthalpy_at_pressure};
         if (!std::all_of(
                 std::begin(values), std::end(values),
                 [](double value) { return std::isfinite(value); })) {

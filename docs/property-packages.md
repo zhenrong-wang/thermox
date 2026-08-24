@@ -110,8 +110,9 @@ The public C++ interface is
 - pressure-temperature (`state_pt`), pressure-enthalpy (`state_ph`), and
   pressure-entropy (`state_ps`) flashes;
 - a backend-neutral `state_ph_derivatives` result containing the state and
-  temperature, density, internal-energy, entropy, vapor-quality, and constant-pressure
-  heat-capacity partials with respect to pressure and enthalpy;
+  temperature, density, internal-energy, entropy, vapor-quality, constant-pressure and
+  constant-volume heat-capacity, and speed-of-sound partials with respect to pressure and
+  enthalpy;
 - explicit capability discovery for PT, PH, PS, and transport operations, allowing the platform
   compiler to reject an incompatible component/backend pairing before solving;
 - saturation-pair surface tension as an explicit `surface_tension` capability and interfacial
@@ -158,7 +159,7 @@ evaluations rather than process-level exceptions.
 ## Solver-facing PH derivatives
 
 `state_ph_derivatives` is an explicit capability rather than an assumption attached to every
-property backend. The built-in ideal-gas package evaluates the twelve partials from its closed-form
+property backend. The built-in ideal-gas package evaluates the sixteen partials from its closed-form
 equations. The HEOS CO2 adapter obtains them from CoolProp's analytic first-partial interface
 after one PH update. Both report `PropertyDerivativeSource::analytic`.
 
@@ -167,7 +168,7 @@ interface. Thermox therefore does not advertise analytic PH derivatives for IF97
 `state_ph_derivatives_with_fallback` utility evaluates a bounded central difference, with
 one-sided behavior at a property-domain boundary, and reports
 `PropertyDerivativeSource::finite_difference`. It evaluates the four neighboring PH states once
-and derives all twelve partials from them. Neighboring points are selected from the same phase where
+and derives all sixteen partials from them. Neighboring points are selected from the same phase where
 possible so a finite-difference stencil does not accidentally average two constitutive regimes.
 
 HEOS water advertises analytic PH derivatives in single-phase states. CoolProp does not define
@@ -179,9 +180,10 @@ remain visible.
 Components consume this shared contract. The rigid fluid volume uses density and internal-energy
 partials in its DAE closure, map-based turbomachinery uses temperature partials in its
 corrected-coordinate chain rule, and safe expression components use entropy partials for
-user-declared isentropic closures, bounded two-phase quality partials for quality targets, and
-heat-capacity partials for thermal correlations. A third-party backend can replace the fallback
-simply by
+user-declared isentropic closures, bounded two-phase quality partials for quality targets,
+heat-capacity partials for thermal correlations, and constant-volume heat-capacity plus
+speed-of-sound partials for compressible-flow closures. A third-party backend can replace the
+fallback simply by
 advertising and implementing the analytic capability; no component changes are required.
 
 Transport-property p-h derivatives use a separate provider-neutral result contract. A package
