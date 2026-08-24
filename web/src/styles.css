@@ -46,6 +46,7 @@ button {
   z-index: 5;
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr) 280px;
+  column-gap: 16px;
   align-items: center;
   padding: 0 22px 0 18px;
   color: #f3f8fa;
@@ -100,9 +101,13 @@ button {
 
 .context {
   justify-self: center;
+  width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 9px;
+  overflow: hidden;
 }
 
 .context-label {
@@ -118,7 +123,9 @@ button {
 }
 
 .context select {
-  min-width: 160px;
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 240px;
   padding: 7px 28px 7px 10px;
   color: #e9f2f6;
   border: 1px solid #3a5b72;
@@ -126,6 +133,7 @@ button {
   outline: none;
   background: #173b55;
   font-size: 12px;
+  text-overflow: ellipsis;
 }
 
 .context select:disabled {
@@ -142,6 +150,7 @@ button {
 
 .runtime-tools {
   justify-self: end;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 13px;
@@ -4490,7 +4499,8 @@ code {
   }
 
   .context select {
-    min-width: 130px;
+    flex-basis: 130px;
+    max-width: 160px;
   }
 
   .case-metadata {
