@@ -25,6 +25,17 @@ outlet.p - inlet.p * parameter.pressure_ratio
 outlet.h - inlet.h
 ```
 
+Registration also infers a physical-dimension signature for the complete expression tree.
+Addition and subtraction require compatible dimensions; multiplication, division, square root,
+and constant powers compose SI base dimensions; `exp` and `log` require dimensionless arguments;
+and a dimensioned `pow` base requires a compile-time constant, dimensionless exponent. State-rate
+symbols carry their state dimension divided by time. Exact numeric zero is accepted as the
+dimension-polymorphic additive identity, while other numeric literals are dimensionless; physical
+constants should therefore be declared as dimensioned component parameters. Thermox's standard
+quantity names map to SI base dimensions, so derived identities such as mass flow times specific
+enthalpy equaling power are recognized. Extension-defined dimension names remain distinct opaque
+dimensions and still receive equality and cancellation checks.
+
 The declaration distinguishes the physical template from one executable model, so nonvisual
 clients can publish the same catalog structure used by the canvas:
 
@@ -134,8 +145,8 @@ the topology instance's exact kind/version rather than substituting the newest p
 The browser only enables new run authoring after the service compiler has validated that exact
 topology, case, and artifact-revision set.
 
-Approval policy, dimension algebra across compound expressions, constrained property functions,
-component-owned expression event surfaces, state-dependent reset expressions, and richer equation
+Approval policy, constrained property functions, component-owned expression event surfaces,
+state-dependent reset expressions, and richer equation
 syntax assistance require later contracts. Cases can declare dimensioned threshold events, typed
 algebraic input transitions, constant resets of declared differential states, and validated mode
 switches without embedding imperative behavior in a project expression component.

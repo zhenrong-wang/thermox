@@ -759,6 +759,34 @@ void test_expression_component_artifact_is_executable() {
     const auto project = projects->create_project({
         team_a, "Custom component", {},
     });
+    auto invalid_dimension = expression_component_payload();
+    const auto parameter_dimension =
+        invalid_dimension.find(
+            "\"dimension\": \"dimensionless\"");
+    invalid_dimension.replace(
+        parameter_dimension,
+        std::string{"\"dimension\": \"dimensionless\""}.size(),
+        "\"dimension\": \"pressure\"");
+    bool dimension_rejected = false;
+    try {
+        (void)projects->create_artifact_revision({
+            team_a,
+            project.project_id,
+            "invalid-dimension-gain",
+            {},
+            "thermox.expression_component",
+            "thermox.expression_component/v4",
+            invalid_dimension,
+        });
+    } catch (const thermox::service::ProjectRequestError& error) {
+        dimension_rejected =
+            std::string{error.what()}.find(
+                "dimensionally invalid") != std::string::npos;
+    }
+    require(
+        dimension_rejected,
+        "project artifact publication must reject dimensionally "
+        "invalid custom equations");
     const auto revision = projects->create_artifact_revision({
         team_a,
         project.project_id,

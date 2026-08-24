@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -50,6 +51,221 @@ struct ParsedExpression {
     std::shared_ptr<const ExpressionNode> root;
     std::set<std::string> symbols;
 };
+
+using DimensionSignature = std::map<std::string, double>;
+
+struct DimensionInference {
+    DimensionSignature signature;
+    std::optional<double> constant;
+};
+
+DimensionSignature physical_dimension(const std::string& dimension) {
+    using Signature = DimensionSignature;
+    static const std::map<std::string, Signature> known{
+        {"dimensionless", {}},
+        {"pressure", {{"mass", 1.0}, {"length", -1.0}, {"time", -2.0}}},
+        {"temperature", {{"temperature", 1.0}}},
+        {"temperature_difference", {{"temperature", 1.0}}},
+        {"angle", {}},
+        {"length", {{"length", 1.0}}},
+        {"mass_flow", {{"mass", 1.0}, {"time", -1.0}}},
+        {"specific_heat", {{"length", 2.0}, {"time", -2.0},
+                           {"temperature", -1.0}}},
+        {"specific_heat_capacity", {{"length", 2.0}, {"time", -2.0},
+                                    {"temperature", -1.0}}},
+        {"specific_entropy", {{"length", 2.0}, {"time", -2.0},
+                              {"temperature", -1.0}}},
+        {"specific_enthalpy", {{"length", 2.0}, {"time", -2.0}}},
+        {"specific_internal_energy", {{"length", 2.0}, {"time", -2.0}}},
+        {"power", {{"mass", 1.0}, {"length", 2.0}, {"time", -3.0}}},
+        {"electrical_power", {{"mass", 1.0}, {"length", 2.0},
+                              {"time", -3.0}}},
+        {"thermal_capacity", {{"mass", 1.0}, {"length", 2.0},
+                              {"time", -2.0}, {"temperature", -1.0}}},
+        {"thermal_conductance", {{"mass", 1.0}, {"length", 2.0},
+                                 {"time", -3.0}, {"temperature", -1.0}}},
+        {"volume", {{"length", 3.0}}},
+        {"mass", {{"mass", 1.0}}},
+        {"molar_mass", {{"mass", 1.0}, {"amount", -1.0}}},
+        {"energy", {{"mass", 1.0}, {"length", 2.0}, {"time", -2.0}}},
+        {"time", {{"time", 1.0}}},
+        {"moment_of_inertia", {{"mass", 1.0}, {"length", 2.0}}},
+        {"angular_speed", {{"time", -1.0}}},
+        {"frequency", {{"time", -1.0}}},
+        {"density", {{"mass", 1.0}, {"length", -3.0}}},
+        {"area", {{"length", 2.0}}},
+        {"mass_flux", {{"mass", 1.0}, {"length", -2.0},
+                       {"time", -1.0}}},
+        {"pressure_gradient", {{"mass", 1.0}, {"length", -2.0},
+                               {"time", -2.0}}},
+        {"dynamic_viscosity", {{"mass", 1.0}, {"length", -1.0},
+                               {"time", -1.0}}},
+        {"thermal_conductivity", {{"mass", 1.0}, {"length", 1.0},
+                                  {"time", -3.0}, {"temperature", -1.0}}},
+        {"surface_tension", {{"mass", 1.0}, {"time", -2.0}}},
+        {"speed", {{"length", 1.0}, {"time", -1.0}}},
+        {"acceleration", {{"length", 1.0}, {"time", -2.0}}},
+    };
+    const auto found = known.find(dimension);
+    if (found != known.end()) return found->second;
+    return {{"custom:" + dimension, 1.0}};
+}
+
+void add_dimension(
+    DimensionSignature& target,
+    const DimensionSignature& source,
+    double scale = 1.0) {
+    constexpr double tolerance = 1.0e-12;
+    for (const auto& [base, exponent] : source) {
+        auto& value = target[base];
+        value += scale * exponent;
+        if (std::abs(value) <= tolerance) target.erase(base);
+    }
+}
+
+bool same_dimension(
+    const DimensionSignature& left,
+    const DimensionSignature& right) {
+    constexpr double tolerance = 1.0e-12;
+    if (left.size() != right.size()) return false;
+    for (const auto& [base, exponent] : left) {
+        const auto found = right.find(base);
+        if (found == right.end() ||
+            std::abs(exponent - found->second) > tolerance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool constant_zero(const DimensionInference& value) {
+    return value.constant.has_value() && *value.constant == 0.0;
+}
+
+DimensionInference infer_dimension(
+    const ExpressionNode& node,
+    const std::map<std::string, DimensionSignature>& symbols) {
+    if (node.kind == NodeKind::literal) {
+        return {{}, node.literal};
+    }
+    if (node.kind == NodeKind::symbol) {
+        const auto found = symbols.find(node.symbol);
+        if (found == symbols.end()) {
+            throw std::invalid_argument(
+                "unbound dimension for symbol '" + node.symbol + "'");
+        }
+        return {found->second, std::nullopt};
+    }
+
+    auto left = infer_dimension(*node.left, symbols);
+    if (node.kind == NodeKind::negate) {
+        if (left.constant) left.constant = -*left.constant;
+        return left;
+    }
+    if (node.kind == NodeKind::absolute) {
+        if (left.constant) left.constant = std::abs(*left.constant);
+        return left;
+    }
+    if (node.kind == NodeKind::square_root) {
+        for (auto& [_, exponent] : left.signature) exponent *= 0.5;
+        if (left.constant && *left.constant >= 0.0) {
+            left.constant = std::sqrt(*left.constant);
+        } else {
+            left.constant.reset();
+        }
+        return left;
+    }
+    if (node.kind == NodeKind::exponential ||
+        node.kind == NodeKind::logarithm) {
+        if (!left.signature.empty()) {
+            throw std::invalid_argument(
+                "exp and log require a dimensionless argument");
+        }
+        if (left.constant) {
+            const double value = node.kind == NodeKind::exponential
+                ? std::exp(*left.constant)
+                : (*left.constant > 0.0
+                       ? std::log(*left.constant)
+                       : std::numeric_limits<double>::quiet_NaN());
+            left.constant = std::isfinite(value)
+                ? std::optional<double>{value}
+                : std::nullopt;
+        }
+        return left;
+    }
+
+    auto right = infer_dimension(*node.right, symbols);
+    if (node.kind == NodeKind::add ||
+        node.kind == NodeKind::subtract) {
+        if (!same_dimension(left.signature, right.signature)) {
+            if (constant_zero(left)) return right;
+            if (constant_zero(right)) return left;
+            throw std::invalid_argument(
+                "addition and subtraction require compatible dimensions");
+        }
+        if (left.constant && right.constant) {
+            left.constant = node.kind == NodeKind::add
+                ? *left.constant + *right.constant
+                : *left.constant - *right.constant;
+        } else {
+            left.constant.reset();
+        }
+        return left;
+    }
+    if (node.kind == NodeKind::multiply ||
+        node.kind == NodeKind::divide) {
+        add_dimension(
+            left.signature, right.signature,
+            node.kind == NodeKind::multiply ? 1.0 : -1.0);
+        if (left.constant && right.constant &&
+            (node.kind == NodeKind::multiply || *right.constant != 0.0)) {
+            left.constant = node.kind == NodeKind::multiply
+                ? *left.constant * *right.constant
+                : *left.constant / *right.constant;
+        } else {
+            left.constant.reset();
+        }
+        return left;
+    }
+    if (node.kind == NodeKind::power) {
+        if (!right.signature.empty()) {
+            throw std::invalid_argument(
+                "pow exponent must be dimensionless");
+        }
+        if (!left.signature.empty()) {
+            if (!right.constant || !std::isfinite(*right.constant)) {
+                throw std::invalid_argument(
+                    "pow of a dimensioned value requires a constant exponent");
+            }
+            for (auto& [_, exponent] : left.signature) {
+                exponent *= *right.constant;
+            }
+        }
+        if (left.constant && right.constant) {
+            const double value = std::pow(*left.constant, *right.constant);
+            left.constant = std::isfinite(value)
+                ? std::optional<double>{value}
+                : std::nullopt;
+        } else {
+            left.constant.reset();
+        }
+        return left;
+    }
+    throw std::logic_error("unsupported expression node for dimension inference");
+}
+
+void validate_dimensions(
+    const ParsedExpression& expression,
+    const std::map<std::string, DimensionSignature>& symbols,
+    const std::string& equation_name) {
+    try {
+        (void)infer_dimension(*expression.root, symbols);
+    } catch (const std::invalid_argument& error) {
+        throw std::invalid_argument(
+            "expression equation '" + equation_name +
+            "' is dimensionally invalid: " + error.what());
+    }
+}
 
 class ExpressionParser {
 public:
@@ -998,6 +1214,8 @@ make_expression_component_model(
 
     std::set<std::string> allowed_symbols;
     std::set<std::string> transient_symbols;
+    std::map<std::string, DimensionSignature> allowed_dimensions;
+    std::map<std::string, DimensionSignature> transient_dimensions;
     std::set<std::string> differential_ports;
     for (const auto& variable : descriptor.transient_variables) {
         if (variable.kind == DaeVariableKind::differential) {
@@ -1024,8 +1242,19 @@ make_expression_component_model(
             }
             allowed_symbols.insert(symbol);
             transient_symbols.insert(symbol);
+            const auto dimension =
+                physical_dimension(variable.dimension);
+            allowed_dimensions.emplace(symbol, dimension);
+            transient_dimensions.emplace(symbol, dimension);
             if (differential_ports.contains(symbol)) {
                 transient_symbols.insert("derivative." + symbol);
+                auto derivative_dimension = dimension;
+                add_dimension(
+                    derivative_dimension,
+                    physical_dimension("time"), -1.0);
+                transient_dimensions.emplace(
+                    "derivative." + symbol,
+                    std::move(derivative_dimension));
             }
         }
     }
@@ -1082,10 +1311,16 @@ make_expression_component_model(
         }
         allowed_symbols.insert(symbol);
         transient_symbols.insert(symbol);
+        const auto dimension =
+            physical_dimension(parameter.dimension);
+        allowed_dimensions.emplace(symbol, dimension);
+        transient_dimensions.emplace(symbol, dimension);
     }
 
     if (version_4) {
         transient_symbols.insert("time");
+        transient_dimensions.emplace(
+            "time", physical_dimension("time"));
         std::set<std::string> internal_names;
         for (const auto& variable : descriptor.internal_variables) {
             if (!valid_symbol(variable.name) ||
@@ -1095,9 +1330,20 @@ make_expression_component_model(
                     variable.name);
             }
             transient_symbols.insert("internal." + variable.name);
+            const auto dimension =
+                physical_dimension(variable.dimension);
+            transient_dimensions.emplace(
+                "internal." + variable.name, dimension);
             if (variable.kind == DaeVariableKind::differential) {
                 transient_symbols.insert(
                     "derivative.internal." + variable.name);
+                auto derivative_dimension = dimension;
+                add_dimension(
+                    derivative_dimension,
+                    physical_dimension("time"), -1.0);
+                transient_dimensions.emplace(
+                    "derivative.internal." + variable.name,
+                    std::move(derivative_dimension));
             }
         }
     }
@@ -1146,6 +1392,8 @@ make_expression_component_model(
                 "expression equation '" + equation.name +
                 "' must reference at least one port variable");
         }
+        validate_dimensions(
+            parsed, allowed_dimensions, equation.name);
         equations.emplace_back(
             std::move(equation), std::move(parsed));
     }
@@ -1186,6 +1434,8 @@ make_expression_component_model(
                 "transient expression equation '" + equation.name +
                 "' must reference at least one state or state rate");
         }
+        validate_dimensions(
+            parsed, transient_dimensions, equation.name);
         transient_equations.emplace_back(
             std::move(equation), std::move(parsed));
     }
@@ -1196,6 +1446,7 @@ make_expression_component_model(
     const auto parse_mode_equation_set = [&](
         std::vector<AlgebraicExpressionEquation>& declarations,
         const std::set<std::string>& symbols,
+        const std::map<std::string, DimensionSignature>& dimensions,
         bool transient,
         const std::string& mode_name) {
         ExpressionComponentModel::ParsedEquationSet parsed_equations;
@@ -1239,6 +1490,9 @@ make_expression_component_model(
                     "' equation '" + equation.name +
                     "' must reference at least one graph variable");
             }
+            validate_dimensions(
+                parsed, dimensions,
+                mode_name + "." + equation.name);
             parsed_equations.emplace_back(
                 std::move(equation), std::move(parsed));
         }
@@ -1282,10 +1536,11 @@ make_expression_component_model(
 
     for (auto& mode : definition.modes) {
         auto steady = parse_mode_equation_set(
-            mode.equations, allowed_symbols, false, mode.name);
+            mode.equations, allowed_symbols, allowed_dimensions,
+            false, mode.name);
         auto transient = parse_mode_equation_set(
-            mode.transient_equations, transient_symbols, true,
-            mode.name);
+            mode.transient_equations, transient_symbols,
+            transient_dimensions, true, mode.name);
         mode_equations.emplace(mode.name, std::move(steady));
         mode_transient_equations.emplace(
             mode.name, std::move(transient));

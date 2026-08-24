@@ -673,8 +673,10 @@ Work items:
    - declarative transient port/internal states, DAE equations, event-driven state reset actions,
      and project-defined fixed-topology operating modes with steady/transient equation switching,
      immutable persistence, and catalog discovery; ✅
-   - approval policy, compound dimension analysis, property functions, and state-dependent reset
-     expressions remain follow-ons.
+   - publication-time compound dimension inference for arithmetic, derivative states, powers,
+     roots, and transcendental functions, including SI-derived equivalence and opaque extension
+     dimensions; ✅
+   - approval policy, property functions, and state-dependent reset expressions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

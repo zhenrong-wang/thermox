@@ -209,6 +209,29 @@ void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
             thermox::platform::register_expression_component(
                 registry,
                 pressure_loss_definition(
+                    "outlet.p - inlet.m_dot"));
+        },
+        "addition and subtraction require compatible dimensions");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry,
+                pressure_loss_definition("exp(inlet.p)"));
+        },
+        "exp and log require a dimensionless argument");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry,
+                pressure_loss_definition(
+                    "pow(inlet.p, parameter.pressure_ratio)"));
+        },
+        "pow of a dimensioned value requires a constant exponent");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry,
+                pressure_loss_definition(
                     "outlet.p + " + std::string(4096, '1')));
         },
         "exceeds the 4096-character limit");
@@ -227,6 +250,23 @@ void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
                 registry, std::move(material));
         },
         "does not support species-expanded connector variables");
+
+    auto shaft_power = pressure_loss_definition(
+        "outlet.p - inlet.p");
+    shaft_power.descriptor.kind = "custom.fluid.shaft_power";
+    shaft_power.descriptor.ports.push_back(
+        {"shaft", "shaft", "out"});
+    shaft_power.equations.push_back({
+        "power_balance",
+        "shaft.W_dot - inlet.m_dot * inlet.h", 1.0});
+    thermox::platform::register_expression_component(
+        registry, std::move(shaft_power));
+
+    auto zero_pressure = pressure_loss_definition(
+        "outlet.p - 0");
+    zero_pressure.descriptor.kind = "custom.fluid.zero_pressure";
+    thermox::platform::register_expression_component(
+        registry, std::move(zero_pressure));
 }
 
 void test_expression_implementation_identity_covers_equations() {
@@ -363,12 +403,26 @@ void test_transient_expression_validation_rejects_unknown_symbols() {
         std::numeric_limits<double>::infinity(), "dimensionless"}};
     algebraic_rate.transient_equations = {{
         "invalid_rate", "output.value - derivative.internal.state", 1.0}};
+    auto dimension_mismatch = algebraic_rate;
+    dimension_mismatch.descriptor.kind =
+        "custom.signal.invalid_rate_dimension";
+    dimension_mismatch.descriptor.internal_variables.front().kind =
+        thermox::DaeVariableKind::differential;
+    dimension_mismatch.transient_equations = {{
+        "invalid_dimension",
+        "derivative.internal.state + output.value", 1.0}};
     require_invalid(
         [&]() {
             thermox::platform::register_expression_component(
                 registry, std::move(algebraic_rate));
         },
         "references unknown symbol: derivative.internal.state");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(dimension_mismatch));
+        },
+        "addition and subtraction require compatible dimensions");
 }
 
 void test_mode_aware_expression_component_switches_fixed_structure() {
