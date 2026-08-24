@@ -97,7 +97,7 @@ Production follow-ons:
 
 Runtime extensibility now includes the safe `thermox.expression_component/v4` contract for
 index-1 transient residuals, internal algebraic/differential states, state rates, time, bounds,
-scales, and sparse analytic DAE Jacobians. Constrained property functions, thermochemistry,
+scales, and sparse analytic DAE Jacobians. Additional property functions, thermochemistry,
 species-expanded variables, and state-dependent reset expressions remain follow-ons.
 
 ## Fixed-topology hybrid component modes
@@ -676,7 +676,11 @@ Work items:
    - publication-time compound dimension inference for arithmetic, derivative states, powers,
      roots, and transcendental functions, including SI-derived equivalence and opaque extension
      dimensions; ✅
-   - approval policy, property functions, and state-dependent reset expressions remain follow-ons.
+   - constrained same-port p-h temperature, density, and internal-energy functions with derived
+     capability requirements, provider binding, analytic/fallback derivative chaining, fixed
+     sparsity, and recoverable-versus-fatal property status propagation; ✅
+   - approval policy, further derivative-backed property functions, and state-dependent reset
+     expressions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

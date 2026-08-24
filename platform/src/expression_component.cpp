@@ -37,6 +37,9 @@ enum class NodeKind {
     square_root,
     exponential,
     logarithm,
+    property_temperature_ph,
+    property_density_ph,
+    property_internal_energy_ph,
 };
 
 struct ExpressionNode {
@@ -50,6 +53,7 @@ struct ExpressionNode {
 struct ParsedExpression {
     std::shared_ptr<const ExpressionNode> root;
     std::set<std::string> symbols;
+    std::set<std::string> property_ports;
 };
 
 using DimensionSignature = std::map<std::string, double>;
@@ -195,6 +199,28 @@ DimensionInference infer_dimension(
     }
 
     auto right = infer_dimension(*node.right, symbols);
+    if (node.kind == NodeKind::property_temperature_ph ||
+        node.kind == NodeKind::property_density_ph ||
+        node.kind == NodeKind::property_internal_energy_ph) {
+        if (!same_dimension(
+                left.signature, physical_dimension("pressure")) ||
+            !same_dimension(
+                right.signature,
+                physical_dimension("specific_enthalpy"))) {
+            throw std::invalid_argument(
+                "p-h property functions require pressure and "
+                "specific-enthalpy arguments");
+        }
+        if (node.kind == NodeKind::property_temperature_ph) {
+            return {physical_dimension("temperature"), std::nullopt};
+        }
+        if (node.kind == NodeKind::property_density_ph) {
+            return {physical_dimension("density"), std::nullopt};
+        }
+        return {
+            physical_dimension("specific_internal_energy"),
+            std::nullopt};
+    }
     if (node.kind == NodeKind::add ||
         node.kind == NodeKind::subtract) {
         if (!same_dimension(left.signature, right.signature)) {
@@ -285,7 +311,9 @@ public:
         if (!at_end()) {
             fail("unexpected trailing token");
         }
-        return {std::move(root), std::move(symbols_)};
+        return {
+            std::move(root), std::move(symbols_),
+            std::move(property_ports_)};
     }
 
 private:
@@ -429,6 +457,49 @@ private:
                     NodeKind::power, std::move(first),
                     std::move(second));
             }
+            const auto property_kind = [&]()
+                -> std::optional<NodeKind> {
+                if (identifier == "property.temperature_ph") {
+                    return NodeKind::property_temperature_ph;
+                }
+                if (identifier == "property.density_ph") {
+                    return NodeKind::property_density_ph;
+                }
+                if (identifier == "property.internal_energy_ph") {
+                    return NodeKind::property_internal_energy_ph;
+                }
+                return std::nullopt;
+            }();
+            if (property_kind) {
+                if (!second) {
+                    fail(identifier + " requires pressure and enthalpy arguments");
+                }
+                if (first->kind != NodeKind::symbol ||
+                    second->kind != NodeKind::symbol) {
+                    fail(identifier +
+                         " requires direct <port>.p and <port>.h symbols");
+                }
+                const auto pressure_suffix = std::string{".p"};
+                const auto enthalpy_suffix = std::string{".h"};
+                if (!first->symbol.ends_with(pressure_suffix) ||
+                    !second->symbol.ends_with(enthalpy_suffix)) {
+                    fail(identifier +
+                         " requires direct <port>.p and <port>.h symbols");
+                }
+                const auto pressure_port = first->symbol.substr(
+                    0, first->symbol.size() - pressure_suffix.size());
+                const auto enthalpy_port = second->symbol.substr(
+                    0, second->symbol.size() - enthalpy_suffix.size());
+                if (pressure_port != enthalpy_port) {
+                    fail(identifier +
+                         " arguments must reference the same fluid port");
+                }
+                property_ports_.insert(pressure_port);
+                return node(
+                    *property_kind, std::move(first),
+                    std::move(second), 0.0,
+                    pressure_port);
+            }
             if (second) {
                 fail(identifier + " accepts one argument");
             }
@@ -501,19 +572,26 @@ private:
     std::size_t position_{0};
     std::size_t node_count_{0};
     std::set<std::string> symbols_;
+    std::set<std::string> property_ports_;
 };
 
 struct Evaluation {
     double value{0.0};
     std::map<std::size_t, double> derivatives;
     std::string error;
+    bool fatal{false};
 };
 
-Evaluation failure(std::string message) {
+Evaluation failure(std::string message, bool fatal = false) {
     Evaluation out;
     out.error = std::move(message);
+    out.fatal = fatal;
     return out;
 }
+
+using PropertyBindings = std::map<
+    std::string,
+    std::shared_ptr<const physics::PropertyPackage>>;
 
 void add_scaled(
     std::map<std::size_t, double>& target,
@@ -528,7 +606,8 @@ Evaluation evaluate(
     const ExpressionNode& node,
     const std::vector<double>& values,
     const std::map<std::string, std::size_t>& variables,
-    const std::map<std::string, double>& parameters) {
+    const std::map<std::string, double>& parameters,
+    const PropertyBindings& properties) {
     if (node.kind == NodeKind::literal) {
         return {node.literal, {}, {}};
     }
@@ -548,7 +627,7 @@ Evaluation evaluate(
     }
 
     auto left = evaluate(
-        *node.left, values, variables, parameters);
+        *node.left, values, variables, parameters, properties);
     if (!left.error.empty()) return left;
     if (node.kind == NodeKind::negate) {
         left.value = -left.value;
@@ -607,10 +686,59 @@ Evaluation evaluate(
     }
 
     auto right = evaluate(
-        *node.right, values, variables, parameters);
+        *node.right, values, variables, parameters, properties);
     if (!right.error.empty()) return right;
     Evaluation out;
-    if (node.kind == NodeKind::add ||
+    if (node.kind == NodeKind::property_temperature_ph ||
+        node.kind == NodeKind::property_density_ph ||
+        node.kind == NodeKind::property_internal_energy_ph) {
+        const auto package = properties.find(node.symbol);
+        if (package == properties.end() || !package->second) {
+            return failure(
+                "property function has no package bound to fluid port '" +
+                    node.symbol + "'",
+                true);
+        }
+        const auto state =
+            physics::state_ph_derivatives_with_fallback(
+                *package->second, left.value, right.value);
+        if (!state.ok()) {
+            const bool fatal =
+                state.status == physics::PropertyStatus::backend_error ||
+                state.status == physics::PropertyStatus::unsupported;
+            return failure(
+                "property function on port '" + node.symbol +
+                    "' failed: " + state.message,
+                fatal);
+        }
+        double pressure_derivative = 0.0;
+        double enthalpy_derivative = 0.0;
+        if (node.kind == NodeKind::property_temperature_ph) {
+            out.value = state.state.temperature_k;
+            pressure_derivative = state.derivatives
+                .temperature_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .temperature_wrt_enthalpy_at_pressure;
+        } else if (node.kind == NodeKind::property_density_ph) {
+            out.value = state.state.density_kg_m3;
+            pressure_derivative = state.derivatives
+                .density_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .density_wrt_enthalpy_at_pressure;
+        } else {
+            out.value = state.state.internal_energy_j_kg;
+            pressure_derivative = state.derivatives
+                .internal_energy_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .internal_energy_wrt_enthalpy_at_pressure;
+        }
+        add_scaled(
+            out.derivatives, left.derivatives,
+            pressure_derivative);
+        add_scaled(
+            out.derivatives, right.derivatives,
+            enthalpy_derivative);
+    } else if (node.kind == NodeKind::add ||
         node.kind == NodeKind::subtract) {
         out.value = node.kind == NodeKind::add
             ? left.value + right.value
@@ -796,6 +924,7 @@ public:
         ParsedEquationSet transient_equations,
         ParsedModeEquationSets mode_equations,
         ParsedModeEquationSets mode_transient_equations,
+        std::set<std::string> property_ports,
         std::string fingerprint)
         : descriptor_(std::move(descriptor)),
           equations_(std::move(equations)),
@@ -803,6 +932,7 @@ public:
           mode_equations_(std::move(mode_equations)),
           mode_transient_equations_(
               std::move(mode_transient_equations)),
+          property_ports_(std::move(property_ports)),
           fingerprint_(std::move(fingerprint)) {}
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -812,6 +942,13 @@ public:
     std::string_view implementation_fingerprint()
         const override {
         return fingerprint_;
+    }
+
+    bool requires_property_capability_on_port(
+        physics::PropertyCapability capability,
+        std::string_view port) const override {
+        return capability == physics::PropertyCapability::state_ph &&
+            property_ports_.contains(std::string{port});
     }
 
     void add_equations(
@@ -866,31 +1003,36 @@ public:
             const auto root = expression.root;
             const auto bound_variables = variables;
             const auto bound_parameters = parameters;
+            const auto bound_properties = context.port_properties;
             const std::string equation_name =
                 "component." + context.component.id +
                 ".expression." + definition.name;
             system.add_checked_sparse_equation(
                 equation_name,
-                [root, bound_variables, bound_parameters](
+                [root, bound_variables, bound_parameters,
+                 bound_properties](
                     const std::vector<double>& values,
                     double& residual) {
                     const auto result = evaluate(
                         *root, values, bound_variables,
-                        bound_parameters);
+                        bound_parameters, bound_properties);
                     if (!result.error.empty()) {
-                        return EvaluationStatus::recoverable(
-                            result.error);
+                        return result.fatal
+                            ? EvaluationStatus::fatal(result.error)
+                            : EvaluationStatus::recoverable(
+                                  result.error);
                     }
                     residual = result.value;
                     return EvaluationStatus::success();
                 },
                 std::move(sparsity),
-                [root, bound_variables, bound_parameters](
+                [root, bound_variables, bound_parameters,
+                 bound_properties](
                     const std::vector<double>& values,
                     std::vector<EquationPartial>& partials) {
                     const auto result = evaluate(
                         *root, values, bound_variables,
-                        bound_parameters);
+                        bound_parameters, bound_properties);
                     if (!result.error.empty()) {
                         throw std::runtime_error(
                             "safe expression evaluation failed: " +
@@ -985,13 +1127,15 @@ public:
             const auto bound_variables = expression_variables;
             const auto bound_bindings = bindings;
             const auto bound_parameters = parameters;
+            const auto bound_properties = context.port_properties;
             const std::string equation_name =
                 "component." + context.component.id +
                 ".expression_transient." + definition.name;
             system.add_sparse_equation(
                 equation_name, std::move(sparsity),
                 [root, mode_roots, active_mode,
-                 bound_variables, bound_bindings, bound_parameters](
+                 bound_variables, bound_bindings, bound_parameters,
+                 bound_properties](
                     double time, const std::vector<double>& state,
                     const std::vector<double>& derivative, double& residual,
                     std::vector<DaeEquationPartial>& partials) {
@@ -1009,9 +1153,12 @@ public:
                         : mode_roots.at(active_mode());
                     const auto result = evaluate(
                         *selected_root, local_values, bound_variables,
-                        dynamic_parameters);
+                        dynamic_parameters, bound_properties);
                     if (!result.error.empty()) {
-                        return EvaluationStatus::recoverable(result.error);
+                        return result.fatal
+                            ? EvaluationStatus::fatal(result.error)
+                            : EvaluationStatus::recoverable(
+                                  result.error);
                     }
                     residual = result.value;
                     std::map<std::size_t, DaeEquationPartial> combined;
@@ -1040,6 +1187,7 @@ private:
     ParsedEquationSet transient_equations_;
     ParsedModeEquationSets mode_equations_;
     ParsedModeEquationSets mode_transient_equations_;
+    std::set<std::string> property_ports_;
     std::string fingerprint_;
 };
 
@@ -1085,7 +1233,7 @@ SafeExpressionEvaluation SafeExpression::evaluate(
         return {0.0, {}, "safe expression received unknown symbols"};
     }
     const auto result = thermox::platform::evaluate(
-        *impl_->parsed.root, ordered_values, variables, {});
+        *impl_->parsed.root, ordered_values, variables, {}, {});
     SafeExpressionEvaluation output;
     output.value = result.value;
     output.error = result.error;
@@ -1151,11 +1299,15 @@ make_expression_component_model(
             "kind, display name, category, and calculation model name");
     }
     if (!descriptor.artifacts.empty() ||
-        !descriptor.required_property_capabilities.empty() ||
         !descriptor.required_thermochemistry_capabilities.empty()) {
         throw std::invalid_argument(
             "expression component v4 cannot access artifacts or "
-            "property/thermochemistry callbacks");
+            "thermochemistry callbacks");
+    }
+    if (!descriptor.required_property_capabilities.empty()) {
+        throw std::invalid_argument(
+            "expression component property capabilities are derived "
+            "from safe property function calls");
     }
     const bool mode_aware = !definition.modes.empty();
     const bool missing_transient_equations = mode_aware
@@ -1216,6 +1368,7 @@ make_expression_component_model(
     std::set<std::string> transient_symbols;
     std::map<std::string, DimensionSignature> allowed_dimensions;
     std::map<std::string, DimensionSignature> transient_dimensions;
+    std::map<std::string, std::string> port_domains;
     std::set<std::string> differential_ports;
     for (const auto& variable : descriptor.transient_variables) {
         if (variable.kind == DaeVariableKind::differential) {
@@ -1224,6 +1377,7 @@ make_expression_component_model(
         }
     }
     for (const auto& port : descriptor.ports) {
+        port_domains.emplace(port.name, port.domain);
         const auto& domain =
             registry.require_connector_domain(port.domain);
         for (const auto& variable : domain.variables) {
@@ -1295,6 +1449,21 @@ make_expression_component_model(
             }
         }
     }
+
+    std::set<std::string> property_ports;
+    const auto validate_property_ports = [&](
+        const ParsedExpression& expression) {
+        for (const auto& port : expression.property_ports) {
+            const auto found = port_domains.find(port);
+            if (found == port_domains.end() ||
+                found->second != "fluid") {
+                throw std::invalid_argument(
+                    "expression property function port must be a "
+                    "declared fluid port: " + port);
+            }
+            property_ports.insert(port);
+        }
+    };
     for (const auto& parameter : descriptor.parameters) {
         if (parameter.name.find('{') != std::string::npos ||
             parameter.name.find('}') != std::string::npos) {
@@ -1379,6 +1548,7 @@ make_expression_component_model(
                     "' references unknown symbol: " + symbol);
             }
         }
+        validate_property_ports(parsed);
         const bool has_variable =
             std::any_of(
                 parsed.symbols.begin(),
@@ -1423,6 +1593,7 @@ make_expression_component_model(
                     "' references unknown symbol: " + symbol);
             }
         }
+        validate_property_ports(parsed);
         const bool has_variable = std::any_of(
             parsed.symbols.begin(), parsed.symbols.end(),
             [&](const auto& symbol) {
@@ -1478,6 +1649,7 @@ make_expression_component_model(
                         "' references unknown symbol: " + symbol);
                 }
             }
+            validate_property_ports(parsed);
             const bool has_variable = std::any_of(
                 parsed.symbols.begin(), parsed.symbols.end(),
                 [&](const auto& symbol) {
@@ -1560,12 +1732,17 @@ make_expression_component_model(
                 "transient");
         }
     }
+    if (!property_ports.empty()) {
+        descriptor.required_property_capabilities.push_back(
+            physics::PropertyCapability::state_ph);
+    }
 
     return std::make_shared<ExpressionComponentModel>(
         std::move(descriptor), std::move(equations),
         std::move(transient_equations),
         std::move(mode_equations),
         std::move(mode_transient_equations),
+        std::move(property_ports),
         fingerprint);
 }
 

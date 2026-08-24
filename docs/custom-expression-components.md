@@ -14,7 +14,10 @@ An expression can reference:
 - an SI-normalized component parameter as `parameter.<name>`;
 - finite decimal numbers and the constants `pi` and `e`;
 - `+`, `-`, `*`, `/`, parentheses, and unary signs;
-- `abs(x)`, `sqrt(x)`, `exp(x)`, `log(x)`, and `pow(x, y)`.
+- `abs(x)`, `sqrt(x)`, `exp(x)`, `log(x)`, and `pow(x, y)`;
+- the constrained p-h calls `property.temperature_ph(<port>.p, <port>.h)`,
+  `property.density_ph(<port>.p, <port>.h)`, and
+  `property.internal_energy_ph(<port>.p, <port>.h)`.
 
 Each expression is a residual whose target value is zero. For example, a steady fluid
 pressure-loss component can declare:
@@ -35,6 +38,16 @@ constants should therefore be declared as dimensioned component parameters. Ther
 quantity names map to SI base dimensions, so derived identities such as mass flow times specific
 enthalpy equaling power are recognized. Extension-defined dimension names remain distinct opaque
 dimensions and still receive equality and cancellation checks.
+
+Property calls must use the direct pressure and enthalpy symbols of the same declared fluid port.
+Registration derives the component's `state_ph` capability requirement; graph compilation binds
+that port to its selected registered property package and rejects unsupported media before solving.
+Evaluation uses the backend-neutral p-h derivative contract, including its bounded documented
+fallback where an analytic provider derivative is unavailable, and chains those derivatives into
+the expression's fixed sparse Jacobian row. Invalid or out-of-range thermodynamic states are
+recoverable physical evaluations; unsupported providers and backend failures are fatal. Arbitrary
+property names, computed state arguments, cross-port states, transport calls without derivative
+contracts, and user callbacks are not accepted.
 
 The declaration distinguishes the physical template from one executable model, so nonvisual
 clients can publish the same catalog structure used by the canvas:
@@ -62,7 +75,7 @@ calibration, engineering-study, transient, and job requests may instead carry a
 `SimulationComponentBundle`; the service composes a temporary immutable overlay without changing
 the shared process runtime. Unknown symbols and functions are rejected before model compilation.
 Expressions are limited to 4,096 characters, 512 syntax nodes, and 64 nesting levels. There is no
-file, process, network, allocation, reflection, loop, or callback syntax. Evaluation derives exact
+file, process, network, allocation, reflection, loop, or arbitrary callback syntax. Evaluation derives exact
 sparse dependencies from referenced port variables and uses forward analytic differentiation for
 the solver-owned Jacobian pattern. Domain failures such as division by zero or an invalid
 logarithm are reported as recoverable physical evaluations.
@@ -106,8 +119,8 @@ Cases select the initial mode through `component_modes`; state events use the or
 immutable Team/project artifacts, queued workers, and catalog discovery. A component without
 `modes` uses its top-level `equations` and `transient_equations`.
 
-The safe contract does not currently expose property-package calls, thermochemistry calls,
-artifact access, parameter templates, or species-expanded material variables.
+The safe contract does not currently expose thermochemistry calls, artifact access, parameter
+templates, species-expanded material variables, or derivative-free transport-property calls.
 Deployment code can register definitions at the trusted composition root through
 `register_expression_component`; application code can supply the same safe definition through a
 request bundle.
@@ -145,8 +158,8 @@ the topology instance's exact kind/version rather than substituting the newest p
 The browser only enables new run authoring after the service compiler has validated that exact
 topology, case, and artifact-revision set.
 
-Approval policy, constrained property functions, component-owned expression event surfaces,
-state-dependent reset expressions, and richer equation
+Approval policy, additional property functions backed by derivative contracts, component-owned
+expression event surfaces, state-dependent reset expressions, and richer equation
 syntax assistance require later contracts. Cases can declare dimensioned threshold events, typed
 algebraic input transitions, constant resets of declared differential states, and validated mode
 switches without embedding imperative behavior in a project expression component.

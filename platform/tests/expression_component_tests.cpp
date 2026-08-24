@@ -176,6 +176,80 @@ void test_expression_component_compiles_and_solves() {
         "custom enthalpy equation is solved");
 }
 
+void test_expression_component_uses_port_bound_properties() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p + "
+        "parameter.loss_coefficient * inlet.m_dot * "
+        "abs(inlet.m_dot) / (2 * "
+        "property.density_ph(inlet.p, inlet.h) * "
+        "parameter.flow_area * parameter.flow_area)");
+    definition.descriptor.kind =
+        "custom.fluid.property_pressure_loss";
+    definition.descriptor.parameters.clear();
+    definition.descriptor.parameters.push_back({
+        "loss_coefficient", "dimensionless", false, 2.0,
+        0.0, 100.0, true, true});
+    definition.descriptor.parameters.push_back({
+        "flow_area", "area", false, 0.5,
+        1.0e-6, 1000.0, false, true});
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+    const auto& model = registry.require_model(
+        "custom.fluid.property_pressure_loss");
+    require(
+        model.descriptor().required_property_capabilities ==
+            std::vector<thermox::physics::PropertyCapability>{
+                thermox::physics::PropertyCapability::state_ph} &&
+            model.requires_property_capability_on_port(
+                thermox::physics::PropertyCapability::state_ph,
+                "inlet") &&
+            !model.requires_property_capability_on_port(
+                thermox::physics::PropertyCapability::state_ph,
+                "outlet"),
+        "safe property calls derive the required p-h capability");
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "property_expression",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [{
+      "id": "loss",
+      "kind": "custom.fluid.property_pressure_loss",
+      "media": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "loss.inlet.m_dot": {"value": 12.0, "unit": "kg/s"},
+      "loss.inlet.p": {"value": 2.0, "unit": "bar"},
+      "loss.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "property functions chain p-h derivatives into the sparse Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "property-backed custom pressure loss converges");
+}
+
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
     auto registry =
         thermox::platform::make_default_component_registry();
@@ -227,6 +301,22 @@ void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
                     "pow(inlet.p, parameter.pressure_ratio)"));
         },
         "pow of a dimensioned value requires a constant exponent");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry,
+                pressure_loss_definition(
+                    "property.density_ph(inlet.p, outlet.h)"));
+        },
+        "arguments must reference the same fluid port");
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry,
+                pressure_loss_definition(
+                    "property.density_ph(inlet.p * 1, inlet.h)"));
+        },
+        "requires direct <port>.p and <port>.h symbols");
     require_invalid(
         [&]() {
             thermox::platform::register_expression_component(
@@ -368,6 +458,86 @@ void test_transient_expression_component_integrates_internal_state() {
     require(std::abs(result.trajectory.back().state.at(filtered) - expected) <
                 2.0e-2,
             "safe transient expression integrates its declared state");
+}
+
+void test_transient_property_expression_integrates_internal_state() {
+    auto registry = thermox::platform::make_default_component_registry();
+    thermox::platform::ExpressionComponentDefinition definition;
+    definition.descriptor.kind =
+        "custom.fluid.filtered_density";
+    definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind = "fluid.state_filter";
+    definition.descriptor.display_name = "Filtered density";
+    definition.descriptor.category = "Project fluid controls";
+    definition.descriptor.model_name = "Safe p-h density filter";
+    definition.descriptor.supports_steady = false;
+    definition.descriptor.supports_transient = true;
+    definition.descriptor.ports = {
+        {"state", "fluid", "in"},
+    };
+    definition.descriptor.parameters = {
+        {"time_constant", "time", true, std::nullopt, 0.0,
+         std::numeric_limits<double>::infinity(), false, true},
+    };
+    definition.descriptor.internal_variables = {{
+        "filtered_density", thermox::DaeVariableKind::differential,
+        1.0, 1.0, 0.0, 1.0, 0.0,
+        std::numeric_limits<double>::infinity(), "density"}};
+    definition.transient_equations = {{
+        "density_filter",
+        "parameter.time_constant * "
+        "derivative.internal.filtered_density + "
+        "internal.filtered_density - "
+        "property.density_ph(state.p, state.h)",
+        1.0}};
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document = thermox::platform::parse_model_document_text(
+        R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "transient_property_expression",
+    "media": [{"id": "air", "backend": "ideal_gas_mixture",
+               "substance": "Air"}],
+    "components": [{
+      "id": "probe",
+      "kind": "custom.fluid.filtered_density",
+      "media": {"state": "air"},
+      "parameters": {"time_constant": {"value": 0.5, "unit": "s"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "hold",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "probe.state.m_dot": {"value": 0.0, "unit": "kg/s"},
+      "probe.state.p": {"value": 1.0, "unit": "bar"},
+      "probe.state.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_transient_model_graph(
+        document, registry, "hold");
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 1.0;
+    options.initial_step = 0.05;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    const auto found = std::find(
+        graph.problem.variable_names.begin(),
+        graph.problem.variable_names.end(),
+        "probe.filtered_density");
+    require(
+        found != graph.problem.variable_names.end(),
+        "transient property expression must expose its internal state");
+    const auto index = static_cast<std::size_t>(
+        std::distance(graph.problem.variable_names.begin(), found));
+    require(
+        result.trajectory.back().state.at(index) > 1.02,
+        "transient property expression must evolve toward p-h density");
 }
 
 void test_transient_expression_validation_rejects_unknown_symbols() {
@@ -591,9 +761,11 @@ void test_mode_aware_expression_component_switches_fixed_structure() {
 int main() {
     try {
         test_expression_component_compiles_and_solves();
+        test_expression_component_uses_port_bound_properties();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();
+        test_transient_property_expression_integrates_internal_state();
         test_transient_expression_validation_rejects_unknown_symbols();
         test_mode_aware_expression_component_switches_fixed_structure();
     } catch (const std::exception& error) {

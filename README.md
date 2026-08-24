@@ -623,8 +623,9 @@ is intentionally deferred until gateway identity and a public API endpoint exist
 Trusted deployments and request-scoped simulations can compose safe steady algebraic and index-1
 transient definitions through `thermox.expression_component/v4`, including declared internal
 states, fixed-topology operating modes, and analytic sparse DAE derivatives. Expressions use registered connector
-variables and dimensioned SI parameters, produce analytic sparse Jacobian rows, and cannot execute
-arbitrary code. Durable jobs snapshot the exact definitions under `thermox.job/v16`. Project-owned
+variables, dimensioned SI parameters, and constrained same-port p-h property calls; they produce
+analytic sparse Jacobian rows and cannot execute arbitrary code. Durable jobs snapshot the exact
+definitions under `thermox.job/v16`. Project-owned
 definitions are discovered from the project component catalog and appear directly in the canvas
 library with automatic source-revision binding. The library also authors and revises safe
 definitions as immutable project artifacts; component identity/version rules are enforced by the

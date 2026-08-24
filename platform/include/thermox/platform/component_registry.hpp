@@ -137,6 +137,12 @@ public:
     virtual std::string_view implementation_fingerprint() const {
         return {};
     }
+    // Descriptors expose the union of required capabilities for catalog
+    // discovery. Models may narrow a capability to the ports where it is
+    // actually evaluated.
+    virtual bool requires_property_capability_on_port(
+        physics::PropertyCapability capability,
+        std::string_view port) const;
     virtual void add_equations(const ComponentCompileContext& context,
                                EquationSystemBuilder& system) const = 0;
     virtual void add_transient_equations(const ComponentCompileContext& context,

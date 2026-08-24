@@ -434,6 +434,35 @@ std::string expression_component_payload(
     return payload;
 }
 
+std::string property_expression_component_payload() {
+    return R"json({
+  "kind": "custom.fluid.property_loss",
+  "version": "1.0.0",
+  "template_kind": "custom.fitting.pressure_loss",
+  "display_name": "Property-backed pressure loss",
+  "category": "Project fittings",
+  "model_name": "Safe p-h density expression",
+  "ports": [
+    {"name": "inlet", "domain": "fluid", "direction": "in"},
+    {"name": "outlet", "domain": "fluid", "direction": "out"}
+  ],
+  "parameters": [
+    {"name": "loss_coefficient", "dimension": "dimensionless",
+     "required": false, "default_value_si": 2.0},
+    {"name": "flow_area", "dimension": "area",
+     "required": false, "default_value_si": 0.5}
+  ],
+  "equations": [
+    {"name": "mass_balance",
+     "expression": "outlet.m_dot - inlet.m_dot"},
+    {"name": "enthalpy_balance",
+     "expression": "outlet.h - inlet.h"},
+    {"name": "pressure_loss",
+     "expression": "outlet.p - inlet.p + parameter.loss_coefficient * inlet.m_dot * abs(inlet.m_dot) / (2 * property.density_ph(inlet.p, inlet.h) * parameter.flow_area * parameter.flow_area)"}
+  ]
+})json";
+}
+
 std::string correlation_payload() {
     return R"json({
   "inputs": [
@@ -1063,6 +1092,40 @@ void test_expression_component_artifact_is_executable() {
         hidden,
         "project component discovery must hide cross-Team "
         "project existence");
+}
+
+void test_property_expression_component_artifact_is_discoverable() {
+    auto projects = std::make_shared<thermox::service::ProjectService>(
+        thermox::service::make_in_memory_project_repository());
+    const auto project = projects->create_project({
+        team_a, "Property expression component", {},
+    });
+    const auto revision = projects->create_artifact_revision({
+        team_a,
+        project.project_id,
+        "property-loss",
+        {},
+        "thermox.expression_component",
+        "thermox.expression_component/v4",
+        property_expression_component_payload(),
+    });
+    thermox::service::ProjectComponentCatalogService catalog{
+        projects,
+        thermox::service::make_default_simulation_runtime()};
+    const auto discovered = catalog.get(team_a, project.project_id);
+    require(
+        discovered.components.size() == 1U &&
+            discovered.components.front().source
+                    .artifact_revision_id ==
+                revision.artifact_revision_id &&
+            discovered.components.front().component
+                    .required_property_capabilities ==
+                std::vector<std::string>{"state_ph"} &&
+            discovered.components.front().definition.equations.back()
+                    .expression.find("property.density_ph") !=
+                std::string::npos,
+        "property-backed expression artifacts must derive and expose "
+        "their fluid-property capability");
 }
 
 void test_assembly_templates_are_versioned_topology_artifacts() {
@@ -2410,6 +2473,7 @@ int main() {
         test_public_json_omits_model_from_history();
         test_case_revisions_bind_exact_model_revisions();
         test_expression_component_artifact_is_executable();
+        test_property_expression_component_artifact_is_discoverable();
         test_assembly_templates_are_versioned_topology_artifacts();
         test_correlation_artifact_is_executable_input();
         test_regime_map_artifact_is_executable_input();

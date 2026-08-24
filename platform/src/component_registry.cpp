@@ -678,6 +678,10 @@ void validate_property_capabilities(const ComponentCompileContext& context,
                                     const ComponentModel& model) {
     for (const auto capability : model.descriptor().required_property_capabilities) {
         for (const auto& [port, package] : context.port_properties) {
+            if (!model.requires_property_capability_on_port(
+                    capability, port)) {
+                continue;
+            }
             if (!package->supports(capability)) {
                 throw std::invalid_argument(
                     "component '" + context.component.id + "' port '" + port +
@@ -871,6 +875,16 @@ const TransientVariableDescriptor* find_transient_variable(
 }
 
 }  // namespace
+
+bool ComponentModel::requires_property_capability_on_port(
+    physics::PropertyCapability capability,
+    std::string_view) const {
+    return std::find(
+               descriptor().required_property_capabilities.begin(),
+               descriptor().required_property_capabilities.end(),
+               capability) !=
+        descriptor().required_property_capabilities.end();
+}
 
 void ComponentModel::add_transient_equations(
     const ComponentCompileContext&,
