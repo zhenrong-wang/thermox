@@ -1901,7 +1901,6 @@ function App() {
           <span className="context-label">Project</span>
           <select
             aria-label="Project"
-            title={selectedProject?.name ?? 'Select project'}
             value={selectedProjectId}
             onChange={(event) => setSelectedProjectId(event.target.value)}
           >
@@ -1915,11 +1914,6 @@ function App() {
           <span className="context-label">Revision</span>
           <select
             aria-label="Topology revision"
-            title={
-              selectedRevision
-                ? `r${selectedRevision.revision_number} · ${selectedRevision.model_revision_label}`
-                : 'Select topology revision'
-            }
             value={selectedRevisionId}
             onChange={(event) => setSelectedRevisionId(event.target.value)}
             disabled={!revisions.length}
