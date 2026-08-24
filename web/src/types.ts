@@ -189,7 +189,7 @@ export interface ProjectModelValidation {
   case_checksum: string
   artifact_revisions: ArtifactRevision[]
   validation: {
-    schema_version: 'thermox.result/v4'
+    schema_version: 'thermox.result/v5'
     status: string
     error: {
       schema_version: string
@@ -547,7 +547,7 @@ export interface CreateReconciliationRevision {
 }
 
 export interface ReconciliationResult {
-  schema_version: 'thermox.result/v4'
+  schema_version: 'thermox.result/v5'
   status: 'succeeded'
   calculation_intent: 'data_reconciliation'
   reconciliation_mode: ReconciliationMode
@@ -706,7 +706,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v17'
+  schema_version: 'thermox.job/v18'
   job_id: string
   owner: {
     team_id: string
@@ -716,7 +716,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v17'
+    schema_version: 'thermox.job/v18'
     mode: 'steady' | 'transient' | 'calibration' | 'reconciliation'
     case_id: string
     calibration_id: string
@@ -799,7 +799,7 @@ export interface SimulationJob {
     checksum: string
   } | null
   result_summary: {
-    schema_version: 'thermox.result_summary/v3'
+    schema_version: 'thermox.result_summary/v4'
     mode: 'steady' | 'transient'
     values: ResultSummaryValue[]
     engineering_acceptance: EngineeringAcceptanceSummary | null
@@ -910,7 +910,7 @@ export interface ThermalFeasibilitySummary {
 }
 
 export interface SteadySimulationResult {
-  schema_version: 'thermox.result/v4'
+  schema_version: 'thermox.result/v5'
   status: 'succeeded'
   error: {
     schema_version: string
@@ -1003,12 +1003,12 @@ export interface SteadySimulationResult {
 
 export interface TransientGraphSample {
   time: number
-  discontinuous_from_previous: boolean
+  graph_before_discontinuity: GraphResult | null
   graph: GraphResult
 }
 
 export interface TransientSimulationResult {
-  schema_version: 'thermox.result/v4'
+  schema_version: 'thermox.result/v5'
   status: 'succeeded'
   error: {
     schema_version: string

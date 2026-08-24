@@ -505,7 +505,7 @@ void test_success_publishes_a_readable_artifact() {
     const auto& manifest = *completed->result_artifact;
     require(
         manifest.schema_version ==
-                thermox::service::result_schema_v4 &&
+                thermox::service::result_schema_v5 &&
             manifest.media_type == "application/json" &&
             manifest.byte_size > 0 &&
             manifest.checksum.starts_with("fnv1a64:"),
@@ -518,7 +518,7 @@ void test_success_publishes_a_readable_artifact() {
                 manifest.artifact_id &&
             result->content.size() == manifest.byte_size &&
             result->content.find("\"schema_version\": "
-                                 "\"thermox.result/v4\"") !=
+                                 "\"thermox.result/v5\"") !=
                 std::string::npos,
         "the application service must retrieve a published "
         "artifact through its manifest");
@@ -530,7 +530,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v17\"") != std::string::npos &&
+                  "\"thermox.job/v18\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -667,7 +667,7 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
     const auto status =
         thermox::service::serialize_job_record_json(*completed);
     require(
-        status.find("\"schema_version\": \"thermox.job/v17\"") !=
+        status.find("\"schema_version\": \"thermox.job/v18\"") !=
                 std::string::npos &&
             status.find("\"mode\": \"reconciliation\"") !=
                 std::string::npos &&
@@ -1105,7 +1105,7 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             true, 1, 0, {}};
     const thermox::service::ResultArtifactManifest manifest{
         "comparison-artifact", "application/json",
-        thermox::service::result_schema_v4, 2, "checksum"};
+        thermox::service::result_schema_v5, 2, "checksum"};
     const auto claimed_baseline = jobs->claim_next("comparison-worker");
     require(
         claimed_baseline && claimed_baseline->job_id == baseline.job_id,

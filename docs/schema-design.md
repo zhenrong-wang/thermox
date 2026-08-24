@@ -296,7 +296,7 @@ operating inputs, not hidden calibration values; the canonical model retains the
 
 `solver_options` in a case are descriptive model metadata. The service command owns executable
 solver settings; Thermox never silently merges case metadata with command defaults. Every
-effective command setting is recorded in `thermox.result/v4`.
+effective command setting is recorded in `thermox.result/v5`.
 
 Case modes:
 
@@ -504,7 +504,7 @@ residuals:
 ## 9. Result schema
 
 ```yaml
-schema_version: thermox.result/v4
+schema_version: thermox.result/v5
 graph:
   components:
     - component_id: st_hp
@@ -528,7 +528,9 @@ graph:
 ```
 
 Steady responses contain one `graph`. Each transient trajectory and event sample contains the same
-graph structure; transient primary and internal values also carry `derivative_si_s`. Fluid
+graph structure; transient primary and internal values also carry `derivative_si_s`. A transient
+trajectory sample at a scheduled jump or event reset additionally contains
+`graph_before_discontinuity`, preserving its left limit while `graph` remains the right limit. Fluid
 temperature, density, entropy, phase, quality, heat capacities, speed of sound, viscosity, and
 thermal conductivity are derived through the selected property package. Material ports expose the
 same thermodynamic fields plus mean molecular weight through the selected thermochemistry package.
@@ -571,6 +573,6 @@ Minimum validation before compilation:
   during early development.
 - Component `kind` + `version` identifies equation semantics.
 - Model revisions are immutable once used for a simulation result.
-- Simulation results use `thermox.result/v4` and record the platform build, model and command
+- Simulation results use `thermox.result/v5` and record the platform build, model and command
   schemas, catalog fingerprint, requested and resolved component/property versions, connector
   contracts, solver contract, and every effective solver setting.

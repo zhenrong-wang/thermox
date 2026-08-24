@@ -2252,7 +2252,7 @@ service::ResultSummary decode_result_summary(
         tree.get<std::string>("schema_version");
     summary.mode = tree.get<std::string>("mode");
     if (summary.schema_version !=
-            service::result_summary_schema_v3 ||
+            service::result_summary_schema_v4 ||
         (summary.mode != "steady" &&
          summary.mode != "transient")) {
         throw std::runtime_error(

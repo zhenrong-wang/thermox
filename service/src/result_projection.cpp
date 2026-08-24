@@ -121,7 +121,7 @@ bool requires_port(ResultValueScope scope) {
 struct SignalSample {
     double time{0.0};
     double value{0.0};
-    bool discontinuous_from_previous{false};
+    std::optional<double> value_before_discontinuity;
 };
 
 std::pair<double, double> resolve_window(
@@ -162,21 +162,6 @@ std::pair<double, double> resolve_window(
             "result projection '" + projection.id +
             "' window lies outside the trajectory");
     }
-    if (projection.aggregation != ResultAggregation::final) {
-        const auto crossed_transition = std::find_if(
-            events.begin(), events.end(), [&](const EventValue& event) {
-                return event.transitioned &&
-                    std::isfinite(event.time) &&
-                    event.time > start && event.time <= end;
-            });
-        if (crossed_transition != events.end()) {
-            throw ResultProjectionError(
-                "result projection '" + projection.id +
-                "' spans state transition '" +
-                crossed_transition->name +
-                "'; begin a reduction window at or after the event");
-        }
-    }
     return {start, end};
 }
 
@@ -192,9 +177,11 @@ double interpolate(
         return upper->value;
     }
     const auto& left = *(upper - 1);
+    const double right = upper->value_before_discontinuity.value_or(
+        upper->value);
     const double fraction =
         (time - left.time) / (upper->time - left.time);
-    return left.value + fraction * (upper->value - left.value);
+    return left.value + fraction * (right - left.value);
 }
 
 std::vector<SignalSample> clipped_signal(
@@ -202,14 +189,37 @@ std::vector<SignalSample> clipped_signal(
     double start,
     double end) {
     std::vector<SignalSample> clipped;
-    clipped.push_back({start, interpolate(signal, start), false});
+    clipped.push_back({start, interpolate(signal, start), std::nullopt});
     for (const auto& sample : signal) {
         if (sample.time > start && sample.time < end) {
-            clipped.push_back(sample);
+            if (sample.value_before_discontinuity) {
+                clipped.push_back({
+                    sample.time,
+                    *sample.value_before_discontinuity,
+                    std::nullopt,
+                });
+            }
+            clipped.push_back({sample.time, sample.value, std::nullopt});
         }
     }
     if (end > start) {
-        clipped.push_back({end, interpolate(signal, end), false});
+        const auto exact = std::lower_bound(
+            signal.begin(), signal.end(), end,
+            [](const SignalSample& sample, double candidate) {
+                return sample.time < candidate;
+            });
+        if (exact != signal.end() && exact->time == end &&
+            exact->value_before_discontinuity) {
+            clipped.push_back({
+                end,
+                *exact->value_before_discontinuity,
+                std::nullopt,
+            });
+            clipped.push_back({end, exact->value, std::nullopt});
+        } else {
+            clipped.push_back({
+                end, interpolate(signal, end), std::nullopt});
+        }
     }
     return clipped;
 }
@@ -659,27 +669,20 @@ ResultSummary project_transient_result(
         std::vector<SignalSample> signal;
         signal.reserve(trajectory.size());
         for (const auto& sample : trajectory) {
+            std::optional<double> value_before_discontinuity;
+            if (sample.graph_before_discontinuity) {
+                value_before_discontinuity = resolve(
+                    *sample.graph_before_discontinuity,
+                    projection).value_si;
+            }
             signal.push_back({
                 sample.time,
                 resolve(sample.graph, projection).value_si,
-                sample.discontinuous_from_previous,
+                value_before_discontinuity,
             });
         }
         const auto [start, end] =
             resolve_window(projection, trajectory, events);
-        if (projection.aggregation != ResultAggregation::final) {
-            const auto discontinuity = std::find_if(
-                signal.begin(), signal.end(), [&](const SignalSample& sample) {
-                    return sample.discontinuous_from_previous &&
-                        sample.time > start && sample.time <= end;
-                });
-            if (discontinuity != signal.end()) {
-                throw ResultProjectionError(
-                    "result projection '" + projection.id +
-                    "' spans a trajectory discontinuity at time " +
-                    std::to_string(discontinuity->time));
-            }
-        }
         const auto clipped = clipped_signal(signal, start, end);
         double value = clipped.back().value;
         double sample_time = end;

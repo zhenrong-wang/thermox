@@ -324,13 +324,13 @@ Completed structural slices:
 - domain-compatible connection kinds, direction checks, and explicit port cardinality; ✅
 - optional exact component/property/connector version pins plus complete execution
   provenance, including the platform build and effective solver settings; ✅
-- graph-native `thermox.result/v4` steady/transient/event values for every connector domain,
+- graph-native `thermox.result/v5` steady/transient/event values for every connector domain,
   fluid-derived properties, internal states, and derivatives; ✅
 - registered source/sink semantics plus topology-aware steady system-boundary mass and energy
   accounting across fluid, material, heat, shaft, and electrical domains; ✅
 - generic steady component net-flow metrics that attribute mass closure and energy conversion
   losses through registered port directions; ✅
-- transport-neutral `thermox.job/v17` lifecycle with Team-scoped idempotency, leased worker claims,
+- transport-neutral `thermox.job/v18` lifecycle with Team-scoped idempotency, leased worker claims,
   optimistic revisions, terminal publication, and checksummed result artifacts; ✅
 - optional PostgreSQL job-metadata adapter with Team-scoped uniqueness, durable immutable requests,
   `SKIP LOCKED` claims, optimistic terminal transitions, migration, Compose service, and isolated
@@ -435,7 +435,7 @@ Next:
 19. Add opt-in bounded profile-likelihood intervals with nuisance-parameter re-optimization,
     adaptive threshold bracketing, explicit bound truncation, evaluation budgets, provenance, and
     thin CLI access. ✅
-20. Carry data reconciliation through the common `thermox.job/v17` idempotent queue, leased
+20. Carry data reconciliation through the common `thermox.job/v18` idempotent queue, leased
     worker, execution-provenance, and checksummed result-artifact boundary without moving
     reconciliation logic out of the service. ✅
 21. Add a distinct immutable reconciliation revision with disjoint constraint/held-out Study

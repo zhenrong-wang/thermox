@@ -99,7 +99,7 @@ must be unambiguous.
 
 ### Results — graph contract completed
 
-`thermox.result/v4` makes steady solutions, transient samples, and events graph-addressable by
+`thermox.result/v5` makes steady solutions, transient samples, and events graph-addressable by
 stable component and port identity for every domain. It carries primary variables, fluid-derived
 properties, internal states, and transient derivatives. Typed component-metric, system-balance,
 and KPI collections are reserved in the same contract for registered evaluators.

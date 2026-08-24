@@ -14,7 +14,7 @@
 namespace thermox::service {
 
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
-inline constexpr char result_schema_v4[] = "thermox.result/v4";
+inline constexpr char result_schema_v5[] = "thermox.result/v5";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
 inline constexpr char catalog_schema_v12[] = "thermox.catalog/v12";
 inline constexpr char correlation_instantiation_schema_v1[] =
@@ -373,7 +373,7 @@ struct RevisionProvenance {
 };
 
 struct ExecutionMetadata {
-    std::string result_schema_version{result_schema_v4};
+    std::string result_schema_version{result_schema_v5};
     std::string command_schema_version;
     std::string platform_version;
     std::string operation;
@@ -874,7 +874,7 @@ struct TimeIntegrationDiagnostics {
 struct StateSample {
     double time{0.0};
     GraphResult graph;
-    bool discontinuous_from_previous{false};
+    std::optional<GraphResult> graph_before_discontinuity;
 };
 
 struct EventValue {

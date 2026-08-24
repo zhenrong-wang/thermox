@@ -559,8 +559,13 @@ void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
         });
     require(
         knot != result.trajectory.end() &&
-            knot->discontinuous_from_previous,
-        "discontinuous DAE input must emit and mark its exact knot");
+            knot->state_before_discontinuity.size() == 2U &&
+            knot->derivative_before_discontinuity.size() == 2U,
+        "discontinuous DAE input must emit both limits at its exact knot");
+    require_near(
+        knot->state_before_discontinuity[1], 0.0, 1.0e-9,
+        "discontinuity evidence must retain the left-limit algebraic "
+        "state");
     require_near(
         knot->state[0], 0.0, 1.0e-9,
         "differential state must not integrate the new command before "
@@ -790,6 +795,19 @@ void test_event_transition_reinitializes_and_restarts_integration() {
         result.events.front().state[1], -1.0, 1.0e-9,
         "event evidence must contain the consistently reinitialized "
         "post-transition algebraic state");
+    const auto transition_sample = std::find_if(
+        result.trajectory.begin(), result.trajectory.end(),
+        [&](const auto& sample) {
+            return sample.time == result.events.front().time;
+        });
+    require(
+        transition_sample != result.trajectory.end() &&
+            transition_sample->state_before_discontinuity.size() == 2U,
+        "event transition samples must retain their left-limit state");
+    require_near(
+        transition_sample->state_before_discontinuity[1], 1.0, 1.0e-9,
+        "event transition evidence must retain the pre-transition "
+        "algebraic mode");
     require_near(
         result.trajectory.back().state[0], 0.0, 4.0e-2,
         "integration must continue under the transitioned residual mode");

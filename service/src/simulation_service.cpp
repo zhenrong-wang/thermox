@@ -5303,12 +5303,25 @@ TransientSimulationResponse SimulationService::run_transient(
             runtime->impl_->thermochemistry);
         response.trajectory.reserve(result.trajectory.size());
         for (const auto& sample : result.trajectory) {
+            std::optional<GraphResult> graph_before_discontinuity;
+            if (sample.state_before_discontinuity.empty() !=
+                sample.derivative_before_discontinuity.empty()) {
+                throw std::runtime_error(
+                    "transient discontinuity evidence must contain both "
+                    "state and derivative limits");
+            }
+            if (!sample.state_before_discontinuity.empty()) {
+                graph_before_discontinuity = copy_graph_result(
+                    evaluator.evaluate(
+                        sample.state_before_discontinuity,
+                        sample.derivative_before_discontinuity));
+            }
             StateSample projected{
                 sample.time,
                 copy_graph_result(
                     evaluator.evaluate(
                         sample.state, sample.derivative)),
-                sample.discontinuous_from_previous,
+                std::move(graph_before_discontinuity),
             };
             const auto snapshot_feasibility =
                 audit_counterflow_thermal_feasibility(

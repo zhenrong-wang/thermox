@@ -5645,7 +5645,14 @@ void test_transient_expression_component_flows_through_service() {
         "the knot");
     require(
         held_knot != held_response.trajectory.end() &&
-            held_knot->discontinuous_from_previous &&
+            held_knot->graph_before_discontinuity &&
+            require_result_value(
+                require_port_result(
+                    *held_knot->graph_before_discontinuity,
+                    "lag", "input")
+                    .primary_values,
+                "value")
+                    .value_si == 0.0 &&
             require_result_value(
                 require_port_result(
                     held_knot->graph, "lag", "input")
@@ -5656,9 +5663,8 @@ void test_transient_expression_component_flows_through_service() {
                 require_component_result(
                     held_knot->graph, "lag")
                     .internal_values.front().value_si) < 1.0e-9,
-        "right-continuous knot must update algebraic commands without "
-        "jumping differential states and must retain discontinuity "
-        "evidence");
+        "right-continuous knot must retain both boundary-command limits "
+        "without jumping differential states");
     const auto& held_final = require_component_result(
         held_response.trajectory.back().graph, "lag");
     require(
@@ -5666,6 +5672,17 @@ void test_transient_expression_component_flows_through_service() {
             held_final.internal_values.front().value_si < 0.24,
         "post-knot trajectory must integrate the held command only after "
         "the discontinuity");
+    const auto held_json =
+        thermox::service::serialize_transient_response_json(
+            held_response);
+    require(
+        held_json.find("\"schema_version\": \"thermox.result/v5\"") !=
+                std::string::npos &&
+            held_json.find(
+                "\"graph_before_discontinuity\": {") !=
+                std::string::npos,
+        "transient result v5 must serialize durable left-limit graph "
+        "evidence");
 
     auto trip_request = held_schedule;
     const std::string initial_state_declaration =
@@ -5834,7 +5851,7 @@ void test_steady_service() {
         "steady result must identify operation");
     require(
         response.metadata.result_schema_version ==
-            thermox::service::result_schema_v4,
+            thermox::service::result_schema_v5,
         "steady result contract must be versioned");
     require(
         response.metadata.platform_version == "0.2.0",
@@ -5986,7 +6003,7 @@ void test_steady_service() {
             std::string::npos,
         "steady JSON must expose service status");
     require(
-        json.find("\"schema_version\": \"thermox.result/v4\"") !=
+        json.find("\"schema_version\": \"thermox.result/v5\"") !=
             std::string::npos,
         "steady JSON must expose result schema");
     require(
@@ -6428,7 +6445,7 @@ void test_system_agnostic_result_projection() {
         projection_graph(0.41), steady_projections);
     require(
         steady.schema_version ==
-                thermox::service::result_summary_schema_v3 &&
+                thermox::service::result_summary_schema_v4 &&
             steady.mode == "steady" &&
             steady.values.size() == 2U &&
             steady.values[0].value_si == 0.41 &&
@@ -6440,7 +6457,7 @@ void test_system_agnostic_result_projection() {
     require(
         steady_json.find(
             "\"schema_version\": "
-            "\"thermox.result_summary/v3\"") !=
+            "\"thermox.result_summary/v4\"") !=
                 std::string::npos &&
             steady_json.find(
                 "\"id\": \"cycle_efficiency\"") !=
@@ -6570,32 +6587,35 @@ void test_system_agnostic_result_projection() {
         {},
         0U,
     };
-    bool transition_span_rejected = false;
-    try {
-        (void)thermox::service::project_transient_result(
-            trajectory,
-            {{"state_reset", 1.0, {}, false, true, 0}},
-            {spanning_transition});
-    } catch (const thermox::service::ResultProjectionError&) {
-        transition_span_rejected = true;
-    }
-    require(
-        transition_span_rejected,
-        "non-final reductions must not interpolate across an "
-        "instantaneous state transition");
     auto discontinuous = trajectory;
-    discontinuous[1].discontinuous_from_previous = true;
-    bool scheduled_span_rejected = false;
-    try {
-        (void)thermox::service::project_transient_result(
-            discontinuous, {}, {spanning_transition});
-    } catch (const thermox::service::ResultProjectionError&) {
-        scheduled_span_rejected = true;
-    }
+    discontinuous[1].graph_before_discontinuity =
+        projection_graph(0.50);
+    auto maximum_across_transition = spanning_transition;
+    maximum_across_transition.id = "maximum_across_transition";
+    maximum_across_transition.aggregation =
+        ResultAggregation::maximum;
+    const auto spanning =
+        thermox::service::project_transient_result(
+            discontinuous,
+            {{"state_reset", 1.0, {}, false, true, 0}},
+            {spanning_transition, maximum_across_transition});
+    const double expected_spanning_mean =
+        (0.5 * (0.40 + 0.50) +
+         0.5 * 0.5 * (0.25 + 0.30)) /
+        1.5;
     require(
-        scheduled_span_rejected,
-        "non-final reductions must not interpolate across a scheduled "
-        "trajectory discontinuity");
+        spanning.values.size() == 2U &&
+            std::abs(
+                spanning.values[0].value_si -
+                expected_spanning_mean) <
+                1.0e-12,
+        "non-final reductions must integrate to the left limit, cross "
+        "the zero-duration jump, and continue from the right limit");
+    require(
+        spanning.values[1].value_si == 0.50 &&
+            spanning.values[1].sample_time == 1.0,
+        "extrema reductions must inspect both limits of an "
+        "instantaneous transition");
 
     const std::vector<thermox::service::EngineeringAcceptanceCriterion>
         criteria{

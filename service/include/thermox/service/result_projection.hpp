@@ -9,8 +9,8 @@
 
 namespace thermox::service {
 
-inline constexpr char result_summary_schema_v3[] =
-    "thermox.result_summary/v3";
+inline constexpr char result_summary_schema_v4[] =
+    "thermox.result_summary/v4";
 
 enum class ResultValueScope {
     system_balance,
@@ -114,7 +114,7 @@ struct EngineeringAcceptanceSummary {
 };
 
 struct ResultSummary {
-    std::string schema_version{result_summary_schema_v3};
+    std::string schema_version{result_summary_schema_v4};
     std::string mode;
     std::vector<ProjectedResultValue> values;
     std::optional<EngineeringAcceptanceSummary>

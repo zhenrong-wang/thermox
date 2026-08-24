@@ -79,7 +79,7 @@ export function ResultSelectionPanel({
       </div>
       <footer>
         <span>Object-backed</span>
-        <code>thermox.result/v4</code>
+        <code>thermox.result/v5</code>
       </footer>
     </div>
   )

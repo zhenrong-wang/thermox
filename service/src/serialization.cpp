@@ -1961,7 +1961,7 @@ std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2063,7 +2063,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2384,7 +2384,7 @@ std::string serialize_calibration_response_json(
     const CalibrationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2572,7 +2572,7 @@ std::string serialize_engineering_study_response_json(
     const EngineeringStudyResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2661,7 +2661,7 @@ std::string serialize_data_reconciliation_response_json(
     const DataReconciliationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3001,7 +3001,7 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v4);
+    json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3111,8 +3111,12 @@ std::string serialize_transient_response_json(
         const auto& sample = response.trajectory[i];
         out << "{\"time\": ";
         json_number(out, sample.time);
-        out << ", \"discontinuous_from_previous\": "
-            << (sample.discontinuous_from_previous ? "true" : "false");
+        out << ", \"graph_before_discontinuity\": ";
+        if (sample.graph_before_discontinuity) {
+            graph_result_json(out, *sample.graph_before_discontinuity);
+        } else {
+            out << "null";
+        }
         out << ", \"graph\": ";
         graph_result_json(out, sample.graph);
         out << "}";

@@ -42,7 +42,7 @@ The current synchronous service exposes:
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
 - `EngineeringStudyRequest` / `EngineeringStudyResponse`;
-- `thermox.command/v1`, `thermox.catalog/v12`, `thermox.result/v4`, and `thermox.error/v1`
+- `thermox.command/v1`, `thermox.catalog/v12`, `thermox.result/v5`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
@@ -62,7 +62,7 @@ The current synchronous service exposes:
 - dimensioned directed-event hysteresis and explicit simultaneous-transition priority projected
   through canonical models and durable transient event evidence;
 - deterministic runtime-catalog fingerprints and native application composition.
-- `thermox.job/v17` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
+- `thermox.job/v18` Team-owned queued/running/succeeded/failed/cancelled simulation, calibration,
   and data-reconciliation jobs with required
   immutable request-scoped component-definition snapshots,
   idempotency keys,
@@ -191,9 +191,9 @@ The application boundary needed by a thin network adapter is now complete:
 | Publish/read run-configuration revisions | `ProjectService` | `thermox.run_configuration_revision/v3` JSON |
 | Resolve an executable model/case pair | `ProjectService::resolve_model_case` | internal `thermox.model/v2` composition |
 | Resolve a complete execution intent | `ProjectService::resolve_run_configuration` | immutable model/artifact/solver snapshot |
-| Submit a calculation | `SimulationJobService::submit` | `thermox.job/v17` JSON |
-| Inspect a calculation | `SimulationJobService::get` | `thermox.job/v17` JSON |
-| Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v4` JSON |
+| Submit a calculation | `SimulationJobService::submit` | `thermox.job/v18` JSON |
+| Inspect a calculation | `SimulationJobService::get` | `thermox.job/v18` JSON |
+| Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v5` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
 request mode, case, exact source revision IDs and checksums, stable request fingerprint, state,

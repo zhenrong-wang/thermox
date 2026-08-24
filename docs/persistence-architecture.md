@@ -82,9 +82,9 @@ Add database code when all of the following are ready:
 4. stable provenance fields and result artifact boundaries;
 5. repository contract tests that can run without PostgreSQL.
 
-All gates are now in place. `thermox.job/v17` defines the Team-owned job lifecycle and idempotent
+All gates are now in place. `thermox.job/v18` defines the Team-owned job lifecycle and idempotent
 submission, leased worker claim, optimistic terminal publication, and queued cancellation. The application
-service writes a checksummed `thermox.result/v4` JSON artifact before publishing a succeeded job.
+service writes a checksummed `thermox.result/v5` JSON artifact before publishing a succeeded job.
 In-memory adapters exercise the repository contract without a database.
 
 The first PostgreSQL metadata adapter is now implemented under `adapters/postgres`. It preserves
@@ -123,7 +123,7 @@ while removing embedded cases from the persisted product model.
 
 `ProjectService` can resolve an exact Team-scoped project/topology/case tuple into a complete
 composed `thermox.model/v2` snapshot. Run configurations use this internal operation during job
-submission. `thermox.job/v17` captures the immutable source provenance and composed snapshot, so
+submission. `thermox.job/v18` captures the immutable source provenance and composed snapshot, so
 workers never reread mutable project state and can execute even if newer revisions are published
 later.
 
@@ -201,7 +201,7 @@ terminal revision rather than deleting history, and cross-Team targets are repor
 Migration `008_run_result_projections.sql` originally added output selections to run configurations;
 the v3 boundary moves those unit-checked, system-agnostic selections to immutable Study revisions.
 The selections are checksummed and snapshotted into jobs. Successful
-workers atomically publish the projected `thermox.result_summary/v3` in PostgreSQL alongside the
+workers atomically publish the projected `thermox.result_summary/v4` in PostgreSQL alongside the
 full result-artifact manifest, allowing history and status views to render selected engineering
 outputs without reading large object-store results.
 

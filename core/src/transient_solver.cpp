@@ -995,7 +995,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     double time = options.start_time;
     double step = std::clamp(options.initial_step, options.min_step, options.max_step);
     result.trajectory.push_back(DaeState{
-        time, state, derivative, false});
+        time, state, derivative, {}, {}});
     std::size_t next_required_output = 0;
     while (next_required_output < options.required_output_times.size() &&
            options.required_output_times[next_required_output] <= time) {
@@ -1222,6 +1222,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         state = std::move(second_half.state);
         derivative = std::move(second_half.derivative);
         std::vector<double> state_before_discontinuity;
+        std::vector<double> derivative_before_discontinuity;
         ++result.diagnostics.accepted_steps;
         result.diagnostics.maximum_order_used = std::max(
             result.diagnostics.maximum_order_used, trial_order);
@@ -1233,6 +1234,7 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                 problem.time_discontinuities[next_time_discontinuity];
             time = discontinuity;
             state_before_discontinuity = state;
+            derivative_before_discontinuity = derivative;
             DaeProblem reinitialization_problem = problem;
             reinitialization_problem.initial_state = state;
             reinitialization_problem.initial_derivative = derivative;
@@ -1253,7 +1255,9 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             has_bdf2_history = false;
         }
         result.trajectory.push_back(DaeState{
-            time, state, derivative, lands_on_discontinuity});
+            time, state, derivative,
+            state_before_discontinuity,
+            derivative_before_discontinuity});
         if (next_required_output < options.required_output_times.size()) {
             const double required_time =
                 options.required_output_times[next_required_output];
@@ -1430,6 +1434,9 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
             }
             time = stopping_event_time;
 
+            const std::vector<double> event_left_state = state;
+            const std::vector<double> event_left_derivative = derivative;
+
             bool terminal_event = false;
             std::vector<const EventCandidate*> simultaneous;
             for (const auto& candidate : event_candidates) {
@@ -1493,10 +1500,18 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     return static_cast<bool>(problem.events[
                         candidate->definition_index].transition);
                 });
+            auto left_state = std::move(
+                result.trajectory.back().state_before_discontinuity);
+            auto left_derivative = std::move(
+                result.trajectory.back().derivative_before_discontinuity);
+            if (transitioned && left_state.empty()) {
+                left_state = event_left_state;
+                left_derivative = event_left_derivative;
+            }
             result.trajectory.back() = DaeState{
                 time, state, derivative,
-                result.trajectory.back().discontinuous_from_previous ||
-                    transitioned};
+                std::move(left_state),
+                std::move(left_derivative)};
             if (terminal_event) {
                 result.diagnostics.success = true;
                 result.diagnostics.final_time = time;
