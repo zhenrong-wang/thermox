@@ -277,6 +277,23 @@ expression_component_definitions(
             definition.modes.push_back(
                 std::move(mode_definition));
         }
+        for (const auto& event : input.events) {
+            platform::ExpressionComponentEventDefinition event_definition;
+            event_definition.name = event.name;
+            event_definition.expression = event.expression;
+            event_definition.dimension = event.dimension;
+            event_definition.direction = event.direction;
+            event_definition.terminal = event.terminal;
+            event_definition.priority = event.priority;
+            event_definition.hysteresis_si = event.hysteresis_si;
+            for (const auto& action : event.actions) {
+                event_definition.actions.push_back({
+                    action.type, action.target,
+                    action.expression, action.mode});
+            }
+            definition.events.push_back(
+                std::move(event_definition));
+        }
         definitions.push_back(std::move(definition));
     }
     return definitions;
@@ -2442,6 +2459,12 @@ CatalogResponse SimulationService::get_catalog(
             descriptor.supports_transient;
         component.supported_modes = descriptor.supported_modes;
         component.default_mode = descriptor.default_mode;
+        for (const auto& event : descriptor.events) {
+            component.events.push_back({
+                event.name, event.dimension, event.direction,
+                event.terminal, event.priority,
+                event.hysteresis_si});
+        }
         for (const auto& port : descriptor.ports) {
             component.ports.push_back(
                 {port.name, port.domain, port.direction,

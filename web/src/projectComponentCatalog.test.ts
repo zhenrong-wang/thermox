@@ -21,6 +21,7 @@ const native = {
   supports_steady: true,
   supports_transient: false,
   supported_modes: [],
+  events: [],
   default_mode: '',
   ports: [],
   parameters: [],
@@ -37,7 +38,7 @@ const projectEntry: ProjectComponentCatalogEntry = {
     revision_number: 7,
     parent_artifact_revision_id: 'artifact-revision-6',
     artifact_type: 'thermox.expression_component',
-    artifact_schema_version: 'thermox.expression_component/v4',
+    artifact_schema_version: 'thermox.expression_component/v5',
     content: {
       media_type: 'application/json',
       byte_size: 42,
@@ -65,7 +66,7 @@ const projectEntry: ProjectComponentCatalogEntry = {
     ],
   },
   definition: {
-    schema_version: 'thermox.expression_component/v4',
+    schema_version: 'thermox.expression_component/v5',
     kind: 'custom.signal.gain',
     version: '1.0.0',
     template_kind: 'custom.signal.gain',
@@ -96,6 +97,7 @@ const projectEntry: ProjectComponentCatalogEntry = {
     internal_variables: [],
     transient_equations: [],
     modes: [],
+    events: [],
   },
 }
 
@@ -119,7 +121,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v11',
+  schema_version: 'thermox.catalog/v12',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],

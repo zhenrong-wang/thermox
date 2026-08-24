@@ -95,7 +95,7 @@ part of the model provenance. This is a cited, limited engineering map—not a u
 the catalog repeats the weak slug/churn evidence warning.
 
 Outside a declared domain, classification returns no applicable region rather than extrapolating.
-Every template exposes its citation and scope through `thermox.catalog/v11`.
+Every template exposes its citation and scope through `thermox.catalog/v12`.
 Direct callers use `instantiate_regime_map_template`; service and remote callers use
 `SimulationService::instantiate_regime_map` or
 `POST /api/v1/regime-map-artifacts/instantiate`. The result is an ordinary canonical

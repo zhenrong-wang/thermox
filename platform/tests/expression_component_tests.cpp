@@ -385,7 +385,7 @@ void test_transient_expression_component_integrates_internal_state() {
     auto registry = thermox::platform::make_default_component_registry();
     thermox::platform::ExpressionComponentDefinition definition;
     definition.schema_version =
-        thermox::platform::expression_component_schema_v4;
+        thermox::platform::expression_component_schema_v5;
     definition.descriptor.kind = "custom.signal.first_order_lag";
     definition.descriptor.version = "1.0.0";
     definition.descriptor.template_kind = "control.first_order_lag";
@@ -544,7 +544,7 @@ void test_transient_expression_validation_rejects_unknown_symbols() {
     auto registry = thermox::platform::make_default_component_registry();
     thermox::platform::ExpressionComponentDefinition definition;
     definition.schema_version =
-        thermox::platform::expression_component_schema_v4;
+        thermox::platform::expression_component_schema_v5;
     definition.descriptor.kind = "custom.signal.invalid_dynamic";
     definition.descriptor.version = "1.0.0";
     definition.descriptor.template_kind = "control.invalid";
@@ -599,7 +599,7 @@ void test_mode_aware_expression_component_switches_fixed_structure() {
     auto registry = thermox::platform::make_default_component_registry();
     thermox::platform::ExpressionComponentDefinition definition;
     definition.schema_version =
-        thermox::platform::expression_component_schema_v4;
+        thermox::platform::expression_component_schema_v5;
     definition.descriptor.kind = "custom.signal.mode_lag";
     definition.descriptor.version = "1.0.0";
     definition.descriptor.template_kind = "control.first_order_lag";
@@ -732,7 +732,7 @@ void test_mode_aware_expression_component_switches_fixed_structure() {
 
     auto invalid = thermox::platform::ExpressionComponentDefinition{};
     invalid.schema_version =
-        thermox::platform::expression_component_schema_v4;
+        thermox::platform::expression_component_schema_v5;
     invalid.descriptor.kind = "custom.signal.invalid_modes";
     invalid.descriptor.version = "1.0.0";
     invalid.descriptor.template_kind = "control.invalid";
@@ -756,6 +756,187 @@ void test_mode_aware_expression_component_switches_fixed_structure() {
         "preserve variable incidence");
 }
 
+void test_component_owned_event_resets_state_and_mode_atomically() {
+    auto registry = thermox::platform::make_default_component_registry();
+    const auto make_definition = [] {
+        thermox::platform::ExpressionComponentDefinition definition;
+        definition.descriptor.kind = "custom.signal.autonomous_trip";
+        definition.descriptor.version = "1.0.0";
+        definition.descriptor.template_kind = "control.autonomous_trip";
+        definition.descriptor.display_name = "Autonomous trip";
+        definition.descriptor.category = "Project controls";
+        definition.descriptor.model_name =
+            "Expression event and atomic reset";
+        definition.descriptor.supports_steady = false;
+        definition.descriptor.supports_transient = true;
+        definition.descriptor.default_mode = "tracking";
+        definition.descriptor.ports = {
+            {"input", "signal", "in"},
+            {"output", "signal", "out"},
+        };
+        definition.descriptor.parameters = {
+            {"time_constant", "time", true},
+            {"trip_level", "dimensionless", true},
+            {"reset_fraction", "dimensionless", true},
+        };
+        thermox::platform::InternalVariableDescriptor filtered;
+        filtered.name = "filtered";
+        filtered.kind = thermox::DaeVariableKind::differential;
+        filtered.state_scale = 1.0;
+        filtered.derivative_scale = 1.0;
+        filtered.lower_bound = 0.0;
+        filtered.upper_bound = 1.0;
+        filtered.dimension = "dimensionless";
+        thermox::platform::InternalVariableDescriptor snapshot = filtered;
+        snapshot.name = "snapshot";
+        definition.descriptor.internal_variables = {
+            filtered, snapshot};
+        definition.modes = {
+            {
+                "tracking", {},
+                {
+                    {"state_balance",
+                     "parameter.time_constant * "
+                     "derivative.internal.filtered + "
+                     "internal.filtered - input.value", 1.0},
+                    {"snapshot_hold",
+                     "derivative.internal.snapshot", 1.0},
+                    {"output",
+                     "output.value - internal.filtered", 1.0},
+                },
+            },
+            {
+                "tripped", {},
+                {
+                    {"state_balance",
+                     "parameter.time_constant * "
+                     "derivative.internal.filtered + "
+                     "internal.filtered - 0 * input.value", 1.0},
+                    {"snapshot_hold",
+                     "derivative.internal.snapshot", 1.0},
+                    {"output",
+                     "output.value - internal.filtered", 1.0},
+                },
+            },
+        };
+        thermox::platform::ExpressionComponentEventDefinition event;
+        event.name = "trip";
+        event.expression =
+            "internal.filtered - parameter.trip_level";
+        event.dimension = "dimensionless";
+        event.direction = "rising";
+        event.hysteresis_si = 0.01;
+        event.actions = {
+            {"set_state", "internal.filtered",
+             "internal.filtered * parameter.reset_fraction", ""},
+            {"set_state", "internal.snapshot",
+             "internal.filtered", ""},
+            {"set_mode", "", "", "tripped"},
+        };
+        definition.events.push_back(std::move(event));
+        return definition;
+    };
+
+    auto definition = make_definition();
+    auto invalid = definition;
+    invalid.descriptor.kind = "custom.signal.invalid_event_reset";
+    invalid.events.front().actions.front().expression =
+        "parameter.time_constant";
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(invalid));
+        },
+        "reset dimension does not match target");
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document = thermox::platform::parse_model_document_text(
+        R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "component_owned_event",
+    "media": [],
+    "components": [{
+      "id": "trip",
+      "kind": "custom.signal.autonomous_trip",
+      "parameters": {
+        "time_constant": {"value": 2.0, "unit": "s"},
+        "trip_level": 0.2,
+        "reset_fraction": 0.25
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "run",
+    "mode": "dynamic_transient",
+    "fixed_values": {"trip.input.value": 1.0},
+    "initial_guesses": {
+      "trip.filtered": 0.0,
+      "trip.snapshot": 0.0
+    }
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "run");
+    require(
+        graph.problem.events.size() == 1U &&
+            graph.problem.events.front().name ==
+                "component.trip.event.trip",
+        "component-owned event is namespaced into the DAE problem");
+    const auto filtered = std::find(
+        graph.problem.variable_names.begin(),
+        graph.problem.variable_names.end(), "trip.filtered");
+    const auto snapshot = std::find(
+        graph.problem.variable_names.begin(),
+        graph.problem.variable_names.end(), "trip.snapshot");
+    require(
+        filtered != graph.problem.variable_names.end() &&
+            snapshot != graph.problem.variable_names.end(),
+        "component event test exposes both differential states");
+    const auto filtered_index = static_cast<std::size_t>(
+        filtered - graph.problem.variable_names.begin());
+    const auto snapshot_index = static_cast<std::size_t>(
+        snapshot - graph.problem.variable_names.begin());
+
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 2.0;
+    options.initial_step = 0.05;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(
+        graph.problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.events.size() == 1U &&
+            result.events.front().transitioned,
+        "component-owned event transitions exactly once");
+    require(
+        std::abs(result.events.front().time + 2.0 * std::log(0.8)) <
+            3.0e-3,
+        "component-owned surface locates the analytical crossing");
+    require(
+        std::abs(result.events.front().state.at(filtered_index) - 0.05) <
+                1.0e-9 &&
+            std::abs(result.events.front().state.at(snapshot_index) - 0.2) <
+                3.0e-3,
+        "reset expressions read one pre-event state and commit atomically");
+    const double expected = 0.05 * std::exp(
+        -(options.end_time - result.events.front().time) / 2.0);
+    require(
+        std::abs(result.trajectory.back().state.at(filtered_index) -
+                 expected) < 3.0e-3,
+        "post-event trajectory uses the reset state and tripped mode");
+
+    const auto repeated = thermox::integrate_dae(
+        graph.problem, options);
+    require(
+        repeated.diagnostics.success &&
+            repeated.events.size() == 1U,
+        "compiled component event mode resets between executions");
+}
+
 }  // namespace
 
 int main() {
@@ -768,6 +949,7 @@ int main() {
         test_transient_property_expression_integrates_internal_state();
         test_transient_expression_validation_rejects_unknown_symbols();
         test_mode_aware_expression_component_switches_fixed_structure();
+        test_component_owned_event_resets_state_and_mode_atomically();
     } catch (const std::exception& error) {
         std::cerr << "test failure: " << error.what() << '\n';
         return 1;

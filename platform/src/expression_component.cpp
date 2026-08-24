@@ -905,6 +905,23 @@ std::string definition_fingerprint(
             hash_text(scale.str());
         }
     }
+    for (const auto& event : definition.events) {
+        hash_text(event.name);
+        hash_text(event.expression);
+        hash_text(event.dimension);
+        hash_text(event.direction);
+        hash_text(event.terminal ? "terminal" : "nonterminal");
+        std::ostringstream attributes;
+        attributes << event.priority << ':' << std::setprecision(17)
+                   << event.hysteresis_si;
+        hash_text(attributes.str());
+        for (const auto& action : event.actions) {
+            hash_text(action.type);
+            hash_text(action.target);
+            hash_text(action.expression);
+            hash_text(action.mode);
+        }
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;
@@ -917,6 +934,17 @@ public:
         AlgebraicExpressionEquation, ParsedExpression>>;
     using ParsedModeEquationSets =
         std::map<std::string, ParsedEquationSet>;
+    struct ParsedEventAction {
+        ExpressionComponentEventActionDefinition definition;
+        std::optional<ParsedExpression> expression;
+        double lower_bound{-std::numeric_limits<double>::infinity()};
+        double upper_bound{std::numeric_limits<double>::infinity()};
+    };
+    struct ParsedEvent {
+        ExpressionComponentEventDefinition definition;
+        ParsedExpression surface;
+        std::vector<ParsedEventAction> actions;
+    };
 
     ExpressionComponentModel(
         ComponentModelDescriptor descriptor,
@@ -924,6 +952,7 @@ public:
         ParsedEquationSet transient_equations,
         ParsedModeEquationSets mode_equations,
         ParsedModeEquationSets mode_transient_equations,
+        std::vector<ParsedEvent> events,
         std::set<std::string> property_ports,
         std::string fingerprint)
         : descriptor_(std::move(descriptor)),
@@ -932,6 +961,7 @@ public:
           mode_equations_(std::move(mode_equations)),
           mode_transient_equations_(
               std::move(mode_transient_equations)),
+          events_(std::move(events)),
           property_ports_(std::move(property_ports)),
           fingerprint_(std::move(fingerprint)) {}
 
@@ -1181,12 +1211,156 @@ public:
         }
     }
 
+    void add_transient_events(
+        const ComponentCompileContext& context,
+        std::vector<DaeEvent>& events) const override {
+        if (events_.empty()) return;
+
+        std::map<std::string, std::size_t> variables;
+        for (const auto& [name, index] : context.port_variables) {
+            variables.emplace(name, index);
+        }
+        for (const auto& [name, index] : context.internal_variables) {
+            variables.emplace("internal." + name, index);
+        }
+        std::map<std::string, double> parameters;
+        for (const auto& descriptor : descriptor_.parameters) {
+            const auto supplied = context.component.parameters.find(
+                descriptor.name);
+            if (supplied != context.component.parameters.end()) {
+                parameters.emplace(
+                    "parameter." + descriptor.name,
+                    supplied->second.value_si);
+            } else if (descriptor.default_value.has_value()) {
+                parameters.emplace(
+                    "parameter." + descriptor.name,
+                    *descriptor.default_value);
+            }
+        }
+
+        for (const auto& event : events_) {
+            const auto surface = event.surface.root;
+            const auto bound_variables = variables;
+            const auto bound_parameters = parameters;
+            const auto bound_properties = context.port_properties;
+            const auto component_id = context.component.id;
+            const auto action_definitions = event.actions;
+            const auto set_mode = context.set_active_mode;
+
+            std::function<EvaluationStatus(
+                double, std::vector<double>&,
+                std::vector<double>&)> transition;
+            if (!action_definitions.empty()) {
+                transition =
+                    [action_definitions, bound_variables,
+                     bound_parameters, bound_properties, set_mode,
+                     component_id](
+                        double time, std::vector<double>& state,
+                        std::vector<double>& derivative) {
+                        auto dynamic_parameters = bound_parameters;
+                        dynamic_parameters.emplace("time", time);
+                        std::vector<std::pair<std::size_t, double>>
+                            state_updates;
+                        std::optional<std::string> next_mode;
+                        for (const auto& action : action_definitions) {
+                            if (action.definition.type == "set_mode") {
+                                next_mode = action.definition.mode;
+                                continue;
+                            }
+                            const auto result = evaluate(
+                                *action.expression->root, state,
+                                bound_variables, dynamic_parameters,
+                                bound_properties);
+                            if (!result.error.empty()) {
+                                return result.fatal
+                                    ? EvaluationStatus::fatal(
+                                          "component '" + component_id +
+                                          "' reset failed: " +
+                                          result.error)
+                                    : EvaluationStatus::recoverable(
+                                          "component '" + component_id +
+                                          "' reset failed: " +
+                                          result.error);
+                            }
+                            if (!std::isfinite(result.value)) {
+                                return EvaluationStatus::fatal(
+                                    "component '" + component_id +
+                                    "' reset produced a non-finite value");
+                            }
+                            if (result.value < action.lower_bound ||
+                                result.value > action.upper_bound) {
+                                return EvaluationStatus::fatal(
+                                    "component '" + component_id +
+                                    "' reset value is outside target bounds");
+                            }
+                            state_updates.emplace_back(
+                                bound_variables.at(
+                                    action.definition.target),
+                                result.value);
+                        }
+                        for (const auto& [index, value] :
+                             state_updates) {
+                            state.at(index) = value;
+                            derivative.at(index) = 0.0;
+                        }
+                        if (next_mode) {
+                            if (!set_mode) {
+                                return EvaluationStatus::fatal(
+                                    "component '" + component_id +
+                                    "' has no mutable mode state");
+                            }
+                            set_mode(*next_mode);
+                        }
+                        return EvaluationStatus::success();
+                    };
+            }
+
+            const auto direction =
+                event.definition.direction == "rising"
+                    ? EventDirection::rising
+                    : event.definition.direction == "falling"
+                        ? EventDirection::falling
+                        : EventDirection::any;
+            events.push_back(DaeEvent{
+                "component." + component_id + ".event." +
+                    event.definition.name,
+                [surface, bound_variables, bound_parameters,
+                 bound_properties, component_id](
+                    double time, const std::vector<double>& state,
+                    double& value) {
+                    auto dynamic_parameters = bound_parameters;
+                    dynamic_parameters.emplace("time", time);
+                    const auto result = evaluate(
+                        *surface, state, bound_variables,
+                        dynamic_parameters, bound_properties);
+                    if (!result.error.empty()) {
+                        return result.fatal
+                            ? EvaluationStatus::fatal(
+                                  "component '" + component_id +
+                                  "' event failed: " + result.error)
+                            : EvaluationStatus::recoverable(
+                                  "component '" + component_id +
+                                  "' event failed: " + result.error);
+                    }
+                    value = result.value;
+                    return EvaluationStatus::success();
+                },
+                direction,
+                event.definition.terminal,
+                std::move(transition),
+                event.definition.priority,
+                event.definition.hysteresis_si,
+            });
+        }
+    }
+
 private:
     ComponentModelDescriptor descriptor_;
     ParsedEquationSet equations_;
     ParsedEquationSet transient_equations_;
     ParsedModeEquationSets mode_equations_;
     ParsedModeEquationSets mode_transient_equations_;
+    std::vector<ParsedEvent> events_;
     std::set<std::string> property_ports_;
     std::string fingerprint_;
 };
@@ -1247,9 +1421,9 @@ std::shared_ptr<const ComponentModel>
 make_expression_component_model(
     const ComponentRegistry& registry,
     ExpressionComponentDefinition definition) {
-    const bool version_4 = definition.schema_version ==
-        expression_component_schema_v4;
-    if (!version_4) {
+    const bool version_5 = definition.schema_version ==
+        expression_component_schema_v5;
+    if (!version_5) {
         throw std::invalid_argument(
             "unsupported expression component schema: " +
             definition.schema_version);
@@ -1295,19 +1469,24 @@ make_expression_component_model(
         descriptor.category.empty() ||
         descriptor.model_name.empty()) {
         throw std::invalid_argument(
-            "expression component v4 requires physical template "
+            "expression component v5 requires physical template "
             "kind, display name, category, and calculation model name");
     }
     if (!descriptor.artifacts.empty() ||
         !descriptor.required_thermochemistry_capabilities.empty()) {
         throw std::invalid_argument(
-            "expression component v4 cannot access artifacts or "
+            "expression component v5 cannot access artifacts or "
             "thermochemistry callbacks");
     }
     if (!descriptor.required_property_capabilities.empty()) {
         throw std::invalid_argument(
             "expression component property capabilities are derived "
             "from safe property function calls");
+    }
+    if (!descriptor.events.empty()) {
+        throw std::invalid_argument(
+            "expression component event metadata is derived from "
+            "safe event declarations");
     }
     const bool mode_aware = !definition.modes.empty();
     const bool missing_transient_equations = mode_aware
@@ -1333,6 +1512,7 @@ make_expression_component_model(
     if (!descriptor.supports_transient &&
         (!descriptor.transient_variables.empty() ||
          !descriptor.internal_variables.empty() ||
+         !definition.events.empty() ||
          !definition.transient_equations.empty() ||
          std::any_of(
              definition.modes.begin(), definition.modes.end(),
@@ -1383,7 +1563,7 @@ make_expression_component_model(
         for (const auto& variable : domain.variables) {
             if (variable.expand_species) {
                 throw std::invalid_argument(
-                    "expression component v4 does not support "
+                    "expression component v5 does not support "
                     "species-expanded connector variables: " +
                     port.name + "." + variable.name);
             }
@@ -1412,7 +1592,7 @@ make_expression_component_model(
             }
         }
     }
-    if (version_4) {
+    if (version_5) {
         std::set<std::string> declared_transient_variables;
         for (const auto& variable : descriptor.transient_variables) {
             const std::string symbol =
@@ -1468,7 +1648,7 @@ make_expression_component_model(
         if (parameter.name.find('{') != std::string::npos ||
             parameter.name.find('}') != std::string::npos) {
             throw std::invalid_argument(
-                "expression component v4 does not support "
+                "expression component v5 does not support "
                 "parameter templates: " + parameter.name);
         }
         const auto symbol =
@@ -1486,7 +1666,7 @@ make_expression_component_model(
         transient_dimensions.emplace(symbol, dimension);
     }
 
-    if (version_4) {
+    if (version_5) {
         transient_symbols.insert("time");
         transient_dimensions.emplace(
             "time", physical_dimension("time"));
@@ -1732,6 +1912,198 @@ make_expression_component_model(
                 "transient");
         }
     }
+
+    if (definition.events.size() > 64U) {
+        throw std::invalid_argument(
+            "expression component exceeds the 64-event limit");
+    }
+    std::set<std::string> event_symbols;
+    std::map<std::string, DimensionSignature> event_dimensions;
+    for (const auto& symbol : transient_symbols) {
+        if (symbol.rfind("derivative.", 0) == 0) continue;
+        event_symbols.insert(symbol);
+        event_dimensions.emplace(
+            symbol, transient_dimensions.at(symbol));
+    }
+    std::map<std::string, std::pair<double, double>>
+        differential_targets;
+    for (const auto& target : differential_ports) {
+        differential_targets.emplace(
+            target,
+            std::pair{
+                -std::numeric_limits<double>::infinity(),
+                std::numeric_limits<double>::infinity()});
+    }
+    for (const auto& variable : descriptor.internal_variables) {
+        if (variable.kind == DaeVariableKind::differential) {
+            differential_targets.emplace(
+                "internal." + variable.name,
+                std::pair{
+                    variable.lower_bound, variable.upper_bound});
+        }
+    }
+
+    std::set<std::string> event_names;
+    std::vector<ExpressionComponentModel::ParsedEvent> events;
+    events.reserve(definition.events.size());
+    for (auto& event : definition.events) {
+        if (!valid_name(event.name) ||
+            !event_names.insert(event.name).second) {
+            throw std::invalid_argument(
+                "expression component event names must be unique and "
+                "contain only letters, digits, '_' or '-': " +
+                event.name);
+        }
+        if (event.dimension.empty()) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' requires a physical dimension");
+        }
+        if (event.direction != "any" &&
+            event.direction != "rising" &&
+            event.direction != "falling") {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' direction must be any, rising, or falling");
+        }
+        if (!std::isfinite(event.hysteresis_si) ||
+            event.hysteresis_si < 0.0 ||
+            (event.direction == "any" &&
+             event.hysteresis_si > 0.0)) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' has invalid hysteresis");
+        }
+        auto surface =
+            ExpressionParser{event.expression}.parse();
+        for (const auto& symbol : surface.symbols) {
+            if (!event_symbols.contains(symbol)) {
+                throw std::invalid_argument(
+                    "expression component event '" + event.name +
+                    "' references unknown or rate symbol: " + symbol);
+            }
+        }
+        validate_property_ports(surface);
+        const bool has_state = std::any_of(
+            surface.symbols.begin(), surface.symbols.end(),
+            [](const auto& symbol) {
+                return symbol != "time" &&
+                    symbol.rfind("parameter.", 0) != 0;
+            });
+        if (!has_state) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' must reference at least one component state");
+        }
+        DimensionSignature surface_dimension;
+        try {
+            surface_dimension =
+                infer_dimension(*surface.root, event_dimensions)
+                    .signature;
+        } catch (const std::invalid_argument& error) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' is dimensionally invalid: " + error.what());
+        }
+        if (!same_dimension(
+                surface_dimension,
+                physical_dimension(event.dimension))) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' expression dimension does not match its declared "
+                "dimension");
+        }
+        if (event.actions.size() > 32U) {
+            throw std::invalid_argument(
+                "expression component event '" + event.name +
+                "' exceeds the 32-action limit");
+        }
+        std::set<std::string> reset_targets;
+        bool has_mode_action = false;
+        std::vector<ExpressionComponentModel::ParsedEventAction>
+            actions;
+        actions.reserve(event.actions.size());
+        for (auto& action : event.actions) {
+            if (action.type == "set_mode") {
+                if (has_mode_action || !action.target.empty() ||
+                    !action.expression.empty() ||
+                    action.mode.empty() ||
+                    std::find(
+                        descriptor.supported_modes.begin(),
+                        descriptor.supported_modes.end(),
+                        action.mode) ==
+                        descriptor.supported_modes.end()) {
+                    throw std::invalid_argument(
+                        "expression component event '" + event.name +
+                        "' has an invalid or duplicate set_mode action");
+                }
+                has_mode_action = true;
+                actions.push_back({std::move(action), std::nullopt});
+                continue;
+            }
+            if (action.type != "set_state") {
+                throw std::invalid_argument(
+                    "expression component event '" + event.name +
+                    "' action type must be set_state or set_mode");
+            }
+            const auto target =
+                differential_targets.find(action.target);
+            if (target == differential_targets.end() ||
+                !reset_targets.insert(action.target).second ||
+                !action.mode.empty()) {
+                throw std::invalid_argument(
+                    "expression component event '" + event.name +
+                    "' set_state target must be a unique local "
+                    "differential state");
+            }
+            auto reset =
+                ExpressionParser{action.expression}.parse();
+            for (const auto& symbol : reset.symbols) {
+                if (!event_symbols.contains(symbol)) {
+                    throw std::invalid_argument(
+                        "expression component event '" + event.name +
+                        "' reset references unknown or rate symbol: " +
+                        symbol);
+                }
+            }
+            validate_property_ports(reset);
+            DimensionSignature reset_dimension;
+            try {
+                reset_dimension =
+                    infer_dimension(*reset.root, event_dimensions)
+                        .signature;
+            } catch (const std::invalid_argument& error) {
+                throw std::invalid_argument(
+                    "expression component event '" + event.name +
+                    "' reset is dimensionally invalid: " +
+                    error.what());
+            }
+            if (!same_dimension(
+                    reset_dimension,
+                    event_dimensions.at(action.target))) {
+                throw std::invalid_argument(
+                    "expression component event '" + event.name +
+                    "' reset dimension does not match target '" +
+                    action.target + "'");
+            }
+            actions.push_back({
+                std::move(action), std::move(reset),
+                target->second.first, target->second.second});
+        }
+        events.push_back({
+            std::move(event), std::move(surface),
+            std::move(actions)});
+    }
+    for (const auto& event : events) {
+        descriptor.events.push_back({
+            event.definition.name,
+            event.definition.dimension,
+            event.definition.direction,
+            event.definition.terminal,
+            event.definition.priority,
+            event.definition.hysteresis_si,
+        });
+    }
     if (!property_ports.empty()) {
         descriptor.required_property_capabilities.push_back(
             physics::PropertyCapability::state_ph);
@@ -1742,6 +2114,7 @@ make_expression_component_model(
         std::move(transient_equations),
         std::move(mode_equations),
         std::move(mode_transient_equations),
+        std::move(events),
         std::move(property_ports),
         fingerprint);
 }

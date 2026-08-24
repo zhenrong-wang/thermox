@@ -95,10 +95,11 @@ Production follow-ons:
   restart;
 - graph/block tearing and richer rank/conditioning diagnostics.
 
-Runtime extensibility now includes the safe `thermox.expression_component/v4` contract for
+Runtime extensibility now includes the safe `thermox.expression_component/v5` contract for
 index-1 transient residuals, internal algebraic/differential states, state rates, time, bounds,
-scales, and sparse analytic DAE Jacobians. Additional property functions, thermochemistry,
-species-expanded variables, and state-dependent reset expressions remain follow-ons.
+scales, sparse analytic DAE Jacobians, checked component-owned event surfaces, and atomic
+state-dependent reset expressions. Additional property functions, thermochemistry,
+species-expanded variables, and variable-structure transitions remain follow-ons.
 
 ## Fixed-topology hybrid component modes
 
@@ -121,7 +122,10 @@ Delivered:
 6. Project-defined mode-specific safe steady/transient equation sets with one default mode,
    invariant residual identity/scaling/incidence validation, immutable artifact persistence,
    request/job fingerprinting, catalog discovery, and event-driven execution. ✅
-7. State-dependent reset maps and variable-structure topology changes remain explicit follow-ons.
+7. Component-owned dimensioned expression event surfaces plus bounded atomic state-reset
+   expressions, optional mode actions, checked failure propagation, immutable persistence, and
+   analytical crossing/post-reset verification. ✅
+8. Variable-structure topology changes remain an explicit follow-on.
 
 ## System-agnostic transient platform milestone
 
@@ -679,8 +683,10 @@ Work items:
    - constrained same-port p-h temperature, density, and internal-energy functions with derived
      capability requirements, provider binding, analytic/fallback derivative chaining, fixed
      sparsity, and recoverable-versus-fatal property status propagation; ✅
-   - approval policy, further derivative-backed property functions, and state-dependent reset
-     expressions remain follow-ons.
+   - checked component-owned expression event surfaces, directional hysteresis, deterministic
+     priority, bounded atomic state-reset expressions, optional mode actions, immutable artifact
+     and job persistence, and analytical post-transition verification; ✅
+   - approval policy and further derivative-backed property functions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

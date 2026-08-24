@@ -82,6 +82,15 @@ struct InternalVariableDescriptor {
     std::string dimension{"unspecified"};
 };
 
+struct EventModelDescriptor {
+    std::string name;
+    std::string dimension;
+    std::string direction;
+    bool terminal{false};
+    int priority{0};
+    double hysteresis_si{0.0};
+};
+
 struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
@@ -109,6 +118,7 @@ struct ComponentModelDescriptor {
     std::vector<InternalVariableDescriptor> internal_variables;
     std::vector<std::string> supported_modes;
     std::string default_mode;
+    std::vector<EventModelDescriptor> events;
 };
 
 struct ComponentCompileContext {
@@ -125,6 +135,7 @@ struct ComponentCompileContext {
     std::map<std::string, std::shared_ptr<const EngineeringArtifact>>
         artifacts;
     std::function<std::string()> active_mode;
+    std::function<void(std::string)> set_active_mode;
 };
 
 class ComponentModel {
@@ -147,6 +158,9 @@ public:
                                EquationSystemBuilder& system) const = 0;
     virtual void add_transient_equations(const ComponentCompileContext& context,
                                          DaeEquationSystemBuilder& system) const;
+    virtual void add_transient_events(
+        const ComponentCompileContext& context,
+        std::vector<DaeEvent>& events) const;
 };
 
 class MetadataComponentModel final : public ComponentModel {

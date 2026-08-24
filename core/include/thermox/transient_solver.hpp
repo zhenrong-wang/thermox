@@ -62,7 +62,12 @@ enum class EventDirection {
 
 struct DaeEvent {
     std::string name;
-    std::function<double(double time, const std::vector<double>& state)> evaluate;
+    // Checked event surfaces make domain/property failures explicit instead
+    // of silently turning a failed evaluation into a missed crossing.
+    std::function<EvaluationStatus(
+        double time,
+        const std::vector<double>& state,
+        double& value)> evaluate;
     EventDirection direction{EventDirection::any};
     bool terminal{false};
     // Optional accepted-crossing transition. It may change discrete data

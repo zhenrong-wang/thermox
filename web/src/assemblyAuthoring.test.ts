@@ -23,6 +23,7 @@ const compressor: CatalogComponent = {
   supports_steady: true,
   supports_transient: true,
   supported_modes: [],
+  events: [],
   default_mode: '',
   ports: [
     { name: 'inlet', domain: 'fluid', direction: 'in', maximum_connections: 1 },

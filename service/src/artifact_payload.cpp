@@ -789,7 +789,7 @@ platform::RegimeMapArtifact regime_map(
 ExpressionComponentInput decode_expression_component(
     const std::string& schema_version,
     const Tree& tree) {
-    if (schema_version != platform::expression_component_schema_v4) {
+    if (schema_version != platform::expression_component_schema_v5) {
         throw std::invalid_argument(
             "unsupported expression-component schema: " +
             schema_version);
@@ -958,6 +958,43 @@ ExpressionComponentInput decode_expression_component(
                     return mode;
                 });
     }
+    if (const auto events = tree.get_child_optional("events")) {
+        component.events =
+            decode_array<ExpressionComponentEventInput>(
+                *events, [](const Tree& encoded) {
+                    ExpressionComponentEventInput event;
+                    event.name = encoded.get<std::string>("name");
+                    event.expression =
+                        encoded.get<std::string>("expression");
+                    event.dimension = encoded.get<std::string>(
+                        "dimension", "dimensionless");
+                    event.direction = encoded.get<std::string>(
+                        "direction", "any");
+                    event.terminal =
+                        encoded.get<bool>("terminal", false);
+                    event.priority =
+                        encoded.get<int>("priority", 0);
+                    event.hysteresis_si =
+                        encoded.get<double>("hysteresis_si", 0.0);
+                    if (const auto actions =
+                            encoded.get_child_optional("actions")) {
+                        event.actions = decode_array<
+                            ExpressionComponentEventActionInput>(
+                                *actions, [](const Tree& action) {
+                                    return ExpressionComponentEventActionInput{
+                                        action.get<std::string>("type"),
+                                        action.get<std::string>(
+                                            "target", ""),
+                                        action.get<std::string>(
+                                            "expression", ""),
+                                        action.get<std::string>(
+                                            "mode", ""),
+                                    };
+                                });
+                    }
+                    return event;
+                });
+    }
     return component;
 }
 
@@ -1097,6 +1134,35 @@ Tree encode_expression_component(
                 array(mode.transient_equations, encode_equation));
             return encoded;
         }));
+    tree.add_child(
+        "events",
+        array(component.events, [](const auto& event) {
+            Tree encoded;
+            encoded.put("name", event.name);
+            encoded.put("expression", event.expression);
+            encoded.put("dimension", event.dimension);
+            encoded.put("direction", event.direction);
+            encoded.put("terminal", event.terminal);
+            encoded.put("priority", event.priority);
+            encoded.put("hysteresis_si", event.hysteresis_si);
+            encoded.add_child(
+                "actions",
+                array(event.actions, [](const auto& action) {
+                    Tree value;
+                    value.put("type", action.type);
+                    if (!action.target.empty()) {
+                        value.put("target", action.target);
+                    }
+                    if (!action.expression.empty()) {
+                        value.put("expression", action.expression);
+                    }
+                    if (!action.mode.empty()) {
+                        value.put("mode", action.mode);
+                    }
+                    return value;
+                }));
+            return encoded;
+        }));
     return tree;
 }
 
@@ -1181,6 +1247,22 @@ platform::ExpressionComponentDefinition definition(
                 equation.residual_scale});
         }
         value.modes.push_back(std::move(mode_definition));
+    }
+    for (const auto& event : input.events) {
+        platform::ExpressionComponentEventDefinition event_definition;
+        event_definition.name = event.name;
+        event_definition.expression = event.expression;
+        event_definition.dimension = event.dimension;
+        event_definition.direction = event.direction;
+        event_definition.terminal = event.terminal;
+        event_definition.priority = event.priority;
+        event_definition.hysteresis_si = event.hysteresis_si;
+        for (const auto& action : event.actions) {
+            event_definition.actions.push_back({
+                action.type, action.target,
+                action.expression, action.mode});
+        }
+        value.events.push_back(std::move(event_definition));
     }
     return value;
 }

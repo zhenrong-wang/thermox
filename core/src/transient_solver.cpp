@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -107,9 +108,12 @@ void validate_dae_problem(const DaeProblem& problem) {
         throw std::invalid_argument(
             "DAE subset Jacobian values require a fixed sparse pattern");
     }
+    std::set<std::string> event_names;
     for (const auto& event : problem.events) {
-        if (event.name.empty() || !event.evaluate) {
-            throw std::invalid_argument("DAE events require a name and evaluation callback");
+        if (event.name.empty() || !event.evaluate ||
+            !event_names.insert(event.name).second) {
+            throw std::invalid_argument(
+                "DAE events require a unique name and evaluation callback");
         }
         if (!std::isfinite(event.hysteresis) ||
             event.hysteresis < 0.0) {
@@ -488,6 +492,21 @@ bool event_crossed(double before, double after, EventDirection direction) {
                    (before > 0.0 && after <= 0.0);
     }
     return false;
+}
+
+EvaluationStatus evaluate_event_surface(
+    const DaeEvent& event,
+    double time,
+    const std::vector<double>& state,
+    double& value) {
+    const auto status = event.evaluate(time, state, value);
+    if (!status.ok()) return status;
+    if (!std::isfinite(value)) {
+        return EvaluationStatus::fatal(
+            "event surface '" + event.name +
+            "' returned a non-finite value");
+    }
+    return EvaluationStatus::success();
 }
 
 }  // namespace
@@ -995,7 +1014,16 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
     std::vector<double> previous_event_values;
     previous_event_values.reserve(problem.events.size());
     for (const auto& event : problem.events) {
-        previous_event_values.push_back(event.evaluate(time, state));
+        double value = 0.0;
+        const auto status =
+            evaluate_event_surface(event, time, state, value);
+        if (!status.ok()) {
+            result.diagnostics.message =
+                "initial event evaluation failed: " + status.message;
+            result.diagnostics.final_time = time;
+            return result;
+        }
+        previous_event_values.push_back(value);
     }
     std::vector<bool> event_armed(problem.events.size(), true);
     std::vector<int> event_blocked_side(problem.events.size(), 0);
@@ -1262,16 +1290,34 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
         std::vector<EventCandidate> event_candidates;
         for (std::size_t i = 0; i < problem.events.size(); ++i) {
             const auto& event = problem.events[i];
-            const double current_value = event.evaluate(time, state);
+            double current_value = 0.0;
+            auto event_status = evaluate_event_surface(
+                event, time, state, current_value);
+            if (!event_status.ok()) {
+                result.diagnostics.message =
+                    "event evaluation failed: " + event_status.message;
+                result.diagnostics.final_time = time;
+                return result;
+            }
             const double continuous_time = lands_on_discontinuity
                 ? std::nextafter(
                       time, -std::numeric_limits<double>::infinity())
                 : time;
             const std::vector<double>& continuous_state =
                 lands_on_discontinuity ? state_before_discontinuity : state;
-            const double continuous_value = lands_on_discontinuity
-                ? event.evaluate(continuous_time, continuous_state)
-                : current_value;
+            double continuous_value = current_value;
+            if (lands_on_discontinuity) {
+                event_status = evaluate_event_surface(
+                    event, continuous_time, continuous_state,
+                    continuous_value);
+                if (!event_status.ok()) {
+                    result.diagnostics.message =
+                        "event evaluation failed: " +
+                        event_status.message;
+                    result.diagnostics.final_time = time;
+                    return result;
+                }
+            }
 
             if (!event_armed[i]) {
                 const bool rearmed =
@@ -1466,15 +1512,30 @@ DaeSolveResult integrate_dae(const DaeProblem& problem,
                     problem.time_discontinuities.end(), time) -
                 problem.time_discontinuities.begin());
             for (std::size_t i = 0; i < problem.events.size(); ++i) {
-                previous_event_values[i] =
-                    problem.events[i].evaluate(time, state);
+                const auto status = evaluate_event_surface(
+                    problem.events[i], time, state,
+                    previous_event_values[i]);
+                if (!status.ok()) {
+                    result.diagnostics.message =
+                        "post-transition event evaluation failed: " +
+                        status.message;
+                    result.diagnostics.final_time = time;
+                    return result;
+                }
             }
             continue;
         }
 
         for (std::size_t i = 0; i < problem.events.size(); ++i) {
-            previous_event_values[i] =
-                problem.events[i].evaluate(time, state);
+            const auto status = evaluate_event_surface(
+                problem.events[i], time, state,
+                previous_event_values[i]);
+            if (!status.ok()) {
+                result.diagnostics.message =
+                    "event evaluation failed: " + status.message;
+                result.diagnostics.final_time = time;
+                return result;
+            }
         }
 
         const double factor =

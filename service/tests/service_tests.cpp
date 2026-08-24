@@ -588,7 +588,7 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v11,
+            thermox::service::catalog_schema_v12,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
@@ -1209,7 +1209,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v11\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v12\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -3872,7 +3872,7 @@ void test_transient_calibration_recovers_parameter_and_initial_state() {
 })json";
 
     thermox::service::ExpressionComponentInput component;
-    component.schema_version = "thermox.expression_component/v4";
+    component.schema_version = "thermox.expression_component/v5";
     component.kind = "custom.signal.calibration_lag";
     component.version = "1.0.0";
     component.template_kind = "control.first_order_lag";
@@ -5495,7 +5495,7 @@ void test_transient_expression_component_flows_through_service() {
 })json";
     thermox::service::ExpressionComponentInput component;
     component.kind = "custom.signal.request_lag";
-    component.schema_version = "thermox.expression_component/v4";
+    component.schema_version = "thermox.expression_component/v5";
     component.version = "1.0.0";
     component.template_kind = "control.first_order_lag";
     component.display_name = "First-order lag";

@@ -80,7 +80,7 @@ void test_catalog_and_validation() {
         api.handle({"GET", "/api/v1/catalog", {}, {}});
     require(catalog.status == 200, "catalog endpoint must succeed");
     require(
-        catalog.body.find("thermox.catalog/v11") != std::string::npos,
+        catalog.body.find("thermox.catalog/v12") != std::string::npos,
         "catalog endpoint must preserve the service schema");
     const auto parsed_catalog = boost::json::parse(catalog.body);
     require(
@@ -596,7 +596,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "?artifact_id=http-test-gain"
             "&artifact_type=thermox.expression_component"
             "&artifact_schema_version="
-            "thermox.expression_component%2Fv4",
+            "thermox.expression_component%2Fv5",
         R"json({
           "kind": "custom.signal.http_gain",
           "version": "1.0.0",
@@ -1326,7 +1326,7 @@ void test_authored_component_job_workflow() {
                 "?artifact_id=authored-gain"
                 "&artifact_type=thermox.expression_component"
                 "&artifact_schema_version="
-                "thermox.expression_component%2Fv4",
+                "thermox.expression_component%2Fv5",
             R"json({
               "kind": "custom.signal.authored_gain",
               "version": "1.0.0",

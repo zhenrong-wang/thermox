@@ -13,6 +13,7 @@ const component: CatalogComponent = {
   supports_steady: true,
   supports_transient: false,
   supported_modes: [],
+  events: [],
   default_mode: '',
   ports: [
     {
@@ -47,6 +48,7 @@ describe('component library presentation', () => {
     const hybrid = {
       ...component,
       supported_modes: ['tracking', 'failsafe'],
+      events: [],
       default_mode: 'tracking',
     }
     expect(componentMatchesFilter(hybrid, 'failsafe')).toBe(true)

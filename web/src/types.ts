@@ -1255,7 +1255,7 @@ export interface ProjectComponentCatalog {
 }
 
 export interface ExpressionComponentDefinition {
-  schema_version: 'thermox.expression_component/v4'
+  schema_version: 'thermox.expression_component/v5'
   kind: string
   version: string
   template_kind: string
@@ -1322,6 +1322,21 @@ export interface ExpressionComponentDefinition {
       residual_scale: number
     }>
   }>
+  events: Array<{
+    name: string
+    expression: string
+    dimension: string
+    direction: 'any' | 'rising' | 'falling'
+    terminal: boolean
+    priority: number
+    hysteresis_si: number
+    actions: Array<{
+      type: 'set_state' | 'set_mode'
+      target: string
+      expression: string
+      mode: string
+    }>
+  }>
 }
 
 export interface ComponentDefinition {
@@ -1373,6 +1388,14 @@ export interface CatalogComponent {
   supports_transient: boolean
   supported_modes: string[]
   default_mode: string
+  events: Array<{
+    name: string
+    dimension: string
+    direction: 'any' | 'rising' | 'falling'
+    terminal: boolean
+    priority: number
+    hysteresis_si: number
+  }>
   ports: CatalogPort[]
   parameters: CatalogParameter[]
   artifacts: Array<{
@@ -1480,7 +1503,7 @@ export interface CatalogCorrelationFamilyTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v11'
+  schema_version: 'thermox.catalog/v12'
   status: string
   fingerprint: string
   components: CatalogComponent[]

@@ -303,7 +303,10 @@ void test_adaptive_dae_integration() {
     auto problem = make_decay_problem();
     problem.events.push_back(thermox::DaeEvent{
         "half_value",
-        [](double, const std::vector<double>& state) { return state[0] - 0.5; },
+        [](double, const std::vector<double>& state, double& value) {
+            value = state[0] - 0.5;
+            return thermox::EvaluationStatus::success();
+        },
         thermox::EventDirection::falling,
         false});
 
@@ -536,8 +539,9 @@ void test_discontinuity_preserves_state_and_reinitializes_algebraics() {
     problem.time_discontinuities = {0.5};
     problem.events.push_back(thermox::DaeEvent{
         "command_enabled",
-        [](double, const std::vector<double>& state) {
-            return state[1] - 0.5;
+        [](double, const std::vector<double>& state, double& value) {
+            value = state[1] - 0.5;
+            return thermox::EvaluationStatus::success();
         },
         thermox::EventDirection::rising,
         false});
@@ -701,7 +705,10 @@ void test_terminal_event_stops_integration() {
     auto problem = make_decay_problem();
     problem.events.push_back(thermox::DaeEvent{
         "terminal_threshold",
-        [](double, const std::vector<double>& state) { return state[0] - 0.75; },
+        [](double, const std::vector<double>& state, double& value) {
+            value = state[0] - 0.75;
+            return thermox::EvaluationStatus::success();
+        },
         thermox::EventDirection::falling,
         true});
     thermox::TimeIntegrationOptions options;
@@ -751,8 +758,9 @@ void test_event_transition_reinitializes_and_restarts_integration() {
     };
     problem.events.push_back(thermox::DaeEvent{
         "reverse_command",
-        [](double, const std::vector<double>& state) {
-            return state[0] - 0.5;
+        [](double, const std::vector<double>& state, double& value) {
+            value = state[0] - 0.5;
+            return thermox::EvaluationStatus::success();
         },
         thermox::EventDirection::rising,
         false,
@@ -826,8 +834,9 @@ void test_event_priority_and_hysteresis_prevent_chatter() {
         return thermox::EvaluationStatus::success();
     };
     const auto surface = [](
-        double, const std::vector<double>& state) {
-        return state[0] - 0.5;
+        double, const std::vector<double>& state, double& value) {
+        value = state[0] - 0.5;
+        return thermox::EvaluationStatus::success();
     };
     problem.events.push_back(thermox::DaeEvent{
         "low_priority_reset", surface,
@@ -873,6 +882,29 @@ void test_event_priority_and_hysteresis_prevent_chatter() {
         "integration must continue once after the prioritized reset");
 }
 
+void test_checked_event_surface_failure_is_reported() {
+    auto problem = make_decay_problem();
+    problem.events.push_back(thermox::DaeEvent{
+        "invalid_surface",
+        [](double, const std::vector<double>&, double&) {
+            return thermox::EvaluationStatus::recoverable(
+                "property state is outside its valid range");
+        },
+        thermox::EventDirection::any,
+        false});
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    const auto result = thermox::integrate_dae(problem, options);
+    require(
+        !result.diagnostics.success &&
+            result.diagnostics.message.find(
+                "initial event evaluation failed") !=
+                std::string::npos &&
+            result.diagnostics.message.find(
+                "outside its valid range") != std::string::npos,
+        "checked event-surface failures must be explicit diagnostics");
+}
+
 }  // namespace
 
 int main() {
@@ -894,6 +926,7 @@ int main() {
         test_terminal_event_stops_integration();
         test_event_transition_reinitializes_and_restarts_integration();
         test_event_priority_and_hysteresis_prevent_chatter();
+        test_checked_event_surface_failure_is_reported();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

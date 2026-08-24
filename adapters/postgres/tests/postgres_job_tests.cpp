@@ -241,7 +241,7 @@ SimulationJobRequest request(
         std::string(64, 'b'),
     });
     thermox::service::ExpressionComponentInput component;
-    component.schema_version = "thermox.expression_component/v4";
+    component.schema_version = "thermox.expression_component/v5";
     component.kind = "custom.signal.persisted_gain";
     component.version = "1.0.0";
     component.template_kind = "custom.signal.gain";
@@ -282,6 +282,15 @@ SimulationJobRequest request(
           {"transient_output",
            "output.value - input.value + 0 * internal.filtered", 1.0}}},
     };
+    component.events = {{
+        "trip", "internal.filtered - 0.5", "dimensionless",
+        "rising", false, 7, 0.02,
+        {
+            {"set_state", "internal.filtered",
+             "internal.filtered * 0.1", ""},
+            {"set_mode", "", "", "bypass"},
+        },
+    }};
     value.components.expression_components.push_back(
         std::move(component));
     return value;
@@ -392,6 +401,16 @@ void test_idempotency_and_tenant_scope(
                     .front().modes.front()
                     .transient_equations.front().name ==
                 "state_balance" &&
+            repeated.request.components.expression_components
+                    .front().events.size() == 1U &&
+            repeated.request.components.expression_components
+                    .front().events.front().priority == 7 &&
+            repeated.request.components.expression_components
+                    .front().events.front().actions.front().expression ==
+                "internal.filtered * 0.1" &&
+            repeated.request.components.expression_components
+                    .front().events.front().actions.back().mode ==
+                "bypass" &&
             repeated.request.transient_solver.required_output_times ==
                 std::vector<double>{1.25, 7.5} &&
             std::isinf(

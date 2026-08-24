@@ -25,7 +25,7 @@ const topology: TopologyDocument = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v11',
+  schema_version: 'thermox.catalog/v12',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],
@@ -46,6 +46,7 @@ const catalog: Catalog = {
       supports_steady: true,
       supports_transient: false,
       supported_modes: [],
+      events: [],
       default_mode: '',
       ports: [
         {
@@ -69,6 +70,7 @@ const catalog: Catalog = {
       supports_steady: true,
       supports_transient: false,
       supported_modes: [],
+      events: [],
       default_mode: '',
       ports: [
         {

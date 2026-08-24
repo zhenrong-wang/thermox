@@ -11,9 +11,9 @@ untrusted code loading remain separate future capabilities; the constrained decl
 language below is the non-executable user extension path.
 
 The safe equation-language boundary is available for trusted deployment composition through
-`thermox.expression_component/v4`. It registers declarative algebraic/DAE components, including
-fixed-topology operating modes, derives sparse analytic rows, and executes through the ordinary
-component registry without loading code.
+`thermox.expression_component/v5`. It registers declarative algebraic/DAE components, including
+fixed-topology operating modes and checked component-owned event/reset maps, derives sparse
+analytic rows, and executes through the ordinary component registry without loading code.
 Its p-h property functions derive a catalog-visible `state_ph` requirement and override
 `requires_property_capability_on_port` so compilation checks only the fluid ports actually used by
 those calls. Native models inherit the conservative default that applies every descriptor-level

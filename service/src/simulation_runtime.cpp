@@ -141,6 +141,14 @@ std::string catalog_fingerprint(
             hash_text(hash, mode);
         }
         hash_text(hash, descriptor.default_mode);
+        for (const auto& event : descriptor.events) {
+            hash_text(hash, event.name);
+            hash_text(hash, event.dimension);
+            hash_text(hash, event.direction);
+            hash_text(hash, event.terminal ? "terminal" : "nonterminal");
+            hash_text(hash, std::to_string(event.priority));
+            hash_number(hash, event.hysteresis_si);
+        }
         hash_text(
             hash,
             descriptor.supports_steady ? "steady" : "not_steady");

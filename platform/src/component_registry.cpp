@@ -894,6 +894,10 @@ void ComponentModel::add_transient_equations(
         descriptor().kind);
 }
 
+void ComponentModel::add_transient_events(
+    const ComponentCompileContext&,
+    std::vector<DaeEvent>&) const {}
+
 MetadataComponentModel::MetadataComponentModel(ComponentModelDescriptor descriptor)
     : descriptor_(std::move(descriptor)) {}
 
@@ -1250,7 +1254,7 @@ CompiledModelGraph compile_flat_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}, {}, {}, {}};
         const auto selected_mode = selected_component_mode(
             model.descriptor(), active_case, component.id);
         if (!selected_mode.empty()) {
@@ -1872,6 +1876,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         component_mode_states;
     std::map<std::string, std::string> initial_component_modes;
     std::set<std::string> seen_component_modes;
+    std::vector<DaeEvent> component_events;
 
     for (const ComponentDefinition& declared_component :
          document.components) {
@@ -1888,7 +1893,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         }
 
         ComponentCompileContext context{
-            component, active_case, {}, {}, {}, {}, {}, {}, {}};
+            component, active_case, {}, {}, {}, {}, {}, {}, {}, {}};
         const auto selected_mode = selected_component_mode(
             model.descriptor(), active_case, component.id);
         if (!selected_mode.empty()) {
@@ -1898,6 +1903,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             initial_component_modes.emplace(
                 component.id, selected_mode);
             context.active_mode = [mode]() { return *mode; };
+            context.set_active_mode =
+                [mode](std::string next) {
+                    *mode = std::move(next);
+                };
         }
         if (active_case != nullptr &&
             active_case->component_modes.contains(component.id)) {
@@ -2053,6 +2062,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             context, model, artifact_registry);
         validate_property_capabilities(context, model);
         model.add_transient_equations(context, system);
+        model.add_transient_events(context, component_events);
     }
     if (active_case != nullptr &&
         seen_component_modes.size() !=
@@ -2360,22 +2370,23 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
     graph.structure =
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
+    graph.problem.events = std::move(component_events);
+    if (!transitioned_input_targets.empty() ||
+        !component_mode_states.empty()) {
+        graph.problem.reset_discrete_state =
+            [transitioned_input_values,
+             component_mode_states,
+             initial_component_modes]() {
+                transitioned_input_values->clear();
+                for (const auto& [component_id, initial_mode] :
+                     initial_component_modes) {
+                    *component_mode_states.at(component_id) =
+                        initial_mode;
+                }
+                return EvaluationStatus::success();
+            };
+    }
     if (active_case != nullptr) {
-        if (!transitioned_input_targets.empty() ||
-            !component_mode_states.empty()) {
-            graph.problem.reset_discrete_state =
-                [transitioned_input_values,
-                 component_mode_states,
-                 initial_component_modes]() {
-                    transitioned_input_values->clear();
-                    for (const auto& [component_id, initial_mode] :
-                         initial_component_modes) {
-                        *component_mode_states.at(component_id) =
-                            initial_mode;
-                    }
-                    return EvaluationStatus::success();
-                };
-        }
         for (const auto& event : active_case->state_events) {
             const auto variable = variable_indices.find(event.target);
             if (variable == variable_indices.end()) {
@@ -2460,8 +2471,10 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 event.id,
                 [index = variable->second,
                  threshold = event.threshold.value_si](
-                    double, const std::vector<double>& state) {
-                    return state.at(index) - threshold;
+                    double, const std::vector<double>& state,
+                    double& value) {
+                    value = state.at(index) - threshold;
+                    return EvaluationStatus::success();
                 },
                 direction,
                 event.terminal,

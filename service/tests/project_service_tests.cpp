@@ -463,6 +463,53 @@ std::string property_expression_component_payload() {
 })json";
 }
 
+std::string event_expression_component_payload() {
+    return R"json({
+  "kind": "custom.signal.persisted_trip",
+  "version": "1.0.0",
+  "template_kind": "custom.signal.trip",
+  "display_name": "Persisted autonomous trip",
+  "category": "Project controls",
+  "model_name": "Expression event reset",
+  "supports_steady": false,
+  "supports_transient": true,
+  "ports": [
+    {"name": "input", "domain": "signal", "direction": "in"},
+    {"name": "output", "domain": "signal", "direction": "out"}
+  ],
+  "parameters": [
+    {"name": "time_constant", "dimension": "time", "required": true},
+    {"name": "trip_level", "dimension": "dimensionless", "required": true},
+    {"name": "reset_fraction", "dimension": "dimensionless", "required": true}
+  ],
+  "internal_variables": [{
+    "name": "filtered", "kind": "differential",
+    "state_scale": 1.0, "derivative_scale": 1.0,
+    "lower_bound": 0.0, "upper_bound": 1.0,
+    "dimension": "dimensionless"
+  }],
+  "transient_equations": [
+    {"name": "state_balance",
+     "expression": "parameter.time_constant * derivative.internal.filtered + internal.filtered - input.value"},
+    {"name": "output",
+     "expression": "output.value - internal.filtered"}
+  ],
+  "events": [{
+    "name": "trip",
+    "expression": "internal.filtered - parameter.trip_level",
+    "dimension": "dimensionless",
+    "direction": "rising",
+    "priority": 4,
+    "hysteresis_si": 0.01,
+    "actions": [{
+      "type": "set_state",
+      "target": "internal.filtered",
+      "expression": "internal.filtered * parameter.reset_fraction"
+    }]
+  }]
+})json";
+}
+
 std::string correlation_payload() {
     return R"json({
   "inputs": [
@@ -804,7 +851,7 @@ void test_expression_component_artifact_is_executable() {
             "invalid-dimension-gain",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v4",
+            "thermox.expression_component/v5",
             invalid_dimension,
         });
     } catch (const thermox::service::ProjectRequestError& error) {
@@ -822,7 +869,7 @@ void test_expression_component_artifact_is_executable() {
         "persisted-gain",
         {},
         "thermox.expression_component",
-        "thermox.expression_component/v4",
+        "thermox.expression_component/v5",
         expression_component_payload(),
     });
     const auto resolved = projects->resolve_artifact_revisions(
@@ -897,7 +944,7 @@ void test_expression_component_artifact_is_executable() {
                 std::string::npos &&
             serialized_catalog.find("\"modes\": [") !=
                 std::string::npos,
-        "project component catalog JSON must expose the v4 mode contract");
+        "project component catalog JSON must expose the v5 mode contract");
     const auto latest_revision =
         projects->create_artifact_revision({
             team_a,
@@ -905,7 +952,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v4",
+            "thermox.expression_component/v5",
             expression_component_payload("1.0.1"),
         });
     const auto refreshed =
@@ -927,7 +974,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             latest_revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v4",
+            "thermox.expression_component/v5",
             expression_component_payload("1.0.1"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -941,7 +988,7 @@ void test_expression_component_artifact_is_executable() {
             "second-gain-artifact",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v4",
+            "thermox.expression_component/v5",
             expression_component_payload("2.0.0"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -1067,7 +1114,7 @@ void test_expression_component_artifact_is_executable() {
             "unsafe-component",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v4",
+            "thermox.expression_component/v5",
             unsafe,
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -1081,6 +1128,63 @@ void test_expression_component_artifact_is_executable() {
                     .size() == 2U,
         "unsafe component definitions must be rejected before "
         "an immutable revision is published");
+
+    const auto event_revision = projects->create_artifact_revision({
+        team_a,
+        project.project_id,
+        "persisted-trip",
+        {},
+        "thermox.expression_component",
+        "thermox.expression_component/v5",
+        event_expression_component_payload(),
+    });
+    const auto resolved_event = projects->resolve_artifact_revisions(
+        team_a, project.project_id,
+        {event_revision.artifact_revision_id});
+    require(
+        resolved_event &&
+            resolved_event->components.expression_components.size() ==
+                1U &&
+            resolved_event->components.expression_components.front()
+                    .events.size() == 1U &&
+            resolved_event->components.expression_components.front()
+                    .events.front().priority == 4 &&
+            resolved_event->components.expression_components.front()
+                    .events.front().actions.front().expression ==
+                "internal.filtered * parameter.reset_fraction",
+        "component-owned event and reset expressions must survive "
+        "immutable artifact canonicalization and resolution");
+    const auto event_catalog =
+        component_catalog.get(team_a, project.project_id);
+    const auto discovered_event = std::find_if(
+        event_catalog.components.begin(),
+        event_catalog.components.end(),
+        [](const auto& entry) {
+            return entry.component.kind ==
+                "custom.signal.persisted_trip";
+        });
+    require(
+        discovered_event != event_catalog.components.end() &&
+            discovered_event->component.events.size() == 1U &&
+            discovered_event->component.events.front().name == "trip" &&
+            discovered_event->component.events.front().direction ==
+                "rising" &&
+            discovered_event->definition.events.front()
+                    .actions.front().type == "set_state",
+        "project catalog discovery must expose event metadata and "
+        "the exact editable event/reset declaration");
+    const auto serialized_event_catalog =
+        thermox::service::serialize_project_component_catalog_json(
+            event_catalog);
+    require(
+        serialized_event_catalog.find(
+            "\"expression\": \"internal.filtered - parameter.trip_level\"") !=
+                std::string::npos &&
+            serialized_event_catalog.find(
+                "\"hysteresis_si\": 0.01") !=
+                std::string::npos,
+        "project catalog JSON must retain event surface and "
+        "hysteresis declarations");
 
     bool hidden = false;
     try {
@@ -1106,7 +1210,7 @@ void test_property_expression_component_artifact_is_discoverable() {
         "property-loss",
         {},
         "thermox.expression_component",
-        "thermox.expression_component/v4",
+        "thermox.expression_component/v5",
         property_expression_component_payload(),
     });
     thermox::service::ProjectComponentCatalogService catalog{

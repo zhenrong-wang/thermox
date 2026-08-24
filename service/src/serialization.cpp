@@ -1497,6 +1497,24 @@ std::string serialize_catalog_response_json(
         }
         out << "], \"default_mode\": ";
         json_string(out, component.default_mode);
+        out << ", \"events\": [";
+        for (std::size_t j = 0; j < component.events.size(); ++j) {
+            if (j != 0U) out << ", ";
+            const auto& event = component.events[j];
+            out << "{\"name\": ";
+            json_string(out, event.name);
+            out << ", \"dimension\": ";
+            json_string(out, event.dimension);
+            out << ", \"direction\": ";
+            json_string(out, event.direction);
+            out << ", \"terminal\": "
+                << (event.terminal ? "true" : "false")
+                << ", \"priority\": " << event.priority
+                << ", \"hysteresis_si\": ";
+            json_number(out, event.hysteresis_si);
+            out << '}';
+        }
+        out << ']';
         out << ", \"ports\": [";
         for (std::size_t j = 0; j < component.ports.size(); ++j) {
             if (j != 0) out << ", ";

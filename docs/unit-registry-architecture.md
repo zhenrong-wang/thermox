@@ -2,7 +2,7 @@
 
 Thermox keeps persisted model, case, and result values in canonical SI. The platform-owned
 `UnitRegistry` is the single authority that translates accepted authoring units into that
-representation and publishes presentation metadata through `thermox.catalog/v11`.
+representation and publishes presentation metadata through `thermox.catalog/v12`.
 
 Each registered physical dimension declares:
 

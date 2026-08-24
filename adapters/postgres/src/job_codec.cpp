@@ -865,6 +865,31 @@ Tree component_bundle(
                             equations(mode.transient_equations));
                         return value;
                     }));
+                encoded.add_child(
+                    "events",
+                    array(component.events, [](const auto& event) {
+                        Tree value;
+                        value.put("name", event.name);
+                        value.put("expression", event.expression);
+                        value.put("dimension", event.dimension);
+                        value.put("direction", event.direction);
+                        value.put("terminal", event.terminal);
+                        value.put("priority", event.priority);
+                        value.put("hysteresis_si", event.hysteresis_si);
+                        value.add_child(
+                            "actions",
+                            array(event.actions, [](const auto& action) {
+                                Tree encoded_action;
+                                encoded_action.put("type", action.type);
+                                encoded_action.put(
+                                    "target", action.target);
+                                encoded_action.put(
+                                    "expression", action.expression);
+                                encoded_action.put("mode", action.mode);
+                                return encoded_action;
+                            }));
+                        return value;
+                    }));
                 return encoded;
             }));
     return tree;
@@ -1056,6 +1081,41 @@ service::SimulationComponentBundle decode_component_bundle(
                                 mode.get_child("transient_equations"));
                             return value;
                         });
+                if (const auto events =
+                        encoded.get_child_optional("events")) {
+                    component.events = decode_array<
+                        service::ExpressionComponentEventInput>(
+                        *events, [](const Tree& event) {
+                            service::ExpressionComponentEventInput value;
+                            value.name =
+                                event.get<std::string>("name");
+                            value.expression =
+                                event.get<std::string>("expression");
+                            value.dimension =
+                                event.get<std::string>("dimension");
+                            value.direction =
+                                event.get<std::string>("direction");
+                            value.terminal =
+                                event.get<bool>("terminal");
+                            value.priority =
+                                event.get<int>("priority");
+                            value.hysteresis_si =
+                                event.get<double>("hysteresis_si");
+                            value.actions = decode_array<
+                                service::ExpressionComponentEventActionInput>(
+                                event.get_child("actions"),
+                                [](const Tree& action) {
+                                    return service::
+                                        ExpressionComponentEventActionInput{
+                                            action.get<std::string>("type"),
+                                            action.get<std::string>("target"),
+                                            action.get<std::string>("expression"),
+                                            action.get<std::string>("mode"),
+                                        };
+                                });
+                            return value;
+                        });
+                }
                 return component;
             });
     return value;

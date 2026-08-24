@@ -325,6 +325,25 @@ void component_type_json(
     }
     out << "], \"default_mode\": ";
     json_string(out, component.default_mode);
+    out << ", \"events\": [";
+    for (std::size_t index = 0;
+         index < component.events.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& event = component.events[index];
+        out << "{\"name\": ";
+        json_string(out, event.name);
+        out << ", \"dimension\": ";
+        json_string(out, event.dimension);
+        out << ", \"direction\": ";
+        json_string(out, event.direction);
+        out << ", \"terminal\": "
+            << (event.terminal ? "true" : "false")
+            << ", \"priority\": " << event.priority
+            << ", \"hysteresis_si\": ";
+        json_number(out, event.hysteresis_si);
+        out << '}';
+    }
+    out << ']';
     out << ", \"ports\": [";
     for (std::size_t index = 0;
          index < component.ports.size(); ++index) {
@@ -571,6 +590,47 @@ void expression_component_json(
         equations("equations", mode.equations);
         equations("transient_equations", mode.transient_equations);
         out << '}';
+    }
+    out << "], \"events\": [";
+    for (std::size_t event_index = 0;
+         event_index < definition.events.size(); ++event_index) {
+        if (event_index != 0U) out << ", ";
+        const auto& event = definition.events[event_index];
+        out << "{\"name\": ";
+        json_string(out, event.name);
+        out << ", \"expression\": ";
+        json_string(out, event.expression);
+        out << ", \"dimension\": ";
+        json_string(out, event.dimension);
+        out << ", \"direction\": ";
+        json_string(out, event.direction);
+        out << ", \"terminal\": "
+            << (event.terminal ? "true" : "false")
+            << ", \"priority\": " << event.priority
+            << ", \"hysteresis_si\": ";
+        json_number(out, event.hysteresis_si);
+        out << ", \"actions\": [";
+        for (std::size_t action_index = 0;
+             action_index < event.actions.size(); ++action_index) {
+            if (action_index != 0U) out << ", ";
+            const auto& action = event.actions[action_index];
+            out << "{\"type\": ";
+            json_string(out, action.type);
+            if (!action.target.empty()) {
+                out << ", \"target\": ";
+                json_string(out, action.target);
+            }
+            if (!action.expression.empty()) {
+                out << ", \"expression\": ";
+                json_string(out, action.expression);
+            }
+            if (!action.mode.empty()) {
+                out << ", \"mode\": ";
+                json_string(out, action.mode);
+            }
+            out << '}';
+        }
+        out << "]}";
     }
     out << "]}";
 }

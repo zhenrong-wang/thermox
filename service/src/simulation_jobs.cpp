@@ -352,6 +352,22 @@ void append_components(
             append_equations(mode.equations);
             append_equations(mode.transient_equations);
         }
+        stream << component.events.size() << '|';
+        for (const auto& event : component.events) {
+            append_string(stream, event.name);
+            append_string(stream, event.expression);
+            append_string(stream, event.dimension);
+            append_string(stream, event.direction);
+            stream << event.terminal << '|' << event.priority << '|'
+                   << event.hysteresis_si << '|'
+                   << event.actions.size() << '|';
+            for (const auto& action : event.actions) {
+                append_string(stream, action.type);
+                append_string(stream, action.target);
+                append_string(stream, action.expression);
+                append_string(stream, action.mode);
+            }
+        }
     }
 }
 

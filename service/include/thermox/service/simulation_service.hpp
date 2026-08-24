@@ -16,7 +16,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v3[] = "thermox.result/v3";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v11[] = "thermox.catalog/v11";
+inline constexpr char catalog_schema_v12[] = "thermox.catalog/v12";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
@@ -103,6 +103,15 @@ struct CatalogInternalVariableType {
     std::string kind;
 };
 
+struct CatalogEventType {
+    std::string name;
+    std::string dimension;
+    std::string direction;
+    bool terminal{false};
+    int priority{0};
+    double hysteresis_si{0.0};
+};
+
 struct ComponentType {
     std::string kind;
     std::string version;
@@ -122,6 +131,7 @@ struct ComponentType {
     bool supports_transient{false};
     std::vector<std::string> supported_modes;
     std::string default_mode;
+    std::vector<CatalogEventType> events;
 };
 
 struct PropertyBackendType {
@@ -281,7 +291,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v11};
+    std::string schema_version{catalog_schema_v12};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;
@@ -622,9 +632,27 @@ struct ExpressionComponentInternalVariableInput {
     std::string dimension{"unspecified"};
 };
 
+struct ExpressionComponentEventActionInput {
+    std::string type;
+    std::string target;
+    std::string expression;
+    std::string mode;
+};
+
+struct ExpressionComponentEventInput {
+    std::string name;
+    std::string expression;
+    std::string dimension{"dimensionless"};
+    std::string direction{"any"};
+    bool terminal{false};
+    int priority{0};
+    double hysteresis_si{0.0};
+    std::vector<ExpressionComponentEventActionInput> actions;
+};
+
 struct ExpressionComponentInput {
     std::string schema_version{
-        "thermox.expression_component/v4"};
+        "thermox.expression_component/v5"};
     std::string kind;
     std::string version;
     std::string template_kind;
@@ -644,6 +672,7 @@ struct ExpressionComponentInput {
         internal_variables;
     std::vector<ExpressionComponentEquationInput> transient_equations;
     std::vector<ExpressionComponentModeInput> modes;
+    std::vector<ExpressionComponentEventInput> events;
 };
 
 struct SimulationComponentBundle {
