@@ -183,8 +183,17 @@ void state_events(
                 json_string(out, action.target);
                 if (action.type == "set_input" ||
                     action.type == "set_state") {
-                    out << ", \"value\": ";
-                    scalar_value(out, action.value);
+                    if (!action.source.empty()) {
+                        out << ", \"source\": ";
+                        json_string(out, action.source);
+                    } else if (action.value.has_value()) {
+                        out << ", \"value\": ";
+                        scalar_value(out, *action.value);
+                    } else {
+                        throw std::invalid_argument(
+                            "state-event value action is missing source "
+                            "and value");
+                    }
                 } else {
                     out << ", \"mode\": ";
                     json_string(out, action.mode);

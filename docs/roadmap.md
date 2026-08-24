@@ -125,7 +125,10 @@ Delivered:
 7. Component-owned dimensioned expression event surfaces plus bounded atomic state-reset
    expressions, optional mode actions, checked failure propagation, immutable persistence, and
    analytical crossing/post-reset verification. ✅
-8. Variable-structure topology changes remain an explicit follow-on.
+8. Case-owned cross-component graph-source reset maps with strict source/target dimension checks,
+   common pre-event snapshot evaluation, all-or-nothing input/mode/state commit, canonical
+   persistence, and analytical order-independence verification. ✅
+9. Variable-structure topology changes remain an explicit follow-on.
 
 ## System-agnostic transient platform milestone
 
@@ -470,6 +473,8 @@ Next:
 32. Add typed constant differential `set_state` actions with variable-kind, dimension, finiteness,
     and bound validation; preserve unreset states and publish the consistently reinitialized event
     state. ✅
+33. Add typed graph-source `set_input`/`set_state` reset maps with cross-component dimension
+    validation and atomic pre-event snapshot semantics. ✅
 
 See `docs/calibration-architecture.md`.
 

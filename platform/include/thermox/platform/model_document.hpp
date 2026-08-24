@@ -92,7 +92,11 @@ struct StateEventDefinition {
     struct Action {
         std::string type;
         std::string target;
-        ScalarValue value;
+        // set_input/set_state accept either a typed constant value or a
+        // graph-variable source. A source is sampled from the common
+        // pre-transition state so all actions in one event commit atomically.
+        std::string source;
+        std::optional<ScalarValue> value;
         std::string mode;
     };
 

@@ -265,6 +265,10 @@ ModelDocument flatten_model_document(const ModelDocument& document) {
             for (auto& action : event.actions) {
                 action.target = rewrite_public_variable(
                     action.target, public_ports);
+                if (!action.source.empty()) {
+                    action.source = rewrite_public_variable(
+                        action.source, public_ports);
+                }
             }
         }
         std::map<std::string, ScalarValue> overrides;

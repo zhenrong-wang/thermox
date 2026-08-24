@@ -278,7 +278,7 @@ state_events:
         mode: closed
       - type: set_state
         target: trip_controller.integral_error
-        value: 0.0
+        source: standby_controller.integral_error
 initial_guesses:
   st_hp.inlet.p:
     value: 120
@@ -394,13 +394,18 @@ right-continuous scheduled jump are stamped at the exact discontinuity with the 
 
 An event may declare typed `set_input`, `set_mode`, and `set_state` actions. Each `set_input` target must already be an
 algebraic boundary/control input declared by `fixed_values` or `input_schedules`, and the action
-value must be finite, match that graph variable's physical dimension, and respect its registered
+must declare exactly one constant `value` or graph-variable `source`. The resulting value must be
+finite, match the target's physical dimension, and respect its registered
 bounds. A `set_mode` target is a component ID,
 and its requested mode must be registered by that component model. For expanded assemblies, this
 low-level declaration uses the canonical flattened child component ID. A `set_state` target must be
-a differential graph variable; its finite, dimensionally compatible value must lie inside the
-state's registered bounds. At the accepted crossing, the solver applies all actions in declaration
-order, preserves every differential state not explicitly reset, consistently reinitializes
+a differential graph variable and likewise accepts exactly one constant `value` or graph-variable
+`source`. Sources may belong to another component but must have the target dimension. At the
+accepted crossing, Thermox evaluates every source from one common pre-event graph snapshot,
+validates all resulting values and bounds, and only then commits the complete input/mode/state
+transition. A failed dynamic reset therefore leaves the system unchanged; declaration order cannot
+make one reset observe another reset from the same event. The solver preserves every differential
+state not explicitly reset, consistently reinitializes
 algebraic states and derivatives, restarts BDF1,
 and continues unless the event is terminal. Result events report `transitioned: true` when actions
 were applied. Compiled hybrid problems reset their discrete input overrides and component modes to

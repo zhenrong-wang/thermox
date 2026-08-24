@@ -5685,7 +5685,7 @@ void test_transient_expression_component_flows_through_service() {
         "\"hysteresis\": 0.01, "
         "\"actions\": [{\"type\": \"set_input\", "
         "\"target\": \"lag.input.value\", "
-        "\"value\": 0.0}, {\"type\": \"set_mode\", "
+        "\"source\": \"lag.output.value\"}, {\"type\": \"set_mode\", "
         "\"target\": \"lag\", "
         "\"mode\": \"failsafe\"}, {\"type\": \"set_state\", "
         "\"target\": \"lag.filtered\", "
@@ -5724,6 +5724,8 @@ void test_transient_expression_component_flows_through_service() {
                     .hysteresis.has_value() &&
             reparsed_trip.cases.front().state_events.front()
                     .actions.size() == 3U &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.front().source == "lag.output.value" &&
             reparsed_trip.cases.front().component_modes.at("lag") ==
                 "tracking" &&
             reparsed_trip.cases.front().state_events.front()
@@ -5739,7 +5741,7 @@ void test_transient_expression_component_flows_through_service() {
 
     auto invalid_reset_document = parsed_trip;
     invalid_reset_document.cases.front().state_events.front()
-        .actions.back().value.value_si = 2.0;
+        .actions.back().value->value_si = 2.0;
     auto invalid_reset_request = trip_request;
     invalid_reset_request.model_json =
         thermox::service::detail::serialize_model_document_json(

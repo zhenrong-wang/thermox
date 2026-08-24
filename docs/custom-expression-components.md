@@ -201,8 +201,9 @@ the topology instance's exact kind/version rather than substituting the newest p
 The browser only enables new run authoring after the service compiler has validated that exact
 topology, case, and artifact-revision set.
 
-Approval policy, additional property functions backed by derivative contracts, cross-component
-reset maps, variable-structure transitions, and richer equation syntax assistance require later
-contracts. Cases continue to own system-level threshold events and transitions; component-owned
+Approval policy, additional property functions backed by derivative contracts, general
+cross-component algebraic reset expressions, variable-structure transitions, and richer equation
+syntax assistance require later contracts. Cases own system-level threshold events and atomic
+dimension-compatible direct graph-source reset maps; component-owned
 events remain deliberately local to the declaring instance. Arbitrary Python is not part of this
 path.

@@ -633,6 +633,11 @@ definitions as immutable project artifacts; component identity/version rules are
 service rather than the browser. See
 [Safe expression components](docs/custom-expression-components.md).
 
+Case-owned system events can observe any canonical graph state and atomically transition declared
+inputs, component modes, and differential states. Reset values may be typed constants or direct
+dimension-compatible graph sources from another component; every source is sampled from the same
+pre-event snapshot before any action commits.
+
 Study v3 can impose dimensioned execution envelopes on the typed inputs of performance maps,
 correlations, and regime maps. The shared core enforcement applies equally to local, HTTP, queued,
 steady, and transient execution and reports stable policy violations without mutating source

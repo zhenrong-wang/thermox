@@ -57,6 +57,8 @@ The current synchronous service exposes:
   nonterminal evidence capture, and terminal protective-trip behavior;
 - typed event-driven `set_input` transitions over declared algebraic boundaries and controls, with
   post-transition graph evidence and no service-owned physics logic;
+- dimension-checked case-owned cross-component reset sources, evaluated from one pre-event graph
+  snapshot and committed atomically across input, mode, and differential-state actions;
 - dimensioned directed-event hysteresis and explicit simultaneous-transition priority projected
   through canonical models and durable transient event evidence;
 - deterministic runtime-catalog fingerprints and native application composition.
@@ -294,6 +296,7 @@ application boundary.
 
 The runtime catalog also publishes every native component's `supported_modes` and `default_mode`.
 Canonical case documents retain initial `component_modes`; canonical state-event actions retain
-typed `set_mode` transitions and dimensioned `set_state` resets. These declarations flow through the ordinary
+typed `set_mode` transitions and dimensioned constant or graph-sourced `set_input`/`set_state`
+resets. These declarations flow through the ordinary
 parse/validate/snapshot/fingerprint/result path, so CLI, HTTP, worker, and future RPC clients invoke
 one application contract rather than owning hybrid-simulation logic themselves.

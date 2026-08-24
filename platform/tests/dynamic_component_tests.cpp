@@ -265,6 +265,30 @@ void test_rotor_integrates_kinetic_energy() {
         std::sqrt(26000.0),
         1.0e-5,
         "rotor speed follows kinetic energy");
+
+    auto invalid_reset_map = document;
+    thermox::platform::StateEventDefinition event;
+    event.id = "invalid_speed_to_energy_reset";
+    event.target = "rotor.rotational_energy";
+    event.threshold = {6.0e5, "J", "energy"};
+    event.direction = "rising";
+    thermox::platform::StateEventDefinition::Action action;
+    action.type = "set_state";
+    action.target = "rotor.rotational_energy";
+    action.source = "rotor.omega";
+    event.actions.push_back(std::move(action));
+    invalid_reset_map.cases.back().state_events.push_back(
+        std::move(event));
+    bool rejected_dimension_mismatch = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            invalid_reset_map, registry, "runup");
+    } catch (const std::invalid_argument&) {
+        rejected_dimension_mismatch = true;
+    }
+    require(
+        rejected_dimension_mismatch,
+        "cross-component reset sources must match target dimensions");
 }
 
 void test_normalized_control_chain_steady_and_transient() {
@@ -289,7 +313,17 @@ void test_normalized_control_chain_steady_and_transient() {
           "time_constant": {"value": 2.0, "unit": "s"}
         }
       },
-      {"id": "consumer", "kind": "sink.control.boundary"}
+      {"id": "consumer", "kind": "sink.control.boundary"},
+      {"id": "observer_source", "kind": "source.control.boundary"},
+      {
+        "id": "observer",
+        "kind": "control.first_order_lag.normalized",
+        "parameters": {
+          "gain": 1.0,
+          "time_constant": {"value": 1.0, "unit": "s"}
+        }
+      },
+      {"id": "observer_sink", "kind": "sink.control.boundary"}
     ],
     "connections": [
       {
@@ -309,6 +343,18 @@ void test_normalized_control_chain_steady_and_transient() {
         "from": "actuator.response",
         "to": "consumer.inlet",
         "kind": "signal_link"
+      },
+      {
+        "id": "observer_command",
+        "from": "observer_source.outlet",
+        "to": "observer.command",
+        "kind": "signal_link"
+      },
+      {
+        "id": "observer_response",
+        "from": "observer.response",
+        "to": "observer_sink.inlet",
+        "kind": "signal_link"
       }
     ]
   },
@@ -316,20 +362,35 @@ void test_normalized_control_chain_steady_and_transient() {
     {
       "id": "steady",
       "mode": "steady_state_design",
-      "fixed_values": {"sensor.outlet.value": 1.0}
+      "fixed_values": {
+        "sensor.outlet.value": 1.0,
+        "observer_source.outlet.value": 0.8
+      }
     },
     {
       "id": "transient",
       "mode": "dynamic_transient",
-      "fixed_values": {"sensor.outlet.value": 1.0},
-      "initial_guesses": {"actuator.response.value": 0.0}
+      "fixed_values": {
+        "sensor.outlet.value": 1.0,
+        "observer_source.outlet.value": 0.8
+      },
+      "initial_guesses": {
+        "actuator.response.value": 0.0,
+        "observer.response.value": 0.0
+      }
     },
     {
       "id": "mode_switch",
       "mode": "dynamic_transient",
-      "fixed_values": {"sensor.outlet.value": 1.0},
+      "fixed_values": {
+        "sensor.outlet.value": 1.0,
+        "observer_source.outlet.value": 0.8
+      },
       "component_modes": {"actuator": "tracking"},
-      "initial_guesses": {"actuator.response.value": 0.0},
+      "initial_guesses": {
+        "actuator.response.value": 0.0,
+        "observer.response.value": 0.0
+      },
       "state_events": [{
         "id": "actuator_failsafe",
         "target": "actuator.response.value",
@@ -342,8 +403,12 @@ void test_normalized_control_chain_steady_and_transient() {
           "mode": "decay_to_zero"
         }, {
           "type": "set_state",
-          "target": "actuator.response.value",
+          "target": "observer.response.value",
           "value": 0.05
+        }, {
+          "type": "set_state",
+          "target": "actuator.response.value",
+          "source": "observer.response.value"
         }]
       }]
     }
@@ -411,6 +476,9 @@ void test_normalized_control_chain_steady_and_transient() {
     const auto switched_response = variable_index(
         switched.problem.variable_names,
         "actuator.response.value");
+    const auto observer_response = variable_index(
+        switched.problem.variable_names,
+        "observer.response.value");
     const auto switched_result =
         thermox::integrate_dae(switched.problem, options);
     require(
@@ -430,13 +498,20 @@ void test_normalized_control_chain_steady_and_transient() {
         "mode transition occurs at the declared state threshold");
     require_near(
         switched_result.events.front().state.at(switched_response),
+        0.8 * (1.0 - std::exp(
+            -switched_result.events.front().time)),
+        2.0e-3,
+        "system event must copy a cross-component graph value into "
+        "the reset state from the common pre-event snapshot");
+    require_near(
+        switched_result.events.front().state.at(observer_response),
         0.05,
         1.0e-10,
-        "event evidence must retain the consistently reinitialized "
-        "state reset");
+        "source-state reset commits only after all reset sources are read");
     require_near(
         switched_result.trajectory.back().state.at(switched_response),
-        0.05 * std::exp(
+        switched_result.events.front().state.at(switched_response) *
+            std::exp(
             -(options.end_time -
               switched_result.events.front().time) / 2.0),
         2.0e-3,
@@ -473,6 +548,36 @@ void test_normalized_control_chain_steady_and_transient() {
     require(
         rejected_algebraic_reset,
         "set_state must reject algebraic graph variables");
+
+    auto invalid_source = document;
+    invalid_source.cases.back().state_events.front()
+        .actions.back().source = "missing.output.value";
+    bool rejected_unknown_source = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            invalid_source, registry, "mode_switch");
+    } catch (const std::invalid_argument&) {
+        rejected_unknown_source = true;
+    }
+    require(
+        rejected_unknown_source,
+        "cross-component reset maps must reject unknown graph sources");
+
+    auto ambiguous_reset = document;
+    ambiguous_reset.cases.back().state_events.front()
+        .actions.back().value =
+            thermox::platform::ScalarValue{
+                0.0, "dimensionless", "dimensionless"};
+    bool rejected_ambiguous_reset = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            ambiguous_reset, registry, "mode_switch");
+    } catch (const std::invalid_argument&) {
+        rejected_ambiguous_reset = true;
+    }
+    require(
+        rejected_ambiguous_reset,
+        "reset maps must declare exactly one constant or graph source");
 }
 
 }  // namespace

@@ -248,10 +248,12 @@ The numeric core does not know about fluids, phases, turbines, reactors, or unit
 Hybrid component behavior is represented without teaching the numeric kernel about equipment
 modes. The platform owns discrete mode state and supplies mode-dependent residual/Jacobian
 callbacks on a fixed DAE graph. A detected event applies its typed transition, preserves
-differential state except for explicitly declared constant resets, requests consistent
+differential state except for explicitly declared resets, requests consistent
 algebraic/derivative reinitialization, and restarts the
 multistep history. The existing event priority, hysteresis, and exact-time discontinuity contracts
-therefore apply equally to input transitions and component mode switches.
+therefore apply equally to input transitions and component mode switches. Case-owned graph-source
+resets are evaluated against a common pre-event state and committed atomically; the numeric kernel
+still sees only one checked transition callback.
 
 ## Structural policy audit
 
@@ -295,5 +297,6 @@ different nonlinear algorithms under a structural-policy label.
   provider or continuation policy.
 - Component-informed homotopy paths, an optional IDA-class transient backend, and broader
   sparse-backend performance/conditioning diagnostics remain future integrations.
-- State-dependent reset expressions, variable-structure topology changes, and automatic index
-  reduction are not part of the current fixed-topology hybrid DAE contract.
+- General cross-component algebraic reset expressions, variable-structure topology changes, and
+  automatic index reduction are not part of the current fixed-topology hybrid DAE contract. Typed
+  direct graph-source reset maps and component-local bounded expressions are supported.

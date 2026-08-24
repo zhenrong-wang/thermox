@@ -2132,6 +2132,14 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                         action.type);
                 }
                 if (action.type == "set_mode") {
+                    if (!action.source.empty() ||
+                        action.value.has_value()) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_mode action cannot declare source or "
+                            "value");
+                    }
                     const auto mode_state =
                         component_mode_states.find(action.target);
                     if (mode_state == component_mode_states.end()) {
@@ -2157,6 +2165,15 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     }
                     continue;
                 }
+                if (action.source.empty() ==
+                    !action.value.has_value()) {
+                    throw std::invalid_argument(
+                        "case '" + active_case->id +
+                        "' state event '" + event.id + "' " +
+                        action.type +
+                        " action must declare exactly one source or "
+                        "value");
+                }
                 if (action.type == "set_state") {
                     const auto variable =
                         variable_indices.find(action.target);
@@ -2175,25 +2192,50 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                             "' set_state action target must be a "
                             "differential variable: " + action.target);
                     }
-                    if (action.value.dimension !=
-                        variable_dimensions.at(action.target)) {
-                        throw std::invalid_argument(
-                            "case '" + active_case->id +
-                            "' state event '" + event.id +
-                            "' set_state value dimension does not match "
-                            "graph variable dimension '" +
-                            variable_dimensions.at(action.target) + "'");
-                    }
                     const auto& descriptor =
                         system.variables().at(variable->second);
-                    if (!std::isfinite(action.value.value_si) ||
-                        action.value.value_si < descriptor.lower_bound ||
-                        action.value.value_si > descriptor.upper_bound) {
-                        throw std::invalid_argument(
-                            "case '" + active_case->id +
-                            "' state event '" + event.id +
-                            "' set_state value is outside bounds for "
-                            "graph variable: " + action.target);
+                    if (!action.source.empty()) {
+                        const auto source =
+                            variable_indices.find(action.source);
+                        if (source == variable_indices.end()) {
+                            throw std::invalid_argument(
+                                "case '" + active_case->id +
+                                "' state event '" + event.id +
+                                "' set_state source references unknown "
+                                "graph variable: " + action.source);
+                        }
+                        if (variable_dimensions.at(action.source) !=
+                            variable_dimensions.at(action.target)) {
+                            throw std::invalid_argument(
+                                "case '" + active_case->id +
+                                "' state event '" + event.id +
+                                "' set_state source dimension does not "
+                                "match target dimension '" +
+                                variable_dimensions.at(action.target) +
+                                "'");
+                        }
+                    } else {
+                        if (action.value->dimension !=
+                            variable_dimensions.at(action.target)) {
+                            throw std::invalid_argument(
+                                "case '" + active_case->id +
+                                "' state event '" + event.id +
+                                "' set_state value dimension does not "
+                                "match graph variable dimension '" +
+                                variable_dimensions.at(action.target) +
+                                "'");
+                        }
+                        if (!std::isfinite(action.value->value_si) ||
+                            action.value->value_si <
+                                descriptor.lower_bound ||
+                            action.value->value_si >
+                                descriptor.upper_bound) {
+                            throw std::invalid_argument(
+                                "case '" + active_case->id +
+                                "' state event '" + event.id +
+                                "' set_state value is outside bounds for "
+                                "graph variable: " + action.target);
+                        }
                     }
                     continue;
                 }
@@ -2222,25 +2264,46 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                         "' cannot set differential variable: " +
                         action.target);
                 }
-                if (action.value.dimension !=
-                    variable_dimensions.at(action.target)) {
-                    throw std::invalid_argument(
-                        "case '" + active_case->id +
-                        "' state event '" + event.id +
-                        "' action value dimension does not match graph "
-                        "variable dimension '" +
-                        variable_dimensions.at(action.target) + "'");
-                }
                 const auto& descriptor =
                     system.variables().at(variable->second);
-                if (!std::isfinite(action.value.value_si) ||
-                    action.value.value_si < descriptor.lower_bound ||
-                    action.value.value_si > descriptor.upper_bound) {
-                    throw std::invalid_argument(
-                        "case '" + active_case->id +
-                        "' state event '" + event.id +
-                        "' set_input value is outside bounds for graph "
-                        "variable: " + action.target);
+                if (!action.source.empty()) {
+                    const auto source =
+                        variable_indices.find(action.source);
+                    if (source == variable_indices.end()) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_input source references unknown graph "
+                            "variable: " + action.source);
+                    }
+                    if (variable_dimensions.at(action.source) !=
+                        variable_dimensions.at(action.target)) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_input source dimension does not match "
+                            "target dimension '" +
+                            variable_dimensions.at(action.target) + "'");
+                    }
+                } else {
+                    if (action.value->dimension !=
+                        variable_dimensions.at(action.target)) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' action value dimension does not match "
+                            "graph variable dimension '" +
+                            variable_dimensions.at(action.target) + "'");
+                    }
+                    if (!std::isfinite(action.value->value_si) ||
+                        action.value->value_si < descriptor.lower_bound ||
+                        action.value->value_si > descriptor.upper_bound) {
+                        throw std::invalid_argument(
+                            "case '" + active_case->id +
+                            "' state event '" + event.id +
+                            "' set_input value is outside bounds for "
+                            "graph variable: " + action.target);
+                    }
                 }
                 transitioned_input_targets.insert(action.target);
             }
@@ -2422,47 +2485,123 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 double, std::vector<double>&,
                 std::vector<double>&)> transition;
             if (!event.actions.empty()) {
-                using CompiledTransitionAction = std::function<void(
-                    std::vector<double>&, std::vector<double>&)>;
+                struct CompiledTransitionAction {
+                    std::string type;
+                    std::string target;
+                    std::size_t target_index{0};
+                    std::optional<std::size_t> source_index;
+                    double constant_value{0.0};
+                    double lower_bound{
+                        -std::numeric_limits<double>::infinity()};
+                    double upper_bound{
+                        std::numeric_limits<double>::infinity()};
+                    std::shared_ptr<std::string> mode_state;
+                    std::string mode;
+                };
                 std::vector<CompiledTransitionAction> actions;
                 actions.reserve(event.actions.size());
                 for (const auto& action : event.actions) {
                     if (action.type == "set_input") {
-                        actions.push_back(
-                            [transitioned_input_values,
-                             target = action.target,
-                             value = action.value.value_si](
-                                std::vector<double>&,
-                                std::vector<double>&) {
-                                (*transitioned_input_values)[target] =
-                                    value;
-                            });
+                        const auto index =
+                            variable_indices.at(action.target);
+                        const auto& descriptor =
+                            system.variables().at(index);
+                        actions.push_back({
+                            action.type,
+                            action.target,
+                            index,
+                            action.source.empty()
+                                ? std::optional<std::size_t>{}
+                                : std::optional<std::size_t>{
+                                      variable_indices.at(action.source)},
+                            action.value.has_value()
+                                ? action.value->value_si : 0.0,
+                            descriptor.lower_bound,
+                            descriptor.upper_bound,
+                            {},
+                            {},
+                        });
                     } else if (action.type == "set_mode") {
-                        actions.push_back(
-                            [mode_state = component_mode_states.at(
-                                 action.target),
-                             mode = action.mode](
-                                std::vector<double>&,
-                                std::vector<double>&) {
-                                *mode_state = mode;
-                            });
+                        actions.push_back({
+                            action.type,
+                            action.target,
+                            0,
+                            {},
+                            0.0,
+                            -std::numeric_limits<double>::infinity(),
+                            std::numeric_limits<double>::infinity(),
+                            component_mode_states.at(action.target),
+                            action.mode,
+                        });
                     } else {
-                        actions.push_back(
-                            [index = variable_indices.at(action.target),
-                             value = action.value.value_si](
-                                std::vector<double>& state,
-                                std::vector<double>& derivative) {
-                                state.at(index) = value;
-                                derivative.at(index) = 0.0;
-                            });
+                        const auto index =
+                            variable_indices.at(action.target);
+                        const auto& descriptor =
+                            system.variables().at(index);
+                        actions.push_back({
+                            action.type,
+                            action.target,
+                            index,
+                            action.source.empty()
+                                ? std::optional<std::size_t>{}
+                                : std::optional<std::size_t>{
+                                      variable_indices.at(action.source)},
+                            action.value.has_value()
+                                ? action.value->value_si : 0.0,
+                            descriptor.lower_bound,
+                            descriptor.upper_bound,
+                            {},
+                            {},
+                        });
                     }
                 }
                 transition =
-                    [actions = std::move(actions)](
+                    [actions = std::move(actions),
+                     transitioned_input_values,
+                     event_name = event.id](
                         double, std::vector<double>& state,
                         std::vector<double>& derivative) {
+                        struct PendingValue {
+                            double value{0.0};
+                        };
+                        std::vector<PendingValue> pending_values;
+                        pending_values.reserve(actions.size());
+                        // Every source reads the same accepted pre-event
+                        // graph state. No action is committed until all
+                        // dynamic values and bounds have been checked.
+                        for (std::size_t index = 0;
+                             index < actions.size(); ++index) {
+                            const auto& action = actions[index];
+                            if (action.type == "set_mode") continue;
+                            const double value = action.source_index
+                                ? state.at(*action.source_index)
+                                : action.constant_value;
+                            if (!std::isfinite(value) ||
+                                value < action.lower_bound ||
+                                value > action.upper_bound) {
+                                return EvaluationStatus::fatal(
+                                    "system event '" + event_name +
+                                    "' produced an invalid or out-of-bounds "
+                                    "value for action target '" +
+                                    action.target + "'");
+                            }
+                            pending_values.push_back({value});
+                        }
+                        std::size_t pending_index = 0;
                         for (const auto& action : actions) {
-                            action(state, derivative);
+                            if (action.type == "set_mode") {
+                                *action.mode_state = action.mode;
+                                continue;
+                            }
+                            const double value =
+                                pending_values.at(pending_index++).value;
+                            if (action.type == "set_input") {
+                                (*transitioned_input_values)[action.target] =
+                                    value;
+                            } else {
+                                state.at(action.target_index) = value;
+                                derivative.at(action.target_index) = 0.0;
+                            }
                         }
                         return EvaluationStatus::success();
                     };

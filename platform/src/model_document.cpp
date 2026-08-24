@@ -906,10 +906,32 @@ StateEventDefinition parse_state_event(
                 "action target in state event '" + event.id + "'");
             if (action.type == "set_input" ||
                 action.type == "set_state") {
-                action.value = parse_scalar_value(
-                    require_member(action_value, "value"),
-                    "case '" + case_id + "'.state_events." +
-                        event.id + ".actions.value");
+                const auto* source = find_member(
+                    action_value, "source");
+                const auto* constant = find_member(
+                    action_value, "value");
+                if ((source == nullptr) == (constant == nullptr)) {
+                    throw std::invalid_argument(
+                        "case '" + case_id + "' state event '" +
+                        event.id + "' " + action.type +
+                        " action must declare exactly one of 'source' "
+                        "or 'value'");
+                }
+                if (source != nullptr) {
+                    if (source->type != JsonValue::Type::String ||
+                        source->string.empty()) {
+                        throw std::invalid_argument(
+                            "case '" + case_id + "' state event '" +
+                            event.id + "' action source must be a "
+                            "nonempty graph-variable name");
+                    }
+                    action.source = source->string;
+                } else {
+                    action.value = parse_scalar_value(
+                        *constant,
+                        "case '" + case_id + "'.state_events." +
+                            event.id + ".actions.value");
+                }
             } else {
                 action.mode = require_string(action_value, "mode");
             }
