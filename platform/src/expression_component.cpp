@@ -41,6 +41,7 @@ enum class NodeKind {
     property_density_ph,
     property_internal_energy_ph,
     property_entropy_ph,
+    property_vapor_quality_ph,
 };
 
 struct ExpressionNode {
@@ -203,7 +204,8 @@ DimensionInference infer_dimension(
     if (node.kind == NodeKind::property_temperature_ph ||
         node.kind == NodeKind::property_density_ph ||
         node.kind == NodeKind::property_internal_energy_ph ||
-        node.kind == NodeKind::property_entropy_ph) {
+        node.kind == NodeKind::property_entropy_ph ||
+        node.kind == NodeKind::property_vapor_quality_ph) {
         if (!same_dimension(
                 left.signature, physical_dimension("pressure")) ||
             !same_dimension(
@@ -223,6 +225,9 @@ DimensionInference infer_dimension(
             return {
                 physical_dimension("specific_entropy"),
                 std::nullopt};
+        }
+        if (node.kind == NodeKind::property_vapor_quality_ph) {
+            return {{}, std::nullopt};
         }
         return {
             physical_dimension("specific_internal_energy"),
@@ -478,6 +483,9 @@ private:
                 if (identifier == "property.entropy_ph") {
                     return NodeKind::property_entropy_ph;
                 }
+                if (identifier == "property.vapor_quality_ph") {
+                    return NodeKind::property_vapor_quality_ph;
+                }
                 return std::nullopt;
             }();
             if (property_kind) {
@@ -702,7 +710,8 @@ Evaluation evaluate(
     if (node.kind == NodeKind::property_temperature_ph ||
         node.kind == NodeKind::property_density_ph ||
         node.kind == NodeKind::property_internal_energy_ph ||
-        node.kind == NodeKind::property_entropy_ph) {
+        node.kind == NodeKind::property_entropy_ph ||
+        node.kind == NodeKind::property_vapor_quality_ph) {
         const auto package = properties.find(node.symbol);
         if (package == properties.end() || !package->second) {
             return failure(
@@ -742,6 +751,22 @@ Evaluation evaluate(
                 .entropy_wrt_pressure_at_enthalpy;
             enthalpy_derivative = state.derivatives
                 .entropy_wrt_enthalpy_at_pressure;
+        } else if (
+            node.kind == NodeKind::property_vapor_quality_ph) {
+            if (state.state.phase != physics::Phase::two_phase ||
+                !std::isfinite(state.state.vapor_quality) ||
+                state.state.vapor_quality < 0.0 ||
+                state.state.vapor_quality > 1.0) {
+                return failure(
+                    "vapor-quality property function on port '" +
+                        node.symbol +
+                        "' requires a two-phase p-h state");
+            }
+            out.value = state.state.vapor_quality;
+            pressure_derivative = state.derivatives
+                .vapor_quality_wrt_pressure_at_enthalpy;
+            enthalpy_derivative = state.derivatives
+                .vapor_quality_wrt_enthalpy_at_pressure;
         } else {
             out.value = state.state.internal_energy_j_kg;
             pressure_derivative = state.derivatives

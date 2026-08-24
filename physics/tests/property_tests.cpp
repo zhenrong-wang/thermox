@@ -275,6 +275,10 @@ void verify_ph_derivatives(
         [](const thermox::physics::ThermodynamicState& state) {
             return state.entropy_j_kg_k;
         };
+    const auto vapor_quality =
+        [](const thermox::physics::ThermodynamicState& state) {
+            return state.vapor_quality;
+        };
     require_relative_near(
         result.derivatives
             .temperature_wrt_pressure_at_enthalpy,
@@ -315,6 +319,16 @@ void verify_ph_derivatives(
             .entropy_wrt_enthalpy_at_pressure,
         enthalpy_partial(entropy), relative_tolerance,
         1.0e-12, "ds/dh at constant p");
+    require_relative_near(
+        result.derivatives
+            .vapor_quality_wrt_pressure_at_enthalpy,
+        pressure_partial(vapor_quality), relative_tolerance,
+        1.0e-12, "dx/dp at constant h");
+    require_relative_near(
+        result.derivatives
+            .vapor_quality_wrt_enthalpy_at_pressure,
+        enthalpy_partial(vapor_quality), relative_tolerance,
+        1.0e-12, "dx/dh at constant p");
 }
 
 void verify_solver_bridge(const thermox::physics::PropertyPackage& package,
@@ -514,8 +528,18 @@ void verify_if97_derivatives_near_vapor_boundary(
             std::isfinite(result.derivatives.internal_energy_wrt_pressure_at_enthalpy) &&
             std::isfinite(result.derivatives.internal_energy_wrt_enthalpy_at_pressure) &&
             std::isfinite(result.derivatives.entropy_wrt_pressure_at_enthalpy) &&
-            std::isfinite(result.derivatives.entropy_wrt_enthalpy_at_pressure),
+            std::isfinite(result.derivatives.entropy_wrt_enthalpy_at_pressure) &&
+            std::isfinite(result.derivatives.vapor_quality_wrt_pressure_at_enthalpy) &&
+            std::isfinite(result.derivatives.vapor_quality_wrt_enthalpy_at_pressure),
         "IF97 one-sided boundary derivatives must remain finite");
+    require_relative_near(
+        result.derivatives
+            .vapor_quality_wrt_enthalpy_at_pressure,
+        1.0 / (
+            saturation.vapor.enthalpy_j_kg -
+            saturation.liquid.enthalpy_j_kg),
+        1.0e-5, 1.0e-12,
+        "IF97 two-phase quality derivative at fixed pressure");
 }
 
 void verify_heos_two_phase_derivative_fallback(
@@ -533,6 +557,17 @@ void verify_heos_two_phase_derivative_fallback(
                 thermox::physics::PropertyDerivativeSource::finite_difference &&
             result.state.phase == thermox::physics::Phase::two_phase,
             "HEOS two-phase state must use the bounded derivative fallback");
+    require(
+        std::isfinite(
+            result.derivatives
+                .vapor_quality_wrt_pressure_at_enthalpy) &&
+            std::isfinite(
+                result.derivatives
+                    .vapor_quality_wrt_enthalpy_at_pressure) &&
+            result.derivatives
+                    .vapor_quality_wrt_enthalpy_at_pressure > 0.0,
+        "HEOS two-phase fallback must retain usable quality "
+        "partials");
 }
 
 void verify_water_reference_points(

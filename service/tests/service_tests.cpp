@@ -5541,6 +5541,91 @@ void test_request_scoped_entropy_expression_solves() {
         "outlet enthalpy");
 }
 
+void test_request_scoped_quality_expression_solves() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.case_id = "design";
+    request.model_json = R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "service_quality_expression",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "target",
+      "kind": "custom.fluid.service_quality_target",
+      "media": {"inlet": "water", "outlet": "water"},
+      "parameters": {
+        "pressure_ratio": 1.0,
+        "target_quality": 0.4
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "target.inlet.m_dot": {"value": 5.0, "unit": "kg/s"},
+      "target.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "target.inlet.h": {"value": 500.0, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "target.outlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json";
+    thermox::service::ExpressionComponentInput component;
+    component.schema_version = "thermox.expression_component/v5";
+    component.kind = "custom.fluid.service_quality_target";
+    component.version = "1.0.0";
+    component.template_kind = "custom.fluid.quality_target";
+    component.display_name = "Service quality target";
+    component.category = "Project two-phase components";
+    component.model_name = "Vapor-quality p-h closure";
+    component.ports = {
+        {"inlet", "fluid", "in", 1},
+        {"outlet", "fluid", "out", 1},
+    };
+    component.parameters = {
+        {"pressure_ratio", "dimensionless", true,
+         std::nullopt, 0.0, 1.0, false, true},
+        {"target_quality", "dimensionless", true,
+         std::nullopt, 0.0, 1.0, true, true},
+    };
+    component.equations = {
+        {"mass_balance", "outlet.m_dot - inlet.m_dot", 10.0},
+        {"pressure_law",
+         "outlet.p - inlet.p * parameter.pressure_ratio",
+         100000.0},
+        {"quality_closure",
+         "property.vapor_quality_ph(outlet.p, outlet.h) - "
+         "parameter.target_quality",
+         1.0},
+    };
+    request.components.expression_components.push_back(
+        std::move(component));
+
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded(),
+        "request-scoped vapor-quality expression must solve through "
+        "the service: " + response.error.message);
+    const auto& outlet = require_port_result(
+        response.graph, "target", "outlet");
+    require(
+        std::abs(
+            require_result_value(
+                outlet.derived_values,
+                "vapor_quality").value_si -
+            0.4) < 1.0e-8,
+        "service result graph must expose the requested two-phase "
+        "quality");
+}
+
 void test_transient_expression_component_flows_through_service() {
     thermox::service::SimulationService service;
     thermox::service::TransientSimulationRequest request;
@@ -7072,6 +7157,7 @@ int main() {
         test_expression_component_flows_through_service_runtime();
         test_expression_component_is_request_scoped();
         test_request_scoped_entropy_expression_solves();
+        test_request_scoped_quality_expression_solves();
         test_transient_expression_component_flows_through_service();
         test_steady_service();
         test_structural_policy_audit_service();

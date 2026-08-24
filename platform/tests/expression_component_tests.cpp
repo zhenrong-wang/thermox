@@ -2,6 +2,7 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/physics/property_registry.hpp"
 #include "thermox/transient_solver.hpp"
 
 #include <algorithm>
@@ -329,6 +330,121 @@ void test_expression_component_supports_isentropic_closure() {
         "enthalpy relation: solved=" +
             std::to_string(outlet_enthalpy) +
             ", expected=" + std::to_string(expected));
+}
+
+void test_expression_component_supports_two_phase_quality_closure() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    auto definition = pressure_loss_definition(
+        "outlet.p - inlet.p * parameter.pressure_ratio");
+    definition.descriptor.kind =
+        "custom.fluid.quality_target";
+    definition.descriptor.template_kind =
+        "custom.fluid.quality_target";
+    definition.descriptor.parameters.push_back({
+        "target_quality", "dimensionless", true,
+        std::nullopt, 0.0, 1.0, true, true});
+    definition.equations[2] = {
+        "quality_closure",
+        "property.vapor_quality_ph(outlet.p, outlet.h) - "
+        "parameter.target_quality",
+        1.0,
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "custom_quality_target",
+    "media": [{
+      "id": "water",
+      "backend": "water_steam_if97",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "target",
+      "kind": "custom.fluid.quality_target",
+      "media": {"inlet": "water", "outlet": "water"},
+      "parameters": {
+        "pressure_ratio": 1.0,
+        "target_quality": 0.4
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "target.inlet.m_dot": {"value": 5.0, "unit": "kg/s"},
+      "target.inlet.p": {"value": 1.0, "unit": "MPa"},
+      "target.inlet.h": {"value": 500.0, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "target.outlet.h": {"value": 1500.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document, registry, "design");
+    const auto derivative_check =
+        thermox::verify_problem_jacobian(graph.problem);
+    require(
+        derivative_check.passed,
+        "two-phase quality functions must chain bounded provider "
+        "derivatives into the sparse Jacobian");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(
+        solved.diagnostics.converged,
+        "custom two-phase quality closure must converge");
+    const auto outlet_enthalpy = [&]() {
+        for (std::size_t index = 0;
+             index < graph.problem.variable_names.size(); ++index) {
+            if (graph.problem.variable_names[index] ==
+                "target.outlet.h") {
+                return solved.x.at(index);
+            }
+        }
+        throw std::runtime_error(
+            "missing quality-target outlet enthalpy");
+    }();
+    auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create(
+        "water_steam_if97", "Water");
+    const auto saturation = water->saturation_p(1.0e6);
+    require(saturation.ok(), "quality-target saturation reference");
+    const double expected =
+        saturation.liquid.enthalpy_j_kg + 0.4 *
+        (saturation.vapor.enthalpy_j_kg -
+         saturation.liquid.enthalpy_j_kg);
+    require(
+        std::abs(outlet_enthalpy - expected) < 1.0e-4,
+        "quality closure must reproduce the saturation-mixture "
+        "enthalpy relation");
+    auto liquid_trial = graph.problem.initial_guess;
+    for (std::size_t index = 0;
+         index < graph.problem.variable_names.size(); ++index) {
+        if (graph.problem.variable_names[index] ==
+            "target.outlet.h") {
+            liquid_trial[index] = 100000.0;
+        }
+    }
+    std::vector<double> residual(
+        graph.problem.residual_names.size(), 0.0);
+    const auto liquid_status = graph.problem.checked_residual(
+        liquid_trial, residual);
+    require(
+        liquid_status.code ==
+                thermox::EvaluationStatusCode::recoverable_failure &&
+            liquid_status.message.find(
+                "requires a two-phase p-h state") !=
+                std::string::npos,
+        "vapor-quality expressions must reject single-phase trials as "
+        "recoverable physical evaluations: " +
+            liquid_status.message);
 }
 
 void test_expression_contract_rejects_unsafe_or_unknown_inputs() {
@@ -1025,6 +1141,7 @@ int main() {
         test_expression_component_compiles_and_solves();
         test_expression_component_uses_port_bound_properties();
         test_expression_component_supports_isentropic_closure();
+        test_expression_component_supports_two_phase_quality_closure();
         test_expression_contract_rejects_unsafe_or_unknown_inputs();
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();

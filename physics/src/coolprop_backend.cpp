@@ -267,7 +267,9 @@ PhDerivativesResult coolprop_state_ph_derivatives(
             derivatives.internal_energy_wrt_pressure_at_enthalpy,
             derivatives.internal_energy_wrt_enthalpy_at_pressure,
             derivatives.entropy_wrt_pressure_at_enthalpy,
-            derivatives.entropy_wrt_enthalpy_at_pressure};
+            derivatives.entropy_wrt_enthalpy_at_pressure,
+            derivatives.vapor_quality_wrt_pressure_at_enthalpy,
+            derivatives.vapor_quality_wrt_enthalpy_at_pressure};
         if (!std::all_of(
                 std::begin(values), std::end(values),
                 [](double value) { return std::isfinite(value); })) {

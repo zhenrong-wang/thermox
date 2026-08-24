@@ -685,14 +685,15 @@ Work items:
    - publication-time compound dimension inference for arithmetic, derivative states, powers,
      roots, and transcendental functions, including SI-derived equivalence and opaque extension
      dimensions; ✅
-   - constrained same-port p-h temperature, density, internal-energy, and entropy functions with derived
+   - constrained same-port p-h temperature, density, internal-energy, entropy, and explicitly
+     two-phase vapor-quality functions with derived
      capability requirements, provider binding, analytic/fallback derivative chaining, fixed
      sparsity, and recoverable-versus-fatal property status propagation; ✅
    - checked component-owned expression event surfaces, directional hysteresis, deterministic
      priority, bounded atomic state-reset expressions, optional mode actions, immutable artifact
      and job persistence, and analytical post-transition verification; ✅
-   - entropy-backed project-defined isentropic closures are covered; approval policy and further
-     derivative-backed property functions remain follow-ons.
+   - entropy-backed isentropic and quality-backed two-phase project closures are covered; approval
+     policy and further derivative-backed property functions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe
