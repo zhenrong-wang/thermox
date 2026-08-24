@@ -241,7 +241,7 @@ describe('performance map artifact authoring API', () => {
 describe('expression component authoring API', () => {
   it('publishes a typed immutable child revision', async () => {
     const definition: ExpressionComponentDefinition = {
-      schema_version: 'thermox.expression_component/v2',
+      schema_version: 'thermox.expression_component/v4',
       kind: 'custom.signal.gain',
       version: '1.0.1',
       template_kind: 'custom.signal.gain',
@@ -249,6 +249,9 @@ describe('expression component authoring API', () => {
       category: 'Project components',
       model_name: 'Custom expression',
       system_boundary_role: '',
+      supports_steady: true,
+      supports_transient: false,
+      default_mode: '',
       ports: [
         {
           name: 'input',
@@ -265,6 +268,10 @@ describe('expression component authoring API', () => {
           residual_scale: 1,
         },
       ],
+      transient_variables: [],
+      internal_variables: [],
+      transient_equations: [],
+      modes: [],
     }
     const revision = {
       schema_version: 'thermox.artifact_revision/v1',
@@ -303,7 +310,7 @@ describe('expression component authoring API', () => {
       'thermox.expression_component',
     )
     expect(url.searchParams.get('artifact_schema_version')).toBe(
-      'thermox.expression_component/v2',
+      'thermox.expression_component/v4',
     )
     expect(url.searchParams.get('parent_revision_id')).toBe('revision-1')
     expect(request).toMatchObject({

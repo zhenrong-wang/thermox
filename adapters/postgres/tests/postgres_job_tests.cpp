@@ -241,7 +241,7 @@ SimulationJobRequest request(
         std::string(64, 'b'),
     });
     thermox::service::ExpressionComponentInput component;
-    component.schema_version = "thermox.expression_component/v3";
+    component.schema_version = "thermox.expression_component/v4";
     component.kind = "custom.signal.persisted_gain";
     component.version = "1.0.0";
     component.template_kind = "custom.signal.gain";
@@ -249,6 +249,7 @@ SimulationJobRequest request(
     component.category = "Project components";
     component.model_name = "Algebraic gain";
     component.supports_transient = true;
+    component.default_mode = "normal";
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},
@@ -260,22 +261,26 @@ SimulationJobRequest request(
             100.0, true, true,
         },
     };
-    component.equations = {
-        {
-            "gain_law",
-            "output.value - parameter.gain * input.value",
-            1.0,
-        },
-    };
     component.internal_variables = {{
         "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
         -std::numeric_limits<double>::infinity(),
         std::numeric_limits<double>::infinity(), "dimensionless"}};
-    component.transient_equations = {
-        {"state_balance",
-         "derivative.internal.filtered + internal.filtered - input.value",
-         1.0},
-        {"transient_output", "output.value - internal.filtered", 1.0},
+    component.modes = {
+        {"normal",
+         {{"gain_law",
+           "output.value - parameter.gain * input.value", 1.0}},
+         {{"state_balance",
+           "derivative.internal.filtered + internal.filtered - input.value",
+           1.0},
+          {"transient_output", "output.value - internal.filtered", 1.0}}},
+        {"bypass",
+         {{"gain_law",
+           "output.value - input.value + 0 * parameter.gain", 1.0}},
+         {{"state_balance",
+           "derivative.internal.filtered + internal.filtered - input.value",
+           1.0},
+          {"transient_output",
+           "output.value - input.value + 0 * internal.filtered", 1.0}}},
     };
     value.components.expression_components.push_back(
         std::move(component));
@@ -372,7 +377,7 @@ void test_idempotency_and_tenant_scope(
             repeated.request.components.expression_components
                     .front().model_name == "Algebraic gain" &&
             repeated.request.components.expression_components
-                    .front().equations.front().expression ==
+                    .front().modes.front().equations.front().expression ==
                 "output.value - parameter.gain * input.value" &&
             repeated.request.components.expression_components
                     .front().supports_transient &&
@@ -380,7 +385,12 @@ void test_idempotency_and_tenant_scope(
                     .front().internal_variables.front().kind ==
                 "differential" &&
             repeated.request.components.expression_components
-                    .front().transient_equations.front().name ==
+                    .front().default_mode == "normal" &&
+            repeated.request.components.expression_components
+                    .front().modes.size() == 2U &&
+            repeated.request.components.expression_components
+                    .front().modes.front()
+                    .transient_equations.front().name ==
                 "state_balance" &&
             repeated.request.transient_solver.required_output_times ==
                 std::vector<double>{1.25, 7.5} &&

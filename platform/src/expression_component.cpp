@@ -541,6 +541,26 @@ std::string definition_fingerprint(
         scale << std::setprecision(17) << equation.residual_scale;
         hash_text(scale.str());
     }
+    hash_text(definition.descriptor.default_mode);
+    for (const auto& mode : definition.modes) {
+        hash_text(mode.name);
+        for (const auto& equation : mode.equations) {
+            hash_text(equation.name);
+            hash_text(equation.expression);
+            std::ostringstream scale;
+            scale << std::setprecision(17)
+                  << equation.residual_scale;
+            hash_text(scale.str());
+        }
+        for (const auto& equation : mode.transient_equations) {
+            hash_text(equation.name);
+            hash_text(equation.expression);
+            std::ostringstream scale;
+            scale << std::setprecision(17)
+                  << equation.residual_scale;
+            hash_text(scale.str());
+        }
+    }
     std::ostringstream out;
     out << "fnv1a64:" << std::hex << std::setw(16)
         << std::setfill('0') << hash;
@@ -549,18 +569,24 @@ std::string definition_fingerprint(
 
 class ExpressionComponentModel final : public ComponentModel {
 public:
+    using ParsedEquationSet = std::vector<std::pair<
+        AlgebraicExpressionEquation, ParsedExpression>>;
+    using ParsedModeEquationSets =
+        std::map<std::string, ParsedEquationSet>;
+
     ExpressionComponentModel(
         ComponentModelDescriptor descriptor,
-        std::vector<std::pair<
-            AlgebraicExpressionEquation,
-            ParsedExpression>> equations,
-        std::vector<std::pair<
-            AlgebraicExpressionEquation,
-            ParsedExpression>> transient_equations,
+        ParsedEquationSet equations,
+        ParsedEquationSet transient_equations,
+        ParsedModeEquationSets mode_equations,
+        ParsedModeEquationSets mode_transient_equations,
         std::string fingerprint)
         : descriptor_(std::move(descriptor)),
           equations_(std::move(equations)),
           transient_equations_(std::move(transient_equations)),
+          mode_equations_(std::move(mode_equations)),
+          mode_transient_equations_(
+              std::move(mode_transient_equations)),
           fingerprint_(std::move(fingerprint)) {}
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -598,8 +624,17 @@ public:
             }
         }
 
+        const ParsedEquationSet* selected_equations = &equations_;
+        if (!mode_equations_.empty()) {
+            if (!context.active_mode) {
+                throw std::logic_error(
+                    "mode-aware expression component has no active mode");
+            }
+            selected_equations = &mode_equations_.at(
+                context.active_mode());
+        }
         for (const auto& [definition, expression] :
-             equations_) {
+             *selected_equations) {
             std::vector<std::size_t> sparsity;
             for (const auto& symbol : expression.symbols) {
                 const auto variable = variables.find(symbol);
@@ -659,6 +694,11 @@ public:
     void add_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system) const override {
+        if (!mode_transient_equations_.empty() &&
+            !context.active_mode) {
+            throw std::logic_error(
+                "mode-aware expression component has no active mode");
+        }
         struct Binding {
             std::string symbol;
             std::size_t variable{0};
@@ -695,7 +735,18 @@ public:
             }
         }
 
-        for (const auto& [definition, expression] : transient_equations_) {
+        const ParsedEquationSet* structural_equations =
+            &transient_equations_;
+        if (!mode_transient_equations_.empty()) {
+            structural_equations =
+                &mode_transient_equations_.at(
+                    descriptor_.default_mode);
+        }
+        for (std::size_t equation_index = 0;
+             equation_index < structural_equations->size();
+             ++equation_index) {
+            const auto& [definition, expression] =
+                structural_equations->at(equation_index);
             std::vector<std::size_t> sparsity;
             for (const auto& symbol : expression.symbols) {
                 const auto found = expression_variables.find(symbol);
@@ -707,6 +758,14 @@ public:
             sparsity.erase(std::unique(sparsity.begin(), sparsity.end()),
                            sparsity.end());
             const auto root = expression.root;
+            std::map<std::string,
+                     std::shared_ptr<const ExpressionNode>> mode_roots;
+            for (const auto& [mode, equations] :
+                 mode_transient_equations_) {
+                mode_roots.emplace(
+                    mode, equations.at(equation_index).second.root);
+            }
+            const auto active_mode = context.active_mode;
             const auto bound_variables = expression_variables;
             const auto bound_bindings = bindings;
             const auto bound_parameters = parameters;
@@ -715,7 +774,8 @@ public:
                 ".expression_transient." + definition.name;
             system.add_sparse_equation(
                 equation_name, std::move(sparsity),
-                [root, bound_variables, bound_bindings, bound_parameters](
+                [root, mode_roots, active_mode,
+                 bound_variables, bound_bindings, bound_parameters](
                     double time, const std::vector<double>& state,
                     const std::vector<double>& derivative, double& residual,
                     std::vector<DaeEquationPartial>& partials) {
@@ -728,8 +788,11 @@ public:
                     }
                     auto dynamic_parameters = bound_parameters;
                     dynamic_parameters.emplace("time", time);
+                    const auto selected_root = mode_roots.empty()
+                        ? root
+                        : mode_roots.at(active_mode());
                     const auto result = evaluate(
-                        *root, local_values, bound_variables,
+                        *selected_root, local_values, bound_variables,
                         dynamic_parameters);
                     if (!result.error.empty()) {
                         return EvaluationStatus::recoverable(result.error);
@@ -757,12 +820,10 @@ public:
 
 private:
     ComponentModelDescriptor descriptor_;
-    std::vector<std::pair<
-        AlgebraicExpressionEquation,
-        ParsedExpression>> equations_;
-    std::vector<std::pair<
-        AlgebraicExpressionEquation,
-        ParsedExpression>> transient_equations_;
+    ParsedEquationSet equations_;
+    ParsedEquationSet transient_equations_;
+    ParsedModeEquationSets mode_equations_;
+    ParsedModeEquationSets mode_transient_equations_;
     std::string fingerprint_;
 };
 
@@ -822,55 +883,113 @@ std::shared_ptr<const ComponentModel>
 make_expression_component_model(
     const ComponentRegistry& registry,
     ExpressionComponentDefinition definition) {
-    const bool version_2 = definition.schema_version ==
-        expression_component_schema_v2;
-    const bool version_3 = definition.schema_version ==
-        expression_component_schema_v3;
-    if (!version_2 && !version_3) {
+    const bool version_4 = definition.schema_version ==
+        expression_component_schema_v4;
+    if (!version_4) {
         throw std::invalid_argument(
             "unsupported expression component schema: " +
             definition.schema_version);
     }
     auto& descriptor = definition.descriptor;
+    if (!definition.modes.empty()) {
+        if (!definition.equations.empty() ||
+            !definition.transient_equations.empty()) {
+            throw std::invalid_argument(
+                "mode-aware expression components cannot combine "
+                "top-level and mode-specific equations");
+        }
+        if (!descriptor.supported_modes.empty()) {
+            throw std::invalid_argument(
+                "expression component modes are derived from mode "
+                "equation declarations");
+        }
+        std::set<std::string> mode_names;
+        for (const auto& mode : definition.modes) {
+            if (!valid_name(mode.name) ||
+                !mode_names.insert(mode.name).second) {
+                throw std::invalid_argument(
+                    "expression component mode names must be unique "
+                    "and contain only letters, digits, '_' or '-': " +
+                    mode.name);
+            }
+            descriptor.supported_modes.push_back(mode.name);
+        }
+        if (descriptor.default_mode.empty() ||
+            !mode_names.contains(descriptor.default_mode)) {
+            throw std::invalid_argument(
+                "mode-aware expression component default mode must "
+                "name one declared mode");
+        }
+    } else if (!descriptor.supported_modes.empty() ||
+               !descriptor.default_mode.empty()) {
+        throw std::invalid_argument(
+            "expression component mode metadata requires mode "
+            "equation declarations");
+    }
     if (descriptor.template_kind.empty() ||
         descriptor.display_name.empty() ||
         descriptor.category.empty() ||
         descriptor.model_name.empty()) {
         throw std::invalid_argument(
-            "expression component v2 requires physical template "
+            "expression component v4 requires physical template "
             "kind, display name, category, and calculation model name");
-    }
-    if (version_2 && (!descriptor.supports_steady ||
-        descriptor.supports_transient ||
-        !descriptor.transient_variables.empty() ||
-        !descriptor.internal_variables.empty() ||
-        !definition.transient_equations.empty())) {
-        throw std::invalid_argument(
-            "expression component v2 supports steady algebraic "
-            "components only");
     }
     if (!descriptor.artifacts.empty() ||
         !descriptor.required_property_capabilities.empty() ||
         !descriptor.required_thermochemistry_capabilities.empty()) {
         throw std::invalid_argument(
-            "expression component v2 cannot access artifacts or "
+            "expression component v4 cannot access artifacts or "
             "property/thermochemistry callbacks");
     }
-    if (version_3 && descriptor.supports_transient &&
-        definition.transient_equations.empty()) {
+    const bool mode_aware = !definition.modes.empty();
+    const bool missing_transient_equations = mode_aware
+        ? std::any_of(
+              definition.modes.begin(), definition.modes.end(),
+              [](const auto& mode) {
+                  return mode.transient_equations.empty();
+              })
+        : definition.transient_equations.empty();
+    const bool missing_steady_equations = mode_aware
+        ? std::any_of(
+              definition.modes.begin(), definition.modes.end(),
+              [](const auto& mode) {
+                  return mode.equations.empty();
+              })
+        : definition.equations.empty();
+    if (descriptor.supports_transient &&
+        missing_transient_equations) {
         throw std::invalid_argument(
-            "expression component v3 transient models require at least one transient equation");
+            "transient expression components require at least one "
+            "transient equation in every equation set");
     }
-    if (version_3 && !descriptor.supports_transient &&
+    if (!descriptor.supports_transient &&
         (!descriptor.transient_variables.empty() ||
          !descriptor.internal_variables.empty() ||
-         !definition.transient_equations.empty())) {
+         !definition.transient_equations.empty() ||
+         std::any_of(
+             definition.modes.begin(), definition.modes.end(),
+             [](const auto& mode) {
+                 return !mode.transient_equations.empty();
+             }))) {
         throw std::invalid_argument(
-            "expression component v3 transient declarations require supports_transient");
+            "expression component transient declarations require "
+            "supports_transient");
     }
-    if (descriptor.supports_steady && definition.equations.empty()) {
+    if (descriptor.supports_steady && missing_steady_equations) {
         throw std::invalid_argument(
-            "expression component requires at least one equation");
+            "steady expression components require at least one "
+            "equation in every equation set");
+    }
+    if (!descriptor.supports_steady &&
+        (!definition.equations.empty() ||
+         std::any_of(
+             definition.modes.begin(), definition.modes.end(),
+             [](const auto& mode) {
+                 return !mode.equations.empty();
+             }))) {
+        throw std::invalid_argument(
+            "expression component steady equations require "
+            "supports_steady");
     }
     if (!descriptor.supports_steady && !descriptor.supports_transient) {
         throw std::invalid_argument(
@@ -892,7 +1011,7 @@ make_expression_component_model(
         for (const auto& variable : domain.variables) {
             if (variable.expand_species) {
                 throw std::invalid_argument(
-                    "expression component v2 does not support "
+                    "expression component v4 does not support "
                     "species-expanded connector variables: " +
                     port.name + "." + variable.name);
             }
@@ -910,7 +1029,7 @@ make_expression_component_model(
             }
         }
     }
-    if (version_3) {
+    if (version_4) {
         std::set<std::string> declared_transient_variables;
         for (const auto& variable : descriptor.transient_variables) {
             const std::string symbol =
@@ -951,7 +1070,7 @@ make_expression_component_model(
         if (parameter.name.find('{') != std::string::npos ||
             parameter.name.find('}') != std::string::npos) {
             throw std::invalid_argument(
-                "expression component v2 does not support "
+                "expression component v4 does not support "
                 "parameter templates: " + parameter.name);
         }
         const auto symbol =
@@ -965,7 +1084,7 @@ make_expression_component_model(
         transient_symbols.insert(symbol);
     }
 
-    if (version_3) {
+    if (version_4) {
         transient_symbols.insert("time");
         std::set<std::string> internal_names;
         for (const auto& variable : descriptor.internal_variables) {
@@ -1071,9 +1190,127 @@ make_expression_component_model(
             std::move(equation), std::move(parsed));
     }
 
+    ExpressionComponentModel::ParsedModeEquationSets mode_equations;
+    ExpressionComponentModel::ParsedModeEquationSets
+        mode_transient_equations;
+    const auto parse_mode_equation_set = [&](
+        std::vector<AlgebraicExpressionEquation>& declarations,
+        const std::set<std::string>& symbols,
+        bool transient,
+        const std::string& mode_name) {
+        ExpressionComponentModel::ParsedEquationSet parsed_equations;
+        parsed_equations.reserve(declarations.size());
+        std::set<std::string> names;
+        for (auto& equation : declarations) {
+            if (!valid_name(equation.name) ||
+                !names.insert(equation.name).second) {
+                throw std::invalid_argument(
+                    "expression component mode '" + mode_name +
+                    "' has duplicate or invalid " +
+                    (transient ? "transient " : "") +
+                    "equation name: " + equation.name);
+            }
+            if (!std::isfinite(equation.residual_scale) ||
+                equation.residual_scale <= 0.0) {
+                throw std::invalid_argument(
+                    "expression component mode '" + mode_name +
+                    "' equation residual scale must be positive and "
+                    "finite: " + equation.name);
+            }
+            auto parsed =
+                ExpressionParser{equation.expression}.parse();
+            for (const auto& symbol : parsed.symbols) {
+                if (!symbols.contains(symbol)) {
+                    throw std::invalid_argument(
+                        "expression component mode '" + mode_name +
+                        "' equation '" + equation.name +
+                        "' references unknown symbol: " + symbol);
+                }
+            }
+            const bool has_variable = std::any_of(
+                parsed.symbols.begin(), parsed.symbols.end(),
+                [&](const auto& symbol) {
+                    return (!transient || symbol != "time") &&
+                        symbol.rfind("parameter.", 0) != 0;
+                });
+            if (!has_variable) {
+                throw std::invalid_argument(
+                    "expression component mode '" + mode_name +
+                    "' equation '" + equation.name +
+                    "' must reference at least one graph variable");
+            }
+            parsed_equations.emplace_back(
+                std::move(equation), std::move(parsed));
+        }
+        return parsed_equations;
+    };
+    const auto validate_fixed_structure = [](
+        const ExpressionComponentModel::ParsedEquationSet& reference,
+        const ExpressionComponentModel::ParsedEquationSet& candidate,
+        const std::string& mode_name,
+        const std::string& equation_kind) {
+        if (candidate.size() != reference.size()) {
+            throw std::invalid_argument(
+                "expression component mode '" + mode_name +
+                "' must declare the same number of " + equation_kind +
+                " equations as the default mode");
+        }
+        for (std::size_t index = 0;
+             index < reference.size(); ++index) {
+            const auto& [reference_definition, reference_expression] =
+                reference[index];
+            const auto& [candidate_definition, candidate_expression] =
+                candidate[index];
+            if (candidate_definition.name != reference_definition.name ||
+                candidate_definition.residual_scale !=
+                    reference_definition.residual_scale) {
+                throw std::invalid_argument(
+                    "expression component mode '" + mode_name +
+                    "' must preserve " + equation_kind +
+                    " equation names, order, and residual scales");
+            }
+            if (candidate_expression.symbols !=
+                reference_expression.symbols) {
+                throw std::invalid_argument(
+                    "expression component mode '" + mode_name +
+                    "' must preserve variable incidence for " +
+                    equation_kind + " equation '" +
+                    reference_definition.name + "'");
+            }
+        }
+    };
+
+    for (auto& mode : definition.modes) {
+        auto steady = parse_mode_equation_set(
+            mode.equations, allowed_symbols, false, mode.name);
+        auto transient = parse_mode_equation_set(
+            mode.transient_equations, transient_symbols, true,
+            mode.name);
+        mode_equations.emplace(mode.name, std::move(steady));
+        mode_transient_equations.emplace(
+            mode.name, std::move(transient));
+    }
+    if (!definition.modes.empty()) {
+        const auto& reference_steady =
+            mode_equations.at(descriptor.default_mode);
+        const auto& reference_transient =
+            mode_transient_equations.at(descriptor.default_mode);
+        for (const auto& mode : descriptor.supported_modes) {
+            validate_fixed_structure(
+                reference_steady, mode_equations.at(mode), mode,
+                "steady");
+            validate_fixed_structure(
+                reference_transient,
+                mode_transient_equations.at(mode), mode,
+                "transient");
+        }
+    }
+
     return std::make_shared<ExpressionComponentModel>(
         std::move(descriptor), std::move(equations),
         std::move(transient_equations),
+        std::move(mode_equations),
+        std::move(mode_transient_equations),
         fingerprint);
 }
 

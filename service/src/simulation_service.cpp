@@ -202,6 +202,7 @@ expression_component_definitions(
             input.system_boundary_role;
         definition.descriptor.supports_steady = input.supports_steady;
         definition.descriptor.supports_transient = input.supports_transient;
+        definition.descriptor.default_mode = input.default_mode;
         for (const auto& port : input.ports) {
             definition.descriptor.ports.push_back({
                 port.name,
@@ -257,6 +258,24 @@ expression_component_definitions(
             definition.transient_equations.push_back({
                 equation.name, equation.expression,
                 equation.residual_scale});
+        }
+        for (const auto& mode : input.modes) {
+            thermox::platform::ExpressionComponentModeDefinition
+                mode_definition;
+            mode_definition.name = mode.name;
+            for (const auto& equation : mode.equations) {
+                mode_definition.equations.push_back({
+                    equation.name, equation.expression,
+                    equation.residual_scale});
+            }
+            for (const auto& equation :
+                 mode.transient_equations) {
+                mode_definition.transient_equations.push_back({
+                    equation.name, equation.expression,
+                    equation.residual_scale});
+            }
+            definition.modes.push_back(
+                std::move(mode_definition));
         }
         definitions.push_back(std::move(definition));
     }

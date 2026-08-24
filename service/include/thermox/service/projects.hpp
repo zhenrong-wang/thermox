@@ -37,8 +37,8 @@ inline constexpr char run_configuration_revision_schema_v3[] =
     "thermox.run_configuration_revision/v3";
 inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
-inline constexpr char project_component_catalog_schema_v1[] =
-    "thermox.project_component_catalog/v1";
+inline constexpr char project_component_catalog_schema_v2[] =
+    "thermox.project_component_catalog/v2";
 inline constexpr char assembly_template_artifact_type[] =
     "thermox.assembly_template";
 inline constexpr char assembly_template_schema_v1[] =
@@ -678,7 +678,7 @@ struct ProjectComponentCatalogEntry {
 
 struct ProjectComponentCatalogResponse {
     std::string schema_version{
-        project_component_catalog_schema_v1};
+        project_component_catalog_schema_v2};
     std::string project_id;
     std::vector<ProjectComponentCatalogEntry> components;
 };

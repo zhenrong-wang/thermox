@@ -1,7 +1,7 @@
 # Safe expression components
 
 Thermox supports deployment-composed steady algebraic and index-1 transient components through
-the versioned `thermox.expression_component/v2` and `thermox.expression_component/v3` contracts.
+the unified `thermox.expression_component/v4` contract.
 The component descriptor remains authoritative for
 physical-template identity, executable kind/version, typed ports, parameter dimensions, defaults,
 and bounds. Equations add residual
@@ -62,9 +62,9 @@ provenance even if its public descriptor is unchanged. `thermox.job/v16` also sn
 request-scoped bundle and includes it in the idempotency fingerprint. A worker therefore
 reconstructs exactly the submitted component implementation after a process restart.
 
-## Version 3 transient equations
+## Transient equations
 
-Version 3 preserves the safe grammar and adds solver-owned DAE declarations. A definition can
+A definition can
 declare transient connector variables, bounded internal algebraic or differential variables, and
 transient residual equations. Transient residuals can reference:
 
@@ -82,12 +82,21 @@ and future IDA-class backends use the same immutable component contract. Interna
 initial rates, scales, bounds, and dimensions are part of the implementation fingerprint and are
 carried through request bundles, artifact revisions, and durable-job serialization.
 
-## Version 2 boundary
+## Fixed-topology operating modes
 
-Version 2 remains deliberately limited to steady algebraic equations over fixed-shape connector
-domains. Version 3 removes the internal/transient-state restriction, but neither safe contract
-currently exposes property-package calls, thermochemistry calls, artifact access, parameter
-templates, or species-expanded material variables.
+Version 4 optionally replaces the top-level equation arrays with named `modes`, each containing
+steady and/or transient equation arrays, plus one `default_mode`. Registration derives catalog
+mode metadata and requires every mode to preserve equation count, names, order, residual scales,
+and referenced-symbol incidence. Ports, parameters, internal variables, connector states, and the
+sparse DAE structure therefore remain immutable while safe residual behavior changes.
+
+Cases select the initial mode through `component_modes`; state events use the ordinary validated
+`set_mode` action. The same declaration works through native embedding, request-scoped execution,
+immutable Team/project artifacts, queued workers, and catalog discovery. A component without
+`modes` uses its top-level `equations` and `transient_equations`.
+
+The safe contract does not currently expose property-package calls, thermochemistry calls,
+artifact access, parameter templates, or species-expanded material variables.
 Deployment code can register definitions at the trusted composition root through
 `register_expression_component`; application code can supply the same safe definition through a
 request bundle.
@@ -95,10 +104,11 @@ request bundle.
 ## Team-owned revisions
 
 The generic engineering-artifact revision API accepts
-`artifact_type=thermox.expression_component` with an expression-component v2 or v3 schema. The
+`artifact_type=thermox.expression_component` with the expression-component v4 schema. The
 JSON payload contains physical
 template metadata (`template_kind`, `display_name`, and `category`), executable `kind`, `version`,
 `model_name`, `ports`, `parameters`, and `equations`; schema identity remains revision metadata.
+Mode-aware payloads use `default_mode` and `modes` in place of the top-level equation arrays.
 Creation canonicalizes the payload, validates the descriptor and safe grammar, stores it through
 the provider-neutral artifact-content store, and publishes an immutable Team/project-owned
 revision with a SHA-256 checksum.
@@ -125,10 +135,8 @@ The browser only enables new run authoring after the service compiler has valida
 topology, case, and artifact-revision set.
 
 Approval policy, dimension algebra across compound expressions, constrained property functions,
-component-owned expression event surfaces, project-defined mode-specific equation sets, and richer
-equation syntax assistance require later versioned contracts. Native registered components can
-already expose fixed-topology operating modes, while cases can declare dimensioned threshold
-events, typed algebraic input transitions, constant resets of declared differential states, and
-validated native-component mode switches without embedding event behavior in a project expression
-component.
+component-owned expression event surfaces, state-dependent reset expressions, and richer equation
+syntax assistance require later contracts. Cases can declare dimensioned threshold events, typed
+algebraic input transitions, constant resets of declared differential states, and validated mode
+switches without embedding imperative behavior in a project expression component.
 Arbitrary Python is not part of this path.

@@ -306,6 +306,33 @@ void test_submission_is_idempotent_and_conflict_safe() {
         "request-scoped component definitions must participate "
         "in the idempotency fingerprint");
 
+    auto mode_aware = expression_request("component-mode-submission");
+    auto& mode_component =
+        mode_aware.components.expression_components.front();
+    mode_component.default_mode = "normal";
+    mode_component.modes = {
+        {"normal", mode_component.equations, {}},
+        {"bypass",
+         {{"gain_law",
+           "output.value - input.value - 0 * parameter.gain",
+           1.0}},
+         {}},
+    };
+    mode_component.equations.clear();
+    (void)service.submit(mode_aware);
+    mode_component.modes.back().equations.front().expression =
+        "output.value - 0.5 * input.value - 0 * parameter.gain";
+    conflict = false;
+    try {
+        (void)service.submit(mode_aware);
+    } catch (const thermox::service::JobConflictError&) {
+        conflict = true;
+    }
+    require(
+        conflict,
+        "every project-defined mode equation must participate in the "
+        "job idempotency fingerprint");
+
     auto metadata = expression_request("component-metadata");
     (void)service.submit(metadata);
     metadata.components.expression_components.front().display_name =

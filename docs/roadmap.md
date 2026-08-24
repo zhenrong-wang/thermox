@@ -95,10 +95,10 @@ Production follow-ons:
   restart;
 - graph/block tearing and richer rank/conditioning diagnostics.
 
-Runtime extensibility now includes the safe `thermox.expression_component/v3` contract for
+Runtime extensibility now includes the safe `thermox.expression_component/v4` contract for
 index-1 transient residuals, internal algebraic/differential states, state rates, time, bounds,
 scales, and sparse analytic DAE Jacobians. Constrained property functions, thermochemistry,
-species-expanded variables, and project-defined mode-specific equation sets remain follow-ons.
+species-expanded variables, and state-dependent reset expressions remain follow-ons.
 
 ## Fixed-topology hybrid component modes
 
@@ -118,8 +118,10 @@ Delivered:
    time and post-transition dynamics. ✅
 5. Typed constant `set_state` actions for registered differential variables, with dimension,
    finiteness, and bound validation plus post-reset trajectory evidence. ✅
-6. Project-defined mode-specific safe expression equation sets, state-dependent reset maps, and
-   variable-structure topology changes remain explicit follow-ons.
+6. Project-defined mode-specific safe steady/transient equation sets with one default mode,
+   invariant residual identity/scaling/incidence validation, immutable artifact persistence,
+   request/job fingerprinting, catalog discovery, and event-driven execution. ✅
+7. State-dependent reset maps and variable-structure topology changes remain explicit follow-ons.
 
 ## System-agnostic transient platform milestone
 
@@ -668,8 +670,11 @@ Work items:
      provenance; ✅
    - project-scoped descriptor discovery, canvas-library integration, and automatic exact
      definition-revision binding during validation and run authoring; ✅
-   - approval policy, compound dimension analysis, property functions, and transient-state
-     contracts remain follow-ons.
+   - declarative transient port/internal states, DAE equations, event-driven state reset actions,
+     and project-defined fixed-topology operating modes with steady/transient equation switching,
+     immutable persistence, and catalog discovery; ✅
+   - approval policy, compound dimension analysis, property functions, and state-dependent reset
+     expressions remain follow-ons.
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

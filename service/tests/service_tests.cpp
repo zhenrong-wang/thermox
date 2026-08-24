@@ -3872,7 +3872,7 @@ void test_transient_calibration_recovers_parameter_and_initial_state() {
 })json";
 
     thermox::service::ExpressionComponentInput component;
-    component.schema_version = "thermox.expression_component/v3";
+    component.schema_version = "thermox.expression_component/v4";
     component.kind = "custom.signal.calibration_lag";
     component.version = "1.0.0";
     component.template_kind = "control.first_order_lag";
@@ -5494,8 +5494,8 @@ void test_transient_expression_component_flows_through_service() {
   }]
 })json";
     thermox::service::ExpressionComponentInput component;
-    component.schema_version = "thermox.expression_component/v3";
     component.kind = "custom.signal.request_lag";
+    component.schema_version = "thermox.expression_component/v4";
     component.version = "1.0.0";
     component.template_kind = "control.first_order_lag";
     component.display_name = "First-order lag";
@@ -5503,6 +5503,7 @@ void test_transient_expression_component_flows_through_service() {
     component.model_name = "Safe transient expression";
     component.supports_steady = false;
     component.supports_transient = true;
+    component.default_mode = "tracking";
     component.ports = {
         {"input", "signal", "in", 1},
         {"output", "signal", "out", 1},
@@ -5514,11 +5515,25 @@ void test_transient_expression_component_flows_through_service() {
         "filtered", "differential", 0.0, 1.0, 0.0, 1.0,
         -std::numeric_limits<double>::infinity(),
         1.0, "dimensionless"}};
-    component.transient_equations = {
-        {"state_balance",
-         "parameter.tau * derivative.internal.filtered + "
-         "internal.filtered - input.value", 1.0},
-        {"output", "output.value - internal.filtered", 1.0},
+    component.modes = {
+        {
+            "tracking", {},
+            {
+                {"state_balance",
+                 "parameter.tau * derivative.internal.filtered + "
+                 "internal.filtered - input.value", 1.0},
+                {"output", "output.value - internal.filtered", 1.0},
+            },
+        },
+        {
+            "failsafe", {},
+            {
+                {"state_balance",
+                 "parameter.tau * derivative.internal.filtered + "
+                 "internal.filtered - 0 * input.value", 1.0},
+                {"output", "output.value - internal.filtered", 1.0},
+            },
+        },
     };
     request.components.expression_components.push_back(component);
     request.solver.end_time = 1.0;
@@ -5659,6 +5674,7 @@ void test_transient_expression_component_flows_through_service() {
         "transient fixture must expose its initial-state declaration");
     trip_request.model_json.insert(
         initial_state_position,
+        "\"component_modes\": {\"lag\": \"tracking\"},\n    "
         "\"state_events\": [{"
         "\"id\": \"high_output_trip\", "
         "\"target\": \"lag.filtered\", "
@@ -5669,7 +5685,9 @@ void test_transient_expression_component_flows_through_service() {
         "\"hysteresis\": 0.01, "
         "\"actions\": [{\"type\": \"set_input\", "
         "\"target\": \"lag.input.value\", "
-        "\"value\": 0.0}, {\"type\": \"set_state\", "
+        "\"value\": 0.0}, {\"type\": \"set_mode\", "
+        "\"target\": \"lag\", "
+        "\"mode\": \"failsafe\"}, {\"type\": \"set_state\", "
         "\"target\": \"lag.filtered\", "
         "\"value\": 0.0}]}],\n    ");
     const auto trip_response = service.run_transient(trip_request);
@@ -5705,7 +5723,13 @@ void test_transient_expression_component_flows_through_service() {
             reparsed_trip.cases.front().state_events.front()
                     .hysteresis.has_value() &&
             reparsed_trip.cases.front().state_events.front()
-                    .actions.size() == 2U &&
+                    .actions.size() == 3U &&
+            reparsed_trip.cases.front().component_modes.at("lag") ==
+                "tracking" &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.at(1).type == "set_mode" &&
+            reparsed_trip.cases.front().state_events.front()
+                    .actions.at(1).mode == "failsafe" &&
             reparsed_trip.cases.front().state_events.front()
                     .actions.back().type == "set_state" &&
             reparsed_trip.cases.front().state_events.front()
@@ -5729,31 +5753,6 @@ void test_transient_expression_component_flows_through_service() {
                 "set_state value is outside bounds") !=
                 std::string::npos,
         "set_state compilation must enforce registered state bounds");
-
-    auto hybrid_trip = parsed_trip;
-    hybrid_trip.cases.front().component_modes.emplace(
-        "lag", "tracking");
-    thermox::platform::StateEventDefinition::Action mode_action;
-    mode_action.type = "set_mode";
-    mode_action.target = "lag";
-    mode_action.mode = "decay_to_zero";
-    hybrid_trip.cases.front().state_events.front().actions.push_back(
-        std::move(mode_action));
-    const auto canonical_hybrid_trip =
-        thermox::service::detail::serialize_model_document_json(
-            hybrid_trip);
-    const auto reparsed_hybrid_trip =
-        thermox::platform::parse_model_document_text(
-            canonical_hybrid_trip);
-    require(
-        reparsed_hybrid_trip.cases.front().component_modes.at("lag") ==
-                "tracking" &&
-            reparsed_hybrid_trip.cases.front().state_events.front()
-                    .actions.back().type == "set_mode" &&
-            reparsed_hybrid_trip.cases.front().state_events.front()
-                    .actions.back().mode == "decay_to_zero",
-        "canonical model serialization must preserve component modes "
-        "and typed mode transitions");
 
     auto differential_schedule = request;
     const auto scheduled_target =

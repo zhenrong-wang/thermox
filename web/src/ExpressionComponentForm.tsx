@@ -203,7 +203,7 @@ export function ExpressionComponentForm({
         artifactId.trim(),
         base?.source.artifact_revision_id ?? '',
         {
-          schema_version: 'thermox.expression_component/v2',
+          schema_version: 'thermox.expression_component/v4',
           kind: kind.trim(),
           version: version.trim(),
           template_kind: templateKind.trim(),
@@ -211,6 +211,9 @@ export function ExpressionComponentForm({
           category: category.trim(),
           model_name: modelName.trim(),
           system_boundary_role: boundaryRole.trim(),
+          supports_steady: true,
+          supports_transient: false,
+          default_mode: '',
           ports: ports.map((port) => ({
             ...port,
             name: port.name.trim(),
@@ -224,6 +227,10 @@ export function ExpressionComponentForm({
             name: equation.name.trim(),
             expression: equation.expression.trim(),
           })),
+          transient_variables: [],
+          internal_variables: [],
+          transient_equations: [],
+          modes: [],
         },
       )
     } catch (reason) {

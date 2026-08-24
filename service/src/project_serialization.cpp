@@ -434,6 +434,8 @@ void expression_component_json(
         << (definition.supports_steady ? "true" : "false");
     out << ", \"supports_transient\": "
         << (definition.supports_transient ? "true" : "false");
+    out << ", \"default_mode\": ";
+    json_string(out, definition.default_mode);
     out << ", \"ports\": [";
     for (std::size_t index = 0;
          index < definition.ports.size(); ++index) {
@@ -539,6 +541,35 @@ void expression_component_json(
         json_string(out, equation.expression);
         out << ", \"residual_scale\": ";
         json_number(out, equation.residual_scale);
+        out << '}';
+    }
+    out << "], \"modes\": [";
+    for (std::size_t mode_index = 0;
+         mode_index < definition.modes.size(); ++mode_index) {
+        if (mode_index != 0U) out << ", ";
+        const auto& mode = definition.modes[mode_index];
+        out << "{\"name\": ";
+        json_string(out, mode.name);
+        const auto equations = [&](
+            const char* name,
+            const std::vector<ExpressionComponentEquationInput>& values) {
+            out << ", \"" << name << "\": [";
+            for (std::size_t index = 0;
+                 index < values.size(); ++index) {
+                if (index != 0U) out << ", ";
+                const auto& equation = values[index];
+                out << "{\"name\": ";
+                json_string(out, equation.name);
+                out << ", \"expression\": ";
+                json_string(out, equation.expression);
+                out << ", \"residual_scale\": ";
+                json_number(out, equation.residual_scale);
+                out << '}';
+            }
+            out << ']';
+        };
+        equations("equations", mode.equations);
+        equations("transient_equations", mode.transient_equations);
         out << '}';
     }
     out << "]}";

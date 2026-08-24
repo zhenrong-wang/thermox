@@ -291,6 +291,9 @@ void append_components(
         append_string(stream, component.category);
         append_string(stream, component.model_name);
         append_string(stream, component.system_boundary_role);
+        stream << component.supports_steady << '|'
+               << component.supports_transient << '|';
+        append_string(stream, component.default_mode);
         stream << component.ports.size() << '|';
         for (const auto& port : component.ports) {
             append_string(stream, port.name);
@@ -313,11 +316,41 @@ void append_components(
                    << parameter.lower_inclusive << '|'
                    << parameter.upper_inclusive << '|';
         }
-        stream << component.equations.size() << '|';
-        for (const auto& equation : component.equations) {
-            append_string(stream, equation.name);
-            append_string(stream, equation.expression);
-            stream << equation.residual_scale << '|';
+        const auto append_equations = [&] (
+            const std::vector<ExpressionComponentEquationInput>& equations) {
+            stream << equations.size() << '|';
+            for (const auto& equation : equations) {
+                append_string(stream, equation.name);
+                append_string(stream, equation.expression);
+                stream << equation.residual_scale << '|';
+            }
+        };
+        append_equations(component.equations);
+        stream << component.transient_variables.size() << '|';
+        for (const auto& variable : component.transient_variables) {
+            append_string(stream, variable.port_name);
+            append_string(stream, variable.variable_name);
+            append_string(stream, variable.kind);
+            stream << variable.derivative_scale << '|';
+        }
+        stream << component.internal_variables.size() << '|';
+        for (const auto& variable : component.internal_variables) {
+            append_string(stream, variable.name);
+            append_string(stream, variable.kind);
+            append_string(stream, variable.dimension);
+            stream << variable.initial_value_si << '|'
+                   << variable.state_scale << '|'
+                   << variable.initial_derivative_si_s << '|'
+                   << variable.derivative_scale << '|'
+                   << variable.lower_bound << '|'
+                   << variable.upper_bound << '|';
+        }
+        append_equations(component.transient_equations);
+        stream << component.modes.size() << '|';
+        for (const auto& mode : component.modes) {
+            append_string(stream, mode.name);
+            append_equations(mode.equations);
+            append_equations(mode.transient_equations);
         }
     }
 }

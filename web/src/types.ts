@@ -1249,13 +1249,13 @@ export interface ProjectComponentCatalogEntry {
 }
 
 export interface ProjectComponentCatalog {
-  schema_version: 'thermox.project_component_catalog/v1'
+  schema_version: 'thermox.project_component_catalog/v2'
   project_id: string
   components: ProjectComponentCatalogEntry[]
 }
 
 export interface ExpressionComponentDefinition {
-  schema_version: 'thermox.expression_component/v2'
+  schema_version: 'thermox.expression_component/v4'
   kind: string
   version: string
   template_kind: string
@@ -1263,6 +1263,9 @@ export interface ExpressionComponentDefinition {
   category: string
   model_name: string
   system_boundary_role: string
+  supports_steady: boolean
+  supports_transient: boolean
+  default_mode: string
   ports: Array<{
     name: string
     domain: string
@@ -1283,6 +1286,41 @@ export interface ExpressionComponentDefinition {
     name: string
     expression: string
     residual_scale: number
+  }>
+  transient_variables: Array<{
+    port_name: string
+    variable_name: string
+    kind: 'algebraic' | 'differential'
+    derivative_scale: number
+  }>
+  internal_variables: Array<{
+    name: string
+    kind: 'algebraic' | 'differential'
+    initial_value_si: number
+    state_scale: number
+    initial_derivative_si_s: number
+    derivative_scale: number
+    lower_bound: number | null
+    upper_bound: number | null
+    dimension: string
+  }>
+  transient_equations: Array<{
+    name: string
+    expression: string
+    residual_scale: number
+  }>
+  modes: Array<{
+    name: string
+    equations: Array<{
+      name: string
+      expression: string
+      residual_scale: number
+    }>
+    transient_equations: Array<{
+      name: string
+      expression: string
+      residual_scale: number
+    }>
   }>
 }
 

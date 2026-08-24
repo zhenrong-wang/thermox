@@ -4,6 +4,7 @@
 #include "thermox/platform/model_document.hpp"
 #include "thermox/transient_solver.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -254,7 +255,7 @@ void test_transient_expression_component_integrates_internal_state() {
     auto registry = thermox::platform::make_default_component_registry();
     thermox::platform::ExpressionComponentDefinition definition;
     definition.schema_version =
-        thermox::platform::expression_component_schema_v3;
+        thermox::platform::expression_component_schema_v4;
     definition.descriptor.kind = "custom.signal.first_order_lag";
     definition.descriptor.version = "1.0.0";
     definition.descriptor.template_kind = "control.first_order_lag";
@@ -333,7 +334,7 @@ void test_transient_expression_validation_rejects_unknown_symbols() {
     auto registry = thermox::platform::make_default_component_registry();
     thermox::platform::ExpressionComponentDefinition definition;
     definition.schema_version =
-        thermox::platform::expression_component_schema_v3;
+        thermox::platform::expression_component_schema_v4;
     definition.descriptor.kind = "custom.signal.invalid_dynamic";
     definition.descriptor.version = "1.0.0";
     definition.descriptor.template_kind = "control.invalid";
@@ -370,6 +371,167 @@ void test_transient_expression_validation_rejects_unknown_symbols() {
         "references unknown symbol: derivative.internal.state");
 }
 
+void test_mode_aware_expression_component_switches_fixed_structure() {
+    auto registry = thermox::platform::make_default_component_registry();
+    thermox::platform::ExpressionComponentDefinition definition;
+    definition.schema_version =
+        thermox::platform::expression_component_schema_v4;
+    definition.descriptor.kind = "custom.signal.mode_lag";
+    definition.descriptor.version = "1.0.0";
+    definition.descriptor.template_kind = "control.first_order_lag";
+    definition.descriptor.display_name = "Mode-aware lag";
+    definition.descriptor.category = "Project controls";
+    definition.descriptor.model_name = "Safe mode equations";
+    definition.descriptor.supports_steady = true;
+    definition.descriptor.supports_transient = true;
+    definition.descriptor.default_mode = "tracking";
+    definition.descriptor.ports = {
+        {"input", "signal", "in"},
+        {"output", "signal", "out"},
+    };
+    definition.descriptor.parameters = {
+        {"time_constant", "time", true, std::nullopt, 0.0,
+         std::numeric_limits<double>::infinity(), false, true},
+    };
+    definition.descriptor.internal_variables = {{
+        "filtered", thermox::DaeVariableKind::differential,
+        0.0, 1.0, 0.0, 1.0,
+        -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::infinity(), "dimensionless"}};
+    definition.modes = {
+        {
+            "tracking",
+            {{"steady_output", "output.value - input.value", 1.0}},
+            {
+                {"state_balance",
+                 "parameter.time_constant * "
+                 "derivative.internal.filtered + internal.filtered - "
+                 "input.value", 1.0},
+                {"output", "output.value - internal.filtered", 1.0},
+            },
+        },
+        {
+            "failsafe",
+            {{"steady_output", "output.value - 0 * input.value", 1.0}},
+            {
+                {"state_balance",
+                 "parameter.time_constant * "
+                 "derivative.internal.filtered + internal.filtered - "
+                 "0 * input.value", 1.0},
+                {"output", "output.value - internal.filtered", 1.0},
+            },
+        },
+    };
+    thermox::platform::register_expression_component(
+        registry, std::move(definition));
+
+    const auto document = thermox::platform::parse_model_document_text(
+        R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mode_expression",
+    "media": [],
+    "components": [{
+      "id": "lag",
+      "kind": "custom.signal.mode_lag",
+      "parameters": {"time_constant": {"value": 2.0, "unit": "s"}}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "steady_failsafe",
+    "mode": "steady_state_design",
+    "component_modes": {"lag": "failsafe"},
+    "fixed_values": {"lag.input.value": 1.0}
+  }, {
+    "id": "transient_trip",
+    "mode": "dynamic_transient",
+    "component_modes": {"lag": "tracking"},
+    "fixed_values": {"lag.input.value": 1.0},
+    "initial_guesses": {"lag.filtered": 0.0},
+    "state_events": [{
+      "id": "failsafe",
+      "target": "lag.filtered",
+      "threshold": 0.2,
+      "direction": "rising",
+      "terminal": false,
+      "actions": [{
+        "type": "set_mode",
+        "target": "lag",
+        "mode": "failsafe"
+      }]
+    }]
+  }]
+})json");
+    const auto steady = thermox::platform::compile_model_graph(
+        document, registry, "steady_failsafe");
+    const auto steady_result = thermox::solve_newton(steady.problem);
+    require(steady_result.diagnostics.converged,
+            steady_result.diagnostics.message);
+    const auto steady_output = std::find(
+        steady.problem.variable_names.begin(),
+        steady.problem.variable_names.end(), "lag.output.value");
+    require(
+        steady_output != steady.problem.variable_names.end() &&
+            std::abs(steady_result.x.at(static_cast<std::size_t>(
+                steady_output - steady.problem.variable_names.begin()))) <
+                1.0e-10,
+        "steady compilation selects the declared expression mode");
+
+    const auto transient =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "transient_trip");
+    const auto filtered = std::find(
+        transient.problem.variable_names.begin(),
+        transient.problem.variable_names.end(), "lag.filtered");
+    require(filtered != transient.problem.variable_names.end(),
+            "mode-aware transient exposes its differential state");
+    const auto filtered_index = static_cast<std::size_t>(
+        filtered - transient.problem.variable_names.begin());
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 2.0;
+    options.initial_step = 0.05;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(
+        transient.problem, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.events.size() == 1U &&
+            result.events.front().transitioned,
+        "case event switches the project-defined component mode");
+    const double expected = 0.2 * std::exp(
+        -(options.end_time - result.events.front().time) / 2.0);
+    require(
+        std::abs(result.trajectory.back().state.at(filtered_index) -
+                 expected) < 2.0e-2,
+        "mode-aware expression follows its post-trip equation set");
+
+    auto invalid = thermox::platform::ExpressionComponentDefinition{};
+    invalid.schema_version =
+        thermox::platform::expression_component_schema_v4;
+    invalid.descriptor.kind = "custom.signal.invalid_modes";
+    invalid.descriptor.version = "1.0.0";
+    invalid.descriptor.template_kind = "control.invalid";
+    invalid.descriptor.display_name = "Invalid modes";
+    invalid.descriptor.category = "Project controls";
+    invalid.descriptor.model_name = "Invalid incidence";
+    invalid.descriptor.default_mode = "a";
+    invalid.descriptor.ports = {
+        {"input", "signal", "in"},
+        {"output", "signal", "out"},
+    };
+    invalid.modes = {
+        {"a", {{"law", "output.value", 1.0}}, {}},
+        {"b", {{"law", "output.value + input.value", 1.0}}, {}},
+    };
+    require_invalid(
+        [&]() {
+            thermox::platform::register_expression_component(
+                registry, std::move(invalid));
+        },
+        "preserve variable incidence");
+}
+
 }  // namespace
 
 int main() {
@@ -379,6 +541,7 @@ int main() {
         test_expression_implementation_identity_covers_equations();
         test_transient_expression_component_integrates_internal_state();
         test_transient_expression_validation_rejects_unknown_symbols();
+        test_mode_aware_expression_component_switches_fixed_structure();
     } catch (const std::exception& error) {
         std::cerr << "test failure: " << error.what() << '\n';
         return 1;

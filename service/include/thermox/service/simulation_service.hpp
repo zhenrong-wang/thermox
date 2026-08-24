@@ -597,6 +597,12 @@ struct ExpressionComponentEquationInput {
     double residual_scale{1.0};
 };
 
+struct ExpressionComponentModeInput {
+    std::string name;
+    std::vector<ExpressionComponentEquationInput> equations;
+    std::vector<ExpressionComponentEquationInput> transient_equations;
+};
+
 struct ExpressionComponentTransientVariableInput {
     std::string port_name;
     std::string variable_name;
@@ -618,7 +624,7 @@ struct ExpressionComponentInternalVariableInput {
 
 struct ExpressionComponentInput {
     std::string schema_version{
-        "thermox.expression_component/v2"};
+        "thermox.expression_component/v4"};
     std::string kind;
     std::string version;
     std::string template_kind;
@@ -628,6 +634,7 @@ struct ExpressionComponentInput {
     std::string system_boundary_role;
     bool supports_steady{true};
     bool supports_transient{false};
+    std::string default_mode;
     std::vector<ExpressionComponentPortInput> ports;
     std::vector<ExpressionComponentParameterInput> parameters;
     std::vector<ExpressionComponentEquationInput> equations;
@@ -636,6 +643,7 @@ struct ExpressionComponentInput {
     std::vector<ExpressionComponentInternalVariableInput>
         internal_variables;
     std::vector<ExpressionComponentEquationInput> transient_equations;
+    std::vector<ExpressionComponentModeInput> modes;
 };
 
 struct SimulationComponentBundle {

@@ -714,6 +714,7 @@ Tree component_bundle(
                     "supports_steady", component.supports_steady);
                 encoded.put(
                     "supports_transient", component.supports_transient);
+                encoded.put("default_mode", component.default_mode);
                 encoded.add_child(
                     "ports",
                     array(
@@ -842,6 +843,28 @@ Tree component_bundle(
                                         equation.residual_scale);
                               return value;
                           }));
+                encoded.add_child(
+                    "modes",
+                    array(component.modes, [](const auto& mode) {
+                        const auto equations = [](const auto& values) {
+                            return array(values, [](const auto& equation) {
+                                Tree value;
+                                value.put("name", equation.name);
+                                value.put("expression", equation.expression);
+                                value.put("residual_scale",
+                                          equation.residual_scale);
+                                return value;
+                            });
+                        };
+                        Tree value;
+                        value.put("name", mode.name);
+                        value.add_child("equations",
+                                        equations(mode.equations));
+                        value.add_child(
+                            "transient_equations",
+                            equations(mode.transient_equations));
+                        return value;
+                    }));
                 return encoded;
             }));
     return tree;
@@ -876,6 +899,8 @@ service::SimulationComponentBundle decode_component_bundle(
                     encoded.get<bool>("supports_steady", true);
                 component.supports_transient =
                     encoded.get<bool>("supports_transient", false);
+                component.default_mode =
+                    encoded.get<std::string>("default_mode");
                 component.ports =
                     decode_array<
                         service::ExpressionComponentPortInput>(
@@ -1005,6 +1030,32 @@ service::SimulationComponentBundle decode_component_bundle(
                                 equation.get<double>("residual_scale")};
                         });
                 }
+                component.modes =
+                    decode_array<service::ExpressionComponentModeInput>(
+                        encoded.get_child("modes"),
+                        [](const Tree& mode) {
+                            const auto equations = [](const Tree& values) {
+                                return decode_array<
+                                    service::ExpressionComponentEquationInput>(
+                                    values, [](const Tree& equation) {
+                                        return service::
+                                            ExpressionComponentEquationInput{
+                                                equation.get<std::string>(
+                                                    "name"),
+                                                equation.get<std::string>(
+                                                    "expression"),
+                                                equation.get<double>(
+                                                    "residual_scale")};
+                                    });
+                            };
+                            service::ExpressionComponentModeInput value;
+                            value.name = mode.get<std::string>("name");
+                            value.equations =
+                                equations(mode.get_child("equations"));
+                            value.transient_equations = equations(
+                                mode.get_child("transient_equations"));
+                            return value;
+                        });
                 return component;
             });
     return value;

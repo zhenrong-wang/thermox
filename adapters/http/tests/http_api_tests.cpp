@@ -596,7 +596,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "?artifact_id=http-test-gain"
             "&artifact_type=thermox.expression_component"
             "&artifact_schema_version="
-            "thermox.expression_component%2Fv2",
+            "thermox.expression_component%2Fv4",
         R"json({
           "kind": "custom.signal.http_gain",
           "version": "1.0.0",
@@ -654,7 +654,7 @@ void test_tenant_scoped_asynchronous_jobs() {
                     .size() == 1U &&
             component_catalog.body.find(
                 "\"schema_version\": "
-                "\"thermox.project_component_catalog/v1\"") !=
+                "\"thermox.project_component_catalog/v2\"") !=
                 std::string::npos &&
             component_catalog.body.find(
                 "custom.signal.http_gain") !=
@@ -1326,7 +1326,7 @@ void test_authored_component_job_workflow() {
                 "?artifact_id=authored-gain"
                 "&artifact_type=thermox.expression_component"
                 "&artifact_schema_version="
-                "thermox.expression_component%2Fv2",
+                "thermox.expression_component%2Fv4",
             R"json({
               "kind": "custom.signal.authored_gain",
               "version": "1.0.0",

@@ -789,8 +789,7 @@ platform::RegimeMapArtifact regime_map(
 ExpressionComponentInput decode_expression_component(
     const std::string& schema_version,
     const Tree& tree) {
-    if (schema_version != platform::expression_component_schema_v2 &&
-        schema_version != platform::expression_component_schema_v3) {
+    if (schema_version != platform::expression_component_schema_v4) {
         throw std::invalid_argument(
             "unsupported expression-component schema: " +
             schema_version);
@@ -812,6 +811,8 @@ ExpressionComponentInput decode_expression_component(
         tree.get<bool>("supports_steady", true);
     component.supports_transient =
         tree.get<bool>("supports_transient", false);
+    component.default_mode =
+        tree.get<std::string>("default_mode", "");
     component.ports =
         decode_array<ExpressionComponentPortInput>(
             tree.get_child("ports"),
@@ -857,9 +858,11 @@ ExpressionComponentInput decode_expression_component(
                         "upper_inclusive", true);
                 return parameter;
             });
-    component.equations =
-        decode_array<ExpressionComponentEquationInput>(
-            tree.get_child("equations"),
+    if (const auto equations =
+            tree.get_child_optional("equations")) {
+        component.equations =
+            decode_array<ExpressionComponentEquationInput>(
+            *equations,
             [](const Tree& encoded) {
                 return ExpressionComponentEquationInput{
                     encoded.get<std::string>("name"),
@@ -868,6 +871,7 @@ ExpressionComponentInput decode_expression_component(
                         "residual_scale", 1.0),
                 };
             });
+    }
     if (const auto variables =
             tree.get_child_optional("transient_variables")) {
         component.transient_variables =
@@ -924,6 +928,36 @@ ExpressionComponentInput decode_expression_component(
                         encoded.get<double>("residual_scale", 1.0)};
                 });
     }
+    if (const auto modes = tree.get_child_optional("modes")) {
+        component.modes =
+            decode_array<ExpressionComponentModeInput>(
+                *modes, [](const Tree& encoded) {
+                    ExpressionComponentModeInput mode;
+                    mode.name = encoded.get<std::string>("name");
+                    const auto decode_equation =
+                        [](const Tree& equation) {
+                            return ExpressionComponentEquationInput{
+                                equation.get<std::string>("name"),
+                                equation.get<std::string>("expression"),
+                                equation.get<double>(
+                                    "residual_scale", 1.0)};
+                        };
+                    if (const auto equations =
+                            encoded.get_child_optional("equations")) {
+                        mode.equations = decode_array<
+                            ExpressionComponentEquationInput>(
+                                *equations, decode_equation);
+                    }
+                    if (const auto equations =
+                            encoded.get_child_optional(
+                                "transient_equations")) {
+                        mode.transient_equations = decode_array<
+                            ExpressionComponentEquationInput>(
+                                *equations, decode_equation);
+                    }
+                    return mode;
+                });
+    }
     return component;
 }
 
@@ -941,6 +975,9 @@ Tree encode_expression_component(
         component.system_boundary_role);
     tree.put("supports_steady", component.supports_steady);
     tree.put("supports_transient", component.supports_transient);
+    if (!component.default_mode.empty()) {
+        tree.put("default_mode", component.default_mode);
+    }
     tree.add_child(
         "ports",
         array(
@@ -1041,6 +1078,25 @@ Tree encode_expression_component(
             encoded.put("residual_scale", equation.residual_scale);
             return encoded;
         }));
+    tree.add_child(
+        "modes",
+        array(component.modes, [](const auto& mode) {
+            Tree encoded;
+            encoded.put("name", mode.name);
+            const auto encode_equation = [](const auto& equation) {
+                Tree value;
+                value.put("name", equation.name);
+                value.put("expression", equation.expression);
+                value.put("residual_scale", equation.residual_scale);
+                return value;
+            };
+            encoded.add_child(
+                "equations", array(mode.equations, encode_equation));
+            encoded.add_child(
+                "transient_equations",
+                array(mode.transient_equations, encode_equation));
+            return encoded;
+        }));
     return tree;
 }
 
@@ -1058,6 +1114,7 @@ platform::ExpressionComponentDefinition definition(
         input.system_boundary_role;
     value.descriptor.supports_steady = input.supports_steady;
     value.descriptor.supports_transient = input.supports_transient;
+    value.descriptor.default_mode = input.default_mode;
     for (const auto& port : input.ports) {
         value.descriptor.ports.push_back({
             port.name,
@@ -1109,6 +1166,21 @@ platform::ExpressionComponentDefinition definition(
         value.transient_equations.push_back({
             equation.name, equation.expression,
             equation.residual_scale});
+    }
+    for (const auto& mode : input.modes) {
+        platform::ExpressionComponentModeDefinition mode_definition;
+        mode_definition.name = mode.name;
+        for (const auto& equation : mode.equations) {
+            mode_definition.equations.push_back({
+                equation.name, equation.expression,
+                equation.residual_scale});
+        }
+        for (const auto& equation : mode.transient_equations) {
+            mode_definition.transient_equations.push_back({
+                equation.name, equation.expression,
+                equation.residual_scale});
+        }
+        value.modes.push_back(std::move(mode_definition));
     }
     return value;
 }

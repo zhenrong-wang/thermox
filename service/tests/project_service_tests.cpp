@@ -394,6 +394,7 @@ std::string expression_component_payload(
   "display_name": "Signal gain",
   "category": "Project components",
   "model_name": "Algebraic gain",
+  "default_mode": "normal",
   "ports": [
     {"name": "input", "domain": "signal", "direction": "in"},
     {"name": "output", "domain": "signal", "direction": "out"}
@@ -407,13 +408,23 @@ std::string expression_component_payload(
       "upper_bound": 100.0
     }
   ],
-  "equations": [
-    {
+  "modes": [{
+    "name": "normal",
+    "equations": [{
+      "name": "gain_law",
+      "expression": "output.value - parameter.gain * input.value",
+      "residual_scale": 1.0
+    }]
+  }, {
+    "name": "bypass",
+    "equations": [{
       "name": "gain_law",
       "expression":
-        "output.value - parameter.gain * input.value",
+        "output.value - input.value - 0 * parameter.gain",
       "residual_scale": 1.0
-    }
+    }]
+  }],
+  "equations": [
   ]
 })json"};
     payload.replace(
@@ -754,7 +765,7 @@ void test_expression_component_artifact_is_executable() {
         "persisted-gain",
         {},
         "thermox.expression_component",
-        "thermox.expression_component/v2",
+        "thermox.expression_component/v4",
         expression_component_payload(),
     });
     const auto resolved = projects->resolve_artifact_revisions(
@@ -774,6 +785,10 @@ void test_expression_component_artifact_is_executable() {
                     .display_name == "Signal gain" &&
             resolved->components.expression_components.front()
                     .model_name == "Algebraic gain" &&
+            resolved->components.expression_components.front()
+                    .default_mode == "normal" &&
+            resolved->components.expression_components.front()
+                    .modes.size() == 2U &&
             resolved->snapshot.references.size() == 1U &&
             resolved->snapshot.references.front().revision ==
                 revision.artifact_revision_id,
@@ -788,7 +803,7 @@ void test_expression_component_artifact_is_executable() {
         component_catalog.get(team_a, project.project_id);
     require(
         discovered.schema_version ==
-                "thermox.project_component_catalog/v1" &&
+                "thermox.project_component_catalog/v2" &&
             discovered.components.size() == 1U &&
             discovered.components.front().source
                     .artifact_revision_id ==
@@ -803,13 +818,29 @@ void test_expression_component_artifact_is_executable() {
                 "Algebraic gain" &&
             discovered.components.front().definition.kind ==
                 "custom.signal.persisted_gain" &&
-            discovered.components.front().definition.equations
-                    .size() == 1U &&
+            discovered.components.front().definition.modes
+                    .size() == 2U &&
+            discovered.components.front().component.default_mode ==
+                "normal" &&
+            discovered.components.front().component.supported_modes ==
+                std::vector<std::string>{"normal", "bypass"} &&
             !discovered.components.front()
                  .catalog_fingerprint.empty(),
         "project component discovery must pair its editable "
         "definition and runtime descriptor with the exact "
         "immutable source revision");
+    const auto serialized_catalog =
+        thermox::service::serialize_project_component_catalog_json(
+            discovered);
+    require(
+        serialized_catalog.find(
+            "\"schema_version\": \"thermox.project_component_catalog/v2\"") !=
+                std::string::npos &&
+            serialized_catalog.find("\"default_mode\": \"normal\"") !=
+                std::string::npos &&
+            serialized_catalog.find("\"modes\": [") !=
+                std::string::npos,
+        "project component catalog JSON must expose the v4 mode contract");
     const auto latest_revision =
         projects->create_artifact_revision({
             team_a,
@@ -817,7 +848,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v2",
+            "thermox.expression_component/v4",
             expression_component_payload("1.0.1"),
         });
     const auto refreshed =
@@ -839,7 +870,7 @@ void test_expression_component_artifact_is_executable() {
             "persisted-gain",
             latest_revision.artifact_revision_id,
             "thermox.expression_component",
-            "thermox.expression_component/v2",
+            "thermox.expression_component/v4",
             expression_component_payload("1.0.1"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -853,7 +884,7 @@ void test_expression_component_artifact_is_executable() {
             "second-gain-artifact",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v2",
+            "thermox.expression_component/v4",
             expression_component_payload("2.0.0"),
         });
     } catch (const thermox::service::ProjectRequestError&) {
@@ -979,7 +1010,7 @@ void test_expression_component_artifact_is_executable() {
             "unsafe-component",
             {},
             "thermox.expression_component",
-            "thermox.expression_component/v2",
+            "thermox.expression_component/v4",
             unsafe,
         });
     } catch (const thermox::service::ProjectRequestError&) {
