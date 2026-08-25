@@ -26,11 +26,12 @@
     },
     {
       "id": "solar_two",
-      "status": "implementation_started",
+      "status": "held_out_reduced_order_complete",
       "role": "independent_utility_scale_experiment",
       "evidence_basis": [
         "independent_reference",
-        "boundary_constrained"
+        "boundary_constrained",
+        "calibrated_reproduction"
       ],
       "strengths": [
         "10 MWe operating plant",
@@ -48,7 +49,18 @@
         "steam_generator_energy_balance",
         "held_out_part_load_power",
         "storage_heat_loss_transient"
-      ]
+      ],
+      "completed_gates": [
+        "solar_salt_property_states",
+        "held_out_part_load_power_reduced_order"
+      ],
+      "latest_result": {
+        "calibration_points": 4,
+        "held_out_points": 4,
+        "held_out_gross_power_mape_percent": 5.1152,
+        "held_out_maximum_absolute_error_percent": 9.1585,
+        "classification": "held_out_validation_of_calibrated_reduced_order_response"
+      }
     },
     {
       "id": "nasa_tmats_twin_spool",

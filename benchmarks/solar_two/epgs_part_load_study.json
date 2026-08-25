@@ -1,0 +1,151 @@
+{
+  "schema_version": "thermox.engineering_study/v2",
+  "model_document": {
+    "schema_version": "thermox.model/v2",
+    "model": {
+      "id": "solar_two_epgs_part_load",
+      "name": "Solar Two EPGS reduced-order held-out study",
+      "revision": "1",
+      "media": [
+        {
+          "id": "solar_salt",
+          "backend": "sandia_solar_salt_table",
+          "substance": "SolarSalt",
+          "package_version": "SAND2001-2100-table-1-1/v1"
+        }
+      ],
+      "components": [
+        {
+          "id": "epgs",
+          "kind": "converter.fluid_to_electrical.polynomial_efficiency",
+          "version": "1.0.0",
+          "parameters": {
+            "outlet_specific_enthalpy": {"value": 44850.30416, "unit": "J/kg"},
+            "reference_thermal_power": {"value": 35.5, "unit": "MW"},
+            "efficiency_intercept": 0.25,
+            "efficiency_linear": 0.10,
+            "efficiency_quadratic": 0.0,
+            "electrical_frequency": {"value": 60.0, "unit": "Hz"}
+          },
+          "media": {"inlet": "solar_salt", "outlet": "solar_salt"}
+        }
+      ],
+      "connections": []
+    },
+    "cases": [
+      {
+        "id": "test_1_calibration",
+        "mode": "steady_state_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 86.4, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 543.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_2_calibration",
+        "mode": "steady_state_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 69.8, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 543.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_3_calibration",
+        "mode": "steady_state_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 54.8, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 542.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_4_calibration",
+        "mode": "steady_state_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 18.0, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 516.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_5_held_out",
+        "mode": "steady_state_off_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 82.5, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 557.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_6_held_out",
+        "mode": "steady_state_off_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 69.0, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 553.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_7_held_out",
+        "mode": "steady_state_off_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 46.7, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 551.0, "unit": "degC"}
+        }
+      },
+      {
+        "id": "test_8_held_out",
+        "mode": "steady_state_off_design",
+        "fixed_values": {
+          "epgs.inlet.m_dot": {"value": 18.0, "unit": "kg/s"},
+          "epgs.inlet.p": {"value": 101.325, "unit": "kPa"},
+          "epgs.inlet.T": {"value": 526.0, "unit": "degC"}
+        }
+      }
+    ],
+    "calibrations": [
+      {
+        "id": "tests_1_to_4_part_load_fit",
+        "label": "Freeze a quadratic gross-efficiency curve before tests 5-8",
+        "parameters": [
+          {
+            "id": "efficiency_intercept",
+            "scope": "system",
+            "targets": ["components.epgs.parameters.efficiency_intercept"],
+            "bounds": {"lower": 0.05, "upper": 0.50}
+          },
+          {
+            "id": "efficiency_linear",
+            "scope": "system",
+            "targets": ["components.epgs.parameters.efficiency_linear"],
+            "bounds": {"lower": -0.50, "upper": 0.80}
+          },
+          {
+            "id": "efficiency_quadratic",
+            "scope": "system",
+            "targets": ["components.epgs.parameters.efficiency_quadratic"],
+            "bounds": {"lower": -0.80, "upper": 0.50}
+          }
+        ],
+        "observations": [
+          {"id": "test_1_gross_power", "case": "test_1_calibration", "target": "epgs.electrical.P", "measured": {"value": 10570.0, "unit": "kW"}, "sigma": {"value": 300.0, "unit": "kW"}},
+          {"id": "test_2_gross_power", "case": "test_2_calibration", "target": "epgs.electrical.P", "measured": {"value": 8880.0, "unit": "kW"}, "sigma": {"value": 300.0, "unit": "kW"}},
+          {"id": "test_3_gross_power", "case": "test_3_calibration", "target": "epgs.electrical.P", "measured": {"value": 5900.0, "unit": "kW"}, "sigma": {"value": 300.0, "unit": "kW"}},
+          {"id": "test_4_gross_power", "case": "test_4_calibration", "target": "epgs.electrical.P", "measured": {"value": 1310.0, "unit": "kW"}, "sigma": {"value": 300.0, "unit": "kW"}}
+        ]
+      }
+    ]
+  },
+  "calibration_id": "tests_1_to_4_part_load_fit",
+  "calibration_solver": {"max_iterations": 30},
+  "steady_prediction_solver": {"max_iterations": 80},
+  "prediction_cases": [
+    {"case_id": "test_5_held_out", "observations": [{"id": "test_5_held_out_gross_power", "target": "epgs.electrical.P", "dimension": "power", "measured_si": 10930000.0, "sigma_si": 300000.0}]},
+    {"case_id": "test_6_held_out", "observations": [{"id": "test_6_held_out_gross_power", "target": "epgs.electrical.P", "dimension": "power", "measured_si": 9170000.0, "sigma_si": 300000.0}]},
+    {"case_id": "test_7_held_out", "observations": [{"id": "test_7_held_out_gross_power", "target": "epgs.electrical.P", "dimension": "power", "measured_si": 5830000.0, "sigma_si": 300000.0}]},
+    {"case_id": "test_8_held_out", "observations": [{"id": "test_8_held_out_gross_power", "target": "epgs.electrical.P", "dimension": "power", "measured_si": 1300000.0, "sigma_si": 300000.0}]}
+  ]
+}

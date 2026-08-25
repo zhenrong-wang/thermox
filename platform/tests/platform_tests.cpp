@@ -984,6 +984,10 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain material splitter");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
+    require(registry.contains(
+                "converter.fluid_to_electrical.polynomial_efficiency"),
+            "default registry should contain the conservative "
+            "fluid-to-electric reduced-order converter");
     require(registry.contains("valve.fluid.isenthalpic_pressure_ratio"),
             "default registry should contain fluid valve");
     require(registry.contains("heat_exchanger.fluid.fixed_duty"),
@@ -1100,6 +1104,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "shaft.combiner.two_driver",
         "shaft.inertia.two_port",
         "generator.electrical.efficiency",
+        "converter.fluid_to_electrical.polynomial_efficiency",
         "control.proportional.normalized",
         "control.first_order_lag.normalized",
         "control.pi_bounded.normalized"};

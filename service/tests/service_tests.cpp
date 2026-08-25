@@ -594,7 +594,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 76,
+        response.components.size() == 77,
         "service must expose the complete component registry");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -3227,6 +3227,63 @@ void test_solar_two_solar_salt_property_benchmark() {
         evidence.passed && evidence.passed_count == 2U,
         "Solar Two salt evidence must remain classified as derived "
         "reference plus internal consistency");
+}
+
+void test_solar_two_epgs_frozen_part_load_study() {
+    const auto response = thermox::service::
+        evaluate_engineering_study_json(read_source_file(
+            "benchmarks/solar_two/epgs_part_load_study.json"));
+    require(
+        response.succeeded() &&
+            response.calibration.succeeded() &&
+            response.calibration.diagnostics.converged,
+        "Solar Two EPGS calibration/frozen-prediction study must "
+        "succeed: " + response.error.message);
+    require(
+        response.calibration.diagnostics.measurement_count == 4 &&
+            response.calibration.diagnostics.adjustable_parameter_count ==
+                3 &&
+            response.calibration.diagnostics.data_sensitivity_rank == 3 &&
+            response.calibration.diagnostics.locally_data_identifiable &&
+            response.predictions.size() == 4,
+        "Solar Two study must retain the declared four-point "
+        "calibration, three-parameter fit, and four held-out points");
+
+    double absolute_relative_error_sum = 0.0;
+    double maximum_absolute_relative_error = 0.0;
+    for (const auto& prediction : response.predictions) {
+        require(
+            prediction.steady_simulation.has_value() &&
+                prediction.steady_simulation->succeeded() &&
+                prediction.observations.size() == 1,
+            "every Solar Two held-out point must solve independently");
+        const auto& observation = prediction.observations.front();
+        const double absolute_relative_error = std::abs(
+            observation.residual_si / observation.measured_si);
+        absolute_relative_error_sum += absolute_relative_error;
+        maximum_absolute_relative_error = std::max(
+            maximum_absolute_relative_error,
+            absolute_relative_error);
+
+        const auto& component = require_component_result(
+            prediction.steady_simulation->graph, "epgs");
+        const double net_energy_flow = require_result_value(
+            component.metrics, "net_energy_flow").value_si;
+        require(
+            std::abs(net_energy_flow) < 1.0 &&
+                prediction.steady_simulation->diagnostics
+                        .final_residual_norm < 1.0e-10,
+            "reduced-order held-out predictions must retain component "
+            "energy conservation and numerical closure");
+    }
+    const double mean_absolute_percentage_error =
+        100.0 * absolute_relative_error_sum /
+        static_cast<double>(response.predictions.size());
+    require(
+        mean_absolute_percentage_error < 6.0 &&
+            100.0 * maximum_absolute_relative_error < 10.0,
+        "frozen Solar Two reduced-order model must retain the pinned "
+        "held-out accuracy envelope");
 }
 
 void test_netl_b31a_decomposed_steam_turbine_train() {
@@ -7248,6 +7305,7 @@ int main() {
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
         test_solar_two_solar_salt_property_benchmark();
+        test_solar_two_epgs_frozen_part_load_study();
         test_netl_b31a_decomposed_steam_turbine_train();
         test_netl_b31a_connected_hrsg_and_steam_cycle();
         test_netl_b31a_published_balance_consistency();

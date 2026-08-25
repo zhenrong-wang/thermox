@@ -55,7 +55,15 @@ component.
 
 CoolProp retains its declared 300°C NaK lower limit. The Solar Two model instead uses
 SAND2001-2100 Table 1-1, whose 500--1100°F range covers the plant's 290°C cold state without
-extrapolation. The next slices are the Solar Two steam-generator boundary model, a declared train/validation
-split across its eight steady points, and then the NASA map import. The Sandia sCO2 transient
-follows once authoritative numeric response data are obtained or digitization uncertainty is
-formally included in every acceptance limit.
+extrapolation.
+
+The declared Solar Two train/validation split is now executable. A generic conservative
+fluid-to-electric reduced-order component is calibrated only on Appendix M tests 1--4 and frozen
+before tests 5--8. The held-out gross-power MAPE is 5.12% and the maximum absolute relative error
+is 9.16%. This advances the independent-system gate, but it does not complete it: missing
+feedwater, steam-flow, salt-outlet, condenser, and turbine-exhaust boundaries mean the result is a
+calibrated system response rather than first-principles steam-cycle validation.
+
+The next implementation is the NASA T-MATS map import and steady/off-design cross-code study.
+The Sandia sCO2 transient follows once authoritative numeric response data are obtained or
+digitization uncertainty is formally included in every acceptance limit.
