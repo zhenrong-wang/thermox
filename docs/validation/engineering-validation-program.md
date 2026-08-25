@@ -135,3 +135,13 @@ NASA flow curve is bound as ordinary instance data. Inserting the component into
 nozzle-closed graph leaves all four closed-valve points convergent and produces exactly zero bleed.
 The fifth open-VBV point still needs to be assembled from the public source boundaries; net thrust
 additionally requires a generic freestream/ram-drag closure.
+
+Attempting that large sea-level-static move exposed a separate generic numerical gap: component
+homotopy existed, but fixed ambient, shaft-speed, nozzle-area, and actuator boundaries remained at
+their final values. Fixed boundaries can now opt into an anchor-to-target physical path through the
+case's `boundary_continuation` solver option, and the numerical core can recognize such a complete
+parameterized path without applying a second diagonal residual blend. Configurable CLI step bounds
+make the behavior reproducible. The fifth AGTF30 endpoint is still reserved: even with very small
+steps, the current line-search Newton globalization can leave Cantera's admissible enthalpy domain.
+The next numerical gate is a bound-aware trust-region or filter globalization, not a case-specific
+relaxation of thermochemistry.

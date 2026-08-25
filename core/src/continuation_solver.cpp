@@ -119,6 +119,10 @@ NonlinearProblem make_stage_problem(
     const bool uses_informed_residual =
         static_cast<bool>(
             target.continuation_checked_residual);
+    const double target_weight =
+        target.continuation_path_is_complete ? 1.0 : parameter;
+    const double anchor_weight =
+        target.continuation_path_is_complete ? 0.0 : 1.0 - parameter;
     NonlinearProblem stage = target;
     stage.initial_guess = warm_start;
     stage.residual = {};
@@ -126,7 +130,7 @@ NonlinearProblem make_stage_problem(
     stage.sparse_jacobian_values_subset = {};
     stage.checked_residual =
         [&target, anchor, variable_scales, residual_scales,
-         parameter](
+         parameter, target_weight, anchor_weight](
             const std::vector<double>& x,
             std::vector<double>& residual) {
             std::vector<double> target_residual(
@@ -142,8 +146,8 @@ NonlinearProblem make_stage_problem(
                     (x[row] - anchor[row]) /
                     variable_scales[row];
                 residual[row] =
-                    parameter * target_residual[row] +
-                    (1.0 - parameter) * anchor_residual;
+                    target_weight * target_residual[row] +
+                    anchor_weight * anchor_residual;
             }
             return EvaluationStatus::success();
         };
@@ -153,7 +157,7 @@ NonlinearProblem make_stage_problem(
          target.checked_residual_subset)) {
         stage.checked_residual_subset =
             [&target, anchor, variable_scales,
-             residual_scales, parameter,
+             residual_scales, parameter, target_weight, anchor_weight,
              uses_informed_residual](
                 const std::vector<double>& x,
                 const std::vector<std::size_t>& rows,
@@ -171,8 +175,8 @@ NonlinearProblem make_stage_problem(
                      output < rows.size(); ++output) {
                     const std::size_t row = rows[output];
                     residual[output] =
-                        parameter * target_residual[output] +
-                        (1.0 - parameter) *
+                        target_weight * target_residual[output] +
+                        anchor_weight *
                             residual_scales[row] *
                             (x[row] - anchor[row]) /
                             variable_scales[row];
@@ -199,7 +203,7 @@ NonlinearProblem make_stage_problem(
         }
         stage.sparse_jacobian_values =
             [&target, anchor, mapping, variable_scales,
-             residual_scales, parameter,
+             residual_scales, parameter, target_weight, anchor_weight,
              uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<double>& values) {
@@ -221,13 +225,13 @@ NonlinearProblem make_stage_problem(
                 for (std::size_t offset = 0;
                      offset < target_values.size(); ++offset) {
                     values[mapping.target_offsets[offset]] +=
-                        parameter * target_values[offset];
+                        target_weight * target_values[offset];
                 }
                 for (std::size_t row = 0;
                      row < mapping.diagonal_offsets.size();
                      ++row) {
                     values[mapping.diagonal_offsets[row]] +=
-                        (1.0 - parameter) *
+                        anchor_weight *
                         residual_scales[row] /
                         variable_scales[row];
                 }
@@ -259,6 +263,7 @@ NonlinearProblem make_stage_problem(
                 [&target, target_of_stage,
                  diagonal_row_of_stage, variable_scales,
                  residual_scales, anchor, parameter,
+                 target_weight, anchor_weight,
                  uses_informed_residual, missing](
                     const std::vector<double>& x,
                     const std::vector<std::size_t>& offsets,
@@ -286,7 +291,7 @@ NonlinearProblem make_stage_problem(
                             diagonal_row_of_stage[offset];
                         if (diagonal_row != missing) {
                             values[output] +=
-                                (1.0 - parameter) *
+                                anchor_weight *
                                 residual_scales[diagonal_row] /
                                 variable_scales[diagonal_row];
                         }
@@ -305,7 +310,7 @@ NonlinearProblem make_stage_problem(
                     for (std::size_t index = 0;
                          index < target_values.size(); ++index) {
                         values[target_outputs[index]] +=
-                            parameter * target_values[index];
+                            target_weight * target_values[index];
                     }
                 };
         }
@@ -317,7 +322,8 @@ NonlinearProblem make_stage_problem(
                 target.continuation_sparse_jacobian)) {
         stage.sparse_jacobian =
             [&target, anchor, variable_scales, residual_scales,
-             parameter, uses_informed_residual](
+             parameter, target_weight, anchor_weight,
+             uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<SparseTriplet>& jacobian) {
                 if (uses_informed_residual &&
@@ -328,13 +334,13 @@ NonlinearProblem make_stage_problem(
                     target.sparse_jacobian(x, jacobian);
                 }
                 for (auto& entry : jacobian) {
-                    entry.value *= parameter;
+                    entry.value *= target_weight;
                 }
                 for (std::size_t row = 0;
                      row < x.size(); ++row) {
                     jacobian.push_back({
                         row, row,
-                        (1.0 - parameter) *
+                        anchor_weight *
                             residual_scales[row] /
                             variable_scales[row]});
                 }
@@ -349,7 +355,8 @@ NonlinearProblem make_stage_problem(
          target.continuation_partial_sparse_jacobian)) {
         stage.partial_sparse_jacobian =
             [&target, anchor, variable_scales, residual_scales,
-             parameter, uses_informed_residual](
+             parameter, target_weight, anchor_weight,
+             uses_informed_residual](
                 const std::vector<double>& x,
                 std::vector<SparseTriplet>& jacobian) {
                 if (uses_informed_residual &&
@@ -363,14 +370,14 @@ NonlinearProblem make_stage_problem(
                         x, jacobian);
                 }
                 for (auto& entry : jacobian) {
-                    entry.value *= parameter;
+                    entry.value *= target_weight;
                 }
                 for (std::size_t row = 0;
                      row < x.size(); ++row) {
                     if (target.analytic_jacobian_rows[row]) {
                         jacobian.push_back({
                             row, row,
-                            (1.0 - parameter) *
+                            anchor_weight *
                                 residual_scales[row] /
                                 variable_scales[row]});
                     }
@@ -386,7 +393,8 @@ NonlinearProblem make_stage_problem(
          target.continuation_jacobian)) {
         stage.jacobian =
             [&target, anchor, variable_scales, residual_scales,
-             parameter, uses_informed_residual](
+             parameter, target_weight, anchor_weight,
+             uses_informed_residual](
                 const std::vector<double>& x,
                 Matrix& jacobian) {
                 if (uses_informed_residual &&
@@ -398,13 +406,13 @@ NonlinearProblem make_stage_problem(
                 }
                 for (auto& row : jacobian) {
                     for (double& value : row) {
-                        value *= parameter;
+                        value *= target_weight;
                     }
                 }
                 for (std::size_t row = 0;
                      row < x.size(); ++row) {
                     jacobian[row][row] +=
-                        (1.0 - parameter) *
+                        anchor_weight *
                         residual_scales[row] /
                         variable_scales[row];
                 }

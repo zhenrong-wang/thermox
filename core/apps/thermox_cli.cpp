@@ -20,6 +20,8 @@ void print_usage(std::ostream& out) {
         << "  thermox_cli solve --model <path> [--case <id>]"
            " [--performance-map <path>]..."
            " [--continuation]"
+           " [--continuation-initial-step <value>]"
+           " [--continuation-minimum-step <value>]"
            " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
@@ -179,6 +181,8 @@ int main(int argc, char** argv) {
     std::string reconciliation_id;
     std::string max_iterations_text;
     std::string residual_tolerance_text;
+    std::string continuation_initial_step_text;
+    std::string continuation_minimum_step_text;
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string format = "text";
@@ -210,6 +214,12 @@ int main(int argc, char** argv) {
             max_iterations_text = argv[++i];
         } else if (arg == "--residual-tolerance" && i + 1 < argc) {
             residual_tolerance_text = argv[++i];
+        } else if (arg == "--continuation-initial-step" &&
+                   i + 1 < argc) {
+            continuation_initial_step_text = argv[++i];
+        } else if (arg == "--continuation-minimum-step" &&
+                   i + 1 < argc) {
+            continuation_minimum_step_text = argv[++i];
         } else if (arg == "--mode" && i + 1 < argc) {
             reconciliation_mode = argv[++i];
         } else if (arg == "--profile-likelihood") {
@@ -297,6 +307,12 @@ int main(int argc, char** argv) {
     }
     if (command != "solve" && !residual_tolerance_text.empty()) {
         std::cerr << "--residual-tolerance is only valid for solve\n";
+        return 2;
+    }
+    if (command != "solve" &&
+        (!continuation_initial_step_text.empty() ||
+         !continuation_minimum_step_text.empty())) {
+        std::cerr << "continuation step options are only valid for solve\n";
         return 2;
     }
     if (command == "simulate" && end_time_text.empty()) {
@@ -513,6 +529,18 @@ int main(int argc, char** argv) {
             }
             request.solver.continuation_enabled =
                 continuation;
+            if (!continuation_initial_step_text.empty()) {
+                request.solver.continuation_initial_step =
+                    parse_positive_number(
+                        continuation_initial_step_text,
+                        "--continuation-initial-step");
+            }
+            if (!continuation_minimum_step_text.empty()) {
+                request.solver.continuation_minimum_step =
+                    parse_positive_number(
+                        continuation_minimum_step_text,
+                        "--continuation-minimum-step");
+            }
             if (!residual_tolerance_text.empty()) {
                 request.solver.residual_tolerance =
                     parse_positive_number(

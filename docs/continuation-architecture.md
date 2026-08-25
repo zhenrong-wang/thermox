@@ -20,6 +20,12 @@ At `lambda = 0`, `x0` is an exact solution. At `lambda = 1`, `H` is exactly the 
 Without an informed callback, `F(x, x0, lambda) = F(x)` and this reduces to ordinary residual
 homotopy. Intermediate solutions warm-start the next stage.
 
+For an explicitly complete physical path, `NonlinearProblem::continuation_path_is_complete`
+suppresses the additional diagonal blend and evaluates the supplied parameterized equations
+directly. The graph compiler selects this mode only when a case opts into
+`solver_options.boundary_continuation`. This prevents a fully parameterized boundary path from
+being multiplied by a second, unrelated residual homotopy.
+
 ## Adaptive path
 
 `solve_continuation` starts with a configured step in `lambda`. A converged stage advances the
@@ -96,6 +102,21 @@ compiled boundary and connection equations move the operating state into its phy
 These projections are continuation-only: `lambda = 1` passes the actual pressure, enthalpy, and
 reactant composition to the unmodified equilibrium backend.
 
+Cases may also stage fixed operating boundaries from their declared initial state:
+
+```json
+{
+  "solver_options": {"boundary_continuation": 1.0},
+  "fixed_values": {"compressor.inlet.p": {"value": 200, "unit": "kPa"}},
+  "initial_guesses": {"compressor.inlet.p": {"value": 100, "unit": "kPa"}}
+}
+```
+
+Ordinary fixed variables interpolate from their initial value to the exact target. Fixed fluid or
+material temperatures interpolate from the temperature evaluated at the anchor pressure/enthalpy
+state, so no synthetic temperature state variable is introduced. The option is explicit: without
+it, fixed values remain at their targets throughout continuation.
+
 ## Derivative preservation
 
 The wrapper preserves the target derivative path:
@@ -123,6 +144,8 @@ The CLI shorthand is:
   --model core/examples/air_compressor.json \
   --case design \
   --continuation \
+  --continuation-initial-step 0.05 \
+  --continuation-minimum-step 0.0001 \
   --format json
 ```
 

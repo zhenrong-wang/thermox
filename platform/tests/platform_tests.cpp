@@ -1649,6 +1649,76 @@ void test_generic_model_solves_ideal_gas_compressor_residuals() {
         "outside its declared bounds");
 }
 
+void test_fixed_boundary_continuation_is_explicit_and_reaches_target() {
+    const auto compile = [](bool enabled) {
+        const std::string option = enabled
+            ? R"json(,"solver_options":{"boundary_continuation":1.0})json"
+            : "";
+        return thermox::platform::compile_model_graph(
+            thermox::platform::parse_model_document_text(
+                std::string(R"json({
+  "schema_version":"thermox.model/v2",
+  "model":{
+    "id":"boundary_continuation",
+    "media":[{"id":"air","backend":"ideal_gas","substance":"Air"}],
+    "components":[{
+      "id":"source","kind":"source.fluid.boundary",
+      "media":{"outlet":"air"}
+    }],
+    "connections":[]
+  },
+  "cases":[{
+    "id":"target","mode":"steady_state_off_design",
+    "fixed_values":{
+      "source.outlet.m_dot":{"value":10.0,"unit":"kg/s"},
+      "source.outlet.p":{"value":200.0,"unit":"kPa"},
+      "source.outlet.T":{"value":600.0,"unit":"K"}
+    },
+    "initial_guesses":{
+      "source.outlet.m_dot":{"value":5.0,"unit":"kg/s"},
+      "source.outlet.p":{"value":100.0,"unit":"kPa"},
+      "source.outlet.h":{"value":300.0,"unit":"kJ/kg"}
+    })json") + option + R"json(}]
+})json"),
+            thermox::platform::make_default_component_registry(),
+            "target");
+    };
+    const auto staged = compile(true);
+    const auto direct = compile(false);
+    const auto pressure_row = require_variable_index(
+        staged.problem.residual_names, "fixed.target.source.outlet.p");
+    const auto temperature_row = require_variable_index(
+        staged.problem.residual_names, "fixed.target.source.outlet.T");
+    std::vector<double> residual(staged.problem.residual_names.size());
+    auto status = staged.problem.continuation_checked_residual(
+        staged.problem.initial_guess, staged.problem.initial_guess,
+        0.0, residual);
+    require(status.ok(), status.message);
+    require_near(residual.at(pressure_row), 0.0, 0.0,
+        "boundary continuation starts from the declared initial state");
+    require_near(residual.at(temperature_row), 0.0, 1.0e-10,
+        "temperature boundary continuation starts from anchor p/h state");
+    status = staged.problem.continuation_checked_residual(
+        staged.problem.initial_guess, staged.problem.initial_guess,
+        1.0, residual);
+    require(status.ok(), status.message);
+    require_near(residual.at(pressure_row), -100000.0, 1.0e-8,
+        "boundary continuation reaches the exact fixed target");
+
+    status = direct.problem.continuation_checked_residual(
+        direct.problem.initial_guess, direct.problem.initial_guess,
+        0.0, residual);
+    require(status.ok(), status.message);
+    require_near(residual.at(pressure_row), -100000.0, 1.0e-8,
+        "fixed boundaries remain at target when continuation is disabled");
+    const auto solved = thermox::solve_continuation(staged.problem);
+    require(solved.continuation.converged, solved.continuation.message);
+    require_near(solved.x.at(require_variable_index(
+                     staged.problem.variable_names, "source.outlet.p")),
+                 200000.0, 1.0e-8,
+        "boundary continuation finishes at the requested pressure");
+}
+
 void test_hierarchical_assembly_composes_compressor_stages() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -8429,6 +8499,7 @@ int main() {
         test_component_parameter_contracts_are_enforced();
         test_generic_model_compiles_to_connection_equations();
         test_generic_model_solves_ideal_gas_compressor_residuals();
+        test_fixed_boundary_continuation_is_explicit_and_reaches_target();
         test_hierarchical_assembly_composes_compressor_stages();
         test_map_driven_compressor_solves_bound_operating_point();
         test_map_continuation_recovers_out_of_domain_flow_guess();

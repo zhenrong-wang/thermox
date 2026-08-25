@@ -1518,6 +1518,21 @@ CompiledModelGraph compile_flat_model_graph(
         graph.port_variables, connection_counts);
 
     if (active_case != nullptr) {
+        const auto boundary_continuation_option =
+            active_case->solver_options.find("boundary_continuation");
+        if (boundary_continuation_option !=
+                active_case->solver_options.end() &&
+            boundary_continuation_option->second.dimension !=
+                "dimensionless") {
+            throw std::invalid_argument(
+                "case '" + active_case->id +
+                "' boundary_continuation solver option must be "
+                "dimensionless");
+        }
+        const bool boundary_continuation =
+            boundary_continuation_option !=
+                active_case->solver_options.end() &&
+            boundary_continuation_option->second.value_si != 0.0;
         for (const auto& [key, scalar] : active_case->fixed_values) {
             const auto variable_it = variable_indices.find(key);
             if (variable_it == variable_indices.end()) {
@@ -1603,7 +1618,7 @@ CompiledModelGraph compile_flat_model_graph(
                                 "fixed." + active_case->id +
                                 "." + key;
                             const std::size_t residual_index =
-                                system.add_checked_equation(
+                                system.add_continuation_checked_equation(
                                     residual_name,
                                     [properties =
                                          package->second,
@@ -1612,9 +1627,13 @@ CompiledModelGraph compile_flat_model_graph(
                                      enthalpy =
                                          enthalpy->second,
                                      target =
-                                         scalar.value_si](
+                                         scalar.value_si,
+                                     boundary_continuation](
                                         const std::vector<double>&
                                             x,
+                                        const std::vector<double>&
+                                            anchor,
+                                        double continuation_parameter,
                                         double& residual) {
                                         const auto state =
                                             properties->state_ph(
@@ -1624,10 +1643,29 @@ CompiledModelGraph compile_flat_model_graph(
                                             return property_failure(
                                                 state);
                                         }
+                                        double staged_target = target;
+                                        if (boundary_continuation &&
+                                            continuation_parameter < 1.0) {
+                                            const auto anchor_state =
+                                                properties->state_ph(
+                                                    anchor.at(pressure),
+                                                    anchor.at(enthalpy));
+                                            if (!anchor_state.ok()) {
+                                                return property_failure(
+                                                    anchor_state);
+                                            }
+                                            staged_target =
+                                                anchor_state.state
+                                                    .temperature_k +
+                                                continuation_parameter *
+                                                    (target -
+                                                     anchor_state.state
+                                                         .temperature_k);
+                                        }
                                         residual =
                                             state.state
                                                 .temperature_k -
-                                            target;
+                                            staged_target;
                                         return EvaluationStatus::
                                             success();
                                     },
@@ -1724,7 +1762,7 @@ CompiledModelGraph compile_flat_model_graph(
                                 "fixed." + active_case->id +
                                 "." + key;
                             const std::size_t residual_index =
-                                system.add_checked_equation(
+                                system.add_continuation_checked_equation(
                                     residual_name,
                                     [properties = package,
                                      species = material.species,
@@ -1734,64 +1772,66 @@ CompiledModelGraph compile_flat_model_graph(
                                      enthalpy =
                                          enthalpy->second,
                                      target =
-                                         scalar.value_si](
+                                         scalar.value_si,
+                                     boundary_continuation](
                                         const std::vector<double>&
                                             x,
+                                        const std::vector<double>&
+                                            anchor,
+                                        double continuation_parameter,
                                         double& residual) {
-                                        std::vector<double>
-                                            mass_fractions(
-                                                flows.size(),
-                                                0.0);
-                                        double total_flow = 0.0;
-                                        for (std::size_t index = 0;
-                                             index < flows.size();
-                                             ++index) {
-                                            const double flow =
-                                                x.at(
-                                                    flows.at(
-                                                        index));
-                                            if (!std::isfinite(flow) ||
-                                                flow < 0.0) {
-                                                return EvaluationStatus::
-                                                    recoverable(
-                                                        "material "
-                                                        "temperature "
-                                                        "specification "
-                                                        "requires finite "
-                                                        "nonnegative "
-                                                        "species flows");
-                                            }
-                                            mass_fractions.at(
-                                                index) = flow;
-                                            total_flow += flow;
-                                        }
-                                        if (!std::isfinite(
-                                                total_flow) ||
-                                            total_flow <= 0.0) {
-                                            return EvaluationStatus::
-                                                recoverable(
-                                                    "material "
-                                                    "temperature "
-                                                    "specification "
-                                                    "requires positive "
-                                                    "total mass flow");
-                                        }
-                                        for (auto& fraction :
-                                             mass_fractions) {
-                                            fraction /= total_flow;
-                                        }
-                                        const auto state =
-                                            properties->state_ph(
-                                                x.at(pressure),
-                                                x.at(enthalpy),
-                                                physics::
-                                                    SpeciesComposition{
+                                        const auto evaluate_state =
+                                            [&](const auto& values) {
+                                                std::vector<double>
+                                                    mass_fractions(
+                                                        flows.size(), 0.0);
+                                                double total_flow = 0.0;
+                                                for (std::size_t index = 0;
+                                                     index < flows.size();
+                                                     ++index) {
+                                                    const double flow =
+                                                        values.at(
+                                                            flows.at(index));
+                                                    if (!std::isfinite(flow) ||
+                                                        flow < 0.0) {
+                                                        return physics::
+                                                            ThermochemicalResult{
+                                                                {},
+                                                                physics::
+                                                                    PropertyStatus::
+                                                                        invalid_input,
+                                                                "material temperature specification requires finite nonnegative species flows"};
+                                                    }
+                                                    mass_fractions.at(index) =
+                                                        flow;
+                                                    total_flow += flow;
+                                                }
+                                                if (!std::isfinite(total_flow) ||
+                                                    total_flow <= 0.0) {
+                                                    return physics::
+                                                        ThermochemicalResult{
+                                                            {},
+                                                            physics::
+                                                                PropertyStatus::
+                                                                    invalid_input,
+                                                            "material temperature specification requires positive total mass flow"};
+                                                }
+                                                for (auto& fraction :
+                                                     mass_fractions) {
+                                                    fraction /= total_flow;
+                                                }
+                                                return properties->state_ph(
+                                                    values.at(pressure),
+                                                    values.at(enthalpy),
+                                                    physics::SpeciesComposition{
                                                         physics::
                                                             CompositionBasis::
                                                                 mass_fraction,
                                                         species,
                                                         std::move(
                                                             mass_fractions)});
+                                            };
+                                        const auto state = evaluate_state(x);
                                         if (!state.ok()) {
                                             return state.status ==
                                                 physics::
@@ -1804,11 +1844,36 @@ CompiledModelGraph compile_flat_model_graph(
                                                       recoverable(
                                                           state.message);
                                         }
+                                        double staged_target = target;
+                                        if (boundary_continuation &&
+                                            continuation_parameter < 1.0) {
+                                            const auto anchor_state =
+                                                evaluate_state(anchor);
+                                            if (!anchor_state.ok()) {
+                                                return anchor_state.status ==
+                                                        physics::PropertyStatus::
+                                                            backend_error
+                                                    ? EvaluationStatus::fatal(
+                                                          anchor_state.message)
+                                                    : EvaluationStatus::
+                                                          recoverable(
+                                                              anchor_state.message);
+                                            }
+                                            const double anchor_temperature =
+                                                anchor_state.state
+                                                    .thermodynamic
+                                                    .temperature_k;
+                                            staged_target =
+                                                anchor_temperature +
+                                                continuation_parameter *
+                                                    (target -
+                                                     anchor_temperature);
+                                        }
                                         residual =
                                             state.state
                                                 .thermodynamic
                                                 .temperature_k -
-                                            target;
+                                            staged_target;
                                         return EvaluationStatus::
                                             success();
                                     },
@@ -1827,11 +1892,26 @@ CompiledModelGraph compile_flat_model_graph(
                 throw std::invalid_argument("case '" + active_case->id +
                                             "' fixed value references unknown variable: " + key);
             }
-            const std::size_t residual_index = system.add_linear_equation(
-                "fixed." + active_case->id + "." + key,
-                {{variable_it->second, 1.0}},
-                scalar.value_si,
-                std::max(std::abs(scalar.value_si), 1.0));
+            const std::size_t variable = variable_it->second;
+            const double target = scalar.value_si;
+            const std::size_t residual_index =
+                system.add_continuation_linear_equation(
+                    "fixed." + active_case->id + "." + key,
+                    {{variable, 1.0}}, target,
+                    [variable, target, boundary_continuation](
+                        const std::vector<double>& x,
+                        const std::vector<double>& anchor,
+                        double continuation_parameter,
+                        std::vector<EquationPartial>& jacobian) {
+                        const double staged_target = boundary_continuation
+                            ? anchor.at(variable) +
+                                continuation_parameter *
+                                    (target - anchor.at(variable))
+                            : target;
+                        jacobian.push_back({variable, 1.0});
+                        return x.at(variable) - staged_target;
+                    },
+                    std::max(std::abs(target), 1.0));
             graph.fixed_value_equations.push_back(system.residuals().at(residual_index).name);
         }
         for (const auto& [key, _] : active_case->initial_guesses) {
@@ -1845,6 +1925,11 @@ CompiledModelGraph compile_flat_model_graph(
     graph.structure =
         validate_degree_of_freedom(document.model_id, system);
     graph.problem = system.build();
+    graph.problem.continuation_path_is_complete =
+        active_case != nullptr &&
+        active_case->solver_options.contains("boundary_continuation") &&
+        active_case->solver_options.at("boundary_continuation").value_si !=
+            0.0;
     return graph;
 }
 

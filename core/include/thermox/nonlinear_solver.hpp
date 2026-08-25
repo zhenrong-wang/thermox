@@ -203,6 +203,10 @@ struct NonlinearProblem {
     std::vector<bool> analytic_jacobian_rows;
     // Optional component- or model-informed path. At parameter 1
     // these callbacks must represent the ordinary target problem.
+    // When this flag is true, the informed callbacks already define the
+    // complete homotopy and must not be blended again with the solver's
+    // generic diagonal anchor problem.
+    bool continuation_path_is_complete{false};
     ContinuationCheckedResidualFunction continuation_checked_residual;
     ContinuationCheckedResidualSubsetFunction
         continuation_checked_residual_subset;
