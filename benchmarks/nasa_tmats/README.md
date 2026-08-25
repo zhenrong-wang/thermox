@@ -155,3 +155,57 @@ state propagation, and exact shaft closure. It does **not** yet qualify fuel-flo
 constitute independent hardware validation. The 0.84 multiplier in the generator affects only the
 initial fuel guess; fuel remains an unconstrained solved variable and the converged result is
 independent of that initialization within the solver's basin.
+
+## AGTF30 coupled low-spool inverse calculation
+
+`agtf30_low_spool.json` couples the ordinary fan, LPC, cooled LPT, and a generic geared two-load
+shaft train. The train represents a direct LPC load and a fan turning at `N2 / 3.1`; the declared
+LP-shaft efficiency is 0.99 and gearbox efficiency is 1.0. The fan, LPC, and LPT maps are imported
+without fitting from the arrays and component scalers in NASA's generated C model:
+
+```sh
+python3 scripts/import_tmats_c_compressor_map.py \
+  /path/to/AGTF30/engine_model/MEX_engine_model.c \
+  benchmarks/nasa_tmats/agtf30_fan_map.json \
+  --prefix GTF_fan --id nasa-agtf30-fan-map
+python3 scripts/import_tmats_c_compressor_map.py \
+  /path/to/AGTF30/engine_model/MEX_engine_model.c \
+  benchmarks/nasa_tmats/agtf30_lpc_map.json \
+  --prefix GTF_lpc --id nasa-agtf30-lpc-map
+python3 scripts/import_tmats_turbine_map.py \
+  /path/to/AGTF30/engine_model/MEX_engine_model.c \
+  benchmarks/nasa_tmats/agtf30_lpt_map.json \
+  --prefix GTF_lpt --id nasa-agtf30-lpt-map
+python3 scripts/build_agtf30_low_spool_benchmark.py
+```
+
+This deliberately remains a station-sliced inverse benchmark. Station 2 pressure/temperature and
+NASA's solved fan R-line are fixed, so fan flow is reconstructed from the untouched fan map.
+Station 23 flow/state, station 48 pressure/temperature, cooling state/flow, and N2 are fixed. LPT
+main flow is left free and is solved from its map plus the common-shaft balance. Fixing fan R-line
+is necessary because the omitted splitter, ducts, bypass/core flow paths, and nozzles provide the
+downstream constraint that solves R-line in the complete engine.
+
+Run a point with all three immutable artifacts:
+
+```sh
+./build/thermox_cli solve \
+  --model benchmarks/nasa_tmats/agtf30_low_spool.json \
+  --case alt_30000_mach_072_2000 \
+  --performance-map benchmarks/nasa_tmats/agtf30_fan_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_lpc_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_lpt_map.json \
+  --format text
+```
+
+All five points converge in two or three direct Newton iterations with normalized residuals below
+`4.20e-11`; shaft power closes below `1e-6 W`. Fan flow, pressure, and temperature reconstruct to
+within 0.01%, LPC discharge pressure/temperature remain within 0.20%, and solved LPT inlet flow is
+within 0.01%. LPT outlet pressure differs by -2.924% to -0.539% and temperature by -1.922% to
+-0.472%, while fan/LPC/LPT shaft-power differences inferred from NASA torque remain below 0.66%.
+Those retained LPT state differences bound the dry N2/O2 thermochemistry and map-work differences.
+
+This validates generic map import, geared multi-load shaft topology, inverse LPT flow, and exact LP
+shaft closure across five off-design points. It is not a continuous gas-path or whole-engine
+prediction: fan R-line and intermediate station boundaries still come from NASA's solved model,
+and bypass/core ducts, splitters, and nozzles are not connected in this declaration.

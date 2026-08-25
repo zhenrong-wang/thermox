@@ -596,8 +596,16 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 81,
+        response.components.size() == 83,
         "service must expose the complete component registry");
+    require(
+        std::any_of(
+            response.components.begin(), response.components.end(),
+            [](const auto& component) {
+                return component.kind ==
+                    "shaft.train.geared_two_load";
+            }),
+        "service catalog must expose the geared two-load shaft train");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1954,6 +1962,137 @@ void test_nasa_agtf30_coupled_high_spool_benchmark() {
             std::abs(shaft_closure) < 1.0e-6,
             "coupled high spool must close compressor, turbine, and "
             "declared extraction power exactly: " + point.case_id);
+    }
+}
+
+void test_nasa_agtf30_coupled_low_spool_benchmark() {
+    struct ReferencePoint {
+        std::string case_id;
+        double fan_flow_lbm_s;
+        double fan_pressure_psia;
+        double fan_temperature_deg_r;
+        double lpc_pressure_psia;
+        double lpc_temperature_deg_r;
+        double lpt_inlet_flow_lbm_s;
+        double lpt_pressure_psia;
+        double lpt_temperature_deg_r;
+    };
+    const std::vector<ReferencePoint> cases = {
+        {"sea_level_static_1000", 952.4527216472, 15.1543226875,
+         524.6498883364, 20.8871224494, 582.6838354522,
+         24.6515224266, 14.9677381289, 1151.0231330851},
+        {"sea_level_mach_03_1500", 1486.5592910209, 17.1003657680,
+         571.2765314183, 34.2933896482, 712.6083875065,
+         44.2490042836, 15.7062233148, 1325.2888976205},
+        {"alt_10000_mach_05_1750", 1362.1732328680, 13.6409494280,
+         527.4801300339, 32.1343832806, 689.4957044996,
+         43.9715927247, 11.4749285219, 1240.3710330419},
+        {"alt_25000_mach_06_2000", 933.1420345382, 8.3275416857,
+         474.6139527632, 22.4726344734, 644.6920761831,
+         33.2783129227, 6.8332506957, 1162.1512948641},
+        {"alt_30000_mach_072_2000", 823.7870551985, 7.3819365350,
+         479.5690376878, 20.2235148517, 654.6017474960,
+         29.1265429133, 5.6850295910, 1156.9484849263},
+    };
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_low_spool.json");
+    const auto fan_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_fan_map.json"));
+    const auto lpc_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_lpc_map.json"));
+    const auto lpt_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_lpt_map.json"));
+    constexpr double psi_to_pa = 6894.757293168;
+    constexpr double pound_mass_to_kg = 0.45359237;
+    for (const auto& point : cases) {
+        thermox::service::SteadySimulationRequest request;
+        request.model_json = model;
+        request.case_id = point.case_id;
+        request.artifacts.performance_maps = {
+            fan_map, lpc_map, lpt_map};
+        const auto response =
+            thermox::service::SimulationService{}.run_steady(request);
+        require(
+            response.succeeded() && response.diagnostics.converged &&
+                response.diagnostics.final_residual_norm < 1.0e-9,
+            "NASA AGTF30 coupled low-spool point must solve: " +
+                point.case_id);
+
+        const auto& fan_inlet = require_port_result(
+            response.graph, "fan", "inlet");
+        const auto& fan_outlet = require_port_result(
+            response.graph, "fan", "outlet");
+        const auto& lpc_outlet = require_port_result(
+            response.graph, "lpc", "outlet");
+        const auto& lpt_inlet = require_port_result(
+            response.graph, "lpt", "inlet");
+        const auto& lpt_outlet = require_port_result(
+            response.graph, "lpt", "outlet");
+        const auto relative_error = [](double actual, double expected) {
+            return std::abs(actual / expected - 1.0);
+        };
+        require(
+            relative_error(
+                require_result_value(
+                    fan_inlet.derived_values, "m_dot_total").value_si,
+                point.fan_flow_lbm_s * pound_mass_to_kg) < 1.0e-4 &&
+                relative_error(
+                    require_result_value(
+                        fan_outlet.primary_values, "p").value_si,
+                    point.fan_pressure_psia * psi_to_pa) < 1.0e-4 &&
+                relative_error(
+                    require_result_value(
+                        fan_outlet.derived_values, "T").value_si,
+                    point.fan_temperature_deg_r * 5.0 / 9.0) < 1.0e-4,
+            "coupled low-spool fan map reconstruction must remain within "
+            "its declared cross-code comparison band: " + point.case_id);
+        require(
+            relative_error(
+                require_result_value(
+                    lpc_outlet.primary_values, "p").value_si,
+                point.lpc_pressure_psia * psi_to_pa) < 1.0e-4 &&
+                relative_error(
+                    require_result_value(
+                        lpc_outlet.derived_values, "T").value_si,
+                    point.lpc_temperature_deg_r * 5.0 / 9.0) < 0.002,
+            "coupled low-spool LPC station must remain within its "
+            "declared cross-code comparison band: " + point.case_id);
+        require(
+            relative_error(
+                require_result_value(
+                    lpt_inlet.derived_values, "m_dot_total").value_si,
+                point.lpt_inlet_flow_lbm_s * pound_mass_to_kg) < 1.0e-4 &&
+                relative_error(
+                    require_result_value(
+                        lpt_outlet.primary_values, "p").value_si,
+                    point.lpt_pressure_psia * psi_to_pa) < 0.035 &&
+                relative_error(
+                    require_result_value(
+                        lpt_outlet.derived_values, "T").value_si,
+                    point.lpt_temperature_deg_r * 5.0 / 9.0) < 0.025,
+            "coupled low-spool LPT inverse flow and station state must "
+            "remain within their declared cross-code comparison bands: " +
+                point.case_id);
+
+        const double lpt_power = require_result_value(
+            require_port_result(response.graph, "lpt", "shaft")
+                .primary_values, "W_dot").value_si;
+        const double lpc_power = require_result_value(
+            require_port_result(response.graph, "lpc", "shaft")
+                .primary_values, "W_dot").value_si;
+        const double fan_power = require_result_value(
+            require_port_result(response.graph, "fan", "shaft")
+                .primary_values, "W_dot").value_si;
+        require(
+            std::abs(0.99 * lpt_power - lpc_power - fan_power) < 1.0e-6,
+            "coupled low spool must close LPT, LPC, and geared fan shaft "
+            "power: " + point.case_id);
     }
 }
 
@@ -7716,6 +7855,7 @@ int main() {
         test_nasa_agtf30_hpc_off_design_benchmark();
         test_nasa_agtf30_hpt_map_compatibility_benchmark();
         test_nasa_agtf30_coupled_high_spool_benchmark();
+        test_nasa_agtf30_coupled_low_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

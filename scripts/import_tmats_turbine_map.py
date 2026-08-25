@@ -132,7 +132,10 @@ def convert(
             {
                 "output": "pressure_ratio",
                 "minimum": 1.0,
-                "minimum_inclusive": False,
+                # Preserve the zero-expansion boundary present in canonical
+                # T-MATS tables. Component equations still select a
+                # physically admissible operating point above this boundary.
+                "minimum_inclusive": True,
             },
             {
                 "output": "isentropic_efficiency",

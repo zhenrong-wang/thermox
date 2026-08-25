@@ -90,3 +90,12 @@ errors are below 0.000057%. Generic front-stage/rear-exit cooling injections clo
 numerical precision and reproduce torque within 0.110%. The simplified N2/O2 station-4 boundary
 leaves outlet temperature 0.685--1.283% low; combustor composition and coupled shaft balance remain
 open system gates.
+
+The LP-spool coupling gate is now complete as a station-sliced cross-code reproduction. Generic
+fan, LPC, cooled LPT, and geared two-load shaft components solve all five healthy AGTF30 points in
+two or three Newton iterations and close shaft power below `1e-6 W`. Fan map outputs and inverse LPT
+flow agree within 0.01%; LPC discharge temperature remains within 0.123%, while the simplified
+dry-air LPT outlet retains pressure and temperature differences up to 2.924% and 1.922%. NASA's
+solved fan R-line is a declared boundary because the downstream splitter, dual gas paths, ducts,
+and nozzles are not yet connected. The next gate is therefore continuous whole-engine gas-path
+closure, not additional fitting of this sliced benchmark.

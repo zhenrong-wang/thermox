@@ -151,6 +151,146 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class FixedRatioShaftGearboxModel final : public ComponentModel {
+public:
+    FixedRatioShaftGearboxModel() {
+        descriptor_.kind = "gearbox.shaft.fixed_ratio";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "gearbox.shaft";
+        descriptor_.display_name = "Fixed-ratio shaft gearbox";
+        descriptor_.category = "Power transmission";
+        descriptor_.model_name =
+            "Fixed speed ratio with mechanical efficiency";
+        descriptor_.ports = {
+            {"driver", "shaft", "in"},
+            {"load", "shaft", "out"},
+        };
+        descriptor_.parameters = {
+            {"speed_ratio", "dimensionless", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, false},
+            {"mechanical_efficiency", "dimensionless", false,
+             1.0, 0.0, 1.0, false, true},
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const double speed_ratio = required_parameter(
+            context.component, "speed_ratio");
+        const double efficiency = parameter_or(
+            context.component, "mechanical_efficiency", 1.0);
+        const auto driver_power =
+            require_port_variable(context, "driver.W_dot");
+        const auto driver_speed =
+            require_port_variable(context, "driver.omega");
+        const auto load_power =
+            require_port_variable(context, "load.W_dot");
+        const auto load_speed =
+            require_port_variable(context, "load.omega");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        // speed_ratio is defined as driver speed divided by load speed.
+        system.add_linear_equation(
+            prefix + "speed_ratio",
+            {{driver_speed, 1.0}, {load_speed, -speed_ratio}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "power_transfer",
+            {{driver_power, efficiency}, {load_power, -1.0}},
+            0.0, 1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
+class GearedTwoLoadShaftTrainModel final : public ComponentModel {
+public:
+    GearedTwoLoadShaftTrainModel() {
+        descriptor_.kind = "shaft.train.geared_two_load";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "shaft.train";
+        descriptor_.display_name = "Geared two-load shaft train";
+        descriptor_.category = "Power transmission";
+        descriptor_.model_name =
+            "Direct and fixed-ratio geared loads on one driver";
+        descriptor_.ports = {
+            {"driver", "shaft", "in"},
+            {"direct_load", "shaft", "out"},
+            {"geared_load", "shaft", "out"},
+        };
+        descriptor_.parameters = {
+            {"speed_ratio", "dimensionless", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, false},
+            {"shaft_efficiency", "dimensionless", false,
+             1.0, 0.0, 1.0, false, true},
+            {"gearbox_efficiency", "dimensionless", false,
+             1.0, 0.0, 1.0, false, true},
+            {"fixed_loss", "power", false, 0.0, 0.0,
+             std::numeric_limits<double>::infinity(), true, true},
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const double speed_ratio = required_parameter(
+            context.component, "speed_ratio");
+        const double shaft_efficiency = parameter_or(
+            context.component, "shaft_efficiency", 1.0);
+        const double gearbox_efficiency = parameter_or(
+            context.component, "gearbox_efficiency", 1.0);
+        const double fixed_loss = parameter_or(
+            context.component, "fixed_loss", 0.0);
+        const auto driver_power =
+            require_port_variable(context, "driver.W_dot");
+        const auto driver_speed =
+            require_port_variable(context, "driver.omega");
+        const auto direct_power =
+            require_port_variable(context, "direct_load.W_dot");
+        const auto direct_speed =
+            require_port_variable(context, "direct_load.omega");
+        const auto geared_power =
+            require_port_variable(context, "geared_load.W_dot");
+        const auto geared_speed =
+            require_port_variable(context, "geared_load.omega");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "direct_load_speed",
+            {{driver_speed, 1.0}, {direct_speed, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "geared_load_speed",
+            {{driver_speed, 1.0}, {geared_speed, -speed_ratio}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "power_balance",
+            {
+                {driver_power, shaft_efficiency},
+                {direct_power, -1.0},
+                {geared_power, -1.0 / gearbox_efficiency},
+            },
+            fixed_loss, 1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class GeneratorModel final : public ComponentModel {
 public:
     GeneratorModel() {
@@ -505,6 +645,10 @@ void register_power_component_models(ComponentRegistry& registry) {
         std::make_shared<TwoLoadShaftTrainModel>());
     registry.register_model(
         std::make_shared<TwoDriverShaftCombinerModel>());
+    registry.register_model(
+        std::make_shared<FixedRatioShaftGearboxModel>());
+    registry.register_model(
+        std::make_shared<GearedTwoLoadShaftTrainModel>());
     registry.register_model(std::make_shared<GeneratorModel>());
     registry.register_model(
         std::make_shared<FluidToElectricalPolynomialModel>());

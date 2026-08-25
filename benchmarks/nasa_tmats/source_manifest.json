@@ -169,5 +169,41 @@
     ],
     "classification": "multi_point_coupled_high_spool_cross_code_inverse_reproduction"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, coupled bleed routing, and exact high-shaft conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, fuel-flow predictive qualification, or transient validation."
+  "agtf30_coupled_low_spool_execution": {
+    "model": "agtf30_low_spool.json",
+    "artifacts": ["agtf30_fan_map.json", "agtf30_lpc_map.json", "agtf30_lpt_map.json"],
+    "selection": "The same five converged nominal-health, zero-bias operating points used for the HPC, HPT, and coupled high-spool slices.",
+    "boundary_contract": "Station 2 pressure/temperature and the NASA-solved fan R-line are fixed; fan flow is reconstructed from the source map. Station 23 flow/state, station 48 pressure/temperature, LPT exit cooling state/flow, and N2 speed are fixed. LPT main flow is relaxed and solved from map compatibility plus LP-shaft closure.",
+    "topology": "A generic geared two-load shaft train connects the LPT driver to a direct LPC load and a fan load at N2/3.1, with declared shaft efficiency 0.99 and gearbox efficiency 1.0.",
+    "results": {
+      "converged_points": 5,
+      "newton_iterations_per_point_range": [2, 3],
+      "maximum_normalized_residual_norm": 4.19225e-11,
+      "fan_flow_maximum_absolute_error_percent": 0.001,
+      "fan_pressure_maximum_absolute_error_percent": 0.001,
+      "fan_temperature_maximum_absolute_error_percent": 0.01,
+      "lpc_pressure_maximum_absolute_error_percent": 0.01,
+      "lpc_temperature_maximum_absolute_error_percent": 0.123,
+      "lpt_inlet_flow_maximum_absolute_error_percent": 0.001,
+      "lpt_outlet_pressure_error_percent_range": [-2.924, -0.539],
+      "lpt_outlet_temperature_error_percent_range": [-1.922, -0.472],
+      "shaft_power_maximum_absolute_error_percent": 0.652,
+      "maximum_absolute_shaft_closure_w": 1e-6
+    },
+    "acceptance": {
+      "fan_map_outputs_percent": 0.01,
+      "lpc_station_percent": 0.2,
+      "lpt_inlet_flow_percent": 0.01,
+      "lpt_outlet_pressure_percent": 3.5,
+      "lpt_outlet_temperature_percent": 2.5,
+      "result": "pass"
+    },
+    "reserved_comparisons": [
+      "Continuous gas-path prediction: the splitter, core/bypass ducts, variable bleed valve, and nozzles are not connected in this station-sliced declaration.",
+      "Independent fan R-line prediction: NASA's solved R-line substitutes for the downstream gas-path constraint omitted from this slice.",
+      "Independent hardware and transient validation."
+    ],
+    "classification": "multi_point_coupled_low_spool_cross_code_inverse_reproduction"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, coupled bleed routing, geared multi-load topology, and exact high- and low-shaft conservation against public NASA code paths. They are not independent hardware validation, continuous whole-engine gas-path validation, fuel-flow predictive qualification, or transient validation."
 }

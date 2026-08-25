@@ -984,6 +984,10 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain material splitter");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
+    require(registry.contains("gearbox.shaft.fixed_ratio"),
+            "default registry should contain fixed-ratio gearbox");
+    require(registry.contains("shaft.train.geared_two_load"),
+            "default registry should contain geared two-load shaft train");
     require(registry.contains(
                 "converter.fluid_to_electrical.polynomial_efficiency"),
             "default registry should contain the conservative "
@@ -1105,7 +1109,9 @@ void test_component_catalog_exposes_parameter_contracts() {
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
         "shaft.train.two_load",
+        "shaft.train.geared_two_load",
         "shaft.combiner.two_driver",
+        "gearbox.shaft.fixed_ratio",
         "shaft.inertia.two_port",
         "generator.electrical.efficiency",
         "converter.fluid_to_electrical.polynomial_efficiency",
@@ -7834,6 +7840,24 @@ void test_shaft_train_and_generator_close_power_balance() {
         }
       },
       {
+        "id": "gearbox",
+        "kind": "gearbox.shaft.fixed_ratio",
+        "parameters": {
+          "speed_ratio": 3.0,
+          "mechanical_efficiency": 0.97
+        }
+      },
+      {
+        "id": "geared_train",
+        "kind": "shaft.train.geared_two_load",
+        "parameters": {
+          "speed_ratio": 3.0,
+          "shaft_efficiency": 0.98,
+          "gearbox_efficiency": 0.95,
+          "fixed_loss": {"value": 1.0, "unit": "MW"}
+        }
+      },
+      {
         "id": "grid",
         "kind": "sink.electrical.boundary"
       }
@@ -7866,6 +7890,11 @@ void test_shaft_train_and_generator_close_power_balance() {
       "combiner.driver_a.W_dot": {"value": 190.0, "unit": "MW"},
       "combiner.driver_a.omega": 314.1592653589793,
       "combiner.driver_b.W_dot": {"value": 120.0, "unit": "MW"},
+      "gearbox.driver.W_dot": {"value": 40.0, "unit": "MW"},
+      "gearbox.driver.omega": 300.0,
+      "geared_train.driver.W_dot": {"value": 50.0, "unit": "MW"},
+      "geared_train.driver.omega": 300.0,
+      "geared_train.direct_load.W_dot": {"value": 10.0, "unit": "MW"},
       "train.load_1.W_dot": {"value": 40.0, "unit": "MW"}
     }
   }]
@@ -7912,6 +7941,21 @@ void test_shaft_train_and_generator_close_power_balance() {
     require_near(
         value("grid.inlet.frequency"), 50.0, 1.0e-10,
         "generator converts shaft speed to electrical frequency");
+    require_near(
+        value("gearbox.load.omega"), 100.0, 1.0e-12,
+        "gearbox applies driver-to-load speed ratio");
+    require_near(
+        value("gearbox.load.W_dot"), 38.8e6, 1.0e-6,
+        "gearbox transfers shaft power after mechanical loss");
+    require_near(
+        value("geared_train.direct_load.omega"), 300.0, 1.0e-12,
+        "geared shaft train preserves direct-load speed");
+    require_near(
+        value("geared_train.geared_load.omega"), 100.0, 1.0e-12,
+        "geared shaft train applies its load speed ratio");
+    require_near(
+        value("geared_train.geared_load.W_dot"), 36.1e6, 1.0e-6,
+        "geared shaft train accounts for shaft, gearbox, and fixed losses");
     const thermox::platform::GraphResultEvaluator evaluator(
         document, graph,
         thermox::physics::
@@ -7921,6 +7965,8 @@ void test_shaft_train_and_generator_close_power_balance() {
         190.0e6 + 120.0e6 - combined_shaft_power;
     const double train_loss =
         (1.0 - 0.99) * combined_shaft_power + 1.0e6;
+    const double gearbox_loss = (1.0 - 0.97) * 40.0e6;
+    const double geared_train_loss = 50.0e6 - 10.0e6 - 36.1e6;
     require_near(
         require_result_value(
             require_component_result(
@@ -7950,6 +7996,7 @@ void test_shaft_train_and_generator_close_power_balance() {
             graph_result.system_balances,
             "net_boundary_energy_flow"),
         combiner_loss + train_loss +
+            gearbox_loss + geared_train_loss +
             0.02 * generator_shaft_power,
         1.0e-6,
         "system boundary energy equals attributed conversion losses");

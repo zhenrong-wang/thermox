@@ -1,0 +1,1184 @@
+{
+  "id": "nasa-agtf30-lpc-map",
+  "schema_version": "thermox.performance_map/v1",
+  "revision": "agtf30-17051fc",
+  "checksum_sha256": "35b0aedda1057c6ff513026fbcf0c797b5b8ca15b79a13049f09b61f422f77c7",
+  "payload": {
+    "primary_variable": {
+      "name": "map_coordinate",
+      "dimension": "dimensionless"
+    },
+    "family_variable": {
+      "name": "corrected_speed",
+      "dimension": "angular_speed"
+    },
+    "output_variables": [
+      {
+        "name": "corrected_mass_flow",
+        "dimension": "mass_flow"
+      },
+      {
+        "name": "pressure_ratio",
+        "dimension": "dimensionless"
+      },
+      {
+        "name": "isentropic_efficiency",
+        "dimension": "dimensionless"
+      }
+    ],
+    "output_constraints": [
+      {
+        "output": "corrected_mass_flow",
+        "minimum": 0.0,
+        "minimum_inclusive": false
+      },
+      {
+        "output": "pressure_ratio",
+        "minimum": 1.0,
+        "minimum_inclusive": true
+      },
+      {
+        "output": "isentropic_efficiency",
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "minimum_inclusive": true,
+        "maximum_inclusive": true
+      }
+    ],
+    "curves": [
+      {
+        "family_coordinate": 201.01166239950186,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              17.270257332328,
+              1.0423,
+              0.7256
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              19.477211008563003,
+              1.0412,
+              0.7656
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              21.65948925987,
+              1.0393,
+              0.7978
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              23.814325172792003,
+              1.0367,
+              0.8195
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              25.939269348531003,
+              1.0333,
+              0.8274
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              28.031736310578,
+              1.0292,
+              0.8164
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              30.089458097083,
+              1.0234,
+              0.7494
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              32.110030668485,
+              1.0151,
+              0.5651
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              34.091276781408,
+              1.0043,
+              0.1931
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              34.729889479131,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              34.729889479131,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              34.729889479131,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 268.0155498660025,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              24.511360567771,
+              1.076,
+              0.7474
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              27.233141583956,
+              1.0738,
+              0.7848
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              29.902305885221,
+              1.0704,
+              0.8147
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              32.514226829392,
+              1.0658,
+              0.8351
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              35.064413852006,
+              1.06,
+              0.843
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              37.548739262496,
+              1.053,
+              0.8339
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              39.96321144800601,
+              1.0434,
+              0.7757
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              42.304201669576,
+              1.0297,
+              0.6161
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              44.568398702905,
+              1.0122,
+              0.3003
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              45.837550154165,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              45.837550154165,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              45.837550154165,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 335.0194373325031,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              31.8966154584,
+              1.1215,
+              0.761
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              35.160348638261,
+              1.118,
+              0.7984
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              38.326241943913004,
+              1.1127,
+              0.8286
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              41.386720382777,
+              1.1055,
+              0.8496
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              44.334980069303,
+              1.0965,
+              0.8586
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              47.164761428785006,
+              1.0856,
+              0.8516
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              49.870621352783,
+              1.0707,
+              0.7977
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              52.447661043701004,
+              1.0497,
+              0.6479
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              54.89175281097201,
+              1.0228,
+              0.3526
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              56.536161229933,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              56.536161229933,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              56.536161229933,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 402.0233247990037,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              39.68298208182,
+              1.1789,
+              0.7744
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              43.404072448352004,
+              1.1738,
+              0.8117
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              46.964636475141,
+              1.166,
+              0.8421
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              50.354559052336,
+              1.1555,
+              0.8637
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              53.565040487959,
+              1.1423,
+              0.8738
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              56.58864186714201,
+              1.1266,
+              0.8685
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              59.419285052126995,
+              1.1052,
+              0.8183
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              62.052298041503,
+              1.0753,
+              0.6765
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              64.484188174021,
+              1.0374,
+              0.397
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              66.329356575944,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              66.329356575944,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              66.329356575944,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 469.0272122655043,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              48.016743977356,
+              1.2494,
+              0.7872
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              52.07562458182701,
+              1.2422,
+              0.824
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              55.895507366545004,
+              1.2312,
+              0.8542
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              59.464961803786004,
+              1.2167,
+              0.8759
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              62.774825327676005,
+              1.1986,
+              0.8866
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              65.81829405266501,
+              1.1771,
+              0.8827
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              68.59083205505301,
+              1.1481,
+              0.836
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              71.090080654516,
+              1.1078,
+              0.7028
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              73.31594913258,
+              1.0572,
+              0.4407
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              75.174725305603,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              75.174725305603,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              75.174725305603,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 536.031099732005,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              56.751844401868006,
+              1.3353,
+              0.7965
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              61.056345274694,
+              1.3253,
+              0.8329
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              65.025732104564,
+              1.3105,
+              0.8627
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              68.64911867459801,
+              1.291,
+              0.8843
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              71.919247506876,
+              1.2669,
+              0.8953
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              74.832444503201,
+              1.2384,
+              0.8924
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              77.388618945099,
+              1.2002,
+              0.8485
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              79.590809901449,
+              1.1476,
+              0.7222
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              81.444959432298,
+              1.0822,
+              0.4748
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              82.959821870387,
+              1.0056,
+              0.0391
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              83.039926282929,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              83.039926282929,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 603.0349871985055,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              65.54001513367001,
+              1.4411,
+              0.7997
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              70.11190870861101,
+              1.4282,
+              0.8368
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              74.21873402659101,
+              1.4088,
+              0.8673
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              77.85214498800201,
+              1.383,
+              0.8896
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              81.009737553283,
+              1.3512,
+              0.9013
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              83.694550791313,
+              1.3136,
+              0.8991
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              85.914885442463,
+              1.2632,
+              0.8561
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              87.68348745233,
+              1.1942,
+              0.731
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              89.01709437936701,
+              1.1088,
+              0.4858
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              89.935800365565,
+              1.0101,
+              0.0551
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              89.99975688973501,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              89.99975688973501,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 670.0388746650062,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              75.257369835417,
+              1.5724,
+              0.8034
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              79.93331750003601,
+              1.5561,
+              0.8405
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              83.998457679213,
+              1.5313,
+              0.8712
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              87.451973906682,
+              1.4982,
+              0.8937
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              90.301441175022,
+              1.4572,
+              0.9058
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              92.562054828628,
+              1.4088,
+              0.9042
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              94.255541942023,
+              1.344,
+              0.8628
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              95.40907269817001,
+              1.2556,
+              0.742
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              96.054443922206,
+              1.1472,
+              0.5068
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              96.229893450922,
+              1.0233,
+              0.0979
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              96.229893450922,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              96.229893450922,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 737.0427621315068,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              85.532869948449,
+              1.7323,
+              0.8214
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              89.971498085084,
+              1.7101,
+              0.8533
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              93.75001324565801,
+              1.6785,
+              0.8793
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              96.875763626565,
+              1.6379,
+              0.8981
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              99.364534242281,
+              1.5888,
+              0.9079
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              101.239186148254,
+              1.5318,
+              0.9062
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              102.52865853769,
+              1.4572,
+              0.8724
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              103.266970838339,
+              1.3572,
+              0.7766
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              103.49213409080701,
+              1.2358,
+              0.5961
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              103.49213409080701,
+              1.0982,
+              0.2955
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              103.49213409080701,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              103.49213409080701,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 804.0466495980074,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              97.132360830274,
+              1.936,
+              0.8425
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              100.785639137491,
+              1.9056,
+              0.8663
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              103.828246036977,
+              1.8662,
+              0.8853
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              106.275013999231,
+              1.8184,
+              0.8985
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              108.14640004014001,
+              1.7625,
+              0.9047
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              109.46812284708301,
+              1.6991,
+              0.9025
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              110.26966592411001,
+              1.619,
+              0.8778
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              110.583960077283,
+              1.5142,
+              0.8117
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              110.591444351388,
+              1.3887,
+              0.6929
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              110.591444351388,
+              1.2471,
+              0.5052
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              110.591444351388,
+              1.0944,
+              0.2255
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              110.591444351388,
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      {
+        "family_coordinate": 837.5485933312577,
+        "samples": [
+          {
+            "coordinate": 1.0,
+            "outputs": [
+              103.354151291853,
+              2.0507,
+              0.854
+            ]
+          },
+          {
+            "coordinate": 1.2,
+            "outputs": [
+              106.40460533934001,
+              2.0158,
+              0.8731
+            ]
+          },
+          {
+            "coordinate": 1.4,
+            "outputs": [
+              108.91628236974101,
+              1.9729,
+              0.888
+            ]
+          },
+          {
+            "coordinate": 1.6,
+            "outputs": [
+              110.90514883448,
+              1.9223,
+              0.8981
+            ]
+          },
+          {
+            "coordinate": 1.8,
+            "outputs": [
+              112.391208157074,
+              1.8645,
+              0.9024
+            ]
+          },
+          {
+            "coordinate": 2.0,
+            "outputs": [
+              113.3980925,
+              1.8,
+              0.9
+            ]
+          },
+          {
+            "coordinate": 2.2,
+            "outputs": [
+              113.952064861481,
+              1.7201,
+              0.88
+            ]
+          },
+          {
+            "coordinate": 2.4,
+            "outputs": [
+              114.08827865019201,
+              1.6176,
+              0.8286
+            ]
+          },
+          {
+            "coordinate": 2.6,
+            "outputs": [
+              114.08827865019201,
+              1.4958,
+              0.7386
+            ]
+          },
+          {
+            "coordinate": 2.8,
+            "outputs": [
+              114.08827865019201,
+              1.3584,
+              0.6003
+            ]
+          },
+          {
+            "coordinate": 3.0,
+            "outputs": [
+              114.08827865019201,
+              1.2098,
+              0.4004
+            ]
+          },
+          {
+            "coordinate": 3.2,
+            "outputs": [
+              114.08827865019201,
+              1.0546,
+              0.1206
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "import_audit": {
+    "source_sha256": "a6315650038a0fcf641ac2a7594660d9ca7608783b11502f7403b5df4b003183",
+    "source_format": "T-MATS generated C compressor structure",
+    "source_prefix": "GTF_lpc",
+    "source_coordinates": {
+      "primary": "X_C_RlineVec",
+      "family": "Y_C_Map_NcVec * s_C_Nc"
+    },
+    "source_component_scales": {
+      "flow_capacity_scale": 0.300704,
+      "pressure_ratio_scale": 4.374453,
+      "efficiency_scale": 1.019486
+    },
+    "source_speed_scale_rpm": 6398.399938,
+    "unit_conversions": {
+      "corrected_mass_flow": "lbm/s to kg/s",
+      "corrected_speed": "rpm to rad/s"
+    },
+    "storage_order": "R-line-major, speed-minor",
+    "curve_count": 11,
+    "samples_per_curve": 12
+  }
+}
