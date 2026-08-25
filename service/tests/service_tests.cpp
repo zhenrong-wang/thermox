@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 87,
+        response.components.size() == 89,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -842,6 +842,29 @@ void test_catalog_discovery() {
             rotor->supports_transient &&
             rotor->internal_variables.size() == 2,
         "catalog must expose reusable shaft-inertia dynamics");
+    const auto multi_load_rotor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind == "shaft.inertia.two_load";
+        });
+    const auto geared_multi_load_rotor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "shaft.inertia.geared_two_load";
+        });
+    require(
+        multi_load_rotor != response.components.end() &&
+            multi_load_rotor->supports_steady &&
+            multi_load_rotor->supports_transient &&
+            multi_load_rotor->parameters.size() == 3 &&
+            multi_load_rotor->internal_variables.size() == 2 &&
+            geared_multi_load_rotor != response.components.end() &&
+            geared_multi_load_rotor->supports_steady &&
+            geared_multi_load_rotor->supports_transient &&
+            geared_multi_load_rotor->parameters.size() == 5 &&
+            geared_multi_load_rotor->internal_variables.size() == 2,
+        "catalog must expose inertial multi-load shaft dynamics");
     const auto compressor = std::find_if(
         response.components.begin(),
         response.components.end(),

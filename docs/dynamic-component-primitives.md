@@ -40,6 +40,20 @@ zero-speed torque directly.
 Mechanical efficiency defaults to one and fixed loss defaults to zero. The steady form reduces to
 speed continuity and the corresponding power balance.
 
+## Multi-load rotating inertia
+
+`shaft.inertia.two_load` extends the same kinetic-energy formulation to one driver and two
+common-speed loads. `shaft.inertia.geared_two_load` provides one direct load plus one fixed-ratio
+geared load. The geared model declares the ratio as driver speed divided by geared-load speed and
+accounts for gearbox efficiency in both its steady balance and transient energy accumulation.
+
+These are dynamic counterparts to `shaft.train.two_load` and
+`shaft.train.geared_two_load`; they are generic topology primitives, not gas-turbine-specific
+components. They allow a rotor to couple a turbine, compressor, generator, accessory, or any other
+registered shaft participant without collapsing those machines into one case-specific equation.
+Each stores `rotational_energy` as its differential state and exposes internal algebraic `omega`.
+As with the two-port model, initialize a desired shaft speed with `0.5 J omega_0²`.
+
 ## Normalized control blocks
 
 The first control primitives deliberately operate on the existing dimensionless signal/control

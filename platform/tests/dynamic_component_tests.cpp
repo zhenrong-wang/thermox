@@ -291,6 +291,101 @@ void test_rotor_integrates_kinetic_energy() {
         "cross-component reset sources must match target dimensions");
 }
 
+void test_multi_load_rotors_accumulate_net_power() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "multi_load_shaft_inertia",
+    "media": [],
+    "components": [
+      {"id": "driver_a", "kind": "source.shaft.boundary"},
+      {
+        "id": "rotor_a", "kind": "shaft.inertia.two_load",
+        "parameters": {
+          "moment_of_inertia": {"value": 10.0, "unit": "kg*m2"},
+          "mechanical_efficiency": 0.9
+        }
+      },
+      {"id": "load_a1", "kind": "sink.shaft.boundary"},
+      {"id": "load_a2", "kind": "sink.shaft.boundary"},
+      {"id": "driver_b", "kind": "source.shaft.boundary"},
+      {
+        "id": "rotor_b", "kind": "shaft.inertia.geared_two_load",
+        "parameters": {
+          "moment_of_inertia": {"value": 20.0, "unit": "kg*m2"},
+          "speed_ratio": 2.0,
+          "shaft_efficiency": 0.95,
+          "gearbox_efficiency": 0.8
+        }
+      },
+      {"id": "load_b1", "kind": "sink.shaft.boundary"},
+      {"id": "load_b2", "kind": "sink.shaft.boundary"}
+    ],
+    "connections": [
+      {"id": "drive_a", "from": "driver_a.outlet", "to": "rotor_a.driver", "kind": "shaft_link"},
+      {"id": "load_a_1", "from": "rotor_a.load_1", "to": "load_a1.inlet", "kind": "shaft_link"},
+      {"id": "load_a_2", "from": "rotor_a.load_2", "to": "load_a2.inlet", "kind": "shaft_link"},
+      {"id": "drive_b", "from": "driver_b.outlet", "to": "rotor_b.driver", "kind": "shaft_link"},
+      {"id": "load_b_1", "from": "rotor_b.direct_load", "to": "load_b1.inlet", "kind": "shaft_link"},
+      {"id": "load_b_2", "from": "rotor_b.geared_load", "to": "load_b2.inlet", "kind": "shaft_link"}
+    ]
+  },
+  "cases": [{
+    "id": "runup", "mode": "dynamic_transient",
+    "fixed_values": {
+      "driver_a.outlet.W_dot": {"value": 1.0, "unit": "MW"},
+      "load_a1.inlet.W_dot": {"value": 0.3, "unit": "MW"},
+      "load_a2.inlet.W_dot": {"value": 0.1, "unit": "MW"},
+      "driver_b.outlet.W_dot": {"value": 1.0, "unit": "MW"},
+      "load_b1.inlet.W_dot": {"value": 0.3, "unit": "MW"},
+      "load_b2.inlet.W_dot": {"value": 0.2, "unit": "MW"}
+    },
+    "initial_guesses": {
+      "rotor_a.rotational_energy": {"value": 50.0, "unit": "kJ"},
+      "rotor_b.rotational_energy": {"value": 100.0, "unit": "kJ"}
+    }
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            "runup");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(graph.problem, 0.0);
+    require(
+        initialized.diagnostics.converged,
+        initialized.diagnostics.message);
+    const auto index = [&](const std::string& name) {
+        return variable_index(graph.problem.variable_names, name);
+    };
+    require_near(
+        initialized.state.at(index("rotor_a.omega")), 100.0, 1.0e-8,
+        "two-load rotor recovers speed from kinetic energy");
+    require_near(
+        initialized.derivative.at(
+            index("rotor_a.rotational_energy")),
+        5.0e5, 1.0e-6,
+        "two-load rotor accumulates efficiency-adjusted net power");
+    require_near(
+        initialized.state.at(index("load_a1.inlet.omega")),
+        100.0, 1.0e-8,
+        "two-load rotor enforces common speed");
+    require_near(
+        initialized.state.at(index("rotor_b.omega")), 100.0, 1.0e-8,
+        "geared rotor recovers speed from kinetic energy");
+    require_near(
+        initialized.state.at(index("load_b2.inlet.omega")),
+        50.0, 1.0e-8,
+        "geared rotor enforces its speed ratio");
+    require_near(
+        initialized.derivative.at(
+            index("rotor_b.rotational_energy")),
+        4.0e5, 1.0e-6,
+        "geared rotor accumulates shaft and gearbox adjusted net power");
+}
+
 void test_normalized_control_chain_steady_and_transient() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -586,6 +681,7 @@ int main() {
     try {
         test_two_sided_wall_accumulates_net_heat();
         test_rotor_integrates_kinetic_energy();
+        test_multi_load_rotors_accumulate_net_power();
         test_normalized_control_chain_steady_and_transient();
         std::cout << "dynamic component tests passed\n";
         return 0;

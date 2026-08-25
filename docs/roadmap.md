@@ -156,9 +156,11 @@ Delivered:
 1. Two-sided lumped wall with steady heat balance and transient thermal-capacity accumulation. ✅
 2. Two-port shaft inertia with kinetic-energy state, speed closure, mechanical efficiency, and
    explicit fixed loss. ✅
-3. Normalized proportional controller and first-order control lag with steady/transient forms. ✅
-4. Shaft, signal, and control source/sink boundaries for independently composable graphs. ✅
-5. Registry-owned time and moment-of-inertia units plus fixed-sparse graph-level integration
+3. Common-speed and fixed-ratio geared multi-load shaft inertias with steady and transient power
+   closure. ✅
+4. Normalized proportional controller and first-order control lag with steady/transient forms. ✅
+5. Shaft, signal, and control source/sink boundaries for independently composable graphs. ✅
+6. Registry-owned time and moment-of-inertia units plus fixed-sparse graph-level integration
    regressions. ✅
 
 ## Thermofluid connector foundation

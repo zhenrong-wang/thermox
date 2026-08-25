@@ -29,6 +29,8 @@
       "retrieved_on": "2026-08-25",
       "files": [
         {"path": "engine_model/MEX_engine_model.c", "sha256": "a6315650038a0fcf641ac2a7594660d9ca7608783b11502f7403b5df4b003183"},
+        {"path": "engine_model/Shaft_TMATS_body.c", "sha256": "9b260e831fcc789b6de64c0722055c910699ed26fa87e25a64e1c46bc56735e6"},
+        {"path": "do_linearization.m", "sha256": "26f97bf78da98e4a44f43dee93655717da079b69e7315b1128ce64f3828db0fa"},
         {"path": "inputs.csv", "sha256": "208dbc1643d66201f134d3a37451c87138cd7ffdcac0c09f54c4bd3edee6fb82"},
         {"path": "outputs.mat", "sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42"}
       ]
@@ -446,6 +448,38 @@
       "Independent hardware evidence and transient validation."
     ],
     "classification": "public_source_full_static_open_vbv_whole_engine_cross_code_reproduction"
+  },
+  "agtf30_linearization_source_target": {
+    "case_index": 0,
+    "operating_point": {
+      "altitude_ft": 0.0,
+      "mach": 0.0,
+      "corrected_fan_speed_rpm": 1000.0,
+      "state_rpm": [3100.00004321, 17750.9216139],
+      "input_fuel_lbm_s": 0.30826616,
+      "input_hp_extraction_hp": -350.0,
+      "input_lp_extraction_hp": 0.0
+    },
+    "source_inertia": {
+      "lp_slug_ft2": 17.44087229,
+      "hp_slug_ft2": 1.86055038,
+      "lp_kg_m2": 23.646647685338,
+      "hp_kg_m2": 2.522567598979
+    },
+    "state_matrix_A": [
+      [-2.58828958, 1.11503138],
+      [0.78936733, -1.88527248]
+    ],
+    "input_matrix_B": [
+      [4405.37064, 0.0, 0.547524024],
+      [8570.82043, 5.13251170, 0.0]
+    ],
+    "status": "reference_target_only",
+    "required_before_qualification": [
+      "Generic quasi-steady algebraic gas-path lift into a transient DAE.",
+      "Independent Thermox perturbation or linearization execution at the pinned operating point.",
+      "A and B comparison with declared units, tolerances, and solver provenance."
+    ]
   },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }

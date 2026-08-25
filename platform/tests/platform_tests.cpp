@@ -1129,6 +1129,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "shaft.combiner.two_driver",
         "gearbox.shaft.fixed_ratio",
         "shaft.inertia.two_port",
+        "shaft.inertia.two_load",
+        "shaft.inertia.geared_two_load",
         "generator.electrical.efficiency",
         "converter.fluid_to_electrical.polynomial_efficiency",
         "control.proportional.normalized",

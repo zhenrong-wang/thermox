@@ -369,3 +369,26 @@ percent. Both shaft balances close to numerical precision. Fuel remains -15.24 p
 with the previously declared combustion/fuel-model prediction limitation; no calibration is
 applied. Gross thrust is solved, but comparison and net thrust remain reserved until the public
 source output extraction and generic inlet ram-drag path are both qualified.
+
+## AGTF30 transient source baseline
+
+The pinned AGTF30 source also establishes the next validation target without yet claiming a
+Thermox transient reproduction. NASA linearizes a quasi-steady gas path around two differential
+states—LP and HP shaft speed—and three inputs: fuel flow, HP shaft extraction, and LP shaft
+extraction. For the sea-level-static case, the public `outputs.mat` contains:
+
+```text
+X = [3100.00004321, 17750.92161390] rpm
+U = [0.30826616 lbm/s, -350 hp, 0 hp]
+A = [[-2.58828958,  1.11503138],
+     [ 0.78936733, -1.88527248]]
+B = [[4405.37064, 0,          0.547524024],
+     [8570.82043, 5.13251170, 0          ]]
+```
+
+NASA declares LP and HP inertias of 17.44087229 and 1.86055038 slug-ft2, respectively
+(23.64664769 and 2.52256760 kg-m2). Thermox now has generic common-speed and geared multi-load
+inertial shaft components capable of representing those two rotor states. The remaining gate is a
+generic quasi-steady algebraic lift for the static gas-path component equations inside the
+transient DAE, followed by an independently executed A/B-matrix comparison. The matrices above are
+therefore a pinned reference target, not validation evidence earned by Thermox.
