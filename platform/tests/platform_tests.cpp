@@ -620,7 +620,8 @@ void test_model_document_supports_component_and_system_calibration() {
       },
       {
         "id": "shaft_train",
-        "kind": "shaft.train.two_load",
+        "kind": "shaft.train.multi_load",
+        "port_counts": {"load": 2},
         "parameters": {
           "fixed_loss": {"value": 2.0, "unit": "MW"}
         }
@@ -998,8 +999,8 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain shaft combiner");
     require(registry.contains("gearbox.shaft.fixed_ratio"),
             "default registry should contain fixed-ratio gearbox");
-    require(registry.contains("shaft.train.geared_two_load"),
-            "default registry should contain geared two-load shaft train");
+    require(registry.contains("shaft.train.multi_load"),
+            "default registry should contain instance-sized shaft train");
     require(registry.contains(
                 "converter.fluid_to_electrical.polynomial_efficiency"),
             "default registry should contain the conservative "
@@ -1124,13 +1125,11 @@ void test_component_catalog_exposes_parameter_contracts() {
         "volume.fluid.equilibrium_two_phase_correlated_outlet",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
-        "shaft.train.two_load",
-        "shaft.train.geared_two_load",
+        "shaft.train.multi_load",
         "shaft.combiner.two_driver",
         "gearbox.shaft.fixed_ratio",
         "shaft.inertia.two_port",
-        "shaft.inertia.two_load",
-        "shaft.inertia.geared_two_load",
+        "shaft.inertia.multi_load",
         "generator.electrical.efficiency",
         "converter.fluid_to_electrical.polynomial_efficiency",
         "control.proportional.normalized",
@@ -8259,7 +8258,8 @@ void test_shaft_train_and_generator_close_power_balance() {
       },
       {
         "id": "train",
-        "kind": "shaft.train.two_load",
+        "kind": "shaft.train.multi_load",
+        "port_counts": {"load": 2},
         "parameters": {
           "mechanical_efficiency": 0.99,
           "fixed_loss": {"value": 1.0, "unit": "MW"}
@@ -8283,12 +8283,19 @@ void test_shaft_train_and_generator_close_power_balance() {
       },
       {
         "id": "geared_train",
-        "kind": "shaft.train.geared_two_load",
+        "kind": "shaft.train.multi_load",
+        "port_counts": {"load": 2},
+        "parameters": {
+          "mechanical_efficiency": 0.98,
+          "fixed_loss": {"value": 1.0, "unit": "MW"}
+        }
+      },
+      {
+        "id": "geared_train_gearbox",
+        "kind": "gearbox.shaft.fixed_ratio",
         "parameters": {
           "speed_ratio": 3.0,
-          "shaft_efficiency": 0.98,
-          "gearbox_efficiency": 0.95,
-          "fixed_loss": {"value": 1.0, "unit": "MW"}
+          "mechanical_efficiency": 0.95
         }
       },
       {
@@ -8314,6 +8321,12 @@ void test_shaft_train_and_generator_close_power_balance() {
         "from": "generator.electrical",
         "to": "grid.inlet",
         "kind": "electrical_link"
+      },
+      {
+        "id": "geared_train_link",
+        "from": "geared_train.load_2",
+        "to": "geared_train_gearbox.driver",
+        "kind": "shaft_link"
       }
     ]
   },
@@ -8328,7 +8341,7 @@ void test_shaft_train_and_generator_close_power_balance() {
       "gearbox.driver.omega": 300.0,
       "geared_train.driver.W_dot": {"value": 50.0, "unit": "MW"},
       "geared_train.driver.omega": 300.0,
-      "geared_train.direct_load.W_dot": {"value": 10.0, "unit": "MW"},
+      "geared_train.load_1.W_dot": {"value": 10.0, "unit": "MW"},
       "train.load_1.W_dot": {"value": 40.0, "unit": "MW"}
     }
   }]
@@ -8382,13 +8395,13 @@ void test_shaft_train_and_generator_close_power_balance() {
         value("gearbox.load.W_dot"), 38.8e6, 1.0e-6,
         "gearbox transfers shaft power after mechanical loss");
     require_near(
-        value("geared_train.direct_load.omega"), 300.0, 1.0e-12,
+        value("geared_train.load_1.omega"), 300.0, 1.0e-12,
         "geared shaft train preserves direct-load speed");
     require_near(
-        value("geared_train.geared_load.omega"), 100.0, 1.0e-12,
+        value("geared_train_gearbox.load.omega"), 100.0, 1.0e-12,
         "geared shaft train applies its load speed ratio");
     require_near(
-        value("geared_train.geared_load.W_dot"), 36.1e6, 1.0e-6,
+        value("geared_train_gearbox.load.W_dot"), 36.1e6, 1.0e-6,
         "geared shaft train accounts for shaft, gearbox, and fixed losses");
     const thermox::platform::GraphResultEvaluator evaluator(
         document, graph,

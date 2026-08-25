@@ -8,8 +8,8 @@ monolithic component. The reusable building blocks are:
 - `transport.material.frozen_pressure_ratio` for pressure-compatible cooling delivery;
 - `junction.material.mixer.two_inlet` for conservative stage injection;
 - `shaft.combiner.two_driver` for recursively combining stage power;
-- `shaft.train.two_load` for recursively distributing power to compressor sections, accessories,
-  and a generator.
+- `shaft.train.multi_load` for instance-sized distribution of power to compressor sections,
+  accessories, gearboxes, and generators.
 
 `core/examples/cooled_turbine_stage_cantera.json` demonstrates the smallest useful cooled-stage
 assembly. A hot-gas stream and a cooler air stream enter separately. The cooling stream is

@@ -42,16 +42,16 @@ speed continuity and the corresponding power balance.
 
 ## Multi-load rotating inertia
 
-`shaft.inertia.two_load` extends the same kinetic-energy formulation to one driver and two
-common-speed loads. `shaft.inertia.geared_two_load` provides one direct load plus one fixed-ratio
-geared load. The geared model declares the ratio as driver speed divided by geared-load speed and
-accounts for gearbox efficiency in both its steady balance and transient energy accumulation.
+`shaft.inertia.multi_load` extends the same kinetic-energy formulation to one driver and an
+instance-sized `load` port group. Each declaration selects 1–64 common-speed loads through
+`port_counts.load`; no load cardinality is encoded in the executable kind. Fixed-ratio branches
+compose through ordinary `gearbox.shaft.fixed_ratio` components, which are valid quasi-steady
+algebraic elements in both steady and transient graphs.
 
-These are dynamic counterparts to `shaft.train.two_load` and
-`shaft.train.geared_two_load`; they are generic topology primitives, not gas-turbine-specific
-components. They allow a rotor to couple a turbine, compressor, generator, accessory, or any other
-registered shaft participant without collapsing those machines into one case-specific equation.
-Each stores `rotational_energy` as its differential state and exposes internal algebraic `omega`.
+Its steady counterpart is `shaft.train.multi_load`. These are generic topology primitives, not
+gas-turbine-specific components. They allow a rotor to couple a turbine, compressor, generator,
+accessory, extraction boundary, gearbox, or any other registered shaft participant. The inertial
+form stores `rotational_energy` as its differential state and exposes internal algebraic `omega`.
 As with the two-port model, initialize a desired shaft speed with `0.5 J omega_0²`.
 
 ## Quasi-steady algebraic subsystems in transient graphs

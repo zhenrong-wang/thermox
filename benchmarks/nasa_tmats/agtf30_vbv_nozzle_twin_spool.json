@@ -259,12 +259,11 @@
       },
       {
         "id": "lp_shaft",
-        "kind": "shaft.train.geared_two_load",
+        "kind": "shaft.train.multi_load",
         "version": "1.0.0",
+        "port_counts": {"load": 2},
         "parameters": {
-          "speed_ratio": 3.1,
-          "shaft_efficiency": 0.99,
-          "gearbox_efficiency": 1.0,
+          "mechanical_efficiency": 0.99,
           "fixed_loss": {
             "value": 0.0,
             "unit": "W"
@@ -272,9 +271,19 @@
         }
       },
       {
-        "id": "hp_shaft",
-        "kind": "shaft.train.two_load",
+        "id": "fan_gearbox",
+        "kind": "gearbox.shaft.fixed_ratio",
         "version": "1.0.0",
+        "parameters": {
+          "speed_ratio": 3.1,
+          "mechanical_efficiency": 1.0
+        }
+      },
+      {
+        "id": "hp_shaft",
+        "kind": "shaft.train.multi_load",
+        "version": "1.0.0",
+        "port_counts": {"load": 2},
         "parameters": {
           "mechanical_efficiency": 1.0,
           "fixed_loss": {
@@ -488,13 +497,19 @@
       },
       {
         "id": "lp_shaft_lpc",
-        "from": "lp_shaft.direct_load",
+        "from": "lp_shaft.load_1",
         "to": "lpc.shaft",
         "kind": "shaft_link"
       },
       {
-        "id": "lp_shaft_fan",
-        "from": "lp_shaft.geared_load",
+        "id": "lp_shaft_fan_gearbox",
+        "from": "lp_shaft.load_2",
+        "to": "fan_gearbox.driver",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "fan_gearbox_fan",
+        "from": "fan_gearbox.load",
         "to": "fan.shaft",
         "kind": "shaft_link"
       },
@@ -599,10 +614,10 @@
         "lpt.cooling_1.h": 318340.2237263148,
         "lp_shaft.driver.W_dot": 7634573.112511594,
         "lp_shaft.driver.omega": 503.9266970917023,
-        "lp_shaft.direct_load.W_dot": 1591824.845174198,
-        "lp_shaft.direct_load.omega": 503.9266970917023,
-        "lp_shaft.geared_load.W_dot": 5966402.536212279,
-        "lp_shaft.geared_load.omega": 162.55699906183943,
+        "lp_shaft.load_1.W_dot": 1591824.845174198,
+        "lp_shaft.load_1.omega": 503.9266970917023,
+        "fan_gearbox.load.W_dot": 5966402.536212279,
+        "fan_gearbox.load.omega": 162.55699906183943,
         "station_2.outlet.m_dot[N2]": 519.9914659617572,
         "station_2.outlet.m_dot[O2]": 157.08075534261414,
         "fan.inlet.m_dot[N2]": 519.9914659617572,
@@ -1034,10 +1049,10 @@
         "lpt.cooling_1.h": 306599.01328817935,
         "lp_shaft.driver.W_dot": 8922022.47144841,
         "lp_shaft.driver.omega": 561.7826015551595,
-        "lp_shaft.direct_load.W_dot": 1810921.6531989828,
-        "lp_shaft.direct_load.omega": 561.7826015551595,
-        "lp_shaft.geared_load.W_dot": 7021880.593534943,
-        "lp_shaft.geared_load.omega": 181.22019405005145,
+        "lp_shaft.load_1.W_dot": 1810921.6531989828,
+        "lp_shaft.load_1.omega": 561.7826015551595,
+        "fan_gearbox.load.W_dot": 7021880.593534943,
+        "fan_gearbox.load.omega": 181.22019405005145,
         "station_2.outlet.m_dot[N2]": 475.6891482818127,
         "station_2.outlet.m_dot[O2]": 143.69776354346425,
         "fan.inlet.m_dot[N2]": 475.6891482818127,
@@ -1469,10 +1484,10 @@
         "lpt.cooling_1.h": 276805.90073944273,
         "lp_shaft.driver.W_dot": 7365998.15999377,
         "lp_shaft.driver.omega": 604.680489237466,
-        "lp_shaft.direct_load.W_dot": 1438810.0615764535,
-        "lp_shaft.direct_load.omega": 604.680489237466,
-        "lp_shaft.geared_load.W_dot": 5853528.1168173775,
-        "lp_shaft.geared_load.omega": 195.05822233466643,
+        "lp_shaft.load_1.W_dot": 1438810.0615764535,
+        "lp_shaft.load_1.omega": 604.680489237466,
+        "fan_gearbox.load.W_dot": 5853528.1168173775,
+        "fan_gearbox.load.omega": 195.05822233466643,
         "station_2.outlet.m_dot[N2]": 325.31187495612306,
         "station_2.outlet.m_dot[O2]": 98.27129555966216,
         "fan.inlet.m_dot[N2]": 325.31187495612306,
@@ -1904,10 +1919,10 @@
         "lpt.cooling_1.h": 282069.0164950671,
         "lp_shaft.driver.W_dot": 6572331.2564862445,
         "lp_shaft.driver.omega": 607.8525218931541,
-        "lp_shaft.direct_load.W_dot": 1294928.3500877626,
-        "lp_shaft.direct_load.omega": 607.8525218931541,
-        "lp_shaft.geared_load.W_dot": 5211679.59383362,
-        "lp_shaft.geared_load.omega": 196.08145867521097,
+        "lp_shaft.load_1.W_dot": 1294928.3500877626,
+        "lp_shaft.load_1.omega": 607.8525218931541,
+        "fan_gearbox.load.W_dot": 5211679.59383362,
+        "fan_gearbox.load.omega": 196.08145867521097,
         "station_2.outlet.m_dot[N2]": 287.39213261451016,
         "station_2.outlet.m_dot[O2]": 86.81637339396663,
         "fan.inlet.m_dot[N2]": 287.39213261451016,

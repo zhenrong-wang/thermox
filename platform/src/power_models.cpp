@@ -14,16 +14,21 @@ using component_model_support::require_internal_variable;
 using component_model_support::require_port_variable;
 using component_model_support::required_parameter;
 
-class TwoLoadShaftTrainModel final : public ComponentModel {
+class MultiLoadShaftTrainModel final : public ComponentModel {
 public:
-    TwoLoadShaftTrainModel() {
-        descriptor_.kind = "shaft.train.two_load";
+    MultiLoadShaftTrainModel() {
+        descriptor_.kind = "shaft.train.multi_load";
         descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "shaft.train";
+        descriptor_.display_name = "Multi-load shaft train";
+        descriptor_.category = "Power transmission";
+        descriptor_.model_name =
+            "Instance-sized common-speed mechanical load bus";
         descriptor_.ports = {
             {"driver", "shaft", "in"},
-            {"load_1", "shaft", "out"},
-            {"load_2", "shaft", "out"},
         };
+        descriptor_.port_groups = {{
+            "load", "load_", "shaft", "out", 1U, 64U, 1U}};
         descriptor_.parameters = {
             {"mechanical_efficiency", "dimensionless", true,
              std::nullopt, 0.0, 1.0, false, true},
@@ -34,6 +39,29 @@ public:
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
+    }
+
+    ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const override {
+        auto result = descriptor_;
+        if (component.port_counts.size() != 1U ||
+            !component.port_counts.contains("load")) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' must declare exactly port_counts.load");
+        }
+        const auto count = component.port_counts.at("load");
+        if (count == 0U || count > 64U) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' load port count must be in [1, 64]");
+        }
+        for (std::size_t index = 1; index <= count; ++index) {
+            result.ports.push_back({
+                "load_" + std::to_string(index),
+                "shaft", "out"});
+        }
+        return result;
     }
 
     void add_equations(
@@ -47,32 +75,26 @@ public:
             require_port_variable(context, "driver.W_dot");
         const auto driver_speed =
             require_port_variable(context, "driver.omega");
-        const auto load_1_power =
-            require_port_variable(context, "load_1.W_dot");
-        const auto load_1_speed =
-            require_port_variable(context, "load_1.omega");
-        const auto load_2_power =
-            require_port_variable(context, "load_2.W_dot");
-        const auto load_2_speed =
-            require_port_variable(context, "load_2.omega");
         const std::string prefix =
             "component." + context.component.id + ".";
-
-        system.add_linear_equation(
-            prefix + "load_1_speed",
-            {{driver_speed, 1.0}, {load_1_speed, -1.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "load_2_speed",
-            {{driver_speed, 1.0}, {load_2_speed, -1.0}},
-            0.0, 100.0);
+        std::vector<LinearTerm> power_balance{
+            {driver_power, efficiency}};
+        const auto count = context.component.port_counts.at("load");
+        for (std::size_t index = 1; index <= count; ++index) {
+            const auto port = "load_" + std::to_string(index);
+            const auto load_power = require_port_variable(
+                context, port + ".W_dot");
+            const auto load_speed = require_port_variable(
+                context, port + ".omega");
+            system.add_linear_equation(
+                prefix + port + "_speed",
+                {{driver_speed, 1.0}, {load_speed, -1.0}},
+                0.0, 100.0);
+            power_balance.push_back({load_power, -1.0});
+        }
         system.add_linear_equation(
             prefix + "power_balance",
-            {
-                {driver_power, efficiency},
-                {load_1_power, -1.0},
-                {load_2_power, -1.0},
-            },
+            std::move(power_balance),
             fixed_loss, 1.0e6);
     }
 
@@ -172,6 +194,8 @@ public:
             {"mechanical_efficiency", "dimensionless", false,
              1.0, 0.0, 1.0, false, true},
         };
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -211,101 +235,21 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
-class GearedTwoLoadShaftTrainModel final : public ComponentModel {
+class MultiLoadShaftInertiaModel final : public ComponentModel {
 public:
-    GearedTwoLoadShaftTrainModel() {
-        descriptor_.kind = "shaft.train.geared_two_load";
-        descriptor_.version = "1.0.0";
-        descriptor_.template_kind = "shaft.train";
-        descriptor_.display_name = "Geared two-load shaft train";
-        descriptor_.category = "Power transmission";
-        descriptor_.model_name =
-            "Direct and fixed-ratio geared loads on one driver";
-        descriptor_.ports = {
-            {"driver", "shaft", "in"},
-            {"direct_load", "shaft", "out"},
-            {"geared_load", "shaft", "out"},
-        };
-        descriptor_.parameters = {
-            {"speed_ratio", "dimensionless", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, false},
-            {"shaft_efficiency", "dimensionless", false,
-             1.0, 0.0, 1.0, false, true},
-            {"gearbox_efficiency", "dimensionless", false,
-             1.0, 0.0, 1.0, false, true},
-            {"fixed_loss", "power", false, 0.0, 0.0,
-             std::numeric_limits<double>::infinity(), true, true},
-        };
-    }
-
-    const ComponentModelDescriptor& descriptor() const override {
-        return descriptor_;
-    }
-
-    void add_equations(
-        const ComponentCompileContext& context,
-        EquationSystemBuilder& system) const override {
-        const double speed_ratio = required_parameter(
-            context.component, "speed_ratio");
-        const double shaft_efficiency = parameter_or(
-            context.component, "shaft_efficiency", 1.0);
-        const double gearbox_efficiency = parameter_or(
-            context.component, "gearbox_efficiency", 1.0);
-        const double fixed_loss = parameter_or(
-            context.component, "fixed_loss", 0.0);
-        const auto driver_power =
-            require_port_variable(context, "driver.W_dot");
-        const auto driver_speed =
-            require_port_variable(context, "driver.omega");
-        const auto direct_power =
-            require_port_variable(context, "direct_load.W_dot");
-        const auto direct_speed =
-            require_port_variable(context, "direct_load.omega");
-        const auto geared_power =
-            require_port_variable(context, "geared_load.W_dot");
-        const auto geared_speed =
-            require_port_variable(context, "geared_load.omega");
-        const std::string prefix =
-            "component." + context.component.id + ".";
-
-        system.add_linear_equation(
-            prefix + "direct_load_speed",
-            {{driver_speed, 1.0}, {direct_speed, -1.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "geared_load_speed",
-            {{driver_speed, 1.0}, {geared_speed, -speed_ratio}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "power_balance",
-            {
-                {driver_power, shaft_efficiency},
-                {direct_power, -1.0},
-                {geared_power, -1.0 / gearbox_efficiency},
-            },
-            fixed_loss, 1.0e6);
-    }
-
-private:
-    ComponentModelDescriptor descriptor_;
-};
-
-class TwoLoadShaftInertiaModel final : public ComponentModel {
-public:
-    TwoLoadShaftInertiaModel() {
-        descriptor_.kind = "shaft.inertia.two_load";
+    MultiLoadShaftInertiaModel() {
+        descriptor_.kind = "shaft.inertia.multi_load";
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "shaft.inertia";
-        descriptor_.display_name = "Two-load shaft inertia";
+        descriptor_.display_name = "Multi-load shaft inertia";
         descriptor_.category = "Power transmission";
         descriptor_.model_name =
-            "Common-speed inertial shaft with two loads";
+            "Instance-sized common-speed inertial mechanical load bus";
         descriptor_.ports = {
             {"driver", "shaft", "in"},
-            {"load_1", "shaft", "out"},
-            {"load_2", "shaft", "out"},
         };
+        descriptor_.port_groups = {{
+            "load", "load_", "shaft", "out", 1U, 64U, 1U}};
         descriptor_.parameters = {
             {"moment_of_inertia", "moment_of_inertia", true,
              std::nullopt, 0.0,
@@ -332,6 +276,29 @@ public:
         return descriptor_;
     }
 
+    ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const override {
+        auto result = descriptor_;
+        if (component.port_counts.size() != 1U ||
+            !component.port_counts.contains("load")) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' must declare exactly port_counts.load");
+        }
+        const auto count = component.port_counts.at("load");
+        if (count == 0U || count > 64U) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' load port count must be in [1, 64]");
+        }
+        for (std::size_t index = 1; index <= count; ++index) {
+            result.ports.push_back({
+                "load_" + std::to_string(index),
+                "shaft", "out"});
+        }
+        return result;
+    }
+
     void add_equations(
         const ComponentCompileContext& context,
         EquationSystemBuilder& system) const override {
@@ -343,29 +310,26 @@ public:
             require_port_variable(context, "driver.W_dot");
         const auto driver_speed =
             require_port_variable(context, "driver.omega");
-        const auto load_1_power =
-            require_port_variable(context, "load_1.W_dot");
-        const auto load_1_speed =
-            require_port_variable(context, "load_1.omega");
-        const auto load_2_power =
-            require_port_variable(context, "load_2.W_dot");
-        const auto load_2_speed =
-            require_port_variable(context, "load_2.omega");
         const std::string prefix =
             "component." + context.component.id + ".";
-        system.add_linear_equation(
-            prefix + "load_1_speed",
-            {{driver_speed, 1.0}, {load_1_speed, -1.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "load_2_speed",
-            {{driver_speed, 1.0}, {load_2_speed, -1.0}},
-            0.0, 100.0);
+        std::vector<LinearTerm> power_balance{
+            {driver_power, efficiency}};
+        const auto count = context.component.port_counts.at("load");
+        for (std::size_t index = 1; index <= count; ++index) {
+            const auto port = "load_" + std::to_string(index);
+            const auto load_power = require_port_variable(
+                context, port + ".W_dot");
+            const auto load_speed = require_port_variable(
+                context, port + ".omega");
+            system.add_linear_equation(
+                prefix + port + "_speed",
+                {{driver_speed, 1.0}, {load_speed, -1.0}},
+                0.0, 100.0);
+            power_balance.push_back({load_power, -1.0});
+        }
         system.add_linear_equation(
             prefix + "steady_power_balance",
-            {{driver_power, efficiency},
-             {load_1_power, -1.0},
-             {load_2_power, -1.0}},
+            std::move(power_balance),
             fixed_loss, 1.0e6);
     }
 
@@ -382,14 +346,6 @@ public:
             require_port_variable(context, "driver.W_dot");
         const auto driver_speed =
             require_port_variable(context, "driver.omega");
-        const auto load_1_power =
-            require_port_variable(context, "load_1.W_dot");
-        const auto load_1_speed =
-            require_port_variable(context, "load_1.omega");
-        const auto load_2_power =
-            require_port_variable(context, "load_2.W_dot");
-        const auto load_2_speed =
-            require_port_variable(context, "load_2.omega");
         const auto energy = require_internal_variable(
             context, "rotational_energy");
         const auto speed = require_internal_variable(context, "omega");
@@ -400,14 +356,22 @@ public:
             prefix + "driver_speed",
             {{driver_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
             0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "load_1_speed",
-            {{load_1_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "load_2_speed",
-            {{load_2_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
-            0.0, 100.0);
+        std::vector<DaeLinearTerm> accumulation{
+            {energy, 0.0, 1.0},
+            {driver_power, -efficiency, 0.0}};
+        const auto count = context.component.port_counts.at("load");
+        for (std::size_t index = 1; index <= count; ++index) {
+            const auto port = "load_" + std::to_string(index);
+            const auto load_power = require_port_variable(
+                context, port + ".W_dot");
+            const auto load_speed = require_port_variable(
+                context, port + ".omega");
+            system.add_linear_equation(
+                prefix + port + "_speed",
+                {{load_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
+                0.0, 100.0);
+            accumulation.push_back({load_power, 1.0, 0.0});
+        }
         system.add_sparse_equation(
             prefix + "kinetic_energy_closure", {energy, speed},
             [inertia, energy, speed](
@@ -424,167 +388,7 @@ public:
             1.0e6);
         system.add_linear_equation(
             prefix + "energy_accumulation",
-            {{energy, 0.0, 1.0},
-             {driver_power, -efficiency, 0.0},
-             {load_1_power, 1.0, 0.0},
-             {load_2_power, 1.0, 0.0}},
-            -fixed_loss, 1.0e6);
-    }
-
-private:
-    ComponentModelDescriptor descriptor_;
-};
-
-class GearedTwoLoadShaftInertiaModel final : public ComponentModel {
-public:
-    GearedTwoLoadShaftInertiaModel() {
-        descriptor_.kind = "shaft.inertia.geared_two_load";
-        descriptor_.version = "1.0.0";
-        descriptor_.template_kind = "shaft.inertia";
-        descriptor_.display_name = "Geared two-load shaft inertia";
-        descriptor_.category = "Power transmission";
-        descriptor_.model_name =
-            "Inertial shaft with direct and geared loads";
-        descriptor_.ports = {
-            {"driver", "shaft", "in"},
-            {"direct_load", "shaft", "out"},
-            {"geared_load", "shaft", "out"},
-        };
-        descriptor_.parameters = {
-            {"moment_of_inertia", "moment_of_inertia", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
-            {"speed_ratio", "dimensionless", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, false},
-            {"shaft_efficiency", "dimensionless", false,
-             1.0, 0.0, 1.0, false, true},
-            {"gearbox_efficiency", "dimensionless", false,
-             1.0, 0.0, 1.0, false, true},
-            {"fixed_loss", "power", false, 0.0, 0.0,
-             std::numeric_limits<double>::infinity(), true, true},
-        };
-        descriptor_.supports_steady = true;
-        descriptor_.supports_transient = true;
-        descriptor_.internal_variables = {
-            {"rotational_energy", DaeVariableKind::differential,
-             1.0e6, 1.0e6, 0.0, 1.0e6, 0.0,
-             std::numeric_limits<double>::infinity(), "energy"},
-            {"omega", DaeVariableKind::algebraic,
-             100.0, 100.0, 0.0, 100.0, 0.0,
-             std::numeric_limits<double>::infinity(),
-             "angular_speed"},
-        };
-    }
-
-    const ComponentModelDescriptor& descriptor() const override {
-        return descriptor_;
-    }
-
-    void add_equations(
-        const ComponentCompileContext& context,
-        EquationSystemBuilder& system) const override {
-        const double ratio = required_parameter(
-            context.component, "speed_ratio");
-        const double shaft_efficiency = parameter_or(
-            context.component, "shaft_efficiency", 1.0);
-        const double gearbox_efficiency = parameter_or(
-            context.component, "gearbox_efficiency", 1.0);
-        const double fixed_loss = parameter_or(
-            context.component, "fixed_loss", 0.0);
-        const auto driver_power =
-            require_port_variable(context, "driver.W_dot");
-        const auto driver_speed =
-            require_port_variable(context, "driver.omega");
-        const auto direct_power =
-            require_port_variable(context, "direct_load.W_dot");
-        const auto direct_speed =
-            require_port_variable(context, "direct_load.omega");
-        const auto geared_power =
-            require_port_variable(context, "geared_load.W_dot");
-        const auto geared_speed =
-            require_port_variable(context, "geared_load.omega");
-        const std::string prefix =
-            "component." + context.component.id + ".";
-        system.add_linear_equation(
-            prefix + "direct_load_speed",
-            {{driver_speed, 1.0}, {direct_speed, -1.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "geared_load_speed",
-            {{driver_speed, 1.0}, {geared_speed, -ratio}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "steady_power_balance",
-            {{driver_power, shaft_efficiency},
-             {direct_power, -1.0},
-             {geared_power, -1.0 / gearbox_efficiency}},
-            fixed_loss, 1.0e6);
-    }
-
-    void add_transient_equations(
-        const ComponentCompileContext& context,
-        DaeEquationSystemBuilder& system) const override {
-        const double inertia = required_parameter(
-            context.component, "moment_of_inertia");
-        const double ratio = required_parameter(
-            context.component, "speed_ratio");
-        const double shaft_efficiency = parameter_or(
-            context.component, "shaft_efficiency", 1.0);
-        const double gearbox_efficiency = parameter_or(
-            context.component, "gearbox_efficiency", 1.0);
-        const double fixed_loss = parameter_or(
-            context.component, "fixed_loss", 0.0);
-        const auto driver_power =
-            require_port_variable(context, "driver.W_dot");
-        const auto driver_speed =
-            require_port_variable(context, "driver.omega");
-        const auto direct_power =
-            require_port_variable(context, "direct_load.W_dot");
-        const auto direct_speed =
-            require_port_variable(context, "direct_load.omega");
-        const auto geared_power =
-            require_port_variable(context, "geared_load.W_dot");
-        const auto geared_speed =
-            require_port_variable(context, "geared_load.omega");
-        const auto energy = require_internal_variable(
-            context, "rotational_energy");
-        const auto speed = require_internal_variable(context, "omega");
-        const std::string prefix =
-            "component." + context.component.id + ".";
-
-        system.add_linear_equation(
-            prefix + "driver_speed",
-            {{driver_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "direct_load_speed",
-            {{direct_speed, 1.0, 0.0}, {speed, -1.0, 0.0}},
-            0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "geared_load_speed",
-            {{speed, 1.0, 0.0}, {geared_speed, -ratio, 0.0}},
-            0.0, 100.0);
-        system.add_sparse_equation(
-            prefix + "kinetic_energy_closure", {energy, speed},
-            [inertia, energy, speed](
-                double, const std::vector<double>& state,
-                const std::vector<double>&, double& residual,
-                std::vector<DaeEquationPartial>& jacobian) {
-                residual = state.at(energy) -
-                    0.5 * inertia * state.at(speed) * state.at(speed);
-                jacobian.push_back({energy, 1.0, 0.0});
-                jacobian.push_back(
-                    {speed, -inertia * state.at(speed), 0.0});
-                return EvaluationStatus::success();
-            },
-            1.0e6);
-        system.add_linear_equation(
-            prefix + "energy_accumulation",
-            {{energy, 0.0, 1.0},
-             {driver_power, -shaft_efficiency, 0.0},
-             {direct_power, 1.0, 0.0},
-             {geared_power, 1.0 / gearbox_efficiency, 0.0}},
+            std::move(accumulation),
             -fixed_loss, 1.0e6);
     }
 
@@ -943,17 +747,13 @@ private:
 
 void register_power_component_models(ComponentRegistry& registry) {
     registry.register_model(
-        std::make_shared<TwoLoadShaftTrainModel>());
+        std::make_shared<MultiLoadShaftTrainModel>());
     registry.register_model(
         std::make_shared<TwoDriverShaftCombinerModel>());
     registry.register_model(
         std::make_shared<FixedRatioShaftGearboxModel>());
     registry.register_model(
-        std::make_shared<GearedTwoLoadShaftTrainModel>());
-    registry.register_model(
-        std::make_shared<TwoLoadShaftInertiaModel>());
-    registry.register_model(
-        std::make_shared<GearedTwoLoadShaftInertiaModel>());
+        std::make_shared<MultiLoadShaftInertiaModel>());
     registry.register_model(std::make_shared<GeneratorModel>());
     registry.register_model(
         std::make_shared<FluidToElectricalPolynomialModel>());

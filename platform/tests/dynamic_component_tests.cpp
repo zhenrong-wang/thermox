@@ -397,7 +397,8 @@ void test_multi_load_rotors_accumulate_net_power() {
     "components": [
       {"id": "driver_a", "kind": "source.shaft.boundary"},
       {
-        "id": "rotor_a", "kind": "shaft.inertia.two_load",
+        "id": "rotor_a", "kind": "shaft.inertia.multi_load",
+        "port_counts": {"load": 2},
         "parameters": {
           "moment_of_inertia": {"value": 10.0, "unit": "kg*m2"},
           "mechanical_efficiency": 0.9
@@ -407,12 +408,18 @@ void test_multi_load_rotors_accumulate_net_power() {
       {"id": "load_a2", "kind": "sink.shaft.boundary"},
       {"id": "driver_b", "kind": "source.shaft.boundary"},
       {
-        "id": "rotor_b", "kind": "shaft.inertia.geared_two_load",
+        "id": "rotor_b", "kind": "shaft.inertia.multi_load",
+        "port_counts": {"load": 2},
         "parameters": {
           "moment_of_inertia": {"value": 20.0, "unit": "kg*m2"},
+          "mechanical_efficiency": 0.95
+        }
+      },
+      {
+        "id": "gearbox_b", "kind": "gearbox.shaft.fixed_ratio",
+        "parameters": {
           "speed_ratio": 2.0,
-          "shaft_efficiency": 0.95,
-          "gearbox_efficiency": 0.8
+          "mechanical_efficiency": 0.8
         }
       },
       {"id": "load_b1", "kind": "sink.shaft.boundary"},
@@ -423,8 +430,9 @@ void test_multi_load_rotors_accumulate_net_power() {
       {"id": "load_a_1", "from": "rotor_a.load_1", "to": "load_a1.inlet", "kind": "shaft_link"},
       {"id": "load_a_2", "from": "rotor_a.load_2", "to": "load_a2.inlet", "kind": "shaft_link"},
       {"id": "drive_b", "from": "driver_b.outlet", "to": "rotor_b.driver", "kind": "shaft_link"},
-      {"id": "load_b_1", "from": "rotor_b.direct_load", "to": "load_b1.inlet", "kind": "shaft_link"},
-      {"id": "load_b_2", "from": "rotor_b.geared_load", "to": "load_b2.inlet", "kind": "shaft_link"}
+      {"id": "load_b_1", "from": "rotor_b.load_1", "to": "load_b1.inlet", "kind": "shaft_link"},
+      {"id": "gear_b", "from": "rotor_b.load_2", "to": "gearbox_b.driver", "kind": "shaft_link"},
+      {"id": "load_b_2", "from": "gearbox_b.load", "to": "load_b2.inlet", "kind": "shaft_link"}
     ]
   },
   "cases": [{

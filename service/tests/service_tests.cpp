@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 89,
+        response.components.size() == 87,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -611,9 +611,9 @@ void test_catalog_discovery() {
             response.components.begin(), response.components.end(),
             [](const auto& component) {
                 return component.kind ==
-                    "shaft.train.geared_two_load";
+                    "shaft.train.multi_load";
             }),
-        "service catalog must expose the geared two-load shaft train");
+        "service catalog must expose the instance-sized shaft train");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -845,13 +845,7 @@ void test_catalog_discovery() {
     const auto multi_load_rotor = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
-            return component.kind == "shaft.inertia.two_load";
-        });
-    const auto geared_multi_load_rotor = std::find_if(
-        response.components.begin(), response.components.end(),
-        [](const auto& component) {
-            return component.kind ==
-                "shaft.inertia.geared_two_load";
+            return component.kind == "shaft.inertia.multi_load";
         });
     require(
         multi_load_rotor != response.components.end() &&
@@ -859,11 +853,10 @@ void test_catalog_discovery() {
             multi_load_rotor->supports_transient &&
             multi_load_rotor->parameters.size() == 3 &&
             multi_load_rotor->internal_variables.size() == 2 &&
-            geared_multi_load_rotor != response.components.end() &&
-            geared_multi_load_rotor->supports_steady &&
-            geared_multi_load_rotor->supports_transient &&
-            geared_multi_load_rotor->parameters.size() == 5 &&
-            geared_multi_load_rotor->internal_variables.size() == 2,
+            multi_load_rotor->port_groups.size() == 1 &&
+            multi_load_rotor->port_groups.front().name == "load" &&
+            multi_load_rotor->port_groups.front().minimum_count == 1 &&
+            multi_load_rotor->port_groups.front().maximum_count == 64,
         "catalog must expose inertial multi-load shaft dynamics");
     const auto compressor = std::find_if(
         response.components.begin(),
@@ -2523,7 +2516,8 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
     request.case_id = "sea_level_static_1000";
     request.input_variables = {
         "fuel.outlet.m_dot[CH4]",
-        "hp_extraction.inlet.W_dot"};
+        "hp_extraction.inlet.W_dot",
+        "lp_extraction.inlet.W_dot"};
     request.settings.relative_perturbation = 3.0e-4;
     request.settings.nonlinear_solver.residual_tolerance = 1.0e-8;
     for (const auto* path : {
@@ -2549,9 +2543,9 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
             "lp_shaft.rotational_energy",
             "hp_shaft.rotational_energy"} &&
             response.diagnostics.residual_evaluations >= 800 &&
-            response.diagnostics.linear_right_hand_sides == 4,
+            response.diagnostics.linear_right_hand_sides == 5,
         "NASA small-signal benchmark must expose two rotor states and "
-        "four tangent sensitivity solves");
+        "five tangent sensitivity solves");
 
     constexpr double radians_per_second_per_rpm =
         2.0 * 3.14159265358979323846 / 60.0;
@@ -2583,6 +2577,13 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
             std::abs(fuel_gain[1] / 8570.82043 - 1.0) < 0.30,
         "NASA fuel gains must remain within the declared partial "
         "cross-code band");
+    require(
+        std::abs(response.B[0][1]) < 1.0e-12 &&
+            std::abs(response.B[1][1] + 1.0) < 1.0e-12 &&
+            std::abs(response.B[0][2] + 1.0) < 1.0e-12 &&
+            std::abs(response.B[1][2]) < 1.0e-12,
+        "independent HP and LP extraction inputs must act on their "
+        "declared rotor energy balances without cross-wiring");
 }
 
 void test_cantera_brayton_integration_benchmark() {

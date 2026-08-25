@@ -142,8 +142,9 @@
       },
       {
         "id": "shaft_train",
-        "kind": "shaft.train.two_load",
+        "kind": "shaft.train.multi_load",
         "version": "1.0.0",
+        "port_counts": {"load": 2},
         "parameters": {
           "mechanical_efficiency": 0.99,
           "fixed_loss": {

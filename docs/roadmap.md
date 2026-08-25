@@ -161,8 +161,8 @@ Delivered:
 1. Two-sided lumped wall with steady heat balance and transient thermal-capacity accumulation. ✅
 2. Two-port shaft inertia with kinetic-energy state, speed closure, mechanical efficiency, and
    explicit fixed loss. ✅
-3. Common-speed and fixed-ratio geared multi-load shaft inertias with steady and transient power
-   closure. ✅
+3. Instance-sized common-speed multi-load shaft trains and inertias, with fixed-ratio branches
+   composed through quasi-steady gearbox components in steady and transient graphs. ✅
 4. Normalized proportional controller and first-order control lag with steady/transient forms. ✅
 5. Shaft, signal, and control source/sink boundaries for independently composable graphs. ✅
 6. Registry-owned time and moment-of-inertia units plus fixed-sparse graph-level integration
@@ -506,7 +506,8 @@ Work items:
    - map-based compressor graph component; ✅
    - map-based turbine graph component; ✅
    - standardized calibratable map corrections without mutating source artifacts; ✅
-   - two-load shaft train with mechanical losses and an electrical generator component; ✅
+   - instance-sized multi-load shaft train with mechanical losses and an electrical generator
+     component; ✅
 3. Add steam turbine stage/extraction support.
 4. Add design/off-design case handling.
 5. Add heat balance report generation.

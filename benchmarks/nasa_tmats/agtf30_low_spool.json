@@ -173,16 +173,26 @@
       },
       {
         "id": "lp_shaft",
-        "kind": "shaft.train.geared_two_load",
+        "kind": "shaft.train.multi_load",
         "version": "1.0.0",
+        "port_counts": {
+          "load": 2
+        },
         "parameters": {
-          "speed_ratio": 3.1,
-          "shaft_efficiency": 0.99,
-          "gearbox_efficiency": 1.0,
+          "mechanical_efficiency": 0.99,
           "fixed_loss": {
             "value": 0.0,
             "unit": "W"
           }
+        }
+      },
+      {
+        "id": "fan_gearbox",
+        "kind": "gearbox.shaft.fixed_ratio",
+        "version": "1.0.0",
+        "parameters": {
+          "speed_ratio": 3.1,
+          "mechanical_efficiency": 1.0
         }
       }
     ],
@@ -237,13 +247,19 @@
       },
       {
         "id": "shaft_lpc",
-        "from": "lp_shaft.direct_load",
+        "from": "lp_shaft.load_1",
         "to": "lpc.shaft",
         "kind": "shaft_link"
       },
       {
-        "id": "shaft_fan",
-        "from": "lp_shaft.geared_load",
+        "id": "shaft_fan_gearbox",
+        "from": "lp_shaft.load_2",
+        "to": "fan_gearbox.driver",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "fan_gearbox_fan",
+        "from": "fan_gearbox.load",
         "to": "fan.shaft",
         "kind": "shaft_link"
       }
@@ -407,19 +423,35 @@
           "value": 3100.0000432125,
           "unit": "rpm"
         },
-        "lp_shaft.direct_load.W_dot": {
+        "lp_shaft.load_1.W_dot": {
           "value": 433020.42354303726,
           "unit": "W"
         },
-        "lp_shaft.direct_load.omega": {
+        "lp_shaft.load_1.omega": {
           "value": 3100.0000432125,
           "unit": "rpm"
         },
-        "lp_shaft.geared_load.W_dot": {
+        "lp_shaft.load_2.W_dot": {
           "value": 1440539.8688708057,
           "unit": "W"
         },
-        "lp_shaft.geared_load.omega": {
+        "lp_shaft.load_2.omega": {
+          "value": 3100.0000432125,
+          "unit": "rpm"
+        },
+        "fan_gearbox.driver.W_dot": {
+          "value": 1440539.8688708057,
+          "unit": "W"
+        },
+        "fan_gearbox.driver.omega": {
+          "value": 3100.0000432125,
+          "unit": "rpm"
+        },
+        "fan_gearbox.load.W_dot": {
+          "value": 1440539.8688708057,
+          "unit": "W"
+        },
+        "fan_gearbox.load.omega": {
           "value": 1000.0000139395161,
           "unit": "rpm"
         },
@@ -694,19 +726,35 @@
           "value": 4812.145487887,
           "unit": "rpm"
         },
-        "lp_shaft.direct_load.W_dot": {
+        "lp_shaft.load_1.W_dot": {
           "value": 1592273.1228417077,
           "unit": "W"
         },
-        "lp_shaft.direct_load.omega": {
+        "lp_shaft.load_1.omega": {
           "value": 4812.145487887,
           "unit": "rpm"
         },
-        "lp_shaft.geared_load.W_dot": {
+        "lp_shaft.load_2.W_dot": {
           "value": 5949172.055339833,
           "unit": "W"
         },
-        "lp_shaft.geared_load.omega": {
+        "lp_shaft.load_2.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "fan_gearbox.driver.W_dot": {
+          "value": 5949172.055339833,
+          "unit": "W"
+        },
+        "fan_gearbox.driver.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "fan_gearbox.load.W_dot": {
+          "value": 5949172.055339833,
+          "unit": "W"
+        },
+        "fan_gearbox.load.omega": {
           "value": 1552.3049960925805,
           "unit": "rpm"
         },
@@ -981,19 +1029,35 @@
           "value": 5364.6286788317,
           "unit": "rpm"
         },
-        "lp_shaft.direct_load.W_dot": {
+        "lp_shaft.load_1.W_dot": {
           "value": 1809926.53742043,
           "unit": "W"
         },
-        "lp_shaft.direct_load.omega": {
+        "lp_shaft.load_1.omega": {
           "value": 5364.6286788317,
           "unit": "rpm"
         },
-        "lp_shaft.geared_load.W_dot": {
+        "lp_shaft.load_2.W_dot": {
           "value": 6989676.415871091,
           "unit": "W"
         },
-        "lp_shaft.geared_load.omega": {
+        "lp_shaft.load_2.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "fan_gearbox.driver.W_dot": {
+          "value": 6989676.415871091,
+          "unit": "W"
+        },
+        "fan_gearbox.driver.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "fan_gearbox.load.W_dot": {
+          "value": 6989676.415871091,
+          "unit": "W"
+        },
+        "fan_gearbox.load.omega": {
           "value": 1730.5253802682903,
           "unit": "rpm"
         },
@@ -1268,19 +1332,35 @@
           "value": 5774.2733312021,
           "unit": "rpm"
         },
-        "lp_shaft.direct_load.W_dot": {
+        "lp_shaft.load_1.W_dot": {
           "value": 1434547.5383083713,
           "unit": "W"
         },
-        "lp_shaft.direct_load.omega": {
+        "lp_shaft.load_1.omega": {
           "value": 5774.2733312021,
           "unit": "rpm"
         },
-        "lp_shaft.geared_load.W_dot": {
+        "lp_shaft.load_2.W_dot": {
           "value": 5829876.409557427,
           "unit": "W"
         },
-        "lp_shaft.geared_load.omega": {
+        "lp_shaft.load_2.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "fan_gearbox.driver.W_dot": {
+          "value": 5829876.409557427,
+          "unit": "W"
+        },
+        "fan_gearbox.driver.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "fan_gearbox.load.W_dot": {
+          "value": 5829876.409557427,
+          "unit": "W"
+        },
+        "fan_gearbox.load.omega": {
           "value": 1862.6688165168064,
           "unit": "rpm"
         },
@@ -1555,19 +1635,35 @@
           "value": 5804.5640118102,
           "unit": "rpm"
         },
-        "lp_shaft.direct_load.W_dot": {
+        "lp_shaft.load_1.W_dot": {
           "value": 1292386.7423239136,
           "unit": "W"
         },
-        "lp_shaft.direct_load.omega": {
+        "lp_shaft.load_1.omega": {
           "value": 5804.5640118102,
           "unit": "rpm"
         },
-        "lp_shaft.geared_load.W_dot": {
+        "lp_shaft.load_2.W_dot": {
           "value": 5193369.3818282075,
           "unit": "W"
         },
-        "lp_shaft.geared_load.omega": {
+        "lp_shaft.load_2.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "fan_gearbox.driver.W_dot": {
+          "value": 5193369.3818282075,
+          "unit": "W"
+        },
+        "fan_gearbox.driver.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "fan_gearbox.load.W_dot": {
+          "value": 5193369.3818282075,
+          "unit": "W"
+        },
+        "fan_gearbox.load.omega": {
           "value": 1872.440003809742,
           "unit": "rpm"
         },

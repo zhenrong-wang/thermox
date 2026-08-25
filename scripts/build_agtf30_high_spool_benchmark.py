@@ -165,8 +165,9 @@ def main() -> None:
             },
             {
                 "id": "hp_shaft",
-                "kind": "shaft.train.two_load",
+                "kind": "shaft.train.multi_load",
                 "version": "1.0.0",
+                "port_counts": {"load": 2},
                 "parameters": {
                     "mechanical_efficiency": 1.0,
                     "fixed_loss": quantity(0.0, "W"),

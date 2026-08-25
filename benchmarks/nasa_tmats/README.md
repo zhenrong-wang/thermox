@@ -115,7 +115,7 @@ so temperature remains reserved until the combustor supplies a consistent produc
 
 ## AGTF30 coupled high-spool inverse calculation
 
-`agtf30_high_spool.json` connects the ordinary HPC, equilibrium combustor, cooled HPT, two-load
+`agtf30_high_spool.json` connects the ordinary HPC, equilibrium combustor, cooled HPT, multi-load
 shaft train, and boundary components. HPC bleed 2 enters at the turbine exit, bleed 3 enters at the
 stage inlet, and the declared `-350 hp` NASA HP-power command is represented as a positive 350 hp
 shaft load. Station 25 and shaft speed are fixed upstream boundaries. Fuel flow is deliberately
@@ -158,8 +158,8 @@ independent of that initialization within the solver's basin.
 
 ## AGTF30 coupled low-spool inverse calculation
 
-`agtf30_low_spool.json` couples the ordinary fan, LPC, cooled LPT, and a generic geared two-load
-shaft train. The train represents a direct LPC load and a fan turning at `N2 / 3.1`; the declared
+`agtf30_low_spool.json` couples the ordinary fan, LPC, cooled LPT, a generic multi-load shaft
+train, and a fixed-ratio gearbox. The topology represents a direct LPC load and a fan turning at `N2 / 3.1`; the declared
 LP-shaft efficiency is 0.99 and gearbox efficiency is 1.0. The fan, LPC, and LPT maps are imported
 without fitting from the arrays and component scalers in NASA's generated C model:
 
@@ -205,7 +205,7 @@ within 0.01%. LPT outlet pressure differs by -2.924% to -0.539% and temperature 
 -0.472%, while fan/LPC/LPT shaft-power differences inferred from NASA torque remain below 0.66%.
 Those retained LPT state differences bound the dry N2/O2 thermochemistry and map-work differences.
 
-This validates generic map import, geared multi-load shaft topology, inverse LPT flow, and exact LP
+This validates generic map import, a multi-load shaft plus gearbox topology, inverse LPT flow, and exact LP
 shaft closure across five off-design points. It is not a continuous gas-path or whole-engine
 prediction: fan R-line and intermediate station boundaries still come from NASA's solved model,
 and bypass/core ducts, splitters, and nozzles are not connected in this declaration.
@@ -387,33 +387,34 @@ B = [[4405.37064, 0,          0.547524024],
 ```
 
 NASA declares LP and HP inertias of 17.44087229 and 1.86055038 slug-ft2, respectively
-(23.64664769 and 2.52256760 kg-m2). Thermox now has generic common-speed and geared multi-load
-inertial shaft components capable of representing those two rotor states. Its explicit
+(23.64664769 and 2.52256760 kg-m2). Thermox now has generic instance-sized multi-load inertial
+shaft components plus composable gearboxes capable of representing those two rotor states. Its explicit
 quasi-steady algebraic contract now lifts the map-driven gas path into the transient DAE without
 duplicating component physics.
 
 The reproducible `agtf30_vbv_nozzle_transient.json` declaration derives from the converged Thermox
 static state, replaces only the two shaft trains with their generic inertial counterparts, fixes
 fuel instead of LP speed, and retains the six public performance-map artifacts. The resulting
-411-variable DAE has two differential rotor-energy states. It reaches 0.001 s in one accepted step,
+419-variable DAE has two differential rotor-energy states. It reaches 0.001 s in one accepted step,
 with no rejection and a maximum absolute normalized residual of 5.58e-10.
 
-Thermox's generic index-1 DAE tangent linearizer releases fuel flow and HP extraction as exogenous
-inputs, forms the scaled local response Jacobian, factors it once, and solves four sensitivity
-right-hand sides. In native rotor-energy coordinates it obtains:
+Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
+extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
+solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:
 
 ```text
 A_E = [[-2.55830,  1.82347],
        [ 0.370274, -1.92434]]
-B_E = [[ 9.24284e6,  0],
-       [ 1.15416e7, -1]]
+B_E = [[ 9.24284e6,  0, -1],
+       [ 1.15416e7, -1,  0]]
 ```
 
 After the exact local coordinate change from rotor energy to rpm, the state matrix is
 `[[-2.55830, 1.11491], [0.605595, -1.92434]]`. Relative to NASA, the LP diagonal, LP-from-HP
 coupling, and HP diagonal differ by 1.16%, 0.011%, and 2.07%; HP-from-LP coupling differs by
-23.3%. Fuel gains converted to rpm/s per lbm/s differ by 18.4% and 24.3%. The HP extraction gain
-does not reproduce NASA (1.52 versus 5.13 rpm/s per signed hp), and LP extraction is not yet a
-declared port on this two-load LP shaft topology. This is therefore a partial dynamic cross-code
-reproduction and a qualification of the generic DAE linearization path, not full transient
-predictive validation. Remaining differences are retained as evidence rather than calibrated away.
+23.3%. Fuel gains converted to rpm/s per lbm/s differ by 18.4% and 24.3%. Extraction topology and
+sign are now reproduced independently on both rotors, but the gains remain materially different:
+HP is 1.52 versus NASA's 5.13 rpm/s per signed hp, while LP is 0.928 versus 0.548. This is therefore
+a complete-input but partial dynamic cross-code reproduction and a qualification of the generic
+DAE linearization path, not full transient predictive validation. Remaining differences are
+retained as evidence rather than calibrated away.

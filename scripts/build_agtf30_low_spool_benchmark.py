@@ -206,13 +206,21 @@ def main() -> None:
             sink("station_5"),
             {
                 "id": "lp_shaft",
-                "kind": "shaft.train.geared_two_load",
+                "kind": "shaft.train.multi_load",
+                "version": "1.0.0",
+                "port_counts": {"load": 2},
+                "parameters": {
+                    "mechanical_efficiency": 0.99,
+                    "fixed_loss": quantity(0.0, "W"),
+                },
+            },
+            {
+                "id": "fan_gearbox",
+                "kind": "gearbox.shaft.fixed_ratio",
                 "version": "1.0.0",
                 "parameters": {
                     "speed_ratio": 3.1,
-                    "shaft_efficiency": 0.99,
-                    "gearbox_efficiency": 1.0,
-                    "fixed_loss": quantity(0.0, "W"),
+                    "mechanical_efficiency": 1.0,
                 },
             },
         ],
@@ -225,8 +233,9 @@ def main() -> None:
             {"id": "bleed1_lpt", "from": "hpc_bleed_1.outlet", "to": "lpt.cooling_1", "kind": "material_link"},
             {"id": "lpt_station5", "from": "lpt.outlet", "to": "station_5.inlet", "kind": "material_link"},
             {"id": "lpt_shaft", "from": "lpt.shaft", "to": "lp_shaft.driver", "kind": "shaft_link"},
-            {"id": "shaft_lpc", "from": "lp_shaft.direct_load", "to": "lpc.shaft", "kind": "shaft_link"},
-            {"id": "shaft_fan", "from": "lp_shaft.geared_load", "to": "fan.shaft", "kind": "shaft_link"},
+            {"id": "shaft_lpc", "from": "lp_shaft.load_1", "to": "lpc.shaft", "kind": "shaft_link"},
+            {"id": "shaft_fan_gearbox", "from": "lp_shaft.load_2", "to": "fan_gearbox.driver", "kind": "shaft_link"},
+            {"id": "fan_gearbox_fan", "from": "fan_gearbox.load", "to": "fan.shaft", "kind": "shaft_link"},
         ],
     }
 
@@ -290,10 +299,14 @@ def main() -> None:
             "lpt.cooling_1.h": quantity(cooling_h, "J/kg"),
             "lp_shaft.driver.W_dot": quantity(lpt_power, "W"),
             "lp_shaft.driver.omega": quantity(n2_rpm, "rpm"),
-            "lp_shaft.direct_load.W_dot": quantity(lpc_power, "W"),
-            "lp_shaft.direct_load.omega": quantity(n2_rpm, "rpm"),
-            "lp_shaft.geared_load.W_dot": quantity(fan_power, "W"),
-            "lp_shaft.geared_load.omega": quantity(n2_rpm / 3.1, "rpm"),
+            "lp_shaft.load_1.W_dot": quantity(lpc_power, "W"),
+            "lp_shaft.load_1.omega": quantity(n2_rpm, "rpm"),
+            "lp_shaft.load_2.W_dot": quantity(fan_power, "W"),
+            "lp_shaft.load_2.omega": quantity(n2_rpm, "rpm"),
+            "fan_gearbox.driver.W_dot": quantity(fan_power, "W"),
+            "fan_gearbox.driver.omega": quantity(n2_rpm, "rpm"),
+            "fan_gearbox.load.W_dot": quantity(fan_power, "W"),
+            "fan_gearbox.load.omega": quantity(n2_rpm / 3.1, "rpm"),
         }
         for prefix, flow in (
             ("station_2.outlet", fan_w), ("fan.inlet", fan_w),

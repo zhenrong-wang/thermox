@@ -92,7 +92,7 @@ leaves outlet temperature 0.685--1.283% low; combustor composition and coupled s
 open system gates.
 
 The LP-spool coupling gate is now complete as a station-sliced cross-code reproduction. Generic
-fan, LPC, cooled LPT, and geared two-load shaft components solve all five healthy AGTF30 points in
+fan, LPC, cooled LPT, multi-load shaft, and gearbox components solve all five healthy AGTF30 points in
 two or three Newton iterations and close shaft power below `1e-6 W`. Fan map outputs and inverse LPT
 flow agree within 0.01%; LPC discharge temperature remains within 0.123%, while the simplified
 dry-air LPT outlet retains pressure and temperature differences up to 2.924% and 1.922%. NASA's

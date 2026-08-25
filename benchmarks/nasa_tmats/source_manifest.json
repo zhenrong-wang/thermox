@@ -476,13 +476,12 @@
     ],
     "status": "partial_thermox_cross_code_reproduction",
     "required_before_qualification": [
-      "Add a generic LP extraction port without replacing the public gas-path physics.",
-      "Resolve the retained HP extraction-gain and fuel-gain differences before predictive qualification."
+      "Resolve the retained HP/LP extraction-gain and fuel-gain differences before predictive qualification."
     ]
   },
   "agtf30_transient_structural_probe": {
     "derivation": "The public static declaration is initialized from its converged target state; steady shaft trains are replaced by generic inertial counterparts; LP speed is released and the converged Thermox fuel flow is fixed.",
-    "variables": 411,
+    "variables": 419,
     "differential_states": [
       "lp_shaft.rotational_energy",
       "hp_shaft.rotational_energy"
@@ -497,20 +496,21 @@
   },
   "agtf30_small_signal_partial_reproduction": {
     "model": "agtf30_vbv_nozzle_transient.json",
-    "variables": 411,
+    "variables": 419,
     "native_states": ["lp_shaft.rotational_energy", "hp_shaft.rotational_energy"],
-    "inputs": ["fuel.outlet.m_dot[CH4]", "hp_extraction.inlet.W_dot"],
+    "inputs": ["fuel.outlet.m_dot[CH4]", "hp_extraction.inlet.W_dot", "lp_extraction.inlet.W_dot"],
     "relative_perturbation": 0.0003,
-    "residual_evaluations": 831,
-    "linear_right_hand_sides": 4,
+    "residual_evaluations": 847,
+    "linear_right_hand_sides": 5,
     "state_matrix_A_rpm": [
       [-2.5583, 1.1149094051],
       [0.6055949727, -1.92434]
     ],
     "fuel_gain_rpm_s_per_lbm_s": [5215.3403932, 10651.2918882],
     "hp_signed_extraction_gain_rpm_s_per_hp": [0.0, 1.5171712181],
+    "lp_signed_extraction_gain_rpm_s_per_hp": [0.9276316365, 0.0],
     "classification": "public_source_partial_dynamic_cross_code_reproduction",
-    "declared_limit": "LP extraction is not represented by the current two-load LP shaft topology; HP extraction and fuel gains retain material cross-code differences. This does not qualify transient prediction."
+    "declared_limit": "All three public inputs are represented, but HP/LP extraction and fuel gains retain material cross-code differences. This does not qualify transient prediction."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, full-graph transient DAE composition/equilibrium hold, and a partial two-input small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or full transient predictive validation."
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, full-graph transient DAE composition/equilibrium hold, and a complete-input but partial small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or full transient predictive validation."
 }

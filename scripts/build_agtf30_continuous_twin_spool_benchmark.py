@@ -89,6 +89,7 @@ def main() -> None:
     combustor = _component(high, "combustor")
     hpt = _component(high, "hpt")
     lp_shaft = _component(low, "lp_shaft")
+    fan_gearbox = _component(low, "fan_gearbox")
     hp_shaft = _component(high, "hp_shaft")
     hp_extraction = _component(high, "hp_extraction")
 
@@ -133,6 +134,7 @@ def main() -> None:
             lpt,
             core_sink,
             lp_shaft,
+            fan_gearbox,
             hp_shaft,
             hp_extraction,
         ],
@@ -151,8 +153,9 @@ def main() -> None:
             {"id": "hpc_bleed1_lpt_exit", "from": "hpc.bleed_1", "to": "lpt.cooling_1", "kind": "material_link"},
             {"id": "lpt_core_exit", "from": "lpt.outlet", "to": "core_exit.inlet", "kind": "material_link"},
             {"id": "lpt_lp_shaft", "from": "lpt.shaft", "to": "lp_shaft.driver", "kind": "shaft_link"},
-            {"id": "lp_shaft_lpc", "from": "lp_shaft.direct_load", "to": "lpc.shaft", "kind": "shaft_link"},
-            {"id": "lp_shaft_fan", "from": "lp_shaft.geared_load", "to": "fan.shaft", "kind": "shaft_link"},
+            {"id": "lp_shaft_lpc", "from": "lp_shaft.load_1", "to": "lpc.shaft", "kind": "shaft_link"},
+            {"id": "lp_shaft_fan_gearbox", "from": "lp_shaft.load_2", "to": "fan_gearbox.driver", "kind": "shaft_link"},
+            {"id": "fan_gearbox_fan", "from": "fan_gearbox.load", "to": "fan.shaft", "kind": "shaft_link"},
             {"id": "hpt_hp_shaft", "from": "hpt.shaft", "to": "hp_shaft.driver", "kind": "shaft_link"},
             {"id": "hp_shaft_hpc", "from": "hp_shaft.load_1", "to": "hpc.shaft", "kind": "shaft_link"},
             {"id": "hp_shaft_extraction", "from": "hp_shaft.load_2", "to": "hp_extraction.inlet", "kind": "shaft_link"},
@@ -189,7 +192,8 @@ def main() -> None:
         _copy_guesses(
             low_case,
             guesses,
-            ("station_2.", "fan.", "lpc.", "lp_shaft.", "lpt."),
+            ("station_2.", "fan.", "lpc.", "lp_shaft.",
+             "fan_gearbox.", "lpt."),
         )
         _copy_guesses(
             high_case,
