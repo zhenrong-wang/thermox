@@ -99,3 +99,17 @@ dry-air LPT outlet retains pressure and temperature differences up to 2.924% and
 solved fan R-line is a declared boundary because the downstream splitter, dual gas paths, ducts,
 and nozzles are not yet connected. The next gate is therefore continuous whole-engine gas-path
 closure, not additional fitting of this sliced benchmark.
+
+The continuous turbomachinery gas-path gate is now complete. A generic signal-controlled species
+splitter connects the fan to the bypass branch and the LPC/HPC/combustor/HPT/LPT core path; both
+shaft trains close in the same 266-variable solve. Four zero-VBV operating points converge in five
+Newton iterations. Inlet-flow error is at most 1.634%, HPT outlet-flow error 1.316%, and LPT outlet
+pressure error 4.521% against T-MATS. The uncalibrated equilibrium fuel result remains 15.656--
+16.088% low, so fuel prediction remains explicitly reserved.
+
+This advances the program from sliced component/spool checks to a continuous map-driven engine
+core. It does not complete the whole-engine gate: Mach-dependent duct losses, the variable bleed
+valve, and core/bypass nozzles are still absent, and therefore fan operating-line prediction and
+net thrust are not yet qualified. The next implementation sequence is those generic transport and
+terminal-flow components, followed by the fifth nonzero-VBV point and NASA's published fuel-step
+transient. No discrepancy in the current comparison should be hidden with a case-specific factor.

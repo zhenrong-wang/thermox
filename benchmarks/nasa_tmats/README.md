@@ -209,3 +209,49 @@ This validates generic map import, geared multi-load shaft topology, inverse LPT
 shaft closure across five off-design points. It is not a continuous gas-path or whole-engine
 prediction: fan R-line and intermediate station boundaries still come from NASA's solved model,
 and bypass/core ducts, splitters, and nozzles are not connected in this declaration.
+
+## AGTF30 continuous twin-spool gas-path calculation
+
+`agtf30_continuous_twin_spool.json` removes the intermediate station sources and connects one
+material graph from station 2 through the fan, core/bypass splitter, LPC, HPC, equilibrium
+combustor, cooled HPT, and cooled LPT. Both shaft trains close simultaneously. Total inlet flow,
+fan map coordinate, fuel flow, turbine pressure ratios, and downstream station states are solved;
+NASA's measured/solved intermediate station values are used only as comparison references.
+
+The splitter is the generic `junction.material.splitter.controlled_fraction` component. Its
+case-owned signal sets the published bypass ratio while conserving every declared species and
+preserving the inlet state. Regenerate the declaration with:
+
+```sh
+python3 scripts/build_agtf30_continuous_twin_spool_benchmark.py
+```
+
+Run one point with the five immutable map artifacts:
+
+```sh
+./build/thermox_cli solve \
+  --model benchmarks/nasa_tmats/agtf30_continuous_twin_spool.json \
+  --case alt_30000_mach_072_2000 \
+  --performance-map benchmarks/nasa_tmats/agtf30_fan_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_lpc_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_hpc_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_hpt_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_lpt_map.json \
+  --residual-tolerance 1e-9 \
+  --format text
+```
+
+All four zero-VBV points converge in five Newton iterations with residual norms from `1.17e-11`
+to `1.64e-10`; both shaft balances close below `1e-6 W`. Relative to NASA T-MATS, solved inlet
+flow differs by +1.264% to +1.634%, fan pressure by -0.473% to -0.332%, LPC pressure by -2.027%
+to -1.042%, HPT outlet flow by +0.930% to +1.316%, and LPT outlet pressure by +2.999% to +4.521%.
+The equilibrium calculation solves fuel 15.656% to 16.088% below T-MATS and station-4 temperature
+2.083% to 2.258% low. Those differences are retained rather than calibrated away.
+
+This is the first **continuous turbomachinery gas-path cross-code inverse reproduction**. It
+validates simultaneous mass/species/energy/map/two-shaft closure without intermediate station
+boundaries. It is not a whole-engine or thrust prediction: the current declaration omits the
+source model's Mach-dependent duct losses, variable bleed valve relation, and core/bypass nozzles.
+The sea-level-static point is excluded because its nonzero VBV command cannot be represented
+honestly until that generic component is present. The explicit `1e-9` solve tolerance is local to
+this 266-variable benchmark; the platform default remains `1e-10`.

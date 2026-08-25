@@ -982,6 +982,9 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains(
                 "junction.material.splitter.fixed_fraction"),
             "default registry should contain material splitter");
+    require(registry.contains(
+                "junction.material.splitter.controlled_fraction"),
+            "default registry should contain controlled material splitter");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
     require(registry.contains("gearbox.shaft.fixed_ratio"),
@@ -1073,6 +1076,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "pipe.fluid.hydraulic_inertance",
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
+        "junction.material.splitter.controlled_fraction",
         "valve.fluid.isenthalpic_pressure_ratio",
         "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
@@ -3801,6 +3805,58 @@ void test_material_mixer_and_fixed_fraction_splitter() {
         split_value("splitter.outlet_b.h"),
         600000.0, 1.0e-8,
         "material splitter preserves specific enthalpy");
+
+    const auto controlled_document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "controlled_material_splitter",
+    "media": [],
+    "materials": [{
+      "id": "gas", "backend": "unresolved_test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "splitter",
+      "kind": "junction.material.splitter.controlled_fraction",
+      "materials": {
+        "inlet": "gas", "outlet_a": "gas", "outlet_b": "gas"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "splitter.inlet.p": {"value": 1.5, "unit": "MPa"},
+      "splitter.inlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "splitter.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "splitter.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "splitter.fraction.value": 0.35
+    }
+  }]
+})json");
+    const auto controlled_graph =
+        thermox::platform::compile_model_graph(
+            controlled_document, registry, "design");
+    const auto controlled =
+        thermox::solve_newton(controlled_graph.problem);
+    require(
+        controlled.diagnostics.converged,
+        controlled.diagnostics.message);
+    const auto controlled_value = [&](const std::string& name) {
+        return controlled.x.at(require_variable_index(
+            controlled_graph.problem.variable_names, name));
+    };
+    require_near(
+        controlled_value("splitter.outlet_a.m_dot[N2]"),
+        2.8, 1.0e-10,
+        "controlled material splitter applies its signal fraction");
+    require_near(
+        controlled_value("splitter.outlet_b.m_dot[O2]"),
+        1.3, 1.0e-10,
+        "controlled material splitter closes its remaining flow");
 
     const auto mixer_document =
         thermox::platform::parse_model_document_text(R"json({

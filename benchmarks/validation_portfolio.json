@@ -64,7 +64,7 @@
     },
     {
       "id": "nasa_tmats_gas_turbines",
-      "status": "multi_point_component_cross_code_complete",
+      "status": "continuous_turbomachinery_gas_path_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -93,19 +93,19 @@
         "shaft_power_and_flow_closure",
         "four_steady_operating_points",
         "map_driven_off_design_component_response",
-        "hpt_inverse_map_flow_compatibility"
+        "hpt_inverse_map_flow_compatibility",
+        "continuous_twin_spool_mass_energy_and_shaft_closure"
       ],
       "latest_result": {
-        "components": ["AGTF30_high_pressure_compressor", "AGTF30_high_pressure_turbine_map"],
-        "healthy_off_design_points": 5,
-        "validated_outputs": ["discharge_pressure", "discharge_temperature", "outlet_mass_flow", "shaft_torque"],
-        "combined_pressure_temperature_mape_percent": 0.1206,
-        "combined_all_outputs_mape_percent": 0.1217,
-        "maximum_absolute_error_percent": 0.2832,
-        "hpt_pressure_ratio_maximum_absolute_error_percent": 0.000056,
-        "hpt_torque_maximum_absolute_error_percent": 0.1101,
-        "acceptance_band_percent": 0.5,
-        "classification": "multi_point_off_design_component_cross_code_reproduction"
+        "topology": "continuous fan_splitter_LPC_HPC_combustor_HPT_LPT_with_two_shafts",
+        "healthy_zero_vbv_points": 4,
+        "maximum_residual_norm": 1.63946e-10,
+        "inlet_flow_maximum_absolute_error_percent": 1.6338,
+        "hpt_outlet_flow_maximum_absolute_error_percent": 1.3165,
+        "lpt_outlet_pressure_maximum_absolute_error_percent": 4.5211,
+        "fuel_flow_error_percent_range": [-16.0880, -15.6559],
+        "classification": "multi_point_continuous_turbomachinery_gas_path_cross_code_inverse_reproduction",
+        "reserved": ["whole_engine_nozzle_and_thrust_prediction", "fuel_flow_prediction", "fuel_step_transient"]
       }
     },
     {

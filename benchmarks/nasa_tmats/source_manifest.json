@@ -205,5 +205,58 @@
     ],
     "classification": "multi_point_coupled_low_spool_cross_code_inverse_reproduction"
   },
+  "agtf30_continuous_twin_spool_execution": {
+    "model": "agtf30_continuous_twin_spool.json",
+    "artifacts": [
+      "agtf30_fan_map.json",
+      "agtf30_lpc_map.json",
+      "agtf30_hpc_map.json",
+      "agtf30_hpt_map.json",
+      "agtf30_lpt_map.json"
+    ],
+    "selection": "Four healthy nominal cases whose NASA variable-bleed-valve command is zero; the sea-level-static case is reserved because its command is nonzero.",
+    "boundary_contract": "Station 2 pressure/temperature, N1/N2 shaft speeds, published bypass ratio, fuel temperature, and 350 hp HP extraction are fixed. Total inlet flow, fan map coordinate, fuel flow, intermediate station states, and both turbine pressure ratios are solved.",
+    "topology": "A continuous material graph connects fan, controlled core/bypass split, LPC, three-bleed HPC, equilibrium combustor, two-injection HPT, and one-injection LPT. Generic HP and geared LP shaft trains close simultaneously.",
+    "omitted_source_physics": [
+      "Mach-dependent core and bypass duct pressure losses",
+      "variable bleed valve flow relation",
+      "core and bypass convergent nozzles and net thrust"
+    ],
+    "results": {
+      "converged_points": 4,
+      "newton_iterations_per_point": 5,
+      "normalized_residual_norm_range": [1.17193e-11, 1.63946e-10],
+      "fan_flow_error_percent_range": [1.264154, 1.633804],
+      "fan_pressure_error_percent_range": [-0.472610, -0.332377],
+      "fan_temperature_error_percent_range": [-0.119234, -0.078951],
+      "lpc_pressure_error_percent_range": [-2.027136, -1.041672],
+      "lpc_temperature_error_percent_range": [-0.852063, -0.611944],
+      "fuel_flow_error_percent_range": [-16.088015, -15.655906],
+      "station_4_temperature_error_percent_range": [-2.257651, -2.082797],
+      "station_45_pressure_error_percent_range": [-1.216403, -0.889375],
+      "station_45_temperature_error_percent_range": [-2.462705, -2.296807],
+      "station_45_flow_error_percent_range": [0.929954, 1.316461],
+      "station_5_pressure_error_percent_range": [2.999283, 4.521100],
+      "station_5_temperature_error_percent_range": [-2.276733, -1.806583],
+      "maximum_absolute_shaft_closure_w": 1e-6
+    },
+    "acceptance": {
+      "fan_flow_percent": 2.0,
+      "fuel_flow_cross_model_percent": 17.0,
+      "station_4_temperature_percent": 2.5,
+      "station_45_pressure_percent": 1.5,
+      "station_45_temperature_percent": 2.6,
+      "station_45_flow_percent": 1.5,
+      "station_5_pressure_percent": 5.0,
+      "station_5_temperature_percent": 2.5,
+      "result": "pass_with_fuel_and_whole_engine_prediction_reserved"
+    },
+    "reserved_comparisons": [
+      "Fuel-flow predictive qualification: no case-specific calibration is applied to the retained 15.66 to 16.09 percent cross-model difference.",
+      "Whole-engine flow/thrust prediction until duct, variable-bleed-valve, and nozzle constraints are connected.",
+      "Independent hardware and transient validation."
+    ],
+    "classification": "multi_point_continuous_turbomachinery_gas_path_cross_code_inverse_reproduction"
+  },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, coupled bleed routing, geared multi-load topology, and exact high- and low-shaft conservation against public NASA code paths. They are not independent hardware validation, continuous whole-engine gas-path validation, fuel-flow predictive qualification, or transient validation."
 }

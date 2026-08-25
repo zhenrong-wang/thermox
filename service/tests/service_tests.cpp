@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 83,
+        response.components.size() == 84,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -2093,6 +2093,124 @@ void test_nasa_agtf30_coupled_low_spool_benchmark() {
             std::abs(0.99 * lpt_power - lpc_power - fan_power) < 1.0e-6,
             "coupled low spool must close LPT, LPC, and geared fan shaft "
             "power: " + point.case_id);
+    }
+}
+
+void test_nasa_agtf30_continuous_twin_spool_benchmark() {
+    struct ReferencePoint {
+        std::string case_id;
+        double fan_flow_lbm_s;
+        double fuel_flow_lbm_s;
+        double station_4_temperature_deg_r;
+        double station_45_pressure_psia;
+        double station_45_temperature_deg_r;
+        double station_45_flow_lbm_s;
+        double station_5_pressure_psia;
+        double station_5_temperature_deg_r;
+    };
+    const std::vector<ReferencePoint> cases = {
+        {"sea_level_mach_03_1500", 1486.5592910209, 0.802132742,
+         2743.26475125, 81.37677935, 1922.25697538, 44.24900428,
+         15.7062233148, 1325.2888976205},
+        {"alt_10000_mach_05_1750", 1362.1732328680, 0.824493078,
+         2769.31220689, 81.66776981, 1941.49257567, 43.97159272,
+         11.4749285219, 1240.3710330419},
+        {"alt_25000_mach_06_2000", 933.1420345382, 0.640935205,
+         2755.13616891, 61.99335406, 1929.64515575, 33.27831292,
+         6.8332506957, 1162.1512948641},
+        {"alt_30000_mach_072_2000", 823.7870551985, 0.56337662,
+         2767.52451171, 54.41163179, 1939.27203891, 29.12654291,
+         5.6850295910, 1156.9484849263},
+    };
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_continuous_twin_spool.json");
+    std::vector<thermox::service::PerformanceMapArtifactInput> maps;
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/agtf30_fan_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpt_map.json"}) {
+        maps.push_back(thermox::service::
+            parse_performance_map_artifact_declaration_json(
+                read_source_file(path)));
+    }
+    constexpr double psi_to_pa = 6894.757293168;
+    constexpr double pound_mass_to_kg = 0.45359237;
+    constexpr double extraction_power_w = 260997.475;
+    const auto relative_error = [](double actual, double expected) {
+        return std::abs(actual / expected - 1.0);
+    };
+    for (const auto& point : cases) {
+        thermox::service::SteadySimulationRequest request;
+        request.model_json = model;
+        request.case_id = point.case_id;
+        request.artifacts.performance_maps = maps;
+        request.solver.residual_tolerance = 1.0e-9;
+        const auto response =
+            thermox::service::SimulationService{}.run_steady(request);
+        require(
+            response.succeeded() && response.diagnostics.converged &&
+                response.diagnostics.final_residual_norm < 2.0e-10,
+            "NASA AGTF30 continuous twin-spool point must solve: " +
+                point.case_id);
+
+        const auto value = [&](const std::string& component,
+                               const std::string& port,
+                               const std::string& name,
+                               bool derived) {
+            const auto& result = require_port_result(
+                response.graph, component, port);
+            return require_result_value(
+                derived ? result.derived_values : result.primary_values,
+                name).value_si;
+        };
+        require(
+            relative_error(
+                value("fan", "inlet", "m_dot_total", true),
+                point.fan_flow_lbm_s * pound_mass_to_kg) < 0.02 &&
+                relative_error(
+                    value("fuel", "outlet", "m_dot_total", true),
+                    point.fuel_flow_lbm_s * pound_mass_to_kg) < 0.17,
+            "continuous twin-spool solved inlet and fuel flows must remain "
+            "within declared cross-code bands: " + point.case_id);
+        require(
+            relative_error(
+                value("combustor", "outlet", "T", true),
+                point.station_4_temperature_deg_r * 5.0 / 9.0) < 0.025 &&
+                relative_error(
+                    value("hpt", "outlet", "p", false),
+                    point.station_45_pressure_psia * psi_to_pa) < 0.015 &&
+                relative_error(
+                    value("hpt", "outlet", "T", true),
+                    point.station_45_temperature_deg_r * 5.0 / 9.0) <
+                    0.026 &&
+                relative_error(
+                    value("hpt", "outlet", "m_dot_total", true),
+                    point.station_45_flow_lbm_s * pound_mass_to_kg) < 0.015,
+            "continuous twin-spool combustor and HPT stations must remain "
+            "within declared cross-code bands: " + point.case_id);
+        require(
+            relative_error(
+                value("lpt", "outlet", "p", false),
+                point.station_5_pressure_psia * psi_to_pa) < 0.05 &&
+                relative_error(
+                    value("lpt", "outlet", "T", true),
+                    point.station_5_temperature_deg_r * 5.0 / 9.0) < 0.025,
+            "continuous twin-spool LPT station must remain within declared "
+            "cross-code bands: " + point.case_id);
+
+        const double fan_power = value("fan", "shaft", "W_dot", false);
+        const double lpc_power = value("lpc", "shaft", "W_dot", false);
+        const double hpc_power = value("hpc", "shaft", "W_dot", false);
+        const double hpt_power = value("hpt", "shaft", "W_dot", false);
+        const double lpt_power = value("lpt", "shaft", "W_dot", false);
+        require(
+            std::abs(0.99 * lpt_power - lpc_power - fan_power) < 1.0e-6 &&
+                std::abs(hpt_power - hpc_power - extraction_power_w) <
+                    1.0e-6,
+            "continuous twin-spool graph must close both shaft balances "
+            "exactly: " + point.case_id);
     }
 }
 
@@ -7856,6 +7974,7 @@ int main() {
         test_nasa_agtf30_hpt_map_compatibility_benchmark();
         test_nasa_agtf30_coupled_high_spool_benchmark();
         test_nasa_agtf30_coupled_low_spool_benchmark();
+        test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

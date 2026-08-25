@@ -20,6 +20,7 @@ void print_usage(std::ostream& out) {
         << "  thermox_cli solve --model <path> [--case <id>]"
            " [--performance-map <path>]..."
            " [--continuation]"
+           " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
@@ -177,6 +178,7 @@ int main(int argc, char** argv) {
     std::string calibration_id;
     std::string reconciliation_id;
     std::string max_iterations_text;
+    std::string residual_tolerance_text;
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string format = "text";
@@ -206,6 +208,8 @@ int main(int argc, char** argv) {
             reconciliation_id = argv[++i];
         } else if (arg == "--max-iterations" && i + 1 < argc) {
             max_iterations_text = argv[++i];
+        } else if (arg == "--residual-tolerance" && i + 1 < argc) {
+            residual_tolerance_text = argv[++i];
         } else if (arg == "--mode" && i + 1 < argc) {
             reconciliation_mode = argv[++i];
         } else if (arg == "--profile-likelihood") {
@@ -289,6 +293,10 @@ int main(int argc, char** argv) {
     }
     if (command != "solve" && !performance_map_paths.empty()) {
         std::cerr << "--performance-map is only valid for solve\n";
+        return 2;
+    }
+    if (command != "solve" && !residual_tolerance_text.empty()) {
+        std::cerr << "--residual-tolerance is only valid for solve\n";
         return 2;
     }
     if (command == "simulate" && end_time_text.empty()) {
@@ -505,6 +513,12 @@ int main(int argc, char** argv) {
             }
             request.solver.continuation_enabled =
                 continuation;
+            if (!residual_tolerance_text.empty()) {
+                request.solver.residual_tolerance =
+                    parse_positive_number(
+                        residual_tolerance_text,
+                        "--residual-tolerance");
+            }
             request.solver.structural_decomposition_policy =
                 structural_policy;
             const auto response = service.run_steady(request);

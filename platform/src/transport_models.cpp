@@ -3053,6 +3053,126 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class ControlledFractionMaterialSplitterModel final
+    : public ComponentModel {
+public:
+    ControlledFractionMaterialSplitterModel()
+        : descriptor_(make_descriptor(
+              "junction.material.splitter.controlled_fraction",
+              {{"inlet", "material", "in"},
+               {"outlet_a", "material", "out"},
+               {"outlet_b", "material", "out"},
+               {"fraction", "signal", "in"}})) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        require_same_material(
+            context, {"inlet", "outlet_a", "outlet_b"});
+        const auto species = require_port_species(context, "inlet");
+        if (species != require_port_species(context, "outlet_a") ||
+            species != require_port_species(context, "outlet_b")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+        const auto fraction =
+            require_port_variable(context, "fraction.value");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        const auto valid_fraction = [](double value) {
+            return std::isfinite(value) && value >= 0.0 && value <= 1.0;
+        };
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "inlet." + variable);
+            const auto outlet_a = require_port_variable(
+                context, "outlet_a." + variable);
+            const auto outlet_b = require_port_variable(
+                context, "outlet_b." + variable);
+            system.add_checked_sparse_equation(
+                prefix + "outlet_a_species." + name,
+                [inlet, outlet_a, fraction, valid_fraction](
+                    const std::vector<double>& x,
+                    double& residual) {
+                    if (!valid_fraction(x.at(fraction))) {
+                        return EvaluationStatus::recoverable(
+                            "controlled material splitter fraction must "
+                            "be finite and in [0, 1]");
+                    }
+                    residual = x.at(outlet_a) -
+                        x.at(fraction) * x.at(inlet);
+                    return EvaluationStatus::success();
+                },
+                {inlet, outlet_a, fraction},
+                [inlet, outlet_a, fraction](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    jacobian.push_back({outlet_a, 1.0});
+                    jacobian.push_back({inlet, -x.at(fraction)});
+                    jacobian.push_back({fraction, -x.at(inlet)});
+                    return x.at(outlet_a) -
+                        x.at(fraction) * x.at(inlet);
+                },
+                100.0);
+            system.add_checked_sparse_equation(
+                prefix + "outlet_b_species." + name,
+                [inlet, outlet_b, fraction, valid_fraction](
+                    const std::vector<double>& x,
+                    double& residual) {
+                    if (!valid_fraction(x.at(fraction))) {
+                        return EvaluationStatus::recoverable(
+                            "controlled material splitter fraction must "
+                            "be finite and in [0, 1]");
+                    }
+                    residual = x.at(outlet_b) -
+                        (1.0 - x.at(fraction)) * x.at(inlet);
+                    return EvaluationStatus::success();
+                },
+                {inlet, outlet_b, fraction},
+                [inlet, outlet_b, fraction](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    jacobian.push_back({outlet_b, 1.0});
+                    jacobian.push_back(
+                        {inlet, -(1.0 - x.at(fraction))});
+                    jacobian.push_back({fraction, x.at(inlet)});
+                    return x.at(outlet_b) -
+                        (1.0 - x.at(fraction)) * x.at(inlet);
+                },
+                100.0);
+        }
+
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        for (const auto& outlet :
+             std::vector<std::string>{"outlet_a", "outlet_b"}) {
+            system.add_linear_equation(
+                prefix + outlet + "_pressure",
+                {{require_port_variable(
+                      context, outlet + ".p"), 1.0},
+                 {inlet_p, -1.0}},
+                0.0, 100000.0);
+            system.add_linear_equation(
+                prefix + outlet + "_enthalpy",
+                {{require_port_variable(
+                      context, outlet + ".h"), 1.0},
+                 {inlet_h, -1.0}},
+                0.0, 100000.0);
+        }
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_transport_component_models(
@@ -3095,6 +3215,8 @@ void register_transport_component_models(
     registry.register_model(
         std::make_shared<
             FixedFractionMaterialSplitterModel>());
+    registry.register_model(std::make_shared<
+        ControlledFractionMaterialSplitterModel>());
 }
 
 }  // namespace thermox::platform

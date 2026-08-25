@@ -1,0 +1,4533 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_continuous_twin_spool",
+    "name": "NASA AGTF30 continuous fan-to-LPT twin-spool gas path",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "reacting_gas",
+        "backend": "cantera",
+        "mechanism": "benchmarks/nasa_tmats/agtf30_major_products.yaml",
+        "phase": "gas",
+        "package_version": "3.2.0",
+        "species": [
+          "CH4",
+          "O2",
+          "N2",
+          "CO2",
+          "H2O",
+          "CO",
+          "H2"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "station_2",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[N2]": 0.768,
+          "mass_fraction[O2]": 0.232
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "fan",
+        "kind": "compressor.material.coordinate_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "reference_temperature": {
+            "value": 518.67,
+            "unit": "degR"
+          },
+          "flow_capacity_scale": 0.768426,
+          "pressure_ratio_scale": 0.769231,
+          "efficiency_scale": 1.036257
+        },
+        "artifacts": {
+          "performance_map": "nasa-agtf30-fan-map"
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "fan_splitter",
+        "kind": "junction.material.splitter.controlled_fraction",
+        "version": "1.0.0",
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet_a": "reacting_gas",
+          "outlet_b": "reacting_gas"
+        }
+      },
+      {
+        "id": "bypass_exit",
+        "kind": "sink.material.boundary",
+        "version": "1.0.0",
+        "materials": {
+          "inlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "lpc",
+        "kind": "compressor.material.coordinate_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "reference_temperature": {
+            "value": 518.67,
+            "unit": "degR"
+          },
+          "flow_capacity_scale": 0.300704,
+          "pressure_ratio_scale": 4.374453,
+          "efficiency_scale": 1.019486
+        },
+        "artifacts": {
+          "performance_map": "nasa-agtf30-lpc-map"
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "hpc",
+        "kind": "compressor.material.coordinate_map.fractional_bleeds",
+        "version": "1.0.0",
+        "port_counts": {
+          "bleed": 3
+        },
+        "parameters": {
+          "reference_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "reference_temperature": {
+            "value": 518.67,
+            "unit": "degR"
+          },
+          "flow_capacity_scale": 0.1328,
+          "pressure_ratio_scale": 0.595594,
+          "efficiency_scale": 0.994014,
+          "bleed_fraction[1]": 0.02,
+          "bleed_pressure_fraction[1]": 0.146498,
+          "bleed_enthalpy_fraction[1]": 0.4997,
+          "bleed_fraction[2]": 0.0693,
+          "bleed_pressure_fraction[2]": 1.0,
+          "bleed_enthalpy_fraction[2]": 1.0,
+          "bleed_fraction[3]": 0.0625,
+          "bleed_pressure_fraction[3]": 1.0,
+          "bleed_enthalpy_fraction[3]": 1.0
+        },
+        "artifacts": {
+          "performance_map": "nasa-agtf30-hpc-map"
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas",
+          "bleed_1": "reacting_gas",
+          "bleed_2": "reacting_gas",
+          "bleed_3": "reacting_gas"
+        }
+      },
+      {
+        "id": "fuel",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[CH4]": 1.0
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "combustor",
+        "kind": "combustor.material.equilibrium_heat_release_efficiency",
+        "version": "1.0.0",
+        "parameters": {
+          "pressure_ratio": 0.96,
+          "combustion_efficiency": 0.999,
+          "fuel_lower_heating_value": {
+            "value": 42.79846824,
+            "unit": "MJ/kg"
+          }
+        },
+        "materials": {
+          "air_inlet": "reacting_gas",
+          "fuel_inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "hpt",
+        "kind": "turbine.material.coordinate_map.cooling_injections",
+        "version": "1.0.0",
+        "port_counts": {
+          "cooling": 2
+        },
+        "parameters": {
+          "reference_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "reference_temperature": {
+            "value": 518.67,
+            "unit": "degR"
+          },
+          "flow_capacity_scale": 1.0,
+          "pressure_ratio_scale": 1.0,
+          "efficiency_scale": 1.0,
+          "cooling_position[1]": 1.0,
+          "cooling_position[2]": 0.0
+        },
+        "artifacts": {
+          "performance_map": "nasa-agtf30-hpt-map"
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas",
+          "cooling_1": "reacting_gas",
+          "cooling_2": "reacting_gas"
+        }
+      },
+      {
+        "id": "lpt",
+        "kind": "turbine.material.coordinate_map.cooling_injections",
+        "version": "1.0.0",
+        "port_counts": {
+          "cooling": 1
+        },
+        "parameters": {
+          "reference_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "reference_temperature": {
+            "value": 518.67,
+            "unit": "degR"
+          },
+          "flow_capacity_scale": 1.0,
+          "pressure_ratio_scale": 1.0,
+          "efficiency_scale": 1.0,
+          "cooling_position[1]": 1.0
+        },
+        "artifacts": {
+          "performance_map": "nasa-agtf30-lpt-map"
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas",
+          "cooling_1": "reacting_gas"
+        }
+      },
+      {
+        "id": "core_exit",
+        "kind": "sink.material.boundary",
+        "version": "1.0.0",
+        "materials": {
+          "inlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "lp_shaft",
+        "kind": "shaft.train.geared_two_load",
+        "version": "1.0.0",
+        "parameters": {
+          "speed_ratio": 3.1,
+          "shaft_efficiency": 0.99,
+          "gearbox_efficiency": 1.0,
+          "fixed_loss": {
+            "value": 0.0,
+            "unit": "W"
+          }
+        }
+      },
+      {
+        "id": "hp_shaft",
+        "kind": "shaft.train.two_load",
+        "version": "1.0.0",
+        "parameters": {
+          "mechanical_efficiency": 1.0,
+          "fixed_loss": {
+            "value": 0.0,
+            "unit": "W"
+          }
+        }
+      },
+      {
+        "id": "hp_extraction",
+        "kind": "sink.shaft.boundary",
+        "version": "1.0.0"
+      }
+    ],
+    "connections": [
+      {
+        "id": "station2_fan",
+        "from": "station_2.outlet",
+        "to": "fan.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "fan_split",
+        "from": "fan.outlet",
+        "to": "fan_splitter.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "split_bypass",
+        "from": "fan_splitter.outlet_a",
+        "to": "bypass_exit.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "split_core",
+        "from": "fan_splitter.outlet_b",
+        "to": "lpc.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "lpc_hpc",
+        "from": "lpc.outlet",
+        "to": "hpc.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "hpc_combustor",
+        "from": "hpc.outlet",
+        "to": "combustor.air_inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "fuel_combustor",
+        "from": "fuel.outlet",
+        "to": "combustor.fuel_inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "combustor_hpt",
+        "from": "combustor.outlet",
+        "to": "hpt.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "hpc_bleed2_hpt_exit",
+        "from": "hpc.bleed_2",
+        "to": "hpt.cooling_1",
+        "kind": "material_link"
+      },
+      {
+        "id": "hpc_bleed3_hpt_front",
+        "from": "hpc.bleed_3",
+        "to": "hpt.cooling_2",
+        "kind": "material_link"
+      },
+      {
+        "id": "hpt_lpt",
+        "from": "hpt.outlet",
+        "to": "lpt.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "hpc_bleed1_lpt_exit",
+        "from": "hpc.bleed_1",
+        "to": "lpt.cooling_1",
+        "kind": "material_link"
+      },
+      {
+        "id": "lpt_core_exit",
+        "from": "lpt.outlet",
+        "to": "core_exit.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "lpt_lp_shaft",
+        "from": "lpt.shaft",
+        "to": "lp_shaft.driver",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "lp_shaft_lpc",
+        "from": "lp_shaft.direct_load",
+        "to": "lpc.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "lp_shaft_fan",
+        "from": "lp_shaft.geared_load",
+        "to": "fan.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "hpt_hp_shaft",
+        "from": "hpt.shaft",
+        "to": "hp_shaft.driver",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "hp_shaft_hpc",
+        "from": "hp_shaft.load_1",
+        "to": "hpc.shaft",
+        "kind": "shaft_link"
+      },
+      {
+        "id": "hp_shaft_extraction",
+        "from": "hp_shaft.load_2",
+        "to": "hp_extraction.inlet",
+        "kind": "shaft_link"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "sea_level_mach_03_1500",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "station_2.outlet.p": {
+          "value": 15.5959388828,
+          "unit": "psia"
+        },
+        "station_2.outlet.T": {
+          "value": 555.4727026221,
+          "unit": "degR"
+        },
+        "fan_splitter.fraction.value": 0.9701770776276801,
+        "lpc.shaft.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "hpc.shaft.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "hp_extraction.inlet.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        }
+      },
+      "initial_guesses": {
+        "station_2.outlet.h": {
+          "value": 10595.1861,
+          "unit": "J/kg"
+        },
+        "fan.inlet.p": {
+          "value": 15.5959388828,
+          "unit": "psia"
+        },
+        "fan.inlet.h": {
+          "value": 10595.1861,
+          "unit": "J/kg"
+        },
+        "fan.outlet.p": {
+          "value": 17.100365768,
+          "unit": "psia"
+        },
+        "fan.outlet.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "fan.shaft.W_dot": {
+          "value": 5949172.055339833,
+          "unit": "W"
+        },
+        "fan.shaft.omega": {
+          "value": 1552.3049960925805,
+          "unit": "rpm"
+        },
+        "lpc.inlet.p": {
+          "value": 17.05024679,
+          "unit": "psia"
+        },
+        "lpc.inlet.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "lpc.outlet.p": {
+          "value": 34.2933896482,
+          "unit": "psia"
+        },
+        "lpc.outlet.h": {
+          "value": 99302.7223,
+          "unit": "J/kg"
+        },
+        "lpc.map_coordinate.value": 1.57222729,
+        "lpc.shaft.W_dot": {
+          "value": 1592273.1228417077,
+          "unit": "W"
+        },
+        "lpt.inlet.p": {
+          "value": 80.500777702,
+          "unit": "psia"
+        },
+        "lpt.inlet.h": {
+          "value": 831801.6541,
+          "unit": "J/kg"
+        },
+        "lpt.outlet.p": {
+          "value": 15.7062233148,
+          "unit": "psia"
+        },
+        "lpt.outlet.h": {
+          "value": 457417.1538,
+          "unit": "J/kg"
+        },
+        "lpt.stage_outlet_enthalpy": {
+          "value": 457417.1538,
+          "unit": "J/kg"
+        },
+        "lpt.map_coordinate.value": 5.1255064130199885,
+        "lpt.shaft.W_dot": {
+          "value": 7617621.383645893,
+          "unit": "W"
+        },
+        "lpt.shaft.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "lpt.cooling_1.p": {
+          "value": 81.29238159,
+          "unit": "psia"
+        },
+        "lpt.cooling_1.h": {
+          "value": 319971.7489,
+          "unit": "J/kg"
+        },
+        "lp_shaft.driver.W_dot": {
+          "value": 7617621.383645893,
+          "unit": "W"
+        },
+        "lp_shaft.driver.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "lp_shaft.direct_load.W_dot": {
+          "value": 1592273.1228417077,
+          "unit": "W"
+        },
+        "lp_shaft.direct_load.omega": {
+          "value": 4812.145487887,
+          "unit": "rpm"
+        },
+        "lp_shaft.geared_load.W_dot": {
+          "value": 5949172.055339833,
+          "unit": "W"
+        },
+        "lp_shaft.geared_load.omega": {
+          "value": 1552.3049960925805,
+          "unit": "rpm"
+        },
+        "station_2.outlet.m_dot[N2]": {
+          "value": 1141.6775355040513,
+          "unit": "lbm/s"
+        },
+        "station_2.outlet.m_dot[O2]": {
+          "value": 344.88175551684884,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[N2]": {
+          "value": 1141.6775355040513,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[O2]": {
+          "value": 344.88175551684884,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[N2]": {
+          "value": 1141.6775355040513,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[O2]": {
+          "value": 344.88175551684884,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[N2]": {
+          "value": 34.048160555443204,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[O2]": {
+          "value": 10.285381834456802,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[N2]": {
+          "value": 34.048160555443204,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[O2]": {
+          "value": 10.285381834456802,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[N2]": {
+          "value": 33.367197343802,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[O2]": {
+          "value": 7.384508185082002,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[N2]": {
+          "value": 34.0481605549,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[O2]": {
+          "value": 7.590215821780002,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[N2]": {
+          "value": 0.6809632111104,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[O2]": {
+          "value": 0.20570763668960002,
+          "unit": "lbm/s"
+        },
+        "hpc.inlet.p": {
+          "value": 33.9832775683,
+          "unit": "psia"
+        },
+        "hpc.inlet.h": {
+          "value": 99.3027222937,
+          "unit": "kJ/kg"
+        },
+        "hpc.outlet.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "hpc.outlet.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "hpc.shaft.W_dot": {
+          "value": 8784207.624757348,
+          "unit": "W"
+        },
+        "hpc.map_coordinate.value": 2.04,
+        "fuel.outlet.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "fuel.outlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 0.6737915032799999,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "combustor.air_inlet.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 0.6737915032799999,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.p": {
+          "value": 342.673983175968,
+          "unit": "psia"
+        },
+        "combustor.outlet.h": {
+          "value": 448.4911390365334,
+          "unit": "kJ/kg"
+        },
+        "hpt.inlet.p": {
+          "value": 342.673983175968,
+          "unit": "psia"
+        },
+        "hpt.inlet.h": {
+          "value": 448.4911390365334,
+          "unit": "kJ/kg"
+        },
+        "hpt.outlet.p": {
+          "value": 81.37677935,
+          "unit": "psia"
+        },
+        "hpt.outlet.h": {
+          "value": 8710.58802382598,
+          "unit": "J/kg"
+        },
+        "hpt.stage_outlet_enthalpy": {
+          "value": -31094.81704076191,
+          "unit": "J/kg"
+        },
+        "hpt.shaft.W_dot": {
+          "value": 9045205.099757347,
+          "unit": "W"
+        },
+        "hpt.shaft.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_1.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_2.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "hp_extraction.inlet.omega": {
+          "value": 20366.4216871,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.W_dot": {
+          "value": 9045205.099757347,
+          "unit": "W"
+        },
+        "hp_shaft.load_1.W_dot": {
+          "value": 8784207.624757348,
+          "unit": "W"
+        },
+        "hp_shaft.load_2.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        },
+        "hpt.map_coordinate.value": 4.2,
+        "hpc.bleed_1.p": {
+          "value": 81.29755910788352,
+          "unit": "psia"
+        },
+        "hpc.bleed_1.h": {
+          "value": 319.78881661812864,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_1.m_dot[N2]": {
+          "value": 0.6809632110980001,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_1.m_dot[O2]": {
+          "value": 0.20570763669800002,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "hpc.bleed_2.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_2.m_dot[N2]": {
+          "value": 2.35953752645457,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.m_dot[O2]": {
+          "value": 0.71277696115857,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "hpc.bleed_3.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_3.m_dot[N2]": {
+          "value": 2.12801003468125,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.m_dot[O2]": {
+          "value": 0.64283636468125,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "hpt.cooling_1.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_1.m_dot[N2]": {
+          "value": 2.35953752645457,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.m_dot[O2]": {
+          "value": 0.71277696115857,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.p": {
+          "value": 356.9520658083,
+          "unit": "psia"
+        },
+        "hpt.cooling_2.h": {
+          "value": 540.5396531010416,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_2.m_dot[N2]": {
+          "value": 2.12801003468125,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.m_dot[O2]": {
+          "value": 0.64283636468125,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[N2]": {
+          "value": 28.879649782666178,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[O2]": {
+          "value": 8.72406087236218,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 28.879649782666178,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 8.72406087236218,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 28.879649782666178,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 6.028894859242181,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[N2]": {
+          "value": 28.879649782666178,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[O2]": {
+          "value": 6.028894859242181,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[N2]": {
+          "value": 33.367197343802,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[O2]": {
+          "value": 7.384508185082002,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "fan.map_coordinate.value": 1.74935262,
+        "fan_splitter.inlet.p": {
+          "value": 17.100365768,
+          "unit": "psia"
+        },
+        "fan_splitter.inlet.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_a.p": {
+          "value": 17.100365768,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_a.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_b.p": {
+          "value": 17.100365768,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_b.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "bypass_exit.inlet.p": {
+          "value": 17.100365768,
+          "unit": "psia"
+        },
+        "bypass_exit.inlet.h": {
+          "value": 19476.6238,
+          "unit": "J/kg"
+        },
+        "core_exit.inlet.p": {
+          "value": 15.7062233148,
+          "unit": "psia"
+        },
+        "core_exit.inlet.h": {
+          "value": 457417.1538,
+          "unit": "J/kg"
+        },
+        "fan_splitter.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[O2]": {
+          "value": 344.88175551684884,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[O2]": {
+          "value": 334.5963736944405,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[O2]": {
+          "value": 10.285381822408368,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[O2]": {
+          "value": 334.5963736944405,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[O2]": {
+          "value": 7.590215821780002,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[N2]": {
+          "value": 1141.6775355040513,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[N2]": {
+          "value": 1107.6293749884926,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[N2]": {
+          "value": 34.048160515558735,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[N2]": {
+          "value": 1107.6293749884926,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[N2]": {
+          "value": 34.0481605549,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[CO2]": {
+          "value": 1.84888388500032,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[H2O]": {
+          "value": 1.51333571636688,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        }
+      }
+    },
+    {
+      "id": "alt_10000_mach_05_1750",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "station_2.outlet.p": {
+          "value": 11.9662568707,
+          "unit": "psia"
+        },
+        "station_2.outlet.T": {
+          "value": 507.1903453549,
+          "unit": "degR"
+        },
+        "fan_splitter.fraction.value": 0.9676783747993873,
+        "lpc.shaft.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "hpc.shaft.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "hp_extraction.inlet.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        }
+      },
+      "initial_guesses": {
+        "station_2.outlet.h": {
+          "value": -16488.0412,
+          "unit": "J/kg"
+        },
+        "fan.inlet.p": {
+          "value": 11.9662568707,
+          "unit": "psia"
+        },
+        "fan.inlet.h": {
+          "value": -16488.0412,
+          "unit": "J/kg"
+        },
+        "fan.outlet.p": {
+          "value": 13.640949428,
+          "unit": "psia"
+        },
+        "fan.outlet.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "fan.shaft.W_dot": {
+          "value": 6989676.415871091,
+          "unit": "W"
+        },
+        "fan.shaft.omega": {
+          "value": 1730.5253802682903,
+          "unit": "rpm"
+        },
+        "lpc.inlet.p": {
+          "value": 13.581755119,
+          "unit": "psia"
+        },
+        "lpc.inlet.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "lpc.outlet.p": {
+          "value": 32.1343832806,
+          "unit": "psia"
+        },
+        "lpc.outlet.h": {
+          "value": 86195.7227,
+          "unit": "J/kg"
+        },
+        "lpc.map_coordinate.value": 1.65759007,
+        "lpc.shaft.W_dot": {
+          "value": 1809926.53742043,
+          "unit": "W"
+        },
+        "lpt.inlet.p": {
+          "value": 80.7994692145,
+          "unit": "psia"
+        },
+        "lpt.inlet.h": {
+          "value": 844233.7204,
+          "unit": "J/kg"
+        },
+        "lpt.outlet.p": {
+          "value": 11.4749285219,
+          "unit": "psia"
+        },
+        "lpt.outlet.h": {
+          "value": 406299.8275,
+          "unit": "J/kg"
+        },
+        "lpt.stage_outlet_enthalpy": {
+          "value": 406299.8275,
+          "unit": "J/kg"
+        },
+        "lpt.map_coordinate.value": 7.041491940724816,
+        "lpt.shaft.W_dot": {
+          "value": 8888487.83212135,
+          "unit": "W"
+        },
+        "lpt.shaft.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "lpt.cooling_1.p": {
+          "value": 79.34148837,
+          "unit": "psia"
+        },
+        "lpt.cooling_1.h": {
+          "value": 308192.7846,
+          "unit": "J/kg"
+        },
+        "lp_shaft.driver.W_dot": {
+          "value": 8888487.83212135,
+          "unit": "W"
+        },
+        "lp_shaft.driver.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "lp_shaft.direct_load.W_dot": {
+          "value": 1809926.53742043,
+          "unit": "W"
+        },
+        "lp_shaft.direct_load.omega": {
+          "value": 5364.6286788317,
+          "unit": "rpm"
+        },
+        "lp_shaft.geared_load.W_dot": {
+          "value": 6989676.415871091,
+          "unit": "W"
+        },
+        "lp_shaft.geared_load.omega": {
+          "value": 1730.5253802682903,
+          "unit": "rpm"
+        },
+        "station_2.outlet.m_dot[N2]": {
+          "value": 1046.149042842624,
+          "unit": "lbm/s"
+        },
+        "station_2.outlet.m_dot[O2]": {
+          "value": 316.024190025376,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[N2]": {
+          "value": 1046.149042842624,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[O2]": {
+          "value": 316.024190025376,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[N2]": {
+          "value": 1046.149042842624,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[O2]": {
+          "value": 316.024190025376,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[N2]": {
+          "value": 33.8132372738304,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[O2]": {
+          "value": 10.214415426469602,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[N2]": {
+          "value": 33.8132372738304,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[O2]": {
+          "value": 10.214415426469602,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[N2]": {
+          "value": 33.136972528324,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[O2]": {
+          "value": 7.2398303758900004,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[N2]": {
+          "value": 33.8132372738,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[O2]": {
+          "value": 7.44411868442,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[N2]": {
+          "value": 0.676264745472,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[O2]": {
+          "value": 0.204288308528,
+          "unit": "lbm/s"
+        },
+        "hpc.inlet.p": {
+          "value": 31.8140591957,
+          "unit": "psia"
+        },
+        "hpc.inlet.h": {
+          "value": 86.1957226758,
+          "unit": "kJ/kg"
+        },
+        "hpc.outlet.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "hpc.outlet.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "hpc.shaft.W_dot": {
+          "value": 8777240.440019375,
+          "unit": "W"
+        },
+        "hpc.map_coordinate.value": 2.02,
+        "fuel.outlet.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "fuel.outlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 0.69257418552,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "combustor.air_inlet.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 0.69257418552,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.p": {
+          "value": 342.0061425336,
+          "unit": "psia"
+        },
+        "combustor.outlet.h": {
+          "value": 435.1219471724257,
+          "unit": "kJ/kg"
+        },
+        "hpt.inlet.p": {
+          "value": 342.0061425336,
+          "unit": "psia"
+        },
+        "hpt.inlet.h": {
+          "value": 435.1219471724257,
+          "unit": "kJ/kg"
+        },
+        "hpt.outlet.p": {
+          "value": 81.66776981,
+          "unit": "psia"
+        },
+        "hpt.outlet.h": {
+          "value": -6817.813721077132,
+          "unit": "J/kg"
+        },
+        "hpt.stage_outlet_enthalpy": {
+          "value": -46984.434655871075,
+          "unit": "J/kg"
+        },
+        "hpt.shaft.W_dot": {
+          "value": 9038237.915019374,
+          "unit": "W"
+        },
+        "hpt.shaft.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_1.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_2.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "hp_extraction.inlet.omega": {
+          "value": 20224.3507505,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.W_dot": {
+          "value": 9038237.915019374,
+          "unit": "W"
+        },
+        "hp_shaft.load_1.W_dot": {
+          "value": 8777240.440019375,
+          "unit": "W"
+        },
+        "hp_shaft.load_2.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        },
+        "hpt.map_coordinate.value": 4.2,
+        "hpc.bleed_1.p": {
+          "value": 79.34421301507264,
+          "unit": "psia"
+        },
+        "hpc.bleed_1.h": {
+          "value": 308.0375887588178,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_1.m_dot[N2]": {
+          "value": 0.676264745476,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_1.m_dot[O2]": {
+          "value": 0.20428830853000002,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "hpc.bleed_2.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_2.m_dot[N2]": {
+          "value": 2.34325734307434,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.m_dot[O2]": {
+          "value": 0.7078589890564501,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "hpc.bleed_3.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_3.m_dot[N2]": {
+          "value": 2.1133273296125,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.m_dot[O2]": {
+          "value": 0.63840096415625,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "hpt.cooling_1.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_1.m_dot[N2]": {
+          "value": 2.34325734307434,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.m_dot[O2]": {
+          "value": 0.7078589890564501,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.p": {
+          "value": 356.2563984725,
+          "unit": "psia"
+        },
+        "hpt.cooling_2.h": {
+          "value": 530.145824903172,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_2.m_dot[N2]": {
+          "value": 2.1133273296125,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.m_dot[O2]": {
+          "value": 0.63840096415625,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[N2]": {
+          "value": 28.680387855637157,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[O2]": {
+          "value": 8.6638671647573,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 28.680387855637157,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 8.6638671647573,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 28.680387855637157,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 5.893570422677299,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[N2]": {
+          "value": 28.680387855637157,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[O2]": {
+          "value": 5.893570422677299,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[N2]": {
+          "value": 33.136972528324,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[O2]": {
+          "value": 7.2398303758900004,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "fan.map_coordinate.value": 1.74925103,
+        "fan_splitter.inlet.p": {
+          "value": 13.640949428,
+          "unit": "psia"
+        },
+        "fan_splitter.inlet.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_a.p": {
+          "value": 13.640949428,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_a.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_b.p": {
+          "value": 13.640949428,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_b.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "bypass_exit.inlet.p": {
+          "value": 13.640949428,
+          "unit": "psia"
+        },
+        "bypass_exit.inlet.h": {
+          "value": -5115.8948,
+          "unit": "J/kg"
+        },
+        "core_exit.inlet.p": {
+          "value": 11.4749285219,
+          "unit": "psia"
+        },
+        "core_exit.inlet.h": {
+          "value": 406299.8275,
+          "unit": "J/kg"
+        },
+        "fan_splitter.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[O2]": {
+          "value": 316.024190025376,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[O2]": {
+          "value": 305.8097746010486,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[O2]": {
+          "value": 10.214415424327395,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[O2]": {
+          "value": 305.8097746010486,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[O2]": {
+          "value": 7.44411868442,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[N2]": {
+          "value": 1046.149042842624,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[N2]": {
+          "value": 1012.3358055758852,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[N2]": {
+          "value": 33.813237266738966,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[N2]": {
+          "value": 1012.3358055758852,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[N2]": {
+          "value": 33.8132372738,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[CO2]": {
+          "value": 1.9004235650668804,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[H2O]": {
+          "value": 1.55552162067792,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        }
+      }
+    },
+    {
+      "id": "alt_25000_mach_06_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "station_2.outlet.p": {
+          "value": 6.9515950704,
+          "unit": "psia"
+        },
+        "station_2.outlet.T": {
+          "value": 449.8859451757,
+          "unit": "degR"
+        },
+        "fan_splitter.fraction.value": 0.9643104206519435,
+        "lpc.shaft.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "hpc.shaft.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "hp_extraction.inlet.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        }
+      },
+      "initial_guesses": {
+        "station_2.outlet.h": {
+          "value": -48538.2462,
+          "unit": "J/kg"
+        },
+        "fan.inlet.p": {
+          "value": 6.9515950704,
+          "unit": "psia"
+        },
+        "fan.inlet.h": {
+          "value": -48538.2462,
+          "unit": "J/kg"
+        },
+        "fan.outlet.p": {
+          "value": 8.3275416857,
+          "unit": "psia"
+        },
+        "fan.outlet.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "fan.shaft.W_dot": {
+          "value": 5829876.409557427,
+          "unit": "W"
+        },
+        "fan.shaft.omega": {
+          "value": 1862.6688165168064,
+          "unit": "rpm"
+        },
+        "lpc.inlet.p": {
+          "value": 8.2752884722,
+          "unit": "psia"
+        },
+        "lpc.inlet.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "lpc.outlet.p": {
+          "value": 22.4726344734,
+          "unit": "psia"
+        },
+        "lpc.outlet.h": {
+          "value": 60848.7713,
+          "unit": "J/kg"
+        },
+        "lpc.map_coordinate.value": 1.82385606,
+        "lpc.shaft.W_dot": {
+          "value": 1434547.5383083713,
+          "unit": "W"
+        },
+        "lpt.inlet.p": {
+          "value": 61.3445174228,
+          "unit": "psia"
+        },
+        "lpt.inlet.h": {
+          "value": 836574.4909,
+          "unit": "J/kg"
+        },
+        "lpt.outlet.p": {
+          "value": 6.8332506957,
+          "unit": "psia"
+        },
+        "lpt.outlet.h": {
+          "value": 359687.9707,
+          "unit": "J/kg"
+        },
+        "lpt.stage_outlet_enthalpy": {
+          "value": 359687.9707,
+          "unit": "J/kg"
+        },
+        "lpt.map_coordinate.value": 8.977455018073993,
+        "lpt.shaft.W_dot": {
+          "value": 7337801.967376616,
+          "unit": "W"
+        },
+        "lpt.shaft.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "lpt.cooling_1.p": {
+          "value": 58.33325088,
+          "unit": "psia"
+        },
+        "lpt.cooling_1.h": {
+          "value": 278372.0627,
+          "unit": "J/kg"
+        },
+        "lp_shaft.driver.W_dot": {
+          "value": 7337801.967376616,
+          "unit": "W"
+        },
+        "lp_shaft.driver.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "lp_shaft.direct_load.W_dot": {
+          "value": 1434547.5383083713,
+          "unit": "W"
+        },
+        "lp_shaft.direct_load.omega": {
+          "value": 5774.2733312021,
+          "unit": "rpm"
+        },
+        "lp_shaft.geared_load.W_dot": {
+          "value": 5829876.409557427,
+          "unit": "W"
+        },
+        "lp_shaft.geared_load.omega": {
+          "value": 1862.6688165168064,
+          "unit": "rpm"
+        },
+        "station_2.outlet.m_dot[N2]": {
+          "value": 716.6530825253377,
+          "unit": "lbm/s"
+        },
+        "station_2.outlet.m_dot[O2]": {
+          "value": 216.48895201286243,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[N2]": {
+          "value": 716.6530825253377,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[O2]": {
+          "value": 216.48895201286243,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[N2]": {
+          "value": 716.6530825253377,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[O2]": {
+          "value": 216.48895201286243,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[N2]": {
+          "value": 25.577047028044802,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[O2]": {
+          "value": 7.726399623055201,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[N2]": {
+          "value": 25.577047028044802,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[O2]": {
+          "value": 7.726399623055201,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[N2]": {
+          "value": 25.065505303537996,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[O2]": {
+          "value": 5.4183301258380006,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[N2]": {
+          "value": 25.577046228099995,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[O2]": {
+          "value": 5.5728581343000005,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[N2]": {
+          "value": 0.511540940544,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[O2]": {
+          "value": 0.15452799245600002,
+          "unit": "lbm/s"
+        },
+        "hpc.inlet.p": {
+          "value": 22.2231534665,
+          "unit": "psia"
+        },
+        "hpc.inlet.h": {
+          "value": 60.848771277,
+          "unit": "kJ/kg"
+        },
+        "hpc.outlet.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "hpc.outlet.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "hpc.shaft.W_dot": {
+          "value": 6507839.646041765,
+          "unit": "W"
+        },
+        "hpc.map_coordinate.value": 1.95,
+        "fuel.outlet.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "fuel.outlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 0.5383855721999999,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "combustor.air_inlet.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 0.5383855721999999,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.p": {
+          "value": 257.978361603456,
+          "unit": "psia"
+        },
+        "combustor.outlet.h": {
+          "value": 399.0414413577038,
+          "unit": "kJ/kg"
+        },
+        "hpt.inlet.p": {
+          "value": 257.978361603456,
+          "unit": "psia"
+        },
+        "hpt.inlet.h": {
+          "value": 399.0414413577038,
+          "unit": "kJ/kg"
+        },
+        "hpt.outlet.p": {
+          "value": 61.99335406,
+          "unit": "psia"
+        },
+        "hpt.outlet.h": {
+          "value": -37937.25768265604,
+          "unit": "J/kg"
+        },
+        "hpt.stage_outlet_enthalpy": {
+          "value": -77859.40871642968,
+          "unit": "J/kg"
+        },
+        "hpt.shaft.W_dot": {
+          "value": 6768837.1210417645,
+          "unit": "W"
+        },
+        "hpt.shaft.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_1.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_2.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "hp_extraction.inlet.omega": {
+          "value": 19767.8835653,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.W_dot": {
+          "value": 6768837.1210417645,
+          "unit": "W"
+        },
+        "hp_shaft.load_1.W_dot": {
+          "value": 6507839.646041765,
+          "unit": "W"
+        },
+        "hp_shaft.load_2.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        },
+        "hpt.map_coordinate.value": 4.2,
+        "hpc.bleed_1.p": {
+          "value": 58.33554136557207,
+          "unit": "psia"
+        },
+        "hpc.bleed_1.h": {
+          "value": 278.29841864989714,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_1.m_dot[N2]": {
+          "value": 0.511540924562,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_1.m_dot[O2]": {
+          "value": 0.15452800846200002,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "hpc.bleed_2.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_2.m_dot[N2]": {
+          "value": 1.77248930360733,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.m_dot[O2]": {
+          "value": 0.53543954932083,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "hpc.bleed_3.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_3.m_dot[N2]": {
+          "value": 1.59856538925625,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.m_dot[O2]": {
+          "value": 0.48290002644375,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "hpt.cooling_1.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_1.m_dot[N2]": {
+          "value": 1.77248930360733,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.m_dot[O2]": {
+          "value": 0.53543954932083,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.p": {
+          "value": 268.7274600036,
+          "unit": "psia"
+        },
+        "hpt.cooling_2.h": {
+          "value": 496.0091622573825,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_2.m_dot[N2]": {
+          "value": 1.59856538925625,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.m_dot[O2]": {
+          "value": 0.48290002644375,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[N2]": {
+          "value": 21.69445061067442,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[O2]": {
+          "value": 6.55353283887342,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 21.69445061067442,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 6.55353283887342,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 21.69445061067442,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 4.39999055007342,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[N2]": {
+          "value": 21.69445061067442,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[O2]": {
+          "value": 4.39999055007342,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[N2]": {
+          "value": 25.065505303537996,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[O2]": {
+          "value": 5.4183301258380006,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "fan.map_coordinate.value": 1.7507672,
+        "fan_splitter.inlet.p": {
+          "value": 8.3275416857,
+          "unit": "psia"
+        },
+        "fan_splitter.inlet.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_a.p": {
+          "value": 8.3275416857,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_a.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_b.p": {
+          "value": 8.3275416857,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_b.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "bypass_exit.inlet.p": {
+          "value": 8.3275416857,
+          "unit": "psia"
+        },
+        "bypass_exit.inlet.h": {
+          "value": -34720.0266,
+          "unit": "J/kg"
+        },
+        "core_exit.inlet.p": {
+          "value": 6.8332506957,
+          "unit": "psia"
+        },
+        "core_exit.inlet.h": {
+          "value": 359687.9707,
+          "unit": "J/kg"
+        },
+        "fan_splitter.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[O2]": {
+          "value": 216.48895201286243,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[O2]": {
+          "value": 208.7625523820218,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[O2]": {
+          "value": 7.72639963084064,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[O2]": {
+          "value": 208.7625523820218,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[O2]": {
+          "value": 5.5728581343000005,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[N2]": {
+          "value": 716.6530825253377,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[N2]": {
+          "value": 691.0760354715205,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[N2]": {
+          "value": 25.577047053817292,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[N2]": {
+          "value": 691.0760354715205,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[N2]": {
+          "value": 25.577046228099995,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[CO2]": {
+          "value": 1.4773300101167999,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[H2O]": {
+          "value": 1.2092139951611998,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        }
+      }
+    },
+    {
+      "id": "alt_30000_mach_072_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "station_2.outlet.p": {
+          "value": 6.1639786109,
+          "unit": "psia"
+        },
+        "station_2.outlet.T": {
+          "value": 454.6183483264,
+          "unit": "degR"
+        },
+        "fan_splitter.fraction.value": 0.9646193905821644,
+        "lpc.shaft.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "hpc.shaft.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "hp_extraction.inlet.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        }
+      },
+      "initial_guesses": {
+        "station_2.outlet.h": {
+          "value": -45895.1333,
+          "unit": "J/kg"
+        },
+        "fan.inlet.p": {
+          "value": 6.1639786109,
+          "unit": "psia"
+        },
+        "fan.inlet.h": {
+          "value": -45895.1333,
+          "unit": "J/kg"
+        },
+        "fan.outlet.p": {
+          "value": 7.381936535,
+          "unit": "psia"
+        },
+        "fan.outlet.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "fan.shaft.W_dot": {
+          "value": 5193369.3818282075,
+          "unit": "W"
+        },
+        "fan.shaft.omega": {
+          "value": 1872.440003809742,
+          "unit": "rpm"
+        },
+        "lpc.inlet.p": {
+          "value": 7.3364349934,
+          "unit": "psia"
+        },
+        "lpc.inlet.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "lpc.outlet.p": {
+          "value": 20.2235148517,
+          "unit": "psia"
+        },
+        "lpc.outlet.h": {
+          "value": 66448.3051,
+          "unit": "J/kg"
+        },
+        "lpc.map_coordinate.value": 1.776075,
+        "lpc.shaft.W_dot": {
+          "value": 1292386.7423239136,
+          "unit": "W"
+        },
+        "lpt.inlet.p": {
+          "value": 53.8425624667,
+          "unit": "psia"
+        },
+        "lpt.inlet.h": {
+          "value": 842797.6361,
+          "unit": "J/kg"
+        },
+        "lpt.outlet.p": {
+          "value": 5.685029591,
+          "unit": "psia"
+        },
+        "lpt.outlet.h": {
+          "value": 356603.1711,
+          "unit": "J/kg"
+        },
+        "lpt.stage_outlet_enthalpy": {
+          "value": 356603.1711,
+          "unit": "J/kg"
+        },
+        "lpt.map_coordinate.value": 9.47103794409416,
+        "lpt.shaft.W_dot": {
+          "value": 6551268.813999684,
+          "unit": "W"
+        },
+        "lpt.shaft.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "lpt.cooling_1.p": {
+          "value": 51.61274165,
+          "unit": "psia"
+        },
+        "lpt.cooling_1.h": {
+          "value": 283751.6175,
+          "unit": "J/kg"
+        },
+        "lp_shaft.driver.W_dot": {
+          "value": 6551268.813999684,
+          "unit": "W"
+        },
+        "lp_shaft.driver.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "lp_shaft.direct_load.W_dot": {
+          "value": 1292386.7423239136,
+          "unit": "W"
+        },
+        "lp_shaft.direct_load.omega": {
+          "value": 5804.5640118102,
+          "unit": "rpm"
+        },
+        "lp_shaft.geared_load.W_dot": {
+          "value": 5193369.3818282075,
+          "unit": "W"
+        },
+        "lp_shaft.geared_load.omega": {
+          "value": 1872.440003809742,
+          "unit": "rpm"
+        },
+        "station_2.outlet.m_dot[N2]": {
+          "value": 632.668458392448,
+          "unit": "lbm/s"
+        },
+        "station_2.outlet.m_dot[O2]": {
+          "value": 191.118596806052,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[N2]": {
+          "value": 632.668458392448,
+          "unit": "lbm/s"
+        },
+        "fan.inlet.m_dot[O2]": {
+          "value": 191.118596806052,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[N2]": {
+          "value": 632.668458392448,
+          "unit": "lbm/s"
+        },
+        "fan.outlet.m_dot[O2]": {
+          "value": 191.118596806052,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[N2]": {
+          "value": 22.3841956261632,
+          "unit": "lbm/s"
+        },
+        "lpc.inlet.m_dot[O2]": {
+          "value": 6.7618924287368,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[N2]": {
+          "value": 22.3841956261632,
+          "unit": "lbm/s"
+        },
+        "lpc.outlet.m_dot[O2]": {
+          "value": 6.7618924287368,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[N2]": {
+          "value": 21.936511712696,
+          "unit": "lbm/s"
+        },
+        "lpt.inlet.m_dot[O2]": {
+          "value": 4.733709137905999,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[N2]": {
+          "value": 22.3841956252,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[O2]": {
+          "value": 4.868946986499998,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[N2]": {
+          "value": 0.44768391252480005,
+          "unit": "lbm/s"
+        },
+        "lpt.cooling_1.m_dot[O2]": {
+          "value": 0.13523784857520002,
+          "unit": "lbm/s"
+        },
+        "hpc.inlet.p": {
+          "value": 20.0097273641,
+          "unit": "psia"
+        },
+        "hpc.inlet.h": {
+          "value": 66.4483051139,
+          "unit": "kJ/kg"
+        },
+        "hpc.outlet.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "hpc.outlet.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "hpc.shaft.W_dot": {
+          "value": 5689143.689900745,
+          "unit": "W"
+        },
+        "hpc.map_coordinate.value": 1.95,
+        "fuel.outlet.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "fuel.outlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 0.4732363608,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "combustor.air_inlet.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 0.4732363608,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.p": {
+          "value": 226.30892090688,
+          "unit": "psia"
+        },
+        "combustor.outlet.h": {
+          "value": 403.64736289794064,
+          "unit": "kJ/kg"
+        },
+        "hpt.inlet.p": {
+          "value": 226.30892090688,
+          "unit": "psia"
+        },
+        "hpt.inlet.h": {
+          "value": 403.64736289794064,
+          "unit": "kJ/kg"
+        },
+        "hpt.outlet.p": {
+          "value": 54.41163179,
+          "unit": "psia"
+        },
+        "hpt.outlet.h": {
+          "value": -35227.67580864975,
+          "unit": "J/kg"
+        },
+        "hpt.stage_outlet_enthalpy": {
+          "value": -75326.82933108853,
+          "unit": "J/kg"
+        },
+        "hpt.shaft.W_dot": {
+          "value": 5950141.164900744,
+          "unit": "W"
+        },
+        "hpt.shaft.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_1.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "hp_shaft.load_2.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "hp_extraction.inlet.omega": {
+          "value": 19823.7515015,
+          "unit": "rpm"
+        },
+        "hp_shaft.driver.W_dot": {
+          "value": 5950141.164900744,
+          "unit": "W"
+        },
+        "hp_shaft.load_1.W_dot": {
+          "value": 5689143.689900745,
+          "unit": "W"
+        },
+        "hp_shaft.load_2.W_dot": {
+          "value": 260.997475,
+          "unit": "kW"
+        },
+        "hpt.map_coordinate.value": 4.2,
+        "hpc.bleed_1.p": {
+          "value": 51.61355513202252,
+          "unit": "psia"
+        },
+        "hpc.bleed_1.h": {
+          "value": 283.6572352886489,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_1.m_dot[N2]": {
+          "value": 0.447683912504,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_1.m_dot[O2]": {
+          "value": 0.13523784859399998,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "hpc.bleed_2.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_2.m_dot[N2]": {
+          "value": 1.55122475682636,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_2.m_dot[O2]": {
+          "value": 0.46859914537820996,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "hpc.bleed_3.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "hpc.bleed_3.m_dot[N2]": {
+          "value": 1.399012226575,
+          "unit": "lbm/s"
+        },
+        "hpc.bleed_3.m_dot[O2]": {
+          "value": 0.42261827685625,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "hpt.cooling_1.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_1.m_dot[N2]": {
+          "value": 1.55122475682636,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_1.m_dot[O2]": {
+          "value": 0.46859914537820996,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.p": {
+          "value": 235.738459278,
+          "unit": "psia"
+        },
+        "hpt.cooling_2.h": {
+          "value": 501.1269726639279,
+          "unit": "kJ/kg"
+        },
+        "hpt.cooling_2.m_dot[N2]": {
+          "value": 1.399012226575,
+          "unit": "lbm/s"
+        },
+        "hpt.cooling_2.m_dot[O2]": {
+          "value": 0.42261827685625,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[N2]": {
+          "value": 18.98627472929464,
+          "unit": "lbm/s"
+        },
+        "hpc.outlet.m_dot[O2]": {
+          "value": 5.735437158871539,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 18.98627472929464,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 5.735437158871539,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 18.98627472929464,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 3.8424917156715392,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[N2]": {
+          "value": 18.98627472929464,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[O2]": {
+          "value": 3.8424917156715392,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "hpt.inlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[N2]": {
+          "value": 21.936511712696,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[O2]": {
+          "value": 4.733709137905999,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "hpt.outlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "fan.map_coordinate.value": 1.75636101,
+        "fan_splitter.inlet.p": {
+          "value": 7.381936535,
+          "unit": "psia"
+        },
+        "fan_splitter.inlet.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_a.p": {
+          "value": 7.381936535,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_a.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "fan_splitter.outlet_b.p": {
+          "value": 7.381936535,
+          "unit": "psia"
+        },
+        "fan_splitter.outlet_b.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "bypass_exit.inlet.p": {
+          "value": 7.381936535,
+          "unit": "psia"
+        },
+        "bypass_exit.inlet.h": {
+          "value": -31948.8979,
+          "unit": "J/kg"
+        },
+        "core_exit.inlet.p": {
+          "value": 5.685029591,
+          "unit": "psia"
+        },
+        "core_exit.inlet.h": {
+          "value": 356603.1711,
+          "unit": "J/kg"
+        },
+        "fan_splitter.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[O2]": {
+          "value": 191.118596806052,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[O2]": {
+          "value": 184.35670437997229,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[O2]": {
+          "value": 6.7618924260797355,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[O2]": {
+          "value": 184.35670437997229,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[O2]": {
+          "value": 4.868946986499998,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[N2]": {
+          "value": 632.668458392448,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_a.m_dot[N2]": {
+          "value": 610.2842627750806,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.outlet_b.m_dot[N2]": {
+          "value": 22.384195617367396,
+          "unit": "lbm/s"
+        },
+        "bypass_exit.inlet.m_dot[N2]": {
+          "value": 610.2842627750806,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[N2]": {
+          "value": 22.3841956252,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[CO2]": {
+          "value": 1.2985605740352,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "lpt.outlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "core_exit.inlet.m_dot[H2O]": {
+          "value": 1.0628888663568,
+          "unit": "lbm/s"
+        },
+        "fan_splitter.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_a.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan_splitter.outlet_b.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "bypass_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "core_exit.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.air_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "combustor.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fan.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "fuel.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.bleed_3.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.cooling_2.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "hpt.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpc.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "lpt.cooling_1.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        },
+        "station_2.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "kg/s"
+        }
+      }
+    }
+  ]
+}
