@@ -17,6 +17,7 @@ namespace {
 
 using component_model_support::require_port_species;
 using component_model_support::require_port_variable;
+using component_model_support::require_internal_variable;
 using component_model_support::require_performance_map;
 using component_model_support::require_thermochemistry_package;
 using component_model_support::parameter_or;
@@ -514,6 +515,109 @@ private:
     mutable IsentropicEvaluation last_;
 };
 
+class MaterialCooledTurbineIsentropicCache {
+public:
+    MaterialCooledTurbineIsentropicCache(
+        std::shared_ptr<const MaterialMapEvaluationCache> map_cache,
+        std::shared_ptr<const physics::ThermochemistryPackage> properties,
+        std::vector<std::string> species,
+        std::vector<std::size_t> main_flows,
+        std::vector<std::vector<std::size_t>> front_cooling_flows,
+        std::size_t main_enthalpy,
+        std::vector<std::size_t> front_cooling_enthalpies,
+        std::size_t inlet_pressure,
+        std::size_t outlet_pressure,
+        std::size_t stage_outlet_enthalpy)
+        : map_cache_(std::move(map_cache)),
+          properties_(std::move(properties)),
+          species_(std::move(species)),
+          main_flows_(std::move(main_flows)),
+          front_cooling_flows_(std::move(front_cooling_flows)),
+          main_enthalpy_(main_enthalpy),
+          front_cooling_enthalpies_(
+              std::move(front_cooling_enthalpies)),
+          inlet_pressure_(inlet_pressure),
+          outlet_pressure_(outlet_pressure),
+          stage_outlet_enthalpy_(stage_outlet_enthalpy) {}
+
+    IsentropicEvaluation evaluate(const std::vector<double>& x) const {
+        const auto map = map_cache_->evaluate(x);
+        if (!map.status.ok()) return {map.status, 0.0};
+        std::vector<double> species_flows(species_.size(), 0.0);
+        double total_flow = 0.0;
+        double enthalpy_flow = 0.0;
+        const auto accumulate = [&](
+                                    const std::vector<std::size_t>& flows,
+                                    std::size_t enthalpy) {
+            double stream_flow = 0.0;
+            for (std::size_t i = 0; i < flows.size(); ++i) {
+                const double flow = x.at(flows[i]);
+                if (!std::isfinite(flow) || flow < 0.0) {
+                    throw std::domain_error(
+                        "cooled turbine species flows must be finite "
+                        "and nonnegative");
+                }
+                species_flows[i] += flow;
+                stream_flow += flow;
+            }
+            total_flow += stream_flow;
+            enthalpy_flow += stream_flow * x.at(enthalpy);
+        };
+        try {
+            accumulate(main_flows_, main_enthalpy_);
+            for (std::size_t i = 0;
+                 i < front_cooling_flows_.size(); ++i) {
+                accumulate(
+                    front_cooling_flows_[i],
+                    front_cooling_enthalpies_[i]);
+            }
+        } catch (const std::domain_error& error) {
+            return {EvaluationStatus::recoverable(error.what()), 0.0};
+        }
+        if (!std::isfinite(total_flow) || total_flow <= 0.0) {
+            return {EvaluationStatus::recoverable(
+                        "cooled turbine stage flow must be positive"),
+                    0.0};
+        }
+        for (double& flow : species_flows) flow /= total_flow;
+        const double stage_enthalpy = enthalpy_flow / total_flow;
+        physics::SpeciesComposition composition{
+            physics::CompositionBasis::mass_fraction,
+            species_, std::move(species_flows)};
+        const auto stage_inlet = properties_->state_ph(
+            x.at(inlet_pressure_), stage_enthalpy, composition);
+        if (!stage_inlet.ok()) {
+            return {thermochemistry_failure(stage_inlet), 0.0};
+        }
+        const auto isentropic = properties_->state_ps(
+            x.at(outlet_pressure_),
+            stage_inlet.state.thermodynamic.entropy_j_kg_k,
+            composition);
+        if (!isentropic.ok()) {
+            return {thermochemistry_failure(isentropic), 0.0};
+        }
+        const double ideal_change =
+            isentropic.state.thermodynamic.enthalpy_j_kg -
+            stage_enthalpy;
+        return {
+            EvaluationStatus::success(),
+            x.at(stage_outlet_enthalpy_) - stage_enthalpy -
+                map.efficiency * ideal_change};
+    }
+
+private:
+    std::shared_ptr<const MaterialMapEvaluationCache> map_cache_;
+    std::shared_ptr<const physics::ThermochemistryPackage> properties_;
+    std::vector<std::string> species_;
+    std::vector<std::size_t> main_flows_;
+    std::vector<std::vector<std::size_t>> front_cooling_flows_;
+    std::size_t main_enthalpy_;
+    std::vector<std::size_t> front_cooling_enthalpies_;
+    std::size_t inlet_pressure_;
+    std::size_t outlet_pressure_;
+    std::size_t stage_outlet_enthalpy_;
+};
+
 class MaterialTurbomachineryModel final
     : public ComponentModel {
 public:
@@ -857,11 +961,13 @@ public:
         std::string kind, bool compressor,
         bool variable_geometry = false,
         bool latent_coordinate = false,
-        bool fractional_bleeds = false)
+        bool fractional_bleeds = false,
+        bool cooling_injections = false)
         : compressor_(compressor),
           variable_geometry_(variable_geometry),
           latent_coordinate_(latent_coordinate),
-          fractional_bleeds_(fractional_bleeds) {
+          fractional_bleeds_(fractional_bleeds),
+          cooling_injections_(cooling_injections) {
         if (latent_coordinate_ && variable_geometry_) {
             throw std::invalid_argument(
                 "latent map coordinates require fixed geometry");
@@ -870,6 +976,11 @@ public:
             throw std::invalid_argument(
                 "fractional bleed ports require a coordinate-map "
                 "compressor");
+        }
+        if (cooling_injections_ &&
+            (compressor_ || !latent_coordinate_ || fractional_bleeds_)) {
+            throw std::invalid_argument(
+                "cooling injections require a coordinate-map turbine");
         }
         descriptor_.kind = std::move(kind);
         descriptor_.version = "1.0.0";
@@ -883,6 +994,8 @@ public:
         descriptor_.model_name = latent_coordinate_
             ? (fractional_bleeds_
                   ? "Coordinate map with fractional bleed extraction"
+                  : cooling_injections_
+                      ? "Coordinate map with staged cooling injection"
                   : "Coordinate-based performance map")
             : (variable_geometry_
                   ? "Variable-geometry performance map"
@@ -925,6 +1038,20 @@ public:
                 "bleed_enthalpy_fraction[{index}]", "dimensionless",
                 true, std::nullopt, 0.0, 1.0, true, true});
         }
+        if (cooling_injections_) {
+            descriptor_.port_groups.push_back({
+                "cooling", "cooling_", "material", "in", 1U, 32U,
+                1U});
+            descriptor_.parameters.push_back({
+                "cooling_position[{index}]", "dimensionless", true,
+                std::nullopt, 0.0, 1.0, true, true});
+            descriptor_.internal_variables.push_back({
+                "stage_outlet_enthalpy", DaeVariableKind::algebraic,
+                500000.0, 1000000.0, 0.0, 1.0,
+                -std::numeric_limits<double>::infinity(),
+                std::numeric_limits<double>::infinity(),
+                "specific_enthalpy"});
+        }
         if (variable_geometry_) {
             descriptor_.parameters.push_back(
                 {"geometry_setting", "angle", true, std::nullopt,
@@ -949,7 +1076,7 @@ public:
     ComponentModelDescriptor instance_descriptor(
         const ComponentDefinition& component) const override {
         auto result = descriptor_;
-        if (!fractional_bleeds_) {
+        if (!fractional_bleeds_ && !cooling_injections_) {
             if (!component.port_counts.empty()) {
                 throw std::invalid_argument(
                     "component '" + component.id +
@@ -957,34 +1084,42 @@ public:
             }
             return result;
         }
+        const std::string group =
+            fractional_bleeds_ ? "bleed" : "cooling";
         if (component.port_counts.size() != 1U ||
-            !component.port_counts.contains("bleed")) {
+            !component.port_counts.contains(group)) {
             throw std::invalid_argument(
                 "component '" + component.id +
-                "' must declare exactly port_counts.bleed");
+                "' must declare exactly port_counts." + group);
         }
-        const auto count = component.port_counts.at("bleed");
+        const auto count = component.port_counts.at(group);
         if (count == 0U || count > 32U) {
             throw std::invalid_argument(
                 "component '" + component.id +
-                "' bleed port count must be in [1, 32]");
+                "' " + group + " port count must be in [1, 32]");
         }
         for (std::size_t index = 1; index <= count; ++index) {
             const std::string suffix = "[" + std::to_string(index) + "]";
             result.ports.push_back({
-                "bleed_" + std::to_string(index),
-                "material", "out"});
-            result.parameters.push_back({
-                "bleed_fraction" + suffix, "dimensionless", true,
-                std::nullopt, 0.0, 1.0, true, false});
-            result.parameters.push_back({
-                "bleed_pressure_fraction" + suffix,
-                "dimensionless", true, std::nullopt,
-                0.0, 1.0, true, true});
-            result.parameters.push_back({
-                "bleed_enthalpy_fraction" + suffix,
-                "dimensionless", true, std::nullopt,
-                0.0, 1.0, true, true});
+                group + "_" + std::to_string(index),
+                "material", fractional_bleeds_ ? "out" : "in"});
+            if (fractional_bleeds_) {
+                result.parameters.push_back({
+                    "bleed_fraction" + suffix, "dimensionless", true,
+                    std::nullopt, 0.0, 1.0, true, false});
+                result.parameters.push_back({
+                    "bleed_pressure_fraction" + suffix,
+                    "dimensionless", true, std::nullopt,
+                    0.0, 1.0, true, true});
+                result.parameters.push_back({
+                    "bleed_enthalpy_fraction" + suffix,
+                    "dimensionless", true, std::nullopt,
+                    0.0, 1.0, true, true});
+            } else {
+                result.parameters.push_back({
+                    "cooling_position" + suffix, "dimensionless", true,
+                    std::nullopt, 0.0, 1.0, true, true});
+            }
         }
         return result;
     }
@@ -1056,10 +1191,46 @@ public:
                 "component '" + context.component.id +
                 "' total bleed fraction must be finite and below one");
         }
+        const std::size_t cooling_count = cooling_injections_
+            ? context.component.port_counts.at("cooling")
+            : 0U;
+        std::vector<bool> cooling_at_exit;
+        for (std::size_t index = 1; index <= cooling_count; ++index) {
+            const std::string suffix = "[" + std::to_string(index) + "]";
+            const double position = required_parameter(
+                context.component, "cooling_position" + suffix);
+            if (position != 0.0 && position != 1.0) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' cooling position must be exactly 0 (stage inlet) "
+                    "or 1 (turbine exit)");
+            }
+            cooling_at_exit.push_back(position == 1.0);
+            const std::string port =
+                "cooling_" + std::to_string(index);
+            if (species != require_port_species(context, port)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' cooling ports must share the turbine species basis");
+            }
+            const auto cooling_package =
+                require_thermochemistry_package(context, port);
+            if (properties->name() != cooling_package->name() ||
+                properties->version() != cooling_package->version() ||
+                properties->mechanism() != cooling_package->mechanism() ||
+                properties->phase() != cooling_package->phase()) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' cooling ports must resolve the turbine "
+                    "thermochemistry package");
+            }
+        }
 
         std::vector<std::size_t> inlet_flows;
         std::vector<std::vector<std::size_t>> bleed_flows(
             bleed_count);
+        std::vector<std::vector<std::size_t>> cooling_flows(
+            cooling_count);
         const std::string prefix =
             "component." + context.component.id + ".";
         for (const auto& name : species) {
@@ -1087,6 +1258,15 @@ public:
                     {{flow, 1.0},
                      {inlet, -bleed_fractions[bleed]}},
                     0.0, 100.0);
+            }
+            for (std::size_t cooling = 0;
+                 cooling < cooling_count; ++cooling) {
+                const auto flow = require_port_variable(
+                    context,
+                    "cooling_" + std::to_string(cooling + 1) +
+                        "." + variable);
+                cooling_flows[cooling].push_back(flow);
+                continuity.push_back({flow, -1.0});
             }
             system.add_linear_equation(
                 prefix + "species_continuity." + name,
@@ -1133,6 +1313,13 @@ public:
                  {inlet_h, -(1.0 - enthalpy_fraction)},
                  {outlet_h, -enthalpy_fraction}},
                 0.0, 1.0e6);
+        }
+        std::vector<std::size_t> cooling_enthalpies;
+        for (std::size_t cooling = 0;
+             cooling < cooling_count; ++cooling) {
+            cooling_enthalpies.push_back(require_port_variable(
+                context,
+                "cooling_" + std::to_string(cooling + 1) + ".h"));
         }
         const std::optional<std::size_t> map_coordinate =
             latent_coordinate_
@@ -1199,19 +1386,113 @@ public:
                 return EvaluationStatus::success();
             },
             1.0e6);
-        const auto isentropic_cache =
-            std::make_shared<
-                MaterialMapIsentropicEvaluationCache>(
+        if (cooling_injections_) {
+            std::vector<std::vector<std::size_t>> front_flows;
+            std::vector<std::size_t> front_enthalpies;
+            for (std::size_t cooling = 0;
+                 cooling < cooling_count; ++cooling) {
+                if (!cooling_at_exit[cooling]) {
+                    front_flows.push_back(cooling_flows[cooling]);
+                    front_enthalpies.push_back(
+                        cooling_enthalpies[cooling]);
+                }
+            }
+            const auto stage_outlet_h =
+                require_internal_variable(
+                    context, "stage_outlet_enthalpy");
+            const auto cooled_cache = std::make_shared<
+                MaterialCooledTurbineIsentropicCache>(
+                    cache, properties, species, inlet_flows,
+                    front_flows, inlet_h, front_enthalpies,
+                    inlet_p, outlet_p, stage_outlet_h);
+            system.add_checked_equation(
+                prefix + "map_isentropic_efficiency",
+                [cooled_cache](const std::vector<double>& x,
+                               double& residual) {
+                    const auto evaluation = cooled_cache->evaluate(x);
+                    residual = evaluation.residual;
+                    return evaluation.status;
+                },
+                1.0e6);
+            system.add_checked_equation(
+                prefix + "cooling_exit_energy_balance",
+                [inlet_flows, cooling_flows, cooling_enthalpies,
+                 cooling_at_exit, outlet_h,
+                 stage_outlet_h](const std::vector<double>& x,
+                                 double& residual) {
+                    double main_flow = 0.0;
+                    for (const auto variable : inlet_flows) {
+                        main_flow += x.at(variable);
+                    }
+                    double stage_flow = main_flow;
+                    double total_flow = main_flow;
+                    for (std::size_t cooling = 0;
+                         cooling < cooling_flows.size(); ++cooling) {
+                        double flow = 0.0;
+                        for (const auto variable : cooling_flows[cooling]) {
+                            flow += x.at(variable);
+                        }
+                        total_flow += flow;
+                        if (!cooling_at_exit[cooling]) stage_flow += flow;
+                    }
+                    double outlet_energy =
+                        stage_flow * x.at(stage_outlet_h);
+                    for (std::size_t cooling = 0;
+                         cooling < cooling_flows.size(); ++cooling) {
+                        if (!cooling_at_exit[cooling]) continue;
+                        double flow = 0.0;
+                        for (const auto variable : cooling_flows[cooling]) {
+                            flow += x.at(variable);
+                        }
+                        outlet_energy +=
+                            flow * x.at(cooling_enthalpies[cooling]);
+                    }
+                    residual = total_flow * x.at(outlet_h) -
+                        outlet_energy;
+                    return EvaluationStatus::success();
+                },
+                1.0e7);
+            system.add_checked_equation(
+                prefix + "shaft_power",
+                [inlet_flows, cooling_flows, cooling_enthalpies,
+                 cooling_at_exit, inlet_h, stage_outlet_h,
+                 shaft_w](const std::vector<double>& x,
+                          double& residual) {
+                    double stage_flow = 0.0;
+                    double stage_inlet_energy = 0.0;
+                    for (const auto variable : inlet_flows) {
+                        stage_flow += x.at(variable);
+                    }
+                    stage_inlet_energy = stage_flow * x.at(inlet_h);
+                    for (std::size_t cooling = 0;
+                         cooling < cooling_flows.size(); ++cooling) {
+                        if (cooling_at_exit[cooling]) continue;
+                        double flow = 0.0;
+                        for (const auto variable : cooling_flows[cooling]) {
+                            flow += x.at(variable);
+                        }
+                        stage_flow += flow;
+                        stage_inlet_energy +=
+                            flow * x.at(cooling_enthalpies[cooling]);
+                    }
+                    residual = x.at(shaft_w) -
+                        (stage_inlet_energy -
+                         stage_flow * x.at(stage_outlet_h));
+                    return EvaluationStatus::success();
+                },
+                1.0e6);
+            return;
+        }
+        const auto isentropic_cache = std::make_shared<
+            MaterialMapIsentropicEvaluationCache>(
                 cache, properties, inlet_flows, inlet_p,
                 inlet_h, outlet_p, outlet_h, shaft_omega,
                 compressor_, map_coordinate);
         system.add_checked_equation(
             prefix + "map_isentropic_efficiency",
-            [isentropic_cache](
-                const std::vector<double>& x,
-                double& residual) {
-                const auto evaluation =
-                    isentropic_cache->evaluate(x);
+            [isentropic_cache](const std::vector<double>& x,
+                               double& residual) {
+                const auto evaluation = isentropic_cache->evaluate(x);
                 residual = evaluation.residual;
                 return evaluation.status;
             },
@@ -1291,6 +1572,7 @@ private:
     bool variable_geometry_{false};
     bool latent_coordinate_{false};
     bool fractional_bleeds_{false};
+    bool cooling_injections_{false};
 };
 
 }  // namespace
@@ -1327,6 +1609,10 @@ void register_material_turbomachinery_component_models(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "turbine.material.coordinate_map",
             false, false, true));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "turbine.material.coordinate_map.cooling_injections",
+            false, false, true, false, true));
     registry.register_model(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "compressor.material.coordinate_map.fractional_bleeds",

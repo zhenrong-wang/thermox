@@ -104,7 +104,11 @@ component scalers and converts corrected quantities to the platform's reference-
 The importer also preserves T-MATS' pressure-major C-array layout explicitly.
 
 Across the same five healthy operating points, the solved HPT pressure-ratio and discharge-pressure
-errors remain below `0.000056%`. This is intentionally classified as **inverse-map compatibility**,
-not yet a complete cooled-turbine validation: the current slice fixes NASA's station-4 boundary and
-uses a simplified N2/O2 working-gas composition. Outlet temperature, mass flow, and torque remain
-reserved for the coupled combustor/cooling/shaft model.
+errors remain below `0.000057%`. The generic instance-sized cooling group places one compressor
+bleed at the stage inlet and one at the turbine exit, matching the declared T-MATS positions. Outlet
+flow closes at numerical precision and torque errors range from -0.110% to +0.077%.
+
+This is a **cooled-turbine component cross-code reproduction**, but not yet the coupled high-spool
+result: NASA's station-4 boundary remains fixed and the slice uses a simplified N2/O2 working-gas
+composition. That explicit approximation produces outlet-temperature errors of -0.685% to -1.283%,
+so temperature remains reserved until the combustor supplies a consistent product composition.

@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 80,
+        response.components.size() == 81,
         "service must expose the complete component registry");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -645,6 +645,18 @@ void test_catalog_discovery() {
             bleed_compressor->port_groups.front().maximum_count == 32U,
         "catalog must expose the instance-sized compressor bleed-port "
         "contract");
+    const auto cooled_turbine = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "turbine.material.coordinate_map.cooling_injections";
+        });
+    require(
+        cooled_turbine != response.components.end() &&
+            cooled_turbine->port_groups.size() == 1U &&
+            cooled_turbine->port_groups.front().name == "cooling" &&
+            cooled_turbine->internal_variables.size() == 1U,
+        "catalog must expose staged turbine cooling injections");
     const auto shaft_combiner = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1761,12 +1773,18 @@ void test_nasa_agtf30_hpc_off_design_benchmark() {
 }
 
 void test_nasa_agtf30_hpt_map_compatibility_benchmark() {
-    const std::vector<std::tuple<std::string, double, double>> cases = {
-        {"sea_level_static_1000", 4.26623294, 38.98232159},
-        {"sea_level_mach_03_1500", 4.21095534, 81.37677935},
-        {"alt_10000_mach_05_1750", 4.18777375, 81.66776981},
-        {"alt_25000_mach_06_2000", 4.16138739, 61.99335406},
-        {"alt_30000_mach_072_2000", 4.15920114, 54.41163179},
+    const std::vector<
+        std::tuple<std::string, double, double, double, double>> cases = {
+        {"sea_level_static_1000", 4.26623294, 38.98232159,
+         24.65152243, 1516.67585},
+        {"sea_level_mach_03_1500", 4.21095534, 81.37677935,
+         44.24900428, 3121.98570},
+        {"alt_10000_mach_05_1750", 4.18777375, 81.66776981,
+         43.97159272, 3141.49536},
+        {"alt_25000_mach_06_2000", 4.16138739, 61.99335406,
+         33.27831292, 2407.07432},
+        {"alt_30000_mach_072_2000", 4.15920114, 54.41163179,
+         29.12654291, 2109.99594},
     };
     const auto model = read_source_file(
         "benchmarks/nasa_tmats/agtf30_hpt_off_design.json");
@@ -1775,7 +1793,11 @@ void test_nasa_agtf30_hpt_map_compatibility_benchmark() {
             read_source_file(
                 "benchmarks/nasa_tmats/agtf30_hpt_map.json"));
     constexpr double psi_to_pa = 6894.757293168;
-    for (const auto& [case_id, pressure_ratio, pressure_psia] : cases) {
+    constexpr double pound_mass_to_kg = 0.45359237;
+    constexpr double pound_foot_to_newton_metre =
+        1.3558179483314004;
+    for (const auto& [case_id, pressure_ratio, pressure_psia,
+                      outlet_flow_lbm_s, torque_lbf_ft] : cases) {
         thermox::service::SteadySimulationRequest request;
         request.model_json = model;
         request.case_id = case_id;
@@ -1790,19 +1812,36 @@ void test_nasa_agtf30_hpt_map_compatibility_benchmark() {
             response.graph, "turbine", "map_coordinate");
         const auto& outlet = require_port_result(
             response.graph, "turbine", "outlet");
+        const auto& shaft = require_port_result(
+            response.graph, "turbine", "shaft");
         const double predicted_coordinate = require_result_value(
             coordinate.primary_values, "value").value_si;
         const double predicted_pressure = require_result_value(
             outlet.primary_values, "p").value_si;
+        const double predicted_flow = require_result_value(
+            outlet.derived_values, "m_dot_total").value_si;
+        const double predicted_power = require_result_value(
+            shaft.primary_values, "W_dot").value_si;
+        const double predicted_speed = require_result_value(
+            shaft.primary_values, "omega").value_si;
         require(
             std::abs(predicted_coordinate / pressure_ratio - 1.0) <
                     1.0e-5 &&
                 std::abs(
                     predicted_pressure /
                         (pressure_psia * psi_to_pa) -
-                    1.0) < 1.0e-5,
-            "Thermox must reproduce AGTF30 HPT inverse map-flow "
-            "compatibility within 0.001%: " + case_id);
+                    1.0) < 1.0e-5 &&
+                std::abs(
+                    predicted_flow /
+                        (outlet_flow_lbm_s * pound_mass_to_kg) -
+                    1.0) < 1.0e-8 &&
+                std::abs(
+                    (predicted_power / predicted_speed) /
+                        (torque_lbf_ft *
+                         pound_foot_to_newton_metre) -
+                    1.0) < 0.005,
+            "Thermox must reproduce AGTF30 HPT inverse map, cooled "
+            "flow, and torque compatibility: " + case_id);
     }
 }
 

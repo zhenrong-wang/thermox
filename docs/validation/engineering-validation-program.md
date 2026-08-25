@@ -86,5 +86,7 @@ uncertainty is formally included in every acceptance limit.
 The first turbine prerequisite is complete. A generic coordinate-map material turbine consumes
 the native pressure-ratio/corrected-speed map orientation and solves pressure ratio through
 corrected-flow compatibility. Against five AGTF30 HPT points, pressure-ratio and discharge-pressure
-errors are below 0.000056%. The result validates import orientation and inverse map closure only;
-cooling mixing, combustor composition, turbine work, and shaft balance remain coupled-system gates.
+errors are below 0.000057%. Generic front-stage/rear-exit cooling injections close outlet flow at
+numerical precision and reproduce torque within 0.110%. The simplified N2/O2 station-4 boundary
+leaves outlet temperature 0.685--1.283% low; combustor composition and coupled shaft balance remain
+open system gates.

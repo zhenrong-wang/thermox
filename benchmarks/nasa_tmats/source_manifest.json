@@ -125,15 +125,19 @@
     ],
     "results": {
       "pressure_ratio_maximum_absolute_error_percent": 0.00005520,
-      "outlet_pressure_maximum_absolute_error_percent": 0.00005523,
-      "acceptance_band_percent": 0.001,
+      "outlet_pressure_maximum_absolute_error_percent": 0.00005657,
+      "outlet_flow_maximum_absolute_error_percent": 0.000001,
+      "torque_error_percent_range": [-0.110025, 0.076539],
+      "outlet_temperature_error_percent_range": [-1.283442, -0.685041],
+      "map_acceptance_band_percent": 0.001,
+      "flow_and_torque_acceptance_band_percent": 0.5,
       "result": "pass"
     },
     "reserved_comparisons": [
-      "HPT outlet temperature and flow until front/rear cooling injections are connected.",
-      "HPT torque until combustor composition, cooling work, and shaft extraction are coupled."
+      "HPT outlet temperature until combustor product composition replaces the declared simplified N2/O2 boundary.",
+      "Net HP-shaft balance until compressor, combustor, turbine, and power extraction are connected."
     ],
-    "classification": "multi_point_inverse_turbine_map_compatibility"
+    "classification": "multi_point_cooled_turbine_component_cross_code_reproduction"
   },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
 }

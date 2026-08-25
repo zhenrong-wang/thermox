@@ -18,17 +18,25 @@
     "components": [
       {
         "id": "turbine",
-        "kind": "turbine.material.coordinate_map",
+        "kind": "turbine.material.coordinate_map.cooling_injections",
         "version": "1.0.0",
+        "port_counts": {"cooling": 2},
         "parameters": {
           "reference_pressure": {"value": 14.696, "unit": "psia"},
           "reference_temperature": {"value": 518.67, "unit": "degR"},
           "flow_capacity_scale": 1.0,
           "pressure_ratio_scale": 1.0,
-          "efficiency_scale": 1.0
+          "efficiency_scale": 1.0,
+          "cooling_position[1]": 1.0,
+          "cooling_position[2]": 0.0
         },
         "artifacts": {"performance_map": "nasa-agtf30-hpt-map"},
-        "materials": {"inlet": "working_gas", "outlet": "working_gas"}
+        "materials": {
+          "inlet": "working_gas",
+          "outlet": "working_gas",
+          "cooling_1": "working_gas",
+          "cooling_2": "working_gas"
+        }
       }
     ],
     "connections": []
@@ -42,7 +50,15 @@
         "turbine.inlet.T": {"value": 2085.69829561, "unit": "degR"},
         "turbine.inlet.m_dot[N2]": {"value": 16.41799899648, "unit": "lbm/s"},
         "turbine.inlet.m_dot[O2]": {"value": 4.95960386352, "unit": "lbm/s"},
-        "turbine.shaft.omega": {"value": 17750.9216139, "unit": "rpm"}
+        "turbine.shaft.omega": {"value": 17750.9216139, "unit": "rpm"},
+        "turbine.cooling_1.p": {"value": 173.23715058, "unit": "psia"},
+        "turbine.cooling_1.T": {"value": 1141.93832814, "unit": "degR"},
+        "turbine.cooling_1.m_dot[N2]": {"value": 1.322047471498, "unit": "lbm/s"},
+        "turbine.cooling_1.m_dot[O2]": {"value": 0.399368507015, "unit": "lbm/s"},
+        "turbine.cooling_2.p": {"value": 173.23715058, "unit": "psia"},
+        "turbine.cooling_2.T": {"value": 1141.93832814, "unit": "degR"},
+        "turbine.cooling_2.m_dot[N2]": {"value": 1.192322755680, "unit": "lbm/s"},
+        "turbine.cooling_2.m_dot[O2]": {"value": 0.360180832445, "unit": "lbm/s"}
       },
       "initial_guesses": {
         "turbine.inlet.h": {"value": 900.0, "unit": "kJ/kg"},
@@ -60,7 +76,15 @@
         "turbine.inlet.T": {"value": 2743.26475125, "unit": "degR"},
         "turbine.inlet.m_dot[N2]": {"value": 29.4956877312, "unit": "lbm/s"},
         "turbine.inlet.m_dot[O2]": {"value": 8.9101556688, "unit": "lbm/s"},
-        "turbine.shaft.omega": {"value": 20366.4216871, "unit": "rpm"}
+        "turbine.shaft.omega": {"value": 20366.4216871, "unit": "rpm"},
+        "turbine.cooling_1.p": {"value": 356.95206581, "unit": "psia"},
+        "turbine.cooling_1.T": {"value": 1464.94817812, "unit": "degR"},
+        "turbine.cooling_1.m_dot[N2]": {"value": 2.359537526498, "unit": "lbm/s"},
+        "turbine.cooling_1.m_dot[O2]": {"value": 0.712776961129, "unit": "lbm/s"},
+        "turbine.cooling_2.p": {"value": 356.95206581, "unit": "psia"},
+        "turbine.cooling_2.T": {"value": 1464.94817812, "unit": "degR"},
+        "turbine.cooling_2.m_dot[N2]": {"value": 2.128010034720, "unit": "lbm/s"},
+        "turbine.cooling_2.m_dot[O2]": {"value": 0.642836364655, "unit": "lbm/s"}
       },
       "initial_guesses": {
         "turbine.inlet.h": {"value": 1300.0, "unit": "kJ/kg"},
@@ -78,7 +102,15 @@
         "turbine.inlet.T": {"value": 2769.31220689, "unit": "degR"},
         "turbine.inlet.m_dot[N2]": {"value": 29.3135985408, "unit": "lbm/s"},
         "turbine.inlet.m_dot[O2]": {"value": 8.8551495592, "unit": "lbm/s"},
-        "turbine.shaft.omega": {"value": 20224.3507505, "unit": "rpm"}
+        "turbine.shaft.omega": {"value": 20224.3507505, "unit": "rpm"},
+        "turbine.cooling_1.p": {"value": 356.25639847, "unit": "psia"},
+        "turbine.cooling_1.T": {"value": 1448.13063297, "unit": "degR"},
+        "turbine.cooling_1.m_dot[N2]": {"value": 2.343257343060, "unit": "lbm/s"},
+        "turbine.cooling_1.m_dot[O2]": {"value": 0.707858989050, "unit": "lbm/s"},
+        "turbine.cooling_2.p": {"value": 356.25639847, "unit": "psia"},
+        "turbine.cooling_2.T": {"value": 1448.13063297, "unit": "degR"},
+        "turbine.cooling_2.m_dot[N2]": {"value": 2.113327329600, "unit": "lbm/s"},
+        "turbine.cooling_2.m_dot[O2]": {"value": 0.638400964150, "unit": "lbm/s"}
       },
       "initial_guesses": {
         "turbine.inlet.h": {"value": 1320.0, "unit": "kJ/kg"},
@@ -96,7 +128,15 @@
         "turbine.inlet.T": {"value": 2755.13616891, "unit": "degR"},
         "turbine.inlet.m_dot[N2]": {"value": 22.1866895232, "unit": "lbm/s"},
         "turbine.inlet.m_dot[O2]": {"value": 6.7022291268, "unit": "lbm/s"},
-        "turbine.shaft.omega": {"value": 19767.8835653, "unit": "rpm"}
+        "turbine.shaft.omega": {"value": 19767.8835653, "unit": "rpm"},
+        "turbine.cooling_1.p": {"value": 268.72746, "unit": "psia"},
+        "turbine.cooling_1.T": {"value": 1392.44396915, "unit": "degR"},
+        "turbine.cooling_1.m_dot[N2]": {"value": 1.772489358985, "unit": "lbm/s"},
+        "turbine.cooling_1.m_dot[O2]": {"value": 0.535439493860, "unit": "lbm/s"},
+        "turbine.cooling_2.p": {"value": 268.72746, "unit": "psia"},
+        "turbine.cooling_2.T": {"value": 1392.44396915, "unit": "degR"},
+        "turbine.cooling_2.m_dot[N2]": {"value": 1.598565439200, "unit": "lbm/s"},
+        "turbine.cooling_2.m_dot[O2]": {"value": 0.482899976425, "unit": "lbm/s"}
       },
       "initial_guesses": {
         "turbine.inlet.h": {"value": 1310.0, "unit": "kJ/kg"},
@@ -114,7 +154,15 @@
         "turbine.inlet.T": {"value": 2767.52451171, "unit": "degR"},
         "turbine.inlet.m_dot[N2]": {"value": 19.41894797568, "unit": "lbm/s"},
         "turbine.inlet.m_dot[O2]": {"value": 5.86614053432, "unit": "lbm/s"},
-        "turbine.shaft.omega": {"value": 19823.7515015, "unit": "rpm"}
+        "turbine.shaft.omega": {"value": 19823.7515015, "unit": "rpm"},
+        "turbine.cooling_1.p": {"value": 235.73845928, "unit": "psia"},
+        "turbine.cooling_1.T": {"value": 1400.79915796, "unit": "degR"},
+        "turbine.cooling_1.m_dot[N2]": {"value": 1.551224756632, "unit": "lbm/s"},
+        "turbine.cooling_1.m_dot[O2]": {"value": 0.468599145233, "unit": "lbm/s"},
+        "turbine.cooling_2.p": {"value": 235.73845928, "unit": "psia"},
+        "turbine.cooling_2.T": {"value": 1400.79915796, "unit": "degR"},
+        "turbine.cooling_2.m_dot[N2]": {"value": 1.399012226400, "unit": "lbm/s"},
+        "turbine.cooling_2.m_dot[O2]": {"value": 0.422618276725, "unit": "lbm/s"}
       },
       "initial_guesses": {
         "turbine.inlet.h": {"value": 1320.0, "unit": "kJ/kg"},

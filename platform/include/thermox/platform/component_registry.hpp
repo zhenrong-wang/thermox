@@ -261,6 +261,7 @@ struct CompiledModelGraph {
     std::string model_id;
     std::optional<std::string> case_id;
     std::vector<CompiledPortVariable> port_variables;
+    std::vector<CompiledInternalVariable> internal_variables;
     std::vector<CompiledConnectionEquation> connection_equations;
     std::vector<std::string> reduced_connection_equations;
     std::vector<std::string> fixed_value_equations;

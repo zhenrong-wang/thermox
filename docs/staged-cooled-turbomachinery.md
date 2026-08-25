@@ -46,3 +46,11 @@ physical extraction fractions and stage states or an explicitly labeled calibrat
 schedule. Cooling pressure losses, injection locations, stage efficiencies, leakage, and shaft
 losses remain independent inputs. ISO 2314 equivalent flow is a reporting/accounting result over
 those physical extraction states; it is not a substitute for the staged topology.
+
+For aggregate map-based turbines, `turbine.material.coordinate_map.cooling_injections` provides
+the same conservation structure without fixing a machine-specific cooling count.
+`port_counts.cooling` creates the declared injection ports; each `cooling_position[i]` is exactly
+`0` for stage-inlet injection or `1` for exit mixing. Stage-inlet coolant participates in expansion
+work, exit coolant does not, and both contribute to species, mass, and outlet-energy conservation.
+The hot-stream state remains the corrected-map reference, matching common NPSS/T-MATS map
+conventions.

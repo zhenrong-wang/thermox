@@ -1095,9 +1095,15 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
                 variable.variable_name);
         }
     }
+    const bool has_differential_internal = std::any_of(
+        model->descriptor().internal_variables.begin(),
+        model->descriptor().internal_variables.end(),
+        [](const auto& variable) {
+            return variable.kind == DaeVariableKind::differential;
+        });
     if (!model->descriptor().supports_transient &&
         (!model->descriptor().transient_variables.empty() ||
-         !model->descriptor().internal_variables.empty())) {
+         has_differential_internal)) {
         throw std::invalid_argument(
             "steady-only component declares transient variables: " + kind);
     }
@@ -1417,6 +1423,40 @@ CompiledModelGraph compile_flat_model_graph(
                             descriptor),
                         index});
             }
+        }
+        for (const auto& variable : descriptor.internal_variables) {
+            // Dual-mode dynamic components own their internal variables in
+            // the DAE formulation. A steady-only model may instead expose
+            // algebraic work variables required by its steady equations.
+            if (descriptor.supports_transient ||
+                variable.kind != DaeVariableKind::algebraic) {
+                continue;
+            }
+            const std::string full_name =
+                component.id + "." + variable.name;
+            double initial = variable.initial_value;
+            bool initialization_anchor = false;
+            if (const auto value =
+                    case_scalar_value(active_case, full_name, false)) {
+                initial = *value;
+                initialization_anchor = true;
+                seen_case_keys.insert(full_name);
+            } else if (const auto fixed =
+                           case_scalar_value(active_case, full_name, true)) {
+                initial = *fixed;
+                initialization_anchor = true;
+            }
+            const auto index = system.add_variable(
+                full_name, initial, variable.state_scale,
+                variable.lower_bound, variable.upper_bound);
+            if (initialization_anchor) {
+                system.mark_initialization_anchor(index);
+            }
+            variable_indices.emplace(full_name, index);
+            context.internal_variables.emplace(variable.name, index);
+            graph.internal_variables.push_back({
+                component.id, variable.name, full_name,
+                variable.dimension, index});
         }
         resolve_component_artifacts(
             context, model, artifact_registry);

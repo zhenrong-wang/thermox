@@ -154,7 +154,7 @@ GraphResultEvaluator::GraphResultEvaluator(
     const physics::PropertyPackageRegistry& property_registry)
     : impl_(std::make_unique<Impl>()) {
     impl_->initialize(
-        document, graph.port_variables, {},
+        document, graph.port_variables, graph.internal_variables,
         graph.problem.variable_names.size(), property_registry,
         nullptr, true);
 }
@@ -167,7 +167,7 @@ GraphResultEvaluator::GraphResultEvaluator(
         thermochemistry_registry)
     : impl_(std::make_unique<Impl>()) {
     impl_->initialize(
-        document, graph.port_variables, {},
+        document, graph.port_variables, graph.internal_variables,
         graph.problem.variable_names.size(), property_registry,
         &thermochemistry_registry, true);
 }

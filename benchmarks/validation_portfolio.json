@@ -103,6 +103,7 @@
         "combined_all_outputs_mape_percent": 0.1217,
         "maximum_absolute_error_percent": 0.2832,
         "hpt_pressure_ratio_maximum_absolute_error_percent": 0.000056,
+        "hpt_torque_maximum_absolute_error_percent": 0.1101,
         "acceptance_band_percent": 0.5,
         "classification": "multi_point_off_design_component_cross_code_reproduction"
       }
