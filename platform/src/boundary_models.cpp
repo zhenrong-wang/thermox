@@ -34,7 +34,8 @@ public:
     FixedCompositionMaterialSourceModel() {
         descriptor_ = boundary_descriptor(
             "source.material.fixed_composition",
-            {{"outlet", "material", "out"}}, false, "source");
+            {{"outlet", "material", "out"}}, true, "source");
+        descriptor_.uses_quasi_steady_transient_equations = true;
         descriptor_.parameters = {{
             "mass_fraction[{species}]",
             "dimensionless",

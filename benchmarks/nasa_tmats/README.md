@@ -388,7 +388,16 @@ B = [[4405.37064, 0,          0.547524024],
 
 NASA declares LP and HP inertias of 17.44087229 and 1.86055038 slug-ft2, respectively
 (23.64664769 and 2.52256760 kg-m2). Thermox now has generic common-speed and geared multi-load
-inertial shaft components capable of representing those two rotor states. The remaining gate is a
-generic quasi-steady algebraic lift for the static gas-path component equations inside the
-transient DAE, followed by an independently executed A/B-matrix comparison. The matrices above are
-therefore a pinned reference target, not validation evidence earned by Thermox.
+inertial shaft components capable of representing those two rotor states. Its explicit
+quasi-steady algebraic contract now lifts the map-driven gas path into the transient DAE without
+duplicating component physics.
+
+A structural hold-point probe derives a transient declaration from the converged Thermox static
+state, replaces only the two shaft trains with their inertial counterparts, fixes fuel instead of
+LP speed, and retains the six public performance-map artifacts. The resulting 411-variable DAE has
+two differential rotor-energy states. It reached 0.001 s in one accepted step, with no rejection
+and a maximum absolute normalized residual of 5.58e-10. This qualifies graph composition,
+consistent initialization from a converged operating point, and short-horizon equilibrium hold.
+It is not a perturbation response or an A/B-matrix reproduction: VAFN/VBV scheduling and declared
+input perturbations must be connected before that comparison. The matrices above therefore remain
+a pinned reference target, not transient predictive validation earned by Thermox.

@@ -145,6 +145,8 @@ Delivered:
 4. Registered lumped thermal-storage component and end-to-end transient CLI example. ✅
 5. Consistent initialization, adaptive integration, release, sanitizer, and CLI regression
    coverage. ✅
+6. Explicit quasi-steady algebraic component lifting with sparse state Jacobians and strict
+   rejection of differential state, plus fluid/material temperature-boundary parity. ✅
 
 ## Reusable dynamic equipment primitives
 

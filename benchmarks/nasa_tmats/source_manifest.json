@@ -476,10 +476,24 @@
     ],
     "status": "reference_target_only",
     "required_before_qualification": [
-      "Generic quasi-steady algebraic gas-path lift into a transient DAE.",
       "Independent Thermox perturbation or linearization execution at the pinned operating point.",
       "A and B comparison with declared units, tolerances, and solver provenance."
     ]
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
+  "agtf30_transient_structural_probe": {
+    "derivation": "The public static declaration is initialized from its converged target state; steady shaft trains are replaced by generic inertial counterparts; LP speed is released and the converged Thermox fuel flow is fixed.",
+    "variables": 411,
+    "differential_states": [
+      "lp_shaft.rotational_energy",
+      "hp_shaft.rotational_energy"
+    ],
+    "end_time_s": 0.001,
+    "accepted_steps": 1,
+    "rejected_steps": 0,
+    "maximum_absolute_normalized_residual": 5.577604752033949e-10,
+    "result": "pass",
+    "classification": "public_source_full_graph_transient_structural_and_equilibrium_hold_qualification",
+    "declared_limit": "This probe qualifies DAE composition and equilibrium hold only. It does not compare a perturbation response, time history, or NASA A/B matrix and is not transient predictive validation."
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, and full-graph transient DAE composition/equilibrium hold against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, perturbation-response qualification, or transient predictive validation."
 }

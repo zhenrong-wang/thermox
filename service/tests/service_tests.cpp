@@ -623,7 +623,7 @@ void test_catalog_discovery() {
     require(
         efficient_combustor != response.components.end() &&
             efficient_combustor->supports_steady &&
-            !efficient_combustor->supports_transient,
+            efficient_combustor->supports_transient,
         "catalog must expose the heat-release-efficiency combustor");
     const auto material_regulator = std::find_if(
         response.components.begin(), response.components.end(),

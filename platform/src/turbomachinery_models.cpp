@@ -62,7 +62,8 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
     auto out = make_descriptor(
         std::move(kind), std::move(shaft_direction));
     out.version = "2.0.0";
-    out.supports_transient = false;
+    out.supports_transient = true;
+    out.uses_quasi_steady_transient_equations = true;
     out.model_name = variable_geometry
         ? "Variable-geometry performance map"
         : "Performance map";

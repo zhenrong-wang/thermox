@@ -201,6 +201,8 @@ public:
         }
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::equilibrium_hp};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {

@@ -30,6 +30,7 @@ void print_usage(std::ostream& out) {
            " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
+           " [--performance-map <path>]..."
            " --end-time <seconds>"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--globalization line_search|trust_region]"
@@ -322,8 +323,10 @@ int main(int argc, char** argv) {
         std::cerr << "--continuation is only valid for solve\n";
         return 2;
     }
-    if (command != "solve" && !performance_map_paths.empty()) {
-        std::cerr << "--performance-map is only valid for solve\n";
+    if (command != "solve" && command != "simulate" &&
+        !performance_map_paths.empty()) {
+        std::cerr << "--performance-map is only valid for solve or "
+                     "simulate\n";
         return 2;
     }
     if (command != "solve" && !residual_tolerance_text.empty()) {
@@ -602,6 +605,12 @@ int main(int argc, char** argv) {
         thermox::service::TransientSimulationRequest request;
         request.model_json = model_json;
         request.case_id = case_id;
+        for (const auto& path : performance_map_paths) {
+            request.artifacts.performance_maps.push_back(
+                thermox::service::
+                    parse_performance_map_artifact_declaration_json(
+                        read_file(path)));
+        }
         request.solver.end_time =
             parse_positive_number(end_time_text, "--end-time");
         request.solver.nonlinear_solver

@@ -54,6 +54,26 @@ registered shaft participant without collapsing those machines into one case-spe
 Each stores `rotational_energy` as its differential state and exposes internal algebraic `omega`.
 As with the two-port model, initialize a desired shaft speed with `0.5 J omega_0²`.
 
+## Quasi-steady algebraic subsystems in transient graphs
+
+Many cycle transients treat flow-path equipment as an algebraic response around slower stored
+mass, energy, wall, actuator, and rotor states. A registered component can now explicitly declare
+that its steady equations are its transient algebraic equations. The graph compiler lifts those
+residuals into the DAE with zero derivative partials while preserving checked evaluation, analytic
+sparse state Jacobians, bounds, artifacts, property packages, thermochemistry, and internal
+algebraic work variables.
+
+This is opt-in. Registration rejects a quasi-steady declaration that lacks either steady or
+transient support, or that also declares differential port/internal state. Components with real
+accumulation continue to implement their own transient equations. Performance-map
+turbomachinery, equilibrium combustors, perfect-gas ducts/nozzles, controlled material splitters
+and cross-bleeds, and fixed-composition material sources use the algebraic contract; it does not
+silently turn unsupported equipment into a transient model.
+
+Transient fixed-temperature boundaries now have the same `(p,T) -> h` property and
+thermochemistry closure as steady cases for both fluid and composition-aware material ports.
+Performance-map artifacts are accepted by both `thermox_cli solve` and `thermox_cli simulate`.
+
 ## Normalized control blocks
 
 The first control primitives deliberately operate on the existing dimensionless signal/control

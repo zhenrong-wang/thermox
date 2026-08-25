@@ -167,6 +167,11 @@ std::string catalog_fingerprint(
             descriptor.supports_transient
                 ? "transient"
                 : "not_transient");
+        hash_text(
+            hash,
+            descriptor.uses_quasi_steady_transient_equations
+                ? "quasi_steady_transient"
+                : "native_transient");
     }
     for (const auto& descriptor : properties.descriptors()) {
         hash_text(hash, descriptor.backend);

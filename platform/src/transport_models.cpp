@@ -2792,6 +2792,8 @@ public:
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
         };
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -3012,6 +3014,8 @@ public:
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
         };
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -3503,7 +3507,10 @@ public:
               {{"inlet", "material", "in"},
                {"outlet_a", "material", "out"},
                {"outlet_b", "material", "out"},
-               {"fraction", "signal", "in"}})) {}
+               {"fraction", "signal", "in"}})) {
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+    }
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
@@ -3649,6 +3656,8 @@ public:
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
         };
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {

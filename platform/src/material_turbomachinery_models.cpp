@@ -640,6 +640,8 @@ public:
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
             physics::ThermochemistryCapability::state_ps};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -1067,6 +1069,8 @@ public:
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
             physics::ThermochemistryCapability::state_ps};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {

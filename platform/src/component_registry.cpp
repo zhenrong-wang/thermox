@@ -865,6 +865,177 @@ EvaluationStatus property_failure(const physics::PropertyResult& result) {
     return EvaluationStatus::recoverable(result.message);
 }
 
+bool add_transient_temperature_specification(
+    const std::string& key,
+    const ScalarValue& scalar,
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry,
+    const std::map<
+        std::string,
+        std::shared_ptr<const physics::PropertyPackage>>&
+        medium_properties,
+    const std::map<std::string, std::size_t>& variable_indices,
+    const std::string& case_id,
+    DaeEquationSystemBuilder& system,
+    CompiledTransientModelGraph& graph) {
+    const auto first_dot = key.find('.');
+    const auto second_dot = first_dot == std::string::npos
+        ? std::string::npos
+        : key.find('.', first_dot + 1);
+    if (first_dot == std::string::npos ||
+        second_dot == std::string::npos ||
+        key.find('.', second_dot + 1) != std::string::npos ||
+        key.substr(second_dot + 1) != "T") {
+        return false;
+    }
+    const auto component_id = key.substr(0, first_dot);
+    const auto port_name = key.substr(
+        first_dot + 1, second_dot - first_dot - 1);
+    const auto component = std::find_if(
+        document.components.begin(), document.components.end(),
+        [&](const auto& candidate) {
+            return candidate.id == component_id;
+        });
+    if (component == document.components.end()) return false;
+    const auto descriptor = registry.require_model(
+        component->kind).instance_descriptor(*component);
+    const auto port = std::find_if(
+        descriptor.ports.begin(), descriptor.ports.end(),
+        [&](const auto& candidate) {
+            return candidate.name == port_name;
+        });
+    if (port == descriptor.ports.end()) return false;
+
+    const auto pressure = variable_indices.find(
+        variable_key(component_id, port_name, "p"));
+    const auto enthalpy = variable_indices.find(
+        variable_key(component_id, port_name, "h"));
+    if (pressure == variable_indices.end() ||
+        enthalpy == variable_indices.end()) {
+        throw std::logic_error(
+            "temperature specification is missing primary variables: " +
+            key);
+    }
+    const auto residual_name = "fixed." + case_id + "." + key;
+    std::size_t residual_index = 0;
+    if (port->domain == "fluid") {
+        const auto medium_id = require_medium_binding(
+            *component, port_name);
+        const auto package = medium_properties.find(medium_id);
+        if (package == medium_properties.end()) {
+            throw std::logic_error(
+                "compiled medium property package missing: " + medium_id);
+        }
+        if (!package->second->supports(
+                physics::PropertyCapability::state_ph)) {
+            throw std::invalid_argument(
+                "temperature specification '" + key +
+                "' requires property capability 'state_ph'");
+        }
+        residual_index = system.add_checked_equation(
+            residual_name,
+            [properties = package->second,
+             pressure = pressure->second,
+             enthalpy = enthalpy->second,
+             target = scalar.value_si](
+                double, const std::vector<double>& state,
+                const std::vector<double>&, double& residual) {
+                const auto result = properties->state_ph(
+                    state.at(pressure), state.at(enthalpy));
+                if (!result.ok()) return property_failure(result);
+                residual = result.state.temperature_k - target;
+                return EvaluationStatus::success();
+            },
+            std::max(std::abs(scalar.value_si), 1.0));
+    } else if (port->domain == "material") {
+        const auto material_id = require_material_binding(
+            *component, port_name);
+        const auto& material = find_material(document, material_id);
+        const auto package = thermochemistry_registry.create(
+            material.backend, material.mechanism, material.phase);
+        if (!material.package_version.empty() &&
+            material.package_version != package->version()) {
+            throw std::invalid_argument(
+                "material '" + material.id +
+                "' requests thermochemistry package version '" +
+                material.package_version + "' but backend '" +
+                material.backend + "' provides version '" +
+                std::string(package->version()) + "'");
+        }
+        if (!package->supports(
+                physics::ThermochemistryCapability::state_ph)) {
+            throw std::invalid_argument(
+                "temperature specification '" + key +
+                "' requires thermochemistry capability 'state_ph'");
+        }
+        std::vector<std::size_t> flows;
+        flows.reserve(material.species.size());
+        for (const auto& species : material.species) {
+            const auto flow = variable_indices.find(variable_key(
+                component_id, port_name, "m_dot[" + species + "]"));
+            if (flow == variable_indices.end()) {
+                throw std::logic_error(
+                    "material temperature specification is missing "
+                    "species flow: " + species);
+            }
+            flows.push_back(flow->second);
+        }
+        residual_index = system.add_checked_equation(
+            residual_name,
+            [properties = std::move(package),
+             species = material.species, flows = std::move(flows),
+             pressure = pressure->second,
+             enthalpy = enthalpy->second,
+             target = scalar.value_si](
+                double, const std::vector<double>& state,
+                const std::vector<double>&, double& residual) {
+                std::vector<double> fractions(flows.size(), 0.0);
+                double total_flow = 0.0;
+                for (std::size_t index = 0;
+                     index < flows.size(); ++index) {
+                    const double flow = state.at(flows.at(index));
+                    if (!std::isfinite(flow) || flow < 0.0) {
+                        return EvaluationStatus::recoverable(
+                            "material temperature specification requires "
+                            "finite nonnegative species flows");
+                    }
+                    fractions.at(index) = flow;
+                    total_flow += flow;
+                }
+                if (!std::isfinite(total_flow) || total_flow <= 0.0) {
+                    return EvaluationStatus::recoverable(
+                        "material temperature specification requires "
+                        "positive total mass flow");
+                }
+                for (auto& fraction : fractions) {
+                    fraction /= total_flow;
+                }
+                const auto result = properties->state_ph(
+                    state.at(pressure), state.at(enthalpy),
+                    physics::SpeciesComposition{
+                        physics::CompositionBasis::mass_fraction,
+                        species, std::move(fractions)});
+                if (!result.ok()) {
+                    return result.status ==
+                            physics::PropertyStatus::backend_error
+                        ? EvaluationStatus::fatal(result.message)
+                        : EvaluationStatus::recoverable(result.message);
+                }
+                residual = result.state.thermodynamic.temperature_k -
+                    target;
+                return EvaluationStatus::success();
+            },
+            std::max(std::abs(scalar.value_si), 1.0));
+    } else {
+        return false;
+    }
+    graph.fixed_value_equations.push_back(
+        system.residuals().at(residual_index).name);
+    return true;
+}
+
 const TransientVariableDescriptor* find_transient_variable(
     const ComponentModelDescriptor& descriptor,
     const std::string& port_name,
@@ -877,6 +1048,73 @@ const TransientVariableDescriptor* find_transient_variable(
                    variable.variable_name == variable_name;
         });
     return it == descriptor.transient_variables.end() ? nullptr : &*it;
+}
+
+EvaluationStatus evaluate_steady_equation(
+    const Equation& equation,
+    const std::vector<double>& state,
+    double& residual) {
+    if (equation.evaluate_checked) {
+        return equation.evaluate_checked(state, residual);
+    }
+    if (equation.evaluate) {
+        residual = equation.evaluate(state);
+        return EvaluationStatus::success();
+    }
+    return EvaluationStatus::fatal(
+        "quasi-steady equation has no target evaluator: " +
+        equation.name);
+}
+
+void add_quasi_steady_transient_equations(
+    const ComponentModel& model,
+    const ComponentCompileContext& context,
+    DaeEquationSystemBuilder& dae_system) {
+    EquationSystemBuilder steady_system;
+    for (const auto& variable : dae_system.variables()) {
+        steady_system.add_variable(
+            variable.name, variable.initial_value, variable.scale,
+            variable.lower_bound, variable.upper_bound);
+    }
+    model.add_equations(context, steady_system);
+
+    for (const auto& equation : steady_system.equations()) {
+        if (equation.assemble_sparse &&
+            !equation.sparsity_variables.empty()) {
+            dae_system.add_sparse_equation(
+                equation.name, equation.sparsity_variables,
+                [equation](
+                    double, const std::vector<double>& state,
+                    const std::vector<double>&, double& residual,
+                    std::vector<DaeEquationPartial>& jacobian) {
+                    const auto status = evaluate_steady_equation(
+                        equation, state, residual);
+                    if (!status.ok()) return status;
+                    std::vector<EquationPartial> steady_jacobian;
+                    residual = equation.assemble_sparse(
+                        state, steady_jacobian);
+                    jacobian.reserve(
+                        jacobian.size() + steady_jacobian.size());
+                    for (const auto& partial : steady_jacobian) {
+                        jacobian.push_back({
+                            partial.variable,
+                            partial.derivative, 0.0});
+                    }
+                    return EvaluationStatus::success();
+                },
+                equation.scale);
+            continue;
+        }
+        dae_system.add_checked_equation(
+            equation.name,
+            [equation](
+                double, const std::vector<double>& state,
+                const std::vector<double>&, double& residual) {
+                return evaluate_steady_equation(
+                    equation, state, residual);
+            },
+            equation.scale);
+    }
 }
 
 }  // namespace
@@ -1106,6 +1344,16 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
          has_differential_internal)) {
         throw std::invalid_argument(
             "steady-only component declares transient variables: " + kind);
+    }
+    if (model->descriptor().uses_quasi_steady_transient_equations &&
+        (!model->descriptor().supports_steady ||
+         !model->descriptor().supports_transient ||
+         !model->descriptor().transient_variables.empty() ||
+         has_differential_internal)) {
+        throw std::invalid_argument(
+            "quasi-steady transient component must support steady and "
+            "transient compilation without differential variables: " +
+            kind);
     }
     std::set<std::string> internal_names;
     for (const auto& variable : model->descriptor().internal_variables) {
@@ -1428,7 +1676,8 @@ CompiledModelGraph compile_flat_model_graph(
             // Dual-mode dynamic components own their internal variables in
             // the DAE formulation. A steady-only model may instead expose
             // algebraic work variables required by its steady equations.
-            if (descriptor.supports_transient ||
+            if ((descriptor.supports_transient &&
+                 !descriptor.uses_quasi_steady_transient_equations) ||
                 variable.kind != DaeVariableKind::algebraic) {
                 continue;
             }
@@ -2201,7 +2450,12 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         resolve_component_artifacts(
             context, model, artifact_registry);
         validate_property_capabilities(context, model);
-        model.add_transient_equations(context, system);
+        if (descriptor.uses_quasi_steady_transient_equations) {
+            add_quasi_steady_transient_equations(
+                model, context, system);
+        } else {
+            model.add_transient_equations(context, system);
+        }
         model.add_transient_events(context, component_events);
     }
     if (active_case != nullptr &&
@@ -2460,6 +2714,13 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             }
             const auto variable_it = variable_indices.find(key);
             if (variable_it == variable_indices.end()) {
+                if (add_transient_temperature_specification(
+                        key, scalar, document, registry,
+                        thermochemistry_registry, medium_properties,
+                        variable_indices, active_case->id, system,
+                        graph)) {
+                    continue;
+                }
                 throw std::invalid_argument(
                     "case '" + active_case->id +
                     "' fixed value references unknown variable: " +

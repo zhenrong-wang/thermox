@@ -128,6 +128,10 @@ struct ComponentModelDescriptor {
         required_thermochemistry_capabilities;
     bool supports_steady{true};
     bool supports_transient{false};
+    // Reuse add_equations as a derivative-free algebraic subsystem in a
+    // transient DAE. This is valid only for dual-mode components without
+    // differential port or internal states.
+    bool uses_quasi_steady_transient_equations{false};
     std::vector<TransientVariableDescriptor> transient_variables;
     std::vector<InternalVariableDescriptor> internal_variables;
     std::vector<std::string> supported_modes;

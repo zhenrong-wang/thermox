@@ -4227,6 +4227,24 @@ void test_perfect_gas_convergent_material_nozzle() {
       "nozzle.mach": 1.0,
       "nozzle.gross_thrust": 2000.0
     }
+  }, {
+    "id": "choked_transient", "mode": "dynamic_transient",
+    "fixed_values": {
+      "source.outlet.p": {"value": 300.0, "unit": "kPa"},
+      "source.outlet.T": {"value": 300.0, "unit": "K"},
+      "nozzle.area_ratio.value": 1.0,
+      "nozzle.back_pressure_ratio.value": 1.0
+    },
+    "initial_guesses": {
+      "source.outlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
+      "source.outlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
+      "nozzle.inlet.p": {"value": 300.0, "unit": "kPa"},
+      "nozzle.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "nozzle.inlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
+      "nozzle.inlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
+      "nozzle.mach": 1.0,
+      "nozzle.gross_thrust": 2000.0
+    }
   }]
 })json");
     thermox::physics::ThermochemistryPackageRegistry chemistry;
@@ -4258,6 +4276,26 @@ void test_perfect_gas_convergent_material_nozzle() {
             value("source.outlet.m_dot[O2]"),
         4.0, 1.0e-10,
         "nozzle capacity solve must preserve source composition");
+    const auto transient_graph =
+        thermox::platform::compile_transient_model_graph(
+            document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::make_default_property_package_registry(),
+            thermox::platform::EngineeringArtifactRegistry{},
+            chemistry, "choked_transient");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            transient_graph.problem, 0.0);
+    require(
+        initialized.diagnostics.converged,
+        initialized.diagnostics.message);
+    require_near(
+        initialized.state.at(require_variable_index(
+            transient_graph.problem.variable_names,
+            "nozzle.mach")),
+        1.0, 1.0e-10,
+        "material temperature boundary and nozzle algebraic closure "
+        "must lift into a transient DAE");
 }
 
 void test_material_thermochemistry_resolves_on_demand() {

@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -34,6 +35,101 @@ std::size_t variable_index(
         if (names[index] == name) return index;
     }
     throw std::runtime_error("missing variable: " + name);
+}
+
+class QuasiSteadySignalGainModel final
+    : public thermox::platform::ComponentModel {
+public:
+    explicit QuasiSteadySignalGainModel(bool invalid_state = false) {
+        descriptor_.kind = invalid_state
+            ? "test.quasi_steady.invalid"
+            : "test.quasi_steady.signal_gain";
+        descriptor_.version = "1.0.0";
+        descriptor_.ports = {
+            {"input", "signal", "in"},
+            {"output", "signal", "out"},
+        };
+        descriptor_.supports_steady = true;
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+        if (invalid_state) {
+            descriptor_.internal_variables = {{
+                "stored_value", thermox::DaeVariableKind::differential,
+                0.0, 1.0, 0.0, 1.0, -1.0, 1.0,
+                "dimensionless"}};
+        }
+    }
+
+    const thermox::platform::ComponentModelDescriptor&
+    descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const thermox::platform::ComponentCompileContext& context,
+        thermox::EquationSystemBuilder& system) const override {
+        const auto input = context.port_variables.at("input.value");
+        const auto output = context.port_variables.at("output.value");
+        system.add_linear_equation(
+            "component." + context.component.id + ".gain",
+            {{output, 1.0}, {input, -2.0}}, 0.0, 1.0);
+    }
+
+private:
+    thermox::platform::ComponentModelDescriptor descriptor_;
+};
+
+void test_quasi_steady_equations_lift_into_transient_dae() {
+    auto registry =
+        thermox::platform::make_default_component_registry();
+    registry.register_model(
+        std::make_shared<QuasiSteadySignalGainModel>());
+    bool rejected_differential_state = false;
+    try {
+        registry.register_model(
+            std::make_shared<QuasiSteadySignalGainModel>(true));
+    } catch (const std::invalid_argument&) {
+        rejected_differential_state = true;
+    }
+    require(
+        rejected_differential_state,
+        "quasi-steady registration must reject differential state");
+
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "quasi_steady_lift",
+    "media": [],
+    "components": [
+      {"id": "source", "kind": "source.signal.boundary"},
+      {"id": "gain", "kind": "test.quasi_steady.signal_gain"},
+      {"id": "sink", "kind": "sink.signal.boundary"}
+    ],
+    "connections": [
+      {"id": "input", "from": "source.outlet", "to": "gain.input", "kind": "signal_link"},
+      {"id": "output", "from": "gain.output", "to": "sink.inlet", "kind": "signal_link"}
+    ]
+  },
+  "cases": [{
+    "id": "transient", "mode": "dynamic_transient",
+    "fixed_values": {"source.outlet.value": 0.25}
+  }]
+})json");
+    const auto graph =
+        thermox::platform::compile_transient_model_graph(
+            document, registry, "transient");
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(
+            graph.problem, 0.0);
+    require(
+        initialized.diagnostics.converged,
+        initialized.diagnostics.message);
+    require_near(
+        initialized.state.at(variable_index(
+            graph.problem.variable_names, "sink.inlet.value")),
+        0.5, 1.0e-12,
+        "quasi-steady equation is retained in transient DAE");
 }
 
 void test_two_sided_wall_accumulates_net_heat() {
@@ -679,6 +775,7 @@ void test_normalized_control_chain_steady_and_transient() {
 
 int main() {
     try {
+        test_quasi_steady_equations_lift_into_transient_dae();
         test_two_sided_wall_accumulates_net_heat();
         test_rotor_integrates_kinetic_energy();
         test_multi_load_rotors_accumulate_net_power();
