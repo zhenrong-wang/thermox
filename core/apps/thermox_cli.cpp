@@ -45,6 +45,10 @@ void print_usage(std::ostream& out) {
            " [--jacobian-fd-epsilon <value>]"
            " [--jacobian-absolute-tolerance <value>]"
            " [--jacobian-relative-tolerance <value>]"
+           " [--verify-nonlinear-response]"
+           " [--nonlinear-response-perturbation <value>]"
+           " [--nonlinear-response-absolute-normalized-tolerance <value>]"
+           " [--nonlinear-response-relative-tolerance <value>]"
            " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--globalization line_search|trust_region]"
@@ -211,6 +215,19 @@ void print_small_signal_text(
                          .derivative_jacobian.mismatch_count
                   << "\n";
     }
+    if (!response.nonlinear_response_probes.empty()) {
+        double maximum_normalized_absolute_error = 0.0;
+        for (const auto& probe :
+             response.nonlinear_response_probes) {
+            maximum_normalized_absolute_error = std::max(
+                maximum_normalized_absolute_error,
+                probe.maximum_normalized_absolute_error);
+        }
+        std::cout << "nonlinear_response_probes: "
+                  << response.nonlinear_response_probes.size()
+                  << "\nnonlinear_response_maximum_normalized_absolute_error: "
+                  << maximum_normalized_absolute_error << "\n";
+    }
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";
         return;
@@ -262,11 +279,15 @@ int main(int argc, char** argv) {
     std::string jacobian_fd_epsilon_text;
     std::string jacobian_absolute_tolerance_text;
     std::string jacobian_relative_tolerance_text;
+    std::string nonlinear_response_perturbation_text;
+    std::string nonlinear_response_absolute_tolerance_text;
+    std::string nonlinear_response_relative_tolerance_text;
     std::string format = "text";
     std::vector<std::string> performance_map_paths;
     std::vector<std::string> input_variables;
     bool continuation = false;
     bool verify_jacobian = false;
+    bool verify_nonlinear_response = false;
     bool profile_likelihood = false;
     std::string profile_objective_increase_text;
     std::vector<std::string> profile_parameter_ids;
@@ -301,6 +322,18 @@ int main(int argc, char** argv) {
         } else if (arg == "--jacobian-relative-tolerance" &&
                    i + 1 < argc) {
             jacobian_relative_tolerance_text = argv[++i];
+        } else if (arg == "--verify-nonlinear-response") {
+            verify_nonlinear_response = true;
+        } else if (arg == "--nonlinear-response-perturbation" &&
+                   i + 1 < argc) {
+            nonlinear_response_perturbation_text = argv[++i];
+        } else if (
+            arg == "--nonlinear-response-absolute-normalized-tolerance" &&
+            i + 1 < argc) {
+            nonlinear_response_absolute_tolerance_text = argv[++i];
+        } else if (arg == "--nonlinear-response-relative-tolerance" &&
+                   i + 1 < argc) {
+            nonlinear_response_relative_tolerance_text = argv[++i];
         } else if (arg == "--calibration" && i + 1 < argc) {
             calibration_id = argv[++i];
         } else if (arg == "--reconciliation" && i + 1 < argc) {
@@ -460,6 +493,27 @@ int main(int argc, char** argv) {
          !jacobian_relative_tolerance_text.empty())) {
         std::cerr << "Jacobian verification tolerances require "
                      "--verify-jacobian\n";
+        return 2;
+    }
+    if (command != "linearize" && verify_nonlinear_response) {
+        std::cerr << "--verify-nonlinear-response is only valid for "
+                     "linearize\n";
+        return 2;
+    }
+    if (command != "linearize" &&
+        (!nonlinear_response_perturbation_text.empty() ||
+         !nonlinear_response_absolute_tolerance_text.empty() ||
+         !nonlinear_response_relative_tolerance_text.empty())) {
+        std::cerr << "Nonlinear response options are only valid for "
+                     "linearize\n";
+        return 2;
+    }
+    if (command == "linearize" && !verify_nonlinear_response &&
+        (!nonlinear_response_perturbation_text.empty() ||
+         !nonlinear_response_absolute_tolerance_text.empty() ||
+         !nonlinear_response_relative_tolerance_text.empty())) {
+        std::cerr << "Nonlinear response options require "
+                     "--verify-nonlinear-response\n";
         return 2;
     }
 
@@ -727,6 +781,8 @@ int main(int argc, char** argv) {
             request.case_id = case_id;
             request.input_variables = input_variables;
             request.settings.verify_jacobian = verify_jacobian;
+            request.settings.verify_nonlinear_response =
+                verify_nonlinear_response;
             if (!jacobian_fd_epsilon_text.empty()) {
                 request.settings.jacobian_verification
                     .finite_difference_epsilon = parse_positive_number(
@@ -744,6 +800,27 @@ int main(int argc, char** argv) {
                     .relative_tolerance = parse_positive_number(
                         jacobian_relative_tolerance_text,
                         "--jacobian-relative-tolerance");
+            }
+            if (!nonlinear_response_perturbation_text.empty()) {
+                request.settings
+                    .nonlinear_response_relative_perturbation =
+                    parse_positive_number(
+                        nonlinear_response_perturbation_text,
+                        "--nonlinear-response-perturbation");
+            }
+            if (!nonlinear_response_absolute_tolerance_text.empty()) {
+                request.settings
+                    .nonlinear_response_absolute_normalized_tolerance =
+                    parse_positive_number(
+                        nonlinear_response_absolute_tolerance_text,
+                        "--nonlinear-response-absolute-normalized-tolerance");
+            }
+            if (!nonlinear_response_relative_tolerance_text.empty()) {
+                request.settings
+                    .nonlinear_response_relative_tolerance =
+                    parse_positive_number(
+                        nonlinear_response_relative_tolerance_text,
+                        "--nonlinear-response-relative-tolerance");
             }
             for (const auto& path : performance_map_paths) {
                 request.artifacts.performance_maps.push_back(

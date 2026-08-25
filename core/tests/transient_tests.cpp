@@ -1115,9 +1115,11 @@ void test_index_one_dae_small_signal_linearization() {
 
     thermox::DaeLinearizationOptions options;
     options.relative_perturbation = 1.0e-4;
+    const std::vector<thermox::DaeLinearizationInput> inputs{
+        {u, fixed_input, "command"}};
     const auto result = thermox::linearize_index1_dae(
         problem, 0.0, initialized.state, initialized.derivative,
-        {{u, fixed_input, "command"}}, options);
+        inputs, options);
     require(result.diagnostics.success, result.diagnostics.message);
     require(
         result.differential_state_names ==
@@ -1139,6 +1141,27 @@ void test_index_one_dae_small_signal_linearization() {
             result.diagnostics.linear_right_hand_sides == 2,
         "tangent linearization reports its residual evaluations and "
         "sensitivity right-hand sides");
+    const auto probe =
+        thermox::validate_index1_dae_linearization_response(
+            problem, 0.0, result, inputs, {0.01}, {0.02});
+    require(
+        probe.success && probe.passed && probe.states.size() == 1,
+        probe.message);
+    require_near(
+        probe.states[0].predicted_rate_change, 0.09, 1.0e-10,
+        "linear response probe prediction");
+    require_near(
+        probe.states[0].nonlinear_rate_change, 0.09, 1.0e-9,
+        "consistent nonlinear DAE response");
+    auto incorrect = result;
+    incorrect.A[0][0] = 2.0;
+    const auto rejected_probe =
+        thermox::validate_index1_dae_linearization_response(
+            problem, 0.0, incorrect, inputs, {0.01}, {0.0});
+    require(
+        rejected_probe.success && !rejected_probe.passed &&
+            rejected_probe.states[0].relative_error > 0.4,
+        "nonlinear response probe rejects an incorrect A column");
 }
 
 }  // namespace

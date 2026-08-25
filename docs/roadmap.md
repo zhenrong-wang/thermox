@@ -152,6 +152,8 @@ Delivered:
    a partial public NASA AGTF30 cross-code reproduction. ✅
 8. Mixed analytic/numerical DAE row ownership preserved through consistent initialization,
    implicit integration, and independent state/state-rate derivative verification. ✅
+9. Finite-perturbation nonlinear DAE response probes for every A/B column, with service/CLI
+   acceptance gates and public AGTF30 regression evidence. ✅
 
 ## Reusable dynamic equipment primitives
 

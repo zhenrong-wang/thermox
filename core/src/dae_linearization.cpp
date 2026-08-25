@@ -360,4 +360,220 @@ DaeLinearizationResult linearize_index1_dae(
     return result;
 }
 
+DaeLinearizationResponseProbeResult
+validate_index1_dae_linearization_response(
+    const DaeProblem& problem,
+    double time,
+    const DaeLinearizationResult& linearization,
+    const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<double>& state_perturbations,
+    const std::vector<double>& input_perturbations,
+    const DaeLinearizationResponseProbeOptions& options) {
+    DaeLinearizationResponseProbeResult result;
+    result.state_perturbations = state_perturbations;
+    result.input_perturbations = input_perturbations;
+    if (!linearization.diagnostics.success) {
+        result.message =
+            "nonlinear response probe requires a successful linearization";
+        return result;
+    }
+    if (!std::isfinite(time) ||
+        !std::isfinite(options.absolute_normalized_tolerance) ||
+        options.absolute_normalized_tolerance < 0.0 ||
+        !std::isfinite(options.relative_tolerance) ||
+        options.relative_tolerance < 0.0) {
+        throw std::invalid_argument(
+            "nonlinear response probe tolerances must be finite and "
+            "non-negative and time must be finite");
+    }
+    validate_problem_vectors(
+        problem, linearization.operating_state,
+        linearization.operating_derivative);
+    const std::size_t state_count =
+        linearization.differential_state_indices.size();
+    const std::size_t input_count = inputs.size();
+    if (state_perturbations.size() != state_count ||
+        input_perturbations.size() != input_count ||
+        linearization.A.size() != state_count ||
+        linearization.B.size() != state_count ||
+        linearization.input_indices.size() != input_count) {
+        throw std::invalid_argument(
+            "nonlinear response probe dimensions do not match the "
+            "linearization");
+    }
+    bool nonzero_perturbation = false;
+    for (const double value : state_perturbations) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument(
+                "state perturbations must be finite");
+        }
+        nonzero_perturbation = nonzero_perturbation || value != 0.0;
+    }
+    for (std::size_t index = 0; index < input_count; ++index) {
+        if (!std::isfinite(input_perturbations[index]) ||
+            inputs[index].variable !=
+                linearization.input_indices[index] ||
+            inputs[index].fixed_residual >=
+                problem.residual_names.size()) {
+            throw std::invalid_argument(
+                "input perturbations and declarations must match the "
+                "linearization");
+        }
+        nonzero_perturbation = nonzero_perturbation ||
+            input_perturbations[index] != 0.0;
+    }
+    if (!nonzero_perturbation) {
+        throw std::invalid_argument(
+            "nonlinear response probe requires a nonzero perturbation");
+    }
+
+    std::vector<double> predicted_rate_change(state_count, 0.0);
+    for (std::size_t row = 0; row < state_count; ++row) {
+        if (linearization.A[row].size() != state_count ||
+            linearization.B[row].size() != input_count) {
+            throw std::invalid_argument(
+                "linearization matrix dimensions are inconsistent");
+        }
+        for (std::size_t column = 0; column < state_count; ++column) {
+            predicted_rate_change[row] +=
+                linearization.A[row][column] *
+                state_perturbations[column];
+        }
+        for (std::size_t column = 0; column < input_count; ++column) {
+            predicted_rate_change[row] +=
+                linearization.B[row][column] *
+                input_perturbations[column];
+        }
+    }
+
+    DaeProblem probe = problem;
+    probe.initial_state = linearization.operating_state;
+    probe.initial_derivative = linearization.operating_derivative;
+    for (std::size_t index = 0; index < state_count; ++index) {
+        const auto variable =
+            linearization.differential_state_indices[index];
+        probe.initial_state[variable] += state_perturbations[index];
+    }
+    std::vector<std::pair<std::size_t, std::pair<std::size_t, double>>>
+        released_inputs;
+    released_inputs.reserve(input_count);
+    for (std::size_t index = 0; index < input_count; ++index) {
+        const auto variable = inputs[index].variable;
+        probe.initial_state[variable] += input_perturbations[index];
+        released_inputs.push_back({
+            inputs[index].fixed_residual,
+            {variable, probe.initial_state[variable]}});
+    }
+    for (std::size_t index = 0; index < state_count; ++index) {
+        const auto variable =
+            linearization.differential_state_indices[index];
+        probe.initial_derivative[variable] +=
+            predicted_rate_change[index];
+    }
+    for (std::size_t variable = 0;
+         variable < probe.initial_state.size(); ++variable) {
+        if (probe.initial_state[variable] < probe.lower_bounds[variable] ||
+            probe.initial_state[variable] > probe.upper_bounds[variable]) {
+            throw std::invalid_argument(
+                "nonlinear response perturbation places variable '" +
+                problem.variable_names[variable] +
+                "' outside its bounds");
+        }
+    }
+
+    const auto original_residual = problem.residual;
+    probe.residual =
+        [original_residual, released_inputs](
+            double evaluation_time,
+            const std::vector<double>& state,
+            const std::vector<double>& derivative,
+            std::vector<double>& residual) {
+            auto status = original_residual(
+                evaluation_time, state, derivative, residual);
+            if (!status.ok()) return status;
+            for (const auto& [row, target] : released_inputs) {
+                residual[row] = state[target.first] - target.second;
+            }
+            return EvaluationStatus::success();
+        };
+    if (problem.residual_subset) {
+        const auto original_subset = problem.residual_subset;
+        probe.residual_subset =
+            [original_subset, released_inputs](
+                double evaluation_time,
+                const std::vector<double>& state,
+                const std::vector<double>& derivative,
+                const std::vector<std::size_t>& rows,
+                std::vector<double>& residual) {
+                auto status = original_subset(
+                    evaluation_time, state, derivative,
+                    rows, residual);
+                if (!status.ok()) return status;
+                for (std::size_t output = 0;
+                     output < rows.size(); ++output) {
+                    for (const auto& [row, target] : released_inputs) {
+                        if (rows[output] == row) {
+                            residual[output] =
+                                state[target.first] - target.second;
+                            break;
+                        }
+                    }
+                }
+                return EvaluationStatus::success();
+            };
+    }
+
+    const auto initialized = make_consistent_initial_conditions(
+        probe, time, options.nonlinear_solver);
+    result.nonlinear_diagnostics = initialized.diagnostics;
+    if (!initialized.diagnostics.converged) {
+        result.message =
+            "nonlinear response probe failed to restore DAE consistency: " +
+            initialized.diagnostics.message;
+        return result;
+    }
+    result.success = true;
+    result.passed = true;
+    result.states.reserve(state_count);
+    for (std::size_t index = 0; index < state_count; ++index) {
+        const auto variable =
+            linearization.differential_state_indices[index];
+        const double nonlinear_rate_change =
+            initialized.derivative[variable] -
+            linearization.operating_derivative[variable];
+        const double absolute_error = std::abs(
+            nonlinear_rate_change - predicted_rate_change[index]);
+        const double rate_scale = problem.derivative_scales[variable];
+        const double normalized_absolute_error =
+            absolute_error / rate_scale;
+        const double reference = std::max(
+            std::abs(nonlinear_rate_change),
+            std::abs(predicted_rate_change[index]));
+        const double relative_error = reference == 0.0
+            ? 0.0
+            : absolute_error / reference;
+        result.maximum_normalized_absolute_error = std::max(
+            result.maximum_normalized_absolute_error,
+            normalized_absolute_error);
+        result.maximum_relative_error = std::max(
+            result.maximum_relative_error, relative_error);
+        const bool state_passed =
+            absolute_error <=
+                options.absolute_normalized_tolerance * rate_scale +
+                    options.relative_tolerance * reference;
+        result.passed = result.passed && state_passed;
+        result.states.push_back({
+            linearization.differential_state_names[index],
+            predicted_rate_change[index],
+            nonlinear_rate_change,
+            absolute_error,
+            normalized_absolute_error,
+            relative_error});
+    }
+    result.message = result.passed
+        ? "linearized rate response agrees with the consistent nonlinear DAE response"
+        : "linearized rate response differs from the consistent nonlinear DAE response";
+    return result;
+}
+
 }  // namespace thermox

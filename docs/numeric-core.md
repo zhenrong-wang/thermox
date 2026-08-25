@@ -179,6 +179,13 @@ reports residual-evaluation and linear-right-hand-side counts. Service and CLI l
 same generic contract; engineering coordinate changes such as rotor energy to rpm remain explicit
 benchmark or presentation transformations rather than numeric-core physics.
 
+`verify_dae_problem_jacobian` independently audits provider-owned `∂F/∂y` and `∂F/∂ẏ` rows.
+Mixed systems preserve those rows while finite-difference-only equations remain solver-owned.
+`validate_index1_dae_linearization_response` then applies an explicit finite perturbation, restores
+the complete nonlinear DAE consistency with the perturbed differential states and released inputs
+held fixed, and compares the actual differential-state rate change with `A·Δx + B·Δu`. Together,
+the checks distinguish derivative implementation errors from finite-amplitude linearization error.
+
 ## Nonlinear globalization
 
 `solve_newton` supports two execution policies without changing the compiled physical equations:

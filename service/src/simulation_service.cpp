@@ -5511,6 +5511,12 @@ SimulationService::run_small_signal_linearization(
         provenance.settings.push_back({
             "verify_jacobian",
             request.settings.verify_jacobian ? 1.0 : 0.0});
+        provenance.settings.push_back({
+            "verify_nonlinear_response",
+            request.settings.verify_nonlinear_response ? 1.0 : 0.0});
+        provenance.settings.push_back({
+            "nonlinear_response_relative_perturbation",
+            request.settings.nonlinear_response_relative_perturbation});
         response.metadata = execution_metadata(
             document, request.schema_version,
             graph.case_id.value_or(""), "small_signal_linearization",
@@ -5625,6 +5631,97 @@ SimulationService::run_small_signal_linearization(
             "linearization_failed", "linearization",
             result.diagnostics.message);
         return response;
+    }
+    if (request.settings.verify_nonlinear_response) {
+        const auto& settings = request.settings;
+        if (!std::isfinite(
+                settings.nonlinear_response_relative_perturbation) ||
+            settings.nonlinear_response_relative_perturbation <= 0.0 ||
+            !std::isfinite(
+                settings.nonlinear_response_absolute_normalized_tolerance) ||
+            settings.nonlinear_response_absolute_normalized_tolerance < 0.0 ||
+            !std::isfinite(
+                settings.nonlinear_response_relative_tolerance) ||
+            settings.nonlinear_response_relative_tolerance < 0.0) {
+            response.error = make_error(
+                "invalid_nonlinear_response_settings", "request",
+                "nonlinear response perturbation must be positive and "
+                "finite and tolerances must be finite and non-negative");
+            return response;
+        }
+        DaeLinearizationResponseProbeOptions probe_options;
+        probe_options.absolute_normalized_tolerance =
+            settings.nonlinear_response_absolute_normalized_tolerance;
+        probe_options.relative_tolerance =
+            settings.nonlinear_response_relative_tolerance;
+        probe_options.nonlinear_solver = nonlinear_options;
+        const auto perturbation = [&](std::size_t variable) {
+            const double operating_magnitude = std::abs(
+                result.operating_state[variable]);
+            const double declared_scale =
+                graph.problem.variable_scales[variable];
+            const double reference =
+                operating_magnitude > 1.0e-12 * declared_scale
+                    ? operating_magnitude
+                    : declared_scale;
+            double delta =
+                settings.nonlinear_response_relative_perturbation *
+                reference;
+            if (result.operating_state[variable] + delta >
+                graph.problem.upper_bounds[variable]) {
+                delta = -delta;
+            }
+            return delta;
+        };
+        try {
+            for (std::size_t column = 0;
+                 column < result.differential_state_indices.size();
+                 ++column) {
+                std::vector<double> state_delta(
+                    result.differential_state_indices.size(), 0.0);
+                std::vector<double> input_delta(inputs.size(), 0.0);
+                state_delta[column] = perturbation(
+                    result.differential_state_indices[column]);
+                response.nonlinear_response_probes.push_back(
+                    validate_index1_dae_linearization_response(
+                        graph.problem, request.settings.time,
+                        result, inputs, state_delta, input_delta,
+                        probe_options));
+            }
+            for (std::size_t column = 0;
+                 column < inputs.size(); ++column) {
+                std::vector<double> state_delta(
+                    result.differential_state_indices.size(), 0.0);
+                std::vector<double> input_delta(inputs.size(), 0.0);
+                input_delta[column] = perturbation(
+                    inputs[column].variable);
+                response.nonlinear_response_probes.push_back(
+                    validate_index1_dae_linearization_response(
+                        graph.problem, request.settings.time,
+                        result, inputs, state_delta, input_delta,
+                        probe_options));
+            }
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "nonlinear_response_verification_exception",
+                "nonlinear_response_verification", ex.what());
+            return response;
+        }
+        const auto failed = std::find_if(
+            response.nonlinear_response_probes.begin(),
+            response.nonlinear_response_probes.end(),
+            [](const auto& probe) {
+                return !probe.success || !probe.passed;
+            });
+        if (failed != response.nonlinear_response_probes.end()) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "nonlinear_response_verification_failed",
+                "nonlinear_response_verification",
+                failed->message);
+            return response;
+        }
     }
     response.state_names = std::move(
         result.differential_state_names);

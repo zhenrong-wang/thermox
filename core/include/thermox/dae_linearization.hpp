@@ -45,6 +45,33 @@ struct DaeLinearizationResult {
     DaeLinearizationDiagnostics diagnostics;
 };
 
+struct DaeLinearizationResponseProbeOptions {
+    double absolute_normalized_tolerance{1.0e-5};
+    double relative_tolerance{1.0e-2};
+    SolverOptions nonlinear_solver;
+};
+
+struct DaeLinearizationResponseProbeState {
+    std::string state_name;
+    double predicted_rate_change{0.0};
+    double nonlinear_rate_change{0.0};
+    double absolute_error{0.0};
+    double normalized_absolute_error{0.0};
+    double relative_error{0.0};
+};
+
+struct DaeLinearizationResponseProbeResult {
+    bool success{false};
+    bool passed{false};
+    std::vector<double> state_perturbations;
+    std::vector<double> input_perturbations;
+    std::vector<DaeLinearizationResponseProbeState> states;
+    double maximum_normalized_absolute_error{0.0};
+    double maximum_relative_error{0.0};
+    SolverDiagnostics nonlinear_diagnostics;
+    std::string message;
+};
+
 // Linearize an initialized index-1 DAE by assembling the local DAE tangent
 // system and eliminating algebraic variables and differential rates through
 // one factorization. Input fixed-value residuals must be supplied explicitly.
@@ -55,5 +82,17 @@ DaeLinearizationResult linearize_index1_dae(
     const std::vector<double>& operating_derivative,
     const std::vector<DaeLinearizationInput>& inputs,
     const DaeLinearizationOptions& options = {});
+
+// Recompute a consistent nonlinear DAE response at a finite perturbation and
+// compare its differential-state rate change with A*dx + B*du.
+DaeLinearizationResponseProbeResult
+validate_index1_dae_linearization_response(
+    const DaeProblem& problem,
+    double time,
+    const DaeLinearizationResult& linearization,
+    const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<double>& state_perturbations,
+    const std::vector<double>& input_perturbations,
+    const DaeLinearizationResponseProbeOptions& options = {});
 
 }  // namespace thermox

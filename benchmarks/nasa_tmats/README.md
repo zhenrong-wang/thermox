@@ -407,6 +407,14 @@ difference is 0.0276% in a combustion-product composition derivative; a separate
 entry has only `1.53e-6` absolute magnitude and is numerically unresolved by central subtraction.
 The stricter platform defaults remain unchanged.
 
+A second opt-in gate perturbs each of the two rotor-energy states and each of the three inputs
+independently by 0.03%, restores the complete nonlinear DAE consistency, and compares the resulting
+rotor-energy rates with the corresponding A/B column. All five probes pass in one or two Newton
+iterations. Across materially nonzero responses, the maximum relative linear-versus-nonlinear
+difference is 0.0156%; nominally zero cross-couplings remain below `3.4e-9` of the declared rate
+scale. This validates the local A/B representation against Thermox's own nonlinear equations; it
+does not remove the separately reported differences from NASA's A/B matrices.
+
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
 solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:

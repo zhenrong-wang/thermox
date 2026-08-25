@@ -512,6 +512,15 @@
       "state_rate_mismatches": 0,
       "result": "pass"
     },
+    "nonlinear_response_verification": {
+      "independent_probes": 5,
+      "relative_perturbation": 0.0003,
+      "newton_iterations_per_probe_range": [1, 2],
+      "maximum_nonzero_response_relative_error_percent": 0.015605,
+      "maximum_normalized_absolute_error": 3.69511e-7,
+      "maximum_zero_cross_coupling_normalized_error": 3.38485e-9,
+      "result": "pass"
+    },
     "state_matrix_A_rpm": [
       [-2.5583, 1.1149094051],
       [0.6055949727, -1.92434]
