@@ -1,0 +1,128 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_hpc_off_design",
+    "name": "NASA AGTF30 compressor off-design component slice",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "dry_air",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": ["N2", "O2"]
+      }
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.material.coordinate_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {"value": 14.696, "unit": "psia"},
+          "reference_temperature": {"value": 518.67, "unit": "degR"},
+          "flow_capacity_scale": 0.1328,
+          "pressure_ratio_scale": 0.595594,
+          "efficiency_scale": 0.994014
+        },
+        "artifacts": {"performance_map": "nasa-agtf30-hpc-map"},
+        "materials": {"inlet": "dry_air", "outlet": "dry_air"}
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "sea_level_static_1000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 20.7626831893, "unit": "psia"},
+        "compressor.inlet.T": {"value": 582.6838354522, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 19.0771640949, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 5.7628933198, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 17750.9216139, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": 25.8925460433, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 173.2371505793, "unit": "psia"},
+        "compressor.outlet.h": {"value": 350.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 3.0, "unit": "MW"},
+        "compressor.map_coordinate.value": 1.98
+      }
+    },
+    {
+      "id": "sea_level_mach_03_1500",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 33.9832775683, "unit": "psia"},
+        "compressor.inlet.T": {"value": 712.6083875065, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 34.0481605549, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 10.2853818349, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 20366.4216871, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": 99.3027222937, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 356.9520658083, "unit": "psia"},
+        "compressor.outlet.h": {"value": 550.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 8.0, "unit": "MW"},
+        "compressor.map_coordinate.value": 2.04
+      }
+    },
+    {
+      "id": "alt_10000_mach_05_1750",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 31.8140591957, "unit": "psia"},
+        "compressor.inlet.T": {"value": 689.4957044996, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 33.8132372738, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 10.2144154265, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 20224.3507505, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": 86.1957226758, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 356.2563984725, "unit": "psia"},
+        "compressor.outlet.h": {"value": 540.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 8.0, "unit": "MW"},
+        "compressor.map_coordinate.value": 2.02
+      }
+    },
+    {
+      "id": "alt_25000_mach_06_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 22.2231534665, "unit": "psia"},
+        "compressor.inlet.T": {"value": 644.6920761831, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 25.5770462281, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 7.7264004231, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 19767.8835653, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": 60.8487712770, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 268.7274600036, "unit": "psia"},
+        "compressor.outlet.h": {"value": 505.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 6.0, "unit": "MW"},
+        "compressor.map_coordinate.value": 1.95
+      }
+    },
+    {
+      "id": "alt_30000_mach_072_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 20.0097273641, "unit": "psia"},
+        "compressor.inlet.T": {"value": 654.6017474960, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 22.3841956252, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 6.7618924297, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 19823.7515015, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": 66.4483051139, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 235.7384592780, "unit": "psia"},
+        "compressor.outlet.h": {"value": 510.0, "unit": "kJ/kg"},
+        "compressor.shaft.W_dot": {"value": 5.0, "unit": "MW"},
+        "compressor.map_coordinate.value": 1.95
+      }
+    }
+  ]
+}

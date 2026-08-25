@@ -1,8 +1,8 @@
 {
-  "id": "nasa-tmats-example-hpc-map",
+  "id": "nasa-agtf30-hpc-map",
   "schema_version": "thermox.performance_map/v1",
-  "revision": "t-mats-ad6e4d5",
-  "checksum_sha256": "4cd75aa7c59bb721980767ea8fc932e0e1f7658a73a101b7ceacdc0e11d37757",
+  "revision": "agtf30-17051fc",
+  "checksum_sha256": "a2577515f9c46041b47744affcefdf8b5e4c3ff92f76735a9b0da234740716f8",
   "payload": {
     "primary_variable": {
       "name": "map_coordinate",
@@ -47,7 +47,7 @@
     ],
     "curves": [
       {
-        "family_coordinate": 523.5987755982989,
+        "family_coordinate": 955.192574533415,
         "samples": [
           {
             "coordinate": 1.0,
@@ -140,7 +140,7 @@
         ]
       },
       {
-        "family_coordinate": 628.3185307179587,
+        "family_coordinate": 1146.231089440098,
         "samples": [
           {
             "coordinate": 1.0,
@@ -233,7 +233,7 @@
         ]
       },
       {
-        "family_coordinate": 733.0382858376183,
+        "family_coordinate": 1337.2696043467809,
         "samples": [
           {
             "coordinate": 1.0,
@@ -326,7 +326,7 @@
         ]
       },
       {
-        "family_coordinate": 785.3981633974482,
+        "family_coordinate": 1432.7888618001225,
         "samples": [
           {
             "coordinate": 1.0,
@@ -419,7 +419,7 @@
         ]
       },
       {
-        "family_coordinate": 837.7580409572781,
+        "family_coordinate": 1528.3081192534642,
         "samples": [
           {
             "coordinate": 1.0,
@@ -512,7 +512,7 @@
         ]
       },
       {
-        "family_coordinate": 890.117918517108,
+        "family_coordinate": 1623.8273767068054,
         "samples": [
           {
             "coordinate": 1.0,
@@ -605,7 +605,7 @@
         ]
       },
       {
-        "family_coordinate": 942.4777960769379,
+        "family_coordinate": 1719.346634160147,
         "samples": [
           {
             "coordinate": 1.0,
@@ -698,7 +698,7 @@
         ]
       },
       {
-        "family_coordinate": 968.6577348568528,
+        "family_coordinate": 1767.1062628868178,
         "samples": [
           {
             "coordinate": 1.0,
@@ -791,7 +791,7 @@
         ]
       },
       {
-        "family_coordinate": 994.8376736367678,
+        "family_coordinate": 1814.8658916134887,
         "samples": [
           {
             "coordinate": 1.0,
@@ -884,7 +884,7 @@
         ]
       },
       {
-        "family_coordinate": 1021.0176124166827,
+        "family_coordinate": 1862.6255203401593,
         "samples": [
           {
             "coordinate": 1.0,
@@ -977,7 +977,7 @@
         ]
       },
       {
-        "family_coordinate": 1047.1975511965977,
+        "family_coordinate": 1910.38514906683,
         "samples": [
           {
             "coordinate": 1.0,
@@ -1070,7 +1070,7 @@
         ]
       },
       {
-        "family_coordinate": 1073.3774899765126,
+        "family_coordinate": 1958.1447777935007,
         "samples": [
           {
             "coordinate": 1.0,
@@ -1163,7 +1163,7 @@
         ]
       },
       {
-        "family_coordinate": 1099.5574287564275,
+        "family_coordinate": 2005.9044065201715,
         "samples": [
           {
             "coordinate": 1.0,
@@ -1274,12 +1274,12 @@
       "efficiency_scale": 0.997653
     },
     "effective_component_scales": {
-      "flow_capacity_scale": 0.495342,
-      "pressure_ratio_scale": 0.86364,
-      "efficiency_scale": 0.997653
+      "flow_capacity_scale": 0.1328,
+      "pressure_ratio_scale": 0.595594,
+      "efficiency_scale": 0.994014
     },
     "source_speed_scale_rpm": 10000.0,
-    "effective_speed_scale_rpm": 10000.0,
+    "effective_speed_scale_rpm": 18242.834381,
     "curve_count": 13,
     "samples_per_curve": 11
   }

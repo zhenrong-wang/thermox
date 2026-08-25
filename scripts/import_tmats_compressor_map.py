@@ -70,7 +70,15 @@ def _require_shape(
         )
 
 
-def convert(source: pathlib.Path, artifact_id: str, revision: str) -> dict:
+def convert(
+    source: pathlib.Path,
+    artifact_id: str,
+    revision: str,
+    speed_scale_rpm: float | None = None,
+    flow_scale: float | None = None,
+    pressure_ratio_scale: float | None = None,
+    efficiency_scale: float | None = None,
+) -> dict:
     raw = source.read_bytes()
     text = raw.decode("utf-8")
     speeds = _vector(text, "NcVec")
@@ -123,7 +131,39 @@ def convert(source: pathlib.Path, artifact_id: str, revision: str) -> dict:
         ],
         "curves": [],
     }
-    speed_scale = _scalar(text, "s_Nc")
+    source_scales = {
+        "flow_capacity_scale": _scalar(text, "s_Wc"),
+        "pressure_ratio_scale": _scalar(text, "s_PR"),
+        "efficiency_scale": _scalar(text, "s_eff"),
+    }
+    effective_scales = {
+        "flow_capacity_scale": (
+            source_scales["flow_capacity_scale"]
+            if flow_scale is None
+            else flow_scale
+        ),
+        "pressure_ratio_scale": (
+            source_scales["pressure_ratio_scale"]
+            if pressure_ratio_scale is None
+            else pressure_ratio_scale
+        ),
+        "efficiency_scale": (
+            source_scales["efficiency_scale"]
+            if efficiency_scale is None
+            else efficiency_scale
+        ),
+    }
+    if any(
+        not math.isfinite(value) or value <= 0.0
+        for value in effective_scales.values()
+    ):
+        raise ValueError("component scales must be positive and finite")
+    source_speed_scale = _scalar(text, "s_Nc")
+    speed_scale = (
+        source_speed_scale if speed_scale_rpm is None else speed_scale_rpm
+    )
+    if not math.isfinite(speed_scale) or speed_scale <= 0.0:
+        raise ValueError("corrected-speed scale must be positive and finite")
     for speed_index, normalized_speed in enumerate(speeds):
         samples = []
         for coordinate_index, coordinate in enumerate(coordinates):
@@ -167,11 +207,10 @@ def convert(source: pathlib.Path, artifact_id: str, revision: str) -> dict:
                 "corrected_mass_flow": "lbm/s to kg/s",
                 "corrected_speed": "rpm to rad/s",
             },
-            "component_scales": {
-                "flow_capacity_scale": _scalar(text, "s_Wc"),
-                "pressure_ratio_scale": _scalar(text, "s_PR"),
-                "efficiency_scale": _scalar(text, "s_eff"),
-            },
+            "source_component_scales": source_scales,
+            "effective_component_scales": effective_scales,
+            "source_speed_scale_rpm": source_speed_scale,
+            "effective_speed_scale_rpm": speed_scale,
             "curve_count": len(speeds),
             "samples_per_curve": len(coordinates),
         },
@@ -184,8 +223,27 @@ def main() -> None:
     parser.add_argument("output", type=pathlib.Path)
     parser.add_argument("--id", default="nasa-tmats-example-hpc-map")
     parser.add_argument("--revision", default="t-mats-ad6e4d5")
+    parser.add_argument(
+        "--speed-scale-rpm",
+        type=float,
+        help=(
+            "override s_Nc when the same public raw map is used by a "
+            "different T-MATS engine model"
+        ),
+    )
+    parser.add_argument("--flow-scale", type=float)
+    parser.add_argument("--pressure-ratio-scale", type=float)
+    parser.add_argument("--efficiency-scale", type=float)
     args = parser.parse_args()
-    artifact = convert(args.source, args.id, args.revision)
+    artifact = convert(
+        args.source,
+        args.id,
+        args.revision,
+        args.speed_scale_rpm,
+        args.flow_scale,
+        args.pressure_ratio_scale,
+        args.efficiency_scale,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(artifact, indent=2, ensure_ascii=False) + "\n",

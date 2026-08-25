@@ -64,7 +64,7 @@
     },
     {
       "id": "nasa_tmats_gas_turbines",
-      "status": "design_component_cross_code_complete",
+      "status": "multi_point_component_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -90,15 +90,17 @@
       "completed_gates": [
         "map_import_fidelity",
         "design_point_component_cross_code",
-        "design_point_shaft_power_and_flow_closure"
+        "shaft_power_and_flow_closure",
+        "four_steady_operating_points",
+        "map_driven_off_design_component_response"
       ],
       "latest_result": {
-        "component": "compressor",
-        "pressure_error_percent": 0.0907,
-        "temperature_error_percent": -0.2654,
-        "shaft_power_error_percent": 0.2896,
+        "component": "AGTF30_high_pressure_compressor",
+        "healthy_off_design_points": 5,
+        "combined_pressure_temperature_mape_percent": 0.1206,
+        "maximum_absolute_error_percent": 0.2818,
         "acceptance_band_percent": 0.5,
-        "classification": "map_import_and_design_point_cross_code_reproduction"
+        "classification": "multi_point_off_design_component_cross_code_reproduction"
       }
     },
     {

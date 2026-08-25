@@ -70,9 +70,16 @@ map's R-line coordinate, all 143 map points, source scalers, and source checksum
 closure. At the NASA Table 4 design point, Thermox differs from T-MATS by +0.091% in compressor
 discharge pressure, -0.265% in temperature, and +0.290% in shaft power inferred from published
 torque. All three pass the report's 0.5% cross-code comparison band. This completes map-import and
-design-component reproduction, but not off-design, whole-engine, transient, or hardware gates.
+design-component reproduction; whole-engine, transient, and hardware gates remain open.
 
-The next T-MATS implementation expands this same generic capability to multiple steady operating
-points and then the coupled shaft/combustor/turbine/nozzle system. The Sandia sCO2 transient follows
-once authoritative numeric response data are obtained or digitization uncertainty is formally
-included in every acceptance limit.
+The off-design component gate is now also complete. Five healthy, unbiased operating points from
+NASA's public AGTF30 numeric output span sea level to 30,000 ft and Mach 0 to 0.72. Without fitting,
+Thermox reproduces HPC discharge pressure and temperature with 0.121% combined MAPE and 0.282%
+maximum absolute error. Outlet flow and shaft power are withheld because the AGTF30 aggregate HPC
+extracts three bleeds; comparing them with a flow-preserving isolated compressor would be a false
+validation.
+
+The next T-MATS implementation is therefore the coupled shaft/combustor/turbine/nozzle system, with
+the HPC represented as an explicit segmented assembly carrying its bleed extraction states. The
+Sandia sCO2 transient follows once authoritative numeric response data are obtained or digitization
+uncertainty is formally included in every acceptance limit.

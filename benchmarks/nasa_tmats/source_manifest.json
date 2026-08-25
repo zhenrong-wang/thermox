@@ -20,6 +20,18 @@
       "source_path": "Trunk/TMATS_Examples/Example_GasTurbine_SS/SimSetup/setup_HPC.m",
       "source_sha256": "979b1042d06a6c5d76942f8e444c291095d47a35250d4d827ea64a88a86e99bc",
       "license": "Apache-2.0"
+    },
+    {
+      "organization": "NASA",
+      "title": "AGTF30 MEX steady-state solver and linearization tool",
+      "official_url": "https://github.com/nasa/-AGTF30-mex-solver-",
+      "git_commit": "17051fc00960fc8d03e0c8813c42535ab6cffce1",
+      "retrieved_on": "2026-08-25",
+      "files": [
+        {"path": "engine_model/MEX_engine_model.c", "sha256": "a6315650038a0fcf641ac2a7594660d9ca7608783b11502f7403b5df4b003183"},
+        {"path": "inputs.csv", "sha256": "208dbc1643d66201f134d3a37451c87138cd7ffdcac0c09f54c4bd3edee6fb82"},
+        {"path": "outputs.mat", "sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42"}
+      ]
     }
   ],
   "reference_case": {
@@ -69,5 +81,35 @@
     },
     "classification": "map_import_and_design_point_cross_code_reproduction"
   },
-  "interpretation_limit": "This test validates deterministic import, coordinate-map interpolation, thermochemical compression, and conservation against another public code path. It is not independent hardware validation, off-design validation, whole-engine validation, or transient validation."
+  "agtf30_off_design_execution": {
+    "model": "agtf30_hpc_off_design.json",
+    "artifact": "agtf30_hpc_map.json",
+    "selection": "Five converged rows with nominal health parameters and zero sensor/actuator biases; the degraded-health and biased-sensor rows are excluded.",
+    "operating_range": {
+      "altitude_ft": [0, 30000],
+      "mach": [0.0, 0.72],
+      "requested_corrected_fan_speed_rpm": [1000, 2000]
+    },
+    "reference_outputs": [
+      {"case": "sea_level_static_1000", "hpc_outlet_pressure_psia": 173.2371505793, "hpc_outlet_temperature_degR": 1141.9383281412},
+      {"case": "sea_level_mach_03_1500", "hpc_outlet_pressure_psia": 356.9520658083, "hpc_outlet_temperature_degR": 1464.9481781211},
+      {"case": "alt_10000_mach_05_1750", "hpc_outlet_pressure_psia": 356.2563984725, "hpc_outlet_temperature_degR": 1448.1306329659},
+      {"case": "alt_25000_mach_06_2000", "hpc_outlet_pressure_psia": 268.7274600036, "hpc_outlet_temperature_degR": 1392.4439691531},
+      {"case": "alt_30000_mach_072_2000", "hpc_outlet_pressure_psia": 235.7384592780, "hpc_outlet_temperature_degR": 1400.7991579615}
+    ],
+    "results": {
+      "pressure_error_percent_range": [-0.009662, -0.004061],
+      "temperature_error_percent_range": [-0.281771, -0.198124],
+      "combined_pressure_temperature_mape_percent": 0.120568,
+      "maximum_absolute_error_percent": 0.281771,
+      "acceptance_band_percent": 0.5,
+      "result": "pass"
+    },
+    "withheld_comparisons": [
+      "HPC outlet mass flow, because the AGTF30 aggregate HPC extracts three fractional bleeds while this isolated map component preserves inlet flow.",
+      "HPC shaft power, because T-MATS accounts for work associated with the three bleed extraction states."
+    ],
+    "classification": "multi_point_off_design_component_cross_code_reproduction"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
 }
