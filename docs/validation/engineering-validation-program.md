@@ -120,3 +120,10 @@ below 0.42%, LPC pressure below 0.40%, and HPT flow below 0.25% across the four 
 The graph now has 361 simultaneous variables. The remaining steady whole-engine gates are the
 generic convergent nozzles and VBV; only after their capacity constraints replace the current
 reference bypass-ratio and HP-speed boundaries can net thrust be classified.
+
+The nozzle gate is now complete for the four zero-VBV points. Generic convergent material nozzles
+close the core and bypass paths, releasing bypass ratio and HP speed as solved quantities. Their
+maximum cross-code errors are 0.613% and 0.109%, respectively, while combined gross thrust remains
+within approximately 0.25%. This is the first complete steady AGTF30 gas-path reproduction, but it
+is still cross-code rather than hardware evidence. Net thrust awaits generic ambient/inlet ram
+drag, and the fifth steady point plus transient await the VBV component.

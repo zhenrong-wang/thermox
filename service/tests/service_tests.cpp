@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 85,
+        response.components.size() == 86,
         "service must expose the complete component registry");
     require(
         std::any_of(

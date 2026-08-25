@@ -278,3 +278,31 @@ This remains short of whole-engine validation. Bypass ratio and HP speed are sti
 reference solution, while the VBV and both convergent nozzles are absent. The next gate adds nozzle
 flow-capacity/back-pressure closure, which will allow bypass ratio and HP speed to become solved
 variables rather than reference boundaries.
+
+## AGTF30 nozzle-closed zero-VBV engine calculation
+
+`agtf30_nozzle_closed_twin_spool.json` replaces both open sinks with generic perfect-gas
+convergent nozzles. Each nozzle solves choked/un-choked Mach, capacity, and gross thrust from its
+material total state, a dimensionless area command, and a dimensionless ambient-pressure command.
+Typed reference area and pressure parameters preserve dimensional correctness. The bypass command
+uses NASA's scheduled VAFN area; the core throat area and both gross-thrust coefficients come
+directly from the generated source model.
+
+The nozzle constraints allow the splitter fraction and HP shaft speed to be released. Across four
+zero-VBV points, both are solved rather than copied from T-MATS. The graph converges in five to nine
+Newton iterations with residual norms below `2.04e-11`. HP-speed error is +0.026% to +0.109%,
+bypass-ratio error is -0.613% to -0.482%, and combined core-plus-bypass gross-thrust error is
+approximately +0.14% to +0.25%.
+
+Generate the final declaration after producing the four ducted steady results in `tmp/`:
+
+```sh
+python3 scripts/build_agtf30_nozzle_closed_twin_spool_benchmark.py \
+  --warm-start-directory tmp
+```
+
+Warm-start results condition only initial guesses; the nozzle equations, component parameters,
+boundaries, and converged acceptance outputs do not depend on them. This qualifies a complete
+map-driven **zero-VBV steady gas path** against the public cross-code reference. Net thrust remains
+reserved until the generic ambient/inlet ram-drag path is connected. The fifth sea-level-static
+point and the published transient remain reserved until the generic VBV is present.

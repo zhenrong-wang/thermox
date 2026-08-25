@@ -4,6 +4,7 @@
 #include "thermox/platform/two_phase_flow_groups.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -2974,6 +2975,230 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class PerfectGasConvergentMaterialNozzleModel final
+    : public ComponentModel {
+public:
+    PerfectGasConvergentMaterialNozzleModel()
+        : descriptor_(make_descriptor(
+              "terminal.material.perfect_gas_convergent_nozzle",
+              {{"inlet", "material", "in"},
+               {"area_ratio", "signal", "in"},
+               {"back_pressure_ratio", "signal", "in"}})) {
+        descriptor_.template_kind = "terminal.material.nozzle";
+        descriptor_.display_name = "Convergent gas nozzle";
+        descriptor_.category = "Gas-path terminals";
+        descriptor_.model_name = "Perfect-gas choked/un-choked flow";
+        descriptor_.system_boundary_role = "sink";
+        descriptor_.parameters = {
+            {"reference_throat_area", "area", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"reference_back_pressure", "pressure", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"discharge_coefficient", "dimensionless", false, 1.0,
+             0.0, 1.0, false, true},
+            {"gross_thrust_coefficient", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"heat_capacity_ratio", "dimensionless", false, 1.4,
+             1.0, 2.0, false, true},
+        };
+        descriptor_.internal_variables = {
+            {"mach", DaeVariableKind::algebraic, 0.8, 1.0,
+             0.0, 1.0, 0.0, 1.0, "dimensionless"},
+            {"gross_thrust", DaeVariableKind::algebraic, 100000.0,
+             100000.0, 0.0, 100000.0, 0.0,
+             std::numeric_limits<double>::infinity(), "force"},
+        };
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph,
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_thermochemistry_package(context, "inlet");
+        const auto species = require_port_species(context, "inlet");
+        std::vector<std::size_t> flows;
+        flows.reserve(species.size());
+        for (const auto& name : species) {
+            flows.push_back(require_port_variable(
+                context, "inlet.m_dot[" + name + "]"));
+        }
+        const auto inlet_p = require_port_variable(context, "inlet.p");
+        const auto inlet_h = require_port_variable(context, "inlet.h");
+        const auto area_ratio =
+            require_port_variable(context, "area_ratio.value");
+        const auto back_pressure_ratio = require_port_variable(
+            context, "back_pressure_ratio.value");
+        const auto mach = require_internal_variable(context, "mach");
+        const auto gross_thrust =
+            require_internal_variable(context, "gross_thrust");
+        const double reference_area = required_parameter(
+            context.component, "reference_throat_area");
+        const double reference_pressure = required_parameter(
+            context.component, "reference_back_pressure");
+        const double discharge = parameter_or(
+            context.component, "discharge_coefficient", 1.0);
+        const double thrust_coefficient = parameter_or(
+            context.component, "gross_thrust_coefficient", 1.0);
+        const double gamma = parameter_or(
+            context.component, "heat_capacity_ratio", 1.4);
+
+        const auto evaluate =
+            [properties, species, flows, inlet_p, inlet_h, area_ratio,
+             back_pressure_ratio, mach, gross_thrust, reference_area,
+             reference_pressure, discharge, thrust_coefficient, gamma](
+                const std::vector<double>& x,
+                std::array<double, 3>& residuals) {
+                double total_flow = 0.0;
+                std::vector<double> fractions;
+                fractions.reserve(flows.size());
+                for (const auto flow : flows) {
+                    const double value = x.at(flow);
+                    if (!std::isfinite(value) || value < 0.0) {
+                        return EvaluationStatus::recoverable(
+                            "convergent material nozzle requires finite "
+                            "nonnegative species flows");
+                    }
+                    total_flow += value;
+                    fractions.push_back(value);
+                }
+                if (!(total_flow > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "convergent material nozzle requires positive "
+                        "total mass flow");
+                }
+                for (double& fraction : fractions) fraction /= total_flow;
+                const auto state = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h),
+                    {physics::CompositionBasis::mass_fraction,
+                     species, std::move(fractions)});
+                if (!state.ok()) {
+                    return state.status ==
+                            physics::PropertyStatus::backend_error
+                        ? EvaluationStatus::fatal(state.message)
+                        : EvaluationStatus::recoverable(state.message);
+                }
+                const double density =
+                    state.state.thermodynamic.density_kg_m3;
+                const double pressure = x.at(inlet_p);
+                const double area =
+                    reference_area * x.at(area_ratio);
+                const double back_pressure =
+                    reference_pressure * x.at(back_pressure_ratio);
+                if (!(density > 0.0) || !(pressure > back_pressure) ||
+                    !(back_pressure > 0.0) || !(area > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "convergent material nozzle requires positive area "
+                        "and total pressure above back pressure");
+                }
+                const double exponent = (gamma - 1.0) / gamma;
+                const double unchoked_mach = std::sqrt(
+                    2.0 / (gamma - 1.0) *
+                    (std::pow(pressure / back_pressure, exponent) - 1.0));
+                const double target_mach =
+                    std::min(1.0, unchoked_mach);
+                const double local_mach = x.at(mach);
+                const double correction = std::pow(
+                    1.0 + 0.5 * (gamma - 1.0) *
+                        local_mach * local_mach,
+                    -(gamma + 1.0) /
+                        (2.0 * (gamma - 1.0)));
+                const double sound_speed =
+                    std::sqrt(gamma * pressure / density);
+                const double capacity = discharge * area * density *
+                    sound_speed * local_mach * correction;
+                const double ideal_velocity = std::sqrt(
+                    2.0 * gamma / (gamma - 1.0) * pressure / density *
+                    (1.0 - std::pow(
+                        back_pressure / pressure, exponent)));
+                residuals = {
+                    total_flow - capacity,
+                    local_mach - target_mach,
+                    x.at(gross_thrust) - thrust_coefficient *
+                        total_flow * ideal_velocity,
+                };
+                return EvaluationStatus::success();
+            };
+        std::vector<std::size_t> pattern = flows;
+        pattern.insert(pattern.end(), {
+            inlet_p, inlet_h, area_ratio, back_pressure_ratio,
+            mach, gross_thrust});
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        const auto add_equation = [&](const std::string& name,
+                                      std::size_t residual_index,
+                                      double scale) {
+            system.add_checked_sparse_equation(
+                prefix + name,
+                [evaluate, residual_index](
+                    const std::vector<double>& x, double& residual) {
+                    std::array<double, 3> values{};
+                    const auto status = evaluate(x, values);
+                    residual = values.at(residual_index);
+                    return status;
+                },
+                pattern,
+                [evaluate, pattern, residual_index](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    std::array<double, 3> base{};
+                    const auto status = evaluate(x, base);
+                    if (!status.ok()) {
+                        throw std::runtime_error(status.message);
+                    }
+                    for (const auto variable : pattern) {
+                        const double step = std::max(
+                            1.0e-7,
+                            std::abs(x.at(variable)) * 1.0e-6);
+                        auto plus = x;
+                        auto minus = x;
+                        plus.at(variable) += step;
+                        minus.at(variable) -= step;
+                        std::array<double, 3> plus_values{};
+                        std::array<double, 3> minus_values{};
+                        const auto plus_status = evaluate(plus, plus_values);
+                        const auto minus_status = evaluate(minus, minus_values);
+                        if (plus_status.ok() && minus_status.ok()) {
+                            jacobian.push_back({
+                                variable,
+                                (plus_values.at(residual_index) -
+                                 minus_values.at(residual_index)) /
+                                    (2.0 * step)});
+                        } else if (plus_status.ok()) {
+                            jacobian.push_back({
+                                variable,
+                                (plus_values.at(residual_index) -
+                                 base.at(residual_index)) / step});
+                        } else if (minus_status.ok()) {
+                            jacobian.push_back({
+                                variable,
+                                (base.at(residual_index) -
+                                 minus_values.at(residual_index)) / step});
+                        } else {
+                            throw std::runtime_error(
+                                "could not evaluate a local derivative for "
+                                "convergent material nozzle");
+                        }
+                    }
+                    return base.at(residual_index);
+                },
+                scale);
+        };
+        add_equation("mass_capacity", 0, 100.0);
+        add_equation("back_pressure_mach", 1, 1.0);
+        add_equation("gross_thrust", 2, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class IsenthalpicMaterialPressureRegulatorModel final
     : public ComponentModel {
 public:
@@ -3434,6 +3659,8 @@ void register_transport_component_models(
         ControlledFractionMaterialSplitterModel>());
     registry.register_model(std::make_shared<
         PerfectGasMachScaledMaterialDuctModel>());
+    registry.register_model(std::make_shared<
+        PerfectGasConvergentMaterialNozzleModel>());
 }
 
 }  // namespace thermox::platform

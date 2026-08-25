@@ -988,6 +988,9 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains(
                 "transport.material.perfect_gas_mach_scaled_loss"),
             "default registry should contain Mach-scaled material duct");
+    require(registry.contains(
+                "terminal.material.perfect_gas_convergent_nozzle"),
+            "default registry should contain convergent material nozzle");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
     require(registry.contains("gearbox.shaft.fixed_ratio"),
@@ -1081,6 +1084,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.splitter.fixed_fraction",
         "junction.material.splitter.controlled_fraction",
         "transport.material.perfect_gas_mach_scaled_loss",
+        "terminal.material.perfect_gas_convergent_nozzle",
         "valve.fluid.isenthalpic_pressure_ratio",
         "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
@@ -3993,6 +3997,90 @@ void test_perfect_gas_mach_scaled_material_duct() {
     require_near(
         value("duct.outlet.m_dot[N2]"), 8.0, 1.0e-10,
         "material duct conserves species flow");
+}
+
+void test_perfect_gas_convergent_material_nozzle() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "convergent_material_nozzle",
+    "media": [],
+    "materials": [{
+      "id": "air", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "source", "kind": "source.material.fixed_composition",
+      "parameters": {"mass_fraction[N2]": 0.8, "mass_fraction[O2]": 0.2},
+      "materials": {"outlet": "air"}
+    }, {
+      "id": "nozzle",
+      "kind": "terminal.material.perfect_gas_convergent_nozzle",
+      "parameters": {
+        "reference_throat_area": 0.01,
+        "reference_back_pressure": {"value": 100.0, "unit": "kPa"},
+        "discharge_coefficient": 1.0,
+        "gross_thrust_coefficient": 0.99,
+        "heat_capacity_ratio": 1.4
+      },
+      "materials": {"inlet": "air"}
+    }],
+    "connections": [{
+      "id": "source_nozzle", "from": "source.outlet",
+      "to": "nozzle.inlet", "kind": "material_link"
+    }]
+  },
+  "cases": [{
+    "id": "choked", "mode": "steady_state_design",
+    "fixed_values": {
+      "source.outlet.p": {"value": 300.0, "unit": "kPa"},
+      "source.outlet.T": {"value": 300.0, "unit": "K"},
+      "nozzle.area_ratio.value": 1.0,
+      "nozzle.back_pressure_ratio.value": 1.0
+    },
+    "initial_guesses": {
+      "source.outlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
+      "source.outlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
+      "nozzle.inlet.p": {"value": 300.0, "unit": "kPa"},
+      "nozzle.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "nozzle.inlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
+      "nozzle.inlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
+      "nozzle.mach": 1.0,
+      "nozzle.gross_thrust": 2000.0
+    }
+  }]
+})json");
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto graph = thermox::platform::compile_model_graph(
+        document, thermox::platform::make_default_component_registry(),
+        thermox::physics::make_default_property_package_registry(),
+        thermox::platform::EngineeringArtifactRegistry{},
+        chemistry, "choked");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("nozzle.mach"), 1.0, 1.0e-10,
+                 "convergent nozzle must choke at sufficient pressure ratio");
+    require(value("nozzle.gross_thrust") > 1000.0,
+            "convergent nozzle must publish positive gross thrust");
+    require_near(
+        value("source.outlet.m_dot[N2]") /
+            value("source.outlet.m_dot[O2]"),
+        4.0, 1.0e-10,
+        "nozzle capacity solve must preserve source composition");
 }
 
 void test_material_thermochemistry_resolves_on_demand() {
@@ -8258,6 +8346,7 @@ int main() {
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
         test_perfect_gas_mach_scaled_material_duct();
+        test_perfect_gas_convergent_material_nozzle();
         test_material_thermochemistry_resolves_on_demand();
         test_material_boundary_temperature_specification();
         test_adiabatic_equilibrium_combustor();
