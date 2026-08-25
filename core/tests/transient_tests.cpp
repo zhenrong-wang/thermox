@@ -210,6 +210,107 @@ void test_dae_equation_system_builder() {
         "torn DAE integration preserves the ordinary trajectory");
 }
 
+void test_dae_jacobian_verification_checks_both_channels() {
+    thermox::DaeEquationSystemBuilder system;
+    const auto x = system.add_variable(
+        "x", thermox::DaeVariableKind::differential,
+        2.0, -4.0, 1.0, 1.0);
+    system.add_sparse_equation(
+        "decay",
+        {x},
+        [x](double,
+            const std::vector<double>& state,
+            const std::vector<double>& derivative,
+            double& residual,
+            std::vector<thermox::DaeEquationPartial>& partials) {
+            residual = derivative[x] + state[x] * state[x];
+            partials.push_back({x, 2.0 * state[x], 1.0});
+            return thermox::EvaluationStatus::success();
+        });
+
+    const auto report = thermox::verify_dae_problem_jacobian(
+        system.build(), 0.0);
+    require(
+        report.analytic_derivatives_available && report.passed &&
+            report.state_jacobian.passed &&
+            report.derivative_jacobian.passed,
+        "DAE verification checks state and state-rate derivatives");
+    require(
+        report.state_jacobian.compared_entries == 1 &&
+            report.derivative_jacobian.compared_entries == 1,
+        "DAE verification reports both derivative channels");
+
+    auto bad = system.build();
+    bad.jacobian = [](double,
+                      const std::vector<double>&,
+                      const std::vector<double>&,
+                      double coefficient,
+                      thermox::Matrix& jacobian) {
+        jacobian[0][0] = 3.0 + 2.0 * coefficient;
+        return thermox::EvaluationStatus::success();
+    };
+    bad.sparse_jacobian_pattern.reset();
+    bad.sparse_jacobian_values = {};
+    bad.sparse_jacobian_values_subset = {};
+    bad.sparse_jacobian = {};
+    const auto bad_report = thermox::verify_dae_problem_jacobian(
+        bad, 0.0);
+    require(
+        !bad_report.passed &&
+            bad_report.state_jacobian.mismatch_count == 1 &&
+            bad_report.derivative_jacobian.mismatch_count == 1,
+        "DAE verification names incorrect state and state-rate derivatives");
+    require(
+        bad_report.derivative_jacobian.mismatches.at(0).variable_name ==
+            "d(x)/dt",
+        "DAE state-rate mismatch retains derivative identity");
+}
+
+void test_dae_jacobian_verification_respects_state_domain() {
+    thermox::DaeProblem problem;
+    problem.variable_names = {"nonnegative_x"};
+    problem.residual_names = {"square_balance"};
+    problem.variable_kinds = {
+        thermox::DaeVariableKind::differential};
+    problem.initial_state = {0.0};
+    problem.initial_derivative = {0.0};
+    problem.variable_scales = {1.0};
+    problem.derivative_scales = {1.0};
+    problem.residual_scales = {1.0};
+    problem.lower_bounds = {0.0};
+    problem.upper_bounds = {1.0};
+    problem.residual = [](
+        double,
+        const std::vector<double>& state,
+        const std::vector<double>& derivative,
+        std::vector<double>& residual) {
+        if (state[0] < 0.0) {
+            return thermox::EvaluationStatus::recoverable(
+                "negative state is outside the physical domain");
+        }
+        residual[0] = state[0] * state[0] + derivative[0];
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        double,
+        const std::vector<double>& state,
+        const std::vector<double>&,
+        double coefficient,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = 2.0 * state[0] + coefficient;
+        return thermox::EvaluationStatus::success();
+    };
+    thermox::JacobianVerificationOptions options;
+    options.finite_difference_epsilon = 1.0e-4;
+    options.absolute_tolerance = 1.1e-4;
+    options.relative_tolerance = 0.0;
+    const auto report = thermox::verify_dae_problem_jacobian(
+        problem, 0.0, {}, {}, options);
+    require(
+        report.passed,
+        "DAE verification uses a valid one-sided state perturbation at a bound");
+}
+
 void test_transient_solver_executes_independent_structural_blocks() {
     thermox::DaeEquationSystemBuilder system;
     const auto first = system.add_variable(
@@ -986,6 +1087,8 @@ void test_index_one_dae_small_signal_linearization() {
 int main() {
     try {
         test_dae_equation_system_builder();
+        test_dae_jacobian_verification_checks_both_channels();
+        test_dae_jacobian_verification_respects_state_domain();
         test_transient_solver_executes_independent_structural_blocks();
         test_dae_equation_system_builder_rejects_non_square_system();
         test_consistent_initial_conditions_for_ode();

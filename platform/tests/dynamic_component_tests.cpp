@@ -461,6 +461,13 @@ void test_multi_load_rotors_accumulate_net_power() {
     require(
         initialized.diagnostics.converged,
         initialized.diagnostics.message);
+    const auto derivative_check =
+        thermox::verify_dae_problem_jacobian(
+            graph.problem, 0.0,
+            initialized.state, initialized.derivative);
+    require(
+        derivative_check.passed,
+        derivative_check.message);
     const auto index = [&](const std::string& name) {
         return variable_index(graph.problem.variable_names, name);
     };

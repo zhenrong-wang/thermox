@@ -615,7 +615,8 @@ Work items:
 2. Package the existing native component/property composition boundaries as a documented extension
    SDK and out-of-tree conformance kit. ✅
 3. Verify provider-owned Jacobian rows against bounded finite differences with named mismatch
-   diagnostics. ✅
+   diagnostics, including independent bounded verification of DAE state and state-rate
+   Jacobians. ✅
 4. Expand analytic or automatic differentiation Jacobians across property-heavy core components.
    - backend-neutral PH derivative contract with explicit analytic/fallback provenance; ✅
    - analytic ideal-gas and HEOS CO2 derivatives plus centralized bounded IF97 fallback; ✅

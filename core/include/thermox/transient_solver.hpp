@@ -218,6 +218,21 @@ struct DaeSolveResult {
     TimeIntegrationDiagnostics diagnostics;
 };
 
+struct DaeJacobianVerificationReport {
+    bool analytic_derivatives_available{false};
+    bool passed{false};
+    JacobianVerificationReport state_jacobian;
+    JacobianVerificationReport derivative_jacobian;
+    std::string message;
+};
+
+DaeJacobianVerificationReport verify_dae_problem_jacobian(
+    const DaeProblem& problem,
+    double time,
+    const std::vector<double>& state = {},
+    const std::vector<double>& derivative = {},
+    const JacobianVerificationOptions& options = {});
+
 DaeInitializationResult make_consistent_initial_conditions(
     const DaeProblem& problem,
     double initial_time,

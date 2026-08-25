@@ -112,3 +112,9 @@ each provider-owned row—including expected zeros—against bounded, scale-awar
 and reports equation/variable names for mismatches. Rows intentionally owned by the numerical
 fallback are excluded, so failures identify the extension's derivative contract rather than the
 solver's fallback implementation.
+
+Transient extensions should likewise call `verify_dae_problem_jacobian`. The DAE verifier checks
+the state Jacobian `∂F/∂y` and state-rate Jacobian `∂F/∂ẏ` independently instead of validating only
+the integrator's combined Newton matrix. It uses declared state and derivative scales, honors state
+bounds, falls back to a valid one-sided perturbation after a recoverable domain failure, and labels
+state-rate mismatches as `d(variable)/dt`.

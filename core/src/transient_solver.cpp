@@ -511,6 +511,262 @@ EvaluationStatus evaluate_event_surface(
 
 }  // namespace
 
+DaeJacobianVerificationReport verify_dae_problem_jacobian(
+    const DaeProblem& problem,
+    double time,
+    const std::vector<double>& state,
+    const std::vector<double>& derivative,
+    const JacobianVerificationOptions& options) {
+    if (!positive_finite(options.finite_difference_epsilon) ||
+        !std::isfinite(options.absolute_tolerance) ||
+        options.absolute_tolerance < 0.0 ||
+        !std::isfinite(options.relative_tolerance) ||
+        options.relative_tolerance < 0.0 || !std::isfinite(time)) {
+        throw std::invalid_argument(
+            "DAE Jacobian verification requires finite non-negative "
+            "tolerances, a positive finite-difference epsilon, and a "
+            "finite time");
+    }
+    validate_dae_problem(problem);
+    const std::size_t size = problem.initial_state.size();
+    const auto y = state.empty() ? problem.initial_state : state;
+    const auto y_dot = derivative.empty()
+        ? default_values(
+              problem.initial_derivative, size, 0.0,
+              "initial_derivative")
+        : derivative;
+    if (y.size() != size || y_dot.size() != size) {
+        throw std::invalid_argument(
+            "DAE Jacobian verification point size must match the problem");
+    }
+    const auto lower = default_values(
+        problem.lower_bounds, size,
+        -std::numeric_limits<double>::infinity(), "lower_bounds");
+    const auto upper = default_values(
+        problem.upper_bounds, size,
+        std::numeric_limits<double>::infinity(), "upper_bounds");
+    const auto state_scales = default_values(
+        problem.variable_scales, size, 1.0, "variable_scales");
+    const auto derivative_scales = default_values(
+        problem.derivative_scales, size, 1.0, "derivative_scales");
+    for (std::size_t i = 0; i < size; ++i) {
+        if (!std::isfinite(y[i]) || !std::isfinite(y_dot[i]) ||
+            y[i] < lower[i] || y[i] > upper[i]) {
+            throw std::invalid_argument(
+                "DAE Jacobian verification point is outside the variable domain");
+        }
+    }
+
+    const auto analytic = [&](double coefficient) {
+        Matrix result(size, std::vector<double>(size, 0.0));
+        EvaluationStatus status;
+        if (problem.sparse_jacobian_pattern.has_value()) {
+            std::vector<double> values(
+                problem.sparse_jacobian_pattern->nonzeros(), 0.0);
+            status = problem.sparse_jacobian_values(
+                time, y, y_dot, coefficient, values);
+            if (status.ok()) {
+                result = SparseMatrix(
+                             *problem.sparse_jacobian_pattern,
+                             std::move(values))
+                             .to_dense();
+            }
+        } else if (problem.sparse_jacobian) {
+            std::vector<SparseTriplet> triplets;
+            status = problem.sparse_jacobian(
+                time, y, y_dot, coefficient, triplets);
+            if (status.ok()) {
+                result = sparse_from_triplets(
+                             size, size, std::move(triplets))
+                             .to_dense();
+            }
+        } else {
+            status = problem.jacobian(
+                time, y, y_dot, coefficient, result);
+        }
+        if (!status.ok()) {
+            throw std::runtime_error(
+                "DAE analytic Jacobian evaluation failed: " +
+                status.message);
+        }
+        if (result.size() != size ||
+            std::any_of(
+                result.begin(), result.end(),
+                [size](const auto& row) {
+                    return row.size() != size;
+                })) {
+            throw std::runtime_error(
+                "DAE analytic Jacobian shape does not match the problem");
+        }
+        return result;
+    };
+
+    DaeJacobianVerificationReport report;
+    if (!problem.sparse_jacobian_pattern.has_value() &&
+        !problem.sparse_jacobian && !problem.jacobian) {
+        report.message = "problem provides no analytic DAE Jacobian";
+        report.state_jacobian.message = report.message;
+        report.derivative_jacobian.message = report.message;
+        return report;
+    }
+    report.analytic_derivatives_available = true;
+    const Matrix provided_state = analytic(0.0);
+    Matrix provided_derivative = analytic(1.0);
+    for (std::size_t row = 0; row < size; ++row) {
+        for (std::size_t column = 0; column < size; ++column) {
+            provided_derivative[row][column] -=
+                provided_state[row][column];
+        }
+    }
+
+    const auto evaluate = [&](const std::vector<double>& trial_state,
+                              const std::vector<double>& trial_derivative,
+                              std::vector<double>& residual) {
+        residual.assign(size, 0.0);
+        auto status = problem.residual(
+            time, trial_state, trial_derivative, residual);
+        if (status.ok() && residual.size() != size) {
+            return EvaluationStatus::fatal(
+                "DAE residual size changed during Jacobian verification");
+        }
+        return status;
+    };
+    std::vector<double> base(size, 0.0);
+    auto base_status = evaluate(y, y_dot, base);
+    if (!base_status.ok()) {
+        throw std::runtime_error(
+            "DAE residual evaluation failed at verification point: " +
+            base_status.message);
+    }
+
+    const auto numerical = [&](bool perturb_derivative) {
+        Matrix result(size, std::vector<double>(size, 0.0));
+        for (std::size_t column = 0; column < size; ++column) {
+            const double value = perturb_derivative
+                                     ? y_dot[column]
+                                     : y[column];
+            const double scale = perturb_derivative
+                                     ? derivative_scales[column]
+                                     : state_scales[column];
+            const double step = options.finite_difference_epsilon *
+                std::max(scale, std::abs(value));
+            std::vector<double> plus_state = y;
+            std::vector<double> minus_state = y;
+            std::vector<double> plus_derivative = y_dot;
+            std::vector<double> minus_derivative = y_dot;
+            bool can_plus = perturb_derivative ||
+                y[column] + step <= upper[column];
+            bool can_minus = perturb_derivative ||
+                y[column] - step >= lower[column];
+            if (perturb_derivative) {
+                plus_derivative[column] += step;
+                minus_derivative[column] -= step;
+            } else {
+                plus_state[column] += step;
+                minus_state[column] -= step;
+            }
+            std::vector<double> plus(size, 0.0);
+            std::vector<double> minus(size, 0.0);
+            if (can_plus) {
+                const auto status = evaluate(
+                    plus_state, plus_derivative, plus);
+                if (status.code == EvaluationStatusCode::fatal_failure) {
+                    throw std::runtime_error(
+                        "DAE positive finite-difference evaluation failed: " +
+                        status.message);
+                }
+                can_plus = status.ok();
+            }
+            if (can_minus) {
+                const auto status = evaluate(
+                    minus_state, minus_derivative, minus);
+                if (status.code == EvaluationStatusCode::fatal_failure) {
+                    throw std::runtime_error(
+                        "DAE negative finite-difference evaluation failed: " +
+                        status.message);
+                }
+                can_minus = status.ok();
+            }
+            if (!can_plus && !can_minus) {
+                throw std::runtime_error(
+                    "DAE finite differences cannot perturb variable '" +
+                    problem.variable_names[column] + "' within its domain");
+            }
+            for (std::size_t row = 0; row < size; ++row) {
+                result[row][column] = can_plus && can_minus
+                    ? (plus[row] - minus[row]) / (2.0 * step)
+                    : can_plus
+                          ? (plus[row] - base[row]) / step
+                          : (base[row] - minus[row]) / step;
+            }
+        }
+        return result;
+    };
+    const Matrix numerical_state = numerical(false);
+    const Matrix numerical_derivative = numerical(true);
+
+    const auto compare = [&](const Matrix& provided,
+                             const Matrix& reference,
+                             bool derivative_channel) {
+        JacobianVerificationReport channel;
+        channel.analytic_derivatives_available = true;
+        channel.compared_rows = size;
+        for (std::size_t row = 0; row < size; ++row) {
+            for (std::size_t column = 0; column < size; ++column) {
+                ++channel.compared_entries;
+                const double absolute_error = std::abs(
+                    provided[row][column] - reference[row][column]);
+                const double magnitude = std::max(
+                    std::abs(provided[row][column]),
+                    std::abs(reference[row][column]));
+                const double relative_error = magnitude == 0.0
+                    ? 0.0
+                    : absolute_error / magnitude;
+                channel.maximum_absolute_error = std::max(
+                    channel.maximum_absolute_error, absolute_error);
+                channel.maximum_relative_error = std::max(
+                    channel.maximum_relative_error, relative_error);
+                if (absolute_error <= options.absolute_tolerance +
+                        options.relative_tolerance * magnitude) {
+                    continue;
+                }
+                ++channel.mismatch_count;
+                if (channel.mismatches.size() >=
+                    options.maximum_reported_mismatches) {
+                    continue;
+                }
+                channel.mismatches.push_back({
+                    row,
+                    column,
+                    problem.residual_names[row],
+                    derivative_channel
+                        ? "d(" + problem.variable_names[column] + ")/dt"
+                        : problem.variable_names[column],
+                    provided[row][column],
+                    reference[row][column],
+                    absolute_error,
+                    relative_error,
+                });
+            }
+        }
+        channel.passed = channel.mismatch_count == 0;
+        channel.message = channel.passed
+            ? "provided DAE Jacobian agrees with finite differences"
+            : "provided DAE Jacobian differs from finite differences";
+        return channel;
+    };
+    report.state_jacobian = compare(
+        provided_state, numerical_state, false);
+    report.derivative_jacobian = compare(
+        provided_derivative, numerical_derivative, true);
+    report.passed = report.state_jacobian.passed &&
+        report.derivative_jacobian.passed;
+    report.message = report.passed
+        ? "provided DAE state and derivative Jacobians agree with finite differences"
+        : "provided DAE state or derivative Jacobian differs from finite differences";
+    return report;
+}
+
 DaeInitializationResult make_consistent_initial_conditions(
     const DaeProblem& problem,
     double initial_time,
