@@ -1,0 +1,69 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_vbv_open_point",
+    "name": "NASA AGTF30 sea-level-static open-VBV component qualification",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "dry_air",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": ["N2", "O2"]
+      }
+    ],
+    "components": [
+      {
+        "id": "vbv",
+        "kind": "junction.material.cross_bleed.performance_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {"value": 14.696, "unit": "psia"},
+          "reference_temperature": {"value": 518.67, "unit": "degR"},
+          "flow_capacity_scale": 1.0
+        },
+        "artifacts": {
+          "flow_characteristic": "nasa-agtf30-vbv-map"
+        },
+        "materials": {
+          "donor_inlet": "dry_air",
+          "donor_outlet": "dry_air",
+          "receiver_inlet": "dry_air",
+          "receiver_outlet": "dry_air"
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "sea_level_static_1000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "vbv.donor_inlet.p": {"value": 20.887087152166, "unit": "psia"},
+        "vbv.donor_inlet.h": {"value": 25.884872229649, "unit": "kJ/kg"},
+        "vbv.donor_inlet.m_dot[N2]": {"value": 10.267507935389359, "unit": "kg/s"},
+        "vbv.donor_inlet.m_dot[O2]": {"value": 3.101643022148869, "unit": "kg/s"},
+        "vbv.receiver_inlet.p": {"value": 15.154322688459, "unit": "psia"},
+        "vbv.receiver_inlet.h": {"value": -6.699281452357, "unit": "kJ/kg"},
+        "vbv.receiver_inlet.m_dot[N2]": {"value": 321.5268059427628, "unit": "kg/s"},
+        "vbv.receiver_inlet.m_dot[O2]": {"value": 97.12788929520962, "unit": "kg/s"},
+        "vbv.position.value": 0.37
+      },
+      "initial_guesses": {
+        "vbv.bleed_mass_flow": {"value": 2.101908485201, "unit": "kg/s"},
+        "vbv.donor_outlet.p": {"value": 20.887087152166, "unit": "psia"},
+        "vbv.donor_outlet.h": {"value": 25.884872229649, "unit": "kJ/kg"},
+        "vbv.donor_outlet.m_dot[N2]": {"value": 8.653242218354991, "unit": "kg/s"},
+        "vbv.donor_outlet.m_dot[O2]": {"value": 2.614000254782777, "unit": "kg/s"},
+        "vbv.receiver_outlet.p": {"value": 15.154322688459, "unit": "psia"},
+        "vbv.receiver_outlet.h": {"value": -6.535885, "unit": "kJ/kg"},
+        "vbv.receiver_outlet.m_dot[N2]": {"value": 323.1410716597972, "unit": "kg/s"},
+        "vbv.receiver_outlet.m_dot[O2]": {"value": 97.61553206257572, "unit": "kg/s"}
+      }
+    }
+  ]
+}

@@ -2104,6 +2104,74 @@ void test_nasa_agtf30_coupled_low_spool_benchmark() {
     }
 }
 
+void test_nasa_agtf30_open_vbv_benchmark() {
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_vbv_open_point.json");
+    const auto valve_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_vbv_map.json"));
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = model;
+    request.case_id = "sea_level_static_1000";
+    request.artifacts.performance_maps = {valve_map};
+    const auto response =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-9,
+        "NASA AGTF30 open-VBV component point must solve");
+
+    // Valve_TMATS_body.c evaluates the source curve in English units:
+    // W = Wc(PR) * Pt24a / sqrt(Tt24a) * (position * 4 in2).
+    constexpr double donor_pressure_psia = 20.887087152166;
+    constexpr double bypass_pressure_psia = 15.154322688459;
+    constexpr double donor_temperature_deg_r =
+        323.70566470438104 * 1.8;
+    constexpr double pound_mass_to_kg = 0.45359237;
+    constexpr double valve_position = 0.37;
+    const double pressure_ratio =
+        donor_pressure_psia / bypass_pressure_psia;
+    const double corrected_flux =
+        3.0 + (pressure_ratio - 1.1) * (5.0 - 3.0) /
+                  (2.0 - 1.1);
+    const double source_bleed_mass_flow =
+        corrected_flux * donor_pressure_psia /
+        std::sqrt(donor_temperature_deg_r) *
+        (valve_position * 4.0) * pound_mass_to_kg;
+
+    const auto& valve = require_component_result(response.graph, "vbv");
+    const double solved_bleed_mass_flow = require_result_value(
+        valve.internal_values, "bleed_mass_flow").value_si;
+    require(
+        std::abs(solved_bleed_mass_flow / source_bleed_mass_flow - 1.0) <
+            1.0e-10,
+        "open-VBV flow must reproduce the NASA Valve_TMATS relation");
+
+    const auto total_flow = [](const thermox::service::PortResult& port) {
+        return require_result_value(
+            port.derived_values, "m_dot_total").value_si;
+    };
+    const auto& donor_in = require_port_result(
+        response.graph, "vbv", "donor_inlet");
+    const auto& donor_out = require_port_result(
+        response.graph, "vbv", "donor_outlet");
+    const auto& receiver_in = require_port_result(
+        response.graph, "vbv", "receiver_inlet");
+    const auto& receiver_out = require_port_result(
+        response.graph, "vbv", "receiver_outlet");
+    require(
+        std::abs(
+            total_flow(donor_in) - total_flow(donor_out) -
+            solved_bleed_mass_flow) < 1.0e-10,
+        "open VBV must remove the mapped flow from its donor");
+    require(
+        std::abs(
+            total_flow(receiver_out) - total_flow(receiver_in) -
+            solved_bleed_mass_flow) < 1.0e-10,
+        "open VBV must route the mapped flow into its receiver");
+}
+
 void test_nasa_agtf30_continuous_twin_spool_benchmark() {
     struct ReferencePoint {
         std::string case_id;
@@ -8004,6 +8072,7 @@ int main() {
         test_nasa_agtf30_hpt_map_compatibility_benchmark();
         test_nasa_agtf30_coupled_high_spool_benchmark();
         test_nasa_agtf30_coupled_low_spool_benchmark();
+        test_nasa_agtf30_open_vbv_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();

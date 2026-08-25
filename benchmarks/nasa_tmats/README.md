@@ -320,9 +320,17 @@ T-MATS branch; `agtf30_vbv_map.json` is the immutable NASA instance data.
 python3 scripts/build_agtf30_vbv_nozzle_twin_spool_benchmark.py
 ```
 
-The four existing points command the valve closed. They therefore form a regression gate proving
-that inserting the physical routing component does not perturb the nozzle-closed solution: the
-four points converge in five to nine Newton iterations and each solves exactly zero bleed. The
-remaining fifth, open-VBV point requires its source station boundary and initialization data to be
-admitted to this assembled declaration; it is the next validation step. Net thrust remains a
-separate gate because ram drag is not yet represented in the graph.
+The four assembled whole-engine points command the valve closed. They therefore form a regression
+gate proving that inserting the physical routing component does not perturb the nozzle-closed
+solution: the four points converge in five to nine Newton iterations and each solves exactly zero
+bleed.
+
+`agtf30_vbv_open_point.json` independently qualifies the remaining sea-level-static open-valve
+physics at the station states produced by the five-point low-spool benchmark. With position 0.37,
+donor pressure 20.887087 psia, bypass pressure 15.154323 psia, and donor temperature 582.670196
+degR, NASA's `Valve_TMATS_body.c` relation gives 4.633915 lbm/s (2.101908 kg/s). The generic
+Thermox map-bound cross-bleed component reproduces that flow to numerical precision and closes
+both donor removal and receiver addition exactly. This is a staged component/subsystem
+qualification; the fully coupled fifth static engine point remains reserved while its nozzle/VBV
+closure is conditioned. Net thrust remains a separate gate because ram drag is not yet represented
+in the graph.

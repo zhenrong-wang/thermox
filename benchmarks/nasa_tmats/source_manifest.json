@@ -326,5 +326,31 @@
     ],
     "classification": "multi_point_closed_vbv_topology_and_conservation_regression"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, nonzero-VBV validation, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
+  "agtf30_vbv_open_point_execution": {
+    "model": "agtf30_vbv_open_point.json",
+    "artifact": "agtf30_vbv_map.json",
+    "case": "sea_level_static_1000",
+    "source_contract": "Valve_TMATS_body.c: W = Wc(Pt24a/Pt13) * Pt24a / sqrt(Tt24a) * (position * 4.0 in2), capped by donor flow.",
+    "qualified_station_boundary": "The five-point coupled low-spool benchmark supplies Pt24a, Tt24a, Pt13, donor flow, and bypass flow for the public static point.",
+    "inputs": {
+      "position": 0.37,
+      "donor_pressure_psia": 20.887087152166,
+      "bypass_pressure_psia": 15.154322688459,
+      "donor_temperature_degR": 582.670196467886,
+      "effective_full_open_area_in2": 4.0
+    },
+    "results": {
+      "source_bleed_mass_flow_lbm_s": 4.63391499548,
+      "thermox_bleed_mass_flow_kg_s": 2.10190848518,
+      "relative_flow_error_limit": 1e-10,
+      "donor_and_receiver_mass_closure_absolute_limit_kg_s": 1e-10
+    },
+    "reserved_comparisons": [
+      "Fully coupled sea-level-static whole-engine solution while static nozzle/VBV closure is conditioned.",
+      "The Valve_TMATS donor-flow cap in a capacity-limited operating point.",
+      "Net thrust, independent hardware evidence, fuel-flow predictive qualification, and transient validation."
+    ],
+    "classification": "public_source_nonzero_vbv_component_and_routing_cross_code_qualification"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }
