@@ -176,7 +176,7 @@
     "artifacts": ["agtf30_fan_map.json", "agtf30_lpc_map.json", "agtf30_lpt_map.json"],
     "selection": "The same five converged nominal-health, zero-bias operating points used for the HPC, HPT, and coupled high-spool slices.",
     "boundary_contract": "Station 2 pressure/temperature and the NASA-solved fan R-line are fixed; fan flow is reconstructed from the source map. Station 23 flow/state, station 48 pressure/temperature, LPT exit cooling state/flow, and N2 speed are fixed. LPT main flow is relaxed and solved from map compatibility plus LP-shaft closure.",
-    "topology": "A generic geared two-load shaft train connects the LPT driver to a direct LPC load and a fan load at N2/3.1, with declared shaft efficiency 0.99 and gearbox efficiency 1.0.",
+    "topology": "A generic multi-load shaft train connects the LPT driver to the LPC and to a separately composed fixed-ratio fan gearbox at N2/3.1, with declared shaft efficiency 0.99 and gearbox efficiency 1.0.",
     "results": {
       "converged_points": 5,
       "newton_iterations_per_point_range": [2, 3],
@@ -218,7 +218,7 @@
     ],
     "selection": "Four healthy nominal cases whose NASA variable-bleed-valve command is zero; the sea-level-static case is reserved because its command is nonzero.",
     "boundary_contract": "Station 2 pressure/temperature, N1/N2 shaft speeds, published bypass ratio, fuel temperature, and 350 hp HP extraction are fixed. Total inlet flow, fan map coordinate, fuel flow, intermediate station states, and both turbine pressure ratios are solved.",
-    "topology": "A continuous material graph connects fan, controlled core/bypass split, LPC, three-bleed HPC, equilibrium combustor, two-injection HPT, and one-injection LPT. Generic HP and geared LP shaft trains close simultaneously.",
+    "topology": "A continuous material graph connects fan, controlled core/bypass split, LPC, three-bleed HPC, equilibrium combustor, two-injection HPT, and one-injection LPT. Generic multi-load HP and LP shaft trains close simultaneously, with the fan gearbox composed separately.",
     "omitted_source_physics": [
       "Mach-dependent core and bypass duct pressure losses",
       "variable bleed valve flow relation",
@@ -502,6 +502,16 @@
     "relative_perturbation": 0.0003,
     "residual_evaluations": 847,
     "linear_right_hand_sides": 5,
+    "jacobian_verification": {
+      "analytic_rows": 392,
+      "numerical_fallback_rows": 27,
+      "entries_per_channel": 164248,
+      "absolute_tolerance": 2e-6,
+      "relative_tolerance": 5e-4,
+      "state_mismatches": 0,
+      "state_rate_mismatches": 0,
+      "result": "pass"
+    },
     "state_matrix_A_rpm": [
       [-2.5583, 1.1149094051],
       [0.6055949727, -1.92434]

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <string_view>
@@ -107,6 +108,11 @@ void validate_dae_problem(const DaeProblem& problem) {
         !problem.sparse_jacobian_pattern.has_value()) {
         throw std::invalid_argument(
             "DAE subset Jacobian values require a fixed sparse pattern");
+    }
+    if (problem.partial_sparse_jacobian &&
+        problem.analytic_jacobian_rows.size() != size) {
+        throw std::invalid_argument(
+            "DAE partial Jacobian requires one analytic-row flag per residual");
     }
     std::set<std::string> event_names;
     for (const auto& event : problem.events) {
@@ -339,6 +345,29 @@ ImplicitStepResult solve_implicit_bdf_step(
                                                  : status.message);
                 }
             };
+    } else if (problem.partial_sparse_jacobian) {
+        nonlinear.partial_sparse_jacobian =
+            [&problem, next_time, derivative_coefficient,
+             derivative_offset](
+                const std::vector<double>& state,
+                std::vector<SparseTriplet>& jacobian) {
+                std::vector<double> derivative(state.size(), 0.0);
+                for (std::size_t i = 0; i < state.size(); ++i) {
+                    derivative[i] = derivative_coefficient * state[i] +
+                        derivative_offset[i];
+                }
+                const auto status = problem.partial_sparse_jacobian(
+                    next_time, state, derivative,
+                    derivative_coefficient, jacobian);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                            ? "DAE partial sparse Jacobian evaluation failed"
+                            : status.message);
+                }
+            };
+        nonlinear.analytic_jacobian_rows =
+            problem.analytic_jacobian_rows;
     } else if (problem.jacobian) {
         nonlinear.jacobian =
             [&problem, next_time, derivative_coefficient,
@@ -580,6 +609,15 @@ DaeJacobianVerificationReport verify_dae_problem_jacobian(
                              size, size, std::move(triplets))
                              .to_dense();
             }
+        } else if (problem.partial_sparse_jacobian) {
+            std::vector<SparseTriplet> triplets;
+            status = problem.partial_sparse_jacobian(
+                time, y, y_dot, coefficient, triplets);
+            if (status.ok()) {
+                result = sparse_from_triplets(
+                             size, size, std::move(triplets))
+                             .to_dense();
+            }
         } else {
             status = problem.jacobian(
                 time, y, y_dot, coefficient, result);
@@ -603,13 +641,17 @@ DaeJacobianVerificationReport verify_dae_problem_jacobian(
 
     DaeJacobianVerificationReport report;
     if (!problem.sparse_jacobian_pattern.has_value() &&
-        !problem.sparse_jacobian && !problem.jacobian) {
+        !problem.sparse_jacobian &&
+        !problem.partial_sparse_jacobian && !problem.jacobian) {
         report.message = "problem provides no analytic DAE Jacobian";
         report.state_jacobian.message = report.message;
         report.derivative_jacobian.message = report.message;
         return report;
     }
     report.analytic_derivatives_available = true;
+    const auto compared_rows = problem.partial_sparse_jacobian
+        ? problem.analytic_jacobian_rows
+        : std::vector<bool>(size, true);
     const Matrix provided_state = analytic(0.0);
     Matrix provided_derivative = analytic(1.0);
     for (std::size_t row = 0; row < size; ++row) {
@@ -710,8 +752,10 @@ DaeJacobianVerificationReport verify_dae_problem_jacobian(
                              bool derivative_channel) {
         JacobianVerificationReport channel;
         channel.analytic_derivatives_available = true;
-        channel.compared_rows = size;
+        channel.compared_rows = static_cast<std::size_t>(
+            std::count(compared_rows.begin(), compared_rows.end(), true));
         for (std::size_t row = 0; row < size; ++row) {
+            if (!compared_rows[row]) continue;
             for (std::size_t column = 0; column < size; ++column) {
                 ++channel.compared_entries;
                 const double absolute_error = std::abs(
@@ -988,6 +1032,70 @@ DaeInitializationResult make_consistent_initial_conditions(
                     }
                 };
         }
+    } else if (problem.partial_sparse_jacobian) {
+        initialization.partial_sparse_jacobian =
+            [&problem, &kinds, initial_time, initial_derivative](
+                const std::vector<double>& unknowns,
+                std::vector<SparseTriplet>& jacobian) {
+                std::vector<double> state = problem.initial_state;
+                std::vector<double> derivative = initial_derivative;
+                for (std::size_t i = 0; i < unknowns.size(); ++i) {
+                    if (kinds[i] == DaeVariableKind::differential) {
+                        derivative[i] = unknowns[i];
+                    } else {
+                        state[i] = unknowns[i];
+                    }
+                }
+                std::vector<SparseTriplet> state_triplets;
+                std::vector<SparseTriplet> combined_triplets;
+                auto status = problem.partial_sparse_jacobian(
+                    initial_time, state, derivative, 0.0,
+                    state_triplets);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                            ? "DAE initialization partial state Jacobian evaluation failed"
+                            : status.message);
+                }
+                status = problem.partial_sparse_jacobian(
+                    initial_time, state, derivative, 1.0,
+                    combined_triplets);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        status.message.empty()
+                            ? "DAE initialization partial derivative Jacobian evaluation failed"
+                            : status.message);
+                }
+                using Entry = std::pair<std::size_t, std::size_t>;
+                std::map<Entry, double> state_values;
+                std::map<Entry, double> combined_values;
+                for (const auto& entry : state_triplets) {
+                    state_values[{entry.row, entry.column}] += entry.value;
+                }
+                for (const auto& entry : combined_triplets) {
+                    combined_values[{entry.row, entry.column}] += entry.value;
+                }
+                std::set<Entry> entries;
+                for (const auto& [entry, value] : state_values) {
+                    (void)value;
+                    entries.insert(entry);
+                }
+                for (const auto& [entry, value] : combined_values) {
+                    (void)value;
+                    entries.insert(entry);
+                }
+                for (const auto& entry : entries) {
+                    const auto [row, column] = entry;
+                    const double state_value = state_values[entry];
+                    const double value =
+                        kinds[column] == DaeVariableKind::differential
+                            ? combined_values[entry] - state_value
+                            : state_value;
+                    jacobian.push_back({row, column, value});
+                }
+            };
+        initialization.analytic_jacobian_rows =
+            problem.analytic_jacobian_rows;
     } else if (problem.jacobian) {
         initialization.jacobian =
             [&problem, &kinds, initial_time, initial_derivative](

@@ -3235,6 +3235,63 @@ std::string serialize_small_signal_linearization_response_json(
     matrix(response.A);
     out << ",\n  \"B\": ";
     matrix(response.B);
+    const auto jacobian_channel = [&](const auto& channel) {
+        out << "{\"analytic_derivatives_available\": "
+            << (channel.analytic_derivatives_available
+                    ? "true" : "false")
+            << ", \"passed\": "
+            << (channel.passed ? "true" : "false")
+            << ", \"compared_rows\": " << channel.compared_rows
+            << ", \"compared_entries\": "
+            << channel.compared_entries
+            << ", \"mismatch_count\": "
+            << channel.mismatch_count
+            << ", \"maximum_absolute_error\": ";
+        json_number(out, channel.maximum_absolute_error);
+        out << ", \"maximum_relative_error\": ";
+        json_number(out, channel.maximum_relative_error);
+        out << ", \"mismatches\": [";
+        for (std::size_t index = 0;
+             index < channel.mismatches.size(); ++index) {
+            if (index != 0U) out << ", ";
+            const auto& mismatch = channel.mismatches[index];
+            out << "{\"residual\": " << mismatch.residual
+                << ", \"variable\": " << mismatch.variable
+                << ", \"residual_name\": ";
+            json_string(out, mismatch.residual_name);
+            out << ", \"variable_name\": ";
+            json_string(out, mismatch.variable_name);
+            out << ", \"provided_derivative\": ";
+            json_number(out, mismatch.provided_derivative);
+            out << ", \"numerical_derivative\": ";
+            json_number(out, mismatch.numerical_derivative);
+            out << ", \"absolute_error\": ";
+            json_number(out, mismatch.absolute_error);
+            out << ", \"relative_error\": ";
+            json_number(out, mismatch.relative_error);
+            out << '}';
+        }
+        out << "], \"message\": ";
+        json_string(out, channel.message);
+        out << '}';
+    };
+    out << ",\n  \"jacobian_verification\": "
+        << "{\"analytic_derivatives_available\": "
+        << (response.jacobian_verification
+                    .analytic_derivatives_available
+                ? "true" : "false")
+        << ", \"passed\": "
+        << (response.jacobian_verification.passed
+                ? "true" : "false")
+        << ", \"state_jacobian\": ";
+    jacobian_channel(
+        response.jacobian_verification.state_jacobian);
+    out << ", \"derivative_jacobian\": ";
+    jacobian_channel(
+        response.jacobian_verification.derivative_jacobian);
+    out << ", \"message\": ";
+    json_string(out, response.jacobian_verification.message);
+    out << '}';
     out << ",\n  \"diagnostics\": {\"success\": "
         << (response.diagnostics.success ? "true" : "false")
         << ", \"residual_evaluations\": "

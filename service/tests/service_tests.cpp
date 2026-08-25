@@ -2519,6 +2519,9 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
         "hp_extraction.inlet.W_dot",
         "lp_extraction.inlet.W_dot"};
     request.settings.relative_perturbation = 3.0e-4;
+    request.settings.verify_jacobian = true;
+    request.settings.jacobian_verification.absolute_tolerance = 2.0e-6;
+    request.settings.jacobian_verification.relative_tolerance = 5.0e-4;
     request.settings.nonlinear_solver.residual_tolerance = 1.0e-8;
     for (const auto* path : {
              "benchmarks/nasa_tmats/agtf30_fan_map.json",
@@ -2546,6 +2549,16 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
             response.diagnostics.linear_right_hand_sides == 5,
         "NASA small-signal benchmark must expose two rotor states and "
         "five tangent sensitivity solves");
+    require(
+        response.jacobian_verification.passed &&
+            response.jacobian_verification.state_jacobian
+                .compared_rows == 392 &&
+            response.jacobian_verification.state_jacobian
+                .mismatch_count == 0 &&
+            response.jacobian_verification.derivative_jacobian
+                .mismatch_count == 0,
+        "NASA transient graph analytic Jacobian channels must agree "
+        "with bounded finite differences");
 
     constexpr double radians_per_second_per_rpm =
         2.0 * 3.14159265358979323846 / 60.0;
@@ -7757,6 +7770,7 @@ void test_small_signal_linearization_service() {
         "core/examples/lumped_thermal_storage.json");
     request.case_id = "charge";
     request.input_variables = {"heater.outlet.Q_dot"};
+    request.settings.verify_jacobian = true;
     const auto response =
         service.run_small_signal_linearization(request);
     require(
@@ -7784,6 +7798,10 @@ void test_small_signal_linearization_service() {
             response.diagnostics.linear_right_hand_sides == 2,
         "tangent linearization must report its residual evaluations and "
         "sensitivity right-hand sides");
+    require(
+        response.jacobian_verification.passed,
+        "small-signal service must gate the calculation on requested "
+        "DAE Jacobian verification");
     const auto json = thermox::service::
         serialize_small_signal_linearization_response_json(response);
     require(
@@ -7792,7 +7810,11 @@ void test_small_signal_linearization_service() {
             json.find("\"inputs\": [\"heater.outlet.Q_dot\"]") !=
                 std::string::npos &&
             json.find("\"A\": [[") != std::string::npos &&
-            json.find("\"B\": [[") != std::string::npos,
+            json.find("\"B\": [[") != std::string::npos &&
+            json.find("\"jacobian_verification\": ") !=
+                std::string::npos &&
+            json.find("\"derivative_jacobian\": ") !=
+                std::string::npos,
         "small-signal JSON must preserve named matrix coordinates");
 }
 

@@ -105,6 +105,10 @@ struct DaeProblem {
     DaeSparseJacobianValuesFunction sparse_jacobian_values;
     DaeSparseJacobianValuesSubsetFunction
         sparse_jacobian_values_subset;
+    // Provider-owned rows for mixed analytic/numerical DAE systems. Missing
+    // rows remain solver-owned finite differences.
+    DaeSparseJacobianFunction partial_sparse_jacobian;
+    std::vector<bool> analytic_jacobian_rows;
     std::vector<DaeEvent> events;
     // Restores residual-owned discrete modes before each integration so a
     // compiled problem is deterministic across sequential executions.

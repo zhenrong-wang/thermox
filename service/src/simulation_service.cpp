@@ -5508,6 +5508,9 @@ SimulationService::run_small_signal_linearization(
         provenance.settings.push_back({
             "minimum_perturbation",
             request.settings.minimum_perturbation});
+        provenance.settings.push_back({
+            "verify_jacobian",
+            request.settings.verify_jacobian ? 1.0 : 0.0});
         response.metadata = execution_metadata(
             document, request.schema_version,
             graph.case_id.value_or(""), "small_signal_linearization",
@@ -5529,6 +5532,30 @@ SimulationService::run_small_signal_linearization(
             "initialization_failed", "initialization",
             initialized.diagnostics.message);
         return response;
+    }
+
+    if (request.settings.verify_jacobian) {
+        try {
+            response.jacobian_verification =
+                verify_dae_problem_jacobian(
+                    graph.problem, request.settings.time,
+                    initialized.state, initialized.derivative,
+                    request.settings.jacobian_verification);
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "jacobian_verification_exception",
+                "jacobian_verification", ex.what());
+            return response;
+        }
+        if (!response.jacobian_verification.passed) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "jacobian_verification_failed",
+                "jacobian_verification",
+                response.jacobian_verification.message);
+            return response;
+        }
     }
 
     std::vector<DaeLinearizationInput> inputs;

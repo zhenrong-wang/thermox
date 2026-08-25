@@ -1,5 +1,6 @@
 #pragma once
 
+#include "thermox/transient_solver.hpp"
 #include "thermox/service/simulation_runtime.hpp"
 
 #include <cstddef>
@@ -1303,6 +1304,8 @@ struct SmallSignalLinearizationSettings {
     double time{0.0};
     double relative_perturbation{3.0e-4};
     double minimum_perturbation{1.0e-10};
+    bool verify_jacobian{false};
+    JacobianVerificationOptions jacobian_verification;
     SteadySolverSettings nonlinear_solver;
 };
 
@@ -1333,6 +1336,7 @@ struct SmallSignalLinearizationResponse {
     std::vector<std::vector<double>> A;
     std::vector<std::vector<double>> B;
     SmallSignalLinearizationDiagnostics diagnostics;
+    DaeJacobianVerificationReport jacobian_verification;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

@@ -249,6 +249,11 @@ DaeProblem DaeEquationSystemBuilder::build() const {
             return static_cast<bool>(equation.assemble_sparse) &&
                    !equation.sparsity_variables.empty();
         });
+    problem.analytic_jacobian_rows.reserve(equations.size());
+    for (const auto& equation : equations) {
+        problem.analytic_jacobian_rows.push_back(
+            static_cast<bool>(equation.assemble_sparse));
+    }
     {
         std::vector<std::size_t> row_offsets{0U};
         std::vector<std::size_t> column_indices;
@@ -271,6 +276,52 @@ DaeProblem DaeEquationSystemBuilder::build() const {
             std::move(row_offsets), std::move(column_indices));
     }
     if (!fixed_sparse) {
+        if (std::any_of(
+                problem.analytic_jacobian_rows.begin(),
+                problem.analytic_jacobian_rows.end(),
+                [](bool analytic) { return analytic; })) {
+            problem.partial_sparse_jacobian =
+                [equations, variable_count](
+                    double time,
+                    const std::vector<double>& state,
+                    const std::vector<double>& derivative,
+                    double derivative_coefficient,
+                    std::vector<SparseTriplet>& triplets) {
+                    for (const auto& equation : equations) {
+                        if (!equation.assemble_sparse) continue;
+                        double ignored_residual = 0.0;
+                        std::vector<DaeEquationPartial> partials;
+                        auto status = equation.assemble_sparse(
+                            time, state, derivative,
+                            ignored_residual, partials);
+                        if (!status.ok()) {
+                            status.message = equation.name + ": " +
+                                status.message;
+                            return status;
+                        }
+                        for (const auto& partial : partials) {
+                            if (partial.variable >= variable_count ||
+                                (!equation.sparsity_variables.empty() &&
+                                 !std::binary_search(
+                                     equation.sparsity_variables.begin(),
+                                     equation.sparsity_variables.end(),
+                                     partial.variable))) {
+                                return EvaluationStatus::fatal(
+                                    equation.name +
+                                    ": derivative emitted outside "
+                                    "declared sparse pattern");
+                            }
+                            triplets.push_back({
+                                equation.index,
+                                partial.variable,
+                                partial.state_derivative +
+                                    derivative_coefficient *
+                                        partial.state_rate_derivative});
+                        }
+                    }
+                    return EvaluationStatus::success();
+                };
+        }
         return problem;
     }
 

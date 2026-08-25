@@ -118,3 +118,6 @@ the state Jacobian `∂F/∂y` and state-rate Jacobian `∂F/∂ẏ` independent
 the integrator's combined Newton matrix. It uses declared state and derivative scales, honors state
 bounds, falls back to a valid one-sided perturbation after a recoverable domain failure, and labels
 state-rate mismatches as `d(variable)/dt`.
+Mixed transient systems retain provider-owned sparse rows through consistent initialization and
+implicit integration; rows without derivatives continue through the solver's bounded numerical
+fallback and are not attributed to the provider during verification.

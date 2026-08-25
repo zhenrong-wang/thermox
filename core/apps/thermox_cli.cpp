@@ -41,6 +41,10 @@ void print_usage(std::ostream& out) {
            " --input-variable <graph-variable>..."
            " [--performance-map <path>]..."
            " [--relative-perturbation <value>]"
+           " [--verify-jacobian]"
+           " [--jacobian-fd-epsilon <value>]"
+           " [--jacobian-absolute-tolerance <value>]"
+           " [--jacobian-relative-tolerance <value>]"
            " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--globalization line_search|trust_region]"
@@ -194,6 +198,19 @@ void print_small_signal_text(
               << response.diagnostics.residual_evaluations << "\n"
               << "linear_right_hand_sides: "
               << response.diagnostics.linear_right_hand_sides << "\n";
+    if (response.jacobian_verification
+            .analytic_derivatives_available) {
+        std::cout << "jacobian_verification: "
+                  << (response.jacobian_verification.passed
+                          ? "passed" : "failed")
+                  << "\nstate_jacobian_mismatches: "
+                  << response.jacobian_verification
+                         .state_jacobian.mismatch_count
+                  << "\nderivative_jacobian_mismatches: "
+                  << response.jacobian_verification
+                         .derivative_jacobian.mismatch_count
+                  << "\n";
+    }
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << "\n";
         return;
@@ -242,10 +259,14 @@ int main(int argc, char** argv) {
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string relative_perturbation_text;
+    std::string jacobian_fd_epsilon_text;
+    std::string jacobian_absolute_tolerance_text;
+    std::string jacobian_relative_tolerance_text;
     std::string format = "text";
     std::vector<std::string> performance_map_paths;
     std::vector<std::string> input_variables;
     bool continuation = false;
+    bool verify_jacobian = false;
     bool profile_likelihood = false;
     std::string profile_objective_increase_text;
     std::vector<std::string> profile_parameter_ids;
@@ -270,6 +291,16 @@ int main(int argc, char** argv) {
             input_variables.emplace_back(argv[++i]);
         } else if (arg == "--relative-perturbation" && i + 1 < argc) {
             relative_perturbation_text = argv[++i];
+        } else if (arg == "--verify-jacobian") {
+            verify_jacobian = true;
+        } else if (arg == "--jacobian-fd-epsilon" && i + 1 < argc) {
+            jacobian_fd_epsilon_text = argv[++i];
+        } else if (arg == "--jacobian-absolute-tolerance" &&
+                   i + 1 < argc) {
+            jacobian_absolute_tolerance_text = argv[++i];
+        } else if (arg == "--jacobian-relative-tolerance" &&
+                   i + 1 < argc) {
+            jacobian_relative_tolerance_text = argv[++i];
         } else if (arg == "--calibration" && i + 1 < argc) {
             calibration_id = argv[++i];
         } else if (arg == "--reconciliation" && i + 1 < argc) {
@@ -409,6 +440,26 @@ int main(int argc, char** argv) {
     }
     if (command != "linearize" && !relative_perturbation_text.empty()) {
         std::cerr << "--relative-perturbation is only valid for linearize\n";
+        return 2;
+    }
+    if (command != "linearize" && verify_jacobian) {
+        std::cerr << "--verify-jacobian is only valid for linearize\n";
+        return 2;
+    }
+    if (command != "linearize" &&
+        (!jacobian_fd_epsilon_text.empty() ||
+         !jacobian_absolute_tolerance_text.empty() ||
+         !jacobian_relative_tolerance_text.empty())) {
+        std::cerr << "Jacobian verification tolerances are only valid "
+                     "for linearize\n";
+        return 2;
+    }
+    if (command == "linearize" && !verify_jacobian &&
+        (!jacobian_fd_epsilon_text.empty() ||
+         !jacobian_absolute_tolerance_text.empty() ||
+         !jacobian_relative_tolerance_text.empty())) {
+        std::cerr << "Jacobian verification tolerances require "
+                     "--verify-jacobian\n";
         return 2;
     }
 
@@ -675,6 +726,25 @@ int main(int argc, char** argv) {
             request.model_json = model_json;
             request.case_id = case_id;
             request.input_variables = input_variables;
+            request.settings.verify_jacobian = verify_jacobian;
+            if (!jacobian_fd_epsilon_text.empty()) {
+                request.settings.jacobian_verification
+                    .finite_difference_epsilon = parse_positive_number(
+                        jacobian_fd_epsilon_text,
+                        "--jacobian-fd-epsilon");
+            }
+            if (!jacobian_absolute_tolerance_text.empty()) {
+                request.settings.jacobian_verification
+                    .absolute_tolerance = parse_positive_number(
+                        jacobian_absolute_tolerance_text,
+                        "--jacobian-absolute-tolerance");
+            }
+            if (!jacobian_relative_tolerance_text.empty()) {
+                request.settings.jacobian_verification
+                    .relative_tolerance = parse_positive_number(
+                        jacobian_relative_tolerance_text,
+                        "--jacobian-relative-tolerance");
+            }
             for (const auto& path : performance_map_paths) {
                 request.artifacts.performance_maps.push_back(
                     thermox::service::

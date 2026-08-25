@@ -150,6 +150,8 @@ Delivered:
 7. Generic index-1 DAE tangent linearization with declared exogenous inputs, scaled algebraic
    elimination, batched A/B sensitivity solves, service/CLI contracts, analytical regression, and
    a partial public NASA AGTF30 cross-code reproduction. ✅
+8. Mixed analytic/numerical DAE row ownership preserved through consistent initialization,
+   implicit integration, and independent state/state-rate derivative verification. ✅
 
 ## Reusable dynamic equipment primitives
 

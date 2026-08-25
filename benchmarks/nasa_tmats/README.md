@@ -372,8 +372,8 @@ source output extraction and generic inlet ram-drag path are both qualified.
 
 ## AGTF30 transient source baseline
 
-The pinned AGTF30 source also establishes the next validation target without yet claiming a
-Thermox transient reproduction. NASA linearizes a quasi-steady gas path around two differential
+The pinned AGTF30 source establishes the public baseline for Thermox's partial dynamic cross-code
+reproduction. NASA linearizes a quasi-steady gas path around two differential
 states—LP and HP shaft speed—and three inputs: fuel flow, HP shaft extraction, and LP shaft
 extraction. For the sea-level-static case, the public `outputs.mat` contains:
 
@@ -397,6 +397,15 @@ static state, replaces only the two shaft trains with their generic inertial cou
 fuel instead of LP speed, and retains the six public performance-map artifacts. The resulting
 419-variable DAE has two differential rotor-energy states. It reaches 0.001 s in one accepted step,
 with no rejection and a maximum absolute normalized residual of 5.58e-10.
+
+Before forming the response matrices, an opt-in derivative gate independently compares the
+provider-owned `∂F/∂y` and `∂F/∂ẏ` rows with bounded finite differences. The mixed DAE preserves
+392 analytic rows and leaves 27 rows to the numerical fallback. At an explicit property-heavy
+benchmark tolerance of `2e-6` absolute plus `5e-4` relative, all 164,248 entries in each analytic
+channel pass. The state-rate channel agrees exactly. The largest non-negligible relative state
+difference is 0.0276% in a combustion-product composition derivative; a separate nozzle-area
+entry has only `1.53e-6` absolute magnitude and is numerically unresolved by central subtraction.
+The stricter platform defaults remain unchanged.
 
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and

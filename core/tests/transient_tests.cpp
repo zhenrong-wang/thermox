@@ -311,6 +311,65 @@ void test_dae_jacobian_verification_respects_state_domain() {
         "DAE verification uses a valid one-sided state perturbation at a bound");
 }
 
+void test_mixed_dae_derivatives_are_preserved_and_solved() {
+    thermox::DaeEquationSystemBuilder system;
+    const auto x = system.add_variable(
+        "x", thermox::DaeVariableKind::differential,
+        1.0, 0.0, 1.0, 1.0);
+    const auto z = system.add_variable(
+        "z", thermox::DaeVariableKind::algebraic,
+        0.0, 0.0, 1.0, 1.0);
+    system.add_linear_equation(
+        "analytic_dynamics",
+        {{x, 1.0, 1.0}, {z, -1.0, 0.0}}, 0.0);
+    system.add_checked_equation(
+        "numeric_constraint",
+        [x, z](double,
+               const std::vector<double>& state,
+               const std::vector<double>&,
+               double& residual) {
+            residual = state[z] - 2.0 * state[x];
+            return thermox::EvaluationStatus::success();
+        });
+    const auto problem = system.build();
+    require(
+        static_cast<bool>(problem.partial_sparse_jacobian) &&
+            problem.analytic_jacobian_rows ==
+                std::vector<bool>({true, false}) &&
+            !problem.sparse_jacobian_pattern.has_value(),
+        "mixed DAE retains provider-owned rows without claiming a "
+        "complete analytic Jacobian");
+
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(problem, 0.0);
+    require(
+        initialized.diagnostics.converged,
+        initialized.diagnostics.message);
+    require_near(
+        initialized.state[z], 2.0, 1.0e-9,
+        "mixed DAE initialization solves its numerical row");
+    require_near(
+        initialized.derivative[x], 1.0, 1.0e-9,
+        "mixed DAE initialization uses its analytic dynamic row");
+    const auto report = thermox::verify_dae_problem_jacobian(
+        problem, 0.0, initialized.state, initialized.derivative);
+    require(
+        report.passed && report.state_jacobian.compared_rows == 1 &&
+            report.derivative_jacobian.compared_rows == 1 &&
+            report.state_jacobian.compared_entries == 2,
+        "mixed DAE verification attributes only provider-owned rows");
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 0.1;
+    options.initial_step = 0.1;
+    options.max_step = 0.1;
+    const auto integrated = thermox::integrate_dae(problem, options);
+    require(
+        integrated.diagnostics.success &&
+            integrated.trajectory.back().state[x] > 1.0 &&
+            integrated.trajectory.back().state[z] > 2.0,
+        "mixed DAE implicit integration combines analytic and numerical rows");
+}
+
 void test_transient_solver_executes_independent_structural_blocks() {
     thermox::DaeEquationSystemBuilder system;
     const auto first = system.add_variable(
@@ -1089,6 +1148,7 @@ int main() {
         test_dae_equation_system_builder();
         test_dae_jacobian_verification_checks_both_channels();
         test_dae_jacobian_verification_respects_state_domain();
+        test_mixed_dae_derivatives_are_preserved_and_solved();
         test_transient_solver_executes_independent_structural_blocks();
         test_dae_equation_system_builder_rejects_non_square_system();
         test_consistent_initial_conditions_for_ode();
