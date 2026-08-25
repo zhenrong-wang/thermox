@@ -247,6 +247,15 @@ set_tests_properties(
     PROPERTIES PASS_REGULAR_EXPRESSION "\"phase\": \"vapor\""
 )
 if(TARGET thermox_cantera_backend)
+    add_test(NAME benchmark_nasa_tmats_hpc_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/hpc_design_point.json
+            --case published_design_point
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/hpc_map.json
+            --format json
+    )
+    set_tests_properties(benchmark_nasa_tmats_hpc_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\"")
     add_test(NAME platform_cooled_turbine_stage_cli
         COMMAND thermox_cli solve
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json

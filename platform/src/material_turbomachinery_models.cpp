@@ -159,6 +159,7 @@ struct MaterialMapEvaluation {
     double total_mass_flow{0.0};
     double pressure_ratio{0.0};
     double efficiency{0.0};
+    double corrected_mass_flow_residual{0.0};
 };
 
 class MaterialMapEvaluationCache {
@@ -178,7 +179,9 @@ public:
         double pressure_ratio_scale,
         double efficiency_scale,
         bool variable_geometry,
-        double geometry_setting)
+        double geometry_setting,
+        bool latent_coordinate,
+        std::optional<std::size_t> map_coordinate)
         : properties_(std::move(properties)),
           artifact_(std::move(artifact)),
           species_(std::move(species)),
@@ -192,7 +195,9 @@ public:
           pressure_ratio_scale_(pressure_ratio_scale),
           efficiency_scale_(efficiency_scale),
           variable_geometry_(variable_geometry),
-          geometry_setting_(geometry_setting) {
+          geometry_setting_(geometry_setting),
+          latent_coordinate_(latent_coordinate),
+          map_coordinate_(map_coordinate) {
         const PerformanceMap* selected = artifact_->map.get();
         if (variable_geometry_) {
             if (!artifact_->conditioned_map ||
@@ -216,13 +221,21 @@ public:
                 "' must provide an ordinary two-coordinate map");
         }
         const auto& map = *selected;
-        if (map.primary_variable().name !=
-                "corrected_mass_flow" ||
-            map.primary_variable().dimension != "mass_flow") {
+        const bool valid_primary = latent_coordinate_
+            ? map.primary_variable().name == "map_coordinate" &&
+                map.primary_variable().dimension == "dimensionless"
+            : map.primary_variable().name == "corrected_mass_flow" &&
+                map.primary_variable().dimension == "mass_flow";
+        if (!valid_primary) {
             throw std::invalid_argument(
                 "performance-map artifact '" + artifact_->id +
-                "' turbomachinery primary axis must be "
-                "'corrected_mass_flow' with dimension 'mass_flow'");
+                (latent_coordinate_
+                     ? "' coordinate-map compressor primary axis "
+                       "must be 'map_coordinate' with dimension "
+                       "'dimensionless'"
+                     : "' turbomachinery primary axis must be "
+                       "'corrected_mass_flow' with dimension "
+                       "'mass_flow'"));
         }
         if (map.family_variable().name != "corrected_speed" ||
             map.family_variable().dimension != "angular_speed") {
@@ -243,13 +256,28 @@ public:
                 outputs[index].dimension == "dimensionless") {
                 efficiency_index_ = index;
             }
+            if (outputs[index].name ==
+                    "corrected_mass_flow" &&
+                outputs[index].dimension == "mass_flow") {
+                corrected_mass_flow_index_ = index;
+            }
         }
         if (!pressure_ratio_index_.has_value() ||
-            !efficiency_index_.has_value()) {
+            !efficiency_index_.has_value() ||
+            (latent_coordinate_ &&
+             !corrected_mass_flow_index_.has_value())) {
             throw std::invalid_argument(
                 "performance-map artifact '" + artifact_->id +
                 "' turbomachinery outputs must include dimensionless "
-                "'pressure_ratio' and 'isentropic_efficiency'");
+                "'pressure_ratio' and 'isentropic_efficiency'" +
+                (latent_coordinate_
+                     ? ", plus mass-flow 'corrected_mass_flow'"
+                     : ""));
+        }
+        if (latent_coordinate_ && !map_coordinate_.has_value()) {
+            throw std::logic_error(
+                "coordinate-map compressor is missing its map-coordinate "
+                "port variable");
         }
     }
 
@@ -257,13 +285,16 @@ public:
         const std::vector<double>& x) const {
         std::scoped_lock lock(mutex_);
         std::vector<double> key;
-        key.reserve(flows_.size() + 3);
+        key.reserve(flows_.size() + 4);
         for (const auto flow : flows_) {
             key.push_back(x.at(flow));
         }
         key.push_back(x.at(inlet_p_));
         key.push_back(x.at(inlet_h_));
         key.push_back(x.at(shaft_omega_));
+        if (map_coordinate_.has_value()) {
+            key.push_back(x.at(*map_coordinate_));
+        }
         if (key == last_key_) return last_;
         last_key_ = std::move(key);
 
@@ -274,7 +305,7 @@ public:
         } catch (const std::domain_error& error) {
             last_ = {
                 EvaluationStatus::recoverable(error.what()),
-                {}, 0.0, 0.0, 0.0};
+                {}, 0.0, 0.0, 0.0, 0.0};
             return last_;
         }
         const auto inlet = properties_->state_ph(
@@ -282,7 +313,7 @@ public:
         if (!inlet.ok()) {
             last_ = {
                 thermochemistry_failure(inlet),
-                {}, 0.0, 0.0, 0.0};
+                {}, 0.0, 0.0, 0.0, 0.0};
             return last_;
         }
         double total_mass_flow = 0.0;
@@ -300,7 +331,7 @@ public:
                 EvaluationStatus::recoverable(
                     "turbomachinery corrected-state ratios must be "
                     "finite and positive"),
-                {}, 0.0, 0.0, 0.0};
+                {}, 0.0, 0.0, 0.0, 0.0};
             return last_;
         }
         try {
@@ -309,18 +340,18 @@ public:
                 total_mass_flow * root_theta / delta;
             const double corrected_speed =
                 x.at(shaft_omega_) / root_theta;
-            const double map_mass_flow =
-                corrected_mass_flow /
-                flow_capacity_scale_;
+            const double primary_coordinate = latent_coordinate_
+                ? x.at(*map_coordinate_)
+                : corrected_mass_flow / flow_capacity_scale_;
             const auto map = variable_geometry_
                 ? artifact_->conditioned_map
                       ->evaluate(
-                          map_mass_flow,
+                          primary_coordinate,
                           corrected_speed,
                           geometry_setting_)
                       .map
                 : artifact_->map->evaluate(
-                      map_mass_flow, corrected_speed);
+                      primary_coordinate, corrected_speed);
             const double pressure_ratio =
                 1.0 + pressure_ratio_scale_ *
                     (map.outputs.at(
@@ -329,13 +360,20 @@ public:
             const double efficiency =
                 efficiency_scale_ *
                 map.outputs.at(*efficiency_index_);
+            const double corrected_mass_flow_residual =
+                latent_coordinate_
+                ? corrected_mass_flow -
+                    flow_capacity_scale_ *
+                        map.outputs.at(
+                            *corrected_mass_flow_index_)
+                : 0.0;
             if (!std::isfinite(pressure_ratio) ||
                 pressure_ratio <= 1.0) {
                 last_ = {
                     EvaluationStatus::recoverable(
                         "turbomachinery map pressure ratio must be "
                         "finite and greater than one"),
-                    {}, 0.0, 0.0, 0.0};
+                    {}, 0.0, 0.0, 0.0, 0.0};
                 return last_;
             }
             if (!std::isfinite(efficiency) ||
@@ -344,7 +382,7 @@ public:
                     EvaluationStatus::recoverable(
                         "turbomachinery map isentropic efficiency "
                         "must be in (0, 1]"),
-                    {}, 0.0, 0.0, 0.0};
+                    {}, 0.0, 0.0, 0.0, 0.0};
                 return last_;
             }
             last_ = {
@@ -352,11 +390,12 @@ public:
                 inlet.state,
                 total_mass_flow,
                 pressure_ratio,
-                efficiency};
+                efficiency,
+                corrected_mass_flow_residual};
         } catch (const MapDomainError& error) {
             last_ = {
                 EvaluationStatus::recoverable(error.what()),
-                {}, 0.0, 0.0, 0.0};
+                {}, 0.0, 0.0, 0.0, 0.0};
         }
         return last_;
     }
@@ -377,8 +416,11 @@ private:
     double efficiency_scale_;
     bool variable_geometry_;
     double geometry_setting_;
+    bool latent_coordinate_{false};
+    std::optional<std::size_t> map_coordinate_;
     std::optional<std::size_t> pressure_ratio_index_;
     std::optional<std::size_t> efficiency_index_;
+    std::optional<std::size_t> corrected_mass_flow_index_;
     mutable std::mutex mutex_;
     mutable std::vector<double> last_key_;
     mutable MaterialMapEvaluation last_;
@@ -397,7 +439,8 @@ public:
         std::size_t outlet_p,
         std::size_t outlet_h,
         std::size_t shaft_omega,
-        bool compressor)
+        bool compressor,
+        std::optional<std::size_t> map_coordinate)
         : map_cache_(std::move(map_cache)),
           properties_(std::move(properties)),
           flows_(std::move(flows)),
@@ -406,13 +449,14 @@ public:
           outlet_p_(outlet_p),
           outlet_h_(outlet_h),
           shaft_omega_(shaft_omega),
-          compressor_(compressor) {}
+          compressor_(compressor),
+          map_coordinate_(map_coordinate) {}
 
     IsentropicEvaluation evaluate(
         const std::vector<double>& x) const {
         std::scoped_lock lock(mutex_);
         std::vector<double> key;
-        key.reserve(flows_.size() + 5);
+        key.reserve(flows_.size() + 6);
         for (const auto flow : flows_) {
             key.push_back(x.at(flow));
         }
@@ -421,6 +465,9 @@ public:
         key.push_back(x.at(outlet_p_));
         key.push_back(x.at(outlet_h_));
         key.push_back(x.at(shaft_omega_));
+        if (map_coordinate_.has_value()) {
+            key.push_back(x.at(*map_coordinate_));
+        }
         if (key == last_key_) return last_;
         last_key_ = std::move(key);
 
@@ -461,6 +508,7 @@ private:
     std::size_t outlet_h_;
     std::size_t shaft_omega_;
     bool compressor_;
+    std::optional<std::size_t> map_coordinate_;
     mutable std::mutex mutex_;
     mutable std::vector<double> last_key_;
     mutable IsentropicEvaluation last_;
@@ -807,15 +855,39 @@ class MaterialMapTurbomachineryModel final
 public:
     MaterialMapTurbomachineryModel(
         std::string kind, bool compressor,
-        bool variable_geometry = false)
+        bool variable_geometry = false,
+        bool latent_coordinate = false)
         : compressor_(compressor),
-          variable_geometry_(variable_geometry) {
+          variable_geometry_(variable_geometry),
+          latent_coordinate_(latent_coordinate) {
+        if (latent_coordinate_ &&
+            (!compressor_ || variable_geometry_)) {
+            throw std::invalid_argument(
+                "latent map coordinates are currently supported only "
+                "for fixed-geometry compressors");
+        }
         descriptor_.kind = std::move(kind);
         descriptor_.version = "1.0.0";
+        descriptor_.template_kind = compressor_
+            ? "compressor.material"
+            : "turbine.material";
+        descriptor_.display_name = compressor_
+            ? "Material compressor"
+            : "Material turbine";
+        descriptor_.category = "Turbomachinery";
+        descriptor_.model_name = latent_coordinate_
+            ? "Coordinate-based performance map"
+            : (variable_geometry_
+                  ? "Variable-geometry performance map"
+                  : "Performance map");
         descriptor_.ports = {
             {"inlet", "material", "in"},
             {"outlet", "material", "out"},
             {"shaft", "shaft", compressor ? "in" : "out"}};
+        if (latent_coordinate_) {
+            descriptor_.ports.push_back(
+                {"map_coordinate", "signal", "in"});
+        }
         descriptor_.parameters = {
             {"reference_pressure", "pressure", false, 101325.0,
              0.0, std::numeric_limits<double>::infinity(), false,
@@ -907,6 +979,12 @@ public:
             require_port_variable(context, "shaft.W_dot");
         const auto shaft_omega =
             require_port_variable(context, "shaft.omega");
+        const std::optional<std::size_t> map_coordinate =
+            latent_coordinate_
+            ? std::optional<std::size_t>{
+                  require_port_variable(
+                      context, "map_coordinate.value")}
+            : std::nullopt;
         const auto cache =
             std::make_shared<MaterialMapEvaluationCache>(
                 properties,
@@ -934,7 +1012,21 @@ public:
                     ? required_parameter(
                           context.component,
                           "geometry_setting")
-                    : 0.0);
+                    : 0.0,
+                latent_coordinate_, map_coordinate);
+
+        if (latent_coordinate_) {
+            system.add_checked_equation(
+                prefix + "map_corrected_flow",
+                [cache](const std::vector<double>& x,
+                        double& residual) {
+                    const auto map = cache->evaluate(x);
+                    if (!map.status.ok()) return map.status;
+                    residual = map.corrected_mass_flow_residual;
+                    return EvaluationStatus::success();
+                },
+                100.0);
+        }
 
         system.add_checked_equation(
             prefix + "map_pressure_ratio",
@@ -957,7 +1049,7 @@ public:
                 MaterialMapIsentropicEvaluationCache>(
                 cache, properties, inlet_flows, inlet_p,
                 inlet_h, outlet_p, outlet_h, shaft_omega,
-                compressor_);
+                compressor_, map_coordinate);
         system.add_checked_equation(
             prefix + "map_isentropic_efficiency",
             [isentropic_cache](
@@ -1008,6 +1100,7 @@ private:
     ComponentModelDescriptor descriptor_;
     bool compressor_{false};
     bool variable_geometry_{false};
+    bool latent_coordinate_{false};
 };
 
 }  // namespace
@@ -1036,6 +1129,10 @@ void register_material_turbomachinery_component_models(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "turbine.material.variable_geometry_map",
             false, true));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "compressor.material.coordinate_map",
+            true, false, true));
 }
 
 }  // namespace thermox::platform

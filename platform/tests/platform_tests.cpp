@@ -853,7 +853,7 @@ void test_generic_model_document_rejects_unsupported_units() {
         "parameters": {
           "p": {
             "value": 14.7,
-            "unit": "psi"
+            "unit": "furlong/fortnight"
           }
         },
         "media": {
@@ -1052,6 +1052,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.isentropic_efficiency",
         "compressor.material.iso2314_equivalent_cooling",
         "compressor.material.performance_map",
+        "compressor.material.coordinate_map",
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",
@@ -4548,6 +4549,31 @@ void test_map_driven_material_turbomachinery() {
                   {12.0, {5.0, 0.9}}}},
             }),
     });
+    maps.register_artifact({
+        "material-latent-coordinate-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-material-latent-coordinate-map",
+        std::string(64, 'b'),
+        std::make_shared<
+            const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "map_coordinate", "dimensionless"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"corrected_mass_flow", "mass_flow"},
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"},
+            },
+            std::vector<thermox::platform::MapCurve>{
+                {250.0,
+                 {{1.0, {8.0, 2.2, 0.78}},
+                  {3.0, {12.0, 1.8, 0.82}}}},
+                {350.0,
+                 {{1.0, {8.0, 2.2, 0.78}},
+                  {3.0, {12.0, 1.8, 0.82}}}},
+            }),
+    });
     const auto material_geometry_layer = [](
         double pressure_ratio, double efficiency) {
         return std::make_shared<
@@ -4635,6 +4661,45 @@ void test_map_driven_material_turbomachinery() {
         value("compressor.shaft.W_dot"),
         10.0 * (expected_enthalpy - 300000.0),
         1.0e-4, "material map closes shaft power");
+
+    auto latent_document = document;
+    auto& latent_machine = latent_document.components.front();
+    latent_machine.kind =
+        "compressor.material.coordinate_map";
+    latent_machine.artifact_bindings["performance_map"] =
+        "material-latent-coordinate-map";
+    latent_machine.parameters["flow_capacity_scale"].value_si = 1.0;
+    latent_machine.parameters["pressure_ratio_scale"].value_si = 1.0;
+    latent_machine.parameters["efficiency_scale"].value_si = 1.0;
+    latent_document.cases.front().initial_guesses[
+        "compressor.map_coordinate.value"] = {
+            2.0, "1", "dimensionless"};
+    const auto latent_graph =
+        thermox::platform::compile_model_graph(
+            latent_document,
+            thermox::platform::make_default_component_registry(),
+            thermox::physics::
+                make_default_property_package_registry(),
+            maps, chemistry, "off_design");
+    const auto latent_result =
+        thermox::solve_newton(latent_graph.problem);
+    require(
+        latent_result.diagnostics.converged,
+        latent_result.diagnostics.message);
+    require_near(
+        latent_result.x.at(require_variable_index(
+            latent_graph.problem.variable_names,
+            "compressor.map_coordinate.value")),
+        2.0, 1.0e-10,
+        "latent compressor coordinate must solve corrected-flow "
+        "closure without inverting the map");
+    require_near(
+        latent_result.x.at(require_variable_index(
+            latent_graph.problem.variable_names,
+            "compressor.outlet.p")),
+        2.0 * 101325.0, 1.0e-6,
+        "latent compressor map must interpolate pressure ratio at "
+        "the solved coordinate");
 
     auto geometry_document = document;
     auto& geometry_machine =

@@ -1,5 +1,6 @@
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
+#include "thermox/service/artifact_declaration.hpp"
 #include "thermox/service/engineering_study.hpp"
 #include "thermox/service/native_runtime.hpp"
 #include "thermox/service/performance_test.hpp"
@@ -594,7 +595,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 77,
+        response.components.size() == 78,
         "service must expose the complete component registry");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -1600,6 +1601,59 @@ void test_homogeneous_two_phase_local_loss() {
 }
 
 #ifdef THERMOX_TEST_HAS_CANTERA
+void test_nasa_tmats_hpc_cross_code_benchmark() {
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/hpc_design_point.json");
+    request.case_id = "published_design_point";
+    request.artifacts.performance_maps.push_back(
+        thermox::service::
+            parse_performance_map_artifact_declaration_json(
+                read_source_file(
+                    "benchmarks/nasa_tmats/hpc_map.json")));
+
+    const auto response =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged,
+        "NASA T-MATS HPC component benchmark must solve: " +
+            response.error.message);
+    require(
+        response.diagnostics.final_residual_norm < 2.0e-10,
+        "NASA T-MATS HPC benchmark must close its normalized equations");
+
+    const auto& outlet = require_port_result(
+        response.graph, "compressor", "outlet");
+    const auto& shaft = require_port_result(
+        response.graph, "compressor", "shaft");
+    const double predicted_pressure = require_result_value(
+        outlet.primary_values, "p").value_si;
+    const double predicted_temperature = require_result_value(
+        outlet.derived_values, "T").value_si;
+    const double predicted_power = require_result_value(
+        shaft.primary_values, "W_dot").value_si;
+
+    constexpr double psi_to_pa = 6894.757293168;
+    constexpr double pound_foot_to_newton_metre =
+        1.3558179483314004;
+    const double published_pressure = 288.60 * psi_to_pa;
+    const double published_temperature = 1317.0 * 5.0 / 9.0;
+    const double published_power =
+        14660.0 * pound_foot_to_newton_metre *
+        (10000.0 * 2.0 * std::acos(-1.0) / 60.0);
+    const auto relative_error = [](double predicted, double reference) {
+        return std::abs(predicted / reference - 1.0);
+    };
+    require(
+        relative_error(predicted_pressure, published_pressure) < 0.005 &&
+            relative_error(
+                predicted_temperature, published_temperature) < 0.005 &&
+            relative_error(predicted_power, published_power) < 0.005,
+        "Thermox map-driven compressor pressure, temperature, and inferred "
+        "shaft power must remain within NASA's 0.5% cross-code comparison "
+        "band at the published design point");
+}
+
 void test_cantera_brayton_integration_benchmark() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -5129,6 +5183,68 @@ void test_map_correction_is_calibrated_then_frozen() {
             5000.0,
         "the fitted map correction must remain frozen for the "
         "independent operating point");
+
+    std::ostringstream declared;
+    declared << std::setprecision(17) << R"json({
+      "schema_version":"thermox.engineering_study/v2",
+      "model_document":)json"
+             << mapped_independent_study_model(baseline_power)
+             << R"json(,
+      "calibration_id":"map_correction_fit",
+      "artifacts":{"performance_maps":[{
+        "id":"request-compressor-map",
+        "schema_version":"thermox.performance_map/v1",
+        "revision":"inline-study-1",
+        "checksum_sha256":")json"
+             << std::string(64, 'a') << R"json(",
+        "payload":{
+          "primary_variable":{"name":"corrected_mass_flow","dimension":"mass_flow"},
+          "family_variable":{"name":"corrected_speed","dimension":"angular_speed"},
+          "output_variables":[
+            {"name":"pressure_ratio","dimension":"dimensionless"},
+            {"name":"isentropic_efficiency","dimension":"dimensionless"}
+          ],
+          "output_constraints":[
+            {"output":"pressure_ratio","minimum":1.0,"minimum_inclusive":false},
+            {"output":"isentropic_efficiency","minimum":0.0,"maximum":1.0,"minimum_inclusive":false}
+          ],
+          "curves":[
+            {"family_coordinate":250.0,"samples":[
+              {"coordinate":70.0,"outputs":[10.0,0.85]},
+              {"coordinate":120.0,"outputs":[10.0,0.85]}
+            ]},
+            {"family_coordinate":400.0,"samples":[
+              {"coordinate":70.0,"outputs":[10.0,0.85]},
+              {"coordinate":120.0,"outputs":[10.0,0.85]}
+            ]}
+          ]
+        }
+      }]},
+      "prediction_cases":[{
+        "case_id":"validation",
+        "observations":[{
+          "id":"validation_power",
+          "target":"compressor.shaft.W_dot",
+          "dimension":"power",
+          "measured_si":)json"
+             << validation_power << R"json(,
+          "sigma_si":10000.0
+        }]
+      }]
+    })json";
+    const auto inline_artifact_response =
+        thermox::service::evaluate_engineering_study_json(
+            declared.str());
+    require(
+        inline_artifact_response.succeeded() &&
+            inline_artifact_response.calibration.succeeded() &&
+            inline_artifact_response.predictions.front()
+                    .steady_simulation->metadata.artifacts.size() == 1U &&
+            std::abs(
+                inline_artifact_response.predictions.front()
+                    .observations.front().residual_si) < 5000.0,
+        "a declarative engineering study must carry immutable inline "
+        "map artifacts through calibration and frozen prediction");
 }
 
 void test_component_version_is_enforced() {
@@ -7293,6 +7409,7 @@ int main() {
         test_validation_and_canonicalization();
         test_homogeneous_two_phase_local_loss();
 #ifdef THERMOX_TEST_HAS_CANTERA
+        test_nasa_tmats_hpc_cross_code_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

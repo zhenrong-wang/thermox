@@ -63,8 +63,8 @@
       }
     },
     {
-      "id": "nasa_tmats_twin_spool",
-      "status": "selected",
+      "id": "nasa_tmats_gas_turbines",
+      "status": "design_component_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -82,10 +82,24 @@
       ],
       "required_gates": [
         "map_import_fidelity",
+        "design_point_component_cross_code",
         "four_steady_operating_points",
         "shaft_power_and_flow_closure",
         "fuel_step_transient_shape"
-      ]
+      ],
+      "completed_gates": [
+        "map_import_fidelity",
+        "design_point_component_cross_code",
+        "design_point_shaft_power_and_flow_closure"
+      ],
+      "latest_result": {
+        "component": "compressor",
+        "pressure_error_percent": 0.0907,
+        "temperature_error_percent": -0.2654,
+        "shaft_power_error_percent": 0.2896,
+        "acceptance_band_percent": 0.5,
+        "classification": "map_import_and_design_point_cross_code_reproduction"
+      }
     },
     {
       "id": "sandia_sco2_loop",

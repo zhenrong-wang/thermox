@@ -2,6 +2,7 @@
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/performance_test.hpp"
 #include "thermox/service/engineering_study.hpp"
+#include "thermox/service/artifact_declaration.hpp"
 #include "thermox/service/iso2314_equivalent_cooling.hpp"
 
 #include <cmath>
@@ -10,12 +11,14 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
 void print_usage(std::ostream& out) {
     out << "Usage:\n"
         << "  thermox_cli solve --model <path> [--case <id>]"
+           " [--performance-map <path>]..."
            " [--continuation]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
            " [--format text|json]\n"
@@ -177,6 +180,7 @@ int main(int argc, char** argv) {
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string format = "text";
+    std::vector<std::string> performance_map_paths;
     bool continuation = false;
     bool profile_likelihood = false;
     std::string profile_objective_increase_text;
@@ -194,6 +198,8 @@ int main(int argc, char** argv) {
             input_path = argv[++i];
         } else if (arg == "--case" && i + 1 < argc) {
             case_id = argv[++i];
+        } else if (arg == "--performance-map" && i + 1 < argc) {
+            performance_map_paths.emplace_back(argv[++i]);
         } else if (arg == "--calibration" && i + 1 < argc) {
             calibration_id = argv[++i];
         } else if (arg == "--reconciliation" && i + 1 < argc) {
@@ -279,6 +285,10 @@ int main(int argc, char** argv) {
     }
     if (command == "simulate" && continuation) {
         std::cerr << "--continuation is only valid for solve\n";
+        return 2;
+    }
+    if (command != "solve" && !performance_map_paths.empty()) {
+        std::cerr << "--performance-map is only valid for solve\n";
         return 2;
     }
     if (command == "simulate" && end_time_text.empty()) {
@@ -487,6 +497,12 @@ int main(int argc, char** argv) {
             thermox::service::SteadySimulationRequest request;
             request.model_json = model_json;
             request.case_id = case_id;
+            for (const auto& path : performance_map_paths) {
+                request.artifacts.performance_maps.push_back(
+                    thermox::service::
+                        parse_performance_map_artifact_declaration_json(
+                            read_file(path)));
+            }
             request.solver.continuation_enabled =
                 continuation;
             request.solver.structural_decomposition_policy =

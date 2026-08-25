@@ -1,0 +1,73 @@
+{
+  "schema_version": "thermox.benchmark_source_manifest/v1",
+  "benchmark_id": "nasa_tmats",
+  "sources": [
+    {
+      "organization": "NASA Glenn Research Center",
+      "report_number": "NASA/TM-2014-218410",
+      "title": "Toolbox for the Modeling and Analysis of Thermodynamic Systems (T-MATS) User's Guide",
+      "official_url": "https://ntrs.nasa.gov/citations/20150002325",
+      "retrieved_on": "2026-08-25",
+      "sha256": "fe71c8f15877abc69996193ddf25d00b61a8689d9fb9f14ff3eda9b6de04880c",
+      "repository_policy": "The public report PDF remains external to this repository. Extracted reference values and provenance are tracked here."
+    },
+    {
+      "organization": "NASA",
+      "title": "T-MATS public source repository",
+      "official_url": "https://github.com/nasa/T-MATS",
+      "git_commit": "ad6e4d5d0d76c229db4eb72ca40ef58d5ddc4014",
+      "retrieved_on": "2026-08-25",
+      "source_path": "Trunk/TMATS_Examples/Example_GasTurbine_SS/SimSetup/setup_HPC.m",
+      "source_sha256": "979b1042d06a6c5d76942f8e444c291095d47a35250d4d827ea64a88a86e99bc",
+      "license": "Apache-2.0"
+    }
+  ],
+  "reference_case": {
+    "location": "NASA/TM-2014-218410, Table 4, Simple Turbojet Comparison",
+    "description": "T-MATS and NPSS steady design-point comparison using the same public maps and constants",
+    "boundaries": {
+      "station_2_mass_flow_lbm_s": 99.97,
+      "station_2_total_temperature_degR": 518.67,
+      "station_2_total_pressure_psia": 14.40,
+      "shaft_speed_rpm": 10000.0
+    },
+    "tmats_outputs": {
+      "station_3_total_temperature_degR": 1317.0,
+      "station_3_total_pressure_psia": 288.60,
+      "compressor_torque_lbf_ft": 14660.0
+    },
+    "npss_outputs": {
+      "station_3_total_temperature_degR": 1315.80,
+      "station_3_total_pressure_psia": 288.0,
+      "compressor_torque_lbf_ft": 14650.0
+    },
+    "published_interpretation": "The report states that the listed T-MATS and NPSS steady-state differences are below 0.5 percent."
+  },
+  "thermox_execution": {
+    "model": "hpc_design_point.json",
+    "artifact": "hpc_map.json",
+    "property_backend": "Cantera 3.2.0 with gri30.yaml",
+    "declared_assumptions": [
+      "The total station-2 air flow is split into 0.768 N2 and 0.232 O2 mass fractions for the Cantera material basis.",
+      "Published compressor torque is converted to shaft power at the published 10000 rpm; it is not an independently tabulated power measurement.",
+      "The T-MATS source map and its three published scaler values are inputs, not fitted Thermox parameters."
+    ],
+    "results": {
+      "iterations": 3,
+      "normalized_residual_norm": 1.14686e-11,
+      "map_coordinate": 1.9839900503,
+      "station_3_total_pressure_psia": 288.8617404,
+      "station_3_total_temperature_degR": 1313.5046242,
+      "compressor_torque_lbf_ft": 14702.45928,
+      "pressure_relative_error_percent_vs_tmats": 0.0906931,
+      "temperature_relative_error_percent_vs_tmats": -0.2654044,
+      "shaft_power_relative_error_percent_vs_tmats_torque": 0.2896267
+    },
+    "acceptance": {
+      "criterion": "Absolute relative error below 0.5 percent for station-3 pressure, station-3 temperature, and shaft power inferred from compressor torque.",
+      "result": "pass"
+    },
+    "classification": "map_import_and_design_point_cross_code_reproduction"
+  },
+  "interpretation_limit": "This test validates deterministic import, coordinate-map interpolation, thermochemical compression, and conservation against another public code path. It is not independent hardware validation, off-design validation, whole-engine validation, or transient validation."
+}

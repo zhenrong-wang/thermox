@@ -1,0 +1,63 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_tmats_hpc_design_point",
+    "name": "NASA T-MATS example turbojet compressor component slice",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "dry_air",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": ["N2", "O2"]
+      }
+    ],
+    "components": [
+      {
+        "id": "compressor",
+        "kind": "compressor.material.coordinate_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {"value": 101.325, "unit": "kPa"},
+          "reference_temperature": {"value": 518.67, "unit": "degR"},
+          "flow_capacity_scale": 0.495342,
+          "pressure_ratio_scale": 0.86364,
+          "efficiency_scale": 0.997653
+        },
+        "artifacts": {
+          "performance_map": "nasa-tmats-example-hpc-map"
+        },
+        "materials": {
+          "inlet": "dry_air",
+          "outlet": "dry_air"
+        }
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "published_design_point",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "compressor.inlet.p": {"value": 14.40, "unit": "psia"},
+        "compressor.inlet.T": {"value": 518.67, "unit": "degR"},
+        "compressor.inlet.m_dot[N2]": {"value": 76.77696, "unit": "lbm/s"},
+        "compressor.inlet.m_dot[O2]": {"value": 23.19304, "unit": "lbm/s"},
+        "compressor.shaft.omega": {"value": 10000.0, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "compressor.inlet.h": {"value": -9.0, "unit": "kJ/kg"},
+        "compressor.outlet.p": {"value": 288.6, "unit": "psia"},
+        "compressor.outlet.h": {"value": 500.0, "unit": "kJ/kg"},
+        "compressor.outlet.m_dot[N2]": {"value": 76.77696, "unit": "lbm/s"},
+        "compressor.outlet.m_dot[O2]": {"value": 23.19304, "unit": "lbm/s"},
+        "compressor.shaft.W_dot": {"value": 20.8, "unit": "MW"},
+        "compressor.map_coordinate.value": 1.8
+      }
+    }
+  ]
+}

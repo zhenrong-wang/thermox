@@ -60,6 +60,24 @@ int main() {
                 std::abs(speed.value_si -
                     2.0 * std::acos(-1.0)) < 1.0e-12,
             "rotational speed must normalize to radians per second");
+        const auto atmospheric_pressure =
+            units.convert(14.6959487755, "psia");
+        require(
+            atmospheric_pressure.dimension == "pressure" &&
+                std::abs(atmospheric_pressure.value_si - 101325.0) <
+                    1.0e-3,
+            "psia must normalize to absolute SI pressure");
+        const auto rankine = units.convert(518.67, "degR");
+        require(
+            rankine.dimension == "temperature" &&
+                std::abs(rankine.value_si - 288.15) < 1.0e-12,
+            "absolute Rankine must normalize to kelvin");
+        const auto customary_flow = units.convert(100.0, "lbm/s");
+        require(
+            customary_flow.dimension == "mass_flow" &&
+                std::abs(customary_flow.value_si - 45.359237) <
+                    1.0e-12,
+            "pound-mass per second must normalize to SI mass flow");
         const auto& pressure_gradient =
             units.require_dimension("pressure_gradient");
         require(

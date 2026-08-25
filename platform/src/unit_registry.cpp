@@ -169,12 +169,14 @@ UnitRegistry make_default_unit_registry() {
             accepted("kPa", 1.0e3),
             accepted("MPa", 1.0e6),
             accepted("bar", 1.0e5),
+            accepted("psi", 6894.757293168, 0.0, {"psia"}),
         }));
     registry.register_dimension(dimension(
         "temperature", "K", display("°C", 1.0, -273.15),
         {
             accepted("K"),
             accepted("degC", 1.0, 273.15, {"C"}),
+            accepted("degR", 5.0 / 9.0, 0.0, {"R"}),
         }));
     registry.register_dimension(dimension(
         "temperature_difference", "delta_K", display("K"),
@@ -200,6 +202,7 @@ UnitRegistry make_default_unit_registry() {
         {
             accepted("kg/s"),
             accepted("kg/h", 1.0 / 3600.0),
+            accepted("lbm/s", 0.45359237, 0.0, {"lb/s"}),
         }));
     registry.register_dimension(dimension(
         "specific_heat", "J/kg/K", display("kJ/kg/K", 1.0e-3),

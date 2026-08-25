@@ -1,5 +1,7 @@
 #include "thermox/service/engineering_study.hpp"
 
+#include "artifact_payload.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <cmath>
@@ -19,6 +21,92 @@ void parse_prediction_solver(
 void parse_transient_prediction_solver(
     const Json& value,
     TransientSolverSettings& settings);
+
+void parse_artifacts(
+    const Json& value,
+    SimulationArtifactBundle& artifacts) {
+    if (!value.is_object()) {
+        throw EngineeringStudyRequestError(
+            "artifacts must be an object");
+    }
+    const std::set<std::string> allowed = {
+        "performance_maps", "correlations", "regime_maps"};
+    for (const auto& [key, unused] : value.items()) {
+        (void)unused;
+        if (!allowed.contains(key)) {
+            throw EngineeringStudyRequestError(
+                "unknown artifacts field: " + key);
+        }
+    }
+    const auto require_declaration = [](const Json& declaration) {
+        if (!declaration.is_object()) {
+            throw EngineeringStudyRequestError(
+                "artifact declaration must be an object");
+        }
+        const std::set<std::string> declaration_allowed = {
+            "id", "schema_version", "revision", "checksum_sha256",
+            "payload"};
+        for (const auto& [key, unused] : declaration.items()) {
+            (void)unused;
+            if (!declaration_allowed.contains(key)) {
+                throw EngineeringStudyRequestError(
+                    "unknown artifact declaration field: " + key);
+            }
+        }
+        for (const char* required : {
+                 "id", "schema_version", "revision",
+                 "checksum_sha256", "payload"}) {
+            if (!declaration.contains(required)) {
+                throw EngineeringStudyRequestError(
+                    "artifact declaration is missing field: " +
+                    std::string(required));
+            }
+        }
+    };
+    if (value.contains("performance_maps")) {
+        for (const auto& declaration :
+             value.at("performance_maps")) {
+            require_declaration(declaration);
+            artifacts.performance_maps.push_back(
+                detail::performance_map_from_payload(
+                    declaration.at("id").get<std::string>(),
+                    declaration.at("schema_version")
+                        .get<std::string>(),
+                    declaration.at("revision").get<std::string>(),
+                    declaration.at("checksum_sha256")
+                        .get<std::string>(),
+                    declaration.at("payload").dump()));
+        }
+    }
+    if (value.contains("correlations")) {
+        for (const auto& declaration : value.at("correlations")) {
+            require_declaration(declaration);
+            artifacts.correlations.push_back(
+                detail::correlation_from_payload(
+                    declaration.at("id").get<std::string>(),
+                    declaration.at("schema_version")
+                        .get<std::string>(),
+                    declaration.at("revision").get<std::string>(),
+                    declaration.at("checksum_sha256")
+                        .get<std::string>(),
+                    declaration.at("payload").dump()));
+        }
+    }
+    if (value.contains("regime_maps")) {
+        for (const auto& declaration : value.at("regime_maps")) {
+            require_declaration(declaration);
+            artifacts.regime_maps.push_back(
+                detail::regime_map_from_payload(
+                    declaration.at("id").get<std::string>(),
+                    declaration.at("schema_version")
+                        .get<std::string>(),
+                    declaration.at("revision").get<std::string>(),
+                    declaration.at("checksum_sha256")
+                        .get<std::string>(),
+                    declaration.at("payload").dump()));
+        }
+    }
+}
 
 void require_positive_finite(double value, const std::string& field) {
     if (!std::isfinite(value) || value <= 0.0) {
@@ -277,6 +365,7 @@ EngineeringStudyRequest parse_engineering_study_request_json(
             "schema_version", "model_document", "calibration_id",
             "calibration_solver", "steady_prediction_solver",
             "transient_prediction_solver", "prediction_cases",
+            "artifacts",
         };
         for (const auto& [key, unused] : root.items()) {
             (void)unused;
@@ -296,6 +385,9 @@ EngineeringStudyRequest parse_engineering_study_request_json(
         request.model_json = root.at("model_document").dump();
         request.calibration_id =
             root.at("calibration_id").get<std::string>();
+        if (root.contains("artifacts")) {
+            parse_artifacts(root.at("artifacts"), request.artifacts);
+        }
         if (root.contains("calibration_solver")) {
             parse_calibration_solver(
                 root.at("calibration_solver"),

@@ -64,6 +64,15 @@ is 9.16%. This advances the independent-system gate, but it does not complete it
 feedwater, steam-flow, salt-outlet, condenser, and turbine-exhaust boundaries mean the result is a
 calibrated system response rather than first-principles steam-cycle validation.
 
-The next implementation is the NASA T-MATS map import and steady/off-design cross-code study.
-The Sandia sCO2 transient follows once authoritative numeric response data are obtained or
-digitization uncertainty is formally included in every acceptance limit.
+The first NASA T-MATS slice is now complete. A deterministic importer preserves the public HPC
+map's R-line coordinate, all 143 map points, source scalers, and source checksum. The generic
+`compressor.material.coordinate_map` component solves the map coordinate from corrected-flow
+closure. At the NASA Table 4 design point, Thermox differs from T-MATS by +0.091% in compressor
+discharge pressure, -0.265% in temperature, and +0.290% in shaft power inferred from published
+torque. All three pass the report's 0.5% cross-code comparison band. This completes map-import and
+design-component reproduction, but not off-design, whole-engine, transient, or hardware gates.
+
+The next T-MATS implementation expands this same generic capability to multiple steady operating
+points and then the coupled shaft/combustor/turbine/nozzle system. The Sandia sCO2 transient follows
+once authoritative numeric response data are obtained or digitization uncertainty is formally
+included in every acceptance limit.
