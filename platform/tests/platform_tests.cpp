@@ -986,6 +986,9 @@ void test_component_registry_exposes_default_models() {
                 "junction.material.splitter.controlled_fraction"),
             "default registry should contain controlled material splitter");
     require(registry.contains(
+                "junction.material.cross_bleed.performance_map"),
+            "default registry should contain map-driven material cross-bleed");
+    require(registry.contains(
                 "transport.material.perfect_gas_mach_scaled_loss"),
             "default registry should contain Mach-scaled material duct");
     require(registry.contains(
@@ -1083,6 +1086,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "junction.material.splitter.controlled_fraction",
+        "junction.material.cross_bleed.performance_map",
         "transport.material.perfect_gas_mach_scaled_loss",
         "terminal.material.perfect_gas_convergent_nozzle",
         "valve.fluid.isenthalpic_pressure_ratio",
@@ -3926,6 +3930,107 @@ void test_material_mixer_and_fixed_fraction_splitter() {
         mix_value("mixer.outlet.p"),
         200000.0, 1.0e-8,
         "material mixer equalizes pressure");
+}
+
+void test_map_driven_material_cross_bleed() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "map_driven_cross_bleed",
+    "media": [],
+    "materials": [{
+      "id": "air", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "valve",
+      "kind": "junction.material.cross_bleed.performance_map",
+      "parameters": {
+        "reference_pressure": {"value": 100.0, "unit": "kPa"},
+        "reference_temperature": {"value": 600.0, "unit": "K"}
+      },
+      "artifacts": {"flow_characteristic": "bleed-map"},
+      "materials": {
+        "donor_inlet": "air", "donor_outlet": "air",
+        "receiver_inlet": "air", "receiver_outlet": "air"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "part_open", "mode": "steady_state_off_design",
+    "fixed_values": {
+      "valve.donor_inlet.p": {"value": 200.0, "unit": "kPa"},
+      "valve.donor_inlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "valve.donor_inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "valve.donor_inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"},
+      "valve.receiver_inlet.p": {"value": 100.0, "unit": "kPa"},
+      "valve.receiver_inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "valve.receiver_inlet.m_dot[N2]": {"value": 4.0, "unit": "kg/s"},
+      "valve.receiver_inlet.m_dot[O2]": {"value": 1.0, "unit": "kg/s"},
+      "valve.position.value": 0.5
+    },
+    "initial_guesses": {
+      "valve.bleed_mass_flow": {"value": 2.0, "unit": "kg/s"},
+      "valve.donor_outlet.p": {"value": 200.0, "unit": "kPa"},
+      "valve.donor_outlet.h": {"value": 600.0, "unit": "kJ/kg"},
+      "valve.donor_outlet.m_dot[N2]": {"value": 6.4, "unit": "kg/s"},
+      "valve.donor_outlet.m_dot[O2]": {"value": 1.6, "unit": "kg/s"},
+      "valve.receiver_outlet.p": {"value": 100.0, "unit": "kPa"},
+      "valve.receiver_outlet.h": {"value": 386.0, "unit": "kJ/kg"},
+      "valve.receiver_outlet.m_dot[N2]": {"value": 5.6, "unit": "kg/s"},
+      "valve.receiver_outlet.m_dot[O2]": {"value": 1.4, "unit": "kg/s"}
+    }
+  }]
+})json");
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact({
+        "bleed-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-bleed-map",
+        std::string(64, 'c'),
+        std::make_shared<const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "pressure_ratio", "dimensionless"},
+            thermox::platform::MapVariable{
+                "position", "dimensionless"},
+            std::vector<thermox::platform::MapVariable>{
+                {"corrected_mass_flow", "mass_flow"}},
+            std::vector<thermox::platform::MapCurve>{
+                {0.0, {{1.0, {0.0}}, {3.0, {0.0}}}},
+                {1.0, {{1.0, {0.0}}, {3.0, {4.0}}}},
+            }),
+    });
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<const TestThermochemistryPackage>();
+        });
+    const auto graph = thermox::platform::compile_model_graph(
+        document, thermox::platform::make_default_component_registry(),
+        thermox::physics::make_default_property_package_registry(),
+        artifacts, chemistry, "part_open");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged, result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(value("valve.bleed_mass_flow"), 2.0, 1.0e-8,
+        "cross-bleed applies corrected mapped flow capacity");
+    require_near(value("valve.donor_outlet.m_dot[N2]"), 6.4, 1.0e-8,
+        "cross-bleed removes donor species proportionally");
+    require_near(value("valve.receiver_outlet.m_dot[N2]"), 5.6, 1.0e-8,
+        "cross-bleed routes donor species into receiver");
+    require_near(value("valve.receiver_outlet.m_dot[O2]"), 1.4, 1.0e-8,
+        "cross-bleed conserves receiver oxygen flow");
+    require_near(value("valve.receiver_outlet.h"),
+        2700000.0 / 7.0, 1.0e-5,
+        "cross-bleed conserves receiver and bleed enthalpy flow");
 }
 
 void test_perfect_gas_mach_scaled_material_duct() {
@@ -8345,6 +8450,7 @@ int main() {
         test_equilibrium_flash_separator_closes_phase_split();
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
+        test_map_driven_material_cross_bleed();
         test_perfect_gas_mach_scaled_material_duct();
         test_perfect_gas_convergent_material_nozzle();
         test_material_thermochemistry_resolves_on_demand();

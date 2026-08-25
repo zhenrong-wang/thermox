@@ -306,3 +306,23 @@ boundaries, and converged acceptance outputs do not depend on them. This qualifi
 map-driven **zero-VBV steady gas path** against the public cross-code reference. Net thrust remains
 reserved until the generic ambient/inlet ram-drag path is connected. The fifth sea-level-static
 point and the published transient remain reserved until the generic VBV is present.
+
+## AGTF30 map-driven variable-bleed-valve calculation
+
+`agtf30_vbv_nozzle_twin_spool.json` inserts a generic
+`junction.material.cross_bleed.performance_map` between the LPC discharge and bypass stream. The
+component evaluates a bound corrected-flow characteristic by donor/receiver pressure ratio and
+dimensionless position, removes the resulting flow with the donor composition, and conservatively
+mixes its species and enthalpy into the receiver. The reusable component contains no AGTF30 or
+T-MATS branch; `agtf30_vbv_map.json` is the immutable NASA instance data.
+
+```sh
+python3 scripts/build_agtf30_vbv_nozzle_twin_spool_benchmark.py
+```
+
+The four existing points command the valve closed. They therefore form a regression gate proving
+that inserting the physical routing component does not perturb the nozzle-closed solution: the
+four points converge in five to nine Newton iterations and each solves exactly zero bleed. The
+remaining fifth, open-VBV point requires its source station boundary and initialization data to be
+admitted to this assembled declaration; it is the next validation step. Net thrust remains a
+separate gate because ram drag is not yet represented in the graph.

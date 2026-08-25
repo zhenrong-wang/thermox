@@ -126,4 +126,12 @@ close the core and bypass paths, releasing bypass ratio and HP speed as solved q
 maximum cross-code errors are 0.613% and 0.109%, respectively, while combined gross thrust remains
 within approximately 0.25%. This is the first complete steady AGTF30 gas-path reproduction, but it
 is still cross-code rather than hardware evidence. Net thrust awaits generic ambient/inlet ram
-drag, and the fifth steady point plus transient await the VBV component.
+drag.
+
+The generic VBV gate is now implemented as an artifact-driven controlled material cross-bleed
+junction. It uses pressure ratio and position to evaluate corrected bleed capacity, preserves the
+donor composition, and conserves species and enthalpy while mixing into the receiving stream. The
+NASA flow curve is bound as ordinary instance data. Inserting the component into the complete
+nozzle-closed graph leaves all four closed-valve points convergent and produces exactly zero bleed.
+The fifth open-VBV point still needs to be assembled from the public source boundaries; net thrust
+additionally requires a generic freestream/ram-drag closure.

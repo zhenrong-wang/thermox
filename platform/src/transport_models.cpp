@@ -25,6 +25,7 @@ using component_model_support::require_property_package;
 using component_model_support::require_thermochemistry_package;
 using component_model_support::require_internal_variable;
 using component_model_support::require_correlation;
+using component_model_support::require_performance_map;
 using component_model_support::optional_regime_map;
 using component_model_support::parameter_or;
 using component_model_support::required_parameter;
@@ -3613,6 +3614,421 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class ControlledMaterialCrossBleedModel final
+    : public ComponentModel {
+public:
+    ControlledMaterialCrossBleedModel()
+        : descriptor_(make_descriptor(
+              "junction.material.cross_bleed.performance_map",
+              {{"donor_inlet", "material", "in"},
+               {"donor_outlet", "material", "out"},
+               {"receiver_inlet", "material", "in"},
+               {"receiver_outlet", "material", "out"},
+               {"position", "signal", "in"}})) {
+        descriptor_.template_kind = "junction.material.cross_bleed";
+        descriptor_.display_name = "Controlled material cross-bleed";
+        descriptor_.category = "Material-flow junctions";
+        descriptor_.model_name =
+            "Corrected-flow map with conservative mixing";
+        descriptor_.parameters = {
+            {"reference_pressure", "pressure", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"reference_temperature", "temperature", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+            {"flow_capacity_scale", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), false, true},
+        };
+        descriptor_.artifacts = {
+            {"flow_characteristic", performance_map_artifact_type, true},
+        };
+        descriptor_.internal_variables = {
+            {"bleed_mass_flow", DaeVariableKind::algebraic, 1.0, 10.0,
+             0.0, 1.0, 0.0,
+             std::numeric_limits<double>::infinity(), "mass_flow"},
+        };
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph,
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        require_same_material(context, {
+            "donor_inlet", "donor_outlet",
+            "receiver_inlet", "receiver_outlet"});
+        const auto species = require_port_species(context, "donor_inlet");
+        for (const auto& port : {"donor_outlet", "receiver_inlet",
+                                 "receiver_outlet"}) {
+            if (species != require_port_species(context, port)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' material ports must use the same species basis");
+            }
+        }
+        const auto properties =
+            require_thermochemistry_package(context, "donor_inlet");
+        (void)require_thermochemistry_package(context, "donor_outlet");
+        (void)require_thermochemistry_package(context, "receiver_inlet");
+        (void)require_thermochemistry_package(context, "receiver_outlet");
+        const auto artifact = require_performance_map(
+            context, "flow_characteristic");
+        if (!artifact->map || artifact->conditioned_map) {
+            throw std::invalid_argument(
+                "cross-bleed flow characteristic must provide an ordinary "
+                "two-coordinate performance map");
+        }
+        const auto& map = *artifact->map;
+        if (map.primary_variable().name != "pressure_ratio" ||
+            map.primary_variable().dimension != "dimensionless" ||
+            map.family_variable().name != "position" ||
+            map.family_variable().dimension != "dimensionless" ||
+            map.output_variables().size() != 1 ||
+            map.output_variables().front().name !=
+                "corrected_mass_flow" ||
+            map.output_variables().front().dimension != "mass_flow") {
+            throw std::invalid_argument(
+                "cross-bleed map axes must be dimensionless pressure_ratio "
+                "and position, with one mass_flow corrected_mass_flow output");
+        }
+
+        const double reference_pressure = required_parameter(
+            context.component, "reference_pressure");
+        const double reference_temperature = required_parameter(
+            context.component, "reference_temperature");
+        const double capacity_scale = parameter_or(
+            context.component, "flow_capacity_scale", 1.0);
+        const auto donor_p =
+            require_port_variable(context, "donor_inlet.p");
+        const auto donor_h =
+            require_port_variable(context, "donor_inlet.h");
+        const auto donor_out_p =
+            require_port_variable(context, "donor_outlet.p");
+        const auto donor_out_h =
+            require_port_variable(context, "donor_outlet.h");
+        const auto receiver_p =
+            require_port_variable(context, "receiver_inlet.p");
+        const auto receiver_h =
+            require_port_variable(context, "receiver_inlet.h");
+        const auto receiver_out_p =
+            require_port_variable(context, "receiver_outlet.p");
+        const auto receiver_out_h =
+            require_port_variable(context, "receiver_outlet.h");
+        const auto position =
+            require_port_variable(context, "position.value");
+        const auto bleed =
+            require_internal_variable(context, "bleed_mass_flow");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        std::vector<std::size_t> donor_in_flows;
+        std::vector<std::size_t> receiver_in_flows;
+        std::vector<std::size_t> receiver_out_flows;
+        donor_in_flows.reserve(species.size());
+        receiver_in_flows.reserve(species.size());
+        receiver_out_flows.reserve(species.size());
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            donor_in_flows.push_back(require_port_variable(
+                context, "donor_inlet." + variable));
+            receiver_in_flows.push_back(require_port_variable(
+                context, "receiver_inlet." + variable));
+            receiver_out_flows.push_back(require_port_variable(
+                context, "receiver_outlet." + variable));
+        }
+        for (std::size_t species_index = 0;
+             species_index < species.size(); ++species_index) {
+            const auto& name = species.at(species_index);
+            const std::string variable = "m_dot[" + name + "]";
+            const auto donor_in = donor_in_flows.at(species_index);
+            const auto donor_out = require_port_variable(
+                context, "donor_outlet." + variable);
+            const auto receiver_in =
+                receiver_in_flows.at(species_index);
+            const auto receiver_out =
+                receiver_out_flows.at(species_index);
+
+            const auto validate = [donor_in_flows, bleed](
+                const std::vector<double>& x, double& donor_total) {
+                donor_total = 0.0;
+                for (const auto flow : donor_in_flows) {
+                    if (!std::isfinite(x.at(flow)) || x.at(flow) < 0.0) {
+                        return false;
+                    }
+                    donor_total += x.at(flow);
+                }
+                return donor_total > 0.0 &&
+                    std::isfinite(x.at(bleed)) && x.at(bleed) >= 0.0 &&
+                    x.at(bleed) <= donor_total;
+            };
+            const auto donor_pattern = [&] {
+                auto out = donor_in_flows;
+                out.push_back(donor_out);
+                out.push_back(bleed);
+                return out;
+            }();
+            system.add_checked_sparse_equation(
+                prefix + "donor_species." + name,
+                [donor_in_flows, donor_in, donor_out, bleed, validate](
+                    const std::vector<double>& x, double& residual) {
+                    double total = 0.0;
+                    if (!validate(x, total)) {
+                        return EvaluationStatus::recoverable(
+                            "cross-bleed requires positive donor flow and "
+                            "bleed flow within donor capacity");
+                    }
+                    residual = x.at(donor_out) - x.at(donor_in) *
+                        (1.0 - x.at(bleed) / total);
+                    return EvaluationStatus::success();
+                },
+                donor_pattern,
+                [donor_in_flows, donor_in, donor_out, bleed](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    double total = 0.0;
+                    for (const auto flow : donor_in_flows) total += x.at(flow);
+                    const double fraction = x.at(bleed) / total;
+                    for (const auto flow : donor_in_flows) {
+                        jacobian.push_back({
+                            flow,
+                            -(flow == donor_in ? 1.0 - fraction : 0.0) -
+                                x.at(donor_in) * x.at(bleed) /
+                                    (total * total)});
+                    }
+                    jacobian.push_back({donor_out, 1.0});
+                    jacobian.push_back({bleed, x.at(donor_in) / total});
+                    return x.at(donor_out) - x.at(donor_in) *
+                        (1.0 - fraction);
+                },
+                100.0);
+
+            auto receiver_pattern = donor_in_flows;
+            receiver_pattern.push_back(receiver_in);
+            receiver_pattern.push_back(receiver_out);
+            receiver_pattern.push_back(bleed);
+            system.add_checked_sparse_equation(
+                prefix + "receiver_species." + name,
+                [donor_in_flows, donor_in, receiver_in, receiver_out,
+                 bleed, validate](const std::vector<double>& x,
+                                  double& residual) {
+                    double total = 0.0;
+                    if (!validate(x, total)) {
+                        return EvaluationStatus::recoverable(
+                            "cross-bleed requires positive donor flow and "
+                            "bleed flow within donor capacity");
+                    }
+                    residual = x.at(receiver_out) - x.at(receiver_in) -
+                        x.at(donor_in) * x.at(bleed) / total;
+                    return EvaluationStatus::success();
+                },
+                receiver_pattern,
+                [donor_in_flows, donor_in, receiver_in, receiver_out, bleed](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    double total = 0.0;
+                    for (const auto flow : donor_in_flows) total += x.at(flow);
+                    for (const auto flow : donor_in_flows) {
+                        jacobian.push_back({
+                            flow,
+                            -(flow == donor_in ? x.at(bleed) / total : 0.0) +
+                                x.at(donor_in) * x.at(bleed) /
+                                    (total * total)});
+                    }
+                    jacobian.push_back({receiver_in, -1.0});
+                    jacobian.push_back({receiver_out, 1.0});
+                    jacobian.push_back({bleed, -x.at(donor_in) / total});
+                    return x.at(receiver_out) - x.at(receiver_in) -
+                        x.at(donor_in) * x.at(bleed) / total;
+                },
+                100.0);
+        }
+
+        system.add_linear_equation(
+            prefix + "donor_pressure",
+            {{donor_out_p, 1.0}, {donor_p, -1.0}}, 0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "donor_enthalpy",
+            {{donor_out_h, 1.0}, {donor_h, -1.0}}, 0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "receiver_pressure",
+            {{receiver_out_p, 1.0}, {receiver_p, -1.0}}, 0.0, 100000.0);
+
+        auto energy_pattern = donor_in_flows;
+        energy_pattern.insert(energy_pattern.end(),
+            receiver_in_flows.begin(), receiver_in_flows.end());
+        energy_pattern.insert(energy_pattern.end(),
+            receiver_out_flows.begin(), receiver_out_flows.end());
+        energy_pattern.insert(energy_pattern.end(),
+            {donor_h, receiver_h, receiver_out_h, bleed});
+        const auto evaluate_energy =
+            [donor_in_flows, receiver_in_flows, receiver_out_flows,
+             donor_h, receiver_h, receiver_out_h, bleed](
+                const std::vector<double>& x, double& residual) {
+                double donor_total = 0.0;
+                double receiver_in_total = 0.0;
+                double receiver_out_total = 0.0;
+                for (const auto flow : donor_in_flows) donor_total += x.at(flow);
+                for (const auto flow : receiver_in_flows)
+                    receiver_in_total += x.at(flow);
+                for (const auto flow : receiver_out_flows)
+                    receiver_out_total += x.at(flow);
+                if (!(donor_total > 0.0) || x.at(bleed) < 0.0 ||
+                    x.at(bleed) > donor_total) {
+                    return EvaluationStatus::recoverable(
+                        "cross-bleed energy balance requires positive, "
+                        "physically bounded flows");
+                }
+                residual = receiver_out_total * x.at(receiver_out_h) -
+                    receiver_in_total * x.at(receiver_h) -
+                    x.at(bleed) * x.at(donor_h);
+                return EvaluationStatus::success();
+            };
+        system.add_checked_sparse_equation(
+            prefix + "receiver_energy", evaluate_energy, energy_pattern,
+            [evaluate_energy, energy_pattern](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double base = 0.0;
+                const auto status = evaluate_energy(x, base);
+                if (!status.ok()) throw std::runtime_error(status.message);
+                for (const auto variable : energy_pattern) {
+                    const double step = std::max(
+                        1.0e-7, std::abs(x.at(variable)) * 1.0e-6);
+                    auto plus = x;
+                    auto minus = x;
+                    plus.at(variable) += step;
+                    minus.at(variable) -= step;
+                    double plus_value = 0.0;
+                    double minus_value = 0.0;
+                    const auto plus_status = evaluate_energy(plus, plus_value);
+                    const auto minus_status = evaluate_energy(minus, minus_value);
+                    if (plus_status.ok() && minus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (plus_value - minus_value) / (2.0 * step)});
+                    } else if (plus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (plus_value - base) / step});
+                    } else if (minus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (base - minus_value) / step});
+                    } else {
+                        throw std::runtime_error(
+                            "could not evaluate a local derivative for "
+                            "cross-bleed energy balance");
+                    }
+                }
+                return base;
+            },
+            1.0e8);
+
+        const auto evaluate_capacity =
+            [properties, artifact, species, donor_in_flows, donor_p,
+             donor_h, receiver_p, position, bleed, reference_pressure,
+             reference_temperature, capacity_scale](
+                const std::vector<double>& x, double& residual) {
+                double donor_total = 0.0;
+                std::vector<double> fractions;
+                fractions.reserve(donor_in_flows.size());
+                for (const auto flow : donor_in_flows) {
+                    if (!std::isfinite(x.at(flow)) || x.at(flow) < 0.0) {
+                        return EvaluationStatus::recoverable(
+                            "cross-bleed requires nonnegative donor species flows");
+                    }
+                    donor_total += x.at(flow);
+                    fractions.push_back(x.at(flow));
+                }
+                if (!(donor_total > 0.0) || !(x.at(donor_p) > 0.0) ||
+                    !(x.at(receiver_p) > 0.0) ||
+                    !std::isfinite(x.at(position))) {
+                    return EvaluationStatus::recoverable(
+                        "cross-bleed requires positive flow/pressures and "
+                        "finite position");
+                }
+                for (double& fraction : fractions) fraction /= donor_total;
+                const auto state = properties->state_ph(
+                    x.at(donor_p), x.at(donor_h),
+                    {physics::CompositionBasis::mass_fraction,
+                     species, std::move(fractions)});
+                if (!state.ok()) {
+                    return state.status == physics::PropertyStatus::backend_error
+                        ? EvaluationStatus::fatal(state.message)
+                        : EvaluationStatus::recoverable(state.message);
+                }
+                const double temperature =
+                    state.state.thermodynamic.temperature_k;
+                if (!(temperature > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "cross-bleed donor temperature must be positive");
+                }
+                try {
+                    const auto mapped = artifact->map->evaluate(
+                        x.at(donor_p) / x.at(receiver_p), x.at(position));
+                    const double capacity = capacity_scale *
+                        mapped.outputs.front() *
+                        (x.at(donor_p) / reference_pressure) *
+                        std::sqrt(reference_temperature / temperature);
+                    if (!std::isfinite(capacity) || capacity < 0.0 ||
+                        capacity > donor_total) {
+                        return EvaluationStatus::recoverable(
+                            "cross-bleed mapped capacity is outside donor flow");
+                    }
+                    residual = x.at(bleed) - capacity;
+                    return EvaluationStatus::success();
+                } catch (const MapDomainError& error) {
+                    return EvaluationStatus::recoverable(error.what());
+                }
+            };
+        auto capacity_pattern = donor_in_flows;
+        capacity_pattern.insert(capacity_pattern.end(),
+            {donor_p, donor_h, receiver_p, position, bleed});
+        system.add_checked_sparse_equation(
+            prefix + "mapped_bleed_capacity", evaluate_capacity,
+            capacity_pattern,
+            [evaluate_capacity, capacity_pattern](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double base = 0.0;
+                const auto status = evaluate_capacity(x, base);
+                if (!status.ok()) throw std::runtime_error(status.message);
+                for (const auto variable : capacity_pattern) {
+                    const double step = std::max(
+                        1.0e-7, std::abs(x.at(variable)) * 1.0e-6);
+                    auto plus = x;
+                    auto minus = x;
+                    plus.at(variable) += step;
+                    minus.at(variable) -= step;
+                    double plus_value = 0.0;
+                    double minus_value = 0.0;
+                    const auto plus_status = evaluate_capacity(plus, plus_value);
+                    const auto minus_status = evaluate_capacity(minus, minus_value);
+                    if (plus_status.ok() && minus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (plus_value - minus_value) / (2.0 * step)});
+                    } else if (plus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (plus_value - base) / step});
+                    } else if (minus_status.ok()) {
+                        jacobian.push_back({variable,
+                            (base - minus_value) / step});
+                    } else {
+                        throw std::runtime_error(
+                            "could not evaluate a local derivative for "
+                            "cross-bleed mapped capacity");
+                    }
+                }
+                return base;
+            },
+            10.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_transport_component_models(
@@ -3657,6 +4073,8 @@ void register_transport_component_models(
             FixedFractionMaterialSplitterModel>());
     registry.register_model(std::make_shared<
         ControlledFractionMaterialSplitterModel>());
+    registry.register_model(std::make_shared<
+        ControlledMaterialCrossBleedModel>());
     registry.register_model(std::make_shared<
         PerfectGasMachScaledMaterialDuctModel>());
     registry.register_model(std::make_shared<

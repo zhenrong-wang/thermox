@@ -1,0 +1,61 @@
+{
+  "id": "nasa-agtf30-vbv-map",
+  "schema_version": "thermox.performance_map/v1",
+  "revision": "agtf30-17051fc",
+  "checksum_sha256": "80bb441d740595cbdf194b6d1359ae9f487dff336fe40c7bbb6e1dc9d92ac796",
+  "payload": {
+    "primary_variable": {
+      "name": "pressure_ratio",
+      "dimension": "dimensionless"
+    },
+    "family_variable": {
+      "name": "position",
+      "dimension": "dimensionless"
+    },
+    "output_variables": [
+      {
+        "name": "corrected_mass_flow",
+        "dimension": "mass_flow"
+      }
+    ],
+    "output_constraints": [
+      {
+        "output": "corrected_mass_flow",
+        "minimum": 0.0,
+        "minimum_inclusive": true
+      }
+    ],
+    "curves": [
+      {
+        "family_coordinate": 0.0,
+        "samples": [
+          {"coordinate": 1.0, "outputs": [0.0]},
+          {"coordinate": 1.1, "outputs": [0.0]},
+          {"coordinate": 2.0, "outputs": [0.0]},
+          {"coordinate": 5.0, "outputs": [0.0]}
+        ]
+      },
+      {
+        "family_coordinate": 1.0,
+        "samples": [
+          {"coordinate": 1.0, "outputs": [0.0]},
+          {"coordinate": 1.1, "outputs": [3.512372477317262]},
+          {"coordinate": 2.0, "outputs": [5.853954128862103]},
+          {"coordinate": 5.0, "outputs": [11.590829175146965]}
+        ]
+      }
+    ],
+    "primary_extrapolation": "clamp",
+    "family_extrapolation": "clamp"
+  },
+  "import_audit": {
+    "source_format": "T-MATS Valve_TMATS generated-C parameters",
+    "source_revision": "NASA AGTF30 17051fc",
+    "source_pressure_ratios": [1.0, 1.1, 2.0, 5.0],
+    "source_corrected_flux": [0.0, 3.0, 5.0, 9.9],
+    "source_effective_area_in2": 4.0,
+    "reference_pressure_psia": 14.696,
+    "reference_temperature_degR": 518.67,
+    "conversion": "Wc*P_ref/sqrt(T_ref)*area converted from lbm/s to kg/s"
+  }
+}

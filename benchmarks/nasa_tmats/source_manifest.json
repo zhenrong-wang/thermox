@@ -307,5 +307,24 @@
     ],
     "classification": "multi_point_nozzle_closed_zero_vbv_whole_gas_path_cross_code_reproduction"
   },
+  "agtf30_vbv_nozzle_twin_spool_execution": {
+    "model": "agtf30_vbv_nozzle_twin_spool.json",
+    "parent_model": "agtf30_nozzle_closed_twin_spool.json",
+    "artifact": "agtf30_vbv_map.json",
+    "source_valve_contract": "T-MATS Valve_TMATS pressure-ratio curve with position from zero to fully open, effective area 4.0 in2, and reference corrected-flow conversion at 14.696 psia and 518.67 degR.",
+    "topology": "The generic cross-bleed junction removes mapped flow at LPC discharge composition and conservatively mixes species and enthalpy into the fan bypass stream before duct 17.",
+    "results": {
+      "converged_closed_valve_points": 4,
+      "newton_iterations_per_point_range": [5, 9],
+      "largest_coupled_linear_system_size": 407,
+      "solved_bleed_mass_flow_kg_s": 0.0
+    },
+    "reserved_comparisons": [
+      "The fifth nonzero-VBV point until its source station boundaries and initialization are assembled into the continuous declaration.",
+      "Net thrust until generic freestream ram drag is connected.",
+      "Fuel-flow predictive qualification, independent hardware evidence, and transient validation."
+    ],
+    "classification": "multi_point_closed_vbv_topology_and_conservation_regression"
+  },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, nonzero-VBV validation, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }
