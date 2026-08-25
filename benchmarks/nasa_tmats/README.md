@@ -84,11 +84,12 @@ path:
 
 No parameters are fitted to the five outputs. Across all five points, discharge-pressure errors
 are -0.004% to -0.010%, discharge-temperature errors are -0.198% to -0.282%, combined MAPE is
-0.121%, and the maximum absolute error is 0.282%. Every point passes the declared 0.5% cross-code
-criterion.
+0.121%. A generic instance-sized fractional-bleed port group represents the three source-declared
+extractions and their pressure/enthalpy state fractions. Outlet-flow error is numerical zero and
+torque errors are +0.198% to +0.283%; the four-output MAPE is 0.122% and the maximum absolute error
+is 0.283%. Every point passes the declared 0.5% cross-code criterion.
 
-The AGTF30 aggregate HPC extracts three bleeds. The current isolated Thermox component deliberately
-does not compare outlet mass flow or shaft power because it preserves inlet flow and does not have
-the three bleed extraction states needed to reproduce T-MATS bleed work. This limitation is useful
-architectural evidence: the next whole-engine slice must represent the HPC as a segmented assembly
-with explicit bleed ports/states instead of adding a hidden case correction to this component.
+The bleed count and state fractions are ordinary component-instance declarations, not an AGTF30
+special case. The same model can expose one through 32 extraction ports, and its shaft balance
+accounts for work retained by each extracted stream. This closes the isolated HPC flow/work gap;
+the next whole-engine slice is the coupled shaft, combustor, turbine, and nozzle system.

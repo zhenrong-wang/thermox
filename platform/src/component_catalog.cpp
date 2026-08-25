@@ -99,6 +99,29 @@ void validate_component_descriptor(
                 "' declares duplicate port: " + port.name);
         }
     }
+    std::map<std::string, bool> port_groups;
+    for (const auto& group : descriptor.port_groups) {
+        if (group.name.empty() || group.port_name_prefix.empty() ||
+            group.domain.empty() || group.direction.empty() ||
+            group.minimum_count > group.maximum_count ||
+            group.maximum_connections == 0U) {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' has an incomplete port-group descriptor");
+        }
+        if (group.direction != "in" && group.direction != "out" &&
+            group.direction != "bidirectional") {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' has invalid port-group direction: " +
+                group.direction);
+        }
+        if (!port_groups.emplace(group.name, true).second) {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' declares duplicate port group: " + group.name);
+        }
+    }
     const auto has_domain = [&](const std::string& domain) {
         return std::any_of(
             descriptor.ports.begin(), descriptor.ports.end(),

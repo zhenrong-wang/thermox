@@ -856,15 +856,22 @@ public:
     MaterialMapTurbomachineryModel(
         std::string kind, bool compressor,
         bool variable_geometry = false,
-        bool latent_coordinate = false)
+        bool latent_coordinate = false,
+        bool fractional_bleeds = false)
         : compressor_(compressor),
           variable_geometry_(variable_geometry),
-          latent_coordinate_(latent_coordinate) {
+          latent_coordinate_(latent_coordinate),
+          fractional_bleeds_(fractional_bleeds) {
         if (latent_coordinate_ &&
             (!compressor_ || variable_geometry_)) {
             throw std::invalid_argument(
                 "latent map coordinates are currently supported only "
                 "for fixed-geometry compressors");
+        }
+        if (fractional_bleeds_ && !latent_coordinate_) {
+            throw std::invalid_argument(
+                "fractional bleed ports require a coordinate-map "
+                "compressor");
         }
         descriptor_.kind = std::move(kind);
         descriptor_.version = "1.0.0";
@@ -876,7 +883,9 @@ public:
             : "Material turbine";
         descriptor_.category = "Turbomachinery";
         descriptor_.model_name = latent_coordinate_
-            ? "Coordinate-based performance map"
+            ? (fractional_bleeds_
+                  ? "Coordinate map with fractional bleed extraction"
+                  : "Coordinate-based performance map")
             : (variable_geometry_
                   ? "Variable-geometry performance map"
                   : "Performance map");
@@ -904,6 +913,20 @@ public:
             {"efficiency_scale", "dimensionless", false, 1.0,
              0.0, std::numeric_limits<double>::infinity(), false,
              true}};
+        if (fractional_bleeds_) {
+            descriptor_.port_groups.push_back({
+                "bleed", "bleed_", "material", "out", 1U, 32U,
+                1U});
+            descriptor_.parameters.push_back({
+                "bleed_fraction[{index}]", "dimensionless", true,
+                std::nullopt, 0.0, 1.0, true, false});
+            descriptor_.parameters.push_back({
+                "bleed_pressure_fraction[{index}]", "dimensionless",
+                true, std::nullopt, 0.0, 1.0, true, true});
+            descriptor_.parameters.push_back({
+                "bleed_enthalpy_fraction[{index}]", "dimensionless",
+                true, std::nullopt, 0.0, 1.0, true, true});
+        }
         if (variable_geometry_) {
             descriptor_.parameters.push_back(
                 {"geometry_setting", "angle", true, std::nullopt,
@@ -923,6 +946,49 @@ public:
 
     const ComponentModelDescriptor& descriptor() const override {
         return descriptor_;
+    }
+
+    ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const override {
+        auto result = descriptor_;
+        if (!fractional_bleeds_) {
+            if (!component.port_counts.empty()) {
+                throw std::invalid_argument(
+                    "component '" + component.id +
+                    "' does not declare an instance-sized port group");
+            }
+            return result;
+        }
+        if (component.port_counts.size() != 1U ||
+            !component.port_counts.contains("bleed")) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' must declare exactly port_counts.bleed");
+        }
+        const auto count = component.port_counts.at("bleed");
+        if (count == 0U || count > 32U) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' bleed port count must be in [1, 32]");
+        }
+        for (std::size_t index = 1; index <= count; ++index) {
+            const std::string suffix = "[" + std::to_string(index) + "]";
+            result.ports.push_back({
+                "bleed_" + std::to_string(index),
+                "material", "out"});
+            result.parameters.push_back({
+                "bleed_fraction" + suffix, "dimensionless", true,
+                std::nullopt, 0.0, 1.0, true, false});
+            result.parameters.push_back({
+                "bleed_pressure_fraction" + suffix,
+                "dimensionless", true, std::nullopt,
+                0.0, 1.0, true, true});
+            result.parameters.push_back({
+                "bleed_enthalpy_fraction" + suffix,
+                "dimensionless", true, std::nullopt,
+                0.0, 1.0, true, true});
+        }
+        return result;
     }
 
     void add_equations(
@@ -951,7 +1017,51 @@ public:
                 "thermochemistry package");
         }
 
+        const std::size_t bleed_count = fractional_bleeds_
+            ? context.component.port_counts.at("bleed")
+            : 0U;
+        std::vector<double> bleed_fractions;
+        std::vector<double> bleed_pressure_fractions;
+        std::vector<double> bleed_enthalpy_fractions;
+        for (std::size_t index = 1; index <= bleed_count; ++index) {
+            const std::string suffix =
+                "[" + std::to_string(index) + "]";
+            bleed_fractions.push_back(required_parameter(
+                context.component, "bleed_fraction" + suffix));
+            bleed_pressure_fractions.push_back(required_parameter(
+                context.component,
+                "bleed_pressure_fraction" + suffix));
+            bleed_enthalpy_fractions.push_back(required_parameter(
+                context.component,
+                "bleed_enthalpy_fraction" + suffix));
+            const std::string port =
+                "bleed_" + std::to_string(index);
+            if (context.component.material_bindings.at(port) !=
+                context.component.material_bindings.at("inlet")) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' bleed ports must share the inlet material binding");
+            }
+            if (species != require_port_species(context, port)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' bleed ports must share the inlet species basis");
+            }
+        }
+        double total_bleed_fraction = 0.0;
+        for (const double fraction : bleed_fractions) {
+            total_bleed_fraction += fraction;
+        }
+        if (!std::isfinite(total_bleed_fraction) ||
+            total_bleed_fraction >= 1.0) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' total bleed fraction must be finite and below one");
+        }
+
         std::vector<std::size_t> inlet_flows;
+        std::vector<std::vector<std::size_t>> bleed_flows(
+            bleed_count);
         const std::string prefix =
             "component." + context.component.id + ".";
         for (const auto& name : species) {
@@ -962,9 +1072,27 @@ public:
             const auto outlet = require_port_variable(
                 context, "outlet." + variable);
             inlet_flows.push_back(inlet);
+            std::vector<LinearTerm> continuity{
+                {outlet, 1.0}, {inlet, -1.0}};
+            for (std::size_t bleed = 0;
+                 bleed < bleed_count; ++bleed) {
+                const auto flow = require_port_variable(
+                    context,
+                    "bleed_" + std::to_string(bleed + 1) +
+                        "." + variable);
+                bleed_flows[bleed].push_back(flow);
+                continuity.push_back({flow, 1.0});
+                system.add_linear_equation(
+                    prefix + "bleed_" +
+                        std::to_string(bleed + 1) +
+                        "_species." + name,
+                    {{flow, 1.0},
+                     {inlet, -bleed_fractions[bleed]}},
+                    0.0, 100.0);
+            }
             system.add_linear_equation(
                 prefix + "species_continuity." + name,
-                {{outlet, 1.0}, {inlet, -1.0}},
+                std::move(continuity),
                 0.0, 100.0);
         }
         const auto inlet_p =
@@ -979,6 +1107,35 @@ public:
             require_port_variable(context, "shaft.W_dot");
         const auto shaft_omega =
             require_port_variable(context, "shaft.omega");
+        std::vector<std::size_t> bleed_pressures;
+        std::vector<std::size_t> bleed_enthalpies;
+        for (std::size_t bleed = 0;
+             bleed < bleed_count; ++bleed) {
+            const std::string port =
+                "bleed_" + std::to_string(bleed + 1);
+            const auto pressure = require_port_variable(
+                context, port + ".p");
+            const auto enthalpy = require_port_variable(
+                context, port + ".h");
+            bleed_pressures.push_back(pressure);
+            bleed_enthalpies.push_back(enthalpy);
+            const double pressure_fraction =
+                bleed_pressure_fractions[bleed];
+            const double enthalpy_fraction =
+                bleed_enthalpy_fractions[bleed];
+            system.add_linear_equation(
+                prefix + port + "_pressure_state",
+                {{pressure, 1.0},
+                 {inlet_p, -(1.0 - pressure_fraction)},
+                 {outlet_p, -pressure_fraction}},
+                0.0, 1.0e6);
+            system.add_linear_equation(
+                prefix + port + "_enthalpy_state",
+                {{enthalpy, 1.0},
+                 {inlet_h, -(1.0 - enthalpy_fraction)},
+                 {outlet_h, -enthalpy_fraction}},
+                0.0, 1.0e6);
+        }
         const std::optional<std::size_t> map_coordinate =
             latent_coordinate_
             ? std::optional<std::size_t>{
@@ -1065,10 +1222,18 @@ public:
         power_variables.push_back(inlet_h);
         power_variables.push_back(outlet_h);
         power_variables.push_back(shaft_w);
+        for (std::size_t bleed = 0;
+             bleed < bleed_count; ++bleed) {
+            power_variables.insert(
+                power_variables.end(), bleed_flows[bleed].begin(),
+                bleed_flows[bleed].end());
+            power_variables.push_back(bleed_enthalpies[bleed]);
+        }
         system.add_sparse_equation(
             prefix + "shaft_power",
             std::move(power_variables),
-            [inlet_flows, inlet_h, outlet_h, shaft_w,
+            [inlet_flows, bleed_flows, bleed_enthalpies,
+             inlet_h, outlet_h, shaft_w,
              compressor = compressor_](
                 const std::vector<double>& x,
                 std::vector<EquationPartial>& jacobian) {
@@ -1090,8 +1255,34 @@ public:
                     {inlet_h, direction * mass_flow});
                 jacobian.push_back(
                     {outlet_h, -direction * mass_flow});
-                return x.at(shaft_w) -
+                double residual = x.at(shaft_w) -
                     direction * mass_flow * enthalpy_change;
+                double total_bleed_flow = 0.0;
+                for (std::size_t bleed = 0;
+                     bleed < bleed_flows.size(); ++bleed) {
+                    double bleed_mass_flow = 0.0;
+                    for (const auto variable : bleed_flows[bleed]) {
+                        bleed_mass_flow += x.at(variable);
+                        jacobian.push_back({
+                            variable,
+                            direction *
+                                (x.at(outlet_h) -
+                                 x.at(bleed_enthalpies[bleed]))});
+                    }
+                    total_bleed_flow += bleed_mass_flow;
+                    jacobian.push_back({
+                        bleed_enthalpies[bleed],
+                        -direction * bleed_mass_flow});
+                    residual += direction * bleed_mass_flow *
+                        (x.at(outlet_h) -
+                         x.at(bleed_enthalpies[bleed]));
+                }
+                if (total_bleed_flow != 0.0) {
+                    jacobian.push_back({
+                        outlet_h,
+                        direction * total_bleed_flow});
+                }
+                return residual;
             },
             1.0e6);
     }
@@ -1101,6 +1292,7 @@ private:
     bool compressor_{false};
     bool variable_geometry_{false};
     bool latent_coordinate_{false};
+    bool fractional_bleeds_{false};
 };
 
 }  // namespace
@@ -1133,6 +1325,10 @@ void register_material_turbomachinery_component_models(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "compressor.material.coordinate_map",
             true, false, true));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "compressor.material.coordinate_map.fractional_bleeds",
+            true, false, true, true));
 }
 
 }  // namespace thermox::platform

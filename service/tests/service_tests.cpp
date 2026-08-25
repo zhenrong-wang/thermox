@@ -590,13 +590,13 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v12,
+            thermox::service::catalog_schema_v13,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 78,
+        response.components.size() == 79,
         "service must expose the complete component registry");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -631,6 +631,20 @@ void test_catalog_discovery() {
             iso_compressor->supports_steady &&
             !iso_compressor->supports_transient,
         "catalog must expose the graph-native ISO 2314 compressor");
+    const auto bleed_compressor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "compressor.material.coordinate_map.fractional_bleeds";
+        });
+    require(
+        bleed_compressor != response.components.end() &&
+            bleed_compressor->port_groups.size() == 1U &&
+            bleed_compressor->port_groups.front().name == "bleed" &&
+            bleed_compressor->port_groups.front().minimum_count == 1U &&
+            bleed_compressor->port_groups.front().maximum_count == 32U,
+        "catalog must expose the instance-sized compressor bleed-port "
+        "contract");
     const auto shaft_combiner = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1211,13 +1225,18 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v12\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v13\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
         json.find("\"unit_dimensions\": [") !=
             std::string::npos,
         "catalog JSON must serialize unit dimensions");
+    require(
+        json.find("\"port_groups\": [") != std::string::npos &&
+            json.find("\"port_name_prefix\": \"bleed_\"") !=
+                std::string::npos,
+        "catalog JSON must serialize instance-sized port groups");
     require(
         json.find("\"correlation_templates\": [") !=
                 std::string::npos &&
@@ -1656,21 +1675,44 @@ void test_nasa_tmats_hpc_cross_code_benchmark() {
 }
 
 void test_nasa_agtf30_hpc_off_design_benchmark() {
-    const std::vector<std::tuple<std::string, double, double>> cases = {
-        {"sea_level_static_1000", 173.2371505793, 1141.9383281412},
-        {"sea_level_mach_03_1500", 356.9520658083, 1464.9481781211},
-        {"alt_10000_mach_05_1750", 356.2563984725, 1448.1306329659},
-        {"alt_25000_mach_06_2000", 268.7274600036, 1392.4439691531},
-        {"alt_30000_mach_072_2000", 235.7384592780, 1400.7991579615},
+    const std::vector<
+        std::tuple<std::string, double, double, double, double>> cases = {
+        {"sea_level_static_1000", 173.2371505793, 1141.9383281412,
+         21.06933669915131, 1413.1184383854654},
+        {"sea_level_mach_03_1500", 356.9520658083, 1464.9481781211,
+         37.603710655135046, 3031.727355003934},
+        {"alt_10000_mach_05_1750", 356.2563984725, 1448.1306329659,
+         37.34425502036809, 3050.602967797384},
+        {"alt_25000_mach_06_2000", 268.7274600036, 1392.4439691531,
+         28.24798344950436, 2314.0830996875666},
+        {"alt_30000_mach_072_2000", 235.7384592780, 1400.7991579615,
+         24.721711888167768, 2017.266792982122},
     };
     const auto model = read_source_file(
         "benchmarks/nasa_tmats/agtf30_hpc_off_design.json");
+    const auto parsed_model =
+        thermox::platform::parse_model_document_text(model);
+    require(
+        parsed_model.components.front().port_counts.at("bleed") == 3U,
+        "AGTF30 declaration must preserve its instance-sized bleed ports");
+    const auto canonical_model =
+        thermox::service::detail::serialize_model_document_json(
+            parsed_model);
+    const auto reparsed_model =
+        thermox::platform::parse_model_document_text(canonical_model);
+    require(
+        reparsed_model.components.front().port_counts.at("bleed") == 3U,
+        "canonical model serialization must preserve port counts");
     const auto map = thermox::service::
         parse_performance_map_artifact_declaration_json(
             read_source_file(
                 "benchmarks/nasa_tmats/agtf30_hpc_map.json"));
     constexpr double psi_to_pa = 6894.757293168;
-    for (const auto& [case_id, pressure_psia, temperature_degR] : cases) {
+    constexpr double pound_mass_to_kg = 0.45359237;
+    constexpr double pound_foot_to_newton_metre =
+        1.3558179483314004;
+    for (const auto& [case_id, pressure_psia, temperature_degR,
+                      outlet_flow_lbm_s, torque_lbf_ft] : cases) {
         thermox::service::SteadySimulationRequest request;
         request.model_json = model;
         request.case_id = case_id;
@@ -1683,18 +1725,38 @@ void test_nasa_agtf30_hpc_off_design_benchmark() {
             "NASA AGTF30 HPC off-design point must solve: " + case_id);
         const auto& outlet = require_port_result(
             response.graph, "compressor", "outlet");
+        const auto& shaft = require_port_result(
+            response.graph, "compressor", "shaft");
         const double pressure = require_result_value(
             outlet.primary_values, "p").value_si;
         const double temperature = require_result_value(
             outlet.derived_values, "T").value_si;
+        const double outlet_flow = require_result_value(
+            outlet.derived_values, "m_dot_total").value_si;
+        const double shaft_power = require_result_value(
+            shaft.primary_values, "W_dot").value_si;
+        const double shaft_speed = require_result_value(
+            shaft.primary_values, "omega").value_si;
+        const double torque =
+            std::abs(shaft_power / shaft_speed);
         require(
             std::abs(pressure / (pressure_psia * psi_to_pa) - 1.0) <
                     0.005 &&
                 std::abs(
                     temperature / (temperature_degR * 5.0 / 9.0) -
+                    1.0) < 0.005 &&
+                std::abs(
+                    outlet_flow /
+                        (outlet_flow_lbm_s * pound_mass_to_kg) -
+                    1.0) < 0.005 &&
+                std::abs(
+                    torque /
+                        (torque_lbf_ft *
+                         pound_foot_to_newton_metre) -
                     1.0) < 0.005,
-            "Thermox AGTF30 HPC discharge pressure and temperature must "
-            "remain within 0.5% at off-design point: " + case_id);
+            "Thermox AGTF30 HPC discharge pressure, temperature, outlet "
+            "flow, and torque must remain within 0.5% at off-design "
+            "point: " + case_id);
     }
 }
 

@@ -97,8 +97,10 @@
       "latest_result": {
         "component": "AGTF30_high_pressure_compressor",
         "healthy_off_design_points": 5,
+        "validated_outputs": ["discharge_pressure", "discharge_temperature", "outlet_mass_flow", "shaft_torque"],
         "combined_pressure_temperature_mape_percent": 0.1206,
-        "maximum_absolute_error_percent": 0.2818,
+        "combined_all_outputs_mape_percent": 0.1217,
+        "maximum_absolute_error_percent": 0.2832,
         "acceptance_band_percent": 0.5,
         "classification": "multi_point_off_design_component_cross_code_reproduction"
       }

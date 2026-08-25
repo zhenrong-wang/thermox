@@ -74,12 +74,11 @@ design-component reproduction; whole-engine, transient, and hardware gates remai
 
 The off-design component gate is now also complete. Five healthy, unbiased operating points from
 NASA's public AGTF30 numeric output span sea level to 30,000 ft and Mach 0 to 0.72. Without fitting,
-Thermox reproduces HPC discharge pressure and temperature with 0.121% combined MAPE and 0.282%
-maximum absolute error. Outlet flow and shaft power are withheld because the AGTF30 aggregate HPC
-extracts three bleeds; comparing them with a flow-preserving isolated compressor would be a false
-validation.
+Thermox reproduces HPC discharge pressure, temperature, outlet flow, and torque with 0.122%
+combined MAPE and 0.283% maximum absolute error. A generic instance-sized fractional-bleed port
+group carries the three source-declared extraction states and their work contribution; no
+case-specific correction is fitted.
 
-The next T-MATS implementation is therefore the coupled shaft/combustor/turbine/nozzle system, with
-the HPC represented as an explicit segmented assembly carrying its bleed extraction states. The
+The next T-MATS implementation is therefore the coupled shaft/combustor/turbine/nozzle system. The
 Sandia sCO2 transient follows once authoritative numeric response data are obtained or digitization
 uncertainty is formally included in every acceptance limit.

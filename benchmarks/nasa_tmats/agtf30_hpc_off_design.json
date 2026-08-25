@@ -18,17 +18,33 @@
     "components": [
       {
         "id": "compressor",
-        "kind": "compressor.material.coordinate_map",
+        "kind": "compressor.material.coordinate_map.fractional_bleeds",
         "version": "1.0.0",
+        "port_counts": {"bleed": 3},
         "parameters": {
           "reference_pressure": {"value": 14.696, "unit": "psia"},
           "reference_temperature": {"value": 518.67, "unit": "degR"},
           "flow_capacity_scale": 0.1328,
           "pressure_ratio_scale": 0.595594,
-          "efficiency_scale": 0.994014
+          "efficiency_scale": 0.994014,
+          "bleed_fraction[1]": 0.02,
+          "bleed_pressure_fraction[1]": 0.146498,
+          "bleed_enthalpy_fraction[1]": 0.4997,
+          "bleed_fraction[2]": 0.0693,
+          "bleed_pressure_fraction[2]": 1.0,
+          "bleed_enthalpy_fraction[2]": 1.0,
+          "bleed_fraction[3]": 0.0625,
+          "bleed_pressure_fraction[3]": 1.0,
+          "bleed_enthalpy_fraction[3]": 1.0
         },
         "artifacts": {"performance_map": "nasa-agtf30-hpc-map"},
-        "materials": {"inlet": "dry_air", "outlet": "dry_air"}
+        "materials": {
+          "inlet": "dry_air",
+          "outlet": "dry_air",
+          "bleed_1": "dry_air",
+          "bleed_2": "dry_air",
+          "bleed_3": "dry_air"
+        }
       }
     ],
     "connections": []

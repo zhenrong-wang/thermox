@@ -39,6 +39,9 @@ struct ComponentDefinition {
     std::map<std::string, std::string> medium_bindings;
     std::map<std::string, std::string> material_bindings;
     std::map<std::string, std::string> artifact_bindings;
+    // Instance-sized repeated port groups (for example bleed=3). Counts
+    // affect topology and therefore cannot be changed by case overrides.
+    std::map<std::string, std::size_t> port_counts;
     std::map<std::string, ScalarValue> parameters;
 };
 

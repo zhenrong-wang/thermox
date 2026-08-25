@@ -358,6 +358,24 @@ void component_type_json(
         out << ", \"maximum_connections\": "
             << port.maximum_connections << '}';
     }
+    out << "], \"port_groups\": [";
+    for (std::size_t index = 0;
+         index < component.port_groups.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& group = component.port_groups[index];
+        out << "{\"name\": ";
+        json_string(out, group.name);
+        out << ", \"port_name_prefix\": ";
+        json_string(out, group.port_name_prefix);
+        out << ", \"domain\": ";
+        json_string(out, group.domain);
+        out << ", \"direction\": ";
+        json_string(out, group.direction);
+        out << ", \"minimum_count\": " << group.minimum_count
+            << ", \"maximum_count\": " << group.maximum_count
+            << ", \"maximum_connections\": "
+            << group.maximum_connections << '}';
+    }
     out << "], \"parameters\": [";
     for (std::size_t index = 0;
          index < component.parameters.size(); ++index) {

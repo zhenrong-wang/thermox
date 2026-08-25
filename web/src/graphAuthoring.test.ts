@@ -25,7 +25,7 @@ const topology: TopologyDocument = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v12',
+  schema_version: 'thermox.catalog/v13',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],

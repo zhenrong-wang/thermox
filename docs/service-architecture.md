@@ -42,7 +42,7 @@ The current synchronous service exposes:
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
 - `EngineeringStudyRequest` / `EngineeringStudyResponse`;
-- `thermox.command/v1`, `thermox.catalog/v12`, `thermox.result/v5`, and `thermox.error/v1`
+- `thermox.command/v1`, `thermox.catalog/v13`, `thermox.result/v5`, and `thermox.error/v1`
   contracts;
 - stable operation status and error stage/code fields;
 - requested/resolved component and property versions, connector contracts, platform build, model,
@@ -181,7 +181,7 @@ The application boundary needed by a thin network adapter is now complete:
 
 | Intended operation | Application call | Wire representation |
 | --- | --- | --- |
-| Discover component, correlation-family, correlation, and regime-map templates | `SimulationService::get_catalog` | `thermox.catalog/v12` JSON |
+| Discover component, correlation-family, correlation, and regime-map templates | `SimulationService::get_catalog` | `thermox.catalog/v13` JSON |
 | Instantiate a correlation artifact from a registered family ID or compatible explicit bindings | `SimulationService::instantiate_correlation` | `thermox.correlation_instantiation/v1` JSON with canonical payload and SHA-256 |
 | Instantiate a regime-map artifact from a template | `SimulationService::instantiate_regime_map` | `thermox.regime_map_instantiation/v1` JSON with canonical payload and SHA-256 |
 | Validate readiness and compile a model | `SimulationService::validate_model` | result-v3 validation JSON with layered readiness and an authoritative calculation gate |

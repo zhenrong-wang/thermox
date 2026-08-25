@@ -1373,6 +1373,7 @@ export interface ComponentDefinition {
   media?: Record<string, string>
   materials?: Record<string, string>
   artifacts?: Record<string, string>
+  port_counts?: Record<string, number>
   parameters?: Record<string, unknown>
 }
 
@@ -1388,6 +1389,16 @@ export interface CatalogPort {
   name: string
   domain: string
   direction: 'in' | 'out' | 'bidirectional'
+  maximum_connections: number
+}
+
+export interface CatalogPortGroup {
+  name: string
+  port_name_prefix: string
+  domain: string
+  direction: 'in' | 'out' | 'bidirectional'
+  minimum_count: number
+  maximum_count: number
   maximum_connections: number
 }
 
@@ -1423,6 +1434,7 @@ export interface CatalogComponent {
     hysteresis_si: number
   }>
   ports: CatalogPort[]
+  port_groups?: CatalogPortGroup[]
   parameters: CatalogParameter[]
   artifacts: Array<{
     role: string
@@ -1529,7 +1541,7 @@ export interface CatalogCorrelationFamilyTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v12'
+  schema_version: 'thermox.catalog/v13'
   status: string
   fingerprint: string
   components: CatalogComponent[]

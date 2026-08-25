@@ -690,6 +690,27 @@ ComponentDefinition parse_component(
         }
     }
 
+    if (const JsonValue* port_counts =
+            optional_object_member(value, "port_counts")) {
+        for (const auto& [group, count_value] :
+             port_counts->object) {
+            const double count = require_number_value(
+                count_value,
+                "component '" + component.id +
+                    "'.port_counts." + group);
+            if (group.empty() || !std::isfinite(count) || count < 0.0 ||
+                std::floor(count) != count ||
+                count > static_cast<double>(
+                    std::numeric_limits<std::size_t>::max())) {
+                throw std::invalid_argument(
+                    "component port count must be a non-negative integer: " +
+                    component.id + "." + group);
+            }
+            component.port_counts.emplace(
+                group, static_cast<std::size_t>(count));
+        }
+    }
+
     if (const JsonValue* parameters = optional_object_member(value, "parameters")) {
         component.parameters = parse_scalar_map(*parameters, "component '" + component.id + "'.parameters");
     }

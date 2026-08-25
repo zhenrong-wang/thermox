@@ -2470,6 +2470,12 @@ CatalogResponse SimulationService::get_catalog(
                 {port.name, port.domain, port.direction,
                  port.maximum_connections});
         }
+        for (const auto& group : descriptor.port_groups) {
+            component.port_groups.push_back({
+                group.name, group.port_name_prefix, group.domain,
+                group.direction, group.minimum_count,
+                group.maximum_count, group.maximum_connections});
+        }
         for (const auto& parameter : descriptor.parameters) {
             component.parameters.push_back({
                 parameter.name,

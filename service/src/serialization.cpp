@@ -897,6 +897,16 @@ void assembly_component_json(
     bindings("media", component.medium_bindings);
     bindings("materials", component.material_bindings);
     bindings("artifacts", component.artifact_bindings);
+    if (!component.port_counts.empty()) {
+        out << ",\n" << indent << "  \"port_counts\": {";
+        std::size_t index = 0;
+        for (const auto& [name, count] : component.port_counts) {
+            if (index++ != 0U) out << ", ";
+            json_string(out, name);
+            out << ": " << count;
+        }
+        out << "}";
+    }
     if (!component.parameters.empty()) {
         out << ",\n" << indent << "  \"parameters\": ";
         scalar_map(out, component.parameters, indent + "    ");
@@ -1092,6 +1102,17 @@ void serialize_topology(
                 json_string(out, role);
                 out << ": ";
                 json_string(out, artifact_id);
+            }
+            out << "}";
+        }
+        if (!component.port_counts.empty()) {
+            out << ",\n        \"port_counts\": {";
+            std::size_t count_index = 0;
+            for (const auto& [name, count] :
+                 component.port_counts) {
+                if (count_index++ != 0) out << ", ";
+                json_string(out, name);
+                out << ": " << count;
             }
             out << "}";
         }
@@ -1537,6 +1558,23 @@ std::string serialize_catalog_response_json(
             out << ", \"maximum_connections\": "
                 << port.maximum_connections;
             out << "}";
+        }
+        out << "], \"port_groups\": [";
+        for (std::size_t j = 0; j < component.port_groups.size(); ++j) {
+            if (j != 0) out << ", ";
+            const auto& group = component.port_groups[j];
+            out << "{\"name\": ";
+            json_string(out, group.name);
+            out << ", \"port_name_prefix\": ";
+            json_string(out, group.port_name_prefix);
+            out << ", \"domain\": ";
+            json_string(out, group.domain);
+            out << ", \"direction\": ";
+            json_string(out, group.direction);
+            out << ", \"minimum_count\": " << group.minimum_count
+                << ", \"maximum_count\": " << group.maximum_count
+                << ", \"maximum_connections\": "
+                << group.maximum_connections << "}";
         }
         out << "], \"parameters\": [";
         for (std::size_t j = 0;

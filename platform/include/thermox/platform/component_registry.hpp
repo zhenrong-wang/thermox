@@ -91,6 +91,19 @@ struct EventModelDescriptor {
     double hysteresis_si{0.0};
 };
 
+// A catalog-visible family of ports whose cardinality is selected by each
+// component instance through ComponentDefinition::port_counts. Generated
+// ports are named <port_name_prefix>1 ... <port_name_prefix>N.
+struct PortGroupModelDescriptor {
+    std::string name;
+    std::string port_name_prefix;
+    std::string domain;
+    std::string direction;
+    std::size_t minimum_count{0};
+    std::size_t maximum_count{0};
+    std::size_t maximum_connections{1};
+};
+
 struct ComponentModelDescriptor {
     std::string kind;
     std::string version;
@@ -107,6 +120,7 @@ struct ComponentModelDescriptor {
     // are still treated as system boundaries in steady result audits.
     std::string system_boundary_role;
     std::vector<PortModelDescriptor> ports;
+    std::vector<PortGroupModelDescriptor> port_groups;
     std::vector<ParameterModelDescriptor> parameters;
     std::vector<ArtifactModelDescriptor> artifacts;
     std::vector<physics::PropertyCapability> required_property_capabilities;
@@ -142,6 +156,14 @@ class ComponentModel {
 public:
     virtual ~ComponentModel() = default;
     virtual const ComponentModelDescriptor& descriptor() const = 0;
+    // Expand instance-sized ports and their associated parameters. The base
+    // descriptor remains the catalog contract; the returned descriptor is
+    // the executable contract for one declared component instance.
+    virtual ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const {
+        (void)component;
+        return descriptor();
+    }
     // Stable identity for implementation content not represented by the
     // public descriptor. The returned view must remain valid for the
     // lifetime of the model.

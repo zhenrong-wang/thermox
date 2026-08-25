@@ -1053,6 +1053,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.iso2314_equivalent_cooling",
         "compressor.material.performance_map",
         "compressor.material.coordinate_map",
+        "compressor.material.coordinate_map.fractional_bleeds",
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
         "turbine.fluid.isentropic_efficiency",

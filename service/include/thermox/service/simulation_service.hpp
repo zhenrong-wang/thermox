@@ -16,7 +16,7 @@ namespace thermox::service {
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
 inline constexpr char result_schema_v5[] = "thermox.result/v5";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
-inline constexpr char catalog_schema_v12[] = "thermox.catalog/v12";
+inline constexpr char catalog_schema_v13[] = "thermox.catalog/v13";
 inline constexpr char correlation_instantiation_schema_v1[] =
     "thermox.correlation_instantiation/v1";
 inline constexpr char regime_map_instantiation_schema_v1[] =
@@ -79,6 +79,16 @@ struct CatalogPortType {
     std::size_t maximum_connections{1};
 };
 
+struct CatalogPortGroupType {
+    std::string name;
+    std::string port_name_prefix;
+    std::string domain;
+    std::string direction;
+    std::size_t minimum_count{0};
+    std::size_t maximum_count{0};
+    std::size_t maximum_connections{1};
+};
+
 struct CatalogParameterType {
     std::string name;
     std::string dimension;
@@ -121,6 +131,7 @@ struct ComponentType {
     std::string model_name;
     std::string system_boundary_role;
     std::vector<CatalogPortType> ports;
+    std::vector<CatalogPortGroupType> port_groups;
     std::vector<CatalogParameterType> parameters;
     std::vector<CatalogArtifactType> artifacts;
     std::vector<CatalogInternalVariableType> internal_variables;
@@ -291,7 +302,7 @@ struct CatalogRequest {
 struct CatalogResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
-    std::string schema_version{catalog_schema_v12};
+    std::string schema_version{catalog_schema_v13};
     std::string fingerprint;
     std::vector<NativeExtensionType> native_extensions;
     std::vector<CatalogDimensionUnitType> unit_dimensions;

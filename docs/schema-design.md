@@ -320,6 +320,13 @@ Descriptors may expose one keyed name template such as `mass_fraction[{species}]
 instance values and case overrides retain the same dimension and bound validation, while the
 component validates keys against its bound material context.
 
+Models that need an instance-selected number of physical ports publish typed `port_groups` in the
+catalog. A component declaration selects each group cardinality with `port_counts`; the compiler
+expands the concrete ports and indexed parameter contract before validating bindings, connections,
+case overrides, calibration observations, or equations. The fractional-bleed coordinate-map
+compressor is the first use: `port_counts.bleed` creates `bleed_1` through `bleed_N` without fixing
+an engine-specific bleed count in the platform model.
+
 The compiler resolves model media
 through the property registry and injects ideal-gas, CO2, or IF97 packages into property-aware
 compressor, turbine, and pump equations. The default registry also contains enthalpy-flow mixer
@@ -332,7 +339,7 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v12`, including physical-template identity, calculation-model labels,
+`thermox.catalog/v13`, including physical-template identity, calculation-model labels,
 internal-state names, dimensions, kinds, component event-surface metadata, connector link contracts,
 numerical connector metadata, and a deterministic
 runtime fingerprint. Optional model behavior reads

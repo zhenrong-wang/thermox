@@ -140,8 +140,8 @@ std::string observation_dimension(
     }
     const auto& component = require_component(
         document, target.substr(0, first), observation);
-    const auto& descriptor =
-        registry.require_model(component.kind).descriptor();
+    const auto descriptor = registry.require_model(component.kind)
+                                .instance_descriptor(component);
 
     if (second == std::string_view::npos) {
         const auto name = target.substr(first + 1);

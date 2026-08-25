@@ -72,6 +72,16 @@ std::string catalog_fingerprint(
                 hash,
                 std::to_string(port.maximum_connections));
         }
+        for (const auto& group : descriptor.port_groups) {
+            hash_text(hash, group.name);
+            hash_text(hash, group.port_name_prefix);
+            hash_text(hash, group.domain);
+            hash_text(hash, group.direction);
+            hash_text(hash, std::to_string(group.minimum_count));
+            hash_text(hash, std::to_string(group.maximum_count));
+            hash_text(
+                hash, std::to_string(group.maximum_connections));
+        }
         for (const auto& parameter : descriptor.parameters) {
             hash_text(hash, parameter.name);
             hash_text(hash, parameter.dimension);

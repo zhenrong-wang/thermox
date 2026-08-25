@@ -147,17 +147,17 @@ const ComponentDefinition& find_component(const ModelDocument& document, const s
     throw std::invalid_argument("unknown component during graph compilation: " + component_id);
 }
 
-const PortModelDescriptor& find_port(
+PortModelDescriptor find_port(
     const ComponentDefinition& component,
-    const ComponentModel& model,
+    const ComponentModelDescriptor& descriptor,
     const std::string& port_name) {
     const auto it = std::find_if(
-        model.descriptor().ports.begin(),
-        model.descriptor().ports.end(),
+        descriptor.ports.begin(),
+        descriptor.ports.end(),
         [&](const auto& port) {
             return port.name == port_name;
         });
-    if (it == model.descriptor().ports.end()) {
+    if (it == descriptor.ports.end()) {
         throw std::invalid_argument(
             "unknown port during graph compilation: " +
             component.id + "." + port_name);
@@ -266,10 +266,14 @@ ValidatedConnection validate_connection(
         registry.require_model(from_definition.kind);
     const auto& to_model =
         registry.require_model(to_definition.kind);
-    const auto& from_port = find_port(
-        from_definition, from_model, result.from_port);
-    const auto& to_port = find_port(
-        to_definition, to_model, result.to_port);
+    const auto from_descriptor =
+        from_model.instance_descriptor(from_definition);
+    const auto to_descriptor =
+        to_model.instance_descriptor(to_definition);
+    const auto from_port = find_port(
+        from_definition, from_descriptor, result.from_port);
+    const auto to_port = find_port(
+        to_definition, to_descriptor, result.to_port);
     result.domain = from_port.domain;
     if (from_port.domain != to_port.domain) {
         throw std::invalid_argument(
@@ -498,8 +502,9 @@ case_parameter_overrides(
                 "' parameter override references unknown "
                 "component: " + component_id);
         }
-        const auto& descriptor =
-            registry.require_model(component->kind).descriptor();
+        const auto descriptor =
+            registry.require_model(component->kind)
+                .instance_descriptor(*component);
         const auto* parameter =
             find_component_parameter_descriptor(
                 descriptor, parameter_name);
@@ -539,15 +544,15 @@ ComponentDefinition effective_component(
 
 void validate_component_bindings(
     const ComponentDefinition& component,
-    const ComponentModel& model) {
-    const auto& expected_ports = model.descriptor().ports;
+    const ComponentModelDescriptor& descriptor) {
+    const auto& expected_ports = descriptor.ports;
     if (!component.version.empty() &&
-        component.version != model.descriptor().version) {
+        component.version != descriptor.version) {
         throw std::invalid_argument(
             "component '" + component.id + "' requests version '" +
             component.version + "' but registered kind '" +
             component.kind + "' provides version '" +
-            model.descriptor().version + "'");
+            descriptor.version + "'");
     }
     for (const auto& expected : expected_ports) {
         const auto medium_binding =
@@ -616,7 +621,7 @@ void validate_component_bindings(
 
     std::map<std::string, const ArtifactModelDescriptor*>
         declared_artifacts;
-    for (const auto& artifact : model.descriptor().artifacts) {
+    for (const auto& artifact : descriptor.artifacts) {
         declared_artifacts.emplace(artifact.role, &artifact);
         if (artifact.required &&
             component.artifact_bindings.find(artifact.role) ==
@@ -1045,6 +1050,9 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
     for (const auto& port : model->descriptor().ports) {
         (void)require_connector_domain(port.domain);
     }
+    for (const auto& group : model->descriptor().port_groups) {
+        (void)require_connector_domain(group.domain);
+    }
     std::set<std::string> transient_names;
     for (const auto& variable : model->descriptor().transient_variables) {
         if (variable.port_name.empty() || variable.variable_name.empty()) {
@@ -1245,9 +1253,11 @@ CompiledModelGraph compile_flat_model_graph(
         const auto component = effective_component(
             declared_component, parameter_overrides);
         const ComponentModel& model = registry.require_model(component.kind);
-        validate_component_bindings(component, model);
-        validate_component_parameters(component, model.descriptor());
-        if (!model.descriptor().supports_steady) {
+        const auto descriptor = model.instance_descriptor(component);
+        validate_component_descriptor(descriptor);
+        validate_component_bindings(component, descriptor);
+        validate_component_parameters(component, descriptor);
+        if (!descriptor.supports_steady) {
             throw std::invalid_argument(
                 "component '" + component.id + "' of kind '" +
                 component.kind + "' does not support steady compilation");
@@ -1256,7 +1266,7 @@ CompiledModelGraph compile_flat_model_graph(
         ComponentCompileContext context{
             component, active_case, {}, {}, {}, {}, {}, {}, {}, {}};
         const auto selected_mode = selected_component_mode(
-            model.descriptor(), active_case, component.id);
+            descriptor, active_case, component.id);
         if (!selected_mode.empty()) {
             const auto mode =
                 std::make_shared<std::string>(selected_mode);
@@ -1266,7 +1276,7 @@ CompiledModelGraph compile_flat_model_graph(
             active_case->component_modes.contains(component.id)) {
             seen_component_modes.insert(component.id);
         }
-        for (const auto& port : model.descriptor().ports) {
+        for (const auto& port : descriptor.ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
                 medium_id =
@@ -1285,7 +1295,7 @@ CompiledModelGraph compile_flat_model_graph(
                     find_material(document, medium_id);
                 context.port_species.emplace(
                     port.name, material.species);
-                if (!model.descriptor()
+                if (!descriptor
                          .required_thermochemistry_capabilities
                          .empty()) {
                     auto package = thermochemistry_registry.create(
@@ -1315,7 +1325,7 @@ CompiledModelGraph compile_flat_model_graph(
                         }
                     }
                     for (const auto capability :
-                         model.descriptor()
+                         descriptor
                              .required_thermochemistry_capabilities) {
                         if (!package->supports(capability)) {
                             throw std::invalid_argument(
@@ -1404,7 +1414,7 @@ CompiledModelGraph compile_flat_model_graph(
                         full_name, port.domain, medium_id,
                         spec.dimension, port.direction,
                         explicit_boundary_sign(
-                            model.descriptor()),
+                            descriptor),
                         index});
             }
         }
@@ -1499,14 +1509,17 @@ CompiledModelGraph compile_flat_model_graph(
                     if (component != nullptr) {
                         const auto& component_model =
                             registry.require_model(component->kind);
+                        const auto component_descriptor =
+                            component_model.instance_descriptor(
+                                *component);
                         const auto port = std::find_if(
-                            component_model.descriptor().ports.begin(),
-                            component_model.descriptor().ports.end(),
+                            component_descriptor.ports.begin(),
+                            component_descriptor.ports.end(),
                             [&](const auto& candidate) {
                                 return candidate.name == port_name;
                             });
                         if (port !=
-                                component_model.descriptor().ports.end() &&
+                                component_descriptor.ports.end() &&
                             port->domain == "fluid") {
                             const std::string& medium_id =
                                 require_medium_binding(
@@ -1589,7 +1602,7 @@ CompiledModelGraph compile_flat_model_graph(
                             continue;
                         }
                         if (port !=
-                                component_model.descriptor().ports.end() &&
+                                component_descriptor.ports.end() &&
                             port->domain == "material") {
                             const std::string& material_id =
                                 require_material_binding(
@@ -1884,9 +1897,11 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             declared_component, parameter_overrides);
         const ComponentModel& model =
             registry.require_model(component.kind);
-        validate_component_bindings(component, model);
-        validate_component_parameters(component, model.descriptor());
-        if (!model.descriptor().supports_transient) {
+        const auto descriptor = model.instance_descriptor(component);
+        validate_component_descriptor(descriptor);
+        validate_component_bindings(component, descriptor);
+        validate_component_parameters(component, descriptor);
+        if (!descriptor.supports_transient) {
             throw std::invalid_argument(
                 "component '" + component.id + "' of kind '" +
                 component.kind + "' does not support transient compilation");
@@ -1895,7 +1910,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
         ComponentCompileContext context{
             component, active_case, {}, {}, {}, {}, {}, {}, {}, {}};
         const auto selected_mode = selected_component_mode(
-            model.descriptor(), active_case, component.id);
+            descriptor, active_case, component.id);
         if (!selected_mode.empty()) {
             const auto mode =
                 std::make_shared<std::string>(selected_mode);
@@ -1912,7 +1927,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
             active_case->component_modes.contains(component.id)) {
             seen_component_modes.insert(component.id);
         }
-        for (const auto& port : model.descriptor().ports) {
+        for (const auto& port : descriptor.ports) {
             std::string medium_id;
             if (port.domain == "fluid") {
                 medium_id =
@@ -1933,7 +1948,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     find_material(document, medium_id);
                 context.port_species.emplace(
                     port.name, material.species);
-                if (!model.descriptor()
+                if (!descriptor
                          .required_thermochemistry_capabilities
                          .empty()) {
                     auto package = thermochemistry_registry.create(
@@ -1960,7 +1975,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                         }
                     }
                     for (const auto capability :
-                         model.descriptor()
+                         descriptor
                              .required_thermochemistry_capabilities) {
                         if (!package->supports(capability)) {
                             throw std::invalid_argument(
@@ -1996,7 +2011,7 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                     initial = *fixed;
                 }
                 const auto* transient = find_transient_variable(
-                    model.descriptor(), port.name, spec.name);
+                    descriptor, port.name, spec.name);
                 const DaeVariableKind kind =
                     transient == nullptr
                         ? DaeVariableKind::algebraic
@@ -2021,12 +2036,12 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                         full_name, port.domain, medium_id,
                         spec.dimension, port.direction,
                         explicit_boundary_sign(
-                            model.descriptor()),
+                            descriptor),
                         index});
             }
         }
         for (const auto& variable :
-             model.descriptor().internal_variables) {
+             descriptor.internal_variables) {
             const std::string full_name =
                 component.id + "." + variable.name;
             double initial = variable.initial_value;

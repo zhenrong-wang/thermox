@@ -91,24 +91,24 @@
       "requested_corrected_fan_speed_rpm": [1000, 2000]
     },
     "reference_outputs": [
-      {"case": "sea_level_static_1000", "hpc_outlet_pressure_psia": 173.2371505793, "hpc_outlet_temperature_degR": 1141.9383281412},
-      {"case": "sea_level_mach_03_1500", "hpc_outlet_pressure_psia": 356.9520658083, "hpc_outlet_temperature_degR": 1464.9481781211},
-      {"case": "alt_10000_mach_05_1750", "hpc_outlet_pressure_psia": 356.2563984725, "hpc_outlet_temperature_degR": 1448.1306329659},
-      {"case": "alt_25000_mach_06_2000", "hpc_outlet_pressure_psia": 268.7274600036, "hpc_outlet_temperature_degR": 1392.4439691531},
-      {"case": "alt_30000_mach_072_2000", "hpc_outlet_pressure_psia": 235.7384592780, "hpc_outlet_temperature_degR": 1400.7991579615}
+      {"case": "sea_level_static_1000", "hpc_outlet_pressure_psia": 173.2371505793, "hpc_outlet_temperature_degR": 1141.9383281412, "hpc_outlet_flow_lbm_s": 21.0693366992, "hpc_torque_lbf_ft": 1413.1184383855},
+      {"case": "sea_level_mach_03_1500", "hpc_outlet_pressure_psia": 356.9520658083, "hpc_outlet_temperature_degR": 1464.9481781211, "hpc_outlet_flow_lbm_s": 37.6037106551, "hpc_torque_lbf_ft": 3031.7273550039},
+      {"case": "alt_10000_mach_05_1750", "hpc_outlet_pressure_psia": 356.2563984725, "hpc_outlet_temperature_degR": 1448.1306329659, "hpc_outlet_flow_lbm_s": 37.3442550204, "hpc_torque_lbf_ft": 3050.6029677974},
+      {"case": "alt_25000_mach_06_2000", "hpc_outlet_pressure_psia": 268.7274600036, "hpc_outlet_temperature_degR": 1392.4439691531, "hpc_outlet_flow_lbm_s": 28.2479834495, "hpc_torque_lbf_ft": 2314.0830996876},
+      {"case": "alt_30000_mach_072_2000", "hpc_outlet_pressure_psia": 235.7384592780, "hpc_outlet_temperature_degR": 1400.7991579615, "hpc_outlet_flow_lbm_s": 24.7217118882, "hpc_torque_lbf_ft": 2017.2667929821}
     ],
     "results": {
       "pressure_error_percent_range": [-0.009662, -0.004061],
       "temperature_error_percent_range": [-0.281771, -0.198124],
+      "outlet_flow_error_percent_range": [-0.000001, 0.000001],
+      "torque_error_percent_range": [0.198299, 0.283134],
       "combined_pressure_temperature_mape_percent": 0.120568,
-      "maximum_absolute_error_percent": 0.281771,
+      "combined_all_four_outputs_mape_percent": 0.121734,
+      "maximum_absolute_error_percent": 0.283134,
       "acceptance_band_percent": 0.5,
       "result": "pass"
     },
-    "withheld_comparisons": [
-      "HPC outlet mass flow, because the AGTF30 aggregate HPC extracts three fractional bleeds while this isolated map component preserves inlet flow.",
-      "HPC shaft power, because T-MATS accounts for work associated with the three bleed extraction states."
-    ],
+    "bleed_model": "A generic instance-sized fractional-bleed port group reproduces the three declared AGTF30 extractions and their pressure/enthalpy state fractions; no case-specific correction is fitted.",
     "classification": "multi_point_off_design_component_cross_code_reproduction"
   },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
