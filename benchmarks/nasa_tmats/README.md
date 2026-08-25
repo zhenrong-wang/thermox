@@ -93,3 +93,18 @@ The bleed count and state fractions are ordinary component-instance declarations
 special case. The same model can expose one through 32 extraction ports, and its shaft balance
 accounts for work retained by each extracted stream. This closes the isolated HPC flow/work gap;
 the next whole-engine slice is the coupled shaft, combustor, turbine, and nozzle system.
+
+## AGTF30 high-pressure-turbine inverse-map slice
+
+T-MATS turbine maps use pressure ratio as their primary coordinate and publish corrected flow as
+an output. `turbine.material.coordinate_map` preserves that orientation: Thermox solves pressure
+ratio from flow compatibility rather than numerically inverting or resampling the source map.
+`scripts/import_tmats_turbine_map.py` imports the generated C arrays, applies the four declared
+component scalers and converts corrected quantities to the platform's reference-state SI basis.
+The importer also preserves T-MATS' pressure-major C-array layout explicitly.
+
+Across the same five healthy operating points, the solved HPT pressure-ratio and discharge-pressure
+errors remain below `0.000056%`. This is intentionally classified as **inverse-map compatibility**,
+not yet a complete cooled-turbine validation: the current slice fixes NASA's station-4 boundary and
+uses a simplified N2/O2 working-gas composition. Outlet temperature, mass flow, and torque remain
+reserved for the coupled combustor/cooling/shaft model.

@@ -266,6 +266,16 @@ if(TARGET thermox_cantera_backend)
     set_tests_properties(
         benchmark_nasa_agtf30_hpc_off_design_cli PROPERTIES
         PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\"")
+    add_test(NAME benchmark_nasa_agtf30_hpt_off_design_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpt_off_design.json
+            --case alt_30000_mach_072_2000
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpt_map.json
+            --format json
+    )
+    set_tests_properties(
+        benchmark_nasa_agtf30_hpt_off_design_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\"")
     add_test(NAME platform_cooled_turbine_stage_cli
         COMMAND thermox_cli solve
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json

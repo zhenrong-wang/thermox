@@ -1061,6 +1061,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "turbine.fluid.variable_geometry_map",
         "turbine.material.isentropic_efficiency",
         "turbine.material.performance_map",
+        "turbine.material.coordinate_map",
         "turbine.material.variable_geometry_map",
         "junction.fluid.mixer.two_inlet",
         "junction.fluid.splitter.two_outlet",

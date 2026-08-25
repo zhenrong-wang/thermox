@@ -1,0 +1,128 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_hpt_off_design",
+    "name": "NASA AGTF30 high-pressure turbine map slice",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "working_gas",
+        "backend": "cantera",
+        "mechanism": "gri30.yaml",
+        "phase": "gri30",
+        "package_version": "3.2.0",
+        "species": ["N2", "O2"]
+      }
+    ],
+    "components": [
+      {
+        "id": "turbine",
+        "kind": "turbine.material.coordinate_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {"value": 14.696, "unit": "psia"},
+          "reference_temperature": {"value": 518.67, "unit": "degR"},
+          "flow_capacity_scale": 1.0,
+          "pressure_ratio_scale": 1.0,
+          "efficiency_scale": 1.0
+        },
+        "artifacts": {"performance_map": "nasa-agtf30-hpt-map"},
+        "materials": {"inlet": "working_gas", "outlet": "working_gas"}
+      }
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "sea_level_static_1000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "turbine.inlet.p": {"value": 166.30766456, "unit": "psia"},
+        "turbine.inlet.T": {"value": 2085.69829561, "unit": "degR"},
+        "turbine.inlet.m_dot[N2]": {"value": 16.41799899648, "unit": "lbm/s"},
+        "turbine.inlet.m_dot[O2]": {"value": 4.95960386352, "unit": "lbm/s"},
+        "turbine.shaft.omega": {"value": 17750.9216139, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "turbine.inlet.h": {"value": 900.0, "unit": "kJ/kg"},
+        "turbine.outlet.p": {"value": 38.98232159, "unit": "psia"},
+        "turbine.outlet.h": {"value": 600.0, "unit": "kJ/kg"},
+        "turbine.shaft.W_dot": {"value": 3.0, "unit": "MW"},
+        "turbine.map_coordinate.value": 4.2662
+      }
+    },
+    {
+      "id": "sea_level_mach_03_1500",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "turbine.inlet.p": {"value": 342.67398318, "unit": "psia"},
+        "turbine.inlet.T": {"value": 2743.26475125, "unit": "degR"},
+        "turbine.inlet.m_dot[N2]": {"value": 29.4956877312, "unit": "lbm/s"},
+        "turbine.inlet.m_dot[O2]": {"value": 8.9101556688, "unit": "lbm/s"},
+        "turbine.shaft.omega": {"value": 20366.4216871, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "turbine.inlet.h": {"value": 1300.0, "unit": "kJ/kg"},
+        "turbine.outlet.p": {"value": 81.37677935, "unit": "psia"},
+        "turbine.outlet.h": {"value": 900.0, "unit": "kJ/kg"},
+        "turbine.shaft.W_dot": {"value": 9.0, "unit": "MW"},
+        "turbine.map_coordinate.value": 4.2110
+      }
+    },
+    {
+      "id": "alt_10000_mach_05_1750",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "turbine.inlet.p": {"value": 342.00614253, "unit": "psia"},
+        "turbine.inlet.T": {"value": 2769.31220689, "unit": "degR"},
+        "turbine.inlet.m_dot[N2]": {"value": 29.3135985408, "unit": "lbm/s"},
+        "turbine.inlet.m_dot[O2]": {"value": 8.8551495592, "unit": "lbm/s"},
+        "turbine.shaft.omega": {"value": 20224.3507505, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "turbine.inlet.h": {"value": 1320.0, "unit": "kJ/kg"},
+        "turbine.outlet.p": {"value": 81.66776981, "unit": "psia"},
+        "turbine.outlet.h": {"value": 910.0, "unit": "kJ/kg"},
+        "turbine.shaft.W_dot": {"value": 9.0, "unit": "MW"},
+        "turbine.map_coordinate.value": 4.1878
+      }
+    },
+    {
+      "id": "alt_25000_mach_06_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "turbine.inlet.p": {"value": 257.97836160, "unit": "psia"},
+        "turbine.inlet.T": {"value": 2755.13616891, "unit": "degR"},
+        "turbine.inlet.m_dot[N2]": {"value": 22.1866895232, "unit": "lbm/s"},
+        "turbine.inlet.m_dot[O2]": {"value": 6.7022291268, "unit": "lbm/s"},
+        "turbine.shaft.omega": {"value": 19767.8835653, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "turbine.inlet.h": {"value": 1310.0, "unit": "kJ/kg"},
+        "turbine.outlet.p": {"value": 61.99335406, "unit": "psia"},
+        "turbine.outlet.h": {"value": 900.0, "unit": "kJ/kg"},
+        "turbine.shaft.W_dot": {"value": 7.0, "unit": "MW"},
+        "turbine.map_coordinate.value": 4.1614
+      }
+    },
+    {
+      "id": "alt_30000_mach_072_2000",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "turbine.inlet.p": {"value": 226.30892091, "unit": "psia"},
+        "turbine.inlet.T": {"value": 2767.52451171, "unit": "degR"},
+        "turbine.inlet.m_dot[N2]": {"value": 19.41894797568, "unit": "lbm/s"},
+        "turbine.inlet.m_dot[O2]": {"value": 5.86614053432, "unit": "lbm/s"},
+        "turbine.shaft.omega": {"value": 19823.7515015, "unit": "rpm"}
+      },
+      "initial_guesses": {
+        "turbine.inlet.h": {"value": 1320.0, "unit": "kJ/kg"},
+        "turbine.outlet.p": {"value": 54.41163179, "unit": "psia"},
+        "turbine.outlet.h": {"value": 910.0, "unit": "kJ/kg"},
+        "turbine.shaft.W_dot": {"value": 6.0, "unit": "MW"},
+        "turbine.map_coordinate.value": 4.1592
+      }
+    }
+  ]
+}

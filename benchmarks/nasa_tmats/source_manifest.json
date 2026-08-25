@@ -111,5 +111,29 @@
     "bleed_model": "A generic instance-sized fractional-bleed port group reproduces the three declared AGTF30 extractions and their pressure/enthalpy state fractions; no case-specific correction is fitted.",
     "classification": "multi_point_off_design_component_cross_code_reproduction"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
+  "agtf30_hpt_inverse_map_execution": {
+    "model": "agtf30_hpt_off_design.json",
+    "artifact": "agtf30_hpt_map.json",
+    "source_component": "GTF_hpt in engine_model/MEX_engine_model.c",
+    "selection": "The same five converged nominal-health, zero-bias operating points used for the HPC slice.",
+    "reference_outputs": [
+      {"case": "sea_level_static_1000", "hpt_pressure_ratio": 4.26623294, "hpt_outlet_pressure_psia": 38.98232159},
+      {"case": "sea_level_mach_03_1500", "hpt_pressure_ratio": 4.21095534, "hpt_outlet_pressure_psia": 81.37677935},
+      {"case": "alt_10000_mach_05_1750", "hpt_pressure_ratio": 4.18777375, "hpt_outlet_pressure_psia": 81.66776981},
+      {"case": "alt_25000_mach_06_2000", "hpt_pressure_ratio": 4.16138739, "hpt_outlet_pressure_psia": 61.99335406},
+      {"case": "alt_30000_mach_072_2000", "hpt_pressure_ratio": 4.15920114, "hpt_outlet_pressure_psia": 54.41163179}
+    ],
+    "results": {
+      "pressure_ratio_maximum_absolute_error_percent": 0.00005520,
+      "outlet_pressure_maximum_absolute_error_percent": 0.00005523,
+      "acceptance_band_percent": 0.001,
+      "result": "pass"
+    },
+    "reserved_comparisons": [
+      "HPT outlet temperature and flow until front/rear cooling injections are connected.",
+      "HPT torque until combustor composition, cooling work, and shaft extraction are coupled."
+    ],
+    "classification": "multi_point_inverse_turbine_map_compatibility"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
 }

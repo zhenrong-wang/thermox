@@ -596,7 +596,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 79,
+        response.components.size() == 80,
         "service must expose the complete component registry");
     const auto efficient_combustor = std::find_if(
         response.components.begin(), response.components.end(),
@@ -1757,6 +1757,52 @@ void test_nasa_agtf30_hpc_off_design_benchmark() {
             "Thermox AGTF30 HPC discharge pressure, temperature, outlet "
             "flow, and torque must remain within 0.5% at off-design "
             "point: " + case_id);
+    }
+}
+
+void test_nasa_agtf30_hpt_map_compatibility_benchmark() {
+    const std::vector<std::tuple<std::string, double, double>> cases = {
+        {"sea_level_static_1000", 4.26623294, 38.98232159},
+        {"sea_level_mach_03_1500", 4.21095534, 81.37677935},
+        {"alt_10000_mach_05_1750", 4.18777375, 81.66776981},
+        {"alt_25000_mach_06_2000", 4.16138739, 61.99335406},
+        {"alt_30000_mach_072_2000", 4.15920114, 54.41163179},
+    };
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_hpt_off_design.json");
+    const auto map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_hpt_map.json"));
+    constexpr double psi_to_pa = 6894.757293168;
+    for (const auto& [case_id, pressure_ratio, pressure_psia] : cases) {
+        thermox::service::SteadySimulationRequest request;
+        request.model_json = model;
+        request.case_id = case_id;
+        request.artifacts.performance_maps.push_back(map);
+        const auto response =
+            thermox::service::SimulationService{}.run_steady(request);
+        require(
+            response.succeeded() && response.diagnostics.converged &&
+                response.diagnostics.final_residual_norm < 1.0e-10,
+            "NASA AGTF30 HPT map point must solve: " + case_id);
+        const auto& coordinate = require_port_result(
+            response.graph, "turbine", "map_coordinate");
+        const auto& outlet = require_port_result(
+            response.graph, "turbine", "outlet");
+        const double predicted_coordinate = require_result_value(
+            coordinate.primary_values, "value").value_si;
+        const double predicted_pressure = require_result_value(
+            outlet.primary_values, "p").value_si;
+        require(
+            std::abs(predicted_coordinate / pressure_ratio - 1.0) <
+                    1.0e-5 &&
+                std::abs(
+                    predicted_pressure /
+                        (pressure_psia * psi_to_pa) -
+                    1.0) < 1.0e-5,
+            "Thermox must reproduce AGTF30 HPT inverse map-flow "
+            "compatibility within 0.001%: " + case_id);
     }
 }
 
@@ -7517,6 +7563,7 @@ int main() {
 #ifdef THERMOX_TEST_HAS_CANTERA
         test_nasa_tmats_hpc_cross_code_benchmark();
         test_nasa_agtf30_hpc_off_design_benchmark();
+        test_nasa_agtf30_hpt_map_compatibility_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

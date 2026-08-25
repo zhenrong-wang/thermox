@@ -230,7 +230,7 @@ public:
             throw std::invalid_argument(
                 "performance-map artifact '" + artifact_->id +
                 (latent_coordinate_
-                     ? "' coordinate-map compressor primary axis "
+                     ? "' coordinate-map turbomachinery primary axis "
                        "must be 'map_coordinate' with dimension "
                        "'dimensionless'"
                      : "' turbomachinery primary axis must be "
@@ -276,7 +276,7 @@ public:
         }
         if (latent_coordinate_ && !map_coordinate_.has_value()) {
             throw std::logic_error(
-                "coordinate-map compressor is missing its map-coordinate "
+                "coordinate-map turbomachinery is missing its map-coordinate "
                 "port variable");
         }
     }
@@ -862,11 +862,9 @@ public:
           variable_geometry_(variable_geometry),
           latent_coordinate_(latent_coordinate),
           fractional_bleeds_(fractional_bleeds) {
-        if (latent_coordinate_ &&
-            (!compressor_ || variable_geometry_)) {
+        if (latent_coordinate_ && variable_geometry_) {
             throw std::invalid_argument(
-                "latent map coordinates are currently supported only "
-                "for fixed-geometry compressors");
+                "latent map coordinates require fixed geometry");
         }
         if (fractional_bleeds_ && !latent_coordinate_) {
             throw std::invalid_argument(
@@ -1325,6 +1323,10 @@ void register_material_turbomachinery_component_models(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "compressor.material.coordinate_map",
             true, false, true));
+    registry.register_model(
+        std::make_shared<MaterialMapTurbomachineryModel>(
+            "turbine.material.coordinate_map",
+            false, false, true));
     registry.register_model(
         std::make_shared<MaterialMapTurbomachineryModel>(
             "compressor.material.coordinate_map.fractional_bleeds",

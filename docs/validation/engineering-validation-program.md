@@ -82,3 +82,9 @@ case-specific correction is fitted.
 The next T-MATS implementation is therefore the coupled shaft/combustor/turbine/nozzle system. The
 Sandia sCO2 transient follows once authoritative numeric response data are obtained or digitization
 uncertainty is formally included in every acceptance limit.
+
+The first turbine prerequisite is complete. A generic coordinate-map material turbine consumes
+the native pressure-ratio/corrected-speed map orientation and solves pressure ratio through
+corrected-flow compatibility. Against five AGTF30 HPT points, pressure-ratio and discharge-pressure
+errors are below 0.000056%. The result validates import orientation and inverse map closure only;
+cooling mixing, combustor composition, turbine work, and shaft balance remain coupled-system gates.

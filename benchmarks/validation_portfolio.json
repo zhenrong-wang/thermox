@@ -92,15 +92,17 @@
         "design_point_component_cross_code",
         "shaft_power_and_flow_closure",
         "four_steady_operating_points",
-        "map_driven_off_design_component_response"
+        "map_driven_off_design_component_response",
+        "hpt_inverse_map_flow_compatibility"
       ],
       "latest_result": {
-        "component": "AGTF30_high_pressure_compressor",
+        "components": ["AGTF30_high_pressure_compressor", "AGTF30_high_pressure_turbine_map"],
         "healthy_off_design_points": 5,
         "validated_outputs": ["discharge_pressure", "discharge_temperature", "outlet_mass_flow", "shaft_torque"],
         "combined_pressure_temperature_mape_percent": 0.1206,
         "combined_all_outputs_mape_percent": 0.1217,
         "maximum_absolute_error_percent": 0.2832,
+        "hpt_pressure_ratio_maximum_absolute_error_percent": 0.000056,
         "acceptance_band_percent": 0.5,
         "classification": "multi_point_off_design_component_cross_code_reproduction"
       }
