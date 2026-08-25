@@ -258,5 +258,34 @@
     ],
     "classification": "multi_point_continuous_turbomachinery_gas_path_cross_code_inverse_reproduction"
   },
+  "agtf30_ducted_twin_spool_execution": {
+    "model": "agtf30_ducted_twin_spool.json",
+    "parent_model": "agtf30_continuous_twin_spool.json",
+    "source_equation": "Duct_TMATS_body.c: PtOut = (1 - (MN/MNdes)^2*dP_M)*PtIn",
+    "instances": {
+      "duct_2": {"area_in2": 286.9, "design_mach": 0.45, "design_pressure_loss_fraction": 0.01},
+      "duct_25": {"area_in2": 115.6, "design_mach": 0.45, "design_pressure_loss_fraction": 0.015},
+      "duct_17": {"area_in2": 6917.7, "design_mach": 0.45, "design_pressure_loss_fraction": 0.015},
+      "duct_45": {"area_in2": 66.3, "design_mach": 0.30, "design_pressure_loss_fraction": 0.005},
+      "duct_5": {"area_in2": 945.0, "design_mach": 0.35, "design_pressure_loss_fraction": 0.01}
+    },
+    "results": {
+      "converged_points": 4,
+      "newton_iterations_per_point": 5,
+      "maximum_normalized_residual_norm": 4.11376e-10,
+      "fan_flow_error_percent_range": [0.075, 0.412],
+      "fan_pressure_error_percent_range": [-0.083, -0.026],
+      "lpc_pressure_error_percent_range": [-0.395, -0.274],
+      "hpt_flow_error_percent_range": [-0.243, 0.119],
+      "lpt_outlet_pressure_error_percent_range": [-3.397, -0.187],
+      "fuel_flow_error_percent_range": [-16.426, -15.769]
+    },
+    "reserved_comparisons": [
+      "Whole-engine flow and thrust until core/bypass nozzles close both terminal paths.",
+      "The nonzero-VBV point until a generic VBV is connected.",
+      "Fuel prediction, independent hardware validation, and transient validation."
+    ],
+    "classification": "multi_point_ducted_twin_spool_cross_code_inverse_reproduction"
+  },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, coupled bleed routing, geared multi-load topology, and exact high- and low-shaft conservation against public NASA code paths. They are not independent hardware validation, continuous whole-engine gas-path validation, fuel-flow predictive qualification, or transient validation."
 }

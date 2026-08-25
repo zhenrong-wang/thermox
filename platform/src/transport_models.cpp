@@ -21,6 +21,8 @@ namespace {
 using component_model_support::require_port_variable;
 using component_model_support::require_port_species;
 using component_model_support::require_property_package;
+using component_model_support::require_thermochemistry_package;
+using component_model_support::require_internal_variable;
 using component_model_support::require_correlation;
 using component_model_support::optional_regime_map;
 using component_model_support::parameter_or;
@@ -2759,6 +2761,219 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class PerfectGasMachScaledMaterialDuctModel final
+    : public ComponentModel {
+public:
+    PerfectGasMachScaledMaterialDuctModel()
+        : descriptor_(make_descriptor(
+              "transport.material.perfect_gas_mach_scaled_loss",
+              {{"inlet", "material", "in"},
+               {"outlet", "material", "out"}})) {
+        descriptor_.template_kind = "transport.material.duct";
+        descriptor_.display_name = "Mach-scaled gas duct";
+        descriptor_.category = "Gas-path transport";
+        descriptor_.model_name = "Perfect-gas area and quadratic loss";
+        descriptor_.parameters = {
+            {"flow_area", "area", true, std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"design_mach", "dimensionless", true, std::nullopt,
+             0.0, 1.0, false, true},
+            {"design_pressure_loss_fraction", "dimensionless", true,
+             std::nullopt, 0.0, 1.0, true, false},
+            {"heat_capacity_ratio", "dimensionless", false, 1.4,
+             1.0, 2.0, false, true},
+        };
+        descriptor_.internal_variables = {
+            {"mach", DaeVariableKind::algebraic, 0.3, 1.0,
+             0.0, 1.0, 0.0, 1.0, "dimensionless"},
+        };
+        descriptor_.required_thermochemistry_capabilities = {
+            physics::ThermochemistryCapability::state_ph,
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        require_same_material(context, {"inlet", "outlet"});
+        const auto properties =
+            require_thermochemistry_package(context, "inlet");
+        (void)require_thermochemistry_package(context, "outlet");
+        const auto species = require_port_species(context, "inlet");
+        if (species != require_port_species(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' material ports must use the same species basis");
+        }
+        const double area = required_parameter(
+            context.component, "flow_area");
+        const double design_mach = required_parameter(
+            context.component, "design_mach");
+        const double loss_fraction = required_parameter(
+            context.component, "design_pressure_loss_fraction");
+        const double gamma = parameter_or(
+            context.component, "heat_capacity_ratio", 1.4);
+        const auto inlet_p = require_port_variable(context, "inlet.p");
+        const auto inlet_h = require_port_variable(context, "inlet.h");
+        const auto outlet_p = require_port_variable(context, "outlet.p");
+        const auto outlet_h = require_port_variable(context, "outlet.h");
+        const auto mach = require_internal_variable(context, "mach");
+        std::vector<std::size_t> inlet_flows;
+        inlet_flows.reserve(species.size());
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (const auto& name : species) {
+            const std::string variable = "m_dot[" + name + "]";
+            const auto inlet = require_port_variable(
+                context, "inlet." + variable);
+            inlet_flows.push_back(inlet);
+            system.add_linear_equation(
+                prefix + "species." + name,
+                {{require_port_variable(
+                      context, "outlet." + variable), 1.0},
+                 {inlet, -1.0}},
+                0.0, 100.0);
+        }
+        system.add_linear_equation(
+            prefix + "adiabatic_enthalpy",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}},
+            0.0, 100000.0);
+
+        const auto evaluate_flow =
+            [properties, species, inlet_flows, inlet_p, inlet_h,
+             mach, area, gamma](const std::vector<double>& x,
+                                double& residual) {
+                double total_flow = 0.0;
+                std::vector<double> fractions;
+                fractions.reserve(inlet_flows.size());
+                for (const auto flow : inlet_flows) {
+                    const double value = x.at(flow);
+                    if (!std::isfinite(value) || value < 0.0) {
+                        return EvaluationStatus::recoverable(
+                            "Mach-scaled material duct requires finite "
+                            "nonnegative species flows");
+                    }
+                    total_flow += value;
+                    fractions.push_back(value);
+                }
+                if (!(total_flow > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "Mach-scaled material duct requires positive "
+                        "total mass flow");
+                }
+                for (double& fraction : fractions) {
+                    fraction /= total_flow;
+                }
+                const auto state = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h),
+                    {physics::CompositionBasis::mass_fraction,
+                     species, std::move(fractions)});
+                if (!state.ok()) {
+                    return state.status ==
+                            physics::PropertyStatus::backend_error
+                        ? EvaluationStatus::fatal(state.message)
+                        : EvaluationStatus::recoverable(state.message);
+                }
+                const double density =
+                    state.state.thermodynamic.density_kg_m3;
+                const double pressure = x.at(inlet_p);
+                const double local_mach = x.at(mach);
+                if (!std::isfinite(density) || density <= 0.0 ||
+                    !std::isfinite(pressure) || pressure <= 0.0 ||
+                    !std::isfinite(local_mach) || local_mach < 0.0 ||
+                    local_mach > 1.0) {
+                    return EvaluationStatus::recoverable(
+                        "Mach-scaled material duct requires positive "
+                        "density/pressure and subsonic Mach in [0, 1]");
+                }
+                const double sound_speed =
+                    std::sqrt(gamma * pressure / density);
+                const double correction = std::pow(
+                    1.0 + 0.5 * (gamma - 1.0) *
+                        local_mach * local_mach,
+                    -(gamma + 1.0) /
+                        (2.0 * (gamma - 1.0)));
+                residual = total_flow -
+                    area * density * sound_speed * local_mach * correction;
+                return EvaluationStatus::success();
+            };
+        std::vector<std::size_t> flow_pattern = inlet_flows;
+        flow_pattern.push_back(inlet_p);
+        flow_pattern.push_back(inlet_h);
+        flow_pattern.push_back(mach);
+        system.add_checked_sparse_equation(
+            prefix + "subsonic_mass_flow",
+            evaluate_flow, flow_pattern,
+            [evaluate_flow, flow_pattern](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                double base = 0.0;
+                const auto status = evaluate_flow(x, base);
+                if (!status.ok()) {
+                    throw std::runtime_error(status.message);
+                }
+                for (const auto variable : flow_pattern) {
+                    const double step = std::max(
+                        variable == flow_pattern.back() ? 1.0e-7 : 1.0e-6,
+                        std::abs(x.at(variable)) * 1.0e-6);
+                    auto plus = x;
+                    auto minus = x;
+                    plus.at(variable) += step;
+                    minus.at(variable) -= step;
+                    double plus_value = 0.0;
+                    double minus_value = 0.0;
+                    const auto plus_status =
+                        evaluate_flow(plus, plus_value);
+                    const auto minus_status =
+                        evaluate_flow(minus, minus_value);
+                    if (plus_status.ok() && minus_status.ok()) {
+                        jacobian.push_back({
+                            variable,
+                            (plus_value - minus_value) / (2.0 * step)});
+                    } else if (plus_status.ok()) {
+                        jacobian.push_back(
+                            {variable, (plus_value - base) / step});
+                    } else if (minus_status.ok()) {
+                        jacobian.push_back(
+                            {variable, (base - minus_value) / step});
+                    } else {
+                        throw std::runtime_error(
+                            "could not evaluate a local derivative for "
+                            "Mach-scaled material duct");
+                    }
+                }
+                return base;
+            },
+            100.0);
+
+        system.add_sparse_equation(
+            prefix + "pressure_loss",
+            {inlet_p, outlet_p, mach},
+            [inlet_p, outlet_p, mach, design_mach, loss_fraction](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double ratio = x.at(mach) / design_mach;
+                const double retained =
+                    1.0 - loss_fraction * ratio * ratio;
+                jacobian.push_back({outlet_p, 1.0});
+                jacobian.push_back({inlet_p, -retained});
+                jacobian.push_back({
+                    mach,
+                    2.0 * x.at(inlet_p) * loss_fraction *
+                        x.at(mach) / (design_mach * design_mach)});
+                return x.at(outlet_p) - retained * x.at(inlet_p);
+            },
+            100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class IsenthalpicMaterialPressureRegulatorModel final
     : public ComponentModel {
 public:
@@ -3217,6 +3432,8 @@ void register_transport_component_models(
             FixedFractionMaterialSplitterModel>());
     registry.register_model(std::make_shared<
         ControlledFractionMaterialSplitterModel>());
+    registry.register_model(std::make_shared<
+        PerfectGasMachScaledMaterialDuctModel>());
 }
 
 }  // namespace thermox::platform

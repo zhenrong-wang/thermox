@@ -985,6 +985,9 @@ void test_component_registry_exposes_default_models() {
     require(registry.contains(
                 "junction.material.splitter.controlled_fraction"),
             "default registry should contain controlled material splitter");
+    require(registry.contains(
+                "transport.material.perfect_gas_mach_scaled_loss"),
+            "default registry should contain Mach-scaled material duct");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
     require(registry.contains("gearbox.shaft.fixed_ratio"),
@@ -1077,6 +1080,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.mixer.two_inlet",
         "junction.material.splitter.fixed_fraction",
         "junction.material.splitter.controlled_fraction",
+        "transport.material.perfect_gas_mach_scaled_loss",
         "valve.fluid.isenthalpic_pressure_ratio",
         "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
@@ -3918,6 +3922,77 @@ void test_material_mixer_and_fixed_fraction_splitter() {
         mix_value("mixer.outlet.p"),
         200000.0, 1.0e-8,
         "material mixer equalizes pressure");
+}
+
+void test_perfect_gas_mach_scaled_material_duct() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mach_scaled_material_duct",
+    "media": [],
+    "materials": [{
+      "id": "air", "backend": "test_backend",
+      "mechanism": "test.yaml", "phase": "gas",
+      "species": ["N2", "O2"]
+    }],
+    "components": [{
+      "id": "duct",
+      "kind": "transport.material.perfect_gas_mach_scaled_loss",
+      "parameters": {
+        "flow_area": 0.1,
+        "design_mach": 0.45,
+        "design_pressure_loss_fraction": 0.01,
+        "heat_capacity_ratio": 1.4
+      },
+      "materials": {"inlet": "air", "outlet": "air"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "design", "mode": "steady_state_design",
+    "fixed_values": {
+      "duct.inlet.p": {"value": 101.325, "unit": "kPa"},
+      "duct.inlet.h": {"value": 300.0, "unit": "kJ/kg"},
+      "duct.inlet.m_dot[N2]": {"value": 8.0, "unit": "kg/s"},
+      "duct.inlet.m_dot[O2]": {"value": 2.0, "unit": "kg/s"}
+    }
+  }]
+})json");
+    thermox::physics::ThermochemistryPackageRegistry chemistry;
+    chemistry.register_backend(
+        {"test_backend", "test-thermochemistry", "1.0.0",
+         {thermox::physics::ThermochemistryCapability::state_ph}},
+        [](std::string_view, std::string_view) {
+            return std::make_shared<
+                const TestThermochemistryPackage>();
+        });
+    const auto graph = thermox::platform::compile_model_graph(
+        document, thermox::platform::make_default_component_registry(),
+        thermox::physics::make_default_property_package_registry(),
+        thermox::platform::EngineeringArtifactRegistry{},
+        chemistry, "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const double mach = value("duct.mach");
+    require(mach > 0.2 && mach < 0.3,
+            "material duct must solve its subsonic local Mach number");
+    const double expected_pressure = 101325.0 *
+        (1.0 - 0.01 * mach * mach / (0.45 * 0.45));
+    require_near(
+        value("duct.outlet.p"), expected_pressure, 1.0e-7,
+        "material duct applies Mach-scaled total-pressure loss");
+    require_near(
+        value("duct.outlet.h"), 300000.0, 1.0e-8,
+        "material duct preserves total enthalpy");
+    require_near(
+        value("duct.outlet.m_dot[N2]"), 8.0, 1.0e-10,
+        "material duct conserves species flow");
 }
 
 void test_material_thermochemistry_resolves_on_demand() {
@@ -8182,6 +8257,7 @@ int main() {
         test_equilibrium_flash_separator_closes_phase_split();
         test_material_connector_and_frozen_transport();
         test_material_mixer_and_fixed_fraction_splitter();
+        test_perfect_gas_mach_scaled_material_duct();
         test_material_thermochemistry_resolves_on_demand();
         test_material_boundary_temperature_specification();
         test_adiabatic_equilibrium_combustor();

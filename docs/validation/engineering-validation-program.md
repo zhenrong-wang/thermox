@@ -113,3 +113,10 @@ valve, and core/bypass nozzles are still absent, and therefore fan operating-lin
 net thrust are not yet qualified. The next implementation sequence is those generic transport and
 terminal-flow components, followed by the fifth nonzero-VBV point and NASA's published fuel-step
 transient. No discrepancy in the current comparison should be hidden with a case-specific factor.
+
+The first whole-engine prerequisite is also complete: five generic area-based gas ducts reproduce
+the source model's local-Mach quadratic loss law. With no output fitting, inlet-flow error falls
+below 0.42%, LPC pressure below 0.40%, and HPT flow below 0.25% across the four zero-VBV points.
+The graph now has 361 simultaneous variables. The remaining steady whole-engine gates are the
+generic convergent nozzles and VBV; only after their capacity constraints replace the current
+reference bypass-ratio and HP-speed boundaries can net thrust be classified.

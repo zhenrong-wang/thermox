@@ -255,3 +255,26 @@ source model's Mach-dependent duct losses, variable bleed valve relation, and co
 The sea-level-static point is excluded because its nonzero VBV command cannot be represented
 honestly until that generic component is present. The explicit `1e-9` solve tolerance is local to
 this 266-variable benchmark; the platform default remains `1e-10`.
+
+## AGTF30 ducted twin-spool calculation
+
+`agtf30_ducted_twin_spool.json` extends the continuous graph with five ordinary
+`transport.material.perfect_gas_mach_scaled_loss` instances. Each duct solves its local subsonic
+Mach number from total state, species flow, physical area, and declared heat-capacity ratio, then
+applies the T-MATS quadratic design-Mach pressure-loss law. Areas and loss coefficients are copied
+from the public generated engine model; none are fitted to its outputs.
+
+```sh
+python3 scripts/build_agtf30_ducted_twin_spool_benchmark.py
+```
+
+All four zero-VBV points converge in five Newton iterations with residual norms below `4.12e-10`.
+Adding the declared ducts reduces inlet-flow error to +0.075% through +0.412%, fan-pressure error
+to -0.083% through -0.026%, LPC-pressure error to -0.395% through -0.274%, and HPT-flow error to
+-0.243% through +0.119%. LPT outlet pressure differs by -3.397% through -0.187%. The retained fuel
+difference is -16.426% through -15.769%, confirming that duct loss was not its cause.
+
+This remains short of whole-engine validation. Bypass ratio and HP speed are still fixed from the
+reference solution, while the VBV and both convergent nozzles are absent. The next gate adds nozzle
+flow-capacity/back-pressure closure, which will allow bypass ratio and HP speed to become solved
+variables rather than reference boundaries.
