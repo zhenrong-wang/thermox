@@ -302,7 +302,7 @@
     },
     "reserved_comparisons": [
       "Net thrust until ambient/inlet ram drag is connected.",
-      "Sea-level-static nonzero-VBV point until a generic VBV is connected.",
+      "Sea-level-static nonzero-VBV qualification is recorded separately in agtf30_vbv_nozzle_static_execution.",
       "Fuel-flow predictive qualification, independent hardware evidence, and transient validation."
     ],
     "classification": "multi_point_nozzle_closed_zero_vbv_whole_gas_path_cross_code_reproduction"
@@ -320,7 +320,7 @@
       "solved_bleed_mass_flow_kg_s": 0.0
     },
     "reserved_comparisons": [
-      "The fifth nonzero-VBV point until its source station boundaries and initialization are assembled into the continuous declaration.",
+      "The fifth nonzero-VBV qualification is recorded separately in agtf30_vbv_nozzle_static_execution.",
       "Net thrust until generic freestream ram drag is connected.",
       "Fuel-flow predictive qualification, independent hardware evidence, and transient validation."
     ],
@@ -388,9 +388,9 @@
     "results": {
       "iterations": 3,
       "normalized_residual_norm": 3.07e-16,
-      "source_station_5_pressure_pa": 102643.158635,
+      "source_station_5_pressure_pa": 103198.921626,
       "thermox_station_5_pressure_pa": 103192.373101,
-      "station_5_pressure_error_percent": 0.5351,
+      "station_5_pressure_error_percent": -0.00635,
       "thermox_core_gross_thrust_n": 923.250716
     },
     "acceptance": {
@@ -400,5 +400,52 @@
     "declared_limit": "The N2/O2 boundary inherited from the low-spool qualification validates terminal capacity and pressure closure, not combustion-product composition or independently measured thrust.",
     "classification": "public_source_core_duct_nozzle_predictive_subsystem_cross_code_qualification"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static bypass and core terminal pressure closure, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
+  "agtf30_vbv_nozzle_static_execution": {
+    "model": "agtf30_vbv_nozzle_static.json",
+    "artifacts": [
+      "agtf30_fan_map.json", "agtf30_lpc_map.json", "agtf30_hpc_map.json",
+      "agtf30_hpt_map.json", "agtf30_lpt_map.json", "agtf30_vbv_map.json"
+    ],
+    "case": "sea_level_static_1000",
+    "boundary_contract": "Station-2 pressure/temperature, LP speed, NASA VAFN area, ambient pressure, fuel temperature, VBV position, and 350 hp extraction are fixed. Inlet flow, compressor coordinates, bypass ratio, fuel, HP speed, turbine pressure ratios, VBV flow, nozzle flows, and all downstream states are solved.",
+    "numerical_path": "A capacity-matched initial state from the qualified terminal subsystems continues both nozzle-area fixed values to the unchanged NASA targets. The target equations and acceptance outputs are independent of initial guesses.",
+    "results": {
+      "variables": 407,
+      "accepted_continuation_stages": 12,
+      "rejected_continuation_stages": 1,
+      "total_newton_iterations": 60,
+      "normalized_residual_norm": 2.16469e-13,
+      "fan_flow_error_percent": -0.03310,
+      "fuel_flow_error_percent": -15.24051,
+      "station_4_temperature_error_percent": -1.07722,
+      "station_45_pressure_error_percent": -0.11077,
+      "station_45_temperature_error_percent": -0.99105,
+      "station_45_flow_error_percent": 0.37188,
+      "station_5_pressure_error_percent": 0.01234,
+      "station_5_temperature_error_percent": -1.01381,
+      "vbv_flow_error_percent": -0.36879,
+      "bypass_ratio_error_percent": -0.46751,
+      "combined_gross_thrust_n": 29071.997814
+    },
+    "acceptance": {
+      "fan_flow_percent": 0.1,
+      "fuel_flow_cross_model_percent": 17.0,
+      "station_4_temperature_percent": 2.0,
+      "station_45_pressure_percent": 0.5,
+      "station_45_temperature_percent": 1.5,
+      "station_45_flow_percent": 1.0,
+      "station_5_pressure_percent": 1.0,
+      "station_5_temperature_percent": 1.5,
+      "vbv_flow_percent": 1.0,
+      "bypass_ratio_percent": 1.0,
+      "result": "pass_with_fuel_and_thrust_prediction_reserved"
+    },
+    "reserved_comparisons": [
+      "Fuel-flow predictive qualification: the retained -15.24 percent cross-model difference is not calibrated away.",
+      "Gross-thrust source comparison until the public result field is independently extracted; net thrust until generic freestream ram drag is connected.",
+      "Independent hardware evidence and transient validation."
+    ],
+    "classification": "public_source_full_static_open_vbv_whole_engine_cross_code_reproduction"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }

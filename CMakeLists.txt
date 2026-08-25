@@ -407,6 +407,26 @@ if(TARGET thermox_cantera_backend)
         benchmark_nasa_agtf30_core_exhaust_branch_cli PROPERTIES
         PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\""
         ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME benchmark_nasa_agtf30_vbv_nozzle_static_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_vbv_nozzle_static.json
+            --case sea_level_static_1000
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_fan_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_lpc_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpc_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpt_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_lpt_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_vbv_map.json
+            --continuation
+            --continuation-initial-step 0.01
+            --continuation-minimum-step 0.0001
+            --residual-tolerance 1e-9
+            --format json
+    )
+    set_tests_properties(
+        benchmark_nasa_agtf30_vbv_nozzle_static_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\""
+        ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME platform_cooled_turbine_stage_cli
         COMMAND thermox_cli solve
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json

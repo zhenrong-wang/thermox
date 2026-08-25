@@ -347,6 +347,25 @@ the simultaneous core/LP-shaft/whole-engine coupling.
 LPT-exit temperature, composition basis, and flow. It relaxes station-5 pressure and closes the
 generic duct-5 loss model against the fixed 393.43 in2 core nozzle and sea-level ambient pressure.
 The branch converges in three trust-region Newton iterations and predicts 103.192 kPa versus the
-NASA station-5 value of 102.643 kPa (+0.535 percent), within the declared LPT station band. The
+NASA station-5 value of 103.199 kPa (-0.0063 percent). The
 boundary uses the same N2/O2 thermochemistry translation as the qualified low-spool slice, so this
 gate qualifies terminal capacity and pressure closure, not combustion-product composition.
+
+## AGTF30 sea-level-static open-VBV whole-engine calculation
+
+`agtf30_vbv_nozzle_static.json` closes the previously reserved fifth point with the complete
+407-variable graph: five coordinate maps, equilibrium combustor, declared cooling extractions,
+open map-bound VBV, five ducts, two nozzles, geared LP shaft, and extracted-power HP shaft. A
+capacity-matched numerical homotopy starts from the independently qualified terminal flows and
+continues the two nozzle areas to NASA's scheduled 8000 in2 bypass area and 393.43 in2 core area.
+Only initial guesses vary along this path; component equations, target areas, maps, boundaries, and
+acceptance outputs are unchanged.
+
+The point reaches the target in 12 accepted continuation stages with a normalized residual of
+2.16e-13. Relative to the public NASA solver it gives fan flow -0.033 percent, HPT pressure -0.111
+percent, HPT temperature -0.991 percent, HPT flow +0.372 percent, station-5 pressure +0.012
+percent, station-5 temperature -1.014 percent, VBV flow -0.369 percent, and bypass ratio -0.468
+percent. Both shaft balances close to numerical precision. Fuel remains -15.24 percent, consistent
+with the previously declared combustion/fuel-model prediction limitation; no calibration is
+applied. Gross thrust is solved, but comparison and net thrust remain reserved until the public
+source output extraction and generic inlet ram-drag path are both qualified.

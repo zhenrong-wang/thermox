@@ -2268,6 +2268,113 @@ void test_nasa_agtf30_core_exhaust_branch_benchmark() {
         "core exhaust branch must produce finite positive gross thrust");
 }
 
+void test_nasa_agtf30_open_vbv_static_whole_engine_benchmark() {
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_vbv_nozzle_static.json");
+    request.case_id = "sea_level_static_1000";
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/agtf30_fan_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_vbv_map.json"}) {
+        request.artifacts.performance_maps.push_back(
+            thermox::service::
+                parse_performance_map_artifact_declaration_json(
+                    read_source_file(path)));
+    }
+    request.solver.residual_tolerance = 1.0e-9;
+    request.solver.continuation_enabled = true;
+    request.solver.continuation_initial_step = 0.01;
+    request.solver.continuation_minimum_step = 0.0001;
+    const auto response =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.continuation.converged &&
+            response.continuation.reached_parameter == 1.0 &&
+            response.diagnostics.final_residual_norm < 1.0e-9,
+        "NASA AGTF30 open-VBV static whole-engine point must solve");
+
+    constexpr double psi_to_pa = 6894.757293168;
+    constexpr double pound_mass_to_kg = 0.45359237;
+    const auto relative_error = [](double actual, double expected) {
+        return std::abs(actual / expected - 1.0);
+    };
+    const auto value = [&](const std::string& component,
+                           const std::string& port,
+                           const std::string& name,
+                           bool derived) {
+        const auto& result = require_port_result(
+            response.graph, component, port);
+        return require_result_value(
+            derived ? result.derived_values : result.primary_values,
+            name).value_si;
+    };
+    require(
+        relative_error(
+            value("fan", "inlet", "m_dot_total", true),
+            952.4527216472 * pound_mass_to_kg) < 0.001,
+        "open-VBV whole-engine fan flow must match NASA within 0.1 percent");
+    require(
+        relative_error(
+            value("fuel", "outlet", "m_dot_total", true),
+            0.30826616 * pound_mass_to_kg) < 0.17,
+        "open-VBV whole-engine fuel flow must remain within the declared "
+        "cross-model band");
+    require(
+        relative_error(
+            value("combustor", "outlet", "T", true),
+            2085.69829561 * 5.0 / 9.0) < 0.02 &&
+            relative_error(
+                value("hpt", "outlet", "p", false),
+                38.98232159 * psi_to_pa) < 0.005 &&
+            relative_error(
+                value("hpt", "outlet", "T", true),
+                1433.76706208 * 5.0 / 9.0) < 0.015 &&
+            relative_error(
+                value("hpt", "outlet", "m_dot_total", true),
+                24.65152243 * pound_mass_to_kg) < 0.01,
+        "open-VBV whole-engine hot-section stations must remain within "
+        "declared cross-code bands");
+    require(
+        relative_error(
+            value("lpt", "outlet", "p", false),
+            14.9677381289 * psi_to_pa) < 0.01 &&
+            relative_error(
+                value("lpt", "outlet", "T", true),
+                1151.0231330851 * 5.0 / 9.0) < 0.015,
+        "open-VBV whole-engine station 5 must remain within declared "
+        "cross-code bands");
+
+    const double bleed_mass_flow = require_result_value(
+        require_component_result(response.graph, "vbv").internal_values,
+        "bleed_mass_flow").value_si;
+    require(
+        relative_error(bleed_mass_flow, 2.10190848517857) < 0.01,
+        "whole-engine VBV flow must remain within 1 percent of the "
+        "independent source relation");
+    const double core_flow = value(
+        "lpc", "inlet", "m_dot_total", true);
+    const double bypass_flow = value(
+        "vbv", "receiver_inlet", "m_dot_total", true);
+    require(
+        relative_error(bypass_flow / core_flow, 31.314980028849) < 0.01,
+        "whole-engine bypass ratio must match NASA within 1 percent");
+
+    const double fan_power = value("fan", "shaft", "W_dot", false);
+    const double lpc_power = value("lpc", "shaft", "W_dot", false);
+    const double lpt_power = value("lpt", "shaft", "W_dot", false);
+    const double hpc_power = value("hpc", "shaft", "W_dot", false);
+    const double hpt_power = value("hpt", "shaft", "W_dot", false);
+    require(
+        std::abs(0.99 * lpt_power - lpc_power - fan_power) < 1.0e-6 &&
+            std::abs(hpt_power - hpc_power - 260997.475) < 1.0e-6,
+        "open-VBV whole-engine graph must close both shaft balances exactly");
+}
+
 void test_nasa_agtf30_continuous_twin_spool_benchmark() {
     struct ReferencePoint {
         std::string case_id;
@@ -8171,6 +8278,7 @@ int main() {
         test_nasa_agtf30_open_vbv_benchmark();
         test_nasa_agtf30_open_vbv_bypass_branch_benchmark();
         test_nasa_agtf30_core_exhaust_branch_benchmark();
+        test_nasa_agtf30_open_vbv_static_whole_engine_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
