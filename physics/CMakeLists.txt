@@ -4,9 +4,11 @@ add_library(thermox_physics
     src/humid_air.cpp
     src/ideal_gas_package.cpp
     src/if97_package.cpp
+    src/incompressible_package.cpp
     src/iso2314_equivalent_cooling.cpp
     src/property_package.cpp
     src/property_registry.cpp
+    src/tabulated_incompressible_package.cpp
     src/thermochemistry.cpp
     src/water_heos_package.cpp
 )

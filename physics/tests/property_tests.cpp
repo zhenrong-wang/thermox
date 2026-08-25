@@ -3,6 +3,8 @@
 #include "thermox/physics/co2_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
+#include "thermox/physics/incompressible_package.hpp"
+#include "thermox/physics/tabulated_incompressible_package.hpp"
 #include "thermox/physics/humid_air.hpp"
 #include "thermox/physics/iso2314_equivalent_cooling.hpp"
 #include "thermox/physics/thermochemistry.hpp"
@@ -868,6 +870,105 @@ void verify_humid_air_ambient_state() {
         "humid-air service rejects invalid relative humidity");
 }
 
+void verify_solar_salt_properties() {
+    const thermox::physics::IncompressiblePropertyPackage salt{
+        "SolarSalt"};
+    require(
+        salt.substance() == "NaK",
+        "SolarSalt alias must resolve to the canonical CoolProp fluid");
+    require(
+        salt.supports(
+            thermox::physics::PropertyCapability::transport) &&
+            !salt.supports(
+                thermox::physics::PropertyCapability::saturation_p),
+        "solar salt must expose single-phase transport without a "
+        "fabricated saturation contract");
+
+    const double temperature = 823.15;
+    const auto state = salt.state_pt(101325.0, temperature);
+    require(state.ok(), state.message);
+    // Formula-level checks against the published Zavoico correlations
+    // embedded in CoolProp's NaK definition, evaluated about its
+    // 273.15 K base. These are provider regressions, not independent
+    // experimental validation.
+    require_near(
+        state.state.density_kg_m3,
+        2090.0 - 0.636 * (temperature - 273.15), 1.0e-8,
+        "solar-salt density correlation");
+    require_near(
+        state.state.cp_j_kg_k,
+        1443.0 + 0.172 * (temperature - 273.15), 1.0e-8,
+        "solar-salt heat-capacity correlation");
+    require(
+        state.state.viscosity_pa_s > 0.0 &&
+            state.state.thermal_conductivity_w_m_k > 0.0 &&
+            state.state.phase == thermox::physics::Phase::liquid,
+        "solar salt must return physical transport and liquid phase");
+
+    const auto ph = salt.state_ph(
+        state.state.pressure_pa, state.state.enthalpy_j_kg);
+    const auto ps = salt.state_ps(
+        state.state.pressure_pa, state.state.entropy_j_kg_k);
+    require(ph.ok() && ps.ok(), "solar-salt PH/PS round trips");
+    require_near(
+        ph.state.temperature_k, temperature, 1.0e-8,
+        "solar-salt PH temperature round trip");
+    require_near(
+        ps.state.temperature_k, temperature, 1.0e-8,
+        "solar-salt PS temperature round trip");
+    require(
+        salt.state_pt(101325.0, 550.0).status ==
+            thermox::physics::PropertyStatus::out_of_range,
+        "solar-salt temperature range must remain explicit");
+    require(
+        salt.saturation_p(101325.0).status ==
+            thermox::physics::PropertyStatus::unsupported,
+        "solar salt must reject saturation queries");
+}
+
+void verify_sandia_solar_salt_table() {
+    const auto salt =
+        thermox::physics::make_sandia_solar_salt_property_package();
+    const double table_temperature =
+        (550.0 - 32.0) * (5.0 / 9.0) + 273.15;
+    const auto table_state = salt->state_pt(
+        101325.0, table_temperature);
+    require(table_state.ok(), table_state.message);
+    require_near(
+        table_state.state.density_kg_m3,
+        118.98 * 16.01846337396014, 1.0e-10,
+        "Sandia table density conversion");
+    require_near(
+        table_state.state.cp_j_kg_k,
+        0.358 * 4186.8, 1.0e-10,
+        "Sandia table heat-capacity conversion");
+
+    const auto solar_two_cold = salt->state_pt(
+        101325.0, 290.0 + 273.15);
+    require(
+        solar_two_cold.ok() &&
+            solar_two_cold.state.phase ==
+                thermox::physics::Phase::liquid,
+        "Sandia table must cover the Solar Two 290 degC cold state");
+    const auto ph = salt->state_ph(
+        solar_two_cold.state.pressure_pa,
+        solar_two_cold.state.enthalpy_j_kg);
+    const auto ps = salt->state_ps(
+        solar_two_cold.state.pressure_pa,
+        solar_two_cold.state.entropy_j_kg_k);
+    require(ph.ok() && ps.ok(), "Sandia table PH/PS round trips");
+    require_near(
+        ph.state.temperature_k, solar_two_cold.state.temperature_k,
+        1.0e-10, "Sandia table PH temperature round trip");
+    require_near(
+        ps.state.temperature_k, solar_two_cold.state.temperature_k,
+        1.0e-10, "Sandia table PS temperature round trip");
+    require(
+        salt->state_pt(101325.0, 250.0 + 273.15).status ==
+            thermox::physics::PropertyStatus::out_of_range,
+        "Sandia table must reject temperatures below 500 degF");
+}
+
 }  // namespace
 
 int main() {
@@ -910,6 +1011,8 @@ int main() {
 #endif
     verify_iso2314_equivalent_cooling();
     verify_humid_air_ambient_state();
+    verify_solar_salt_properties();
+    verify_sandia_solar_salt_table();
     verify_water_reference_points(if97);
     verify_solver_bridge(ideal_gas, 2e5, 700.0, 500.0, 1e-5);
     verify_solver_bridge(co2, 1e5, 340.0, 300.0, 0.02);

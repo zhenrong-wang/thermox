@@ -129,13 +129,31 @@ supported substances where applicable, and capabilities. `thermox_service` publi
 fixed-fluid and thermochemistry backend catalogs through `thermox.catalog/v12`, allowing graph
 clients to reject unsupported backend/component combinations before simulation submission.
 
-CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the only
-real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
+CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the primary
+external real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
 backend using its Span-Wagner formulation. Water and steam can use either
 `coolprop_if97`/`water_steam_if97` for the industrial IF97 formulation or
 `coolprop_heos` for a smooth Helmholtz-energy formulation suitable for
 regime-spanning inventory transients. The backend choice is explicit and is
 preserved in run provenance.
+
+`coolprop_incompressible` exposes provider-backed single-phase heat-transfer
+liquids through the same PT/PH/PS and transport contract. Its first registered
+substance is `SolarSalt` (canonical CoolProp fluid `NaK`), the 60 mass-% NaNO3 /
+40 mass-% KNO3 mixture correlated over 573.15--873.15 K. It deliberately does
+not advertise saturation, surface tension, or native analytic PH derivatives;
+components receive the shared bounded PH finite-difference fallback when they
+need state derivatives. The property family is generic even though the first
+validation consumer is the Solar Two benchmark.
+
+`TabulatedIncompressiblePropertyPackage` provides the corresponding
+source-qualified table path. It validates positive, finite, strictly ordered
+samples; linearly interpolates density, heat capacity, viscosity, and thermal
+conductivity; and analytically integrates piecewise-linear heat capacity for
+consistent enthalpy and entropy. `sandia_solar_salt_table` is the first
+registration, using SAND2001-2100 Table 1-1 over 500--1100°F. It covers the
+Solar Two 290°C cold boundary without weakening or extrapolating CoolProp's
+separate NaK validity contract.
 
 ## Verification
 

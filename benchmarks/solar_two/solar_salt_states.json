@@ -1,0 +1,40 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "solar_two_solar_salt_states",
+    "name": "Solar Two nitrate-salt property-state audit",
+    "revision": "1",
+    "media": [
+      {
+        "id": "solar_salt",
+        "backend": "sandia_solar_salt_table",
+        "substance": "SolarSalt",
+        "package_version": "SAND2001-2100-table-1-1/v1"
+      }
+    ],
+    "materials": [],
+    "components": [
+      {"id": "nominal_hot", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "solar_salt"}},
+      {"id": "actual_hot", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "solar_salt"}},
+      {"id": "nominal_cold", "kind": "source.fluid.boundary", "version": "1.0.0", "media": {"outlet": "solar_salt"}}
+    ],
+    "connections": []
+  },
+  "cases": [
+    {
+      "id": "published_storage_states",
+      "mode": "steady_state_design",
+      "fixed_values": {
+        "nominal_hot.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+        "nominal_hot.outlet.p": {"value": 101.325, "unit": "kPa"},
+        "nominal_hot.outlet.T": {"value": 565.0, "unit": "degC"},
+        "actual_hot.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+        "actual_hot.outlet.p": {"value": 101.325, "unit": "kPa"},
+        "actual_hot.outlet.T": {"value": 554.0, "unit": "degC"},
+        "nominal_cold.outlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+        "nominal_cold.outlet.p": {"value": 101.325, "unit": "kPa"},
+        "nominal_cold.outlet.T": {"value": 290.0, "unit": "degC"}
+      }
+    }
+  ]
+}

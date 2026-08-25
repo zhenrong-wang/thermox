@@ -3133,6 +3133,102 @@ void test_netl_b31a_steam_stream_property_benchmark() {
         "quality");
 }
 
+void test_solar_two_solar_salt_property_benchmark() {
+    thermox::service::SimulationService service;
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/solar_two/solar_salt_states.json");
+    request.case_id = "published_storage_states";
+    const auto response = service.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.diagnostics.iterations == 0,
+        "Solar Two solar-salt state benchmark must solve from "
+        "property-informed initialization: " +
+            response.error.message);
+
+    const auto& nominal = require_port_result(
+        response.graph, "nominal_hot", "outlet");
+    const auto& actual = require_port_result(
+        response.graph, "actual_hot", "outlet");
+    const auto& cold = require_port_result(
+        response.graph, "nominal_cold", "outlet");
+    const double actual_hot_enthalpy = require_result_value(
+        actual.primary_values, "h").value_si;
+    const double cold_enthalpy = require_result_value(
+        cold.primary_values, "h").value_si;
+    require(
+        std::abs(
+            require_result_value(
+                nominal.primary_values, "h").value_si -
+            463237.0) < 2.0 &&
+            std::abs(
+                require_result_value(
+                    nominal.derived_values, "rho").value_si -
+                1728.43) < 0.02 &&
+            std::abs(actual_hot_enthalpy - 446253.0) < 2.0 &&
+            std::abs(
+                require_result_value(
+                    actual.derived_values, "rho").value_si -
+                1735.47) < 0.02 &&
+            std::abs(cold_enthalpy - 44850.3) < 2.0,
+        "Solar Two states must retain the pinned Sandia table "
+        "derived-reference values");
+
+    const double total_inventory_capacity_mwh =
+        1.38e6 * (actual_hot_enthalpy - cold_enthalpy) / 3.6e9;
+    const double implied_active_mass_kg =
+        107.0 * 3.6e9 /
+        (actual_hot_enthalpy - cold_enthalpy);
+    require(
+        total_inventory_capacity_mwh > 150.0 &&
+            total_inventory_capacity_mwh < 160.0 &&
+            implied_active_mass_kg > 0.9e6 &&
+            implied_active_mass_kg < 1.0e6,
+        "published total inventory must not be mistaken for active "
+        "storage mass when interpreting the 107 MWh result");
+
+    const auto summary = thermox::service::project_steady_result(
+        response.graph,
+        {{"actual_hot_enthalpy",
+          thermox::service::ResultValueScope::port_primary,
+          "actual_hot", "outlet", "h", "specific_enthalpy",
+          thermox::service::ResultAggregation::final}});
+    auto observations = thermox::service::
+        validation_observations_from_result_summary(summary);
+    observations.push_back({
+        "normalized_residual", "dimensionless",
+        response.diagnostics.final_residual_norm});
+    const auto evidence =
+        thermox::service::evaluate_validation_evidence(
+            observations,
+            {{"actual_hot_property_regression",
+              "actual_hot_enthalpy",
+              thermox::service::ValidationEvidenceLayer::property,
+              thermox::service::ValidationEvidenceBasis::
+                  derived_reference,
+              "specific_enthalpy", 446253.0, 2.0, 0.0,
+              "SAND2001-2100 Table 1-1",
+              "This is a tabulated-provider regression, not an independent "
+              "Solar Two measurement."},
+             {"solar_salt_state_numerical_closure",
+              "normalized_residual",
+              thermox::service::ValidationEvidenceLayer::numerical,
+              thermox::service::ValidationEvidenceBasis::
+                  internal_consistency,
+              "dimensionless", 0.0, 1.0e-10, 0.0,
+              "Thermox scaled equation system",
+              "Closure is not external physical validation."}},
+            {"The report does not publish active salt mass after "
+             "subtracting inaccessible tank heels and sump inventory; "
+             "the reported 107 MWh capacity cannot be independently "
+             "reconstructed from total inventory."});
+    require(
+        evidence.passed && evidence.passed_count == 2U,
+        "Solar Two salt evidence must remain classified as derived "
+        "reference plus internal consistency");
+}
+
 void test_netl_b31a_decomposed_steam_turbine_train() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -7151,6 +7247,7 @@ int main() {
         test_dynamic_natural_circulation_evaporator();
 #endif
         test_netl_b31a_steam_stream_property_benchmark();
+        test_solar_two_solar_salt_property_benchmark();
         test_netl_b31a_decomposed_steam_turbine_train();
         test_netl_b31a_connected_hrsg_and_steam_cycle();
         test_netl_b31a_published_balance_consistency();

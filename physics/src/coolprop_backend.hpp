@@ -15,6 +15,11 @@ enum class CoolPropFlash { pt, ph, ps };
     CoolPropFluid fluid, double pressure_pa, double enthalpy_j_kg);
 [[nodiscard]] SaturationResult coolprop_saturation_p(
     CoolPropFluid fluid, double pressure_pa);
+[[nodiscard]] PropertyResult coolprop_incompressible_state(
+    std::string_view substance,
+    CoolPropFlash flash,
+    double first,
+    double second);
 [[nodiscard]] std::string_view coolprop_version() noexcept;
 
 }  // namespace thermox::physics::detail

@@ -9,6 +9,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace thermox::physics::detail {
 namespace {
@@ -31,6 +32,18 @@ CoolProp::AbstractState& backend_state(CoolPropFluid fluid) {
             return *water_heos;
     }
     return *water;
+}
+
+CoolProp::AbstractState& incompressible_backend_state(
+    std::string_view substance) {
+    thread_local std::unordered_map<std::string, StatePtr> states;
+    const std::string key{substance};
+    auto [position, inserted] = states.try_emplace(key);
+    if (inserted) {
+        position->second.reset(
+            CoolProp::AbstractState::factory("INCOMP", key));
+    }
+    return *position->second;
 }
 
 Phase map_phase(CoolProp::phases phase) {
@@ -79,8 +92,16 @@ ThermodynamicState read_state(CoolProp::AbstractState& source) {
         optional_output([&source] { return source.viscosity(); });
     state.thermal_conductivity_w_m_k =
         optional_output([&source] { return source.conductivity(); });
-    state.vapor_quality = source.Q();
-    state.phase = map_phase(source.phase());
+    try {
+        state.vapor_quality = source.Q();
+    } catch (const CoolProp::CoolPropBaseError&) {
+        state.vapor_quality = -1.0;
+    }
+    try {
+        state.phase = map_phase(source.phase());
+    } catch (const CoolProp::CoolPropBaseError&) {
+        state.phase = Phase::unknown;
+    }
     return state;
 }
 
@@ -193,6 +214,37 @@ PropertyResult coolprop_state(
             contains_case_insensitive(message, "above the maximum")) {
             return error_result(
                 PropertyStatus::out_of_range, message);
+        }
+        return error_result(PropertyStatus::backend_error, message);
+    }
+}
+
+PropertyResult coolprop_incompressible_state(
+    std::string_view substance,
+    CoolPropFlash flash,
+    double first,
+    double second) {
+    if (!valid_input(first, second)) {
+        return error_result(
+            PropertyStatus::invalid_input,
+            "property inputs must be finite and pressure must be positive");
+    }
+    try {
+        auto& state = incompressible_backend_state(substance);
+        update(state, flash, first, second);
+        auto result = read_state(state);
+        result.phase = Phase::liquid;
+        result.vapor_quality = -1.0;
+        return {result, PropertyStatus::success, {}};
+    } catch (CoolProp::CoolPropBaseError& error) {
+        return map_exception(error);
+    } catch (const std::exception& error) {
+        const std::string message = error.what();
+        if (contains_case_insensitive(message, "out of range") ||
+            contains_case_insensitive(message, "outside the range") ||
+            contains_case_insensitive(message, "below the minimum") ||
+            contains_case_insensitive(message, "above the maximum")) {
+            return error_result(PropertyStatus::out_of_range, message);
         }
         return error_result(PropertyStatus::backend_error, message);
     }

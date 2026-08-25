@@ -436,6 +436,12 @@ Engineering benchmarks use the separate `thermox.validation_evidence/v1` service
 classify each dimensioned comparison as independent, boundary-constrained, calibrated, derived,
 internal consistency, or assumption-dependent. Numeric agreement never upgrades its own evidence
 class, and explicit data limitations remain part of the serialized summary.
+The public engineering-validation portfolio and its promotion gates are tracked in
+[`benchmarks/validation_portfolio.json`](benchmarks/validation_portfolio.json). The current cases
+combine NETL B31A design reproduction, Solar Two operating-plant evidence, NASA T-MATS map-driven
+steady/transient reference behavior, and Sandia sCO2 hardware evidence. See
+[`docs/validation/engineering-validation-program.md`](docs/validation/engineering-validation-program.md)
+for the claim boundary and implementation sequence.
 
 The CLI is a thin terminal adapter. It reads arguments and model text, calls `thermox_service`, and
 renders the returned contract. Model parsing, registry resolution, graph compilation, solving,

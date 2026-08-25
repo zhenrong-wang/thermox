@@ -3,6 +3,8 @@
 #include "thermox/physics/co2_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
+#include "thermox/physics/incompressible_package.hpp"
+#include "thermox/physics/tabulated_incompressible_package.hpp"
 #include "thermox/physics/water_heos_package.hpp"
 
 #include <algorithm>
@@ -126,6 +128,19 @@ PropertyPackageRegistry make_default_property_package_registry() {
                 "HEOS water backend requires substance Water or Steam");
         return std::make_shared<WaterHeosPropertyPackage>();
     };
+    const auto incompressible = [](std::string_view substance)
+        -> std::shared_ptr<const PropertyPackage> {
+        return std::make_shared<IncompressiblePropertyPackage>(
+            std::string{substance});
+    };
+    const auto solar_salt_table = [](std::string_view substance)
+        -> std::shared_ptr<const PropertyPackage> {
+        if (substance != "SolarSalt") {
+            throw std::invalid_argument(
+                "Sandia solar-salt table requires substance SolarSalt");
+        }
+        return make_sandia_solar_salt_property_package();
+    };
     const std::vector all_flashes{
         PropertyCapability::state_pt,
         PropertyCapability::state_ph,
@@ -153,6 +168,9 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const auto co2_identity = co2("CO2");
     const auto if97_identity = if97("Water");
     const auto water_heos_identity = water_heos("Water");
+    const auto incompressible_identity = incompressible("SolarSalt");
+    const auto solar_salt_table_identity =
+        solar_salt_table("SolarSalt");
     const std::string ideal_name{ideal_identity->name()};
     const std::string ideal_version{ideal_identity->version()};
     const std::string co2_name{co2_identity->name()};
@@ -161,6 +179,14 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const std::string if97_version{if97_identity->version()};
     const std::string water_heos_name{water_heos_identity->name()};
     const std::string water_heos_version{water_heos_identity->version()};
+    const std::string incompressible_name{
+        incompressible_identity->name()};
+    const std::string incompressible_version{
+        incompressible_identity->version()};
+    const std::string solar_salt_table_name{
+        solar_salt_table_identity->name()};
+    const std::string solar_salt_table_version{
+        solar_salt_table_identity->version()};
     registry.register_backend(
         {"ideal_gas", ideal_name, ideal_version, {"Air"},
          ideal_capabilities},
@@ -193,6 +219,22 @@ PropertyPackageRegistry make_default_property_package_registry() {
         {"coolprop_heos", water_heos_name, water_heos_version,
          {"Water", "Steam"}, all_flashes},
         water_heos);
+    registry.register_backend(
+        {"coolprop_incompressible", incompressible_name,
+         incompressible_version, {"SolarSalt", "NaK"},
+         {PropertyCapability::state_pt,
+          PropertyCapability::state_ph,
+          PropertyCapability::state_ps,
+         PropertyCapability::transport}},
+        incompressible);
+    registry.register_backend(
+        {"sandia_solar_salt_table", solar_salt_table_name,
+         solar_salt_table_version, {"SolarSalt"},
+         {PropertyCapability::state_pt,
+          PropertyCapability::state_ph,
+          PropertyCapability::state_ps,
+          PropertyCapability::transport}},
+        solar_salt_table);
     return registry;
 }
 

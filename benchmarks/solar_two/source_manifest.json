@@ -1,0 +1,77 @@
+{
+  "schema_version": "thermox.benchmark_source_manifest/v1",
+  "benchmark_id": "solar_two",
+  "source": {
+    "organization": "Sandia National Laboratories",
+    "report_number": "SAND2002-0120",
+    "title": "Final Test and Evaluation Results from the Solar Two Project",
+    "publication_date": "2002-01",
+    "doi": "10.2172/793226",
+    "official_url": "https://www.osti.gov/servlets/purl/793226",
+    "retrieved_on": "2026-08-25",
+    "sha256": "60058c6826b65cad41d80616ebc026556df7ff5e1891d1148d5fe24941afd236",
+    "distribution": "Approved for public release; further dissemination unlimited.",
+    "repository_policy": "The report PDF is not copied into this repository. Only cited public test values and provenance are tracked."
+  },
+  "supporting_sources": [
+    {
+      "organization": "Sandia National Laboratories",
+      "report_number": "SAND2001-2100",
+      "title": "Solar Power Tower Design Basis Document",
+      "official_url": "https://www.osti.gov/servlets/purl/786629",
+      "retrieved_on": "2026-08-25",
+      "sha256": "084fec04394258183f825a6b3c64823557b5eb7ad1f3638eb0d6c50eebb990f5",
+      "use": "Table 1-1 tabulates 60/40 nitrate-salt properties from 500 to 1100 degF; section 1.6.3 states analytic property formulas for 300 to 600 degC."
+    }
+  ],
+  "extracted_sections": [
+    {
+      "id": "storage_characteristics",
+      "location": "Table 4-1 and section 4.3.3",
+      "values": {
+        "salt_composition_mass_fraction": {
+          "NaNO3": 0.6,
+          "KNO3": 0.4
+        },
+        "nominal_cold_temperature_c": 290.0,
+        "nominal_hot_temperature_c": 565.0,
+        "reported_actual_hot_temperature_c": 554.0,
+        "reported_total_salt_inventory_tonne": 1380.0,
+        "reported_usable_capacity_mwh": 107.0
+      },
+      "interpretation_limit": "The report accounts for inaccessible tank heels and sump inventory but does not publish a separate active salt mass; total inventory must not be used as active inventory to manufacture agreement. The executable model evaluates the 290 degC cold state with SAND2001-2100 Table 1-1, not by extrapolating CoolProp NaK below its declared 300 degC limit."
+    },
+    {
+      "id": "storage_heat_losses",
+      "location": "Table 4-2",
+      "values": [
+        {"equipment": "hot_salt_tank", "temperature_c": 565.0, "calculated_kw": 98.0, "measured_kw": 102.0, "uncertainty_kw": 21.0},
+        {"equipment": "cold_salt_tank", "temperature_c": 290.0, "calculated_kw": 45.0, "measured_kw": 44.0, "uncertainty_kw": 6.6},
+        {"equipment": "steam_generator_system", "temperature_c": 565.0, "calculated_kw": 14.0, "measured_kw": 29.0, "uncertainty_kw": 3.5},
+        {"equipment": "receiver_sump", "temperature_c": 290.0, "calculated_kw": 13.0, "measured_kw": 9.5, "uncertainty_kw": 1.0}
+      ]
+    },
+    {
+      "id": "epgs_steady_points",
+      "location": "Appendix M, Table M-1",
+      "values": [
+        {"test": 1, "salt_inlet_c": 543.0, "salt_flow_kg_s": 86.4, "steam_pressure_mpa": 10.1, "steam_temperature_c": 532.0, "gross_power_kw": 10570.0},
+        {"test": 2, "salt_inlet_c": 543.0, "salt_flow_kg_s": 69.8, "steam_pressure_mpa": 10.1, "steam_temperature_c": 534.0, "gross_power_kw": 8880.0},
+        {"test": 3, "salt_inlet_c": 542.0, "salt_flow_kg_s": 54.8, "steam_pressure_mpa": 10.1, "steam_temperature_c": 536.0, "gross_power_kw": 5900.0},
+        {"test": 4, "salt_inlet_c": 516.0, "salt_flow_kg_s": 18.0, "steam_pressure_mpa": 10.1, "steam_temperature_c": 513.0, "gross_power_kw": 1310.0},
+        {"test": 5, "salt_inlet_c": 557.0, "salt_flow_kg_s": 82.5, "steam_pressure_mpa": 10.1, "steam_temperature_c": 542.0, "gross_power_kw": 10930.0},
+        {"test": 6, "salt_inlet_c": 553.0, "salt_flow_kg_s": 69.0, "steam_pressure_mpa": 10.1, "steam_temperature_c": 542.0, "gross_power_kw": 9170.0},
+        {"test": 7, "salt_inlet_c": 551.0, "salt_flow_kg_s": 46.7, "steam_pressure_mpa": 10.1, "steam_temperature_c": 543.0, "gross_power_kw": 5830.0},
+        {"test": 8, "salt_inlet_c": 526.0, "salt_flow_kg_s": 18.0, "steam_pressure_mpa": 10.1, "steam_temperature_c": 522.0, "gross_power_kw": 1300.0}
+      ],
+      "interpretation_limit": "Salt outlet temperature, feedwater state, steam flow, and turbine exhaust state are not all tabulated here. These points support boundary-constrained and held-out performance studies, not a fully specified first-principles cycle prediction by themselves."
+    }
+  ],
+  "derived_audit": {
+    "basis": "SAND2001-2100 Table 1-1 enthalpy integration between 290 and 554 degC",
+    "total_inventory_capacity_mwh": 153.871,
+    "reported_usable_capacity_mwh": 107.0,
+    "implied_active_salt_mass_tonne": 959.636,
+    "interpretation": "This does not disprove the report. It quantifies why the published total 1380-tonne inventory cannot be treated as active inventory: the report explicitly subtracts inaccessible tank heels and sump inventory but does not publish their separate mass. The 107 MWh value remains non-reproducible from public inputs alone."
+  }
+}

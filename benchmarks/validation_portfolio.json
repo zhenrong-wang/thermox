@@ -1,0 +1,122 @@
+{
+  "schema_version": "thermox.validation_portfolio/v1",
+  "objective": "Accumulate non-overstated evidence for generic steady and transient thermal-system calculation from independent experiments and reproducible public reference models.",
+  "promotion_rule": "No benchmark may promote a result beyond its declared evidence basis. Engineering-ready claims require all required gates, including independent held-out physical evidence, to pass.",
+  "cases": [
+    {
+      "id": "netl_b31a",
+      "status": "implemented",
+      "role": "complex_combined_cycle_design_reference",
+      "evidence_basis": [
+        "independent_reference",
+        "boundary_constrained",
+        "calibrated_reproduction",
+        "internal_consistency"
+      ],
+      "strengths": [
+        "public utility-scale combined-cycle mass and energy balances",
+        "detailed steam states and aggregate plant performance",
+        "connected multi-pressure HRSG and steam-turbine topology"
+      ],
+      "limits": [
+        "no OEM gas-turbine or steam-turbine maps",
+        "no independent off-design operating points",
+        "no transient plant data"
+      ]
+    },
+    {
+      "id": "solar_two",
+      "status": "implementation_started",
+      "role": "independent_utility_scale_experiment",
+      "evidence_basis": [
+        "independent_reference",
+        "boundary_constrained"
+      ],
+      "strengths": [
+        "10 MWe operating plant",
+        "eight steady steam-generator and turbine-generator test conditions",
+        "measured subsystem heat losses and uncertainty",
+        "thermal storage and startup-energy evidence"
+      ],
+      "limits": [
+        "complete raw time series are not published with the report",
+        "some steam-side state and flow measurements are presented only graphically",
+        "full turbine prediction still requires a defensible part-load model"
+      ],
+      "required_gates": [
+        "solar_salt_property_states",
+        "steam_generator_energy_balance",
+        "held_out_part_load_power",
+        "storage_heat_loss_transient"
+      ]
+    },
+    {
+      "id": "nasa_tmats_twin_spool",
+      "status": "selected",
+      "role": "map_rich_steady_transient_cross_code",
+      "evidence_basis": [
+        "derived_reference",
+        "internal_consistency"
+      ],
+      "strengths": [
+        "Apache-2.0 source and non-proprietary component maps",
+        "multi-spool topology with bleeds, cooling, nozzles, shafts, and controls",
+        "published steady and fuel-step transient comparisons"
+      ],
+      "limits": [
+        "reference outputs are computational rather than independent hardware measurements",
+        "model convention differences must remain explicit",
+        "original execution requires MATLAB and Simulink"
+      ],
+      "required_gates": [
+        "map_import_fidelity",
+        "four_steady_operating_points",
+        "shaft_power_and_flow_closure",
+        "fuel_step_transient_shape"
+      ]
+    },
+    {
+      "id": "sandia_sco2_loop",
+      "status": "selected_data_limited",
+      "role": "real_fluid_hardware_transient",
+      "evidence_basis": [
+        "independent_reference",
+        "boundary_constrained"
+      ],
+      "strengths": [
+        "operating closed Brayton hardware",
+        "measured startup, break-even generation, and cooling perturbation behavior",
+        "near-critical CO2 compressor and turbine evidence"
+      ],
+      "limits": [
+        "published response series are predominantly plots",
+        "the cited GenIV_101201_1041.csv raw file is not publicly downloadable",
+        "digitized chart values cannot be treated as metrology-grade raw data"
+      ],
+      "required_gates": [
+        "obtain_authoritative_numeric_series_or_record_digitization_uncertainty",
+        "steady_turbomachinery_point",
+        "cooling_step_transient",
+        "near_critical_property_sensitivity"
+      ]
+    }
+  ],
+  "claim_gates": {
+    "numerically_credible": [
+      "scaled_residual_and_conservation_limits_pass",
+      "solver_policy_independence_passes",
+      "steady_and_transient_regressions_pass"
+    ],
+    "physically_credible_for_declared_scope": [
+      "independent_property_and_component_criteria_pass",
+      "assumptions_and_calibration_are_classified",
+      "uncertainty_aware_acceptance_limits_pass"
+    ],
+    "engineering_ready": [
+      "at_least_one_independent_system_case_passes_on_held_out_outputs",
+      "at_least_one_map_driven_off_design_case_passes",
+      "at_least_one_measured_transient_case_passes",
+      "no_required_gate_depends_on_hidden_case_specific_corrections"
+    ]
+  }
+}
