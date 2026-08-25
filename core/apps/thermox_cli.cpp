@@ -5,6 +5,7 @@
 #include "thermox/service/artifact_declaration.hpp"
 #include "thermox/service/iso2314_equivalent_cooling.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -24,10 +25,16 @@ void print_usage(std::ostream& out) {
            " [--continuation-minimum-step <value>]"
            " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
+           " [--globalization line_search|trust_region]"
+           " [--trust-region-initial-radius <value>]"
+           " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
         << "  thermox_cli simulate --model <path> [--case <id>]"
            " --end-time <seconds>"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
+           " [--globalization line_search|trust_region]"
+           " [--trust-region-initial-radius <value>]"
+           " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
            " [--format text|json]\n"
@@ -183,6 +190,8 @@ int main(int argc, char** argv) {
     std::string residual_tolerance_text;
     std::string continuation_initial_step_text;
     std::string continuation_minimum_step_text;
+    std::string trust_region_initial_radius_text;
+    std::string trust_region_minimum_radius_text;
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
     std::string format = "text";
@@ -195,6 +204,8 @@ int main(int argc, char** argv) {
     std::vector<std::string> joint_region_parameter_ids;
     auto structural_policy = thermox::service::
         StructuralDecompositionPolicy::automatic;
+    auto globalization_policy = thermox::service::
+        GlobalizationPolicy::line_search;
 
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -220,6 +231,12 @@ int main(int argc, char** argv) {
         } else if (arg == "--continuation-minimum-step" &&
                    i + 1 < argc) {
             continuation_minimum_step_text = argv[++i];
+        } else if (arg == "--trust-region-initial-radius" &&
+                   i + 1 < argc) {
+            trust_region_initial_radius_text = argv[++i];
+        } else if (arg == "--trust-region-minimum-radius" &&
+                   i + 1 < argc) {
+            trust_region_minimum_radius_text = argv[++i];
         } else if (arg == "--mode" && i + 1 < argc) {
             reconciliation_mode = argv[++i];
         } else if (arg == "--profile-likelihood") {
@@ -246,6 +263,10 @@ int main(int argc, char** argv) {
             structural_policy = thermox::service::
                 structural_decomposition_policy_from_string(
                     argv[++i]);
+        } else if (arg == "--globalization" &&
+                   i + 1 < argc) {
+            globalization_policy = thermox::service::
+                globalization_policy_from_string(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(std::cout);
             return 0;
@@ -549,6 +570,24 @@ int main(int argc, char** argv) {
             }
             request.solver.structural_decomposition_policy =
                 structural_policy;
+            request.solver.globalization_policy =
+                globalization_policy;
+            if (!trust_region_initial_radius_text.empty()) {
+                request.solver.trust_region_initial_radius =
+                    parse_positive_number(
+                        trust_region_initial_radius_text,
+                        "--trust-region-initial-radius");
+                request.solver.trust_region_maximum_radius =
+                    std::max(
+                        request.solver.trust_region_maximum_radius,
+                        request.solver.trust_region_initial_radius);
+            }
+            if (!trust_region_minimum_radius_text.empty()) {
+                request.solver.trust_region_minimum_radius =
+                    parse_positive_number(
+                        trust_region_minimum_radius_text,
+                        "--trust-region-minimum-radius");
+            }
             const auto response = service.run_steady(request);
             if (format == "json") {
                 std::cout <<
@@ -568,6 +607,28 @@ int main(int argc, char** argv) {
         request.solver.nonlinear_solver
             .structural_decomposition_policy =
             structural_policy;
+        request.solver.nonlinear_solver.globalization_policy =
+            globalization_policy;
+        if (!trust_region_initial_radius_text.empty()) {
+            request.solver.nonlinear_solver
+                .trust_region_initial_radius =
+                parse_positive_number(
+                    trust_region_initial_radius_text,
+                    "--trust-region-initial-radius");
+            request.solver.nonlinear_solver
+                .trust_region_maximum_radius = std::max(
+                    request.solver.nonlinear_solver
+                        .trust_region_maximum_radius,
+                    request.solver.nonlinear_solver
+                        .trust_region_initial_radius);
+        }
+        if (!trust_region_minimum_radius_text.empty()) {
+            request.solver.nonlinear_solver
+                .trust_region_minimum_radius =
+                parse_positive_number(
+                    trust_region_minimum_radius_text,
+                    "--trust-region-minimum-radius");
+        }
         const auto response = service.run_transient(request);
         if (format == "json") {
             std::cout <<

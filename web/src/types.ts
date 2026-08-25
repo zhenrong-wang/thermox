@@ -245,6 +245,12 @@ export interface SteadySolverSettings {
   damping_reduction: number
   sufficient_decrease: number
   max_line_search_steps: number
+  globalization_policy: 'line_search' | 'trust_region'
+  trust_region_initial_radius: number
+  trust_region_minimum_radius: number
+  trust_region_maximum_radius: number
+  trust_region_acceptance_threshold: number
+  max_trust_region_steps: number
   continuation_enabled: boolean
   continuation_initial_step: number
   continuation_minimum_step: number
@@ -943,6 +949,9 @@ export interface SteadySimulationResult {
     function_evaluations: number
     jacobian_evaluations: number
     linear_solver_evaluations: number
+    trust_region_trials: number
+    trust_region_rejections: number
+    final_trust_region_radius: number
     symbolic_factorizations: number
     numeric_factorizations: number
     factorization_quality_observations: number

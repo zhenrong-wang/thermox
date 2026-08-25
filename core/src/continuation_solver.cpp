@@ -438,6 +438,12 @@ void accumulate_diagnostics(
         stage.jacobian_evaluations;
     aggregate.linear_solver_evaluations +=
         stage.linear_solver_evaluations;
+    aggregate.trust_region_trials +=
+        stage.trust_region_trials;
+    aggregate.trust_region_rejections +=
+        stage.trust_region_rejections;
+    aggregate.final_trust_region_radius =
+        stage.final_trust_region_radius;
     aggregate.symbolic_factorizations +=
         stage.symbolic_factorizations;
     aggregate.numeric_factorizations +=

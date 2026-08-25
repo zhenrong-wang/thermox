@@ -596,8 +596,16 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 86,
+        response.components.size() == 87,
         "service must expose the complete component registry");
+    require(
+        std::any_of(
+            response.components.begin(), response.components.end(),
+            [](const auto& component) {
+                return component.kind ==
+                    "junction.material.cross_bleed.performance_map";
+            }),
+        "service catalog must expose map-driven material cross-bleed");
     require(
         std::any_of(
             response.components.begin(), response.components.end(),
@@ -6847,10 +6855,18 @@ void test_steady_service() {
         thermox::service::structural_decomposition_policy_from_string(
             "tearing") ==
                 thermox::service::StructuralDecompositionPolicy::tearing &&
-            thermox::service::to_string(
+        thermox::service::to_string(
                 thermox::service::StructuralDecompositionPolicy::tearing) ==
                 "tearing",
         "structural tearing policy must round-trip through transport and persistence text");
+    require(
+        thermox::service::globalization_policy_from_string(
+            "trust_region") ==
+                thermox::service::GlobalizationPolicy::trust_region &&
+            thermox::service::to_string(
+                thermox::service::GlobalizationPolicy::trust_region) ==
+                "trust_region",
+        "trust-region policy must round-trip through transport and persistence text");
     thermox::service::SteadySimulationRequest request;
     request.model_json =
         read_source_file("core/examples/air_compressor.json");
@@ -6873,7 +6889,7 @@ void test_steady_service() {
         "steady result must identify the platform build");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton/v11" &&
+            "thermox.newton/v12" &&
             !response.metadata.solver.settings.empty(),
         "steady result must record solver contract");
     require(
@@ -6928,7 +6944,7 @@ void test_steady_service() {
                 tearing_response.diagnostics
                     .factorization_size_at_minimum_ratio &&
             tearing_response.metadata.solver.contract_version ==
-                "thermox.newton/v11",
+                "thermox.newton/v12",
         "service must expose the exact structural tearing policy with a safe fallback");
     require(
         std::any_of(
@@ -6950,6 +6966,20 @@ void test_steady_service() {
             !response.metadata.components.front()
                  .resolved_version.empty(),
         "component provenance must include requested and resolved versions");
+
+    auto trust_region_request = request;
+    trust_region_request.solver.structural_decomposition_policy =
+        thermox::service::StructuralDecompositionPolicy::monolithic;
+    trust_region_request.solver.globalization_policy =
+        thermox::service::GlobalizationPolicy::trust_region;
+    const auto trust_region_response =
+        service.run_steady(trust_region_request);
+    require(
+        trust_region_response.succeeded() &&
+            trust_region_response.diagnostics.trust_region_trials > 0 &&
+            trust_region_response.diagnostics.final_trust_region_radius >
+                0.0,
+        "steady service must execute and expose trust-region globalization");
     require(
         !response.metadata.media.empty() &&
             response.metadata.media.front().package == "ideal-gas" &&
@@ -7154,7 +7184,7 @@ void test_steady_continuation_service() {
         "steady provenance must record continuation settings");
     require(
         response.metadata.solver.contract_version ==
-            "thermox.newton-continuation/v12",
+            "thermox.newton-continuation/v13",
         "continued solve must identify its solver contract");
     const auto json =
         thermox::service::serialize_steady_response_json(

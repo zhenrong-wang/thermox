@@ -162,6 +162,24 @@ The variable-order integrator is the dependency-free native backend. The DAE cal
 contract remains independent of the stepper so an IDA-style backend with mature order 1-5 control
 and Newton/Krylov facilities can be added without changing physics components.
 
+## Nonlinear globalization
+
+`solve_newton` supports two execution policies without changing the compiled physical equations:
+
+- `line_search` is the default damped Newton path and applies Armijo backtracking. Recoverable
+  property-domain failures reject only the trial state and reduce the damping.
+- `trust_region` applies a dogleg step to the scaled residual/Jacobian model. Its radius is defined
+  in dimensionless variable coordinates, contracts after inadmissible states or poor agreement,
+  and expands after trustworthy boundary steps. Explicit variable bounds are applied before the
+  predicted and actual reductions are compared, so active bounds do not invalidate the model
+  ratio.
+
+The trust-region path retains the same sparse Jacobian and factorization interfaces as ordinary
+Newton. It adds no component- or fluid-specific recovery rules. Diagnostics expose attempted and
+rejected trust-region trials, the final radius, and each accepted step's model reduction ratio.
+The service, HTTP command, persisted run configuration, CLI, and transient nonlinear settings all
+carry the same policy and radius contract.
+
 ## Sparse and linear-solver policy
 
 The built-in dense and CSR direct solvers provide small-model capability and deterministic tests.

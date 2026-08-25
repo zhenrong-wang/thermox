@@ -1314,6 +1314,12 @@ void parse_steady_solver(
         "damping_reduction",
         "sufficient_decrease",
         "max_line_search_steps",
+        "globalization_policy",
+        "trust_region_initial_radius",
+        "trust_region_minimum_radius",
+        "trust_region_maximum_radius",
+        "trust_region_acceptance_threshold",
+        "max_trust_region_steps",
         "continuation_enabled",
         "continuation_initial_step",
         "continuation_minimum_step",
@@ -1355,6 +1361,25 @@ void parse_steady_solver(
     solver.max_line_search_steps = tree.get(
         "max_line_search_steps",
         solver.max_line_search_steps);
+    solver.globalization_policy =
+        service::globalization_policy_from_string(tree.get(
+            "globalization_policy",
+            service::to_string(solver.globalization_policy)));
+    solver.trust_region_initial_radius = tree.get(
+        "trust_region_initial_radius",
+        solver.trust_region_initial_radius);
+    solver.trust_region_minimum_radius = tree.get(
+        "trust_region_minimum_radius",
+        solver.trust_region_minimum_radius);
+    solver.trust_region_maximum_radius = tree.get(
+        "trust_region_maximum_radius",
+        solver.trust_region_maximum_radius);
+    solver.trust_region_acceptance_threshold = tree.get(
+        "trust_region_acceptance_threshold",
+        solver.trust_region_acceptance_threshold);
+    solver.max_trust_region_steps = tree.get(
+        "max_trust_region_steps",
+        solver.max_trust_region_steps);
     solver.continuation_enabled = tree.get(
         "continuation_enabled",
         solver.continuation_enabled);

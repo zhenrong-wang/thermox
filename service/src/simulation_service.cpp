@@ -963,8 +963,17 @@ void validate_settings(const SteadySolverSettings& settings) {
         throw std::invalid_argument(
             "invalid structural decomposition policy");
     }
+    switch (settings.globalization_policy) {
+    case GlobalizationPolicy::line_search:
+    case GlobalizationPolicy::trust_region:
+        break;
+    default:
+        throw std::invalid_argument(
+            "invalid globalization policy");
+    }
     if (settings.max_iterations <= 0 ||
         settings.max_line_search_steps <= 0 ||
+        settings.max_trust_region_steps <= 0 ||
         !std::isfinite(settings.residual_tolerance) ||
         settings.residual_tolerance <= 0.0 ||
         !std::isfinite(settings.step_tolerance) ||
@@ -980,6 +989,19 @@ void validate_settings(const SteadySolverSettings& settings) {
         settings.damping_reduction >= 1.0 ||
         !std::isfinite(settings.sufficient_decrease) ||
         settings.sufficient_decrease <= 0.0 ||
+        !std::isfinite(settings.trust_region_initial_radius) ||
+        settings.trust_region_initial_radius <= 0.0 ||
+        !std::isfinite(settings.trust_region_minimum_radius) ||
+        settings.trust_region_minimum_radius <= 0.0 ||
+        settings.trust_region_minimum_radius >
+            settings.trust_region_initial_radius ||
+        !std::isfinite(settings.trust_region_maximum_radius) ||
+        settings.trust_region_maximum_radius <
+            settings.trust_region_initial_radius ||
+        !std::isfinite(
+            settings.trust_region_acceptance_threshold) ||
+        settings.trust_region_acceptance_threshold < 0.0 ||
+        settings.trust_region_acceptance_threshold >= 1.0 ||
         !std::isfinite(
             settings.continuation_initial_step) ||
         settings.continuation_initial_step <= 0.0 ||
@@ -1066,6 +1088,21 @@ SolverOptions to_core(const SteadySolverSettings& settings) {
     options.damping_reduction = settings.damping_reduction;
     options.sufficient_decrease = settings.sufficient_decrease;
     options.max_line_search_steps = settings.max_line_search_steps;
+    options.globalization_policy =
+        settings.globalization_policy ==
+                GlobalizationPolicy::trust_region
+            ? thermox::GlobalizationPolicy::trust_region
+            : thermox::GlobalizationPolicy::line_search;
+    options.trust_region_initial_radius =
+        settings.trust_region_initial_radius;
+    options.trust_region_minimum_radius =
+        settings.trust_region_minimum_radius;
+    options.trust_region_maximum_radius =
+        settings.trust_region_maximum_radius;
+    options.trust_region_acceptance_threshold =
+        settings.trust_region_acceptance_threshold;
+    options.max_trust_region_steps =
+        settings.max_trust_region_steps;
     return options;
 }
 
@@ -1183,8 +1220,8 @@ SolverProvenance solver_provenance(
     const SteadySolverSettings& settings) {
     return {
         settings.continuation_enabled
-            ? "thermox.newton-continuation/v12"
-            : "thermox.newton/v11",
+            ? "thermox.newton-continuation/v13"
+            : "thermox.newton/v12",
         {
             {"max_iterations",
              static_cast<double>(settings.max_iterations)},
@@ -1203,6 +1240,19 @@ SolverProvenance solver_provenance(
             {"max_line_search_steps",
              static_cast<double>(
                  settings.max_line_search_steps)},
+            {"globalization_policy",
+             static_cast<double>(settings.globalization_policy)},
+            {"trust_region_initial_radius",
+             settings.trust_region_initial_radius},
+            {"trust_region_minimum_radius",
+             settings.trust_region_minimum_radius},
+            {"trust_region_maximum_radius",
+             settings.trust_region_maximum_radius},
+            {"trust_region_acceptance_threshold",
+             settings.trust_region_acceptance_threshold},
+            {"max_trust_region_steps",
+             static_cast<double>(
+                 settings.max_trust_region_steps)},
             {"continuation_enabled",
              settings.continuation_enabled ? 1.0 : 0.0},
             {"continuation_initial_step",
@@ -1393,6 +1443,9 @@ NonlinearDiagnostics copy_diagnostics(
         source.failed_structural_block,
         source.linear_solver_backend,
         source.message,
+        source.trust_region_trials,
+        source.trust_region_rejections,
+        source.final_trust_region_radius,
     };
 }
 
@@ -2036,6 +2089,28 @@ structural_decomposition_policy_from_string(
     throw std::invalid_argument(
         "unknown structural decomposition policy: " +
         std::string(value));
+}
+
+std::string to_string(GlobalizationPolicy policy) {
+    switch (policy) {
+    case GlobalizationPolicy::line_search:
+        return "line_search";
+    case GlobalizationPolicy::trust_region:
+        return "trust_region";
+    }
+    return "unknown";
+}
+
+GlobalizationPolicy globalization_policy_from_string(
+    std::string_view value) {
+    if (value == "line_search") {
+        return GlobalizationPolicy::line_search;
+    }
+    if (value == "trust_region") {
+        return GlobalizationPolicy::trust_region;
+    }
+    throw std::invalid_argument(
+        "unknown globalization policy: " + std::string(value));
 }
 
 std::string to_string(DiagnosticSeverity severity) {

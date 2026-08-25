@@ -226,7 +226,12 @@ void parse_prediction_solver(
         "structural_decomposition_policy",
         "finite_difference_epsilon", "min_damping",
         "damping_reduction", "sufficient_decrease",
-        "max_line_search_steps", "continuation_enabled",
+        "max_line_search_steps", "globalization_policy",
+        "trust_region_initial_radius",
+        "trust_region_minimum_radius",
+        "trust_region_maximum_radius",
+        "trust_region_acceptance_threshold",
+        "max_trust_region_steps", "continuation_enabled",
         "continuation_initial_step",
         "continuation_minimum_step", "continuation_step_growth",
         "continuation_step_reduction",
@@ -267,6 +272,27 @@ void parse_prediction_solver(
         "sufficient_decrease", settings.sufficient_decrease);
     settings.max_line_search_steps = value.value(
         "max_line_search_steps", settings.max_line_search_steps);
+    if (value.contains("globalization_policy")) {
+        settings.globalization_policy =
+            globalization_policy_from_string(
+                value.at("globalization_policy")
+                    .get<std::string>());
+    }
+    settings.trust_region_initial_radius = value.value(
+        "trust_region_initial_radius",
+        settings.trust_region_initial_radius);
+    settings.trust_region_minimum_radius = value.value(
+        "trust_region_minimum_radius",
+        settings.trust_region_minimum_radius);
+    settings.trust_region_maximum_radius = value.value(
+        "trust_region_maximum_radius",
+        settings.trust_region_maximum_radius);
+    settings.trust_region_acceptance_threshold = value.value(
+        "trust_region_acceptance_threshold",
+        settings.trust_region_acceptance_threshold);
+    settings.max_trust_region_steps = value.value(
+        "max_trust_region_steps",
+        settings.max_trust_region_steps);
     settings.continuation_initial_step = value.value(
         "continuation_initial_step",
         settings.continuation_initial_step);

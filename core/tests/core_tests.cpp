@@ -1047,6 +1047,19 @@ void test_newton_solver_validates_options_and_problem() {
         [&]() { (void)thermox::solve_newton(problem, invalid_options); },
         "invalid structural decomposition policy should throw");
 
+    invalid_options = {};
+    invalid_options.globalization_policy =
+        static_cast<thermox::GlobalizationPolicy>(99);
+    require_throws_invalid_argument(
+        [&]() { (void)thermox::solve_newton(problem, invalid_options); },
+        "invalid globalization policy should throw");
+
+    invalid_options = {};
+    invalid_options.trust_region_minimum_radius = 2.0;
+    require_throws_invalid_argument(
+        [&]() { (void)thermox::solve_newton(problem, invalid_options); },
+        "inconsistent trust-region radii should throw");
+
     thermox::NonlinearProblem invalid_problem = problem;
     invalid_problem.variable_scales = {0.0};
     require_throws_invalid_argument([&]() { (void)thermox::solve_newton(invalid_problem); },
@@ -1375,6 +1388,45 @@ void test_newton_solver_recovers_from_invalid_trial_state() {
     const auto result = thermox::solve_newton(problem);
     require(result.diagnostics.converged, result.diagnostics.message);
     require_near(result.x[0], 1.0, 1.0e-8, "line search recovers from invalid trial state");
+}
+
+void test_trust_region_recovers_from_invalid_property_domain() {
+    thermox::NonlinearProblem problem;
+    problem.variable_names = {"temperature_like_state"};
+    problem.residual_names = {"exponential_target"};
+    problem.initial_guess = {0.0};
+    problem.checked_residual = [](
+        const std::vector<double>& x,
+        std::vector<double>& residual) {
+        if (x[0] > 3.0) {
+            return thermox::EvaluationStatus::recoverable(
+                "property domain exceeded");
+        }
+        residual[0] = std::exp(x[0]) - 10.0;
+        return thermox::EvaluationStatus::success();
+    };
+    problem.jacobian = [](
+        const std::vector<double>& x,
+        thermox::Matrix& jacobian) {
+        jacobian[0][0] = std::exp(x[0]);
+    };
+
+    thermox::SolverOptions options;
+    options.globalization_policy =
+        thermox::GlobalizationPolicy::trust_region;
+    options.trust_region_initial_radius = 10.0;
+    options.trust_region_maximum_radius = 10.0;
+    options.trust_region_minimum_radius = 1.0e-10;
+    const auto result = thermox::solve_newton(problem, options);
+    require(result.diagnostics.converged, result.diagnostics.message);
+    require_near(
+        result.x[0], std::log(10.0), 1.0e-8,
+        "trust-region solve reaches target inside property domain");
+    require(
+        result.diagnostics.trust_region_trials > 0 &&
+            result.diagnostics.trust_region_rejections > 0 &&
+            result.diagnostics.final_trust_region_radius > 0.0,
+        "trust-region diagnostics expose rejected inadmissible trials and final radius");
 }
 
 void test_mixed_derivative_equation_system_stays_sparse() {
@@ -2323,6 +2375,7 @@ int main() {
         test_newton_solver_scales_linear_system_rows();
         test_newton_solver_scales_columns_and_returns_physical_step();
         test_newton_solver_recovers_from_invalid_trial_state();
+        test_trust_region_recovers_from_invalid_property_domain();
         test_mixed_derivative_equation_system_stays_sparse();
         test_jacobian_verification_checks_only_provided_rows();
         test_jacobian_verification_reports_bad_derivative();

@@ -21,7 +21,9 @@ interface RunConfigurationFormProps {
 
 type SteadyNumericKey = Exclude<
   keyof SteadySolverSettings,
-  'continuation_enabled' | 'structural_decomposition_policy'
+  | 'continuation_enabled'
+  | 'structural_decomposition_policy'
+  | 'globalization_policy'
 >
 
 const steadyFields: Array<{
@@ -40,6 +42,18 @@ const steadyFields: Array<{
   {
     key: 'max_line_search_steps',
     label: 'Line-search steps',
+    integer: true,
+  },
+  { key: 'trust_region_initial_radius', label: 'Initial trust radius' },
+  { key: 'trust_region_minimum_radius', label: 'Minimum trust radius' },
+  { key: 'trust_region_maximum_radius', label: 'Maximum trust radius' },
+  {
+    key: 'trust_region_acceptance_threshold',
+    label: 'Trust acceptance threshold',
+  },
+  {
+    key: 'max_trust_region_steps',
+    label: 'Trust-region trials',
     integer: true,
   },
   { key: 'continuation_initial_step', label: 'Continuation initial step' },
@@ -322,6 +336,22 @@ function SolverFields({
           <option value="monolithic">Force monolithic</option>
           <option value="blocks">Force structural blocks</option>
           <option value="tearing">Force exact Schur tearing</option>
+        </select>
+      </label>
+      <label>
+        <span>Nonlinear globalization</span>
+        <select
+          value={value.globalization_policy}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              globalization_policy: event.target.value as
+                SteadySolverSettings['globalization_policy'],
+            })
+          }
+        >
+          <option value="line_search">Damped Newton line search</option>
+          <option value="trust_region">Scaled trust-region dogleg</option>
         </select>
       </label>
       <div className="form-grid">

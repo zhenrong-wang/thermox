@@ -160,6 +160,18 @@ export function resultDiagnosticSummary(
         label: 'Worst linear error',
         value: number(result.diagnostics.maximum_linear_backward_error),
       },
+      ...(result.diagnostics.trust_region_trials > 0
+        ? [
+            {
+              label: 'Trust-region trials',
+              value: `${number(result.diagnostics.trust_region_trials)} total / ${number(result.diagnostics.trust_region_rejections)} rejected`,
+            },
+            {
+              label: 'Final trust radius',
+              value: number(result.diagnostics.final_trust_region_radius),
+            },
+          ]
+        : []),
       {
         label: 'Linear refinements',
         value: `${number(result.diagnostics.linear_refinement_successes)} recovered / ${number(result.diagnostics.linear_refinement_attempts)} corrections`,

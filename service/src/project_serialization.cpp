@@ -241,6 +241,18 @@ void steady_solver_json(
         << solver.sufficient_decrease
         << ", \"max_line_search_steps\": "
         << solver.max_line_search_steps
+        << ", \"globalization_policy\": ";
+    json_string(out, to_string(solver.globalization_policy));
+    out << ", \"trust_region_initial_radius\": "
+        << solver.trust_region_initial_radius
+        << ", \"trust_region_minimum_radius\": "
+        << solver.trust_region_minimum_radius
+        << ", \"trust_region_maximum_radius\": "
+        << solver.trust_region_maximum_radius
+        << ", \"trust_region_acceptance_threshold\": "
+        << solver.trust_region_acceptance_threshold
+        << ", \"max_trust_region_steps\": "
+        << solver.max_trust_region_steps
         << ", \"continuation_enabled\": "
         << (solver.continuation_enabled ? "true" : "false")
         << ", \"continuation_initial_step\": "

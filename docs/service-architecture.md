@@ -114,7 +114,13 @@ Solver settings on the service command are the sole execution authority. Case-le
 provenance records every effective command setting so a stored run does not depend on defaults
 from a later build.
 
-Steady commands may opt into `thermox.newton-continuation/v12`, which wraps the same compiled
+Steady and transient nonlinear commands may select either scaled Armijo line search or scaled
+dogleg trust-region globalization. The latter is intended for strongly coupled off-design systems
+where an unconstrained Newton step can leave a property package's admissible state domain; its
+policy, radii, acceptance threshold, trial budget, and diagnostics remain execution metadata rather
+than model physics.
+
+Steady commands may opt into `thermox.newton-continuation/v13`, which wraps the same compiled
 system and Newton solver in an adaptive scaled-residual homotopy. Continuation settings, accepted
 and rejected stages, stage-level solver diagnostics, and the reached continuation parameter are
 part of the service result and provenance. This is a numerical globalization mechanism, not a

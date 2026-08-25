@@ -39,6 +39,13 @@ bool is_positive_finite(double value) {
 }
 
 void validate_options(const SolverOptions& options) {
+    switch (options.globalization_policy) {
+    case GlobalizationPolicy::line_search:
+    case GlobalizationPolicy::trust_region:
+        break;
+    default:
+        throw std::invalid_argument("globalization_policy is invalid");
+    }
     switch (options.structural_decomposition_policy) {
     case StructuralDecompositionPolicy::automatic:
     case StructuralDecompositionPolicy::monolithic:
@@ -77,6 +84,31 @@ void validate_options(const SolverOptions& options) {
     }
     if (options.max_line_search_steps <= 0) {
         throw std::invalid_argument("max_line_search_steps must be positive");
+    }
+    if (!is_positive_finite(options.trust_region_initial_radius)) {
+        throw std::invalid_argument(
+            "trust_region_initial_radius must be positive and finite");
+    }
+    if (!is_positive_finite(options.trust_region_minimum_radius) ||
+        options.trust_region_minimum_radius >
+            options.trust_region_initial_radius) {
+        throw std::invalid_argument(
+            "trust_region_minimum_radius must be positive, finite, and no larger than the initial radius");
+    }
+    if (!is_positive_finite(options.trust_region_maximum_radius) ||
+        options.trust_region_maximum_radius <
+            options.trust_region_initial_radius) {
+        throw std::invalid_argument(
+            "trust_region_maximum_radius must be finite and no smaller than the initial radius");
+    }
+    if (!std::isfinite(options.trust_region_acceptance_threshold) ||
+        options.trust_region_acceptance_threshold < 0.0 ||
+        options.trust_region_acceptance_threshold >= 1.0) {
+        throw std::invalid_argument(
+            "trust_region_acceptance_threshold must be in [0, 1)");
+    }
+    if (options.max_trust_region_steps <= 0) {
+        throw std::invalid_argument("max_trust_region_steps must be positive");
     }
 }
 
@@ -481,6 +513,125 @@ std::vector<double> scale_residual(const std::vector<double>& residual,
         scaled[i] /= residual_scales[i];
     }
     return scaled;
+}
+
+double vector_dot(const std::vector<double>& left,
+                  const std::vector<double>& right) {
+    long double result = 0.0;
+    for (std::size_t i = 0; i < left.size(); ++i) {
+        result += static_cast<long double>(left[i]) * right[i];
+    }
+    return static_cast<double>(result);
+}
+
+double vector_norm(const std::vector<double>& values) {
+    return std::sqrt(std::max(0.0, vector_dot(values, values)));
+}
+
+std::vector<double> jacobian_product(
+    const EvaluatedJacobian& jacobian,
+    const std::vector<double>& values) {
+    const std::size_t rows = jacobian.is_sparse
+        ? jacobian.sparse.rows()
+        : jacobian.dense.size();
+    std::vector<double> product(rows, 0.0);
+    if (jacobian.is_sparse) {
+        for (std::size_t row = 0; row < rows; ++row) {
+            long double sum = 0.0;
+            for (std::size_t offset = jacobian.sparse.row_offsets()[row];
+                 offset < jacobian.sparse.row_offsets()[row + 1]; ++offset) {
+                sum += static_cast<long double>(
+                           jacobian.sparse.values()[offset]) *
+                       values[jacobian.sparse.column_indices()[offset]];
+            }
+            product[row] = static_cast<double>(sum);
+        }
+        return product;
+    }
+    for (std::size_t row = 0; row < rows; ++row) {
+        product[row] = vector_dot(jacobian.dense[row], values);
+    }
+    return product;
+}
+
+std::vector<double> jacobian_transpose_product(
+    const EvaluatedJacobian& jacobian,
+    const std::vector<double>& values) {
+    const std::size_t columns = jacobian.is_sparse
+        ? jacobian.sparse.columns()
+        : jacobian.dense.front().size();
+    std::vector<double> product(columns, 0.0);
+    if (jacobian.is_sparse) {
+        for (std::size_t row = 0; row < jacobian.sparse.rows(); ++row) {
+            for (std::size_t offset = jacobian.sparse.row_offsets()[row];
+                 offset < jacobian.sparse.row_offsets()[row + 1]; ++offset) {
+                product[jacobian.sparse.column_indices()[offset]] +=
+                    jacobian.sparse.values()[offset] * values[row];
+            }
+        }
+        return product;
+    }
+    for (std::size_t row = 0; row < jacobian.dense.size(); ++row) {
+        for (std::size_t column = 0;
+             column < jacobian.dense[row].size(); ++column) {
+            product[column] += jacobian.dense[row][column] * values[row];
+        }
+    }
+    return product;
+}
+
+std::vector<double> dogleg_step(
+    const EvaluatedJacobian& jacobian,
+    const std::vector<double>& scaled_residual,
+    const std::vector<double>& newton_step,
+    double radius) {
+    const double newton_norm = vector_norm(newton_step);
+    if (newton_norm <= radius) return newton_step;
+
+    const auto gradient =
+        jacobian_transpose_product(jacobian, scaled_residual);
+    const double gradient_norm = vector_norm(gradient);
+    if (!(gradient_norm > 0.0) || !std::isfinite(gradient_norm)) {
+        std::vector<double> radial = newton_step;
+        const double scale = radius / newton_norm;
+        for (double& value : radial) value *= scale;
+        return radial;
+    }
+
+    const auto jacobian_gradient =
+        jacobian_product(jacobian, gradient);
+    const double denominator =
+        vector_dot(jacobian_gradient, jacobian_gradient);
+    const double alpha = denominator > 0.0
+        ? vector_dot(gradient, gradient) / denominator
+        : radius / gradient_norm;
+    std::vector<double> cauchy(gradient.size(), 0.0);
+    for (std::size_t i = 0; i < gradient.size(); ++i) {
+        cauchy[i] = -alpha * gradient[i];
+    }
+    const double cauchy_norm = vector_norm(cauchy);
+    if (!std::isfinite(cauchy_norm) || cauchy_norm >= radius) {
+        for (std::size_t i = 0; i < gradient.size(); ++i) {
+            cauchy[i] = -radius * gradient[i] / gradient_norm;
+        }
+        return cauchy;
+    }
+
+    std::vector<double> difference(newton_step.size(), 0.0);
+    for (std::size_t i = 0; i < difference.size(); ++i) {
+        difference[i] = newton_step[i] - cauchy[i];
+    }
+    const double a = vector_dot(difference, difference);
+    const double b = 2.0 * vector_dot(cauchy, difference);
+    const double c = vector_dot(cauchy, cauchy) - radius * radius;
+    const double discriminant = std::max(0.0, b * b - 4.0 * a * c);
+    const double tau = a > 0.0
+        ? std::clamp((-b + std::sqrt(discriminant)) / (2.0 * a), 0.0, 1.0)
+        : 0.0;
+    for (std::size_t i = 0; i < cauchy.size(); ++i) {
+        cauchy[i] += tau * difference[i];
+    }
+    return cauchy;
 }
 
 void scale_jacobian_rows(Matrix& jacobian, const std::vector<double>& residual_scales) {
@@ -2151,6 +2302,11 @@ void accumulate_block_diagnostics(
     aggregate.jacobian_evaluations += block.jacobian_evaluations;
     aggregate.linear_solver_evaluations +=
         block.linear_solver_evaluations;
+    aggregate.trust_region_trials += block.trust_region_trials;
+    aggregate.trust_region_rejections +=
+        block.trust_region_rejections;
+    aggregate.final_trust_region_radius =
+        block.final_trust_region_radius;
     aggregate.symbolic_factorizations +=
         block.symbolic_factorizations;
     aggregate.numeric_factorizations +=
@@ -2206,6 +2362,13 @@ void prepend_failed_attempt_diagnostics(
     final.jacobian_evaluations += attempt.jacobian_evaluations;
     final.linear_solver_evaluations +=
         attempt.linear_solver_evaluations;
+    final.trust_region_trials += attempt.trust_region_trials;
+    final.trust_region_rejections +=
+        attempt.trust_region_rejections;
+    if (attempt.final_trust_region_radius > 0.0) {
+        final.final_trust_region_radius =
+            attempt.final_trust_region_radius;
+    }
     final.symbolic_factorizations +=
         attempt.symbolic_factorizations;
     final.numeric_factorizations +=
@@ -2306,6 +2469,7 @@ NonlinearSolveResult solve_newton_monolithic(
         !options.linear_solver) {
         factorization = make_default_sparse_factorization();
     }
+    double trust_region_radius = options.trust_region_initial_radius;
 
     for (int iteration = 0; iteration <= options.max_iterations; ++iteration) {
         std::vector<double> residual;
@@ -2371,9 +2535,16 @@ NonlinearSolveResult solve_newton_monolithic(
 
         LinearSolveResult linear;
         if (tear_columns.empty()) {
-            linear = solve_linear_system(
-                options, factorization, std::move(jacobian),
-                std::move(rhs), x.size(), diagnostics);
+            if (options.globalization_policy ==
+                GlobalizationPolicy::trust_region) {
+                linear = solve_linear_system(
+                    options, factorization, jacobian,
+                    rhs, x.size(), diagnostics);
+            } else {
+                linear = solve_linear_system(
+                    options, factorization, std::move(jacobian),
+                    std::move(rhs), x.size(), diagnostics);
+            }
         } else {
             ++diagnostics.structural_tearing_attempts;
             linear = solve_linear_system_by_tearing(
@@ -2384,9 +2555,17 @@ NonlinearSolveResult solve_newton_monolithic(
                 ++diagnostics.structural_tearing_fallbacks;
                 diagnostics.last_structural_tearing_fallback =
                     tearing_failure;
-                linear = solve_linear_system(
-                    options, factorization, std::move(jacobian),
-                    std::move(rhs), x.size(), diagnostics);
+                if (options.globalization_policy ==
+                    GlobalizationPolicy::trust_region) {
+                    linear = solve_linear_system(
+                        options, factorization, jacobian,
+                        rhs, x.size(), diagnostics);
+                } else {
+                    linear = solve_linear_system(
+                        options, factorization,
+                        std::move(jacobian), std::move(rhs),
+                        x.size(), diagnostics);
+                }
                 diagnostics.linear_solver_backend =
                     "structural-schur-fallback/" +
                     diagnostics.linear_solver_backend;
@@ -2425,51 +2604,191 @@ NonlinearSolveResult solve_newton_monolithic(
         std::vector<double> accepted_residual;
         double accepted_norm = std::numeric_limits<double>::infinity();
         double accepted_step_norm = 0.0;
+        double accepted_reduction_ratio = 0.0;
         bool accepted = false;
 
-        for (int line_search_step = 0; line_search_step < options.max_line_search_steps &&
-                                       damping >= options.min_damping;
-             ++line_search_step) {
-            auto candidate_x =
-                add_scaled_step(x, physical_step, lower_bounds, upper_bounds, damping);
-            std::vector<double> actual_step(candidate_x.size(), 0.0);
-            for (std::size_t i = 0; i < candidate_x.size(); ++i) {
-                actual_step[i] = candidate_x[i] - x[i];
-            }
+        if (options.globalization_policy ==
+            GlobalizationPolicy::trust_region) {
+            for (int trial = 0;
+                 trial < options.max_trust_region_steps &&
+                 trust_region_radius >= options.trust_region_minimum_radius;
+                 ++trial) {
+                ++diagnostics.trust_region_trials;
+                const double attempted_radius =
+                    trust_region_radius;
+                const auto scaled_trial_step = dogleg_step(
+                    jacobian, scaled_residual, linear.x,
+                    trust_region_radius);
+                std::vector<double> trial_physical_step(
+                    scaled_trial_step.size(), 0.0);
+                for (std::size_t i = 0;
+                     i < scaled_trial_step.size(); ++i) {
+                    trial_physical_step[i] =
+                        scaled_trial_step[i] * variable_scales[i];
+                }
+                auto candidate_x = add_scaled_step(
+                    x, trial_physical_step, lower_bounds,
+                    upper_bounds, 1.0);
+                std::vector<double> actual_step(
+                    candidate_x.size(), 0.0);
+                std::vector<double> actual_scaled_step(
+                    candidate_x.size(), 0.0);
+                for (std::size_t i = 0; i < candidate_x.size(); ++i) {
+                    actual_step[i] = candidate_x[i] - x[i];
+                    actual_scaled_step[i] =
+                        actual_step[i] / variable_scales[i];
+                }
+                const double trial_step_norm =
+                    vector_norm(actual_scaled_step);
 
-            std::vector<double> candidate_residual;
-            try {
-                candidate_residual = evaluate_residual(problem, candidate_x, diagnostics);
-            } catch (const EvaluationError& ex) {
-                if (!ex.recoverable()) {
-                    diagnostics.converged = false;
-                    diagnostics.iterations = iteration;
-                    diagnostics.final_residual_norm = residual_norm;
-                    diagnostics.message =
-                        std::string("fatal residual evaluation failure during line search: ") +
-                        ex.what();
-                    return {x, diagnostics};
+                auto predicted_residual =
+                    jacobian_product(jacobian, actual_scaled_step);
+                for (std::size_t row = 0;
+                     row < predicted_residual.size(); ++row) {
+                    predicted_residual[row] += scaled_residual[row];
+                }
+                const double predicted_reduction = 0.5 *
+                    (residual_norm * residual_norm -
+                     vector_dot(predicted_residual,
+                                predicted_residual));
+
+                std::vector<double> candidate_residual;
+                bool recoverable_failure = false;
+                try {
+                    candidate_residual = evaluate_residual(
+                        problem, candidate_x, diagnostics);
+                } catch (const EvaluationError& ex) {
+                    if (!ex.recoverable()) {
+                        diagnostics.converged = false;
+                        diagnostics.iterations = iteration;
+                        diagnostics.final_residual_norm = residual_norm;
+                        diagnostics.message =
+                            std::string("fatal residual evaluation failure during trust-region trial: ") +
+                            ex.what();
+                        return {x, diagnostics};
+                    }
+                    recoverable_failure = true;
+                }
+
+                double candidate_norm =
+                    std::numeric_limits<double>::infinity();
+                double reduction_ratio =
+                    -std::numeric_limits<double>::infinity();
+                if (!recoverable_failure) {
+                    candidate_norm = scaled_residual_norm(
+                        candidate_residual, residual_scales);
+                    const double actual_reduction = 0.5 *
+                        (residual_norm * residual_norm -
+                         candidate_norm * candidate_norm);
+                    if (predicted_reduction > 0.0 &&
+                        std::isfinite(candidate_norm)) {
+                        reduction_ratio =
+                            actual_reduction / predicted_reduction;
+                    }
+                }
+
+                if (reduction_ratio < 0.25) {
+                    trust_region_radius = std::max(
+                        options.trust_region_minimum_radius,
+                        0.25 * trust_region_radius);
+                } else if (reduction_ratio > 0.75 &&
+                           trial_step_norm >=
+                               0.9 * trust_region_radius) {
+                    trust_region_radius = std::min(
+                        options.trust_region_maximum_radius,
+                        2.0 * trust_region_radius);
+                }
+                diagnostics.final_trust_region_radius =
+                    trust_region_radius;
+
+                if (!recoverable_failure &&
+                    reduction_ratio >=
+                        options.trust_region_acceptance_threshold &&
+                    candidate_norm < residual_norm) {
+                    accepted_x = std::move(candidate_x);
+                    accepted_residual =
+                        std::move(candidate_residual);
+                    accepted_norm = candidate_norm;
+                    accepted_step_norm = trial_step_norm;
+                    accepted_reduction_ratio = reduction_ratio;
+                    accepted = true;
+                    break;
+                }
+                ++diagnostics.trust_region_rejections;
+                if (attempted_radius <=
+                        options.trust_region_minimum_radius &&
+                    trust_region_radius <=
+                        options.trust_region_minimum_radius) {
+                    break;
+                }
+            }
+        } else {
+            for (int line_search_step = 0;
+                 line_search_step < options.max_line_search_steps &&
+                 damping >= options.min_damping;
+                 ++line_search_step) {
+                auto candidate_x = add_scaled_step(
+                    x, physical_step, lower_bounds, upper_bounds,
+                    damping);
+                std::vector<double> actual_step(
+                    candidate_x.size(), 0.0);
+                for (std::size_t i = 0;
+                     i < candidate_x.size(); ++i) {
+                    actual_step[i] = candidate_x[i] - x[i];
+                }
+
+                std::vector<double> candidate_residual;
+                try {
+                    candidate_residual = evaluate_residual(
+                        problem, candidate_x, diagnostics);
+                } catch (const EvaluationError& ex) {
+                    if (!ex.recoverable()) {
+                        diagnostics.converged = false;
+                        diagnostics.iterations = iteration;
+                        diagnostics.final_residual_norm = residual_norm;
+                        diagnostics.message =
+                            std::string("fatal residual evaluation failure during line search: ") +
+                            ex.what();
+                        return {x, diagnostics};
+                    }
+                    damping *= options.damping_reduction;
+                    continue;
+                }
+                const double candidate_norm = scaled_residual_norm(
+                    candidate_residual, residual_scales);
+                const double armijo_limit = residual_norm *
+                    (1.0 - options.sufficient_decrease * damping);
+                if (std::isfinite(candidate_norm) &&
+                    candidate_norm <= armijo_limit &&
+                    candidate_norm < residual_norm) {
+                    accepted_x = std::move(candidate_x);
+                    accepted_residual =
+                        std::move(candidate_residual);
+                    accepted_norm = candidate_norm;
+                    accepted_step_norm = scaled_step_norm(
+                        actual_step, variable_scales);
+                    accepted = true;
+                    break;
                 }
                 damping *= options.damping_reduction;
-                continue;
             }
-            const double candidate_norm = scaled_residual_norm(candidate_residual, residual_scales);
-            const double armijo_limit = residual_norm * (1.0 - options.sufficient_decrease * damping);
-            if (std::isfinite(candidate_norm) && candidate_norm <= armijo_limit &&
-                candidate_norm < residual_norm) {
-                accepted_x = std::move(candidate_x);
-                accepted_residual = std::move(candidate_residual);
-                accepted_norm = candidate_norm;
-                accepted_step_norm = scaled_step_norm(actual_step, variable_scales);
-                accepted = true;
-                break;
-            }
-            damping *= options.damping_reduction;
         }
 
         diagnostics.history.push_back(IterationDiagnostic{
             iteration, residual_norm, accepted ? accepted_norm : residual_norm,
-            accepted ? accepted_step_norm : damping * full_step_norm, accepted ? damping : 0.0});
+            accepted
+                ? accepted_step_norm
+                : (options.globalization_policy ==
+                           GlobalizationPolicy::trust_region
+                       ? trust_region_radius
+                       : damping * full_step_norm),
+            options.globalization_policy == GlobalizationPolicy::line_search && accepted
+                ? damping
+                : 0.0,
+            options.globalization_policy == GlobalizationPolicy::trust_region
+                ? trust_region_radius
+                : 0.0,
+            accepted_reduction_ratio});
 
         if (!accepted) {
             diagnostics.converged = false;
@@ -2490,7 +2809,10 @@ NonlinearSolveResult solve_newton_monolithic(
             magnitude << std::scientific << std::setprecision(6)
                       << dominant_magnitude;
             diagnostics.message =
-                "line search failed to reduce residual; dominant "
+                std::string(options.globalization_policy ==
+                                GlobalizationPolicy::trust_region
+                            ? "trust region failed to reduce residual; dominant "
+                            : "line search failed to reduce residual; dominant ") +
                 "scaled residual '" +
                 problem.residual_names.at(dominant) + "'=" +
                 magnitude.str();

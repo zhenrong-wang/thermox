@@ -47,6 +47,11 @@ enum class StructuralDecompositionPolicy {
     tearing,
 };
 
+enum class GlobalizationPolicy {
+    line_search,
+    trust_region,
+};
+
 struct EvaluationStatus {
     EvaluationStatusCode code{EvaluationStatusCode::success};
     std::string message;
@@ -113,6 +118,15 @@ struct SolverOptions {
     double damping_reduction{0.5};
     double sufficient_decrease{1.0e-4};
     int max_line_search_steps{50};
+    // Trust-region dogleg operates entirely in the dimensionless variable and
+    // residual coordinates defined by the declared scales. It is especially
+    // useful when a full Newton step can leave a fluid-property domain.
+    GlobalizationPolicy globalization_policy{GlobalizationPolicy::line_search};
+    double trust_region_initial_radius{1.0};
+    double trust_region_minimum_radius{1.0e-8};
+    double trust_region_maximum_radius{1.0e3};
+    double trust_region_acceptance_threshold{0.1};
+    int max_trust_region_steps{20};
     // Custom backends receive the dimensionless scaled Newton system and must return
     // a step in scaled variable coordinates.
     LinearSolverFunction linear_solver;
@@ -133,6 +147,8 @@ struct IterationDiagnostic {
     double accepted_residual_norm{0.0};
     double step_norm{0.0};
     double damping{1.0};
+    double trust_region_radius{0.0};
+    double reduction_ratio{0.0};
 };
 
 struct SolverDiagnostics {
@@ -145,6 +161,9 @@ struct SolverDiagnostics {
     int function_evaluations{0};
     int jacobian_evaluations{0};
     int linear_solver_evaluations{0};
+    int trust_region_trials{0};
+    int trust_region_rejections{0};
+    double final_trust_region_radius{0.0};
     int symbolic_factorizations{0};
     int numeric_factorizations{0};
     int factorization_quality_observations{0};

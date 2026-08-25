@@ -171,8 +171,17 @@ std::string run_mode(const std::string& case_mode) {
 
 void validate_steady_solver(
     const SteadySolverSettings& value) {
+    switch (value.globalization_policy) {
+    case GlobalizationPolicy::line_search:
+    case GlobalizationPolicy::trust_region:
+        break;
+    default:
+        throw ProjectRequestError(
+            "invalid steady solver globalization policy");
+    }
     if (value.max_iterations <= 0 ||
         value.max_line_search_steps <= 0 ||
+        value.max_trust_region_steps <= 0 ||
         !std::isfinite(value.residual_tolerance) ||
         value.residual_tolerance <= 0.0 ||
         !std::isfinite(value.step_tolerance) ||
@@ -188,6 +197,18 @@ void validate_steady_solver(
         value.damping_reduction >= 1.0 ||
         !std::isfinite(value.sufficient_decrease) ||
         value.sufficient_decrease <= 0.0 ||
+        !std::isfinite(value.trust_region_initial_radius) ||
+        value.trust_region_initial_radius <= 0.0 ||
+        !std::isfinite(value.trust_region_minimum_radius) ||
+        value.trust_region_minimum_radius <= 0.0 ||
+        value.trust_region_minimum_radius >
+            value.trust_region_initial_radius ||
+        !std::isfinite(value.trust_region_maximum_radius) ||
+        value.trust_region_maximum_radius <
+            value.trust_region_initial_radius ||
+        !std::isfinite(value.trust_region_acceptance_threshold) ||
+        value.trust_region_acceptance_threshold < 0.0 ||
+        value.trust_region_acceptance_threshold >= 1.0 ||
         !std::isfinite(value.continuation_initial_step) ||
         value.continuation_initial_step <= 0.0 ||
         value.continuation_initial_step > 1.0 ||
@@ -253,6 +274,12 @@ void append_steady(
         << value.damping_reduction << '|'
         << value.sufficient_decrease << '|'
         << value.max_line_search_steps << '|'
+        << to_string(value.globalization_policy) << '|'
+        << value.trust_region_initial_radius << '|'
+        << value.trust_region_minimum_radius << '|'
+        << value.trust_region_maximum_radius << '|'
+        << value.trust_region_acceptance_threshold << '|'
+        << value.max_trust_region_steps << '|'
         << value.continuation_enabled << '|'
         << value.continuation_initial_step << '|'
         << value.continuation_minimum_step << '|'

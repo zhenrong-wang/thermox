@@ -77,6 +77,24 @@ Tree steady_solver_tree(
         "max_line_search_steps",
         value.max_line_search_steps);
     tree.put(
+        "globalization_policy",
+        service::to_string(value.globalization_policy));
+    tree.put(
+        "trust_region_initial_radius",
+        value.trust_region_initial_radius);
+    tree.put(
+        "trust_region_minimum_radius",
+        value.trust_region_minimum_radius);
+    tree.put(
+        "trust_region_maximum_radius",
+        value.trust_region_maximum_radius);
+    tree.put(
+        "trust_region_acceptance_threshold",
+        value.trust_region_acceptance_threshold);
+    tree.put(
+        "max_trust_region_steps",
+        value.max_trust_region_steps);
+    tree.put(
         "continuation_enabled",
         value.continuation_enabled);
     tree.put(
@@ -121,6 +139,19 @@ service::SteadySolverSettings decode_steady_solver(
         tree.get<double>("sufficient_decrease");
     value.max_line_search_steps =
         tree.get<int>("max_line_search_steps");
+    value.globalization_policy =
+        service::globalization_policy_from_string(
+            tree.get<std::string>("globalization_policy"));
+    value.trust_region_initial_radius =
+        tree.get<double>("trust_region_initial_radius");
+    value.trust_region_minimum_radius =
+        tree.get<double>("trust_region_minimum_radius");
+    value.trust_region_maximum_radius =
+        tree.get<double>("trust_region_maximum_radius");
+    value.trust_region_acceptance_threshold =
+        tree.get<double>("trust_region_acceptance_threshold");
+    value.max_trust_region_steps =
+        tree.get<int>("max_trust_region_steps");
     value.continuation_enabled = tree.get(
         "continuation_enabled",
         value.continuation_enabled);

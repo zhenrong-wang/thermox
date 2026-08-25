@@ -803,6 +803,13 @@ void nonlinear_diagnostics_json(
         << diagnostics.jacobian_evaluations
         << ", \"linear_solver_evaluations\": "
         << diagnostics.linear_solver_evaluations
+        << ", \"trust_region_trials\": "
+        << diagnostics.trust_region_trials
+        << ", \"trust_region_rejections\": "
+        << diagnostics.trust_region_rejections
+        << ", \"final_trust_region_radius\": ";
+    json_number(out, diagnostics.final_trust_region_radius);
+    out
         << ", \"symbolic_factorizations\": "
         << diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "
@@ -2128,6 +2135,14 @@ std::string serialize_steady_response_json(
         << response.diagnostics.jacobian_evaluations
         << ", \"linear_solver_evaluations\": "
         << response.diagnostics.linear_solver_evaluations
+        << ", \"trust_region_trials\": "
+        << response.diagnostics.trust_region_trials
+        << ", \"trust_region_rejections\": "
+        << response.diagnostics.trust_region_rejections
+        << ", \"final_trust_region_radius\": ";
+    json_number(
+        out, response.diagnostics.final_trust_region_radius);
+    out
         << ", \"symbolic_factorizations\": "
         << response.diagnostics.symbolic_factorizations
         << ", \"numeric_factorizations\": "

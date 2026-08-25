@@ -796,6 +796,9 @@ struct NonlinearDiagnostics {
     std::string failed_structural_block;
     std::string linear_solver_backend;
     std::string message;
+    int trust_region_trials{0};
+    int trust_region_rejections{0};
+    double final_trust_region_radius{0.0};
 };
 
 struct ContinuationStageDiagnostics {
@@ -1028,8 +1031,16 @@ enum class StructuralDecompositionPolicy {
     tearing,
 };
 
+enum class GlobalizationPolicy {
+    line_search,
+    trust_region,
+};
+
 std::string to_string(StructuralDecompositionPolicy policy);
 StructuralDecompositionPolicy structural_decomposition_policy_from_string(
+    std::string_view value);
+std::string to_string(GlobalizationPolicy policy);
+GlobalizationPolicy globalization_policy_from_string(
     std::string_view value);
 
 struct SteadySolverSettings {
@@ -1044,6 +1055,13 @@ struct SteadySolverSettings {
     double damping_reduction{0.5};
     double sufficient_decrease{1.0e-4};
     int max_line_search_steps{50};
+    GlobalizationPolicy globalization_policy{
+        GlobalizationPolicy::line_search};
+    double trust_region_initial_radius{1.0};
+    double trust_region_minimum_radius{1.0e-8};
+    double trust_region_maximum_radius{1.0e3};
+    double trust_region_acceptance_threshold{0.1};
+    int max_trust_region_steps{20};
     bool continuation_enabled{false};
     double continuation_initial_step{0.25};
     double continuation_minimum_step{1.0 / 64.0};
