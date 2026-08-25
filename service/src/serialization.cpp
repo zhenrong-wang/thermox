@@ -3194,6 +3194,62 @@ std::string serialize_transient_response_json(
     return out.str();
 }
 
+std::string serialize_small_signal_linearization_response_json(
+    const SmallSignalLinearizationResponse& response) {
+    std::ostringstream out;
+    const auto string_array = [&](const auto& values) {
+        out << '[';
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            if (index != 0U) out << ", ";
+            json_string(out, values[index]);
+        }
+        out << ']';
+    };
+    const auto matrix = [&](const auto& values) {
+        out << '[';
+        for (std::size_t row = 0; row < values.size(); ++row) {
+            if (row != 0U) out << ", ";
+            out << '[';
+            for (std::size_t column = 0;
+                 column < values[row].size(); ++column) {
+                if (column != 0U) out << ", ";
+                json_number(out, values[row][column]);
+            }
+            out << ']';
+        }
+        out << ']';
+    };
+    out << "{\n  \"schema_version\": ";
+    json_string(out, result_schema_v5);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"metadata\": ";
+    execution_metadata_json(out, response.metadata);
+    out << ",\n  \"states\": ";
+    string_array(response.state_names);
+    out << ",\n  \"inputs\": ";
+    string_array(response.input_names);
+    out << ",\n  \"A\": ";
+    matrix(response.A);
+    out << ",\n  \"B\": ";
+    matrix(response.B);
+    out << ",\n  \"diagnostics\": {\"success\": "
+        << (response.diagnostics.success ? "true" : "false")
+        << ", \"residual_evaluations\": "
+        << response.diagnostics.residual_evaluations
+        << ", \"linear_right_hand_sides\": "
+        << response.diagnostics.linear_right_hand_sides
+        << ", \"maximum_operating_residual\": ";
+    json_number(
+        out, response.diagnostics.maximum_operating_residual);
+    out << ", \"message\": ";
+    json_string(out, response.diagnostics.message);
+    out << "}\n}\n";
+    return out.str();
+}
+
 std::string serialize_result_summary_json(
     const ResultSummary& summary) {
     std::ostringstream out;

@@ -1299,6 +1299,46 @@ struct TransientSimulationResponse {
     }
 };
 
+struct SmallSignalLinearizationSettings {
+    double time{0.0};
+    double relative_perturbation{3.0e-4};
+    double minimum_perturbation{1.0e-10};
+    SteadySolverSettings nonlinear_solver;
+};
+
+struct SmallSignalLinearizationRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::string case_id;
+    std::vector<std::string> input_variables;
+    SmallSignalLinearizationSettings settings;
+    SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
+};
+
+struct SmallSignalLinearizationDiagnostics {
+    bool success{false};
+    int residual_evaluations{0};
+    int linear_right_hand_sides{0};
+    double maximum_operating_residual{0.0};
+    std::string message;
+};
+
+struct SmallSignalLinearizationResponse {
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    ExecutionMetadata metadata;
+    std::vector<std::string> state_names;
+    std::vector<std::string> input_names;
+    std::vector<std::vector<double>> A;
+    std::vector<std::vector<double>> B;
+    SmallSignalLinearizationDiagnostics diagnostics;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct StudyObservation {
     std::string id;
     std::string target;
@@ -1560,6 +1600,9 @@ public:
         const DataReconciliationRequest& request) const;
     [[nodiscard]] TransientSimulationResponse run_transient(
         const TransientSimulationRequest& request) const;
+    [[nodiscard]] SmallSignalLinearizationResponse
+    run_small_signal_linearization(
+        const SmallSignalLinearizationRequest& request) const;
 
 private:
     struct Impl;

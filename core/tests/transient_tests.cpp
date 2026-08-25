@@ -1,4 +1,5 @@
 #include "thermox/dae_equation_system.hpp"
+#include "thermox/dae_linearization.hpp"
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/sparse_linear_solver.hpp"
 
@@ -924,6 +925,62 @@ void test_checked_event_surface_failure_is_reported() {
         "checked event-surface failures must be explicit diagnostics");
 }
 
+void test_index_one_dae_small_signal_linearization() {
+    thermox::DaeEquationSystemBuilder builder;
+    const auto x = builder.add_variable(
+        "x", thermox::DaeVariableKind::differential,
+        1.0, 9.0, 1.0, 1.0);
+    const auto z = builder.add_variable(
+        "z", thermox::DaeVariableKind::algebraic,
+        11.0, 0.0, 1.0, 1.0);
+    const auto u = builder.add_variable(
+        "u", thermox::DaeVariableKind::algebraic,
+        2.0, 0.0, 1.0, 1.0);
+    builder.add_linear_equation(
+        "dynamics",
+        {{x, 2.0, 1.0}, {z, -1.0, 0.0}}, 0.0);
+    builder.add_linear_equation(
+        "algebraic",
+        {{z, 1.0, 0.0}, {x, -3.0, 0.0},
+         {u, -4.0, 0.0}},
+        0.0);
+    const auto fixed_input = builder.add_linear_equation(
+        "fixed.u", {{u, 1.0, 0.0}}, 2.0);
+    const auto problem = builder.build();
+    const auto initialized =
+        thermox::make_consistent_initial_conditions(problem, 0.0);
+    require(
+        initialized.diagnostics.converged,
+        initialized.diagnostics.message);
+
+    thermox::DaeLinearizationOptions options;
+    options.relative_perturbation = 1.0e-4;
+    const auto result = thermox::linearize_index1_dae(
+        problem, 0.0, initialized.state, initialized.derivative,
+        {{u, fixed_input, "command"}}, options);
+    require(result.diagnostics.success, result.diagnostics.message);
+    require(
+        result.differential_state_names ==
+            std::vector<std::string>{"x"} &&
+            result.input_names ==
+                std::vector<std::string>{"command"},
+        "DAE linearization preserves state and input identity");
+    require_near(
+        result.operating_derivative[x], 9.0, 1.0e-10,
+        "nominal DAE response rate");
+    require_near(
+        result.A.at(0).at(0), 1.0, 1.0e-8,
+        "DAE state matrix");
+    require_near(
+        result.B.at(0).at(0), 4.0, 1.0e-8,
+        "DAE input matrix");
+    require(
+        result.diagnostics.residual_evaluations == 9 &&
+            result.diagnostics.linear_right_hand_sides == 2,
+        "tangent linearization reports its residual evaluations and "
+        "sensitivity right-hand sides");
+}
+
 }  // namespace
 
 int main() {
@@ -946,6 +1003,7 @@ int main() {
         test_event_transition_reinitializes_and_restarts_integration();
         test_event_priority_and_hysteresis_prevent_chatter();
         test_checked_event_surface_failure_is_reported();
+        test_index_one_dae_small_signal_linearization();
     } catch (const std::exception& ex) {
         std::cerr << "test failure: " << ex.what() << "\n";
         return 1;

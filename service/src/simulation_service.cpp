@@ -11,6 +11,7 @@
 #include "thermox/dense_linear_solver.hpp"
 #include "thermox/least_squares_solver.hpp"
 #include "thermox/continuation_solver.hpp"
+#include "thermox/dae_linearization.hpp"
 #include "thermox/solver_policy_benchmark.hpp"
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
@@ -5439,6 +5440,170 @@ TransientSimulationResponse SimulationService::run_transient(
         return response;
     }
 
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
+SmallSignalLinearizationResponse
+SimulationService::run_small_signal_linearization(
+    const SmallSignalLinearizationRequest& request) const {
+    SmallSignalLinearizationResponse response;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema", "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.model_json.empty() || request.input_variables.empty()) {
+        response.error = make_error(
+            "invalid_request", "request",
+            "model_json and at least one input variable are required");
+        return response;
+    }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        return response;
+    }
+
+    platform::ModelDocument document;
+    SimulationArtifactBundle artifacts;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
+    SolverOptions nonlinear_options;
+    try {
+        nonlinear_options = to_core(
+            request.settings.nonlinear_solver);
+        document = platform::parse_model_document_text(
+            request.model_json, runtime->impl_->units);
+        artifacts = resolve_artifacts(
+            request.artifacts, impl_->artifact_resolver.get());
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts, artifacts);
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_request", "request", ex.what());
+        return response;
+    }
+
+    platform::CompiledTransientModelGraph graph;
+    try {
+        graph = platform::compile_transient_model_graph(
+            document, runtime->impl_->components,
+            runtime->impl_->properties, engineering_artifacts,
+            runtime->impl_->thermochemistry, request.case_id);
+        auto provenance = solver_provenance(
+            request.settings.nonlinear_solver);
+        provenance.contract_version =
+            "thermox.index1-small-signal/v1";
+        provenance.settings.push_back({
+            "time", request.settings.time});
+        provenance.settings.push_back({
+            "relative_perturbation",
+            request.settings.relative_perturbation});
+        provenance.settings.push_back({
+            "minimum_perturbation",
+            request.settings.minimum_perturbation});
+        response.metadata = execution_metadata(
+            document, request.schema_version,
+            graph.case_id.value_or(""), "small_signal_linearization",
+            std::move(provenance), runtime->impl_->fingerprint,
+            runtime->impl_->components, runtime->impl_->properties);
+        response.metadata.artifacts = artifact_provenance(artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::compilation_failed;
+        response.error = make_error(
+            "compilation_failed", "compilation", ex.what());
+        return response;
+    }
+
+    const auto initialized = make_consistent_initial_conditions(
+        graph.problem, request.settings.time, nonlinear_options);
+    if (!initialized.diagnostics.converged) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "initialization_failed", "initialization",
+            initialized.diagnostics.message);
+        return response;
+    }
+
+    std::vector<DaeLinearizationInput> inputs;
+    std::set<std::string> unique_inputs;
+    try {
+        for (const auto& name : request.input_variables) {
+            if (!unique_inputs.insert(name).second) {
+                throw std::invalid_argument(
+                    "duplicate linearization input variable: " + name);
+            }
+            const auto variable = std::find(
+                graph.problem.variable_names.begin(),
+                graph.problem.variable_names.end(), name);
+            if (variable == graph.problem.variable_names.end()) {
+                throw std::invalid_argument(
+                    "unknown linearization input variable: " + name);
+            }
+            const auto residual_name = "fixed." +
+                graph.case_id.value_or("") + "." + name;
+            const auto residual = std::find(
+                graph.problem.residual_names.begin(),
+                graph.problem.residual_names.end(), residual_name);
+            if (residual == graph.problem.residual_names.end()) {
+                throw std::invalid_argument(
+                    "linearization input must be fixed by the active "
+                    "case: " + name);
+            }
+            inputs.push_back({
+                static_cast<std::size_t>(std::distance(
+                    graph.problem.variable_names.begin(), variable)),
+                static_cast<std::size_t>(std::distance(
+                    graph.problem.residual_names.begin(), residual)),
+                name});
+        }
+    } catch (const std::exception& ex) {
+        response.error = make_error(
+            "invalid_inputs", "request", ex.what());
+        return response;
+    }
+
+    DaeLinearizationOptions options;
+    options.relative_perturbation =
+        request.settings.relative_perturbation;
+    options.minimum_perturbation =
+        request.settings.minimum_perturbation;
+    DaeLinearizationResult result;
+    try {
+        result = linearize_index1_dae(
+            graph.problem, request.settings.time,
+            initialized.state, initialized.derivative,
+            inputs, options);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "linearization_exception", "linearization", ex.what());
+        return response;
+    }
+    response.diagnostics = {
+        result.diagnostics.success,
+        result.diagnostics.residual_evaluations,
+        result.diagnostics.linear_right_hand_sides,
+        result.diagnostics.maximum_operating_residual,
+        result.diagnostics.message};
+    if (!result.diagnostics.success) {
+        response.status = OperationStatus::solver_failed;
+        response.error = make_error(
+            "linearization_failed", "linearization",
+            result.diagnostics.message);
+        return response;
+    }
+    response.state_names = std::move(
+        result.differential_state_names);
+    response.input_names = std::move(result.input_names);
+    response.A = std::move(result.A);
+    response.B = std::move(result.B);
     response.status = OperationStatus::succeeded;
     return response;
 }

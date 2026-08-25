@@ -392,12 +392,28 @@ inertial shaft components capable of representing those two rotor states. Its ex
 quasi-steady algebraic contract now lifts the map-driven gas path into the transient DAE without
 duplicating component physics.
 
-A structural hold-point probe derives a transient declaration from the converged Thermox static
-state, replaces only the two shaft trains with their inertial counterparts, fixes fuel instead of
-LP speed, and retains the six public performance-map artifacts. The resulting 411-variable DAE has
-two differential rotor-energy states. It reached 0.001 s in one accepted step, with no rejection
-and a maximum absolute normalized residual of 5.58e-10. This qualifies graph composition,
-consistent initialization from a converged operating point, and short-horizon equilibrium hold.
-It is not a perturbation response or an A/B-matrix reproduction: VAFN/VBV scheduling and declared
-input perturbations must be connected before that comparison. The matrices above therefore remain
-a pinned reference target, not transient predictive validation earned by Thermox.
+The reproducible `agtf30_vbv_nozzle_transient.json` declaration derives from the converged Thermox
+static state, replaces only the two shaft trains with their generic inertial counterparts, fixes
+fuel instead of LP speed, and retains the six public performance-map artifacts. The resulting
+411-variable DAE has two differential rotor-energy states. It reaches 0.001 s in one accepted step,
+with no rejection and a maximum absolute normalized residual of 5.58e-10.
+
+Thermox's generic index-1 DAE tangent linearizer releases fuel flow and HP extraction as exogenous
+inputs, forms the scaled local response Jacobian, factors it once, and solves four sensitivity
+right-hand sides. In native rotor-energy coordinates it obtains:
+
+```text
+A_E = [[-2.55830,  1.82347],
+       [ 0.370274, -1.92434]]
+B_E = [[ 9.24284e6,  0],
+       [ 1.15416e7, -1]]
+```
+
+After the exact local coordinate change from rotor energy to rpm, the state matrix is
+`[[-2.55830, 1.11491], [0.605595, -1.92434]]`. Relative to NASA, the LP diagonal, LP-from-HP
+coupling, and HP diagonal differ by 1.16%, 0.011%, and 2.07%; HP-from-LP coupling differs by
+23.3%. Fuel gains converted to rpm/s per lbm/s differ by 18.4% and 24.3%. The HP extraction gain
+does not reproduce NASA (1.52 versus 5.13 rpm/s per signed hp), and LP extraction is not yet a
+declared port on this two-load LP shaft topology. This is therefore a partial dynamic cross-code
+reproduction and a qualification of the generic DAE linearization path, not full transient
+predictive validation. Remaining differences are retained as evidence rather than calibrated away.

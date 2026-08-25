@@ -147,6 +147,9 @@ Delivered:
    coverage. ✅
 6. Explicit quasi-steady algebraic component lifting with sparse state Jacobians and strict
    rejection of differential state, plus fluid/material temperature-boundary parity. ✅
+7. Generic index-1 DAE tangent linearization with declared exogenous inputs, scaled algebraic
+   elimination, batched A/B sensitivity solves, service/CLI contracts, analytical regression, and
+   a partial public NASA AGTF30 cross-code reproduction. ✅
 
 ## Reusable dynamic equipment primitives
 

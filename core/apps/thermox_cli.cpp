@@ -37,6 +37,16 @@ void print_usage(std::ostream& out) {
            " [--trust-region-initial-radius <value>]"
            " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
+        << "  thermox_cli linearize --model <path> [--case <id>]"
+           " --input-variable <graph-variable>..."
+           " [--performance-map <path>]..."
+           " [--relative-perturbation <value>]"
+           " [--residual-tolerance <value>]"
+           " [--structural-policy automatic|monolithic|blocks|tearing]"
+           " [--globalization line_search|trust_region]"
+           " [--trust-region-initial-radius <value>]"
+           " [--trust-region-minimum-radius <value>]"
+           " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
            " [--format text|json]\n"
         << "  thermox_cli study --input <path>"
@@ -173,6 +183,42 @@ void print_transient_text(
     print_graph_text(response.trajectory.back().graph);
 }
 
+void print_small_signal_text(
+    const thermox::service::SmallSignalLinearizationResponse& response) {
+    std::cout << "model: " << response.metadata.model.model_id << "\n"
+              << "status: "
+              << thermox::service::to_string(response.status) << "\n"
+              << "success: "
+              << (response.diagnostics.success ? "yes" : "no") << "\n"
+              << "residual_evaluations: "
+              << response.diagnostics.residual_evaluations << "\n"
+              << "linear_right_hand_sides: "
+              << response.diagnostics.linear_right_hand_sides << "\n";
+    if (!response.error.code.empty()) {
+        std::cout << "error: " << response.error.message << "\n";
+        return;
+    }
+    const auto print_matrix = [](
+        const std::string& name,
+        const auto& matrix) {
+        std::cout << name << ":\n";
+        for (const auto& row : matrix) {
+            for (std::size_t column = 0; column < row.size(); ++column) {
+                if (column != 0U) std::cout << ' ';
+                std::cout << row[column];
+            }
+            std::cout << '\n';
+        }
+    };
+    std::cout << "states:";
+    for (const auto& name : response.state_names) std::cout << ' ' << name;
+    std::cout << "\ninputs:";
+    for (const auto& name : response.input_names) std::cout << ' ' << name;
+    std::cout << '\n';
+    print_matrix("A", response.A);
+    print_matrix("B", response.B);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -195,8 +241,10 @@ int main(int argc, char** argv) {
     std::string trust_region_minimum_radius_text;
     std::string reconciliation_mode = "hard-equalities";
     std::string end_time_text;
+    std::string relative_perturbation_text;
     std::string format = "text";
     std::vector<std::string> performance_map_paths;
+    std::vector<std::string> input_variables;
     bool continuation = false;
     bool profile_likelihood = false;
     std::string profile_objective_increase_text;
@@ -218,6 +266,10 @@ int main(int argc, char** argv) {
             case_id = argv[++i];
         } else if (arg == "--performance-map" && i + 1 < argc) {
             performance_map_paths.emplace_back(argv[++i]);
+        } else if (arg == "--input-variable" && i + 1 < argc) {
+            input_variables.emplace_back(argv[++i]);
+        } else if (arg == "--relative-perturbation" && i + 1 < argc) {
+            relative_perturbation_text = argv[++i];
         } else if (arg == "--calibration" && i + 1 < argc) {
             calibration_id = argv[++i];
         } else if (arg == "--reconciliation" && i + 1 < argc) {
@@ -279,6 +331,7 @@ int main(int argc, char** argv) {
     }
 
     if (command != "solve" && command != "simulate" &&
+        command != "linearize" &&
         command != "performance-test" && command != "study" &&
         command != "iso2314-equivalent-cooling" &&
         command != "calibrate" &&
@@ -315,22 +368,25 @@ int main(int argc, char** argv) {
         std::cerr << "Unsupported format: " << format << "\n";
         return 2;
     }
-    if (command == "solve" && !end_time_text.empty()) {
+    if (command != "simulate" && !end_time_text.empty()) {
         std::cerr << "--end-time is only valid for simulate\n";
         return 2;
     }
-    if (command == "simulate" && continuation) {
+    if (command != "solve" && continuation) {
         std::cerr << "--continuation is only valid for solve\n";
         return 2;
     }
     if (command != "solve" && command != "simulate" &&
+        command != "linearize" &&
         !performance_map_paths.empty()) {
         std::cerr << "--performance-map is only valid for solve or "
-                     "simulate\n";
+                     "simulate or linearize\n";
         return 2;
     }
-    if (command != "solve" && !residual_tolerance_text.empty()) {
-        std::cerr << "--residual-tolerance is only valid for solve\n";
+    if (command != "solve" && command != "linearize" &&
+        !residual_tolerance_text.empty()) {
+        std::cerr << "--residual-tolerance is only valid for solve or "
+                     "linearize\n";
         return 2;
     }
     if (command != "solve" &&
@@ -341,6 +397,18 @@ int main(int argc, char** argv) {
     }
     if (command == "simulate" && end_time_text.empty()) {
         std::cerr << "Missing required --end-time for simulate\n";
+        return 2;
+    }
+    if (command == "linearize" && input_variables.empty()) {
+        std::cerr << "Missing required --input-variable for linearize\n";
+        return 2;
+    }
+    if (command != "linearize" && !input_variables.empty()) {
+        std::cerr << "--input-variable is only valid for linearize\n";
+        return 2;
+    }
+    if (command != "linearize" && !relative_perturbation_text.empty()) {
+        std::cerr << "--relative-perturbation is only valid for linearize\n";
         return 2;
     }
 
@@ -598,6 +666,63 @@ int main(int argc, char** argv) {
                         response);
             } else {
                 print_steady_text(response);
+            }
+            return response.succeeded() ? 0 : 1;
+        }
+
+        if (command == "linearize") {
+            thermox::service::SmallSignalLinearizationRequest request;
+            request.model_json = model_json;
+            request.case_id = case_id;
+            request.input_variables = input_variables;
+            for (const auto& path : performance_map_paths) {
+                request.artifacts.performance_maps.push_back(
+                    thermox::service::
+                        parse_performance_map_artifact_declaration_json(
+                            read_file(path)));
+            }
+            if (!relative_perturbation_text.empty()) {
+                request.settings.relative_perturbation =
+                    parse_positive_number(
+                        relative_perturbation_text,
+                        "--relative-perturbation");
+            }
+            if (!residual_tolerance_text.empty()) {
+                request.settings.nonlinear_solver.residual_tolerance =
+                    parse_positive_number(
+                        residual_tolerance_text,
+                        "--residual-tolerance");
+            }
+            request.settings.nonlinear_solver
+                .structural_decomposition_policy = structural_policy;
+            request.settings.nonlinear_solver.globalization_policy =
+                globalization_policy;
+            if (!trust_region_initial_radius_text.empty()) {
+                request.settings.nonlinear_solver
+                    .trust_region_initial_radius = parse_positive_number(
+                        trust_region_initial_radius_text,
+                        "--trust-region-initial-radius");
+                request.settings.nonlinear_solver
+                    .trust_region_maximum_radius = std::max(
+                        request.settings.nonlinear_solver
+                            .trust_region_maximum_radius,
+                        request.settings.nonlinear_solver
+                            .trust_region_initial_radius);
+            }
+            if (!trust_region_minimum_radius_text.empty()) {
+                request.settings.nonlinear_solver
+                    .trust_region_minimum_radius = parse_positive_number(
+                        trust_region_minimum_radius_text,
+                        "--trust-region-minimum-radius");
+            }
+            const auto response =
+                service.run_small_signal_linearization(request);
+            if (format == "json") {
+                std::cout << thermox::service::
+                    serialize_small_signal_linearization_response_json(
+                        response);
+            } else {
+                print_small_signal_text(response);
             }
             return response.succeeded() ? 0 : 1;
         }

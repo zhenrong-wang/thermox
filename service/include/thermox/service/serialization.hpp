@@ -31,6 +31,8 @@ std::string serialize_data_reconciliation_response_json(
     const DataReconciliationResponse& response);
 std::string serialize_transient_response_json(
     const TransientSimulationResponse& response);
+std::string serialize_small_signal_linearization_response_json(
+    const SmallSignalLinearizationResponse& response);
 std::string serialize_result_summary_json(
     const ResultSummary& summary);
 std::string serialize_validation_evidence_summary_json(

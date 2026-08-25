@@ -2516,6 +2516,75 @@ void test_nasa_agtf30_continuous_twin_spool_benchmark() {
     }
 }
 
+void test_nasa_agtf30_partial_small_signal_benchmark() {
+    thermox::service::SmallSignalLinearizationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_vbv_nozzle_transient.json");
+    request.case_id = "sea_level_static_1000";
+    request.input_variables = {
+        "fuel.outlet.m_dot[CH4]",
+        "hp_extraction.inlet.W_dot"};
+    request.settings.relative_perturbation = 3.0e-4;
+    request.settings.nonlinear_solver.residual_tolerance = 1.0e-8;
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/agtf30_fan_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_vbv_map.json"}) {
+        request.artifacts.performance_maps.push_back(
+            thermox::service::
+                parse_performance_map_artifact_declaration_json(
+                    read_source_file(path)));
+    }
+    const auto response = thermox::service::SimulationService{}
+        .run_small_signal_linearization(request);
+    require(
+        response.succeeded(),
+        "NASA AGTF30 small-signal benchmark must linearize: " +
+            response.error.message);
+    require(
+        response.state_names == std::vector<std::string>{
+            "lp_shaft.rotational_energy",
+            "hp_shaft.rotational_energy"} &&
+            response.diagnostics.residual_evaluations >= 800 &&
+            response.diagnostics.linear_right_hand_sides == 4,
+        "NASA small-signal benchmark must expose two rotor states and "
+        "four tangent sensitivity solves");
+
+    constexpr double radians_per_second_per_rpm =
+        2.0 * 3.14159265358979323846 / 60.0;
+    const double state_scale[2] = {
+        23.646647685338 * 324.6312453961477 *
+            radians_per_second_per_rpm,
+        2.522567598979 * 1860.621529627479 *
+            radians_per_second_per_rpm};
+    double A_rpm[2][2]{};
+    for (std::size_t row = 0; row < 2; ++row) {
+        for (std::size_t column = 0; column < 2; ++column) {
+            A_rpm[row][column] = response.A[row][column] *
+                state_scale[column] / state_scale[row];
+        }
+    }
+    require(
+        std::abs(A_rpm[0][0] + 2.58828958) < 0.05 &&
+            std::abs(A_rpm[0][1] - 1.11503138) < 0.03 &&
+            std::abs(A_rpm[1][0] - 0.78936733) < 0.25 &&
+            std::abs(A_rpm[1][1] + 1.88527248) < 0.08,
+        "NASA rotor-speed A matrix must remain within the declared "
+        "partial cross-code bands");
+    constexpr double kg_per_pound_mass = 0.45359237;
+    const double fuel_gain[2] = {
+        response.B[0][0] * kg_per_pound_mass / state_scale[0],
+        response.B[1][0] * kg_per_pound_mass / state_scale[1]};
+    require(
+        std::abs(fuel_gain[0] / 4405.37064 - 1.0) < 0.30 &&
+            std::abs(fuel_gain[1] / 8570.82043 - 1.0) < 0.30,
+        "NASA fuel gains must remain within the declared partial "
+        "cross-code band");
+}
+
 void test_cantera_brayton_integration_benchmark() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -7680,6 +7749,52 @@ void test_transient_service() {
         "transient JSON must expose graph-native trajectory state");
 }
 
+void test_small_signal_linearization_service() {
+    thermox::service::SimulationService service;
+    thermox::service::SmallSignalLinearizationRequest request;
+    request.model_json = read_source_file(
+        "core/examples/lumped_thermal_storage.json");
+    request.case_id = "charge";
+    request.input_variables = {"heater.outlet.Q_dot"};
+    const auto response =
+        service.run_small_signal_linearization(request);
+    require(
+        response.succeeded(),
+        "small-signal service execution failed: " +
+            response.error.message);
+    require(
+        response.metadata.operation == "small_signal_linearization" &&
+            response.metadata.solver.contract_version ==
+                "thermox.index1-small-signal/v1",
+        "small-signal result must identify its operation and contract");
+    require(
+        response.state_names ==
+                std::vector<std::string>{"store.temperature"} &&
+            response.input_names == request.input_variables &&
+            response.A.size() == 1U && response.A[0].size() == 1U &&
+            response.B.size() == 1U && response.B[0].size() == 1U &&
+            std::abs(response.A[0][0]) < 1.0e-12 &&
+            std::abs(response.B[0][0] - 1.0 / 1.5e6) < 1.0e-12,
+        "small-signal service must recover the analytical storage "
+        "linearization in native SI coordinates");
+    require(
+        response.diagnostics.success &&
+            response.diagnostics.residual_evaluations >= 7 &&
+            response.diagnostics.linear_right_hand_sides == 2,
+        "tangent linearization must report its residual evaluations and "
+        "sensitivity right-hand sides");
+    const auto json = thermox::service::
+        serialize_small_signal_linearization_response_json(response);
+    require(
+        json.find("\"states\": [\"store.temperature\"]") !=
+                std::string::npos &&
+            json.find("\"inputs\": [\"heater.outlet.Q_dot\"]") !=
+                std::string::npos &&
+            json.find("\"A\": [[") != std::string::npos &&
+            json.find("\"B\": [[") != std::string::npos,
+        "small-signal JSON must preserve named matrix coordinates");
+}
+
 void test_structured_compilation_failure() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -8303,6 +8418,7 @@ int main() {
         test_nasa_agtf30_core_exhaust_branch_benchmark();
         test_nasa_agtf30_open_vbv_static_whole_engine_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
+        test_nasa_agtf30_partial_small_signal_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();
@@ -8352,6 +8468,7 @@ int main() {
         test_steady_continuation_service();
         test_explicit_system_boundary_balance();
         test_transient_service();
+        test_small_signal_linearization_service();
         test_structured_compilation_failure();
         test_invalid_solver_settings();
         test_system_agnostic_result_projection();
