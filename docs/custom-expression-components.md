@@ -62,6 +62,12 @@ recoverable physical evaluations; unsupported providers and backend failures are
 property names, computed state arguments, cross-port states, transport calls without derivative
 contracts, and user callbacks are not accepted.
 
+Within one residual or Jacobian evaluation, repeated property calls at the same provider and exact
+p-h state share one thermodynamic derivative result. Viscosity and conductivity calls likewise
+share one bounded transport derivative stencil. The cache is evaluation-local—never global or
+cross-timestep—so it cannot retain stale states, cross provider instances, or change solver-visible
+failure semantics.
+
 The declaration distinguishes the physical template from one executable model, so nonvisual
 clients can publish the same catalog structure used by the canvas:
 

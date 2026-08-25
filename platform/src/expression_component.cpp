@@ -1,6 +1,7 @@
 #include "thermox/platform/expression_component.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -671,6 +672,41 @@ using PropertyBindings = std::map<
     std::string,
     std::shared_ptr<const physics::PropertyPackage>>;
 
+struct PropertyCacheKey {
+    const physics::PropertyPackage* package{nullptr};
+    std::uint64_t pressure_bits{0};
+    std::uint64_t enthalpy_bits{0};
+
+    bool operator<(const PropertyCacheKey& other) const {
+        const std::less<const physics::PropertyPackage*> pointer_less;
+        if (package != other.package) {
+            return pointer_less(package, other.package);
+        }
+        if (pressure_bits != other.pressure_bits) {
+            return pressure_bits < other.pressure_bits;
+        }
+        return enthalpy_bits < other.enthalpy_bits;
+    }
+};
+
+PropertyCacheKey property_cache_key(
+    const physics::PropertyPackage& package,
+    double pressure, double enthalpy) {
+    return {
+        &package,
+        std::bit_cast<std::uint64_t>(pressure),
+        std::bit_cast<std::uint64_t>(enthalpy),
+    };
+}
+
+struct EvaluationCache {
+    std::map<PropertyCacheKey, physics::PhDerivativesResult>
+        thermodynamic;
+    std::map<PropertyCacheKey,
+             physics::PhTransportDerivativesResult>
+        transport;
+};
+
 void add_scaled(
     std::map<std::size_t, double>& target,
     const std::map<std::size_t, double>& source,
@@ -680,12 +716,13 @@ void add_scaled(
     }
 }
 
-Evaluation evaluate(
+Evaluation evaluate_cached(
     const ExpressionNode& node,
     const std::vector<double>& values,
     const std::map<std::string, std::size_t>& variables,
     const std::map<std::string, double>& parameters,
-    const PropertyBindings& properties) {
+    const PropertyBindings& properties,
+    EvaluationCache& cache) {
     if (node.kind == NodeKind::literal) {
         return {node.literal, {}, {}};
     }
@@ -704,8 +741,9 @@ Evaluation evaluate(
         return failure("unbound symbol '" + node.symbol + "'");
     }
 
-    auto left = evaluate(
-        *node.left, values, variables, parameters, properties);
+    auto left = evaluate_cached(
+        *node.left, values, variables, parameters, properties,
+        cache);
     if (!left.error.empty()) return left;
     if (node.kind == NodeKind::negate) {
         left.value = -left.value;
@@ -763,8 +801,9 @@ Evaluation evaluate(
         return left;
     }
 
-    auto right = evaluate(
-        *node.right, values, variables, parameters, properties);
+    auto right = evaluate_cached(
+        *node.right, values, variables, parameters, properties,
+        cache);
     if (!right.error.empty()) return right;
     Evaluation out;
     if (node.kind == NodeKind::property_temperature_ph ||
@@ -787,9 +826,19 @@ Evaluation evaluate(
         if (node.kind == NodeKind::property_viscosity_ph ||
             node.kind ==
                 NodeKind::property_thermal_conductivity_ph) {
-            const auto transport =
-                physics::state_ph_transport_derivatives_with_fallback(
-                    *package->second, left.value, right.value);
+            const auto key = property_cache_key(
+                *package->second, left.value, right.value);
+            auto found = cache.transport.find(key);
+            if (found == cache.transport.end()) {
+                found = cache.transport.emplace(
+                    key,
+                    physics::
+                        state_ph_transport_derivatives_with_fallback(
+                            *package->second, left.value,
+                            right.value))
+                            .first;
+            }
+            const auto& transport = found->second;
             if (!transport.ok()) {
                 const bool fatal =
                     transport.status ==
@@ -826,8 +875,17 @@ Evaluation evaluate(
             }
             return out;
         }
-        const auto state = physics::state_ph_derivatives_with_fallback(
+        const auto key = property_cache_key(
             *package->second, left.value, right.value);
+        auto found = cache.thermodynamic.find(key);
+        if (found == cache.thermodynamic.end()) {
+            found = cache.thermodynamic.emplace(
+                key,
+                physics::state_ph_derivatives_with_fallback(
+                    *package->second, left.value, right.value))
+                        .first;
+        }
+        const auto& state = found->second;
         if (!state.ok()) {
             const bool fatal =
                 state.status == physics::PropertyStatus::backend_error ||
@@ -987,6 +1045,17 @@ Evaluation evaluate(
         }
     }
     return out;
+}
+
+Evaluation evaluate(
+    const ExpressionNode& node,
+    const std::vector<double>& values,
+    const std::map<std::string, std::size_t>& variables,
+    const std::map<std::string, double>& parameters,
+    const PropertyBindings& properties) {
+    EvaluationCache cache;
+    return evaluate_cached(
+        node, values, variables, parameters, properties, cache);
 }
 
 bool valid_name(std::string_view value) {

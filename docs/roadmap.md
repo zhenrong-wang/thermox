@@ -696,6 +696,9 @@ Work items:
    - entropy-backed isentropic, quality-backed two-phase, heat-capacity-rate, compressible
      Mach/gamma, and transport-ratio project closures are covered; approval policy and further
      derivative-backed property functions remain follow-ons.
+   - exact provider/p-h evaluation-local caching shares repeated thermodynamic flashes and bounded
+     transport stencils within each residual/Jacobian call, with counting-provider regressions and
+     no cross-call state retention. ✅
 8. Referenced, provider-extensible correlation templates.
    - packaged parameterized Zuber–Findlay kinematic void-fraction relation, strict coefficient
      bounds, physical limiting tests, runtime-catalog discovery, and connected two-phase pipe

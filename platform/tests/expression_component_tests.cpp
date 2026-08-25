@@ -2,6 +2,8 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/physics/ideal_gas_package.hpp"
+#include "thermox/physics/if97_package.hpp"
 #include "thermox/physics/property_registry.hpp"
 #include "thermox/transient_solver.hpp"
 
@@ -9,10 +11,92 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
 namespace {
+
+class CountingPropertyPackage final
+    : public thermox::physics::PropertyPackage {
+public:
+    CountingPropertyPackage(
+        std::shared_ptr<const thermox::physics::PropertyPackage> delegate,
+        std::string name)
+        : delegate_(std::move(delegate)), name_(std::move(name)) {}
+
+    std::string_view name() const noexcept override { return name_; }
+    std::string_view version() const noexcept override {
+        return "test-1";
+    }
+    thermox::physics::PropertyLimits limits() const noexcept override {
+        return delegate_->limits();
+    }
+    bool supports(
+        thermox::physics::PropertyCapability capability)
+        const noexcept override {
+        return delegate_->supports(capability);
+    }
+    thermox::physics::PropertyResult state_pt(
+        double pressure, double temperature) const override {
+        return delegate_->state_pt(pressure, temperature);
+    }
+    thermox::physics::PropertyResult state_ph(
+        double pressure, double enthalpy) const override {
+        ++state_ph_calls;
+        return delegate_->state_ph(pressure, enthalpy);
+    }
+    thermox::physics::PhDerivativesResult state_ph_derivatives(
+        double pressure, double enthalpy) const override {
+        ++derivative_calls;
+        return delegate_->state_ph_derivatives(pressure, enthalpy);
+    }
+    thermox::physics::PropertyResult state_ps(
+        double pressure, double entropy) const override {
+        return delegate_->state_ps(pressure, entropy);
+    }
+    thermox::physics::SaturationResult saturation_p(
+        double pressure) const override {
+        return delegate_->saturation_p(pressure);
+    }
+
+    void reset_counts() const {
+        state_ph_calls = 0;
+        derivative_calls = 0;
+    }
+
+    mutable std::size_t state_ph_calls{0};
+    mutable std::size_t derivative_calls{0};
+
+private:
+    std::shared_ptr<const thermox::physics::PropertyPackage> delegate_;
+    std::string name_;
+};
+
+thermox::physics::PropertyPackageRegistry counting_property_registry(
+    const std::string& backend,
+    const std::string& substance,
+    const std::shared_ptr<CountingPropertyPackage>& package) {
+    std::vector<thermox::physics::PropertyCapability> capabilities;
+    for (const auto capability : {
+             thermox::physics::PropertyCapability::state_pt,
+             thermox::physics::PropertyCapability::state_ph,
+             thermox::physics::PropertyCapability::state_ph_derivatives,
+             thermox::physics::PropertyCapability::state_ps,
+             thermox::physics::PropertyCapability::saturation_p,
+             thermox::physics::PropertyCapability::transport,
+             thermox::physics::PropertyCapability::surface_tension}) {
+        if (package->supports(capability)) {
+            capabilities.push_back(capability);
+        }
+    }
+    thermox::physics::PropertyPackageRegistry registry;
+    registry.register_backend(
+        {backend, std::string{package->name()},
+         std::string{package->version()}, {substance}, capabilities},
+        [package](std::string_view) { return package; });
+    return registry;
+}
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
@@ -560,7 +644,7 @@ void test_expression_component_supports_compressible_properties() {
     thermox::platform::register_expression_component(
         registry, std::move(definition));
 
-    const auto document =
+    auto document =
         thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v2",
   "model": {
@@ -598,8 +682,24 @@ void test_expression_component_supports_compressible_properties() {
     }
   }]
 })json");
+    const auto counting = std::make_shared<CountingPropertyPackage>(
+        std::make_shared<
+            thermox::physics::IdealGasPropertyPackage>(),
+        "counting-ideal-gas");
+    auto property_registry = counting_property_registry(
+        "counting_ideal_gas", "Air", counting);
+    document.media.front().backend = "counting_ideal_gas";
     const auto graph = thermox::platform::compile_model_graph(
-        document, registry, "design");
+        document, registry, property_registry, "design");
+    counting->reset_counts();
+    std::vector<double> residual(
+        graph.problem.residual_names.size(), 0.0);
+    const auto residual_status = graph.problem.checked_residual(
+        graph.problem.initial_guess, residual);
+    require(
+        residual_status.ok() && counting->derivative_calls == 1U,
+        "repeated thermodynamic property calls at one p-h state must "
+        "share one provider derivative evaluation");
     const auto derivative_check =
         thermox::verify_problem_jacobian(graph.problem);
     require(
@@ -649,7 +749,7 @@ void test_expression_component_supports_transport_properties() {
     thermox::platform::register_expression_component(
         registry, std::move(definition));
 
-    const auto document =
+    auto document =
         thermox::platform::parse_model_document_text(R"json({
   "schema_version": "thermox.model/v2",
   "model": {
@@ -682,8 +782,23 @@ void test_expression_component_supports_transport_properties() {
     }
   }]
 })json");
+    const auto counting = std::make_shared<CountingPropertyPackage>(
+        std::make_shared<thermox::physics::If97PropertyPackage>(),
+        "counting-if97");
+    auto property_registry = counting_property_registry(
+        "counting_if97", "Steam", counting);
+    document.media.front().backend = "counting_if97";
     const auto graph = thermox::platform::compile_model_graph(
-        document, registry, "design");
+        document, registry, property_registry, "design");
+    counting->reset_counts();
+    std::vector<double> residual(
+        graph.problem.residual_names.size(), 0.0);
+    const auto residual_status = graph.problem.checked_residual(
+        graph.problem.initial_guess, residual);
+    require(
+        residual_status.ok() && counting->state_ph_calls == 5U,
+        "repeated transport calls at one p-h state must share one "
+        "bounded five-state derivative stencil");
     const auto derivative_check =
         thermox::verify_problem_jacobian(graph.problem);
     require(
