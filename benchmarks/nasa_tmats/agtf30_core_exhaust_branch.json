@@ -1,0 +1,55 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_core_exhaust_branch",
+    "name": "NASA AGTF30 sea-level-static core exhaust branch",
+    "media": [],
+    "materials": [{
+      "id": "dry_air", "backend": "cantera", "mechanism": "gri30.yaml",
+      "phase": "gri30", "package_version": "3.2.0", "species": ["N2", "O2"]
+    }],
+    "components": [
+      {
+        "id": "duct_5", "kind": "transport.material.perfect_gas_mach_scaled_loss",
+        "version": "1.0.0",
+        "parameters": {"flow_area": 0.6096762, "design_mach": 0.35,
+          "design_pressure_loss_fraction": 0.01, "heat_capacity_ratio": 1.4},
+        "materials": {"inlet": "dry_air", "outlet": "dry_air"}
+      },
+      {
+        "id": "core_exit", "kind": "terminal.material.perfect_gas_convergent_nozzle",
+        "version": "1.0.0",
+        "parameters": {"reference_throat_area": 0.2538252988,
+          "reference_back_pressure": 101325.35318039692,
+          "discharge_coefficient": 1.0, "gross_thrust_coefficient": 0.9999,
+          "heat_capacity_ratio": 1.4},
+        "materials": {"inlet": "dry_air"}
+      }
+    ],
+    "connections": [{"id": "duct5_core_exit", "from": "duct_5.outlet",
+      "to": "core_exit.inlet", "kind": "material_link"}]
+  },
+  "cases": [{
+    "id": "sea_level_static_1000", "mode": "steady_state_off_design",
+    "fixed_values": {
+      "duct_5.inlet.h": {"value": 349.878636680957, "unit": "kJ/kg"},
+      "duct_5.inlet.m_dot[N2]": {"value": 8.760643344668493, "unit": "kg/s"},
+      "duct_5.inlet.m_dot[O2]": {"value": 2.646444343701941, "unit": "kg/s"},
+      "core_exit.area_ratio.value": 1.0,
+      "core_exit.back_pressure_ratio.value": 1.0
+    },
+    "initial_guesses": {
+      "duct_5.inlet.p": {"value": 14.9677381289, "unit": "psia"},
+      "duct_5.outlet.p": {"value": 14.95, "unit": "psia"},
+      "duct_5.outlet.h": {"value": 349.878636680957, "unit": "kJ/kg"},
+      "duct_5.outlet.m_dot[N2]": {"value": 8.760643344668493, "unit": "kg/s"},
+      "duct_5.outlet.m_dot[O2]": {"value": 2.646444343701941, "unit": "kg/s"},
+      "core_exit.inlet.p": {"value": 14.95, "unit": "psia"},
+      "core_exit.inlet.h": {"value": 349.878636680957, "unit": "kJ/kg"},
+      "core_exit.inlet.m_dot[N2]": {"value": 8.760643344668493, "unit": "kg/s"},
+      "core_exit.inlet.m_dot[O2]": {"value": 2.646444343701941, "unit": "kg/s"},
+      "duct_5.mach": 0.06,
+      "core_exit.mach": 0.16
+    }
+  }]
+}

@@ -342,3 +342,11 @@ pressure within 0.0043 percent and the independently qualified VBV flow within 0
 while producing a finite positive gross thrust. No pressure or flow correction is fitted. This
 confirms that the static bypass branch is compatible; the remaining fifth-point blocker lies in
 the simultaneous core/LP-shaft/whole-engine coupling.
+
+`agtf30_core_exhaust_branch.json` performs the symmetric terminal test from the public static
+LPT-exit temperature, composition basis, and flow. It relaxes station-5 pressure and closes the
+generic duct-5 loss model against the fixed 393.43 in2 core nozzle and sea-level ambient pressure.
+The branch converges in three trust-region Newton iterations and predicts 103.192 kPa versus the
+NASA station-5 value of 102.643 kPa (+0.535 percent), within the declared LPT station band. The
+boundary uses the same N2/O2 thermochemistry translation as the qualified low-spool slice, so this
+gate qualifies terminal capacity and pressure closure, not combustion-product composition.

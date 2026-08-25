@@ -380,5 +380,25 @@
     ],
     "classification": "public_source_open_vbv_duct_nozzle_predictive_subsystem_cross_code_qualification"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static bypass-branch pressure closure, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
+  "agtf30_core_exhaust_branch_execution": {
+    "model": "agtf30_core_exhaust_branch.json",
+    "case": "sea_level_static_1000",
+    "boundary_contract": "LPT-exit enthalpy, N2/O2 flow, core-nozzle area, and ambient pressure are fixed. Station-5 pressure, duct loss, nozzle Mach, and gross thrust are solved simultaneously.",
+    "topology": "The generic Mach-scaled duct-5 instance feeds the fixed-area generic convergent core nozzle.",
+    "results": {
+      "iterations": 3,
+      "normalized_residual_norm": 3.07e-16,
+      "source_station_5_pressure_pa": 102643.158635,
+      "thermox_station_5_pressure_pa": 103192.373101,
+      "station_5_pressure_error_percent": 0.5351,
+      "thermox_core_gross_thrust_n": 923.250716
+    },
+    "acceptance": {
+      "station_5_pressure_percent": 1.0,
+      "result": "pass"
+    },
+    "declared_limit": "The N2/O2 boundary inherited from the low-spool qualification validates terminal capacity and pressure closure, not combustion-product composition or independently measured thrust.",
+    "classification": "public_source_core_duct_nozzle_predictive_subsystem_cross_code_qualification"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static bypass and core terminal pressure closure, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }

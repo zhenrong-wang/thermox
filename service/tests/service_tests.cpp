@@ -2223,6 +2223,51 @@ void test_nasa_agtf30_open_vbv_bypass_branch_benchmark() {
         "open bypass branch must produce finite positive gross thrust");
 }
 
+void test_nasa_agtf30_core_exhaust_branch_benchmark() {
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_core_exhaust_branch.json");
+    request.case_id = "sea_level_static_1000";
+    request.solver.globalization_policy =
+        thermox::service::GlobalizationPolicy::trust_region;
+    const auto response =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-9,
+        "NASA AGTF30 core exhaust branch must solve");
+
+    const auto& duct_inlet = require_port_result(
+        response.graph, "duct_5", "inlet");
+    const double solved_lpt_exit_pressure = require_result_value(
+        duct_inlet.primary_values, "p").value_si;
+    constexpr double source_lpt_exit_pressure_pa =
+        14.9677381289 * 6894.757293168;
+    require(
+        std::abs(
+            solved_lpt_exit_pressure / source_lpt_exit_pressure_pa -
+            1.0) < 0.01,
+        "duct/nozzle closure must reconstruct NASA station-5 pressure "
+        "within 1 percent");
+
+    const auto& duct_outlet = require_port_result(
+        response.graph, "duct_5", "outlet");
+    const double inlet_flow = require_result_value(
+        duct_inlet.derived_values, "m_dot_total").value_si;
+    const double outlet_flow = require_result_value(
+        duct_outlet.derived_values, "m_dot_total").value_si;
+    require(
+        std::abs(inlet_flow - outlet_flow) < 1.0e-10,
+        "core exhaust duct must conserve mass exactly");
+    const double gross_thrust = require_result_value(
+        require_component_result(response.graph, "core_exit")
+            .internal_values,
+        "gross_thrust").value_si;
+    require(
+        std::isfinite(gross_thrust) && gross_thrust > 0.0,
+        "core exhaust branch must produce finite positive gross thrust");
+}
+
 void test_nasa_agtf30_continuous_twin_spool_benchmark() {
     struct ReferencePoint {
         std::string case_id;
@@ -8125,6 +8170,7 @@ int main() {
         test_nasa_agtf30_coupled_low_spool_benchmark();
         test_nasa_agtf30_open_vbv_benchmark();
         test_nasa_agtf30_open_vbv_bypass_branch_benchmark();
+        test_nasa_agtf30_core_exhaust_branch_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
