@@ -1452,33 +1452,62 @@ public:
                     return EvaluationStatus::success();
                 },
                 1.0e7);
-            system.add_checked_equation(
+            std::vector<std::size_t> shaft_power_variables =
+                inlet_flows;
+            shaft_power_variables.push_back(inlet_h);
+            shaft_power_variables.push_back(stage_outlet_h);
+            shaft_power_variables.push_back(shaft_w);
+            for (std::size_t cooling = 0;
+                 cooling < cooling_flows.size(); ++cooling) {
+                if (cooling_at_exit[cooling]) continue;
+                shaft_power_variables.insert(
+                    shaft_power_variables.end(),
+                    cooling_flows[cooling].begin(),
+                    cooling_flows[cooling].end());
+                shaft_power_variables.push_back(
+                    cooling_enthalpies[cooling]);
+            }
+            system.add_sparse_equation(
                 prefix + "shaft_power",
+                std::move(shaft_power_variables),
                 [inlet_flows, cooling_flows, cooling_enthalpies,
                  cooling_at_exit, inlet_h, stage_outlet_h,
                  shaft_w](const std::vector<double>& x,
-                          double& residual) {
-                    double stage_flow = 0.0;
-                    double stage_inlet_energy = 0.0;
+                          std::vector<EquationPartial>& jacobian) {
+                    double main_flow = 0.0;
                     for (const auto variable : inlet_flows) {
-                        stage_flow += x.at(variable);
+                        main_flow += x.at(variable);
+                        jacobian.push_back({
+                            variable,
+                            x.at(stage_outlet_h) - x.at(inlet_h)});
                     }
-                    stage_inlet_energy = stage_flow * x.at(inlet_h);
+                    double stage_flow = main_flow;
+                    double stage_inlet_energy =
+                        main_flow * x.at(inlet_h);
+                    jacobian.push_back({inlet_h, -main_flow});
                     for (std::size_t cooling = 0;
                          cooling < cooling_flows.size(); ++cooling) {
                         if (cooling_at_exit[cooling]) continue;
                         double flow = 0.0;
                         for (const auto variable : cooling_flows[cooling]) {
                             flow += x.at(variable);
+                            jacobian.push_back({
+                                variable,
+                                x.at(stage_outlet_h) -
+                                    x.at(cooling_enthalpies[cooling])});
                         }
                         stage_flow += flow;
                         stage_inlet_energy +=
                             flow * x.at(cooling_enthalpies[cooling]);
+                        jacobian.push_back({
+                            cooling_enthalpies[cooling], -flow});
                     }
-                    residual = x.at(shaft_w) -
+                    jacobian.push_back({
+                        stage_outlet_h, stage_flow});
+                    jacobian.push_back({shaft_w, 1.0});
+                    return x.at(shaft_w) -
                         (stage_inlet_energy -
                          stage_flow * x.at(stage_outlet_h));
-                    return EvaluationStatus::success();
                 },
                 1.0e6);
             return;

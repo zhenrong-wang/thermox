@@ -139,5 +139,35 @@
     ],
     "classification": "multi_point_cooled_turbine_component_cross_code_reproduction"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, and conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, or transient validation."
+  "agtf30_coupled_high_spool_execution": {
+    "model": "agtf30_high_spool.json",
+    "artifacts": ["agtf30_hpc_map.json", "agtf30_hpt_map.json"],
+    "chemistry": "agtf30_major_products.yaml; seven-species methane-air HP equilibrium using GRI-Mech 3.0 thermodynamic species data",
+    "boundary_contract": "Station 25 state and flow, HP shaft speed, and 350 hp extraction are fixed. Fuel flow, station 4, turbine pressure ratio, and station 45 are solved.",
+    "results": {
+      "converged_points": 5,
+      "newton_iterations_per_point": 3,
+      "normalized_residual_norm_range": [3.14572e-12, 1.98363e-11],
+      "fuel_flow_error_percent_range": [-12.767702, -12.009074],
+      "station_4_temperature_error_percent_range": [0.363957, 0.523506],
+      "station_45_pressure_error_percent_range": [2.501355, 3.612177],
+      "station_45_temperature_error_percent_range": [0.996194, 1.318734],
+      "station_45_flow_error_percent_range": [-0.232284, -0.159660],
+      "maximum_absolute_shaft_closure_w": 1e-6
+    },
+    "acceptance": {
+      "station_4_temperature_percent": 0.6,
+      "station_45_pressure_percent": 4.0,
+      "station_45_temperature_percent": 1.5,
+      "station_45_flow_percent": 0.3,
+      "fuel_flow_cross_model_percent": 14.0,
+      "result": "pass_with_fuel_prediction_reserved"
+    },
+    "reserved_comparisons": [
+      "Fuel-flow predictive qualification: Thermox solves 12.01 to 12.77 percent below the T-MATS command and no calibration is applied.",
+      "Independent hardware validation and whole-engine net-thrust/nozzle performance."
+    ],
+    "classification": "multi_point_coupled_high_spool_cross_code_inverse_reproduction"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, inverse turbine-map flow compatibility, off-design thermochemical compression, coupled bleed routing, and exact high-shaft conservation against public NASA code paths. They are not independent hardware validation, whole-engine validation, fuel-flow predictive qualification, or transient validation."
 }

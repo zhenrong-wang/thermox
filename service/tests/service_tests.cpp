@@ -1845,6 +1845,118 @@ void test_nasa_agtf30_hpt_map_compatibility_benchmark() {
     }
 }
 
+void test_nasa_agtf30_coupled_high_spool_benchmark() {
+    struct ReferencePoint {
+        std::string case_id;
+        double fuel_lbm_s;
+        double station_4_temperature_deg_r;
+        double station_45_pressure_psia;
+        double station_45_temperature_deg_r;
+        double station_45_flow_lbm_s;
+    };
+    const std::vector<ReferencePoint> cases = {
+        {"sea_level_static_1000", 0.30826616, 2085.69829561,
+         38.98232159, 1433.76706208, 24.65152243},
+        {"sea_level_mach_03_1500", 0.802132742, 2743.26475125,
+         81.37677935, 1922.25697538, 44.24900428},
+        {"alt_10000_mach_05_1750", 0.824493078, 2769.31220689,
+         81.66776981, 1941.49257567, 43.97159272},
+        {"alt_25000_mach_06_2000", 0.640935205, 2755.13616891,
+         61.99335406, 1929.64515575, 33.27831292},
+        {"alt_30000_mach_072_2000", 0.56337662, 2767.52451171,
+         54.41163179, 1939.27203891, 29.12654291},
+    };
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_high_spool.json");
+    const auto hpc_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_hpc_map.json"));
+    const auto hpt_map = thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_hpt_map.json"));
+    constexpr double psi_to_pa = 6894.757293168;
+    constexpr double pound_mass_to_kg = 0.45359237;
+    constexpr double extraction_power_w = 260997.475;
+    for (const auto& point : cases) {
+        thermox::service::SteadySimulationRequest request;
+        request.model_json = model;
+        request.case_id = point.case_id;
+        request.artifacts.performance_maps = {hpc_map, hpt_map};
+        const auto response =
+            thermox::service::SimulationService{}.run_steady(request);
+        require(
+            response.succeeded() && response.diagnostics.converged &&
+                response.diagnostics.final_residual_norm < 1.0e-9,
+            "NASA AGTF30 coupled high-spool point must solve: " +
+                point.case_id);
+
+        const auto& fuel = require_port_result(
+            response.graph, "fuel", "outlet");
+        const auto& station_4 = require_port_result(
+            response.graph, "combustor", "outlet");
+        const auto& station_45 = require_port_result(
+            response.graph, "hpt", "outlet");
+        const auto& hpc_shaft = require_port_result(
+            response.graph, "hpc", "shaft");
+        const auto& hpt_shaft = require_port_result(
+            response.graph, "hpt", "shaft");
+        const double predicted_fuel = require_result_value(
+            fuel.derived_values, "m_dot_total").value_si;
+        const double predicted_station_4_temperature =
+            require_result_value(
+                station_4.derived_values, "T").value_si;
+        const double predicted_station_45_pressure =
+            require_result_value(
+                station_45.primary_values, "p").value_si;
+        const double predicted_station_45_temperature =
+            require_result_value(
+                station_45.derived_values, "T").value_si;
+        const double predicted_station_45_flow =
+            require_result_value(
+                station_45.derived_values, "m_dot_total").value_si;
+        const double shaft_closure =
+            require_result_value(
+                hpt_shaft.primary_values, "W_dot").value_si -
+            require_result_value(
+                hpc_shaft.primary_values, "W_dot").value_si -
+            extraction_power_w;
+
+        require(
+            std::abs(
+                predicted_fuel /
+                    (point.fuel_lbm_s * pound_mass_to_kg) -
+                1.0) < 0.14,
+            "coupled high-spool inverse fuel must remain within its "
+            "declared cross-model comparison band: " + point.case_id);
+        require(
+            std::abs(
+                predicted_station_4_temperature /
+                    (point.station_4_temperature_deg_r * 5.0 / 9.0) -
+                1.0) < 0.006 &&
+                std::abs(
+                    predicted_station_45_pressure /
+                        (point.station_45_pressure_psia * psi_to_pa) -
+                    1.0) < 0.04 &&
+                std::abs(
+                    predicted_station_45_temperature /
+                        (point.station_45_temperature_deg_r * 5.0 / 9.0) -
+                    1.0) < 0.015 &&
+                std::abs(
+                    predicted_station_45_flow /
+                        (point.station_45_flow_lbm_s *
+                         pound_mass_to_kg) -
+                    1.0) < 0.003,
+            "coupled high-spool station states must remain within their "
+            "declared cross-model comparison bands: " + point.case_id);
+        require(
+            std::abs(shaft_closure) < 1.0e-6,
+            "coupled high spool must close compressor, turbine, and "
+            "declared extraction power exactly: " + point.case_id);
+    }
+}
+
 void test_cantera_brayton_integration_benchmark() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -7603,6 +7715,7 @@ int main() {
         test_nasa_tmats_hpc_cross_code_benchmark();
         test_nasa_agtf30_hpc_off_design_benchmark();
         test_nasa_agtf30_hpt_map_compatibility_benchmark();
+        test_nasa_agtf30_coupled_high_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

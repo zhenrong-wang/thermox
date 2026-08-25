@@ -112,3 +112,46 @@ This is a **cooled-turbine component cross-code reproduction**, but not yet the 
 result: NASA's station-4 boundary remains fixed and the slice uses a simplified N2/O2 working-gas
 composition. That explicit approximation produces outlet-temperature errors of -0.685% to -1.283%,
 so temperature remains reserved until the combustor supplies a consistent product composition.
+
+## AGTF30 coupled high-spool inverse calculation
+
+`agtf30_high_spool.json` connects the ordinary HPC, equilibrium combustor, cooled HPT, two-load
+shaft train, and boundary components. HPC bleed 2 enters at the turbine exit, bleed 3 enters at the
+stage inlet, and the declared `-350 hp` NASA HP-power command is represented as a positive 350 hp
+shaft load. Station 25 and shaft speed are fixed upstream boundaries. Fuel flow is deliberately
+left free and is solved from the common-shaft balance; it is not copied from NASA's command vector.
+
+The methane/air calculation uses `agtf30_major_products.yaml`, a seven-species ideal-gas equilibrium
+phase whose thermodynamic data are imported unchanged from Cantera's GRI-Mech 3.0 declaration. The
+reduced basis avoids carrying 46 immaterial trace-species flow unknowns through compressor and
+turbine ports. This is a visible model declaration, not a solver specialization. Regenerate the
+model deterministically with:
+
+```sh
+python3 scripts/build_agtf30_high_spool_benchmark.py
+```
+
+Run a coupled point with both immutable map inputs:
+
+```sh
+./build/thermox_cli solve \
+  --model benchmarks/nasa_tmats/agtf30_high_spool.json \
+  --case sea_level_static_1000 \
+  --performance-map benchmarks/nasa_tmats/agtf30_hpc_map.json \
+  --performance-map benchmarks/nasa_tmats/agtf30_hpt_map.json \
+  --format text
+```
+
+All five points converge in three direct Newton iterations with normalized residuals from
+`3.15e-12` to `1.98e-11`. HP-shaft power closes below `1e-6 W`. Against T-MATS, station-4
+temperature differs by +0.364% to +0.524%, HPT outlet flow by -0.232% to -0.160%, outlet pressure
+by +2.501% to +3.612%, and outlet temperature by +0.996% to +1.319%.
+
+The inverse fuel result is 12.01% to 12.77% below the T-MATS command. That discrepancy is retained,
+not calibrated away. It bounds the combined difference between T-MATS' station-level burner/FAR
+thermodynamics and the declared equilibrium chemistry plus Thermox map-work calculation. Therefore
+this case validates generic graph coupling, bleed routing, inverse-map compatibility, thermochemical
+state propagation, and exact shaft closure. It does **not** yet qualify fuel-flow prediction or
+constitute independent hardware validation. The 0.84 multiplier in the generator affects only the
+initial fuel guess; fuel remains an unconstrained solved variable and the converged result is
+independent of that initialization within the solver's basin.

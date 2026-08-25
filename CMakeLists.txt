@@ -151,6 +151,10 @@ if(TARGET thermox_cantera_backend)
         THERMOX_TEST_HAS_CANTERA=1)
 endif()
 add_test(NAME thermox_service_tests COMMAND thermox_service_tests)
+if(TARGET thermox_cantera_backend)
+    set_tests_properties(thermox_service_tests PROPERTIES
+        ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
 
 add_executable(thermox_job_service_tests
     service/tests/job_service_tests.cpp
@@ -276,6 +280,18 @@ if(TARGET thermox_cantera_backend)
     set_tests_properties(
         benchmark_nasa_agtf30_hpt_off_design_cli PROPERTIES
         PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\"")
+    add_test(NAME benchmark_nasa_agtf30_high_spool_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_high_spool.json
+            --case alt_30000_mach_072_2000
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpc_map.json
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_hpt_map.json
+            --format json
+    )
+    set_tests_properties(
+        benchmark_nasa_agtf30_high_spool_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\""
+        ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME platform_cooled_turbine_stage_cli
         COMMAND thermox_cli solve
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json

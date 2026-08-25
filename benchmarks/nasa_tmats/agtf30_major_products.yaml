@@ -1,0 +1,19 @@
+description: >-
+  Reduced methane-air equilibrium species basis for the AGTF30 station-level
+  high-spool benchmark. Thermodynamic species data are imported unchanged
+  from Cantera's GRI-Mech 3.0 declaration. Reactions are not required for
+  Gibbs-equilibrium HP calculations.
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [C, H, O, N]
+  species:
+  - gri30.yaml/species: [CH4, O2, N2, CO2, H2O, CO, H2]
+  kinetics: gas
+  reactions: none
+  state:
+    T: 300.0
+    P: 101325.0
+    Y: {N2: 0.768, O2: 0.232}
+
