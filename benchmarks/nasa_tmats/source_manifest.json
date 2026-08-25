@@ -352,5 +352,33 @@
     ],
     "classification": "public_source_nonzero_vbv_component_and_routing_cross_code_qualification"
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
+  "agtf30_vbv_bypass_branch_execution": {
+    "model": "agtf30_vbv_bypass_branch.json",
+    "artifact": "agtf30_vbv_map.json",
+    "case": "sea_level_static_1000",
+    "boundary_contract": "Donor state/flow, receiver enthalpy/flow, VBV position, ambient pressure, and VAFN area are fixed. Receiver pressure, VBV flow, duct loss, nozzle Mach, and gross thrust are solved simultaneously.",
+    "topology": "The generic map-bound cross-bleed receiver feeds the generic Mach-scaled duct-17 instance and scheduled-area convergent bypass nozzle.",
+    "results": {
+      "iterations": 3,
+      "normalized_residual_norm": 5.49e-14,
+      "source_receiver_pressure_psia": 15.1543226875,
+      "thermox_receiver_pressure_pa": 104489.846612,
+      "receiver_pressure_error_percent": 0.00428,
+      "thermox_bleed_mass_flow_kg_s": 2.10183237736,
+      "bleed_flow_error_percent": -0.00362,
+      "thermox_bypass_gross_thrust_n": 28166.58344
+    },
+    "acceptance": {
+      "receiver_pressure_percent": 0.01,
+      "bleed_flow_percent": 0.01,
+      "result": "pass"
+    },
+    "reserved_comparisons": [
+      "Fully coupled sea-level-static whole-engine solution; current staged retry is limited by LP-turbine/shaft closure rather than the bypass branch.",
+      "Net thrust until generic freestream ram drag is connected.",
+      "Independent hardware evidence, fuel-flow predictive qualification, and transient validation."
+    ],
+    "classification": "public_source_open_vbv_duct_nozzle_predictive_subsystem_cross_code_qualification"
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static bypass-branch pressure closure, bleed/cooling routing, duct loss, nozzle capacity, and exact two-shaft conservation against public NASA code paths. They are not independent hardware validation, fully coupled static open-VBV qualification, net-thrust qualification, fuel-flow predictive qualification, or transient validation."
 }

@@ -334,3 +334,11 @@ both donor removal and receiver addition exactly. This is a staged component/sub
 qualification; the fully coupled fifth static engine point remains reserved while its nozzle/VBV
 closure is conditioned. Net thrust remains a separate gate because ram drag is not yet represented
 in the graph.
+
+`agtf30_vbv_bypass_branch.json` then relaxes the bypass pressure and closes it through the source
+duct-17 loss model and scheduled 8000 in2 convergent nozzle. This three-component predictive
+subsystem converges in three trust-region Newton iterations. It reconstructs the NASA station-13
+pressure within 0.0043 percent and the independently qualified VBV flow within 0.0037 percent,
+while producing a finite positive gross thrust. No pressure or flow correction is fitted. This
+confirms that the static bypass branch is compatible; the remaining fifth-point blocker lies in
+the simultaneous core/LP-shaft/whole-engine coupling.

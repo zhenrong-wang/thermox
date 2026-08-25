@@ -1,0 +1,108 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_agtf30_vbv_open_bypass_branch",
+    "name": "NASA AGTF30 open-VBV bypass branch",
+    "revision": "1",
+    "media": [],
+    "materials": [{
+      "id": "dry_air", "backend": "cantera",
+      "mechanism": "gri30.yaml", "phase": "gri30",
+      "package_version": "3.2.0", "species": ["N2", "O2"]
+    }],
+    "components": [
+      {
+        "id": "vbv",
+        "kind": "junction.material.cross_bleed.performance_map",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_pressure": {"value": 14.696, "unit": "psia"},
+          "reference_temperature": {"value": 518.67, "unit": "degR"},
+          "flow_capacity_scale": 1.0
+        },
+        "artifacts": {"flow_characteristic": "nasa-agtf30-vbv-map"},
+        "materials": {
+          "donor_inlet": "dry_air", "donor_outlet": "dry_air",
+          "receiver_inlet": "dry_air", "receiver_outlet": "dry_air"
+        }
+      },
+      {
+        "id": "duct_17",
+        "kind": "transport.material.perfect_gas_mach_scaled_loss",
+        "version": "1.0.0",
+        "parameters": {
+          "flow_area": 4.463023332,
+          "design_mach": 0.45,
+          "design_pressure_loss_fraction": 0.015,
+          "heat_capacity_ratio": 1.4
+        },
+        "materials": {"inlet": "dry_air", "outlet": "dry_air"}
+      },
+      {
+        "id": "bypass_exit",
+        "kind": "terminal.material.perfect_gas_convergent_nozzle",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_throat_area": 0.00064516,
+          "reference_back_pressure": 101325.35318039692,
+          "discharge_coefficient": 1.0,
+          "gross_thrust_coefficient": 0.9975,
+          "heat_capacity_ratio": 1.4
+        },
+        "materials": {"inlet": "dry_air"}
+      }
+    ],
+    "connections": [
+      {
+        "id": "vbv_receiver_duct17", "from": "vbv.receiver_outlet",
+        "to": "duct_17.inlet", "kind": "material_link"
+      },
+      {
+        "id": "duct17_bypass", "from": "duct_17.outlet",
+        "to": "bypass_exit.inlet", "kind": "material_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "sea_level_static_1000",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "vbv.donor_inlet.p": {"value": 20.887087152166, "unit": "psia"},
+      "vbv.donor_inlet.h": {"value": 25.884872229649, "unit": "kJ/kg"},
+      "vbv.donor_inlet.m_dot[N2]": {"value": 10.267507935389359, "unit": "kg/s"},
+      "vbv.donor_inlet.m_dot[O2]": {"value": 3.101643022148869, "unit": "kg/s"},
+      "vbv.receiver_inlet.h": {"value": -6.699281452357, "unit": "kJ/kg"},
+      "vbv.receiver_inlet.m_dot[N2]": {"value": 321.5268059427628, "unit": "kg/s"},
+      "vbv.receiver_inlet.m_dot[O2]": {"value": 97.12788929520961, "unit": "kg/s"},
+      "vbv.position.value": 0.37,
+      "bypass_exit.area_ratio.value": 8000.0,
+      "bypass_exit.back_pressure_ratio.value": 1.0
+    },
+    "initial_guesses": {
+      "vbv.bleed_mass_flow": {"value": 2.1019, "unit": "kg/s"},
+      "vbv.donor_outlet.p": {"value": 20.8871, "unit": "psia"},
+      "vbv.donor_outlet.h": {"value": 25.8849, "unit": "kJ/kg"},
+      "vbv.donor_outlet.m_dot[N2]": {"value": 8.6533, "unit": "kg/s"},
+      "vbv.donor_outlet.m_dot[O2]": {"value": 2.6140, "unit": "kg/s"},
+      "vbv.receiver_inlet.p": {"value": 15.1543, "unit": "psia"},
+      "vbv.receiver_outlet.p": {"value": 15.1543, "unit": "psia"},
+      "vbv.receiver_outlet.h": {"value": -6.5359, "unit": "kJ/kg"},
+      "vbv.receiver_outlet.m_dot[N2]": {"value": 323.1411, "unit": "kg/s"},
+      "vbv.receiver_outlet.m_dot[O2]": {"value": 97.6155, "unit": "kg/s"},
+      "duct_17.inlet.p": {"value": 104.485, "unit": "kPa"},
+      "duct_17.outlet.p": {"value": 104.110, "unit": "kPa"},
+      "bypass_exit.inlet.p": {"value": 104.110, "unit": "kPa"},
+      "duct_17.inlet.h": {"value": -6.5359, "unit": "kJ/kg"},
+      "duct_17.outlet.h": {"value": -6.5359, "unit": "kJ/kg"},
+      "bypass_exit.inlet.h": {"value": -6.5359, "unit": "kJ/kg"},
+      "duct_17.inlet.m_dot[N2]": {"value": 323.1411, "unit": "kg/s"},
+      "duct_17.outlet.m_dot[N2]": {"value": 323.1411, "unit": "kg/s"},
+      "bypass_exit.inlet.m_dot[N2]": {"value": 323.1411, "unit": "kg/s"},
+      "duct_17.inlet.m_dot[O2]": {"value": 97.6155, "unit": "kg/s"},
+      "duct_17.outlet.m_dot[O2]": {"value": 97.6155, "unit": "kg/s"},
+      "bypass_exit.inlet.m_dot[O2]": {"value": 97.6155, "unit": "kg/s"},
+      "duct_17.mach": 0.22,
+      "bypass_exit.mach": 0.22
+    }
+  }]
+}

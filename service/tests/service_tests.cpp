@@ -2172,6 +2172,57 @@ void test_nasa_agtf30_open_vbv_benchmark() {
         "open VBV must route the mapped flow into its receiver");
 }
 
+void test_nasa_agtf30_open_vbv_bypass_branch_benchmark() {
+    thermox::service::SteadySimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_vbv_bypass_branch.json");
+    request.case_id = "sea_level_static_1000";
+    request.artifacts.performance_maps = {thermox::service::
+        parse_performance_map_artifact_declaration_json(
+            read_source_file(
+                "benchmarks/nasa_tmats/agtf30_vbv_map.json"))};
+    request.solver.globalization_policy =
+        thermox::service::GlobalizationPolicy::trust_region;
+    const auto response =
+        thermox::service::SimulationService{}.run_steady(request);
+    require(
+        response.succeeded() && response.diagnostics.converged &&
+            response.diagnostics.final_residual_norm < 1.0e-9,
+        "NASA AGTF30 open-VBV bypass branch must solve");
+
+    const auto& valve = require_component_result(response.graph, "vbv");
+    const double bleed_mass_flow = require_result_value(
+        valve.internal_values, "bleed_mass_flow").value_si;
+    const double solved_receiver_pressure = require_result_value(
+        require_port_result(response.graph, "vbv", "receiver_inlet")
+            .primary_values,
+        "p").value_si;
+    constexpr double source_receiver_pressure_pa =
+        15.1543226875 * 6894.757293168;
+    constexpr double source_bleed_mass_flow_kg_s =
+        4.63391499548057 * 0.45359237;
+    require(
+        std::abs(
+            solved_receiver_pressure / source_receiver_pressure_pa -
+            1.0) < 1.0e-4,
+        "scheduled bypass nozzle must reconstruct the NASA receiver "
+        "pressure within 0.01 percent");
+    require(
+        std::abs(
+            bleed_mass_flow / source_bleed_mass_flow_kg_s - 1.0) <
+            1.0e-4,
+        "nozzle-coupled VBV flow must remain within 0.01 percent of "
+        "the NASA source relation");
+
+    const auto& nozzle = require_component_result(
+        response.graph, "bypass_exit");
+    const double gross_thrust = require_result_value(
+        nozzle.internal_values, "gross_thrust").value_si;
+    require(
+        std::isfinite(gross_thrust) && gross_thrust > 0.0,
+        "open bypass branch must produce finite positive gross thrust");
+}
+
 void test_nasa_agtf30_continuous_twin_spool_benchmark() {
     struct ReferencePoint {
         std::string case_id;
@@ -8073,6 +8124,7 @@ int main() {
         test_nasa_agtf30_coupled_high_spool_benchmark();
         test_nasa_agtf30_coupled_low_spool_benchmark();
         test_nasa_agtf30_open_vbv_benchmark();
+        test_nasa_agtf30_open_vbv_bypass_branch_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();

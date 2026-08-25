@@ -382,6 +382,19 @@ if(TARGET thermox_cantera_backend)
         benchmark_nasa_agtf30_vbv_open_point_cli PROPERTIES
         PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\""
         ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME benchmark_nasa_agtf30_vbv_bypass_branch_cli
+        COMMAND thermox_cli solve
+            --model ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_vbv_bypass_branch.json
+            --case sea_level_static_1000
+            --performance-map ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/nasa_tmats/agtf30_vbv_map.json
+            --globalization trust_region
+            --residual-tolerance 1e-9
+            --format json
+    )
+    set_tests_properties(
+        benchmark_nasa_agtf30_vbv_bypass_branch_cli PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"status\": \"succeeded\""
+        ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME platform_cooled_turbine_stage_cli
         COMMAND thermox_cli solve
             --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/cooled_turbine_stage_cantera.json
