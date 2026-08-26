@@ -18,6 +18,7 @@ interface CaseRevisionPanelProps {
   canPublishStudy: boolean
   onSelect: (revisionId: string) => void
   onCreate: () => void
+  onImportEvidence: () => void
   onPublishStudy: () => void
   onPublishCalibration: () => void
   onRunCalibration: (revision: CalibrationRevision) => void
@@ -38,6 +39,7 @@ export function CaseRevisionPanel({
   canPublishStudy,
   onSelect,
   onCreate,
+  onImportEvidence,
   onPublishStudy,
   onPublishCalibration,
   onRunCalibration,
@@ -95,19 +97,25 @@ export function CaseRevisionPanel({
           <h2>Studies</h2>
           <p>{studies.length} immutable revisions</p>
         </div>
-        <button
-          type="button"
-          className="resource-button"
-          disabled={publishing || !canPublishStudy}
-          onClick={onPublishStudy}
-          title={
-            canPublishStudy
-              ? 'Publish the validated revision set as a study'
-              : 'Validate the exact topology, case, and artifacts first'
-          }
-        >
-          Publish
-        </button>
+        <div>
+          <button type="button" className="resource-button"
+            disabled={publishing} onClick={onImportEvidence}>
+            + Evidence
+          </button>
+          <button
+            type="button"
+            className="resource-button"
+            disabled={publishing || !canPublishStudy}
+            onClick={onPublishStudy}
+            title={
+              canPublishStudy
+                ? 'Publish the validated revision set as a study'
+                : 'Validate the exact topology, case, and artifacts first'
+            }
+          >
+            Publish
+          </button>
+        </div>
       </header>
       <div className="case-revision-list">
         {!studies.length && (
@@ -123,7 +131,8 @@ export function CaseRevisionPanel({
               <span>r{revision.revision_number}</span>
             </div>
             <small>
-              {revision.intent} · {revision.result_projections.length} outputs
+              {revision.intent} · {revision.result_projections.length} outputs ·{' '}
+              {revision.trajectory_validation_bindings.length} evidence bindings
             </small>
             <code>{revision.checksum.slice(7, 19)}</code>
           </div>

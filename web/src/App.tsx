@@ -2158,7 +2158,6 @@ function App() {
             onRevisePerformanceMap={(revision) => {
               void revisePerformanceMap(revision)
             }}
-            onAddValidationSeries={() => setAddingValidationSeries(true)}
             onBuild={() => setWorkspaceView('topology')}
           />
         ) : workspaceView === 'studies' ? (
@@ -2388,6 +2387,7 @@ function App() {
               canPublishStudy={exactRevisionCompiled}
               onSelect={setSelectedCaseRevisionId}
               onCreate={() => setAddingCase(true)}
+              onImportEvidence={() => setAddingValidationSeries(true)}
               onPublishStudy={() => {
                 setAddingStudy(true)
               }}

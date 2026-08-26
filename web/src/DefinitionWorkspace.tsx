@@ -22,7 +22,6 @@ interface DefinitionWorkspaceProps {
   onAddCorrelation: () => void
   onReviseCorrelation: (revision: ArtifactRevision) => void
   onAddPerformanceMap: () => void
-  onAddValidationSeries: () => void
   onRevisePerformanceMap: (revision: ArtifactRevision) => void
   onBuild: () => void
 }
@@ -43,7 +42,6 @@ export function DefinitionWorkspace({
   onAddCorrelation,
   onReviseCorrelation,
   onAddPerformanceMap,
-  onAddValidationSeries,
   onRevisePerformanceMap,
   onBuild,
 }: DefinitionWorkspaceProps) {
@@ -124,14 +122,6 @@ export function DefinitionWorkspace({
             onClick={onAddPerformanceMap}
           >
             + Performance map
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={onAddValidationSeries}
-          >
-            + Validation data
           </button>
         </div>
       </div>
