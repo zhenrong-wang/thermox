@@ -2518,6 +2518,11 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
         "fuel.outlet.m_dot[CH4]",
         "hp_extraction.inlet.W_dot",
         "lp_extraction.inlet.W_dot"};
+    request.output_variables = {
+        "lp_shaft.rotational_energy",
+        "hp_shaft.rotational_energy",
+        "hpc.outlet.p",
+        "hpt.outlet.p"};
     request.settings.relative_perturbation = 3.0e-4;
     request.settings.verify_jacobian = true;
     request.settings.verify_nonlinear_response = true;
@@ -2551,6 +2556,32 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
             response.diagnostics.linear_right_hand_sides == 5,
         "NASA small-signal benchmark must expose two rotor states and "
         "five tangent sensitivity solves");
+    require(
+        response.output_names == request.output_variables &&
+            response.C.size() == 4U &&
+            response.C[0] == std::vector<double>({1.0, 0.0}) &&
+            response.C[1] == std::vector<double>({0.0, 1.0}) &&
+            response.D.size() == 4U &&
+            std::all_of(
+                response.C.begin(), response.C.end(),
+                [](const auto& row) {
+                    return row.size() == 2U &&
+                        std::all_of(row.begin(), row.end(),
+                            [](double value) {
+                                return std::isfinite(value);
+                            });
+                }) &&
+            std::all_of(
+                response.D.begin(), response.D.end(),
+                [](const auto& row) {
+                    return row.size() == 3U &&
+                        std::all_of(row.begin(), row.end(),
+                            [](double value) {
+                                return std::isfinite(value);
+                            });
+                }),
+        "NASA small-signal benchmark must expose finite native C/D "
+        "sensitivities for selected state and gas-path outputs");
     require(
         response.jacobian_verification.passed &&
             response.jacobian_verification.state_jacobian
@@ -2613,6 +2644,37 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
             std::abs(fuel_gain[1] / 8570.82043 - 1.0) < 0.30,
         "NASA fuel gains must remain within the declared partial "
         "cross-code band");
+    constexpr double pascals_per_psi = 6894.757293168;
+    const double nasa_C_psia_per_rpm[2][2] = {
+        {0.001715407714005, 0.046023431109940},
+        {0.000558668833366, 0.010308928665257}};
+    const double nasa_D_psia_per_lbm_s[2] = {
+        120.05887811188617, 28.077407485521434};
+    double maximum_output_cross_code_relative_error = 0.0;
+    for (std::size_t output = 0; output < 2; ++output) {
+        for (std::size_t state = 0; state < 2; ++state) {
+            const double nasa_native =
+                nasa_C_psia_per_rpm[output][state] *
+                pascals_per_psi / state_scale[state];
+            maximum_output_cross_code_relative_error = std::max(
+                maximum_output_cross_code_relative_error,
+                std::abs(
+                    response.C[output + 2U][state] /
+                        nasa_native - 1.0));
+        }
+        const double nasa_native_feedthrough =
+            nasa_D_psia_per_lbm_s[output] * pascals_per_psi /
+            kg_per_pound_mass;
+        maximum_output_cross_code_relative_error = std::max(
+            maximum_output_cross_code_relative_error,
+            std::abs(
+                response.D[output + 2U][0] /
+                    nasa_native_feedthrough - 1.0));
+    }
+    require(
+        maximum_output_cross_code_relative_error < 0.18,
+        "NASA HPC/HPT pressure C/D sensitivities must remain within "
+        "the declared 18 percent partial cross-code band");
     require(
         std::abs(response.B[0][1]) < 1.0e-12 &&
             std::abs(response.B[1][1] + 1.0) < 1.0e-12 &&
@@ -7793,6 +7855,8 @@ void test_small_signal_linearization_service() {
         "core/examples/lumped_thermal_storage.json");
     request.case_id = "charge";
     request.input_variables = {"heater.outlet.Q_dot"};
+    request.output_variables = {
+        "store.temperature", "heater.outlet.Q_dot"};
     request.settings.verify_jacobian = true;
     request.settings.verify_nonlinear_response = true;
     request.settings.verify_nonlinear_trajectory = true;
@@ -7805,14 +7869,19 @@ void test_small_signal_linearization_service() {
     require(
         response.metadata.operation == "small_signal_linearization" &&
             response.metadata.solver.contract_version ==
-                "thermox.index1-small-signal/v1",
+                "thermox.index1-small-signal/v2",
         "small-signal result must identify its operation and contract");
     require(
         response.state_names ==
                 std::vector<std::string>{"store.temperature"} &&
             response.input_names == request.input_variables &&
+            response.output_names == request.output_variables &&
             response.A.size() == 1U && response.A[0].size() == 1U &&
             response.B.size() == 1U && response.B[0].size() == 1U &&
+            response.C == std::vector<std::vector<double>>{
+                {1.0}, {0.0}} &&
+            response.D == std::vector<std::vector<double>>{
+                {0.0}, {1.0}} &&
             std::abs(response.A[0][0]) < 1.0e-12 &&
             std::abs(response.B[0][0] - 1.0 / 1.5e6) < 1.0e-12,
         "small-signal service must recover the analytical storage "
@@ -7846,8 +7915,13 @@ void test_small_signal_linearization_service() {
                 std::string::npos &&
             json.find("\"inputs\": [\"heater.outlet.Q_dot\"]") !=
                 std::string::npos &&
+            json.find(
+                "\"outputs\": [\"store.temperature\", "
+                "\"heater.outlet.Q_dot\"]") != std::string::npos &&
             json.find("\"A\": [[") != std::string::npos &&
             json.find("\"B\": [[") != std::string::npos &&
+            json.find("\"C\": [[") != std::string::npos &&
+            json.find("\"D\": [[") != std::string::npos &&
             json.find("\"jacobian_verification\": ") !=
                 std::string::npos &&
             json.find("\"derivative_jacobian\": ") !=

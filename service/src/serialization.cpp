@@ -3231,10 +3231,16 @@ std::string serialize_small_signal_linearization_response_json(
     string_array(response.state_names);
     out << ",\n  \"inputs\": ";
     string_array(response.input_names);
+    out << ",\n  \"outputs\": ";
+    string_array(response.output_names);
     out << ",\n  \"A\": ";
     matrix(response.A);
     out << ",\n  \"B\": ";
     matrix(response.B);
+    out << ",\n  \"C\": ";
+    matrix(response.C);
+    out << ",\n  \"D\": ";
+    matrix(response.D);
     const auto jacobian_channel = [&](const auto& channel) {
         out << "{\"analytic_derivatives_available\": "
             << (channel.analytic_derivatives_available

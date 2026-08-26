@@ -5499,7 +5499,7 @@ SimulationService::run_small_signal_linearization(
         auto provenance = solver_provenance(
             request.settings.nonlinear_solver);
         provenance.contract_version =
-            "thermox.index1-small-signal/v1";
+            "thermox.index1-small-signal/v2";
         provenance.settings.push_back({
             "time", request.settings.time});
         provenance.settings.push_back({
@@ -5574,7 +5574,9 @@ SimulationService::run_small_signal_linearization(
     }
 
     std::vector<DaeLinearizationInput> inputs;
+    std::vector<DaeLinearizationOutput> outputs;
     std::set<std::string> unique_inputs;
+    std::set<std::string> unique_outputs;
     try {
         for (const auto& name : request.input_variables) {
             if (!unique_inputs.insert(name).second) {
@@ -5605,9 +5607,26 @@ SimulationService::run_small_signal_linearization(
                     graph.problem.residual_names.begin(), residual)),
                 name});
         }
+        for (const auto& name : request.output_variables) {
+            if (!unique_outputs.insert(name).second) {
+                throw std::invalid_argument(
+                    "duplicate linearization output variable: " + name);
+            }
+            const auto variable = std::find(
+                graph.problem.variable_names.begin(),
+                graph.problem.variable_names.end(), name);
+            if (variable == graph.problem.variable_names.end()) {
+                throw std::invalid_argument(
+                    "unknown linearization output variable: " + name);
+            }
+            outputs.push_back({
+                static_cast<std::size_t>(std::distance(
+                    graph.problem.variable_names.begin(), variable)),
+                name});
+        }
     } catch (const std::exception& ex) {
         response.error = make_error(
-            "invalid_inputs", "request", ex.what());
+            "invalid_linearization_variables", "request", ex.what());
         return response;
     }
 
@@ -5621,7 +5640,7 @@ SimulationService::run_small_signal_linearization(
         result = linearize_index1_dae(
             graph.problem, request.settings.time,
             initialized.state, initialized.derivative,
-            inputs, options);
+            inputs, outputs, options);
     } catch (const std::exception& ex) {
         response.status = OperationStatus::solver_failed;
         response.error = make_error(
@@ -5820,8 +5839,11 @@ SimulationService::run_small_signal_linearization(
     response.state_names = std::move(
         result.differential_state_names);
     response.input_names = std::move(result.input_names);
+    response.output_names = std::move(result.output_names);
     response.A = std::move(result.A);
     response.B = std::move(result.B);
+    response.C = std::move(result.C);
+    response.D = std::move(result.D);
     response.status = OperationStatus::succeeded;
     return response;
 }

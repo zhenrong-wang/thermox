@@ -39,6 +39,7 @@ void print_usage(std::ostream& out) {
            " [--format text|json]\n"
         << "  thermox_cli linearize --model <path> [--case <id>]"
            " --input-variable <graph-variable>..."
+           " [--output-variable <graph-variable>]..."
            " [--performance-map <path>]..."
            " [--relative-perturbation <value>]"
            " [--verify-jacobian]"
@@ -265,9 +266,13 @@ void print_small_signal_text(
     for (const auto& name : response.state_names) std::cout << ' ' << name;
     std::cout << "\ninputs:";
     for (const auto& name : response.input_names) std::cout << ' ' << name;
+    std::cout << "\noutputs:";
+    for (const auto& name : response.output_names) std::cout << ' ' << name;
     std::cout << '\n';
     print_matrix("A", response.A);
     print_matrix("B", response.B);
+    print_matrix("C", response.C);
+    print_matrix("D", response.D);
 }
 
 }  // namespace
@@ -305,6 +310,7 @@ int main(int argc, char** argv) {
     std::string format = "text";
     std::vector<std::string> performance_map_paths;
     std::vector<std::string> input_variables;
+    std::vector<std::string> output_variables;
     bool continuation = false;
     bool verify_jacobian = false;
     bool verify_nonlinear_response = false;
@@ -331,6 +337,8 @@ int main(int argc, char** argv) {
             performance_map_paths.emplace_back(argv[++i]);
         } else if (arg == "--input-variable" && i + 1 < argc) {
             input_variables.emplace_back(argv[++i]);
+        } else if (arg == "--output-variable" && i + 1 < argc) {
+            output_variables.emplace_back(argv[++i]);
         } else if (arg == "--relative-perturbation" && i + 1 < argc) {
             relative_perturbation_text = argv[++i];
         } else if (arg == "--verify-jacobian") {
@@ -501,6 +509,10 @@ int main(int argc, char** argv) {
     }
     if (command != "linearize" && !input_variables.empty()) {
         std::cerr << "--input-variable is only valid for linearize\n";
+        return 2;
+    }
+    if (command != "linearize" && !output_variables.empty()) {
+        std::cerr << "--output-variable is only valid for linearize\n";
         return 2;
     }
     if (command != "linearize" && !relative_perturbation_text.empty()) {
@@ -833,6 +845,7 @@ int main(int argc, char** argv) {
             request.model_json = model_json;
             request.case_id = case_id;
             request.input_variables = input_variables;
+            request.output_variables = output_variables;
             request.settings.verify_jacobian = verify_jacobian;
             request.settings.verify_nonlinear_response =
                 verify_nonlinear_response;

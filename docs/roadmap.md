@@ -157,6 +157,9 @@ Delivered:
 10. Finite-window nominal-versus-perturbed nonlinear DAE trajectory probes against integrated A/B
     responses, with exact sample times, breakpoint/event guards, service/CLI gates, and public
     AGTF30 self-consistency evidence. ✅
+11. Complete native-coordinate A/B/C/D export for caller-selected differential, algebraic, and
+    direct-feedthrough graph outputs, with service/CLI contracts and public AGTF30 gas-path pressure
+    sensitivity evidence. ✅
 
 ## Reusable dynamic equipment primitives
 

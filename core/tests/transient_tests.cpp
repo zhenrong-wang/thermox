@@ -1117,16 +1117,21 @@ void test_index_one_dae_small_signal_linearization() {
     options.relative_perturbation = 1.0e-4;
     const std::vector<thermox::DaeLinearizationInput> inputs{
         {u, fixed_input, "command"}};
+    const std::vector<thermox::DaeLinearizationOutput> outputs{
+        {x, "state"}, {z, "algebraic"}, {u, "command_echo"}};
     const auto result = thermox::linearize_index1_dae(
         problem, 0.0, initialized.state, initialized.derivative,
-        inputs, options);
+        inputs, outputs, options);
     require(result.diagnostics.success, result.diagnostics.message);
     require(
         result.differential_state_names ==
             std::vector<std::string>{"x"} &&
             result.input_names ==
-                std::vector<std::string>{"command"},
-        "DAE linearization preserves state and input identity");
+                std::vector<std::string>{"command"} &&
+            result.output_names ==
+                std::vector<std::string>{
+                    "state", "algebraic", "command_echo"},
+        "DAE linearization preserves state, input, and output identity");
     require_near(
         result.operating_derivative[x], 9.0, 1.0e-10,
         "nominal DAE response rate");
@@ -1136,6 +1141,18 @@ void test_index_one_dae_small_signal_linearization() {
     require_near(
         result.B.at(0).at(0), 4.0, 1.0e-8,
         "DAE input matrix");
+    require_near(result.C.at(0).at(0), 1.0, 1.0e-12,
+                 "differential-state output C row");
+    require_near(result.D.at(0).at(0), 0.0, 1.0e-12,
+                 "differential-state output has no direct feedthrough");
+    require_near(result.C.at(1).at(0), 3.0, 1.0e-8,
+                 "algebraic output state sensitivity");
+    require_near(result.D.at(1).at(0), 4.0, 1.0e-8,
+                 "algebraic output input sensitivity");
+    require_near(result.C.at(2).at(0), 0.0, 1.0e-12,
+                 "released-input output has no state sensitivity");
+    require_near(result.D.at(2).at(0), 1.0, 1.0e-12,
+                 "released-input output direct feedthrough");
     require(
         result.diagnostics.residual_evaluations == 9 &&
             result.diagnostics.linear_right_hand_sides == 2,

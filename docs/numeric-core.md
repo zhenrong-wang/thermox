@@ -164,9 +164,10 @@ and Newton/Krylov facilities can be added without changing physics components.
 
 ### Index-1 small-signal linearization
 
-`linearize_index1_dae` computes native-coordinate state and input matrices around a consistently
-initialized operating point. A caller declares fixed algebraic variables to release as exogenous
-inputs and identifies the corresponding fixed-value residual rows. The core then forms the local
+`linearize_index1_dae` computes native-coordinate A/B/C/D matrices around a consistently initialized
+operating point. A caller declares fixed algebraic variables to release as exogenous inputs,
+identifies the corresponding fixed-value residual rows, and may select any native DAE variables as
+outputs. The core then forms the local
 tangent system from finite differences of `F` with respect to differential states, differential
 rates, remaining algebraic variables, and inputs. Bounded or property-limited state columns use a
 valid one-sided derivative, with adaptive perturbation reduction when both initial directions are
@@ -174,8 +175,11 @@ outside the residual domain.
 
 The response Jacobian is scaled with the DAE variable, derivative, and residual scales, factored
 once, and reused for all A/B right-hand sides. Algebraic variables and state rates are eliminated
-without perturb-and-resolve nonlinear solves. The result names every native state and input and
-reports residual-evaluation and linear-right-hand-side counts. Service and CLI layers preserve the
+without perturb-and-resolve nonlinear solves. The result names every native state, input, and
+selected output and reports residual-evaluation and linear-right-hand-side counts. Differential
+state outputs and released-input echoes produce exact identity C/D rows; algebraic outputs are
+recovered from the already-factorized tangent elimination, so selecting pressures, flows, or other
+graph variables adds no residual evaluations or linear solves. Service and CLI layers preserve the
 same generic contract; engineering coordinate changes such as rotor energy to rpm remain explicit
 benchmark or presentation transformations rather than numeric-core physics.
 

@@ -49,6 +49,7 @@ DaeLinearizationResult linearize_index1_dae(
     const std::vector<double>& operating_state,
     const std::vector<double>& operating_derivative,
     const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<DaeLinearizationOutput>& outputs,
     const DaeLinearizationOptions& options) {
     validate_problem_vectors(
         problem, operating_state, operating_derivative);
@@ -66,6 +67,7 @@ DaeLinearizationResult linearize_index1_dae(
     std::vector<std::size_t> differential;
     std::set<std::size_t> input_variables;
     std::set<std::size_t> removed_residuals;
+    std::set<std::size_t> output_variables;
     for (std::size_t index = 0; index < variable_count; ++index) {
         if (problem.variable_kinds[index] ==
             DaeVariableKind::differential) {
@@ -92,6 +94,16 @@ DaeLinearizationResult linearize_index1_dae(
             throw std::invalid_argument(
                 "DAE linearization input variables and fixed residuals "
                 "must be unique");
+        }
+    }
+    for (const auto& output : outputs) {
+        if (output.variable >= variable_count) {
+            throw std::invalid_argument(
+                "DAE linearization output index is out of range");
+        }
+        if (!output_variables.insert(output.variable).second) {
+            throw std::invalid_argument(
+                "DAE linearization output variables must be unique");
         }
     }
 
@@ -127,6 +139,13 @@ DaeLinearizationResult linearize_index1_dae(
             input.name.empty()
                 ? problem.variable_names[input.variable]
                 : input.name);
+    }
+    for (const auto& output : outputs) {
+        result.output_indices.push_back(output.variable);
+        result.output_names.push_back(
+            output.name.empty()
+                ? problem.variable_names[output.variable]
+                : output.name);
     }
 
     auto evaluate = [&result, &problem, time](
@@ -352,6 +371,54 @@ DaeLinearizationResult linearize_index1_dae(
             result.B[row][column] =
                 solved[differential.size() + column].x[row] *
                 problem.derivative_scales[differential[row]];
+        }
+    }
+    result.C.assign(
+        outputs.size(),
+        std::vector<double>(differential.size(), 0.0));
+    result.D.assign(
+        outputs.size(),
+        std::vector<double>(inputs.size(), 0.0));
+    for (std::size_t output = 0; output < outputs.size(); ++output) {
+        const auto variable = outputs[output].variable;
+        const auto differential_position = std::find(
+            differential.begin(), differential.end(), variable);
+        if (differential_position != differential.end()) {
+            result.C[output][static_cast<std::size_t>(std::distance(
+                differential.begin(), differential_position))] = 1.0;
+            continue;
+        }
+        const auto input_position = std::find_if(
+            inputs.begin(), inputs.end(),
+            [variable](const auto& input) {
+                return input.variable == variable;
+            });
+        if (input_position != inputs.end()) {
+            result.D[output][static_cast<std::size_t>(std::distance(
+                inputs.begin(), input_position))] = 1.0;
+            continue;
+        }
+        const auto algebraic_position = std::find(
+            algebraic_unknowns.begin(), algebraic_unknowns.end(),
+            variable);
+        if (algebraic_position == algebraic_unknowns.end()) {
+            throw std::logic_error(
+                "DAE linearization output is not a response variable");
+        }
+        const auto response_row = differential.size() +
+            static_cast<std::size_t>(std::distance(
+                algebraic_unknowns.begin(), algebraic_position));
+        for (std::size_t column = 0;
+             column < differential.size(); ++column) {
+            result.C[output][column] =
+                solved[column].x[response_row] *
+                problem.variable_scales[variable];
+        }
+        for (std::size_t column = 0;
+             column < inputs.size(); ++column) {
+            result.D[output][column] =
+                solved[differential.size() + column].x[response_row] *
+                problem.variable_scales[variable];
         }
     }
     result.diagnostics.success = true;

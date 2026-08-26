@@ -535,6 +535,22 @@
       "result": "pass",
       "declared_limit": "This compares nominal-versus-perturbed Thermox nonlinear DAE trajectories with the integrated Thermox A/B model. No public NASA time-history reference is available, so it is a finite-window self-consistency qualification rather than transient predictive validation."
     },
+    "output_linearization_partial_reproduction": {
+      "selected_outputs": [
+        "lp_shaft.rotational_energy",
+        "hp_shaft.rotational_energy",
+        "hpc.outlet.p",
+        "hpt.outlet.p"
+      ],
+      "additional_residual_evaluations": 0,
+      "additional_linear_right_hand_sides": 0,
+      "pressure_C_relative_error_percent_range": [-16.0736, -1.0989],
+      "fuel_to_pressure_D_relative_error_percent_range": [17.0000, 17.4035],
+      "acceptance_band_percent": 18.0,
+      "result": "pass",
+      "classification": "public_source_partial_gas_path_output_linearization_cross_code_reproduction",
+      "declared_limit": "Only two total-pressure outputs are compared. The result does not qualify all 64 NASA output rows, a nonlinear time history, or independent hardware prediction."
+    },
     "state_matrix_A_rpm": [
       [-2.5583, 1.1149094051],
       [0.6055949727, -1.92434]

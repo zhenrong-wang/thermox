@@ -426,6 +426,15 @@ largest relative discrepancy among responses exceeding one native energy unit is
 a finite-window self-consistency qualification of Thermox's nonlinear DAE and its local A/B model,
 not comparison with a NASA time history.
 
+The same tangent elimination now exports C/D rows for caller-selected graph variables. Selecting
+LP and HP rotor energy, HPC outlet pressure, and HPT outlet pressure adds no residual evaluations or
+sensitivity solves: state outputs give exact identity rows, while gas-path pressure sensitivities
+are recovered from the algebraic response already computed for A/B. After explicit conversion of
+NASA's rpm, psia, lbm/s coordinates into Thermox's native J, Pa, kg/s coordinates, the four pressure
+C entries differ by 1.10% to 16.07% and the two fuel-to-pressure D entries differ by 17.00% and
+17.40%. These remain partial cross-code results consistent with the already visible fuel-gain and
+gas-path convention differences; they are not calibrated away.
+
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
 solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:

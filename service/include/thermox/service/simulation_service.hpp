@@ -1324,6 +1324,7 @@ struct SmallSignalLinearizationRequest {
     std::string model_json;
     std::string case_id;
     std::vector<std::string> input_variables;
+    std::vector<std::string> output_variables;
     SmallSignalLinearizationSettings settings;
     SimulationArtifactBundle artifacts;
     SimulationComponentBundle components;
@@ -1343,8 +1344,11 @@ struct SmallSignalLinearizationResponse {
     ExecutionMetadata metadata;
     std::vector<std::string> state_names;
     std::vector<std::string> input_names;
+    std::vector<std::string> output_names;
     std::vector<std::vector<double>> A;
     std::vector<std::vector<double>> B;
+    std::vector<std::vector<double>> C;
+    std::vector<std::vector<double>> D;
     SmallSignalLinearizationDiagnostics diagnostics;
     DaeJacobianVerificationReport jacobian_verification;
     std::vector<DaeLinearizationResponseProbeResult>

@@ -17,6 +17,14 @@ struct DaeLinearizationInput {
     std::string name;
 };
 
+// Selects one native DAE variable as a small-signal output. Differential
+// states and released inputs produce direct identity rows; algebraic outputs
+// are recovered from the same tangent elimination used to form A and B.
+struct DaeLinearizationOutput {
+    std::size_t variable{0};
+    std::string name;
+};
+
 struct DaeLinearizationOptions {
     double relative_perturbation{3.0e-4};
     double minimum_perturbation{1.0e-10};
@@ -36,10 +44,16 @@ struct DaeLinearizationResult {
     // B = d(ydot_differential)/d(input)
     Matrix A;
     Matrix B;
+    // C = d(output)/d(y_differential)
+    // D = d(output)/d(input)
+    Matrix C;
+    Matrix D;
     std::vector<std::size_t> differential_state_indices;
     std::vector<std::string> differential_state_names;
     std::vector<std::size_t> input_indices;
     std::vector<std::string> input_names;
+    std::vector<std::size_t> output_indices;
+    std::vector<std::string> output_names;
     std::vector<double> operating_state;
     std::vector<double> operating_derivative;
     DaeLinearizationDiagnostics diagnostics;
@@ -116,6 +130,7 @@ DaeLinearizationResult linearize_index1_dae(
     const std::vector<double>& operating_state,
     const std::vector<double>& operating_derivative,
     const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<DaeLinearizationOutput>& outputs,
     const DaeLinearizationOptions& options = {});
 
 // Recompute a consistent nonlinear DAE response at a finite perturbation and

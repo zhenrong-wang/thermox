@@ -40,6 +40,7 @@ The current synchronous service exposes:
 - `CatalogRequest` / `CatalogResponse`;
 - `SteadySimulationRequest` / `SteadySimulationResponse`;
 - `TransientSimulationRequest` / `TransientSimulationResponse`;
+- `SmallSignalLinearizationRequest` / `SmallSignalLinearizationResponse`;
 - `CalibrationRequest` / `CalibrationResponse`;
 - `EngineeringStudyRequest` / `EngineeringStudyResponse`;
 - `thermox.command/v1`, `thermox.catalog/v13`, `thermox.result/v5`, and `thermox.error/v1`
@@ -49,6 +50,8 @@ The current synchronous service exposes:
   case, solver contract, effective solver-setting provenance, and request engineering-artifact
   identity;
 - canonical model JSON and steady/transient/calibration result JSON.
+- native-coordinate A/B/C/D small-signal models with declared exogenous inputs and caller-selected
+  differential, algebraic, or direct-feedthrough graph outputs;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by
