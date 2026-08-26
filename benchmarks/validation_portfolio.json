@@ -64,7 +64,7 @@
     },
     {
       "id": "nasa_tmats_gas_turbines",
-      "status": "steady_flight_point_net_thrust_cross_code_complete",
+      "status": "steady_net_thrust_and_local_transient_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -73,7 +73,7 @@
       "strengths": [
         "Apache-2.0 source and non-proprietary component maps",
         "multi-spool topology with bleeds, cooling, nozzles, shafts, and controls",
-        "published steady and fuel-step transient comparisons"
+        "published steady outputs and local dynamic linearization"
       ],
       "limits": [
         "reference outputs are computational rather than independent hardware measurements",
@@ -98,7 +98,8 @@
         "ducted_core_and_bypass_paths",
         "zero_vbv_nozzle_capacity_and_gross_thrust",
         "generic_freestream_ram_drag_and_propulsive_force_balance",
-        "four_point_net_thrust_cross_code"
+        "four_point_net_thrust_cross_code",
+        "nonlinear_fuel_step_against_public_linear_reference"
       ],
       "latest_result": {
         "topology": "nozzle_closed_fan_splitter_LPC_HPC_combustor_HPT_LPT_with_two_shafts",
@@ -113,8 +114,11 @@
         "combined_gross_thrust_maximum_absolute_error_percent": 0.25,
         "ram_drag_maximum_absolute_error_percent": 0.12254,
         "net_thrust_maximum_absolute_error_percent": 1.257601,
-        "classification": "multi_point_steady_flight_net_thrust_cross_code_reproduction",
-        "reserved": ["fuel_flow_prediction", "fuel_step_transient", "independent_hardware_validation"]
+        "fuel_step_duration_seconds": 0.05,
+        "fuel_step_lp_speed_error_percent_range": [17.8105, 18.1198],
+        "fuel_step_hp_speed_error_percent_range": [21.6405, 21.8856],
+        "classification": "steady_net_thrust_and_partial_dynamic_cross_code_reproduction",
+        "reserved": ["fuel_flow_prediction", "nonlinear_reference_transient", "independent_hardware_validation"]
       }
     },
     {

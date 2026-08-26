@@ -173,6 +173,9 @@ Delivered:
 16. Held-out local-model-family validation with independently initialized reference cases,
     training-only interpolation, absolute-plus-relative A/B/C/D acceptance, complete serialized
     evidence, and structured failure when the declared interval is not predictive. ✅
+17. Full-graph nonlinear AGTF30 scheduled fuel-step execution against the checksum-pinned public
+    NASA A/B trajectory, with exact discontinuity evidence and five finite-window rotor-speed
+    comparisons. ✅ Partial cross-code transient evidence; nonlinear/hardware reference remains open.
 
 ## Reusable dynamic equipment primitives
 

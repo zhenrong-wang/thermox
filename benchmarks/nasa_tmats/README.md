@@ -507,3 +507,21 @@ HP is 1.52 versus NASA's 5.13 rpm/s per signed hp, while LP is 0.928 versus 0.54
 a complete-input but partial dynamic cross-code reproduction and a qualification of the generic
 DAE linearization path, not full transient predictive validation. Remaining differences are
 retained as evidence rather than calibrated away.
+
+`agtf30_fuel_step_transient.json` takes the next cross-code step with a true nonlinear DAE input
+schedule. At 0.001 s it applies a right-continuous 1% fuel-flow increase, retains both sides of the
+discontinuity, and compares five exact output times through 0.050 s after the step. The paired
+`agtf30_fuel_step_linear_reference.json` integrates NASA's checksum-pinned two-state A/B model for
+the identical absolute fuel perturbation.
+
+```sh
+python3 scripts/build_agtf30_fuel_step_transient_benchmark.py
+```
+
+The 419-variable Thermox graph integrates in six accepted steps with no rejection and a maximum
+absolute normalized residual of `5.44e-9`. Its nonlinear LP-speed increment is 17.81% to 18.12%
+above the NASA linear reference, and its HP-speed increment is 21.64% to 21.89% above it. The
+differences agree with the independently reported local fuel-gain mismatch and are not fitted away.
+This is executable finite-window cross-code trajectory evidence. It is still partial: NASA's
+reference is a local linear response, not an exported nonlinear Simulink trajectory or hardware
+measurement.

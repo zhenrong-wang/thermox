@@ -571,6 +571,26 @@
     "classification": "public_source_partial_dynamic_cross_code_reproduction",
     "declared_limit": "All three public inputs are represented and the local linear model passes finite-window nonlinear self-consistency probes, but HP/LP extraction and fuel gains retain material cross-code differences and no NASA time history is compared. This does not qualify transient prediction."
   },
+  "agtf30_nonlinear_fuel_step_execution": {
+    "model": "agtf30_fuel_step_transient.json",
+    "reference": "agtf30_fuel_step_linear_reference.json",
+    "source_sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
+    "input": "one-percent right-continuous fuel-flow step at 0.001 s",
+    "comparison_times_after_step_s": [0.002, 0.006, 0.014, 0.03, 0.05],
+    "results": {
+      "accepted_steps": 6,
+      "rejected_steps": 0,
+      "maximum_absolute_normalized_residual": 5.44e-9,
+      "lp_speed_error_percent_range": [17.8105, 18.1198],
+      "hp_speed_error_percent_range": [21.6405, 21.8856]
+    },
+    "acceptance": {
+      "rotor_speed_increment_percent": 25.0,
+      "result": "pass_with_material_dynamic_difference_retained"
+    },
+    "classification": "public_source_finite_window_partial_dynamic_cross_code_reproduction",
+    "declared_limit": "The complete nonlinear Thermox DAE is compared with the public NASA local A/B response for the identical absolute input. NASA supplies neither an exported nonlinear time history nor hardware measurements, so this is not nonlinear or hardware transient qualification."
+  },
   "agtf30_propulsion_output_reference": {
     "artifact": "agtf30_propulsion_reference.json",
     "source_array": "outputs[].Y",
@@ -585,5 +605,5 @@
     "classification": "authoritative_public_cross_code_reference_extraction",
     "declared_limit": "Source-output extraction and generic graph-based gross-thrust, ram-drag, and net-thrust comparisons are complete. The source remains a code reference rather than hardware evidence, and fuel-flow prediction remains unqualified."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, and a complete-input but partial small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, fuel-flow predictive qualification, or full transient predictive validation."
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, and a finite-window nonlinear Thermox trajectory against the public NASA linear response. They are not independent hardware validation, fuel-flow predictive qualification, nonlinear reference-trajectory qualification, or full transient predictive validation."
 }

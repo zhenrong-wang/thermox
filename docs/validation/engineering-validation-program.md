@@ -109,7 +109,8 @@ pressure error 4.521% against T-MATS. The uncalibrated equilibrium fuel result r
 
 This advanced the program from sliced component/spool checks to a continuous map-driven engine
 core. Subsequent generic duct, variable-bleed, nozzle, freestream-momentum, and force-balance gates
-now complete the steady flight-point topology. NASA's published fuel-step transient remains open.
+now complete the steady flight-point topology. An external nonlinear fuel-step time history remains
+open; the public source exposes a local linear dynamic reference only.
 No discrepancy in the comparison is hidden with a case-specific factor.
 
 The first whole-engine prerequisite is also complete: five generic area-based gas ducts reproduce
@@ -160,6 +161,16 @@ nonzero-Mach points: ram-drag error is -0.123% to -0.057%, and net-thrust error 
 +1.258%. Freestream speed comes from published Mach and static temperature through the declared
 ideal-air relation; source forces are acceptance targets and initial guesses only. This qualifies
 steady net thrust within the public cross-code scope, not against independent hardware evidence.
+
+The first external-reference trajectory gate is now executable as well. A one-percent scheduled
+fuel step drives the complete 419-variable nonlinear Thermox DAE, while the checksum-pinned NASA
+A/B model supplies the same absolute-input rotor-speed reference at five times through 0.050 s.
+The integration accepts six steps without rejection and closes normalized residuals below
+`5.44e-9`. Thermox's LP-speed increment is 17.81%--18.12% above NASA and its HP-speed increment is
+21.64%--21.89% above NASA. These differences are consistent with the separately identified local
+fuel-gain mismatch. This promotes the work beyond internal trajectory self-consistency, but it
+does not qualify nonlinear or hardware transient prediction because the public source provides no
+exported numeric nonlinear time history.
 
 Thermox now also has an executable held-out gate for multi-operating-point local-model families.
 Validation cases are excluded from interpolation construction, independently initialized and

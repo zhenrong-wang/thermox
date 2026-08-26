@@ -1,0 +1,78 @@
+{
+  "schema_version": "thermox.validation.transient_reference/v1",
+  "id": "nasa_agtf30_open_loop_fuel_step_linear_reference",
+  "source": {
+    "artifact": "NASA AGTF30 outputs.mat",
+    "sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
+    "evidence_basis": "authoritative_public_cross_code",
+    "limitations": [
+      "The response is derived from NASA's local A/B model, not a nonlinear time history or hardware measurement.",
+      "Thermox and NASA perturbations are compared about their respective initialized baselines."
+    ]
+  },
+  "input": {
+    "name": "fuel_flow",
+    "step_time_s": 0.001,
+    "step_fraction_of_thermox_baseline": 0.01,
+    "delta_kg_s": 0.0011851680744618147,
+    "delta_lbm_s": 0.0026128483476514706
+  },
+  "linear_model": {
+    "states": [
+      "lp_speed_rpm",
+      "hp_speed_rpm"
+    ],
+    "A_per_s": [
+      [
+        -2.58828958,
+        1.11503138
+      ],
+      [
+        0.78936733,
+        -1.88527248
+      ]
+    ],
+    "fuel_B_rpm_s_per_lbm_s": [
+      4405.37064,
+      8570.82043
+    ],
+    "integration": "classical_rk4_fixed_1e-5_s"
+  },
+  "samples": [
+    {
+      "elapsed_time_s": 0.002,
+      "delta_speed_rpm": {
+        "lp": 0.023011453502513848,
+        "hp": 0.044722319708905604
+      }
+    },
+    {
+      "elapsed_time_s": 0.006,
+      "delta_speed_rpm": {
+        "lp": 0.06897571579306494,
+        "hp": 0.13377123098794128
+      }
+    },
+    {
+      "elapsed_time_s": 0.014,
+      "delta_speed_rpm": {
+        "lp": 0.1606643385139012,
+        "hp": 0.3102991218465175
+      }
+    },
+    {
+      "elapsed_time_s": 0.03,
+      "delta_speed_rpm": {
+        "lp": 0.3430410570933324,
+        "hp": 0.6571773253483175
+      }
+    },
+    {
+      "elapsed_time_s": 0.05,
+      "delta_speed_rpm": {
+        "lp": 0.5690229627543857,
+        "hp": 1.0794852967569677
+      }
+    }
+  ]
+}

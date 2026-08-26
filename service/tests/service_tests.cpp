@@ -2817,6 +2817,130 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
         "declared rotor energy balances without cross-wiring");
 }
 
+void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_fuel_step_transient.json");
+    request.case_id = "sea_level_static_fuel_step_1pct";
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/agtf30_fan_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_vbv_map.json"}) {
+        request.artifacts.performance_maps.push_back(
+            thermox::service::
+                parse_performance_map_artifact_declaration_json(
+                    read_source_file(path)));
+    }
+
+    const auto reference_value = boost::json::parse(read_source_file(
+        "benchmarks/nasa_tmats/agtf30_fuel_step_linear_reference.json"));
+    const auto& reference = reference_value.as_object();
+    const double step_time = reference.at("input").as_object()
+        .at("step_time_s").as_double();
+    const auto& reference_samples = reference.at("samples").as_array();
+    for (const auto& encoded : reference_samples) {
+        request.solver.required_output_times.push_back(
+            step_time + encoded.as_object()
+                .at("elapsed_time_s").as_double());
+    }
+    request.solver.end_time =
+        request.solver.required_output_times.back();
+    request.solver.initial_step = 0.001;
+    request.solver.max_step = 0.02;
+    request.solver.nonlinear_solver.residual_tolerance = 1.0e-8;
+
+    const auto response =
+        thermox::service::SimulationService{}.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.diagnostics.rejected_steps == 0 &&
+            response.diagnostics.maximum_absolute_normalized_residual <
+                1.0e-8,
+        "NASA AGTF30 nonlinear fuel-step transient must integrate: " +
+            response.error.message);
+
+    const auto energy = [](const thermox::service::GraphResult& graph,
+                           const std::string& shaft) {
+        return require_result_value(
+            require_component_result(graph, shaft).internal_values,
+            "rotational_energy").value_si;
+    };
+    constexpr double radians_per_second_per_rpm =
+        2.0 * 3.14159265358979323846 / 60.0;
+    constexpr double lp_inertia = 23.646647685338;
+    constexpr double hp_inertia = 2.522567598979;
+    const auto speed_rpm = [&](double rotational_energy,
+                               double inertia) {
+        return std::sqrt(2.0 * rotational_energy / inertia) /
+            radians_per_second_per_rpm;
+    };
+    const double initial_lp_speed = speed_rpm(
+        energy(response.trajectory.front().graph, "lp_shaft"),
+        lp_inertia);
+    const double initial_hp_speed = speed_rpm(
+        energy(response.trajectory.front().graph, "hp_shaft"),
+        hp_inertia);
+
+    const auto discontinuity = std::find_if(
+        response.trajectory.begin(), response.trajectory.end(),
+        [&](const auto& sample) { return sample.time == step_time; });
+    require(
+        discontinuity != response.trajectory.end() &&
+            discontinuity->graph_before_discontinuity.has_value(),
+        "fuel-step trajectory must retain both limits at the declared "
+        "input discontinuity");
+    const double fuel_before = require_result_value(
+        require_port_result(
+            *discontinuity->graph_before_discontinuity,
+            "fuel", "outlet").primary_values,
+        "m_dot[CH4]").value_si;
+    const double fuel_after = require_result_value(
+        require_port_result(
+            discontinuity->graph, "fuel", "outlet").primary_values,
+        "m_dot[CH4]").value_si;
+    require(
+        std::abs(fuel_after / fuel_before - 1.01) < 1.0e-12,
+        "fuel-step declaration must apply the exact one-percent input "
+        "perturbation");
+
+    for (const auto& encoded : reference_samples) {
+        const auto& expected = encoded.as_object();
+        const double sample_time = step_time +
+            expected.at("elapsed_time_s").as_double();
+        const auto sample = std::find_if(
+            response.trajectory.begin(), response.trajectory.end(),
+            [&](const auto& candidate) {
+                return candidate.time == sample_time;
+            });
+        require(
+            sample != response.trajectory.end(),
+            "fuel-step transient must expose every requested comparison "
+            "time");
+        const auto& expected_speed =
+            expected.at("delta_speed_rpm").as_object();
+        const double actual_lp_delta = speed_rpm(
+            energy(sample->graph, "lp_shaft"), lp_inertia) -
+            initial_lp_speed;
+        const double actual_hp_delta = speed_rpm(
+            energy(sample->graph, "hp_shaft"), hp_inertia) -
+            initial_hp_speed;
+        const double expected_lp_delta =
+            expected_speed.at("lp").as_double();
+        const double expected_hp_delta =
+            expected_speed.at("hp").as_double();
+        require(
+            std::abs(actual_lp_delta / expected_lp_delta - 1.0) < 0.25 &&
+                std::abs(actual_hp_delta / expected_hp_delta - 1.0) <
+                    0.25,
+            "Thermox nonlinear rotor-speed response must remain within "
+            "25 percent of the public NASA local linear model: t=" +
+                std::to_string(sample_time));
+    }
+}
+
 void test_cantera_brayton_integration_benchmark() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -8987,6 +9111,7 @@ int main() {
         test_nasa_agtf30_propulsive_force_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_nasa_agtf30_partial_small_signal_benchmark();
+        test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();
