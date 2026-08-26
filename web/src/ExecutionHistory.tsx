@@ -250,6 +250,28 @@ export function ExecutionHistory({
                     </span>
                   </div>
                 )}
+                {selected.result_summary.trajectory_validation && (
+                  <div className={`job-acceptance ${
+                    selected.result_summary.trajectory_validation.passed
+                      ? 'accepted' : 'not-accepted'
+                  }`}>
+                    <strong>
+                      {selected.result_summary.trajectory_validation.passed
+                        ? 'Reference trajectories matched'
+                        : 'Reference trajectories did not match'}
+                    </strong>
+                    <span>
+                      {selected.result_summary.trajectory_validation.validation_count}{' '}
+                      datasets ·{' '}
+                      {selected.result_summary.trajectory_validation.passed_count} passed ·{' '}
+                      {selected.result_summary.trajectory_validation.failed_count} failed ·{' '}
+                      {selected.result_summary.trajectory_validation.exact_alignment_count}{' '}
+                      exact ·{' '}
+                      {selected.result_summary.trajectory_validation.interpolated_alignment_count}{' '}
+                      interpolated
+                    </span>
+                  </div>
+                )}
                 <div className="job-summary">
                   <header>
                     <h3>Projected results</h3>

@@ -873,10 +873,18 @@ export interface SimulationJob {
     checksum: string
   } | null
   result_summary: {
-    schema_version: 'thermox.result_summary/v4'
+    schema_version: 'thermox.result_summary/v5'
     mode: 'steady' | 'transient'
     values: ResultSummaryValue[]
     engineering_acceptance: EngineeringAcceptanceSummary | null
+    trajectory_validation: {
+      passed: boolean
+      validation_count: number
+      passed_count: number
+      failed_count: number
+      exact_alignment_count: number
+      interpolated_alignment_count: number
+    } | null
   } | null
 }
 

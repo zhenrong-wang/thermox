@@ -1259,6 +1259,29 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                     response.trajectory,
                     response.events));
         }
+        if (!trajectory_validations.empty()) {
+            if (!summary) {
+                summary = ResultSummary{};
+                summary->mode = "transient";
+            }
+            TrajectoryValidationAggregate aggregate;
+            aggregate.passed = true;
+            aggregate.validation_count =
+                trajectory_validations.size();
+            for (const auto& validation : trajectory_validations) {
+                aggregate.passed =
+                    aggregate.passed && validation.evidence.passed;
+                aggregate.passed_count +=
+                    validation.evidence.passed_count;
+                aggregate.failed_count +=
+                    validation.evidence.failed_count;
+                aggregate.exact_alignment_count +=
+                    validation.exact_alignment_count;
+                aggregate.interpolated_alignment_count +=
+                    validation.interpolated_alignment_count;
+            }
+            summary->trajectory_validation = aggregate;
+        }
         auto result_document = nlohmann::json::parse(
             serialize_transient_response_json(response));
         result_document["trajectory_validations"] =

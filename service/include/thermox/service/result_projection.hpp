@@ -9,8 +9,8 @@
 
 namespace thermox::service {
 
-inline constexpr char result_summary_schema_v4[] =
-    "thermox.result_summary/v4";
+inline constexpr char result_summary_schema_v5[] =
+    "thermox.result_summary/v5";
 
 enum class ResultValueScope {
     system_balance,
@@ -114,12 +114,23 @@ struct EngineeringAcceptanceSummary {
     std::vector<EngineeringAcceptanceResult> criteria;
 };
 
+struct TrajectoryValidationAggregate {
+    bool passed{false};
+    std::size_t validation_count{0};
+    std::size_t passed_count{0};
+    std::size_t failed_count{0};
+    std::size_t exact_alignment_count{0};
+    std::size_t interpolated_alignment_count{0};
+};
+
 struct ResultSummary {
-    std::string schema_version{result_summary_schema_v4};
+    std::string schema_version{result_summary_schema_v5};
     std::string mode;
     std::vector<ProjectedResultValue> values;
     std::optional<EngineeringAcceptanceSummary>
         engineering_acceptance;
+    std::optional<TrajectoryValidationAggregate>
+        trajectory_validation;
 };
 
 class ResultProjectionError : public std::runtime_error {

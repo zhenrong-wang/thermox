@@ -8574,7 +8574,7 @@ void test_system_agnostic_result_projection() {
         projection_graph(0.41), steady_projections);
     require(
         steady.schema_version ==
-                thermox::service::result_summary_schema_v4 &&
+                thermox::service::result_summary_schema_v5 &&
             steady.mode == "steady" &&
             steady.values.size() == 2U &&
             steady.values[0].value_si == 0.41 &&
@@ -8586,7 +8586,7 @@ void test_system_agnostic_result_projection() {
     require(
         steady_json.find(
             "\"schema_version\": "
-            "\"thermox.result_summary/v4\"") !=
+            "\"thermox.result_summary/v5\"") !=
                 std::string::npos &&
             steady_json.find(
                 "\"id\": \"cycle_efficiency\"") !=

@@ -51,7 +51,7 @@ describe('result presentation', () => {
         ],
       },
       result_summary: {
-        schema_version: 'thermox.result_summary/v4',
+        schema_version: 'thermox.result_summary/v5',
         mode: 'steady',
         values: [
           {
@@ -63,6 +63,8 @@ describe('result presentation', () => {
             window: null,
           },
         ],
+        engineering_acceptance: null,
+        trajectory_validation: null,
       },
     } as SimulationJob
 

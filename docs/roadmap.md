@@ -186,6 +186,8 @@ Delivered:
 21. Revision-backed HTTP validation workflow from immutable evidence publication through Study,
     run configuration, durable worker execution, and auditable result retrieval; Job v19 exposes
     the exact evidence revision and comparison policy before execution. ✅
+22. Result Summary v5 compact trajectory-validation verdicts in job history, PostgreSQL payloads,
+    HTTP, and web execution views, explicitly independent of numerical success/failure state. ✅
 
 ## Reusable dynamic equipment primitives
 

@@ -46,13 +46,20 @@ physical dimension.
 
 Projection definitions are stored in immutable run-configuration revisions and participate in
 their checksums. Submission snapshots them into the immutable job request. After a successful
-solve, the worker materializes `thermox.result_summary/v4` before writing the full result artifact,
+solve, the worker materializes `thermox.result_summary/v5` before writing the full result artifact,
 then publishes the summary, artifact manifest, and terminal job revision atomically. A missing or
 dimensionally incompatible selector produces a structured result-stage job failure.
 
 This keeps summary policy owned by the run definition rather than the HTTP API, worker host, or a
 particular UI. Run-history and status responses can display the compact summary without loading or
 parsing the full result artifact from object storage.
+
+Result Summary v5 also carries an optional aggregate trajectory-validation verdict: number of
+reference datasets, passed/failed aligned samples, and exact/interpolated alignment counts. This
+supports bounded job-history and campaign views without repeatedly downloading large artifacts.
+It is evidence, not solver status: a converged calculation that misses its reference tolerance is
+a succeeded job with `trajectory_validation.passed=false`. Detailed source, uncertainty, error,
+tolerance, and limitation evidence remains in the immutable Result v6 artifact.
 
 Comparisons align multiple selected signals by projection ID. Dimension, aggregation, and resolved
 window evidence must all match before Thermox reports a numerical delta; incompatible windows are

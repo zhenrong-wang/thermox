@@ -627,6 +627,9 @@ void test_atomic_claim_and_terminal_publication(
     summary.engineering_acceptance =
         thermox::service::EngineeringAcceptanceSummary{
             false, 0U, 1U, {criterion}};
+    summary.trajectory_validation =
+        thermox::service::TrajectoryValidationAggregate{
+            false, 1U, 1U, 1U, 2U, 0U};
     const auto succeeded = jobs->publish_success(
         claimed.job_id,
         claimed.revision,
@@ -656,9 +659,19 @@ void test_atomic_claim_and_terminal_publication(
                     ->criteria.front().limiting_margin_si == -8.0 &&
             succeeded.result_summary->engineering_acceptance
                     ->criteria.front().limiting_bound == "lower" &&
+            succeeded.result_summary->trajectory_validation &&
+            !succeeded.result_summary->trajectory_validation->passed &&
+            succeeded.result_summary->trajectory_validation
+                    ->validation_count == 1U &&
+            succeeded.result_summary->trajectory_validation
+                    ->passed_count == 1U &&
+            succeeded.result_summary->trajectory_validation
+                    ->failed_count == 1U &&
+            succeeded.result_summary->trajectory_validation
+                    ->exact_alignment_count == 2U &&
             !succeeded.lease_expires_at.has_value(),
         "success publication must preserve provenance and "
-        "artifact metadata");
+        "artifact, acceptance, and validation-summary metadata");
 
     bool conflict = false;
     try {

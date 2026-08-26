@@ -1825,6 +1825,24 @@ void test_revision_backed_transient_validation_workflow() {
                 thermox::service::SimulationJobState::succeeded,
         "the common worker must execute the evidence-bound transient job");
 
+    const auto completed_job = api.handle(authenticated({
+        "GET", queued.headers.at("Location"), {}, {},
+    }, identity.user_id, identity.team_id));
+    require(
+        completed_job.status == 200 &&
+            completed_job.body.find(
+                "\"schema_version\": "
+                "\"thermox.result_summary/v5\"") !=
+                std::string::npos &&
+            completed_job.body.find(
+                "\"trajectory_validation\": {\"passed\": true") !=
+                std::string::npos &&
+            completed_job.body.find(
+                "\"exact_alignment_count\": 2") !=
+                std::string::npos,
+        "job history must expose the compact reference-validation "
+        "verdict without downloading the result artifact");
+
     const auto result = api.handle(authenticated({
         "GET", queued.headers.at("Location") + "/result", {}, {},
     }, identity.user_id, identity.team_id));

@@ -517,6 +517,7 @@ decode_acceptance_criteria(const std::string& payload) {
 std::string trajectory_validation_bindings_payload(
     const std::vector<service::StudyTrajectoryValidationBinding>&
         bindings) {
+    if (bindings.empty()) return R"({"items":[]})";
     Tree values;
     for (const auto& binding : bindings) {
         Tree value;

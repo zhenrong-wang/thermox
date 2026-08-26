@@ -807,9 +807,22 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
                 thermox::service::SimulationJobState::succeeded &&
             completed->execution.has_value() &&
             completed->execution->operation == "transient" &&
-            completed->result_artifact.has_value(),
+            completed->result_artifact.has_value() &&
+            completed->result_summary.has_value() &&
+            completed->result_summary->trajectory_validation.has_value() &&
+            completed->result_summary->trajectory_validation->passed &&
+            completed->result_summary->trajectory_validation
+                    ->validation_count == 1U &&
+            completed->result_summary->trajectory_validation
+                    ->passed_count == 2U &&
+            completed->result_summary->trajectory_validation
+                    ->failed_count == 0U &&
+            completed->result_summary->trajectory_validation
+                    ->exact_alignment_count == 2U &&
+            completed->result_summary->trajectory_validation
+                    ->interpolated_alignment_count == 0U,
         "transient execution must publish through the common job "
-        "contract");
+        "contract with a compact validation verdict");
     const auto content = artifacts->get(
         *completed->result_artifact);
     require(
@@ -825,6 +838,25 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
                 std::string::npos,
         "transient job artifact must retain its trajectory and "
         "automatic immutable-reference validation evidence");
+
+    request.idempotency_key = "transient-reference-mismatch";
+    request.trajectory_validations.front()
+        .artifact.signals.front().samples.front().value_si += 1.0;
+    (void)service.submit(request);
+    const auto mismatch = service.run_next("worker-mismatch");
+    require(
+        mismatch &&
+            mismatch->state ==
+                thermox::service::SimulationJobState::succeeded &&
+            mismatch->result_summary &&
+            mismatch->result_summary->trajectory_validation &&
+            !mismatch->result_summary->trajectory_validation->passed &&
+            mismatch->result_summary->trajectory_validation
+                    ->passed_count == 1U &&
+            mismatch->result_summary->trajectory_validation
+                    ->failed_count == 1U,
+        "reference mismatch must remain a validation verdict and "
+        "must not be misreported as numerical job failure");
 }
 
 void test_cancel_and_optimistic_revision_rules() {

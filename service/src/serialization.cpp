@@ -3738,6 +3738,25 @@ std::string serialize_result_summary_json(
         }
         out << "]}";
     }
+    out << ",\n  \"trajectory_validation\": ";
+    if (!summary.trajectory_validation) {
+        out << "null";
+    } else {
+        const auto& validation = *summary.trajectory_validation;
+        out << "{\"passed\": "
+            << (validation.passed ? "true" : "false")
+            << ", \"validation_count\": "
+            << validation.validation_count
+            << ", \"passed_count\": "
+            << validation.passed_count
+            << ", \"failed_count\": "
+            << validation.failed_count
+            << ", \"exact_alignment_count\": "
+            << validation.exact_alignment_count
+            << ", \"interpolated_alignment_count\": "
+            << validation.interpolated_alignment_count
+            << '}';
+    }
     out << "\n}\n";
     return out.str();
 }

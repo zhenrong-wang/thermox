@@ -2354,6 +2354,22 @@ std::string encode_result_summary(
                 }));
         tree.add_child("engineering_acceptance", encoded);
     }
+    if (summary.trajectory_validation) {
+        const auto& validation = *summary.trajectory_validation;
+        Tree encoded;
+        encoded.put("passed", validation.passed);
+        encoded.put(
+            "validation_count", validation.validation_count);
+        encoded.put("passed_count", validation.passed_count);
+        encoded.put("failed_count", validation.failed_count);
+        encoded.put(
+            "exact_alignment_count",
+            validation.exact_alignment_count);
+        encoded.put(
+            "interpolated_alignment_count",
+            validation.interpolated_alignment_count);
+        tree.add_child("trajectory_validation", encoded);
+    }
     return write(tree);
 }
 
@@ -2365,7 +2381,7 @@ service::ResultSummary decode_result_summary(
         tree.get<std::string>("schema_version");
     summary.mode = tree.get<std::string>("mode");
     if (summary.schema_version !=
-            service::result_summary_schema_v4 ||
+            service::result_summary_schema_v5 ||
         (summary.mode != "steady" &&
          summary.mode != "transient")) {
         throw std::runtime_error(
@@ -2474,6 +2490,33 @@ service::ResultSummary decode_result_summary(
         summary.engineering_acceptance = std::move(acceptance);
         service::validate_engineering_acceptance_summary(
             *summary.engineering_acceptance);
+    }
+    if (const auto encoded =
+            tree.get_child_optional("trajectory_validation")) {
+        service::TrajectoryValidationAggregate validation;
+        validation.passed = encoded->get<bool>("passed");
+        validation.validation_count =
+            encoded->get<std::size_t>("validation_count");
+        validation.passed_count =
+            encoded->get<std::size_t>("passed_count");
+        validation.failed_count =
+            encoded->get<std::size_t>("failed_count");
+        validation.exact_alignment_count =
+            encoded->get<std::size_t>("exact_alignment_count");
+        validation.interpolated_alignment_count =
+            encoded->get<std::size_t>(
+                "interpolated_alignment_count");
+        if (validation.validation_count == 0U ||
+            validation.passed ==
+                (validation.failed_count != 0U) ||
+            validation.passed_count + validation.failed_count == 0U ||
+            validation.exact_alignment_count +
+                    validation.interpolated_alignment_count !=
+                validation.passed_count + validation.failed_count) {
+            throw std::runtime_error(
+                "persisted trajectory-validation summary is invalid");
+        }
+        summary.trajectory_validation = validation;
     }
     return summary;
 }
