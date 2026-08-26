@@ -294,6 +294,23 @@ Newton iterations with residual norms below `2.04e-11`. HP-speed error is +0.026
 bypass-ratio error is -0.613% to -0.482%, and combined core-plus-bypass gross-thrust error is
 approximately +0.14% to +0.25%.
 
+NASA's propulsion outputs are now extracted directly from the pinned public `outputs.mat` rather
+than inferred from plots or intermediate station data. The checksum-guarded extractor maps the
+published C-model positions `Y[55]` through `Y[60]` to ram drag, combined gross thrust, net thrust,
+bypass/core gross thrust, and TSFC. The resulting
+`agtf30_propulsion_reference.json` retains source and SI force values for all five selected healthy
+points. Including the subsequently closed sea-level-static point, Thermox combined-gross-thrust
+error is +0.1408% to +0.3261%.
+
+Reproduce the reference artifact from the pinned public checkout with a Python environment that
+provides NumPy and SciPy:
+
+```sh
+python3 scripts/extract_agtf30_propulsion_reference.py \
+  tmp/AGTF30-source/outputs.mat \
+  benchmarks/nasa_tmats/agtf30_propulsion_reference.json
+```
+
 Generate the final declaration after producing the four ducted steady results in `tmp/`:
 
 ```sh
@@ -367,8 +384,8 @@ percent, HPT temperature -0.991 percent, HPT flow +0.372 percent, station-5 pres
 percent, station-5 temperature -1.014 percent, VBV flow -0.369 percent, and bypass ratio -0.468
 percent. Both shaft balances close to numerical precision. Fuel remains -15.24 percent, consistent
 with the previously declared combustion/fuel-model prediction limitation; no calibration is
-applied. Gross thrust is solved, but comparison and net thrust remain reserved until the public
-source output extraction and generic inlet ram-drag path are both qualified.
+applied. Its combined gross thrust is +0.3261 percent relative to the checksum-pinned NASA output.
+Net thrust remains reserved until the generic inlet ram-drag path is qualified.
 
 ## AGTF30 transient source baseline
 

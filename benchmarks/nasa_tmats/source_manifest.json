@@ -571,5 +571,16 @@
     "classification": "public_source_partial_dynamic_cross_code_reproduction",
     "declared_limit": "All three public inputs are represented and the local linear model passes finite-window nonlinear self-consistency probes, but HP/LP extraction and fuel gains retain material cross-code differences and no NASA time history is compared. This does not qualify transient prediction."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, full-graph transient DAE composition/equilibrium hold, and a complete-input but partial small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or full transient predictive validation."
+  "agtf30_propulsion_output_reference": {
+    "artifact": "agtf30_propulsion_reference.json",
+    "source_array": "outputs[].Y",
+    "source_indices_zero_based": [0, 1, 2, 3, 5],
+    "source_code_index_evidence": "engine_model/MEX_engine_model.c:1806-1811",
+    "source_sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
+    "extracted_outputs": ["ram_drag", "gross_thrust", "net_thrust", "bypass_gross_thrust", "core_gross_thrust", "tsfc"],
+    "thermox_combined_gross_thrust_error_percent_range": [0.1408, 0.3261],
+    "classification": "authoritative_public_cross_code_reference_extraction",
+    "declared_limit": "Source-output extraction and gross-thrust comparison are complete. Net thrust still requires generic freestream momentum accounting in the Thermox graph; the source remains a code reference rather than hardware evidence."
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust target extraction, full-graph transient DAE composition/equilibrium hold, and a complete-input but partial small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or full transient predictive validation."
 }

@@ -153,6 +153,14 @@ accepted stages at a normalized residual of `2.16e-13`. The public cross-code di
 station-5 pressure, -1.014% station-5 temperature, -0.369% VBV flow, and -0.468% bypass ratio.
 Fuel remains -15.24% and is explicitly unqualified; the difference is not calibrated away.
 
+The previously reserved propulsion outputs have now been extracted directly from NASA's pinned
+`outputs.mat`. A checksum-guarded artifact preserves the published ram drag, combined gross
+thrust, net thrust, bypass/core gross thrust, and TSFC fields for five healthy points. Thermox's
+already solved combined gross thrust differs by +0.1408% to +0.3261% across those points. This
+completes the source-extraction and gross-thrust comparison gates; net thrust remains open until a
+generic freestream-momentum component is connected, and the comparison remains cross-code rather
+than hardware evidence.
+
 Thermox now also has an executable held-out gate for multi-operating-point local-model families.
 Validation cases are excluded from interpolation construction, independently initialized and
 linearized, and then compared entry-by-entry against the training-only A/B/C/D prediction under
