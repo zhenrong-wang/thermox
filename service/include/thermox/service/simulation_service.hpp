@@ -1375,10 +1375,21 @@ struct SmallSignalLinearizationResponse {
     }
 };
 
+struct SmallSignalModelFamilyOperatingPointRequest {
+    std::string case_id;
+    double coordinate_si{0.0};
+    std::string regime;
+};
+
 struct SmallSignalModelFamilyRequest {
     std::string schema_version{command_schema_v1};
     std::string model_json;
-    std::vector<std::string> case_ids;
+    std::string coordinate_name;
+    std::string coordinate_dimension;
+    std::vector<SmallSignalModelFamilyOperatingPointRequest>
+        operating_points;
+    double maximum_interpolation_gap_si{0.0};
+    std::vector<double> evaluation_coordinates_si;
     std::vector<std::string> input_variables;
     std::vector<std::string> output_variables;
     SmallSignalLinearizationSettings settings;
@@ -1388,18 +1399,37 @@ struct SmallSignalModelFamilyRequest {
 
 struct SmallSignalModelFamilyPoint {
     std::string case_id;
+    double coordinate_si{0.0};
+    std::string regime;
     SmallSignalLinearizationResponse linearization;
+};
+
+struct SmallSignalModelFamilyEvaluation {
+    double coordinate_si{0.0};
+    std::string lower_case_id;
+    std::string upper_case_id;
+    std::string regime;
+    double upper_weight{0.0};
+    bool exact{false};
+    std::vector<std::vector<double>> A;
+    std::vector<std::vector<double>> B;
+    std::vector<std::vector<double>> C;
+    std::vector<std::vector<double>> D;
 };
 
 struct SmallSignalModelFamilyResponse {
     std::string contract_version{
-        "thermox.index1-model-family/v1"};
+        "thermox.index1-model-family/v2"};
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
+    std::string coordinate_name;
+    std::string coordinate_dimension;
+    double maximum_interpolation_gap_si{0.0};
     std::vector<std::string> state_names;
     std::vector<std::string> input_names;
     std::vector<std::string> output_names;
     std::vector<SmallSignalModelFamilyPoint> operating_points;
+    std::vector<SmallSignalModelFamilyEvaluation> evaluations;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

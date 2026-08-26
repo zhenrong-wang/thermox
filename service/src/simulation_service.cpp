@@ -29,6 +29,7 @@
 #include <cmath>
 #include <exception>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -5947,29 +5948,68 @@ SimulationService::run_small_signal_model_family(
         return response;
     }
     if (request.model_json.empty() || request.input_variables.empty() ||
-        request.case_ids.size() < 2U) {
+        request.coordinate_name.empty() ||
+        request.coordinate_dimension.empty() ||
+        request.operating_points.size() < 2U ||
+        !std::isfinite(request.maximum_interpolation_gap_si) ||
+        request.maximum_interpolation_gap_si < 0.0) {
         response.error = make_error(
             "invalid_request", "request",
-            "model_json, at least one input variable, and at least two "
-            "case IDs are required for a small-signal model family");
+            "model_json, coordinate identity, at least one input "
+            "variable, at least two operating points, and a finite "
+            "non-negative maximum interpolation gap are required");
         return response;
     }
+    auto declarations = request.operating_points;
     std::set<std::string> unique_cases;
-    for (const auto& case_id : request.case_ids) {
-        if (case_id.empty() || !unique_cases.insert(case_id).second) {
+    for (const auto& point : declarations) {
+        if (point.case_id.empty() ||
+            point.regime.empty() ||
+            !std::isfinite(point.coordinate_si) ||
+            !unique_cases.insert(point.case_id).second) {
             response.error = make_error(
-                "invalid_operating_points", "case_ids",
-                "model-family case IDs must be nonempty and unique");
+                "invalid_operating_points", "operating_points",
+                "model-family case IDs must be nonempty and unique, "
+                "regime labels must be nonempty, and coordinates must "
+                "be finite");
+            return response;
+        }
+    }
+    std::sort(
+        declarations.begin(), declarations.end(),
+        [](const auto& left, const auto& right) {
+            return left.coordinate_si < right.coordinate_si;
+        });
+    if (std::adjacent_find(
+            declarations.begin(), declarations.end(),
+            [](const auto& left, const auto& right) {
+                return left.coordinate_si == right.coordinate_si;
+            }) != declarations.end()) {
+        response.error = make_error(
+            "invalid_operating_points", "operating_points",
+            "model-family scheduling coordinates must be unique");
+        return response;
+    }
+    for (const double coordinate : request.evaluation_coordinates_si) {
+        if (!std::isfinite(coordinate)) {
+            response.error = make_error(
+                "invalid_evaluation_coordinate",
+                "evaluation_coordinates_si",
+                "model-family evaluation coordinates must be finite");
             return response;
         }
     }
 
-    response.operating_points.reserve(request.case_ids.size());
-    for (const auto& case_id : request.case_ids) {
+    response.coordinate_name = request.coordinate_name;
+    response.coordinate_dimension = request.coordinate_dimension;
+    response.maximum_interpolation_gap_si =
+        request.maximum_interpolation_gap_si;
+    response.operating_points.reserve(declarations.size());
+    for (const auto& declaration : declarations) {
         SmallSignalLinearizationRequest point_request;
         point_request.schema_version = request.schema_version;
         point_request.model_json = request.model_json;
-        point_request.case_id = case_id;
+        point_request.case_id = declaration.case_id;
         point_request.input_variables = request.input_variables;
         point_request.output_variables = request.output_variables;
         point_request.settings = request.settings;
@@ -5979,14 +6019,16 @@ SimulationService::run_small_signal_model_family(
         auto linearization =
             run_small_signal_linearization(point_request);
         response.operating_points.push_back({
-            case_id, std::move(linearization)});
+            declaration.case_id, declaration.coordinate_si,
+            declaration.regime, std::move(linearization)});
         const auto& point = response.operating_points.back();
         if (!point.linearization.succeeded()) {
             response.status = point.linearization.status;
             response.error = make_error(
-                "operating_point_linearization_failed", case_id,
+                "operating_point_linearization_failed",
+                declaration.case_id,
                 "small-signal linearization failed for operating point '" +
-                    case_id + "': " +
+                    declaration.case_id + "': " +
                     point.linearization.error.message);
             return response;
         }
@@ -6001,11 +6043,91 @@ SimulationService::run_small_signal_model_family(
             point.linearization.output_names != response.output_names) {
             response.status = OperationStatus::compilation_failed;
             response.error = make_error(
-                "inconsistent_model_family", case_id,
+                "inconsistent_model_family", declaration.case_id,
                 "operating points in one model family must expose "
                 "identical ordered state, input, and output identities");
             return response;
         }
+    }
+
+    const auto interpolate_matrix = [](
+        const std::vector<std::vector<double>>& lower,
+        const std::vector<std::vector<double>>& upper,
+        double upper_weight) {
+        auto result = lower;
+        for (std::size_t row = 0; row < result.size(); ++row) {
+            for (std::size_t column = 0;
+                 column < result[row].size(); ++column) {
+                result[row][column] += upper_weight *
+                    (upper[row][column] - lower[row][column]);
+            }
+        }
+        return result;
+    };
+    response.evaluations.reserve(
+        request.evaluation_coordinates_si.size());
+    for (const double coordinate : request.evaluation_coordinates_si) {
+        const auto upper = std::lower_bound(
+            response.operating_points.begin(),
+            response.operating_points.end(), coordinate,
+            [](const auto& point, double value) {
+                return point.coordinate_si < value;
+            });
+        if (upper != response.operating_points.end() &&
+            upper->coordinate_si == coordinate) {
+            const auto& model = upper->linearization;
+            response.evaluations.push_back({
+                coordinate, upper->case_id, upper->case_id,
+                upper->regime, 0.0, true,
+                model.A, model.B, model.C, model.D});
+            continue;
+        }
+        if (upper == response.operating_points.begin() ||
+            upper == response.operating_points.end()) {
+            response.error = make_error(
+                "model_family_extrapolation_forbidden",
+                request.coordinate_name,
+                "model-family evaluation coordinate lies outside the "
+                "qualified operating-point envelope");
+            return response;
+        }
+        const auto lower = std::prev(upper);
+        if (lower->regime != upper->regime) {
+            response.error = make_error(
+                "model_family_regime_boundary",
+                request.coordinate_name,
+                "model-family interpolation across different declared "
+                "regimes is forbidden");
+            return response;
+        }
+        const double gap =
+            upper->coordinate_si - lower->coordinate_si;
+        if (request.maximum_interpolation_gap_si <= 0.0 ||
+            gap > request.maximum_interpolation_gap_si) {
+            response.error = make_error(
+                "model_family_interpolation_gap",
+                request.coordinate_name,
+                "bracketing operating points exceed the declared "
+                "maximum interpolation gap");
+            return response;
+        }
+        const double upper_weight =
+            (coordinate - lower->coordinate_si) / gap;
+        response.evaluations.push_back({
+            coordinate, lower->case_id, upper->case_id,
+            lower->regime, upper_weight, false,
+            interpolate_matrix(
+                lower->linearization.A, upper->linearization.A,
+                upper_weight),
+            interpolate_matrix(
+                lower->linearization.B, upper->linearization.B,
+                upper_weight),
+            interpolate_matrix(
+                lower->linearization.C, upper->linearization.C,
+                upper_weight),
+            interpolate_matrix(
+                lower->linearization.D, upper->linearization.D,
+                upper_weight)});
     }
     response.status = OperationStatus::succeeded;
     return response;

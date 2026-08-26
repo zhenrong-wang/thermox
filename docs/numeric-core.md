@@ -210,8 +210,11 @@ representative. A requested disturbance must fit within at least one direction o
 declared physical bounds; otherwise validation fails explicitly.
 
 For multiple independently initialized cases, the service composes these single-point operations
-into `thermox.index1-model-family/v1`. Every member retains its complete A/B/C/D model and nonlinear
+into `thermox.index1-model-family/v2`. Every member retains its complete A/B/C/D model and nonlinear
 evidence, while the family gate requires identical ordered state, input, and output coordinates.
+The validity-aware evaluator permits exact selection or same-regime one-dimensional A/B/C/D
+interpolation within an explicit maximum coordinate gap; it forbids extrapolation and
+cross-regime interpolation.
 See [small-signal-model-family.md](small-signal-model-family.md) for the contract and multi-regime
 validation scope.
 

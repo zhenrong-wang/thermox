@@ -167,6 +167,9 @@ Delivered:
 14. Multi-operating-point local model families with independent case initialization, complete
     per-point A/B/C/D evidence, coordinate-consistency gates, service/CLI contracts, and a
     liquid/two-phase/vapor property-regime validation. ✅
+15. Validity-aware one-dimensional local-model evaluation with explicit SI scheduling coordinates,
+    exact selection, bounded same-regime A/B/C/D interpolation, and hard gap, regime-boundary, and
+    extrapolation rejection. ✅
 
 ## Reusable dynamic equipment primitives
 

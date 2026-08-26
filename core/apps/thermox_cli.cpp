@@ -61,9 +61,12 @@ void print_usage(std::ostream& out) {
            " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
         << "  thermox_cli linearize-family --model <path>"
-           " --case <id> --case <id>..."
+           " --coordinate-name <name> --coordinate-dimension <dimension>"
+           " --operating-point <case>:<coordinate-si>:<regime>..."
            " --input-variable <graph-variable>..."
            " [--output-variable <graph-variable>]..."
+           " [--maximum-interpolation-gap <si-value>]"
+           " [--evaluate-at <coordinate-si>]..."
            " [same linearization and verification options as linearize]"
            " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
@@ -108,6 +111,40 @@ double parse_positive_number(
             option + " must be a positive finite number");
     }
     return value;
+}
+
+double parse_finite_number(
+    const std::string& text,
+    const std::string& option) {
+    std::size_t parsed = 0;
+    const double value = std::stod(text, &parsed);
+    if (parsed != text.size() || !std::isfinite(value)) {
+        throw std::invalid_argument(
+            option + " must be a finite number");
+    }
+    return value;
+}
+
+thermox::service::SmallSignalModelFamilyOperatingPointRequest
+parse_family_operating_point(const std::string& text) {
+    const auto first = text.find(':');
+    const auto second = first == std::string::npos
+        ? std::string::npos
+        : text.find(':', first + 1U);
+    if (first == std::string::npos || second == std::string::npos ||
+        first == 0U || first + 1U == second ||
+        second + 1U == text.size()) {
+        throw std::invalid_argument(
+            "--operating-point must be case:coordinate-si:regime");
+    }
+    const std::string case_id = text.substr(0U, first);
+    const std::string coordinate_text =
+        text.substr(first + 1U, second - first - 1U);
+    const std::string regime = text.substr(second + 1U);
+    return {
+        case_id,
+        parse_finite_number(coordinate_text, "--operating-point"),
+        regime};
 }
 
 void print_graph_text(
@@ -289,14 +326,29 @@ void print_small_signal_family_text(
     const thermox::service::SmallSignalModelFamilyResponse& response) {
     std::cout << "status: "
               << thermox::service::to_string(response.status)
+              << "\ncoordinate: " << response.coordinate_name
+              << " [" << response.coordinate_dimension << ']'
               << "\noperating_points: "
-              << response.operating_points.size() << '\n';
+              << response.operating_points.size()
+              << "\nevaluations: " << response.evaluations.size()
+              << '\n';
     if (!response.error.code.empty()) {
         std::cout << "error: " << response.error.message << '\n';
     }
     for (const auto& point : response.operating_points) {
-        std::cout << "\ncase: " << point.case_id << '\n';
+        std::cout << "\ncase: " << point.case_id
+                  << " coordinate_si=" << point.coordinate_si
+                  << " regime=" << point.regime << '\n';
         print_small_signal_text(point.linearization);
+    }
+    for (const auto& evaluation : response.evaluations) {
+        std::cout << "evaluation coordinate_si="
+                  << evaluation.coordinate_si
+                  << " lower=" << evaluation.lower_case_id
+                  << " upper=" << evaluation.upper_case_id
+                  << " upper_weight=" << evaluation.upper_weight
+                  << " exact="
+                  << (evaluation.exact ? "yes" : "no") << '\n';
     }
 }
 
@@ -312,7 +364,11 @@ int main(int argc, char** argv) {
     std::string model_path;
     std::string input_path;
     std::string case_id;
-    std::vector<std::string> case_ids;
+    std::string family_coordinate_name;
+    std::string family_coordinate_dimension;
+    std::string maximum_interpolation_gap_text;
+    std::vector<std::string> family_operating_point_texts;
+    std::vector<std::string> family_evaluation_coordinate_texts;
     std::string calibration_id;
     std::string reconciliation_id;
     std::string max_iterations_text;
@@ -359,7 +415,17 @@ int main(int argc, char** argv) {
             input_path = argv[++i];
         } else if (arg == "--case" && i + 1 < argc) {
             case_id = argv[++i];
-            case_ids.push_back(case_id);
+        } else if (arg == "--coordinate-name" && i + 1 < argc) {
+            family_coordinate_name = argv[++i];
+        } else if (arg == "--coordinate-dimension" && i + 1 < argc) {
+            family_coordinate_dimension = argv[++i];
+        } else if (arg == "--operating-point" && i + 1 < argc) {
+            family_operating_point_texts.emplace_back(argv[++i]);
+        } else if (arg == "--maximum-interpolation-gap" &&
+                   i + 1 < argc) {
+            maximum_interpolation_gap_text = argv[++i];
+        } else if (arg == "--evaluate-at" && i + 1 < argc) {
+            family_evaluation_coordinate_texts.emplace_back(argv[++i]);
         } else if (arg == "--performance-map" && i + 1 < argc) {
             performance_map_paths.emplace_back(argv[++i]);
         } else if (arg == "--input-variable" && i + 1 < argc) {
@@ -473,12 +539,26 @@ int main(int argc, char** argv) {
     }
     const bool linearization_command =
         command == "linearize" || command == "linearize-family";
-    if (command == "linearize-family" && case_ids.size() < 2U) {
-        std::cerr << "linearize-family requires at least two --case IDs\n";
+    if (command == "linearize-family" &&
+        (family_operating_point_texts.size() < 2U ||
+         family_coordinate_name.empty() ||
+         family_coordinate_dimension.empty())) {
+        std::cerr << "linearize-family requires coordinate identity and "
+                     "at least two --operating-point declarations\n";
         return 2;
     }
-    if (command != "linearize-family" && case_ids.size() > 1U) {
-        std::cerr << "multiple --case IDs are only valid for "
+    if (command == "linearize-family" && !case_id.empty()) {
+        std::cerr << "--case is not valid for linearize-family; use "
+                     "--operating-point\n";
+        return 2;
+    }
+    if (command != "linearize-family" &&
+        (!family_coordinate_name.empty() ||
+         !family_coordinate_dimension.empty() ||
+         !family_operating_point_texts.empty() ||
+         !maximum_interpolation_gap_text.empty() ||
+         !family_evaluation_coordinate_texts.empty())) {
+        std::cerr << "model-family coordinate options are only valid for "
                      "linearize-family\n";
         return 2;
     }
@@ -1005,7 +1085,25 @@ int main(int argc, char** argv) {
                     family_request;
                 family_request.schema_version = request.schema_version;
                 family_request.model_json = std::move(request.model_json);
-                family_request.case_ids = case_ids;
+                family_request.coordinate_name = family_coordinate_name;
+                family_request.coordinate_dimension =
+                    family_coordinate_dimension;
+                for (const auto& value :
+                     family_operating_point_texts) {
+                    family_request.operating_points.push_back(
+                        parse_family_operating_point(value));
+                }
+                if (!maximum_interpolation_gap_text.empty()) {
+                    family_request.maximum_interpolation_gap_si =
+                        parse_positive_number(
+                            maximum_interpolation_gap_text,
+                            "--maximum-interpolation-gap");
+                }
+                for (const auto& value :
+                     family_evaluation_coordinate_texts) {
+                    family_request.evaluation_coordinates_si.push_back(
+                        parse_finite_number(value, "--evaluate-at"));
+                }
                 family_request.input_variables =
                     std::move(request.input_variables);
                 family_request.output_variables =

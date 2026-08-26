@@ -8058,7 +8058,15 @@ void test_small_signal_model_family_service() {
     thermox::service::SmallSignalModelFamilyRequest request;
     request.model_json = read_source_file(
         "core/examples/lumped_thermal_storage.json");
-    request.case_ids = {"charge", "charge_high_capacity"};
+    request.coordinate_name = "inverse_thermal_capacity";
+    request.coordinate_dimension = "temperature_per_energy";
+    request.operating_points = {
+        {"charge", 1.0 / 1.5e6, "single_phase_solid"},
+        {"charge_high_capacity", 1.0 / 3.0e6,
+         "single_phase_solid"}};
+    request.maximum_interpolation_gap_si = 4.0e-7;
+    request.evaluation_coordinates_si = {
+        1.0 / 3.0e6, 5.0e-7};
     request.input_variables = {"heater.outlet.Q_dot"};
     request.output_variables = {
         "store.temperature", "heater.outlet.Q_dot"};
@@ -8067,8 +8075,11 @@ void test_small_signal_model_family_service() {
     require(
         response.succeeded() &&
             response.contract_version ==
-                "thermox.index1-model-family/v1" &&
+                "thermox.index1-model-family/v2" &&
             response.operating_points.size() == 2 &&
+            response.coordinate_name == "inverse_thermal_capacity" &&
+            response.coordinate_dimension ==
+                "temperature_per_energy" &&
             response.state_names ==
                 std::vector<std::string>{"store.temperature"} &&
             response.input_names == request.input_variables &&
@@ -8077,17 +8088,26 @@ void test_small_signal_model_family_service() {
         "identities across independently initialized cases: " +
             response.error.message);
     require(
-        response.operating_points[0].case_id == "charge" &&
-            response.operating_points[1].case_id ==
+        response.operating_points[0].case_id ==
                 "charge_high_capacity" &&
+            response.operating_points[1].case_id == "charge" &&
             std::abs(
                 response.operating_points[0].linearization.B[0][0] -
-                1.0 / 1.5e6) < 1.0e-12 &&
+                1.0 / 3.0e6) < 1.0e-12 &&
             std::abs(
                 response.operating_points[1].linearization.B[0][0] -
-                1.0 / 3.0e6) < 1.0e-12,
+                1.0 / 1.5e6) < 1.0e-12 &&
+            response.evaluations.size() == 2 &&
+            response.evaluations[0].exact &&
+            response.evaluations[0].lower_case_id ==
+                "charge_high_capacity" &&
+            !response.evaluations[1].exact &&
+            std::abs(response.evaluations[1].upper_weight - 0.5) <
+                1.0e-12 &&
+            std::abs(response.evaluations[1].B[0][0] - 5.0e-7) <
+                1.0e-12,
         "model-family points must retain distinct case-owned physical "
-        "parameters and local matrices");
+        "parameters and provide exact and interpolated local matrices");
     const auto json = thermox::service::
         serialize_small_signal_model_family_response_json(response);
     require(
@@ -8096,13 +8116,17 @@ void test_small_signal_model_family_service() {
                 std::string::npos &&
             json.find("\"case_id\": \"charge_high_capacity\"") !=
                 std::string::npos &&
+            json.find("\"coordinate_name\": ") !=
+                std::string::npos &&
+            json.find("\"evaluations\": [") !=
+                std::string::npos &&
             json.find("\"linearization\": {") !=
                 std::string::npos,
         "model-family JSON must embed auditable per-point "
         "linearization results");
 
     auto duplicate = request;
-    duplicate.case_ids = {"charge", "charge"};
+    duplicate.operating_points[1].case_id = "charge";
     const auto rejected = thermox::service::SimulationService{}
         .run_small_signal_model_family(duplicate);
     require(
@@ -8112,12 +8136,69 @@ void test_small_signal_model_family_service() {
         "model-family service must reject duplicate operating points "
         "before executing them");
 
+    auto missing_regime = request;
+    missing_regime.operating_points[0].regime.clear();
+    const auto missing_regime_rejected =
+        thermox::service::SimulationService{}
+            .run_small_signal_model_family(missing_regime);
+    require(
+        !missing_regime_rejected.succeeded() &&
+            missing_regime_rejected.error.code ==
+                "invalid_operating_points" &&
+            missing_regime_rejected.operating_points.empty(),
+        "model-family service must require explicit regime labels "
+        "before executing operating points");
+
+    auto boundary = request;
+    boundary.operating_points[1].regime = "different_regime";
+    boundary.evaluation_coordinates_si = {5.0e-7};
+    const auto boundary_rejected = thermox::service::SimulationService{}
+        .run_small_signal_model_family(boundary);
+    require(
+        !boundary_rejected.succeeded() &&
+            boundary_rejected.error.code ==
+                "model_family_regime_boundary" &&
+            boundary_rejected.operating_points.size() == 2,
+        "model-family evaluator must never interpolate across a "
+        "declared regime boundary");
+
+    auto gap = request;
+    gap.maximum_interpolation_gap_si = 1.0e-8;
+    gap.evaluation_coordinates_si = {5.0e-7};
+    const auto gap_rejected = thermox::service::SimulationService{}
+        .run_small_signal_model_family(gap);
+    require(
+        !gap_rejected.succeeded() &&
+            gap_rejected.error.code ==
+                "model_family_interpolation_gap",
+        "model-family evaluator must enforce the engineer-declared "
+        "maximum interpolation gap");
+
+    auto extrapolation = request;
+    extrapolation.evaluation_coordinates_si = {1.0e-7};
+    const auto extrapolation_rejected =
+        thermox::service::SimulationService{}
+            .run_small_signal_model_family(extrapolation);
+    require(
+        !extrapolation_rejected.succeeded() &&
+            extrapolation_rejected.error.code ==
+                "model_family_extrapolation_forbidden",
+        "model-family evaluator must reject extrapolation beyond the "
+        "qualified operating-point envelope");
+
     request.model_json = read_source_file(
         "core/examples/"
         "dynamic_bidirectional_regime_spanning_rigid_volume.json");
-    request.case_ids = {
-        "liquid_to_two_phase", "two_phase_to_liquid",
-        "two_phase_to_vapor", "vapor_to_two_phase"};
+    request.coordinate_name = "initial_specific_enthalpy";
+    request.coordinate_dimension = "specific_energy";
+    request.operating_points = {
+        {"liquid_to_two_phase", 760000.0, "liquid"},
+        {"two_phase_to_liquid", 758852.18418594659,
+         "two_phase"},
+        {"two_phase_to_vapor", 2777000.0, "two_phase"},
+        {"vapor_to_two_phase", 2779486.9924528766, "vapor"}};
+    request.maximum_interpolation_gap_si = 0.0;
+    request.evaluation_coordinates_si.clear();
     request.input_variables = {"thermal_boundary.outlet.Q_dot"};
     request.output_variables = {
         "vessel.pressure", "vessel.enthalpy"};
@@ -8130,11 +8211,19 @@ void test_small_signal_model_family_service() {
         "model-family service must linearize independently initialized "
         "liquid, two-phase, and vapor operating points: " +
             regimes.error.message);
+    const auto point = [&](const std::string& case_id) -> const auto& {
+        return *std::find_if(
+            regimes.operating_points.begin(),
+            regimes.operating_points.end(),
+            [&](const auto& candidate) {
+                return candidate.case_id == case_id;
+            });
+    };
     require(
-        regimes.operating_points[0].linearization.C[0][0] > 0.0 &&
-            regimes.operating_points[1].linearization.C[0][0] < 0.0 &&
-            regimes.operating_points[2].linearization.C[0][0] < 0.0 &&
-            regimes.operating_points[3].linearization.C[0][0] < 0.0 &&
+        point("liquid_to_two_phase").linearization.C[0][0] > 0.0 &&
+            point("two_phase_to_liquid").linearization.C[0][0] < 0.0 &&
+            point("two_phase_to_vapor").linearization.C[0][0] < 0.0 &&
+            point("vapor_to_two_phase").linearization.C[0][0] < 0.0 &&
             std::all_of(
                 regimes.operating_points.begin(),
                 regimes.operating_points.end(),

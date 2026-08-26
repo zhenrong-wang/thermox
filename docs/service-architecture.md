@@ -58,6 +58,8 @@ The current synchronous service exposes:
   linearity-envelope summaries, exposed through the service contract and thin CLI;
 - ordered multi-operating-point model families that independently execute immutable cases, embed
   each complete local model, and reject inconsistent state/input/output coordinate systems;
+- validity-aware local-model evaluation with explicit scheduling coordinates and interpolation
+  authority bounded by regime identity and maximum point spacing, with extrapolation prohibited;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by

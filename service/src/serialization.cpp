@@ -3504,6 +3504,20 @@ std::string serialize_small_signal_model_family_response_json(
         }
         out << ']';
     };
+    const auto matrix = [&](const auto& values) {
+        out << '[';
+        for (std::size_t row = 0; row < values.size(); ++row) {
+            if (row != 0U) out << ", ";
+            out << '[';
+            for (std::size_t column = 0;
+                 column < values[row].size(); ++column) {
+                if (column != 0U) out << ", ";
+                json_number(out, values[row][column]);
+            }
+            out << ']';
+        }
+        out << ']';
+    };
     out << "{\n  \"schema_version\": ";
     json_string(out, result_schema_v5);
     out << ",\n  \"contract_version\": ";
@@ -3512,6 +3526,12 @@ std::string serialize_small_signal_model_family_response_json(
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
     error_json(out, response.error);
+    out << ",\n  \"coordinate_name\": ";
+    json_string(out, response.coordinate_name);
+    out << ",\n  \"coordinate_dimension\": ";
+    json_string(out, response.coordinate_dimension);
+    out << ",\n  \"maximum_interpolation_gap_si\": ";
+    json_number(out, response.maximum_interpolation_gap_si);
     out << ",\n  \"states\": ";
     string_array(response.state_names);
     out << ",\n  \"inputs\": ";
@@ -3525,10 +3545,41 @@ std::string serialize_small_signal_model_family_response_json(
         const auto& point = response.operating_points[index];
         out << "{\"case_id\": ";
         json_string(out, point.case_id);
+        out << ", \"coordinate_si\": ";
+        json_number(out, point.coordinate_si);
+        out << ", \"regime\": ";
+        json_string(out, point.regime);
         out << ", \"linearization\": "
             << serialize_small_signal_linearization_response_json(
                    point.linearization)
             << '}';
+    }
+    out << "],\n  \"evaluations\": [";
+    for (std::size_t index = 0;
+         index < response.evaluations.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& evaluation = response.evaluations[index];
+        out << "{\"coordinate_si\": ";
+        json_number(out, evaluation.coordinate_si);
+        out << ", \"lower_case_id\": ";
+        json_string(out, evaluation.lower_case_id);
+        out << ", \"upper_case_id\": ";
+        json_string(out, evaluation.upper_case_id);
+        out << ", \"regime\": ";
+        json_string(out, evaluation.regime);
+        out << ", \"upper_weight\": ";
+        json_number(out, evaluation.upper_weight);
+        out << ", \"exact\": "
+            << (evaluation.exact ? "true" : "false")
+            << ", \"A\": ";
+        matrix(evaluation.A);
+        out << ", \"B\": ";
+        matrix(evaluation.B);
+        out << ", \"C\": ";
+        matrix(evaluation.C);
+        out << ", \"D\": ";
+        matrix(evaluation.D);
+        out << '}';
     }
     out << "]\n}\n";
     return out.str();

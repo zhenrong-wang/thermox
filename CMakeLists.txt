@@ -89,13 +89,29 @@ add_test(
     NAME platform_small_signal_model_family_cli
     COMMAND thermox_cli linearize-family
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_bidirectional_regime_spanning_rigid_volume.json
-        --case liquid_to_two_phase
-        --case two_phase_to_liquid
-        --case two_phase_to_vapor
-        --case vapor_to_two_phase
+        --coordinate-name initial_specific_enthalpy
+        --coordinate-dimension specific_energy
+        --operating-point liquid_to_two_phase:760000:liquid
+        --operating-point two_phase_to_liquid:758852.18418594659:two_phase
+        --operating-point two_phase_to_vapor:2777000:two_phase
+        --operating-point vapor_to_two_phase:2779486.9924528766:vapor
         --input-variable thermal_boundary.outlet.Q_dot
         --output-variable vessel.pressure
         --output-variable vessel.enthalpy
+        --format json)
+add_test(
+    NAME platform_small_signal_model_family_evaluation_cli
+    COMMAND thermox_cli linearize-family
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/lumped_thermal_storage.json
+        --coordinate-name inverse_thermal_capacity
+        --coordinate-dimension temperature_per_energy
+        --operating-point charge:6.666666666666667e-7:solid
+        --operating-point charge_high_capacity:3.333333333333333e-7:solid
+        --maximum-interpolation-gap 4e-7
+        --evaluate-at 3.333333333333333e-7
+        --evaluate-at 5e-7
+        --input-variable heater.outlet.Q_dot
+        --output-variable store.temperature
         --format json)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
