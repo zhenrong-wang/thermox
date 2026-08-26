@@ -145,13 +145,23 @@ def main() -> None:
         else nominal_fuel
     )
     delta_fuel_kg_s = nominal_fuel_kg_s * args.step_fraction
+    response_samples = nasa_linear_step_response(
+        delta_fuel_kg_s / KG_PER_POUND_MASS,
+        REFERENCE_SAMPLE_TIMES_S,
+    )
     reference = {
-        "schema_version": "thermox.validation.transient_reference/v1",
+        "schema_version": "thermox.validation_series/v1",
         "id": "nasa_agtf30_open_loop_fuel_step_linear_reference",
         "source": {
-            "artifact": "NASA AGTF30 outputs.mat",
-            "sha256": SOURCE_SHA256,
-            "evidence_basis": "authoritative_public_cross_code",
+            "reference": "NASA AGTF30 outputs.mat local A/B model",
+            "checksum_sha256": SOURCE_SHA256,
+            "evidence_basis": "derived_reference",
+            "acquisition": "computational",
+            "note": (
+                "Classical RK4 integration at 1e-5 s of the published "
+                "two-state A/B model for an absolute fuel step of "
+                f"{delta_fuel_kg_s:.17g} kg/s."
+            ),
             "limitations": [
                 "The response is derived from NASA's local A/B model, "
                 "not a nonlinear time history or hardware measurement.",
@@ -159,23 +169,22 @@ def main() -> None:
                 "respective initialized baselines."
             ],
         },
-        "input": {
-            "name": "fuel_flow",
-            "step_time_s": args.step_time,
-            "step_fraction_of_thermox_baseline": args.step_fraction,
-            "delta_kg_s": delta_fuel_kg_s,
-            "delta_lbm_s": delta_fuel_kg_s / KG_PER_POUND_MASS,
-        },
-        "linear_model": {
-            "states": ["lp_speed_rpm", "hp_speed_rpm"],
-            "A_per_s": NASA_A_PER_S,
-            "fuel_B_rpm_s_per_lbm_s": NASA_FUEL_B_RPM_S_PER_LBM_S,
-            "integration": "classical_rk4_fixed_1e-5_s",
-        },
-        "samples": nasa_linear_step_response(
-            delta_fuel_kg_s / KG_PER_POUND_MASS,
-            REFERENCE_SAMPLE_TIMES_S,
-        ),
+        "time_unit": "s",
+        "signals": [
+            {
+                "id": f"{shaft}_speed_delta",
+                "dimension": "angular_speed",
+                "unit": "rpm",
+                "samples": [
+                    {
+                        "time": sample["elapsed_time_s"],
+                        "value": sample["delta_speed_rpm"][shaft],
+                    }
+                    for sample in response_samples
+                ],
+            }
+            for shaft in ("lp", "hp")
+        ],
     }
 
     output = args.output

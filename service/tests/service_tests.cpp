@@ -9,6 +9,7 @@
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/thermal_feasibility.hpp"
 #include "thermox/service/validation_evidence.hpp"
+#include "thermox/service/validation_series.hpp"
 
 #include "../src/serialization_internal.hpp"
 
@@ -2835,16 +2836,14 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
                     read_source_file(path)));
     }
 
-    const auto reference_value = boost::json::parse(read_source_file(
-        "benchmarks/nasa_tmats/agtf30_fuel_step_linear_reference.json"));
-    const auto& reference = reference_value.as_object();
-    const double step_time = reference.at("input").as_object()
-        .at("step_time_s").as_double();
-    const auto& reference_samples = reference.at("samples").as_array();
-    for (const auto& encoded : reference_samples) {
+    const auto reference = thermox::service::
+        parse_validation_series_artifact_json(read_source_file(
+            "benchmarks/nasa_tmats/"
+            "agtf30_fuel_step_linear_reference.json"));
+    constexpr double step_time = 0.001;
+    for (const auto& sample : reference.signals.front().samples) {
         request.solver.required_output_times.push_back(
-            step_time + encoded.as_object()
-                .at("elapsed_time_s").as_double());
+            step_time + sample.time_si);
     }
     request.solver.end_time =
         request.solver.required_output_times.back();
@@ -2862,8 +2861,6 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
         "NASA AGTF30 nonlinear fuel-step transient must integrate: " +
             response.error.message);
 
-    constexpr double radians_per_second_per_rpm =
-        2.0 * 3.14159265358979323846 / 60.0;
     const auto discontinuity = std::find_if(
         response.trajectory.begin(), response.trajectory.end(),
         [&](const auto& sample) { return sample.time == step_time; });
@@ -2886,79 +2883,37 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
         "fuel-step declaration must apply the exact one-percent input "
         "perturbation");
 
-    std::vector<thermox::service::ResultProjection> projections;
-    std::vector<thermox::service::ValidationEvidenceCriterion> criteria;
-    projections.reserve(reference_samples.size() * 2U);
-    criteria.reserve(reference_samples.size() * 2U);
-    std::size_t index = 0U;
-    for (const auto& encoded : reference_samples) {
-        const auto& expected = encoded.as_object();
-        const double sample_time = step_time +
-            expected.at("elapsed_time_s").as_double();
-        const auto& expected_speed =
-            expected.at("delta_speed_rpm").as_object();
-        for (const auto* shaft : {"lp", "hp"}) {
-            const std::string id =
-                std::string(shaft) + "_speed_change_" +
-                std::to_string(index);
-            projections.push_back({
-                id,
+    std::vector<thermox::service::TrajectoryValidationBinding> bindings;
+    for (const auto* shaft : {"lp", "hp"}) {
+        bindings.push_back({
+            std::string(shaft) + "_speed_delta",
+            {
+                {},
                 thermox::service::ResultValueScope::component_internal,
                 std::string(shaft) + "_shaft",
                 {},
                 "omega",
                 "angular_speed",
-                thermox::service::ResultAggregation::change,
-                thermox::service::ResultWindow{
-                    thermox::service::ResultWindowAnchor::simulation,
-                    step_time,
-                    sample_time,
-                    {},
-                    0U,
-                },
-            });
-            criteria.push_back({
-                id + "_nasa_reference",
-                id,
-                thermox::service::ValidationEvidenceLayer::system,
-                thermox::service::ValidationEvidenceBasis::
-                    derived_reference,
-                "angular_speed",
-                expected_speed.at(shaft).as_double() *
-                    radians_per_second_per_rpm,
-                0.0,
-                0.25,
-                "NASA AGTF30 outputs.mat A/B model, sha256 "
-                "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
-                "Local linear cross-code reference; not a nonlinear "
-                "time history or hardware measurement.",
-            });
-        }
-        ++index;
-    }
-    const auto projected = thermox::service::project_transient_result(
-        response.trajectory, response.events, projections);
-    const auto evidence = thermox::service::evaluate_validation_evidence(
-        thermox::service::validation_observations_from_result_summary(
-            projected),
-        criteria,
-        {
-            "NASA supplies a local linear response, not an exported "
-            "nonlinear trajectory.",
-            "The reference is computational rather than hardware "
-            "evidence.",
+            },
+            thermox::service::TrajectoryComparison::projected_change,
+            step_time,
+            step_time,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
         });
+    }
+    const auto validation =
+        thermox::service::evaluate_trajectory_validation(
+            reference, bindings, response.trajectory, response.events);
     require(
-        projected.values.size() == 10U &&
-            std::all_of(
-                projected.values.begin(), projected.values.end(),
-                [](const auto& value) {
-                    return value.aggregation ==
-                            thermox::service::ResultAggregation::change &&
-                        value.has_window && value.has_sample_time;
-                }) &&
-            evidence.passed && evidence.passed_count == 10U &&
-            evidence.failed_count == 0U,
+        validation.exact_alignment_count == 10U &&
+            validation.interpolated_alignment_count == 0U &&
+            validation.maximum_alignment_gap_si == 0.0 &&
+            validation.evidence.passed &&
+            validation.evidence.passed_count == 10U &&
+            validation.evidence.failed_count == 0U,
         "generic change projections and classified evidence must qualify "
         "the finite-window NASA fuel-step comparison");
 }
@@ -8876,6 +8831,132 @@ void test_system_agnostic_result_projection() {
         "result projection must reject dimension mismatches");
 }
 
+void test_validation_series_contract() {
+    const auto artifact = thermox::service::
+        parse_validation_series_artifact_json(R"json({
+  "schema_version": "thermox.validation_series/v1",
+  "id": "external-transient-reference",
+  "source": {
+    "reference": "test report table 4",
+    "checksum_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "evidence_basis": "independent_reference",
+    "acquisition": "measured",
+    "note": "Synthetic contract fixture",
+    "limitations": ["Test-only values"]
+  },
+  "time_unit": "ms",
+  "signals": [{
+    "id": "outlet_temperature",
+    "dimension": "temperature",
+    "unit": "degC",
+    "samples": [{
+      "time": 500.0,
+      "value": 446.85,
+      "standard_uncertainty": 0.1
+    }]
+  }, {
+    "id": "efficiency_change",
+    "dimension": "dimensionless",
+    "unit": "1",
+    "samples": [
+      {"time": 1000.0, "value": -0.15},
+      {"time": 2000.0, "value": -0.05}
+    ]
+  }]
+})json");
+    require(
+        artifact.signals.size() == 2U &&
+            artifact.signals[0].samples[0].time_si == 0.5 &&
+            std::abs(
+                artifact.signals[0].samples[0].value_si - 720.0) <
+                1.0e-12 &&
+            std::abs(
+                *artifact.signals[0].samples[0]
+                    .standard_uncertainty_si - 0.1) < 1.0e-12,
+        "validation-series parsing must normalize time, offset units, "
+        "and uncertainties to canonical SI");
+    const auto round_trip = thermox::service::
+        parse_validation_series_artifact_json(
+            thermox::service::serialize_validation_series_artifact_json(
+                artifact));
+    require(
+        round_trip.id == artifact.id &&
+            round_trip.signals[0].canonical_unit == "K" &&
+            round_trip.signals[0].samples[0].value_si ==
+                artifact.signals[0].samples[0].value_si,
+        "canonical validation-series serialization must round-trip");
+
+    const std::vector<thermox::service::StateSample> trajectory{
+        {0.0, projection_graph(0.40)},
+        {1.0, projection_graph(0.25)},
+        {2.0, projection_graph(0.35)},
+    };
+    std::vector<thermox::service::TrajectoryValidationBinding> bindings{
+        {
+            "outlet_temperature",
+            {
+                {},
+                thermox::service::ResultValueScope::port_primary,
+                "turbine",
+                "outlet",
+                "temperature",
+                "temperature",
+            },
+            thermox::service::TrajectoryComparison::absolute,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+            1.0,
+        },
+        {
+            "efficiency_change",
+            {
+                {},
+                thermox::service::ResultValueScope::kpi,
+                {},
+                {},
+                "net_efficiency",
+                "dimensionless",
+            },
+            thermox::service::TrajectoryComparison::projected_change,
+            0.0,
+            0.0,
+            0.0,
+            1.0e-12,
+            0.0,
+            0.0,
+        },
+    };
+    const auto summary = thermox::service::
+        evaluate_trajectory_validation(
+            artifact, bindings, trajectory);
+    require(
+        summary.schema_version ==
+                thermox::service::trajectory_validation_schema_v1 &&
+            summary.artifact_id == artifact.id &&
+            summary.exact_alignment_count == 2U &&
+            summary.interpolated_alignment_count == 1U &&
+            summary.maximum_alignment_gap_si == 1.0 &&
+            summary.evidence.passed &&
+            summary.evidence.passed_count == 3U &&
+            summary.evidence.limitations ==
+                std::vector<std::string>{"Test-only values"},
+        "trajectory validation must align exact and interpolated samples, "
+        "apply projected changes and uncertainty, and retain provenance");
+
+    bindings[0].maximum_interpolation_gap_si = 0.5;
+    try {
+        (void)thermox::service::evaluate_trajectory_validation(
+            artifact, bindings, trajectory);
+        throw std::runtime_error(
+            "validation-series interpolation policy must reject wide "
+            "simulation gaps");
+    } catch (const thermox::service::ValidationSeriesError&) {
+    }
+}
+
 void test_validation_evidence_contract() {
     using namespace thermox::service;
     ResultSummary projected;
@@ -9207,6 +9288,7 @@ int main() {
         test_structured_compilation_failure();
         test_invalid_solver_settings();
         test_system_agnostic_result_projection();
+        test_validation_series_contract();
         test_validation_evidence_contract();
         test_iso2314_gas_turbine_performance_test_reduction();
         std::cout << "thermox service tests passed\n";

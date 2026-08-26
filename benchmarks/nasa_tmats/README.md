@@ -511,8 +511,10 @@ retained as evidence rather than calibrated away.
 `agtf30_fuel_step_transient.json` takes the next cross-code step with a true nonlinear DAE input
 schedule. At 0.001 s it applies a right-continuous 1% fuel-flow increase, retains both sides of the
 discontinuity, and compares five exact output times through 0.050 s after the step. The paired
-`agtf30_fuel_step_linear_reference.json` integrates NASA's checksum-pinned two-state A/B model for
-the identical absolute fuel perturbation.
+`agtf30_fuel_step_linear_reference.json` is a generic `thermox.validation_series/v1` artifact that
+integrates NASA's checksum-pinned two-state A/B model for the identical absolute fuel perturbation.
+The same validation-series contract accepts measured, computational, derived, or digitized data
+with declared units, uncertainty, alignment policy, and evidence provenance.
 
 ```sh
 python3 scripts/build_agtf30_fuel_step_transient_benchmark.py

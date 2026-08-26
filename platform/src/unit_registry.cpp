@@ -264,6 +264,7 @@ UnitRegistry make_default_unit_registry() {
         "time", "s", display("s"),
         {
             accepted("s"),
+            accepted("ms", 1.0e-3),
             accepted("min", 60.0),
             accepted("h", 3600.0),
         }));

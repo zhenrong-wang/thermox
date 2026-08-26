@@ -85,6 +85,12 @@ int main() {
                 std::abs(customary_velocity.value_si - 30.48) <
                     1.0e-12,
             "freestream velocity must normalize to SI speed");
+        const auto millisecond = units.convert(25.0, "ms");
+        require(
+            millisecond.dimension == "time" &&
+                millisecond.unit == "s" &&
+                std::abs(millisecond.value_si - 0.025) < 1.0e-15,
+            "millisecond timestamps must normalize to SI time");
         const auto& pressure_gradient =
             units.require_dimension("pressure_gradient");
         require(

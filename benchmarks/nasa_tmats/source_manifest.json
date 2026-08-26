@@ -574,6 +574,7 @@
   "agtf30_nonlinear_fuel_step_execution": {
     "model": "agtf30_fuel_step_transient.json",
     "reference": "agtf30_fuel_step_linear_reference.json",
+    "reference_schema": "thermox.validation_series/v1",
     "source_sha256": "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
     "input": "one-percent right-continuous fuel-flow step at 0.001 s",
     "comparison_times_after_step_s": [0.002, 0.006, 0.014, 0.03, 0.05],

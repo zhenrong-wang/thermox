@@ -176,6 +176,9 @@ Delivered:
 17. Full-graph nonlinear AGTF30 scheduled fuel-step execution against the checksum-pinned public
     NASA A/B trajectory, with exact discontinuity evidence and five finite-window rotor-speed
     comparisons. ✅ Partial cross-code transient evidence; nonlinear/hardware reference remains open.
+18. Provider-neutral validation-series artifacts with checksum provenance, unit and uncertainty
+    normalization, timestamp alignment policy, generic graph bindings, and classified trajectory
+    evidence; exercised by the public AGTF30 fuel-step benchmark. ✅
 
 ## Reusable dynamic equipment primitives
 
