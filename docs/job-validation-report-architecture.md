@@ -22,6 +22,11 @@ checksums remain in the durable Project repository.
 This makes campaign definitions usable by HTTP, future RPC adapters, CLI clients, and the web UI
 without adding transport-specific or filesystem persistence.
 
+The Studies workspace provides a thin typed authoring form over this API. It selects exact Project
+Study revisions, records objective and limitations, prevents accidental duplicate logical IDs, and
+publishes child revisions without retaining mutable drafts as campaign truth. The service repeats
+all authoritative validation at publication.
+
 ## Report selection contract
 
 `POST /api/v1/projects/{project_id}/validation-reports` accepts

@@ -117,6 +117,54 @@ describe('reconciliation revision API', () => {
 })
 
 describe('validation report API', () => {
+  it('publishes a typed immutable validation campaign revision', async () => {
+    const revision = {
+      schema_version: 'thermox.artifact_revision/v1',
+      artifact_revision_id: 'campaign-r2',
+      revision_number: 2,
+    } as ArtifactRevision
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) =>
+      new Response(JSON.stringify(revision), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const definition = {
+      schema_version: 'thermox.validation_campaign/v1' as const,
+      id: 'campaign-a',
+      name: 'Campaign A',
+      objective: 'Check reference agreement',
+      study_revision_ids: ['study-r1'],
+      limitations: [],
+    }
+
+    await api.createValidationCampaignRevision(
+      'project/a',
+      'campaign-a',
+      'campaign-r1',
+      definition,
+    )
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.pathname).toBe('/api/v1/projects/project%2Fa/artifact-revisions')
+    expect(url.searchParams.get('artifact_type')).toBe(
+      'thermox.validation_campaign',
+    )
+    expect(url.searchParams.get('artifact_schema_version')).toBe(
+      'thermox.validation_campaign/v1',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe('campaign-r1')
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(definition),
+    })
+  })
+
   it('submits only the explicitly selected immutable job identities', async () => {
     const response = {
       schema_version: 'thermox.job_validation_report/v2',

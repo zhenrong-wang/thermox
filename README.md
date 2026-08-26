@@ -192,7 +192,8 @@ Implemented in this sprint:
 - Immutable validation-campaign artifacts pin exact Project Study revisions, engineering objective,
   and limitations. Service-owned reports require one selected terminal job per pinned Study and
   summarize numerical completion, declared evidence, evaluated agreement, sample verdicts, and
-  timestamp alignment while deliberately making no global engineering-readiness claim.
+  timestamp alignment while deliberately making no global engineering-readiness claim. The Studies
+  workspace authors new and child campaign revisions through the same typed artifact API.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, transient, and explicit structural-policy audit HTTP routes onto
   `thermox_service`, with strict query decoding, JSON content checks, body limits, transport status

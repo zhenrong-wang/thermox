@@ -40,6 +40,7 @@ import type {
   StudyRevisionList,
   ExpressionComponentDefinition,
   TopologyDocument,
+  ValidationCampaignArtifact,
   ValidationSeriesArtifact,
 } from './types'
 
@@ -338,6 +339,27 @@ export const api = {
       artifact_id: artifactId,
       artifact_type: 'thermox.validation_series',
       artifact_schema_version: 'thermox.validation_series/v1',
+    })
+    if (parentArtifactRevisionId) {
+      query.set('parent_revision_id', parentArtifactRevisionId)
+    }
+    return postJson<ArtifactRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
+      definition,
+      signal,
+    )
+  },
+  createValidationCampaignRevision: (
+    projectId: string,
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ValidationCampaignArtifact,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      artifact_id: artifactId,
+      artifact_type: 'thermox.validation_campaign',
+      artifact_schema_version: 'thermox.validation_campaign/v1',
     })
     if (parentArtifactRevisionId) {
       query.set('parent_revision_id', parentArtifactRevisionId)

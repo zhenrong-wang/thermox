@@ -4,6 +4,7 @@ import type {
   StudyRevision,
   SimulationJob,
   ReconciliationRevision,
+  ValidationCampaignCatalogEntry,
 } from './types'
 
 interface CaseRevisionPanelProps {
@@ -11,6 +12,8 @@ interface CaseRevisionPanelProps {
   selectedId: string
   publishing: boolean
   studies: StudyRevision[]
+  validationCampaigns: ValidationCampaignCatalogEntry[]
+  campaignStudyCount: number
   calibrations: CalibrationRevision[]
   calibrationJobs: SimulationJob[]
   reconciliations: ReconciliationRevision[]
@@ -20,6 +23,10 @@ interface CaseRevisionPanelProps {
   onCreate: () => void
   onImportEvidence: () => void
   onPublishStudy: () => void
+  onPublishValidationCampaign: () => void
+  onReviseValidationCampaign: (
+    campaign: ValidationCampaignCatalogEntry,
+  ) => void
   onPublishCalibration: () => void
   onRunCalibration: (revision: CalibrationRevision) => void
   onPublishReconciliation: () => void
@@ -32,6 +39,8 @@ export function CaseRevisionPanel({
   selectedId,
   publishing,
   studies,
+  validationCampaigns,
+  campaignStudyCount,
   calibrations,
   calibrationJobs,
   reconciliations,
@@ -41,6 +50,8 @@ export function CaseRevisionPanel({
   onCreate,
   onImportEvidence,
   onPublishStudy,
+  onPublishValidationCampaign,
+  onReviseValidationCampaign,
   onPublishCalibration,
   onRunCalibration,
   onPublishReconciliation,
@@ -137,6 +148,49 @@ export function CaseRevisionPanel({
             <code>{revision.checksum.slice(7, 19)}</code>
           </div>
         ))}
+      </div>
+      <header className="study-revision-heading">
+        <div>
+          <span className="eyebrow">Cross-Study evidence scope</span>
+          <h2>Validation campaigns</h2>
+          <p>{validationCampaigns.length} immutable revisions</p>
+        </div>
+        <button type="button" className="resource-button"
+          disabled={publishing || campaignStudyCount === 0}
+          onClick={onPublishValidationCampaign}>Publish</button>
+      </header>
+      <div className="case-revision-list">
+        {!validationCampaigns.length && (
+          <div className="case-list-empty">
+            <strong>No validation campaigns</strong>
+            <span>Pin exact Studies, an objective, and known limitations.</span>
+          </div>
+        )}
+        {validationCampaigns.map((campaign) => {
+          const latest = !validationCampaigns.some((candidate) =>
+            candidate.source.artifact_id === campaign.source.artifact_id &&
+            candidate.source.revision_number > campaign.source.revision_number)
+          return (
+            <div className="case-revision-card"
+              key={campaign.source.artifact_revision_id}>
+              <div>
+                <strong>{campaign.definition.name}</strong>
+                <span>r{campaign.source.revision_number}</span>
+              </div>
+              <small>
+                {campaign.definition.study_revision_ids.length} Studies ·{' '}
+                {campaign.definition.objective}
+              </small>
+              <code>{campaign.source.content.checksum.slice(7, 19)}</code>
+              {latest && (
+                <button type="button" className="resource-button"
+                  onClick={() => onReviseValidationCampaign(campaign)}>
+                  Revise
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
       <header className="study-revision-heading">
         <div>

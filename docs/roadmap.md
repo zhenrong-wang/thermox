@@ -196,6 +196,8 @@ Delivered:
 25. Immutable Validation Campaign v1 artifacts and campaign-bound Report v2, requiring complete
     one-terminal-job-per-pinned-Study coverage through a service-owned coordinator and thin Results
     workspace. ✅
+26. Typed Studies-workspace validation-campaign authoring with exact Study selection, objective and
+    limitation declaration, immutable child revisions, and service-authoritative publication. ✅
 
 ## Reusable dynamic equipment primitives
 

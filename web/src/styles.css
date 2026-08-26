@@ -3045,6 +3045,48 @@ code {
   width: min(1120px, 100%);
 }
 
+.validation-campaign-dialog > label,
+.validation-campaign-dialog > .form-note,
+.validation-campaign-dialog > .form-error {
+  margin: 14px 20px 0;
+}
+
+.campaign-study-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 7px;
+  padding: 10px;
+}
+
+.campaign-study-picker label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #dce5e9;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.campaign-study-picker input {
+  width: auto;
+  min-height: 0;
+  margin-top: 2px;
+}
+
+.campaign-study-picker label > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.campaign-study-picker code {
+  overflow: hidden;
+  color: #587789;
+  font-size: 8px;
+  text-overflow: ellipsis;
+}
+
 .run-binding-summary {
   display: grid;
   grid-template-columns: 1.5fr 1.5fr 0.6fr 0.6fr;

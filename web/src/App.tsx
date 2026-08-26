@@ -45,6 +45,7 @@ import { ResultsWorkspace } from './ResultsWorkspace'
 import { StudyPublishForm } from './StudyPublishForm'
 import { studyArtifactRevisionIds } from './studyAuthoring'
 import { ValidationSeriesArtifactForm } from './ValidationSeriesArtifactForm'
+import { ValidationCampaignForm } from './ValidationCampaignForm'
 import { validationMatchesExecutionSelection } from './runAuthoring'
 import {
   mergeProjectComponentCatalog,
@@ -166,6 +167,10 @@ function App() {
   const [validationCampaigns, setValidationCampaigns] = useState<
     ValidationCampaignCatalogEntry[]
   >([])
+  const [addingValidationCampaign, setAddingValidationCampaign] =
+    useState(false)
+  const [revisingValidationCampaign, setRevisingValidationCampaign] =
+    useState<ValidationCampaignCatalogEntry>()
   const [revisingPerformanceMap, setRevisingPerformanceMap] = useState<{
     source: ArtifactRevision
     definition: PerformanceMapArtifactDefinition
@@ -1219,6 +1224,40 @@ function App() {
       setAddingValidationSeries(false)
       setOperationStatus(
         `Published validation data ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function publishValidationCampaign(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ValidationCampaignArtifact,
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing a campaign.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createValidationCampaignRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const artifacts = await api.artifactRevisions(selectedProjectId)
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setAddingValidationCampaign(false)
+      setRevisingValidationCampaign(undefined)
+      setOperationStatus(
+        `Published validation campaign ${artifactId} r${revision.revision_number}.`,
       )
     } catch (reason) {
       const message = errorMessage(reason)
@@ -2450,6 +2489,8 @@ function App() {
             <CaseRevisionPanel
               revisions={caseRevisions}
               studies={visibleStudies}
+              validationCampaigns={validationCampaigns}
+              campaignStudyCount={studyRevisions.length}
               calibrations={visibleCalibrations}
               calibrationJobs={calibrationJobs}
               reconciliations={visibleReconciliations}
@@ -2462,6 +2503,14 @@ function App() {
               onImportEvidence={() => setAddingValidationSeries(true)}
               onPublishStudy={() => {
                 setAddingStudy(true)
+              }}
+              onPublishValidationCampaign={() => {
+                setAddingValidationCampaign(true)
+                setRevisingValidationCampaign(undefined)
+              }}
+              onReviseValidationCampaign={(campaign) => {
+                setAddingValidationCampaign(false)
+                setRevisingValidationCampaign(campaign)
               }}
               onPublishCalibration={() => setAddingCalibration(true)}
               onRunCalibration={(revision) => {
@@ -2609,6 +2658,22 @@ function App() {
           <ValidationSeriesArtifactForm
             onCancel={() => setAddingValidationSeries(false)}
             onSubmit={publishValidationSeries}
+          />
+        )}
+      {workspaceView === 'studies' &&
+        (addingValidationCampaign || revisingValidationCampaign) && (
+          <ValidationCampaignForm
+            key={revisingValidationCampaign
+              ? `revise-campaign-${revisingValidationCampaign.source.artifact_revision_id}`
+              : 'new-validation-campaign'}
+            studies={studyRevisions}
+            campaigns={validationCampaigns}
+            base={revisingValidationCampaign}
+            onCancel={() => {
+              setAddingValidationCampaign(false)
+              setRevisingValidationCampaign(undefined)
+            }}
+            onSubmit={publishValidationCampaign}
           />
         )}
       {workspaceView === 'topology' &&
