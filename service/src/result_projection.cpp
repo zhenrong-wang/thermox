@@ -280,6 +280,8 @@ std::string to_string(ResultAggregation aggregation) {
             return "mean";
         case ResultAggregation::root_mean_square:
             return "root_mean_square";
+        case ResultAggregation::change:
+            return "change";
     }
     return "unknown";
 }
@@ -300,6 +302,9 @@ ResultAggregation result_aggregation_from_string(
     }
     if (value == "root_mean_square") {
         return ResultAggregation::root_mean_square;
+    }
+    if (value == "change") {
+        return ResultAggregation::change;
     }
     throw ResultProjectionError(
         "unsupported result projection aggregation: " + value);
@@ -704,6 +709,8 @@ ResultSummary project_transient_result(
             const auto& sample = *selected;
             value = sample.value;
             sample_time = sample.time;
+        } else if (projection.aggregation == ResultAggregation::change) {
+            value = clipped.back().value - clipped.front().value;
         } else if (projection.aggregation == ResultAggregation::mean ||
                    projection.aggregation ==
                        ResultAggregation::root_mean_square) {

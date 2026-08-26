@@ -2862,28 +2862,8 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
         "NASA AGTF30 nonlinear fuel-step transient must integrate: " +
             response.error.message);
 
-    const auto energy = [](const thermox::service::GraphResult& graph,
-                           const std::string& shaft) {
-        return require_result_value(
-            require_component_result(graph, shaft).internal_values,
-            "rotational_energy").value_si;
-    };
     constexpr double radians_per_second_per_rpm =
         2.0 * 3.14159265358979323846 / 60.0;
-    constexpr double lp_inertia = 23.646647685338;
-    constexpr double hp_inertia = 2.522567598979;
-    const auto speed_rpm = [&](double rotational_energy,
-                               double inertia) {
-        return std::sqrt(2.0 * rotational_energy / inertia) /
-            radians_per_second_per_rpm;
-    };
-    const double initial_lp_speed = speed_rpm(
-        energy(response.trajectory.front().graph, "lp_shaft"),
-        lp_inertia);
-    const double initial_hp_speed = speed_rpm(
-        energy(response.trajectory.front().graph, "hp_shaft"),
-        hp_inertia);
-
     const auto discontinuity = std::find_if(
         response.trajectory.begin(), response.trajectory.end(),
         [&](const auto& sample) { return sample.time == step_time; });
@@ -2906,39 +2886,81 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
         "fuel-step declaration must apply the exact one-percent input "
         "perturbation");
 
+    std::vector<thermox::service::ResultProjection> projections;
+    std::vector<thermox::service::ValidationEvidenceCriterion> criteria;
+    projections.reserve(reference_samples.size() * 2U);
+    criteria.reserve(reference_samples.size() * 2U);
+    std::size_t index = 0U;
     for (const auto& encoded : reference_samples) {
         const auto& expected = encoded.as_object();
         const double sample_time = step_time +
             expected.at("elapsed_time_s").as_double();
-        const auto sample = std::find_if(
-            response.trajectory.begin(), response.trajectory.end(),
-            [&](const auto& candidate) {
-                return candidate.time == sample_time;
-            });
-        require(
-            sample != response.trajectory.end(),
-            "fuel-step transient must expose every requested comparison "
-            "time");
         const auto& expected_speed =
             expected.at("delta_speed_rpm").as_object();
-        const double actual_lp_delta = speed_rpm(
-            energy(sample->graph, "lp_shaft"), lp_inertia) -
-            initial_lp_speed;
-        const double actual_hp_delta = speed_rpm(
-            energy(sample->graph, "hp_shaft"), hp_inertia) -
-            initial_hp_speed;
-        const double expected_lp_delta =
-            expected_speed.at("lp").as_double();
-        const double expected_hp_delta =
-            expected_speed.at("hp").as_double();
-        require(
-            std::abs(actual_lp_delta / expected_lp_delta - 1.0) < 0.25 &&
-                std::abs(actual_hp_delta / expected_hp_delta - 1.0) <
-                    0.25,
-            "Thermox nonlinear rotor-speed response must remain within "
-            "25 percent of the public NASA local linear model: t=" +
-                std::to_string(sample_time));
+        for (const auto* shaft : {"lp", "hp"}) {
+            const std::string id =
+                std::string(shaft) + "_speed_change_" +
+                std::to_string(index);
+            projections.push_back({
+                id,
+                thermox::service::ResultValueScope::component_internal,
+                std::string(shaft) + "_shaft",
+                {},
+                "omega",
+                "angular_speed",
+                thermox::service::ResultAggregation::change,
+                thermox::service::ResultWindow{
+                    thermox::service::ResultWindowAnchor::simulation,
+                    step_time,
+                    sample_time,
+                    {},
+                    0U,
+                },
+            });
+            criteria.push_back({
+                id + "_nasa_reference",
+                id,
+                thermox::service::ValidationEvidenceLayer::system,
+                thermox::service::ValidationEvidenceBasis::
+                    derived_reference,
+                "angular_speed",
+                expected_speed.at(shaft).as_double() *
+                    radians_per_second_per_rpm,
+                0.0,
+                0.25,
+                "NASA AGTF30 outputs.mat A/B model, sha256 "
+                "d5a62c4d59825b5521f28d6a6f125e21f2f170ab0b7081d2dd536525f7f10f42",
+                "Local linear cross-code reference; not a nonlinear "
+                "time history or hardware measurement.",
+            });
+        }
+        ++index;
     }
+    const auto projected = thermox::service::project_transient_result(
+        response.trajectory, response.events, projections);
+    const auto evidence = thermox::service::evaluate_validation_evidence(
+        thermox::service::validation_observations_from_result_summary(
+            projected),
+        criteria,
+        {
+            "NASA supplies a local linear response, not an exported "
+            "nonlinear trajectory.",
+            "The reference is computational rather than hardware "
+            "evidence.",
+        });
+    require(
+        projected.values.size() == 10U &&
+            std::all_of(
+                projected.values.begin(), projected.values.end(),
+                [](const auto& value) {
+                    return value.aggregation ==
+                            thermox::service::ResultAggregation::change &&
+                        value.has_window && value.has_sample_time;
+                }) &&
+            evidence.passed && evidence.passed_count == 10U &&
+            evidence.failed_count == 0U,
+        "generic change projections and classified evidence must qualify "
+        "the finite-window NASA fuel-step comparison");
 }
 
 void test_cantera_brayton_integration_benchmark() {
@@ -8566,6 +8588,13 @@ void test_system_agnostic_result_projection() {
     using thermox::service::ResultProjection;
     using thermox::service::ResultValueScope;
 
+    require(
+        thermox::service::to_string(ResultAggregation::change) ==
+                "change" &&
+            thermox::service::result_aggregation_from_string("change") ==
+                ResultAggregation::change,
+        "transient change aggregation must preserve its transport name");
+
     const std::vector<ResultProjection> steady_projections{
         {
             "cycle_efficiency",
@@ -8683,6 +8712,15 @@ void test_system_agnostic_result_projection() {
                     thermox::service::ResultWindowAnchor::simulation,
                     0.5, 1.5, {}, 0U,
                 },
+            }, ResultProjection{
+                "windowed_efficiency_change",
+                ResultValueScope::kpi,
+                {}, {}, "net_efficiency", "dimensionless",
+                ResultAggregation::change,
+                thermox::service::ResultWindow{
+                    thermox::service::ResultWindowAnchor::simulation,
+                    0.5, 1.5, {}, 0U,
+                },
             }});
     const double expected_mean = 0.2828125;
     const double expected_rms = std::sqrt(
@@ -8691,11 +8729,14 @@ void test_system_agnostic_result_projection() {
          0.5 / 3.0 * (0.25 * 0.25 + 0.25 * 0.30 +
                        0.30 * 0.30)));
     require(
-        reductions.values.size() == 2U &&
+        reductions.values.size() == 3U &&
             std::abs(reductions.values[0].value_si - expected_mean) <
                 1.0e-12 &&
             std::abs(reductions.values[1].value_si - expected_rms) <
                 1.0e-12 &&
+            std::abs(reductions.values[2].value_si + 0.025) <
+                1.0e-12 &&
+            reductions.values[2].sample_time == 1.5 &&
             reductions.values[0].has_window &&
             reductions.values[0].window_start_time == 0.75 &&
             reductions.values[0].window_end_time == 1.75 &&

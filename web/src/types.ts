@@ -289,6 +289,7 @@ export type ResultAggregation =
   | 'maximum'
   | 'mean'
   | 'root_mean_square'
+  | 'change'
 
 export interface ResultWindow {
   anchor: 'simulation' | 'event'

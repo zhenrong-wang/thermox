@@ -20,12 +20,14 @@ This keeps fuel, air, extraction, and exhaust totals selectable without embeddin
 reference species or mixture composition in service/UI post-processing.
 
 Steady projections use the final solved graph. Transient projections select `final`, `minimum`,
-`maximum`, `mean`, or `root_mean_square`. A projection can reduce the complete trajectory, an
-absolute simulation-time window, or a window anchored to a named event occurrence. Exact window
-boundaries and event-relative offsets are canonical SI seconds and are linearly interpolated from
-graph-native samples. Event occurrences are zero-based. Extrema and final values retain
-their evaluation time; mean and RMS values retain the resolved window instead of inventing a
-representative sample time.
+`maximum`, `mean`, `root_mean_square`, or `change`. Change is the signed end value minus the start
+value and preserves the selected physical dimension. A projection can reduce the complete
+trajectory, an absolute simulation-time window, or a window anchored to a named event occurrence.
+Exact window boundaries and event-relative offsets are canonical SI seconds and are linearly
+interpolated from graph-native samples. Event occurrences are zero-based. Extrema and final values
+retain
+their evaluation time; change retains the end time, while mean and RMS values retain the resolved
+window instead of inventing a representative sample time.
 
 Event-relative windows currently require non-negative offsets. An offset of zero evaluates the
 post-transition sample recorded at the event. `thermox.result/v5` retains the ordinary graph as the
@@ -38,7 +40,9 @@ Minimum and maximum reductions inspect both limits. Mean uses trapezoidal integr
 continuous piece, while RMS uses the exact integral of the square of each linear piece; the jump
 itself contributes zero duration. A window beginning exactly at a jump uses only the right limit,
 and a window ending at one includes both limits for extrema while remaining measure-neutral for
-mean and RMS. All reductions preserve the selected value's physical dimension.
+mean and RMS. Change uses the right-limit value when its window begins at a discontinuity, making
+scheduled step-response increments unambiguous. All reductions preserve the selected value's
+physical dimension.
 
 Projection definitions are stored in immutable run-configuration revisions and participate in
 their checksums. Submission snapshots them into the immutable job request. After a successful

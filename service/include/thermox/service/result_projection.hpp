@@ -31,6 +31,7 @@ enum class ResultAggregation {
     maximum,
     mean,
     root_mean_square,
+    change,
 };
 
 std::string to_string(ResultAggregation aggregation);

@@ -187,6 +187,7 @@ export function StudyPublishForm({
                   <option value="maximum">maximum</option>
                   <option value="mean">mean</option>
                   <option value="root_mean_square">root mean square</option>
+                  <option value="change">change over window</option>
                 </select>
                 {transient && (
                   <label className="projection-window-toggle">

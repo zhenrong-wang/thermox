@@ -14,6 +14,11 @@ or transient result projections can be converted directly into observations. Sol
 such as a normalized residual can be added as separate observations rather than being conflated
 with physical outputs.
 
+Transient `change` projections make finite-window response validation generic: the same contract
+can compare pressure, temperature, speed, power, or another registered quantity between a declared
+perturbation time and any later time. The resulting dimensioned changes flow through this evidence
+contract without benchmark-specific post-processing.
+
 ## Evidence layers
 
 Every criterion identifies the layer being checked:
