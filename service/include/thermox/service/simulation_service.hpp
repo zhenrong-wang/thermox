@@ -1388,7 +1388,11 @@ struct SmallSignalModelFamilyRequest {
     std::string coordinate_dimension;
     std::vector<SmallSignalModelFamilyOperatingPointRequest>
         operating_points;
+    std::vector<SmallSignalModelFamilyOperatingPointRequest>
+        validation_points;
     double maximum_interpolation_gap_si{0.0};
+    double validation_absolute_tolerance{0.0};
+    double validation_relative_tolerance{0.0};
     std::vector<double> evaluation_coordinates_si;
     std::vector<std::string> input_variables;
     std::vector<std::string> output_variables;
@@ -1417,19 +1421,38 @@ struct SmallSignalModelFamilyEvaluation {
     std::vector<std::vector<double>> D;
 };
 
+struct SmallSignalModelFamilyMatrixValidation {
+    double maximum_absolute_error{0.0};
+    double maximum_tolerance_ratio{0.0};
+    bool passed{false};
+};
+
+struct SmallSignalModelFamilyValidation {
+    SmallSignalModelFamilyPoint reference;
+    SmallSignalModelFamilyEvaluation prediction;
+    SmallSignalModelFamilyMatrixValidation A;
+    SmallSignalModelFamilyMatrixValidation B;
+    SmallSignalModelFamilyMatrixValidation C;
+    SmallSignalModelFamilyMatrixValidation D;
+    bool passed{false};
+};
+
 struct SmallSignalModelFamilyResponse {
     std::string contract_version{
-        "thermox.index1-model-family/v2"};
+        "thermox.index1-model-family/v3"};
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
     std::string coordinate_name;
     std::string coordinate_dimension;
     double maximum_interpolation_gap_si{0.0};
+    double validation_absolute_tolerance{0.0};
+    double validation_relative_tolerance{0.0};
     std::vector<std::string> state_names;
     std::vector<std::string> input_names;
     std::vector<std::string> output_names;
     std::vector<SmallSignalModelFamilyPoint> operating_points;
     std::vector<SmallSignalModelFamilyEvaluation> evaluations;
+    std::vector<SmallSignalModelFamilyValidation> validations;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

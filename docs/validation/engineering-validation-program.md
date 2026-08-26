@@ -145,3 +145,19 @@ make the behavior reproducible. The fifth AGTF30 endpoint is still reserved: eve
 steps, the current line-search Newton globalization can leave Cantera's admissible enthalpy domain.
 The next numerical gate is a bound-aware trust-region or filter globalization, not a case-specific
 relaxation of thermochemistry.
+
+That numerical gate and the fifth steady point are now complete. Bound-aware trust-region Newton
+globalization plus capacity continuation closes the 407-variable sea-level-static graph in 12
+accepted stages at a normalized residual of `2.16e-13`. The public cross-code differences are
+-0.033% fan flow, -0.111% HPT pressure, -0.991% HPT temperature, +0.372% HPT flow, +0.012%
+station-5 pressure, -1.014% station-5 temperature, -0.369% VBV flow, and -0.468% bypass ratio.
+Fuel remains -15.24% and is explicitly unqualified; the difference is not calibrated away.
+
+Thermox now also has an executable held-out gate for multi-operating-point local-model families.
+Validation cases are excluded from interpolation construction, independently initialized and
+linearized, and then compared entry-by-entry against the training-only A/B/C/D prediction under
+declared absolute-plus-relative tolerances. The analytical storage gate passes and a deliberately
+mislocated validation coordinate fails. This strengthens the validation machinery, but it is
+internal-consistency evidence. The next engineering-evidence use is to promote traceable AGTF30
+dynamic operating points into training and held-out cases; measured transient evidence remains
+required for the unrestricted transient claim.

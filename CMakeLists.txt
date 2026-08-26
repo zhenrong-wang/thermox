@@ -107,7 +107,10 @@ add_test(
         --coordinate-dimension temperature_per_energy
         --operating-point charge:6.666666666666667e-7:solid
         --operating-point charge_high_capacity:3.333333333333333e-7:solid
+        --validation-point charge_nominal_capacity:5e-7:solid
         --maximum-interpolation-gap 4e-7
+        --validation-absolute-tolerance 1e-14
+        --validation-relative-tolerance 1e-10
         --evaluate-at 3.333333333333333e-7
         --evaluate-at 5e-7
         --input-variable heater.outlet.Q_dot

@@ -5952,12 +5952,21 @@ SimulationService::run_small_signal_model_family(
         request.coordinate_dimension.empty() ||
         request.operating_points.size() < 2U ||
         !std::isfinite(request.maximum_interpolation_gap_si) ||
-        request.maximum_interpolation_gap_si < 0.0) {
+        request.maximum_interpolation_gap_si < 0.0 ||
+        !std::isfinite(request.validation_absolute_tolerance) ||
+        request.validation_absolute_tolerance < 0.0 ||
+        !std::isfinite(request.validation_relative_tolerance) ||
+        request.validation_relative_tolerance < 0.0 ||
+        (!request.validation_points.empty() &&
+         request.validation_absolute_tolerance == 0.0 &&
+         request.validation_relative_tolerance == 0.0)) {
         response.error = make_error(
             "invalid_request", "request",
             "model_json, coordinate identity, at least one input "
             "variable, at least two operating points, and a finite "
-            "non-negative maximum interpolation gap are required");
+            "non-negative interpolation and validation tolerances are "
+            "required; held-out validation additionally requires at "
+            "least one positive error tolerance");
         return response;
     }
     auto declarations = request.operating_points;
@@ -5975,6 +5984,25 @@ SimulationService::run_small_signal_model_family(
             return response;
         }
     }
+    auto validation_declarations = request.validation_points;
+    for (const auto& point : validation_declarations) {
+        if (point.case_id.empty() || point.regime.empty() ||
+            !std::isfinite(point.coordinate_si) ||
+            !unique_cases.insert(point.case_id).second) {
+            response.error = make_error(
+                "invalid_validation_points", "validation_points",
+                "held-out case IDs must be nonempty and distinct from "
+                "training cases, regime labels must be nonempty, and "
+                "coordinates must be finite");
+            return response;
+        }
+    }
+    std::sort(
+        validation_declarations.begin(),
+        validation_declarations.end(),
+        [](const auto& left, const auto& right) {
+            return left.coordinate_si < right.coordinate_si;
+        });
     std::sort(
         declarations.begin(), declarations.end(),
         [](const auto& left, const auto& right) {
@@ -6004,6 +6032,10 @@ SimulationService::run_small_signal_model_family(
     response.coordinate_dimension = request.coordinate_dimension;
     response.maximum_interpolation_gap_si =
         request.maximum_interpolation_gap_si;
+    response.validation_absolute_tolerance =
+        request.validation_absolute_tolerance;
+    response.validation_relative_tolerance =
+        request.validation_relative_tolerance;
     response.operating_points.reserve(declarations.size());
     for (const auto& declaration : declarations) {
         SmallSignalLinearizationRequest point_request;
@@ -6064,9 +6096,9 @@ SimulationService::run_small_signal_model_family(
         }
         return result;
     };
-    response.evaluations.reserve(
-        request.evaluation_coordinates_si.size());
-    for (const double coordinate : request.evaluation_coordinates_si) {
+    const auto evaluate_coordinate = [&](
+        double coordinate,
+        SmallSignalModelFamilyEvaluation& evaluation) -> ServiceError {
         const auto upper = std::lower_bound(
             response.operating_points.begin(),
             response.operating_points.end(), coordinate,
@@ -6076,44 +6108,41 @@ SimulationService::run_small_signal_model_family(
         if (upper != response.operating_points.end() &&
             upper->coordinate_si == coordinate) {
             const auto& model = upper->linearization;
-            response.evaluations.push_back({
+            evaluation = {
                 coordinate, upper->case_id, upper->case_id,
                 upper->regime, 0.0, true,
-                model.A, model.B, model.C, model.D});
-            continue;
+                model.A, model.B, model.C, model.D};
+            return {};
         }
         if (upper == response.operating_points.begin() ||
             upper == response.operating_points.end()) {
-            response.error = make_error(
+            return make_error(
                 "model_family_extrapolation_forbidden",
                 request.coordinate_name,
                 "model-family evaluation coordinate lies outside the "
                 "qualified operating-point envelope");
-            return response;
         }
         const auto lower = std::prev(upper);
         if (lower->regime != upper->regime) {
-            response.error = make_error(
+            return make_error(
                 "model_family_regime_boundary",
                 request.coordinate_name,
                 "model-family interpolation across different declared "
                 "regimes is forbidden");
-            return response;
         }
         const double gap =
             upper->coordinate_si - lower->coordinate_si;
         if (request.maximum_interpolation_gap_si <= 0.0 ||
             gap > request.maximum_interpolation_gap_si) {
-            response.error = make_error(
+            return make_error(
                 "model_family_interpolation_gap",
                 request.coordinate_name,
                 "bracketing operating points exceed the declared "
                 "maximum interpolation gap");
-            return response;
         }
         const double upper_weight =
             (coordinate - lower->coordinate_si) / gap;
-        response.evaluations.push_back({
+        evaluation = {
             coordinate, lower->case_id, upper->case_id,
             lower->regime, upper_weight, false,
             interpolate_matrix(
@@ -6127,7 +6156,155 @@ SimulationService::run_small_signal_model_family(
                 upper_weight),
             interpolate_matrix(
                 lower->linearization.D, upper->linearization.D,
-                upper_weight)});
+                upper_weight)};
+        return {};
+    };
+
+    response.evaluations.reserve(
+        request.evaluation_coordinates_si.size());
+    for (const double coordinate : request.evaluation_coordinates_si) {
+        SmallSignalModelFamilyEvaluation evaluation;
+        const auto error = evaluate_coordinate(coordinate, evaluation);
+        if (!error.code.empty()) {
+            response.error = error;
+            return response;
+        }
+        response.evaluations.push_back(std::move(evaluation));
+    }
+
+    const auto validate_matrix = [
+        absolute_tolerance = request.validation_absolute_tolerance,
+        relative_tolerance = request.validation_relative_tolerance](
+        const std::vector<std::vector<double>>& predicted,
+        const std::vector<std::vector<double>>& reference) {
+        SmallSignalModelFamilyMatrixValidation result;
+        result.passed = predicted.size() == reference.size();
+        if (!result.passed) {
+            result.maximum_absolute_error =
+                std::numeric_limits<double>::infinity();
+            result.maximum_tolerance_ratio =
+                std::numeric_limits<double>::infinity();
+            return result;
+        }
+        for (std::size_t row = 0; row < reference.size(); ++row) {
+            if (predicted[row].size() != reference[row].size()) {
+                result.passed = false;
+                result.maximum_absolute_error =
+                    std::numeric_limits<double>::infinity();
+                result.maximum_tolerance_ratio =
+                    std::numeric_limits<double>::infinity();
+                return result;
+            }
+            for (std::size_t column = 0;
+                 column < reference[row].size();
+                 ++column) {
+                const double absolute_error = std::abs(
+                    predicted[row][column] - reference[row][column]);
+                const double tolerance = absolute_tolerance +
+                    relative_tolerance *
+                        std::abs(reference[row][column]);
+                result.maximum_absolute_error = std::max(
+                    result.maximum_absolute_error, absolute_error);
+                const double ratio = tolerance > 0.0
+                    ? absolute_error / tolerance
+                    : (absolute_error == 0.0
+                           ? 0.0
+                           : std::numeric_limits<double>::infinity());
+                result.maximum_tolerance_ratio = std::max(
+                    result.maximum_tolerance_ratio, ratio);
+                result.passed = result.passed &&
+                    absolute_error <= tolerance;
+            }
+        }
+        return result;
+    };
+    response.validations.reserve(validation_declarations.size());
+    for (const auto& declaration : validation_declarations) {
+        SmallSignalModelFamilyEvaluation prediction;
+        const auto interpolation_error = evaluate_coordinate(
+            declaration.coordinate_si, prediction);
+        if (!interpolation_error.code.empty()) {
+            response.error = make_error(
+                interpolation_error.code, declaration.case_id,
+                "held-out validation point cannot be predicted: " +
+                    interpolation_error.message);
+            return response;
+        }
+        if (prediction.exact) {
+            response.error = make_error(
+                "invalid_validation_points", declaration.case_id,
+                "held-out validation coordinate must not coincide with "
+                "a training operating point");
+            return response;
+        }
+        if (prediction.regime != declaration.regime) {
+            response.error = make_error(
+                "model_family_regime_boundary", declaration.case_id,
+                "held-out validation regime does not match the "
+                "training interval regime");
+            return response;
+        }
+
+        SmallSignalLinearizationRequest point_request;
+        point_request.schema_version = request.schema_version;
+        point_request.model_json = request.model_json;
+        point_request.case_id = declaration.case_id;
+        point_request.input_variables = request.input_variables;
+        point_request.output_variables = request.output_variables;
+        point_request.settings = request.settings;
+        point_request.artifacts = request.artifacts;
+        point_request.components = request.components;
+        auto reference = run_small_signal_linearization(point_request);
+        if (!reference.succeeded()) {
+            response.status = reference.status;
+            response.error = make_error(
+                "validation_point_linearization_failed",
+                declaration.case_id,
+                "small-signal linearization failed for held-out point '" +
+                    declaration.case_id + "': " +
+                    reference.error.message);
+            return response;
+        }
+        if (reference.state_names != response.state_names ||
+            reference.input_names != response.input_names ||
+            reference.output_names != response.output_names) {
+            response.status = OperationStatus::compilation_failed;
+            response.error = make_error(
+                "inconsistent_validation_point", declaration.case_id,
+                "held-out point must expose the same ordered state, "
+                "input, and output identities as the model family");
+            return response;
+        }
+        SmallSignalModelFamilyValidation validation;
+        validation.reference = {
+            declaration.case_id, declaration.coordinate_si,
+            declaration.regime, std::move(reference)};
+        validation.prediction = std::move(prediction);
+        validation.A = validate_matrix(
+            validation.prediction.A,
+            validation.reference.linearization.A);
+        validation.B = validate_matrix(
+            validation.prediction.B,
+            validation.reference.linearization.B);
+        validation.C = validate_matrix(
+            validation.prediction.C,
+            validation.reference.linearization.C);
+        validation.D = validate_matrix(
+            validation.prediction.D,
+            validation.reference.linearization.D);
+        validation.passed = validation.A.passed &&
+            validation.B.passed && validation.C.passed &&
+            validation.D.passed;
+        response.validations.push_back(std::move(validation));
+        if (!response.validations.back().passed) {
+            response.status = OperationStatus::result_failed;
+            response.error = make_error(
+                "model_family_validation_failed",
+                declaration.case_id,
+                "interpolated local model exceeds the declared "
+                "held-out matrix tolerances");
+            return response;
+        }
     }
     response.status = OperationStatus::succeeded;
     return response;

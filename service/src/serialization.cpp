@@ -3518,6 +3518,37 @@ std::string serialize_small_signal_model_family_response_json(
         }
         out << ']';
     };
+    const auto evaluation_json = [&](const auto& evaluation) {
+        out << "{\"coordinate_si\": ";
+        json_number(out, evaluation.coordinate_si);
+        out << ", \"lower_case_id\": ";
+        json_string(out, evaluation.lower_case_id);
+        out << ", \"upper_case_id\": ";
+        json_string(out, evaluation.upper_case_id);
+        out << ", \"regime\": ";
+        json_string(out, evaluation.regime);
+        out << ", \"upper_weight\": ";
+        json_number(out, evaluation.upper_weight);
+        out << ", \"exact\": "
+            << (evaluation.exact ? "true" : "false")
+            << ", \"A\": ";
+        matrix(evaluation.A);
+        out << ", \"B\": ";
+        matrix(evaluation.B);
+        out << ", \"C\": ";
+        matrix(evaluation.C);
+        out << ", \"D\": ";
+        matrix(evaluation.D);
+        out << '}';
+    };
+    const auto matrix_validation_json = [&](const auto& validation) {
+        out << "{\"maximum_absolute_error\": ";
+        json_number(out, validation.maximum_absolute_error);
+        out << ", \"maximum_tolerance_ratio\": ";
+        json_number(out, validation.maximum_tolerance_ratio);
+        out << ", \"passed\": "
+            << (validation.passed ? "true" : "false") << '}';
+    };
     out << "{\n  \"schema_version\": ";
     json_string(out, result_schema_v5);
     out << ",\n  \"contract_version\": ";
@@ -3532,6 +3563,10 @@ std::string serialize_small_signal_model_family_response_json(
     json_string(out, response.coordinate_dimension);
     out << ",\n  \"maximum_interpolation_gap_si\": ";
     json_number(out, response.maximum_interpolation_gap_si);
+    out << ",\n  \"validation_absolute_tolerance\": ";
+    json_number(out, response.validation_absolute_tolerance);
+    out << ",\n  \"validation_relative_tolerance\": ";
+    json_number(out, response.validation_relative_tolerance);
     out << ",\n  \"states\": ";
     string_array(response.state_names);
     out << ",\n  \"inputs\": ";
@@ -3559,27 +3594,34 @@ std::string serialize_small_signal_model_family_response_json(
          index < response.evaluations.size(); ++index) {
         if (index != 0U) out << ", ";
         const auto& evaluation = response.evaluations[index];
-        out << "{\"coordinate_si\": ";
-        json_number(out, evaluation.coordinate_si);
-        out << ", \"lower_case_id\": ";
-        json_string(out, evaluation.lower_case_id);
-        out << ", \"upper_case_id\": ";
-        json_string(out, evaluation.upper_case_id);
+        evaluation_json(evaluation);
+    }
+    out << "],\n  \"validations\": [";
+    for (std::size_t index = 0;
+         index < response.validations.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& validation = response.validations[index];
+        out << "{\"reference\": {\"case_id\": ";
+        json_string(out, validation.reference.case_id);
+        out << ", \"coordinate_si\": ";
+        json_number(out, validation.reference.coordinate_si);
         out << ", \"regime\": ";
-        json_string(out, evaluation.regime);
-        out << ", \"upper_weight\": ";
-        json_number(out, evaluation.upper_weight);
-        out << ", \"exact\": "
-            << (evaluation.exact ? "true" : "false")
-            << ", \"A\": ";
-        matrix(evaluation.A);
+        json_string(out, validation.reference.regime);
+        out << ", \"linearization\": "
+            << serialize_small_signal_linearization_response_json(
+                   validation.reference.linearization)
+            << "}, \"prediction\": ";
+        evaluation_json(validation.prediction);
+        out << ", \"A\": ";
+        matrix_validation_json(validation.A);
         out << ", \"B\": ";
-        matrix(evaluation.B);
+        matrix_validation_json(validation.B);
         out << ", \"C\": ";
-        matrix(evaluation.C);
+        matrix_validation_json(validation.C);
         out << ", \"D\": ";
-        matrix(evaluation.D);
-        out << '}';
+        matrix_validation_json(validation.D);
+        out << ", \"passed\": "
+            << (validation.passed ? "true" : "false") << '}';
     }
     out << "]\n}\n";
     return out.str();

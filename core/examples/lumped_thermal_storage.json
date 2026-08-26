@@ -77,6 +77,28 @@
           "unit": "K"
         }
       }
+    },
+    {
+      "id": "charge_nominal_capacity",
+      "mode": "dynamic_transient",
+      "parameter_overrides": {
+        "components.store.parameters.thermal_capacity": {
+          "value": 2.0,
+          "unit": "MJ/K"
+        }
+      },
+      "fixed_values": {
+        "heater.outlet.Q_dot": {
+          "value": 1.5,
+          "unit": "MW"
+        }
+      },
+      "initial_guesses": {
+        "store.temperature": {
+          "value": 315.0,
+          "unit": "K"
+        }
+      }
     }
   ]
 }

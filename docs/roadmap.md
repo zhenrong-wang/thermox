@@ -170,6 +170,9 @@ Delivered:
 15. Validity-aware one-dimensional local-model evaluation with explicit SI scheduling coordinates,
     exact selection, bounded same-regime A/B/C/D interpolation, and hard gap, regime-boundary, and
     extrapolation rejection. ✅
+16. Held-out local-model-family validation with independently initialized reference cases,
+    training-only interpolation, absolute-plus-relative A/B/C/D acceptance, complete serialized
+    evidence, and structured failure when the declared interval is not predictive. ✅
 
 ## Reusable dynamic equipment primitives
 

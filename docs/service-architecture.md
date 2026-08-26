@@ -60,6 +60,9 @@ The current synchronous service exposes:
   each complete local model, and reject inconsistent state/input/output coordinate systems;
 - validity-aware local-model evaluation with explicit scheduling coordinates and interpolation
   authority bounded by regime identity and maximum point spacing, with extrapolation prohibited;
+- held-out model-family validation that independently linearizes cases excluded from construction,
+  compares training-only A/B/C/D predictions under explicit matrix tolerances, and preserves the
+  complete reference, prediction, bracket, and acceptance evidence;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by

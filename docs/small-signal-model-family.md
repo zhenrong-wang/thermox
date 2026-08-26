@@ -1,6 +1,6 @@
 # Small-signal model families
 
-`thermox.index1-model-family/v2` constructs an ordered family of local A/B/C/D models from two or
+`thermox.index1-model-family/v3` constructs an ordered family of local A/B/C/D models from two or
 more independently initialized cases in one declarative model document. Every point declares an
 SI scheduling coordinate and a regime label. The workflow belongs to the service layer; the CLI is
 a thin caller through `linearize-family`.
@@ -18,9 +18,21 @@ label and their coordinate separation does not exceed the request's positive
 `maximum_interpolation_gap_si`. Extrapolation is always forbidden. A zero maximum gap therefore
 allows construction and exact selection but grants no interpolation authority. These policies make
 the validity boundary part of the engineering request rather than an implicit numerical choice.
-They are necessary safety gates, not proof that interpolation is predictive: an engineering study
-must still compare interpolated models with independently solved or measured held-out points before
-claiming accuracy over an interval.
+They are necessary safety gates, not by themselves proof that interpolation is predictive.
+
+The v3 held-out gate makes that distinction executable. Validation cases are declared separately
+from the operating points used to form the family. Thermox independently initializes and
+linearizes each validation case, predicts its A/B/C/D matrices using only its two neighboring
+training points, and compares every entry with an absolute-plus-relative tolerance. The response
+retains the complete reference linearization, interpolated matrices, bracketing case identities,
+maximum absolute errors, maximum tolerance ratios, and per-matrix acceptance. Extrapolation,
+cross-regime prediction, excessive gaps, coincident training/validation coordinates, and failed
+matrix acceptance are structured result failures rather than warnings.
+
+This is cross-validation against an independently solved Thermox operating point. It can qualify
+a chosen scheduling coordinate and interpolation interval, but it remains internal physics/model
+evidence unless the held-out case itself is anchored to an independent measured or authoritative
+reference.
 
 This contract is distinct from the perturbation ladder:
 
@@ -33,7 +45,10 @@ case-owned initial states spanning liquid, two-phase, and vapor regions. All fou
 conserved states `vessel.mass` and `vessel.total_energy`, the heat input has the expected common
 energy rate gain, and the pressure/enthalpy C matrices change with the local CoolProp-backed
 thermodynamic derivatives. A second analytical gate uses different case-owned storage capacities
-and verifies that each point retains its distinct B matrix.
+and verifies that each point retains its distinct B matrix. A third capacity case is withheld from
+construction; the interpolated model reproduces its independently linearized A/B/C/D matrices
+within the declared numerical tolerance. A deliberately mislocated validation coordinate is
+rejected, proving that acceptance is based on matrix agreement rather than case identity.
 
 The public AGTF30 transient benchmark currently contains one dynamically qualified operating
 point. Four additional points exist in steady graphs, but they fix shaft speed rather than declare

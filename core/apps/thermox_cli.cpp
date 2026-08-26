@@ -63,9 +63,12 @@ void print_usage(std::ostream& out) {
         << "  thermox_cli linearize-family --model <path>"
            " --coordinate-name <name> --coordinate-dimension <dimension>"
            " --operating-point <case>:<coordinate-si>:<regime>..."
+           " [--validation-point <case>:<coordinate-si>:<regime>]..."
            " --input-variable <graph-variable>..."
            " [--output-variable <graph-variable>]..."
            " [--maximum-interpolation-gap <si-value>]"
+           " [--validation-absolute-tolerance <value>]"
+           " [--validation-relative-tolerance <value>]"
            " [--evaluate-at <coordinate-si>]..."
            " [same linearization and verification options as linearize]"
            " [--format text|json]\n"
@@ -350,6 +353,24 @@ void print_small_signal_family_text(
                   << " exact="
                   << (evaluation.exact ? "yes" : "no") << '\n';
     }
+    for (const auto& validation : response.validations) {
+        std::cout << "validation case="
+                  << validation.reference.case_id
+                  << " coordinate_si="
+                  << validation.reference.coordinate_si
+                  << " lower="
+                  << validation.prediction.lower_case_id
+                  << " upper="
+                  << validation.prediction.upper_case_id
+                  << " max_tolerance_ratio="
+                  << std::max({
+                         validation.A.maximum_tolerance_ratio,
+                         validation.B.maximum_tolerance_ratio,
+                         validation.C.maximum_tolerance_ratio,
+                         validation.D.maximum_tolerance_ratio})
+                  << " passed="
+                  << (validation.passed ? "yes" : "no") << '\n';
+    }
 }
 
 }  // namespace
@@ -367,7 +388,10 @@ int main(int argc, char** argv) {
     std::string family_coordinate_name;
     std::string family_coordinate_dimension;
     std::string maximum_interpolation_gap_text;
+    std::string validation_absolute_tolerance_text;
+    std::string validation_relative_tolerance_text;
     std::vector<std::string> family_operating_point_texts;
+    std::vector<std::string> family_validation_point_texts;
     std::vector<std::string> family_evaluation_coordinate_texts;
     std::string calibration_id;
     std::string reconciliation_id;
@@ -421,9 +445,17 @@ int main(int argc, char** argv) {
             family_coordinate_dimension = argv[++i];
         } else if (arg == "--operating-point" && i + 1 < argc) {
             family_operating_point_texts.emplace_back(argv[++i]);
+        } else if (arg == "--validation-point" && i + 1 < argc) {
+            family_validation_point_texts.emplace_back(argv[++i]);
         } else if (arg == "--maximum-interpolation-gap" &&
                    i + 1 < argc) {
             maximum_interpolation_gap_text = argv[++i];
+        } else if (arg == "--validation-absolute-tolerance" &&
+                   i + 1 < argc) {
+            validation_absolute_tolerance_text = argv[++i];
+        } else if (arg == "--validation-relative-tolerance" &&
+                   i + 1 < argc) {
+            validation_relative_tolerance_text = argv[++i];
         } else if (arg == "--evaluate-at" && i + 1 < argc) {
             family_evaluation_coordinate_texts.emplace_back(argv[++i]);
         } else if (arg == "--performance-map" && i + 1 < argc) {
@@ -556,7 +588,10 @@ int main(int argc, char** argv) {
         (!family_coordinate_name.empty() ||
          !family_coordinate_dimension.empty() ||
          !family_operating_point_texts.empty() ||
+         !family_validation_point_texts.empty() ||
          !maximum_interpolation_gap_text.empty() ||
+         !validation_absolute_tolerance_text.empty() ||
+         !validation_relative_tolerance_text.empty() ||
          !family_evaluation_coordinate_texts.empty())) {
         std::cerr << "model-family coordinate options are only valid for "
                      "linearize-family\n";
@@ -1093,11 +1128,28 @@ int main(int argc, char** argv) {
                     family_request.operating_points.push_back(
                         parse_family_operating_point(value));
                 }
+                for (const auto& value :
+                     family_validation_point_texts) {
+                    family_request.validation_points.push_back(
+                        parse_family_operating_point(value));
+                }
                 if (!maximum_interpolation_gap_text.empty()) {
                     family_request.maximum_interpolation_gap_si =
                         parse_positive_number(
                             maximum_interpolation_gap_text,
                             "--maximum-interpolation-gap");
+                }
+                if (!validation_absolute_tolerance_text.empty()) {
+                    family_request.validation_absolute_tolerance =
+                        parse_positive_number(
+                            validation_absolute_tolerance_text,
+                            "--validation-absolute-tolerance");
+                }
+                if (!validation_relative_tolerance_text.empty()) {
+                    family_request.validation_relative_tolerance =
+                        parse_positive_number(
+                            validation_relative_tolerance_text,
+                            "--validation-relative-tolerance");
                 }
                 for (const auto& value :
                      family_evaluation_coordinate_texts) {

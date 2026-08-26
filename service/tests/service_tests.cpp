@@ -8064,7 +8064,12 @@ void test_small_signal_model_family_service() {
         {"charge", 1.0 / 1.5e6, "single_phase_solid"},
         {"charge_high_capacity", 1.0 / 3.0e6,
          "single_phase_solid"}};
+    request.validation_points = {
+        {"charge_nominal_capacity", 1.0 / 2.0e6,
+         "single_phase_solid"}};
     request.maximum_interpolation_gap_si = 4.0e-7;
+    request.validation_absolute_tolerance = 1.0e-14;
+    request.validation_relative_tolerance = 1.0e-10;
     request.evaluation_coordinates_si = {
         1.0 / 3.0e6, 5.0e-7};
     request.input_variables = {"heater.outlet.Q_dot"};
@@ -8075,7 +8080,7 @@ void test_small_signal_model_family_service() {
     require(
         response.succeeded() &&
             response.contract_version ==
-                "thermox.index1-model-family/v2" &&
+                "thermox.index1-model-family/v3" &&
             response.operating_points.size() == 2 &&
             response.coordinate_name == "inverse_thermal_capacity" &&
             response.coordinate_dimension ==
@@ -8105,7 +8110,15 @@ void test_small_signal_model_family_service() {
             std::abs(response.evaluations[1].upper_weight - 0.5) <
                 1.0e-12 &&
             std::abs(response.evaluations[1].B[0][0] - 5.0e-7) <
-                1.0e-12,
+                1.0e-12 &&
+            response.validations.size() == 1 &&
+            response.validations[0].passed &&
+            response.validations[0].reference.case_id ==
+                "charge_nominal_capacity" &&
+            std::abs(
+                response.validations[0].prediction.B[0][0] -
+                response.validations[0].reference.linearization
+                    .B[0][0]) < 1.0e-14,
         "model-family points must retain distinct case-owned physical "
         "parameters and provide exact and interpolated local matrices");
     const auto json = thermox::service::
@@ -8119,6 +8132,10 @@ void test_small_signal_model_family_service() {
             json.find("\"coordinate_name\": ") !=
                 std::string::npos &&
             json.find("\"evaluations\": [") !=
+                std::string::npos &&
+            json.find("\"validations\": [") !=
+                std::string::npos &&
+            json.find("\"maximum_tolerance_ratio\": ") !=
                 std::string::npos &&
             json.find("\"linearization\": {") !=
                 std::string::npos,
@@ -8186,6 +8203,21 @@ void test_small_signal_model_family_service() {
         "model-family evaluator must reject extrapolation beyond the "
         "qualified operating-point envelope");
 
+    auto failed_validation = request;
+    failed_validation.validation_points[0].coordinate_si = 5.2e-7;
+    const auto validation_rejected =
+        thermox::service::SimulationService{}
+            .run_small_signal_model_family(failed_validation);
+    require(
+        validation_rejected.status ==
+                thermox::service::OperationStatus::result_failed &&
+            validation_rejected.error.code ==
+                "model_family_validation_failed" &&
+            validation_rejected.validations.size() == 1 &&
+            !validation_rejected.validations[0].passed,
+        "model-family held-out validation must fail as structured "
+        "result evidence when interpolation exceeds tolerance");
+
     request.model_json = read_source_file(
         "core/examples/"
         "dynamic_bidirectional_regime_spanning_rigid_volume.json");
@@ -8198,6 +8230,9 @@ void test_small_signal_model_family_service() {
         {"two_phase_to_vapor", 2777000.0, "two_phase"},
         {"vapor_to_two_phase", 2779486.9924528766, "vapor"}};
     request.maximum_interpolation_gap_si = 0.0;
+    request.validation_points.clear();
+    request.validation_absolute_tolerance = 0.0;
+    request.validation_relative_tolerance = 0.0;
     request.evaluation_coordinates_si.clear();
     request.input_variables = {"thermal_boundary.outlet.Q_dot"};
     request.output_variables = {
