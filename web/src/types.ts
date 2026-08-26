@@ -918,7 +918,7 @@ export interface ComparedResultValue {
 }
 
 export interface SimulationJobComparison {
-  schema_version: 'thermox.job_comparison/v2'
+  schema_version: 'thermox.job_comparison/v3'
   team_id: string
   project_id: string
   baseline_job_id: string
@@ -935,6 +935,14 @@ export interface SimulationJobComparison {
   engineering_acceptance: {
     baseline_passed: boolean | null
     candidate_passed: boolean | null
+    transition: string
+  }
+  trajectory_validation: {
+    baseline_passed: boolean | null
+    candidate_passed: boolean | null
+    baseline_sample_count: number
+    candidate_sample_count: number
+    compatibility: string
     transition: string
   }
   values: ComparedResultValue[]

@@ -610,6 +610,24 @@ export function ResultsWorkspace({
                   {comparison.coverage.incompatible_count} incompatible
                 </span>
               </div>
+              {comparison.trajectory_validation.compatibility !==
+                'not_evaluated' && (
+                <div className={`job-acceptance ${
+                  comparison.trajectory_validation.compatibility === 'comparable' &&
+                  comparison.trajectory_validation.candidate_passed
+                    ? 'accepted' : 'not-accepted'
+                }`}>
+                  <strong>Reference validation regression</strong>
+                  <span>
+                    {comparison.trajectory_validation.compatibility === 'comparable'
+                      ? comparison.trajectory_validation.transition.replaceAll('_', ' ')
+                      : comparison.trajectory_validation.compatibility.replaceAll('_', ' ')}
+                    {' · '}baseline {comparison.trajectory_validation.baseline_sample_count}
+                    {' samples · '}candidate{' '}
+                    {comparison.trajectory_validation.candidate_sample_count} samples
+                  </span>
+                </div>
+              )}
               <div className="comparison-table-wrap">
                 <table className="comparison-table">
                   <thead>

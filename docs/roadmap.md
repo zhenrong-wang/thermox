@@ -188,6 +188,8 @@ Delivered:
     the exact evidence revision and comparison policy before execution. ✅
 22. Result Summary v5 compact trajectory-validation verdicts in job history, PostgreSQL payloads,
     HTTP, and web execution views, explicitly independent of numerical success/failure state. ✅
+23. Job Comparison v3 reference-validation regression transitions guarded by exact immutable
+    evidence and policy compatibility, exposed consistently through HTTP and web analysis. ✅
 
 ## Reusable dynamic equipment primitives
 

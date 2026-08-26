@@ -185,7 +185,9 @@ Implemented in this sprint:
   evidence; comparisons reject otherwise similar values when their resolved windows differ.
 - Team- and Project-scoped Study comparison aligns completed projected results by stable identity,
   reports missing or incompatible outputs explicitly, and calculates candidate-minus-baseline SI
-  and relative deltas through one service-owned contract used by HTTP and web clients.
+  and relative deltas through one service-owned contract used by HTTP and web clients. Reference-
+  validation transitions are reported only when both jobs used identical evidence revisions and
+  alignment/tolerance policies.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, transient, and explicit structural-policy audit HTTP routes onto
   `thermox_service`, with strict query decoding, JSON content checks, body limits, transport status

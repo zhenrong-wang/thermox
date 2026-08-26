@@ -4258,6 +4258,23 @@ std::string serialize_job_comparison_json(
     out << ", \"transition\": ";
     json_string(
         out, comparison.engineering_acceptance.transition);
+    out << "},\n  \"trajectory_validation\": {"
+        << "\"baseline_passed\": ";
+    optional_bool(
+        out, comparison.trajectory_validation.baseline_passed);
+    out << ", \"candidate_passed\": ";
+    optional_bool(
+        out, comparison.trajectory_validation.candidate_passed);
+    out << ", \"baseline_sample_count\": "
+        << comparison.trajectory_validation.baseline_sample_count
+        << ", \"candidate_sample_count\": "
+        << comparison.trajectory_validation.candidate_sample_count
+        << ", \"compatibility\": ";
+    json_string(
+        out, comparison.trajectory_validation.compatibility);
+    out << ", \"transition\": ";
+    json_string(
+        out, comparison.trajectory_validation.transition);
     out << "},\n  \"values\": [";
     for (std::size_t index = 0;
          index < comparison.values.size(); ++index) {

@@ -1150,13 +1150,51 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         "study-candidate";
     candidate_request.source_revisions->study_checksum =
         "sha256:" + std::string(64, '4');
+    thermox::service::TrajectoryValidationPlan validation;
+    validation.artifact_revision_id = "artifact-revision-reference-1";
+    validation.artifact =
+        thermox::service::parse_validation_series_artifact_json(
+            R"json({
+              "schema_version": "thermox.validation_series/v1",
+              "id": "comparison-reference",
+              "source": {
+                "reference": "comparison fixture",
+                "checksum_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "evidence_basis": "independent_reference",
+                "acquisition": "measured",
+                "limitations": []
+              },
+              "time_unit": "s",
+              "signals": [{
+                "id": "net_power",
+                "dimension": "power",
+                "unit": "W",
+                "samples": [{"time": 0.0, "value": 100.0}]
+              }]
+            })json");
+    validation.bindings = {{
+        "net_power",
+        {
+            "net_power",
+            thermox::service::ResultValueScope::kpi,
+            {}, {}, "net_power", "power",
+        },
+        thermox::service::TrajectoryComparison::absolute,
+        0.0, 0.0, 1.0, 0.01, 0.0, 0.0,
+    }};
+    baseline_request.mode =
+        thermox::service::SimulationJobMode::transient;
+    candidate_request.mode =
+        thermox::service::SimulationJobMode::transient;
+    baseline_request.trajectory_validations = {validation};
+    candidate_request.trajectory_validations = {validation};
     const auto baseline = jobs->create_or_get(
         baseline_request, "comparison-baseline-fingerprint");
     const auto candidate = jobs->create_or_get(
         candidate_request, "comparison-candidate-fingerprint");
 
     thermox::service::ResultSummary baseline_summary;
-    baseline_summary.mode = "steady";
+    baseline_summary.mode = "transient";
     baseline_summary.values = {
         {"net_power", "power", 100.0,
          thermox::service::ResultAggregation::final, false, 0.0},
@@ -1171,8 +1209,11 @@ void test_completed_study_jobs_compare_by_projected_identity() {
     baseline_summary.engineering_acceptance =
         thermox::service::EngineeringAcceptanceSummary{
             false, 0, 1, {}};
+    baseline_summary.trajectory_validation =
+        thermox::service::TrajectoryValidationAggregate{
+            false, 1U, 0U, 1U, 1U, 0U};
     thermox::service::ResultSummary candidate_summary;
-    candidate_summary.mode = "steady";
+    candidate_summary.mode = "transient";
     candidate_summary.values = {
         {"net_power", "power", 110.0,
          thermox::service::ResultAggregation::final, false, 0.0},
@@ -1187,6 +1228,9 @@ void test_completed_study_jobs_compare_by_projected_identity() {
     candidate_summary.engineering_acceptance =
         thermox::service::EngineeringAcceptanceSummary{
             true, 1, 0, {}};
+    candidate_summary.trajectory_validation =
+        thermox::service::TrajectoryValidationAggregate{
+            true, 1U, 1U, 0U, 1U, 0U};
     const thermox::service::ResultArtifactManifest manifest{
         "comparison-artifact", "application/json",
         thermox::service::result_schema_v6, 2, "checksum"};
@@ -1214,9 +1258,13 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             comparison->candidate_only_count == 1U &&
             comparison->values.front().id == "baseline_only" &&
             comparison->engineering_acceptance.transition ==
-                "not_accepted_to_accepted",
+                "not_accepted_to_accepted" &&
+            comparison->trajectory_validation.compatibility ==
+                "comparable" &&
+            comparison->trajectory_validation.transition ==
+                "not_matched_to_matched",
         "comparison must align outputs by stable projection ID and "
-        "report coverage and acceptance transitions");
+        "report acceptance and reference-validation transitions");
     const auto matched = std::find_if(
         comparison->values.begin(), comparison->values.end(),
         [](const auto& value) { return value.id == "net_power"; });
@@ -1234,7 +1282,7 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         thermox::service::serialize_job_comparison_json(*comparison);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job_comparison/v2\"") !=
+                  "\"thermox.job_comparison/v3\"") !=
                 std::string::npos &&
             json.find("\"relative_delta\": 0.10000000000000001") !=
                 std::string::npos &&
@@ -1243,9 +1291,41 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             json.find("\"window_mismatch\"") !=
                 std::string::npos &&
             json.find("\"baseline_window\": {") !=
+                std::string::npos &&
+            json.find(
+                "\"transition\": \"not_matched_to_matched\"") !=
                 std::string::npos,
         "comparison JSON must retain versioned deltas and explicit "
         "incompatibility evidence");
+
+    auto mismatched_request = candidate_request;
+    mismatched_request.idempotency_key = "comparison-policy-mismatch";
+    mismatched_request.source_revisions->study_revision_id =
+        "study-policy-mismatch";
+    mismatched_request.trajectory_validations.front()
+        .bindings.front().absolute_tolerance_si = 2.0;
+    const auto mismatched = jobs->create_or_get(
+        mismatched_request, "comparison-policy-mismatch-fingerprint");
+    const auto claimed_mismatched =
+        jobs->claim_next("comparison-worker");
+    require(
+        claimed_mismatched &&
+            claimed_mismatched->job_id == mismatched.job_id,
+        "comparison fixture must claim the policy-mismatch job");
+    (void)jobs->publish_success(
+        mismatched.job_id,
+        claimed_mismatched->revision,
+        {}, manifest, candidate_summary);
+    const auto incomparable = service.compare(
+        team_a, baseline.job_id, mismatched.job_id);
+    require(
+        incomparable &&
+            incomparable->trajectory_validation.compatibility ==
+                "evidence_policy_mismatch" &&
+            incomparable->trajectory_validation.transition ==
+                "not_evaluated",
+        "reference-validation transitions must be suppressed when "
+        "the immutable evidence or tolerance policy differs");
 }
 
 }  // namespace

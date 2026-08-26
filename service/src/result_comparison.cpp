@@ -1,12 +1,52 @@
 #include "thermox/service/simulation_jobs.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <iomanip>
+#include <limits>
 #include <map>
+#include <sstream>
 #include <set>
 #include <string>
 #include <utility>
 
 namespace thermox::service {
+
+namespace {
+
+std::vector<std::string> trajectory_policy_signature(
+    const SimulationJobRequest& request) {
+    std::vector<std::string> signature;
+    for (const auto& validation : request.trajectory_validations) {
+        for (const auto& binding : validation.bindings) {
+            std::ostringstream row;
+            row << std::setprecision(
+                std::numeric_limits<double>::max_digits10);
+            row << validation.artifact_revision_id << '|'
+                << validation.artifact.id << '|'
+                << binding.signal_id << '|'
+                << binding.projection.id << '|'
+                << to_string(binding.projection.scope) << '|'
+                << binding.projection.component_id << '|'
+                << binding.projection.port_name << '|'
+                << binding.projection.value_name << '|'
+                << binding.projection.dimension << '|'
+                << to_string(binding.projection.aggregation) << '|'
+                << to_string(binding.comparison) << '|'
+                << binding.time_offset_si << '|'
+                << binding.baseline_time_si << '|'
+                << binding.absolute_tolerance_si << '|'
+                << binding.relative_tolerance << '|'
+                << binding.uncertainty_multiplier << '|'
+                << binding.maximum_interpolation_gap_si;
+            signature.push_back(row.str());
+        }
+    }
+    std::sort(signature.begin(), signature.end());
+    return signature;
+}
+
+}  // namespace
 
 std::string to_string(ComparedValueStatus status) {
     switch (status) {
@@ -187,6 +227,57 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
             (candidate_acceptance->passed
                  ? "accepted"
                  : "not_accepted");
+    }
+    const auto baseline_validation =
+        baseline->result_summary->trajectory_validation;
+    const auto candidate_validation =
+        candidate->result_summary->trajectory_validation;
+    if (baseline_validation) {
+        comparison.trajectory_validation.baseline_passed =
+            baseline_validation->passed;
+        comparison.trajectory_validation.baseline_sample_count =
+            baseline_validation->passed_count +
+            baseline_validation->failed_count;
+    }
+    if (candidate_validation) {
+        comparison.trajectory_validation.candidate_passed =
+            candidate_validation->passed;
+        comparison.trajectory_validation.candidate_sample_count =
+            candidate_validation->passed_count +
+            candidate_validation->failed_count;
+    }
+    if (!baseline_validation && candidate_validation) {
+        comparison.trajectory_validation.compatibility =
+            "baseline_not_evaluated";
+    } else if (baseline_validation && !candidate_validation) {
+        comparison.trajectory_validation.compatibility =
+            "candidate_not_evaluated";
+    } else if (baseline_validation && candidate_validation) {
+        const auto baseline_policy =
+            trajectory_policy_signature(baseline->request);
+        const auto candidate_policy =
+            trajectory_policy_signature(candidate->request);
+        if (baseline_policy.empty() || candidate_policy.empty() ||
+            baseline_policy != candidate_policy ||
+            baseline_validation->validation_count !=
+                baseline->request.trajectory_validations.size() ||
+            candidate_validation->validation_count !=
+                candidate->request.trajectory_validations.size()) {
+            comparison.trajectory_validation.compatibility =
+                "evidence_policy_mismatch";
+        } else {
+            comparison.trajectory_validation.compatibility =
+                "comparable";
+            comparison.trajectory_validation.transition =
+                std::string(
+                    baseline_validation->passed
+                        ? "matched"
+                        : "not_matched") +
+                "_to_" +
+                (candidate_validation->passed
+                     ? "matched"
+                     : "not_matched");
+        }
     }
     return comparison;
 }

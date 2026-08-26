@@ -1590,7 +1590,7 @@ void test_authored_component_job_workflow() {
     require(
         comparison.status == 200 &&
             comparison.body.find(
-                "\"thermox.job_comparison/v2\"") !=
+                "\"thermox.job_comparison/v3\"") !=
                 std::string::npos &&
             comparison.body.find("\"matched_count\": 1") !=
                 std::string::npos &&

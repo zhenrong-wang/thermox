@@ -17,8 +17,8 @@
 namespace thermox::service {
 
 inline constexpr char job_schema_v19[] = "thermox.job/v19";
-inline constexpr char job_comparison_schema_v2[] =
-    "thermox.job_comparison/v2";
+inline constexpr char job_comparison_schema_v3[] =
+    "thermox.job_comparison/v3";
 
 enum class SimulationJobMode {
     steady,
@@ -162,8 +162,17 @@ struct EngineeringAcceptanceComparison {
     std::string transition{"not_evaluated"};
 };
 
+struct TrajectoryValidationComparison {
+    std::optional<bool> baseline_passed;
+    std::optional<bool> candidate_passed;
+    std::size_t baseline_sample_count{0};
+    std::size_t candidate_sample_count{0};
+    std::string compatibility{"not_evaluated"};
+    std::string transition{"not_evaluated"};
+};
+
 struct SimulationJobComparison {
-    std::string schema_version{job_comparison_schema_v2};
+    std::string schema_version{job_comparison_schema_v3};
     std::string team_id;
     std::string project_id;
     std::string baseline_job_id;
@@ -177,6 +186,7 @@ struct SimulationJobComparison {
     std::size_t candidate_only_count{0};
     std::vector<ComparedResultValue> values;
     EngineeringAcceptanceComparison engineering_acceptance;
+    TrajectoryValidationComparison trajectory_validation;
 };
 
 struct SimulationWorkerSettings {

@@ -45,10 +45,20 @@ example `accepted_to_not_accepted`. If either Study had no acceptance evaluation
 is `not_evaluated`. This evidence remains distinct from both the successful job states and the
 per-projection numerical deltas.
 
+## Reference-validation regression
+
+Job Comparison v3 also reports the baseline and candidate trajectory-validation verdicts and
+aligned-sample counts. A transition such as `matched_to_not_matched` is emitted only when both jobs
+use the same immutable evidence revision and the same signal/projection, comparison mode, clock
+alignment, uncertainty multiplier, interpolation limit, and absolute/relative tolerance policy.
+Otherwise the response reports `evidence_policy_mismatch` and suppresses a potentially misleading
+transition. A missing evaluation on either side is explicit. Reference agreement remains separate
+from numerical success and Study engineering acceptance.
+
 ## Interface and persistence boundary
 
 `POST /api/v1/job-comparisons` accepts baseline and candidate job IDs and returns
-`thermox.job_comparison/v2`. The Analyze workspace presents the same service response with display
+`thermox.job_comparison/v3`. The Analyze workspace presents the same service response with display
 unit conversion. The comparison is currently a deterministic read model and is not persisted.
 
 Generated reports, approvals, comments, or signed snapshots are durable business artifacts and
