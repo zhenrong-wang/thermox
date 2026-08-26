@@ -10,7 +10,9 @@ import type {
   ResultProjection,
   ResultValueScope,
   StudyRevision,
+  StudyTrajectoryValidationBinding,
   TopologyDocument,
+  ValidationSeriesCatalogEntry,
 } from './types'
 
 interface StudyPublishFormProps {
@@ -18,10 +20,12 @@ interface StudyPublishFormProps {
   catalog: Catalog
   base?: StudyRevision
   transient: boolean
+  validationSeries: ValidationSeriesCatalogEntry[]
   onCancel: () => void
   onSubmit: (
     projections: ResultProjection[],
     acceptanceCriteria: EngineeringAcceptanceCriterion[],
+    trajectoryBindings: StudyTrajectoryValidationBinding[],
   ) => Promise<void>
 }
 
@@ -39,6 +43,7 @@ export function StudyPublishForm({
   catalog,
   base,
   transient,
+  validationSeries,
   onCancel,
   onSubmit,
 }: StudyPublishFormProps) {
@@ -48,6 +53,9 @@ export function StudyPublishForm({
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<
     EngineeringAcceptanceCriterion[]
   >(base?.acceptance_criteria ?? [])
+  const [trajectoryBindings, setTrajectoryBindings] = useState<
+    StudyTrajectoryValidationBinding[]
+  >(base?.trajectory_validation_bindings ?? [])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -102,12 +110,46 @@ export function StudyPublishForm({
       },
     ])
   }
+  const updateBinding = (
+    index: number,
+    value: Partial<StudyTrajectoryValidationBinding>,
+  ) => setTrajectoryBindings((current) => current.map(
+    (binding, item) => item === index ? { ...binding, ...value } : binding,
+  ))
+  const addBinding = () => {
+    const evidence = validationSeries.find((item) =>
+      item.definition.signals.some((candidate) => projections.some(
+        (projection) => !projection.window &&
+          projection.dimension === candidate.dimension,
+      )),
+    )
+    const signal = evidence?.definition.signals.find((candidate) =>
+      projections.some((projection) => !projection.window &&
+        projection.dimension === candidate.dimension),
+    )
+    const projection = projections.find(
+      (item) => !item.window && item.dimension === signal?.dimension,
+    )
+    setTrajectoryBindings((current) => [...current, {
+      id: `trajectory_${current.length + 1}`,
+      artifact_revision_id: evidence?.source.artifact_revision_id ?? '',
+      signal_id: signal?.id ?? '',
+      projection_id: projection?.id ?? '',
+      comparison: 'absolute',
+      time_offset_si: 0,
+      baseline_time_si: 0,
+      absolute_tolerance_si: 0,
+      relative_tolerance: 0,
+      uncertainty_multiplier: 0,
+      maximum_interpolation_gap_si: 0,
+    }])
+  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setSubmitting(true)
     setError('')
     try {
-      await onSubmit(projections, acceptanceCriteria)
+      await onSubmit(projections, acceptanceCriteria, trajectoryBindings)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Study was rejected.')
     } finally {
@@ -332,6 +374,136 @@ export function StudyPublishForm({
               disabled={!projections.length} onClick={addCriterion}>
               + Acceptance criterion
             </button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Reference trajectory validation</legend>
+          <p className="form-note acceptance-note">
+            Bind immutable external signals to graph outputs. Policies affect
+            validation evidence only; they never tune the physical model.
+          </p>
+          {!transient && <p>Trajectory validation requires a transient case.</p>}
+          {transient && !validationSeries.length && (
+            <p>Import validation data before adding a trajectory binding.</p>
+          )}
+          <div className="projection-editor">
+            {trajectoryBindings.map((binding, index) => {
+              const evidence = validationSeries.find(
+                (item) => item.source.artifact_revision_id ===
+                  binding.artifact_revision_id,
+              )
+              const signal = evidence?.definition.signals.find(
+                (item) => item.id === binding.signal_id,
+              )
+              const compatibleProjections = projections.filter(
+                (projection) => !projection.window &&
+                  projection.dimension === signal?.dimension,
+              )
+              return (
+                <div className="acceptance-row" key={`${binding.id}-${index}`}>
+                  <input aria-label="Trajectory binding ID" value={binding.id}
+                    onChange={(event) => updateBinding(index, { id: event.target.value })} />
+                  <select aria-label="Validation data revision"
+                    value={binding.artifact_revision_id}
+                    onChange={(event) => {
+                      const selected = validationSeries.find(
+                        (item) => item.source.artifact_revision_id === event.target.value,
+                      )
+                      const selectedSignal = selected?.definition.signals[0]
+                      updateBinding(index, {
+                        artifact_revision_id: event.target.value,
+                        signal_id: selectedSignal?.id ?? '',
+                        projection_id: projections.find(
+                          (projection) => !projection.window &&
+                            projection.dimension === selectedSignal?.dimension,
+                        )?.id ?? '',
+                      })
+                    }}>
+                    {validationSeries.map((item) => (
+                      <option value={item.source.artifact_revision_id}
+                        key={item.source.artifact_revision_id}>
+                        {item.source.artifact_id} r{item.source.revision_number}
+                      </option>
+                    ))}
+                  </select>
+                  <select aria-label="Validation signal" value={binding.signal_id}
+                    onChange={(event) => {
+                      const selectedSignal = evidence?.definition.signals.find(
+                        (item) => item.id === event.target.value,
+                      )
+                      updateBinding(index, {
+                        signal_id: event.target.value,
+                        projection_id: projections.find(
+                          (projection) => !projection.window &&
+                            projection.dimension === selectedSignal?.dimension,
+                        )?.id ?? '',
+                      })
+                    }}>
+                    {(evidence?.definition.signals ?? []).map((signal) => (
+                      <option value={signal.id} key={signal.id}>
+                        {signal.id} · {signal.dimension}
+                      </option>
+                    ))}
+                  </select>
+                  <select aria-label="Validation projection" value={binding.projection_id}
+                    onChange={(event) => updateBinding(index, {
+                      projection_id: event.target.value,
+                    })}>
+                    {!compatibleProjections.length && (
+                      <option value="">No dimension-compatible projection</option>
+                    )}
+                    {compatibleProjections.map((projection) => (
+                      <option value={projection.id} key={projection.id}>
+                        {projection.id} · {projection.dimension}
+                      </option>
+                    ))}
+                  </select>
+                  <select aria-label="Trajectory comparison" value={binding.comparison}
+                    onChange={(event) => updateBinding(index, {
+                      comparison: event.target.value as 'absolute' | 'projected_change',
+                    })}>
+                    <option value="absolute">absolute value</option>
+                    <option value="projected_change">change from baseline</option>
+                  </select>
+                  <input aria-label="Time offset SI" type="number" step="any"
+                    title="Reference-to-simulation time offset in seconds"
+                    value={binding.time_offset_si} onChange={(event) =>
+                      updateBinding(index, { time_offset_si: Number(event.target.value) })} />
+                  <input aria-label="Baseline time SI" type="number" step="any"
+                    title="Simulation baseline time in seconds"
+                    value={binding.baseline_time_si} disabled={binding.comparison === 'absolute'}
+                    onChange={(event) => updateBinding(index, {
+                      baseline_time_si: Number(event.target.value),
+                    })} />
+                  <input aria-label="Absolute tolerance SI" type="number" min="0" step="any"
+                    value={binding.absolute_tolerance_si} onChange={(event) =>
+                      updateBinding(index, { absolute_tolerance_si: Number(event.target.value) })} />
+                  <input aria-label="Relative tolerance" type="number" min="0" step="any"
+                    value={binding.relative_tolerance} onChange={(event) =>
+                      updateBinding(index, { relative_tolerance: Number(event.target.value) })} />
+                  <input aria-label="Uncertainty multiplier" type="number" min="0" step="any"
+                    value={binding.uncertainty_multiplier} onChange={(event) =>
+                      updateBinding(index, { uncertainty_multiplier: Number(event.target.value) })} />
+                  <input aria-label="Maximum interpolation gap SI" type="number" min="0" step="any"
+                    value={binding.maximum_interpolation_gap_si} onChange={(event) =>
+                      updateBinding(index, {
+                        maximum_interpolation_gap_si: Number(event.target.value),
+                      })} />
+                  <button type="button" className="projection-remove"
+                    aria-label="Remove trajectory binding"
+                    onClick={() => setTrajectoryBindings((current) =>
+                      current.filter((_, item) => item !== index))}>×</button>
+                </div>
+              )
+            })}
+            <button type="button" className="secondary-button projection-add"
+              disabled={!transient || !validationSeries.some((evidence) =>
+                evidence.definition.signals.some((signal) => projections.some(
+                  (projection) => !projection.window &&
+                    projection.dimension === signal.dimension,
+                )),
+              )}
+              onClick={addBinding}>+ Trajectory binding</button>
           </div>
         </fieldset>
         {error && <div className="form-error">{error}</div>}

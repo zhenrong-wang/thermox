@@ -357,6 +357,35 @@ export interface StudyTrajectoryValidationBinding {
   maximum_interpolation_gap_si: number
 }
 
+export interface ValidationSeriesArtifact {
+  schema_version: 'thermox.validation_series/v1'
+  id: string
+  source: {
+    reference: string
+    checksum_sha256: string
+    evidence_basis: string
+    acquisition: 'measured' | 'computational' | 'derived' | 'digitized'
+    note?: string
+    limitations: string[]
+  }
+  time_unit: string
+  signals: Array<{
+    id: string
+    dimension: string
+    unit: string
+    samples: Array<{
+      time: number
+      value: number
+      standard_uncertainty?: number
+    }>
+  }>
+}
+
+export interface ValidationSeriesCatalogEntry {
+  source: ArtifactRevision
+  definition: ValidationSeriesArtifact
+}
+
 export interface StudyRevision {
   schema_version: 'thermox.study_revision/v5'
   study_revision_id: string

@@ -504,6 +504,93 @@ export function ResultsWorkspace({
             </section>
           )}
 
+          {isTransientResult(result) && result.trajectory_validations.map(
+            (validation, validationIndex) => (
+              <section className={`engineering-acceptance-card ${
+                validation.evidence.passed ? 'accepted' : 'not-accepted'
+              }`} key={`${validation.artifact_id}-${validationIndex}`}>
+                <header>
+                  <div>
+                    <span className="section-kicker">Reference evidence</span>
+                    <h2>Trajectory validation</h2>
+                  </div>
+                  <strong>
+                    {validation.evidence.passed ? 'Validated' : 'Not validated'}
+                  </strong>
+                </header>
+                <div className="solver-diagnostic-facts">
+                  <div>
+                    <span>Artifact</span>
+                    <code>{validation.artifact_id}</code>
+                  </div>
+                  <div>
+                    <span>Exact alignments</span>
+                    <code>{validation.exact_alignment_count}</code>
+                  </div>
+                  <div>
+                    <span>Interpolated alignments</span>
+                    <code>{validation.interpolated_alignment_count}</code>
+                  </div>
+                  <div>
+                    <span>Maximum alignment gap</span>
+                    <code>{formatResultValue(
+                      validation.maximum_alignment_gap_si,
+                    )} s</code>
+                  </div>
+                </div>
+                {validation.evidence.criteria.map((criterion) => {
+                  const actual = displayValue(
+                    criterion.actual_value_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
+                  const reference = displayValue(
+                    criterion.reference_value_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
+                  const error = displayMarginValue(
+                    criterion.absolute_error_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
+                  const allowed = displayMarginValue(
+                    criterion.allowed_absolute_error_si,
+                    criterion.dimension,
+                    profile,
+                    unitDimensions,
+                  )
+                  return (
+                    <div className="acceptance-result-row"
+                      key={criterion.criterion_id}>
+                      <span className={criterion.passed ? 'passed' : 'failed'}>
+                        {criterion.passed ? 'Pass' : 'Fail'}
+                      </span>
+                      <strong>{criterion.criterion_id}</strong>
+                      <code>
+                        {formatResultValue(actual.value)} {actual.unit}
+                      </code>
+                      <small>
+                        reference {formatResultValue(reference.value)}{' '}
+                        {reference.unit} · |error| {formatResultValue(error.value)}{' '}
+                        {error.unit} ≤ {formatResultValue(allowed.value)} {allowed.unit}
+                        {' · '}{criterion.basis}
+                      </small>
+                      <small>{criterion.source_reference}</small>
+                      {criterion.note && <small>{criterion.note}</small>}
+                    </div>
+                  )
+                })}
+                {validation.evidence.limitations.map((limitation) => (
+                  <p key={limitation}><strong>Limitation:</strong> {limitation}</p>
+                ))}
+              </section>
+            ),
+          )}
+
           {comparison && (
             <section className="study-comparison-card">
               <header>

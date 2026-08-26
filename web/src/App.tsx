@@ -43,6 +43,8 @@ import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { ResultsWorkspace } from './ResultsWorkspace'
 import { StudyPublishForm } from './StudyPublishForm'
+import { studyArtifactRevisionIds } from './studyAuthoring'
+import { ValidationSeriesArtifactForm } from './ValidationSeriesArtifactForm'
 import { validationMatchesExecutionSelection } from './runAuthoring'
 import {
   mergeProjectComponentCatalog,
@@ -91,8 +93,11 @@ import type {
   SimulationResult,
   SimulationJobState,
   StudyRevision,
+  StudyTrajectoryValidationBinding,
   TopologyDocument,
   ValidationDiagnostic,
+  ValidationSeriesArtifact,
+  ValidationSeriesCatalogEntry,
 } from './types'
 
 function App() {
@@ -151,6 +156,10 @@ function App() {
     definition: CorrelationArtifactDefinition
   }>()
   const [addingPerformanceMap, setAddingPerformanceMap] = useState(false)
+  const [addingValidationSeries, setAddingValidationSeries] = useState(false)
+  const [validationSeries, setValidationSeries] = useState<
+    ValidationSeriesCatalogEntry[]
+  >([])
   const [revisingPerformanceMap, setRevisingPerformanceMap] = useState<{
     source: ArtifactRevision
     definition: PerformanceMapArtifactDefinition
@@ -295,6 +304,29 @@ function App() {
           ),
         ),
       )
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [artifactRevisions, selectedProjectId])
+
+  useEffect(() => {
+    setValidationSeries([])
+    if (!selectedProjectId) return
+    const sources = artifactRevisions.filter(
+      (revision) => revision.artifact_type === 'thermox.validation_series',
+    )
+    if (!sources.length) return
+    const controller = new AbortController()
+    Promise.all(sources.map(async (source) => {
+      const content = await api.artifactRevision<ValidationSeriesArtifact>(
+        selectedProjectId,
+        source.artifact_revision_id,
+        controller.signal,
+      )
+      return { source, definition: content.artifact }
+    }))
+      .then(setValidationSeries)
       .catch((reason: unknown) => {
         if (!isAbortError(reason)) setOperationError(errorMessage(reason))
       })
@@ -1124,6 +1156,39 @@ function App() {
     }
   }
 
+  async function publishValidationSeries(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ValidationSeriesArtifact,
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing validation data.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createValidationSeriesRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const artifacts = await api.artifactRevisions(selectedProjectId)
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setAddingValidationSeries(false)
+      setOperationStatus(
+        `Published validation data ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   async function revisePerformanceMap(source: ArtifactRevision) {
     if (!selectedProjectId) return
     setLoadingArtifactRevision(true)
@@ -1262,6 +1327,7 @@ function App() {
   async function publishStudy(
     resultProjections: ResultProjection[],
     acceptanceCriteria: EngineeringAcceptanceCriterion[],
+    trajectoryValidationBindings: StudyTrajectoryValidationBinding[],
   ) {
     if (
       !selectedProjectId ||
@@ -1278,6 +1344,10 @@ function App() {
     const parent = visibleStudies.find(
       (revision) => revision.study_id === studyId,
     )
+    const artifactRevisionIds = studyArtifactRevisionIds(
+      selectedArtifactRevisionIds,
+      trajectoryValidationBindings,
+    )
     const request: CreateStudyRevision = {
       schema_version: 'thermox.study_revision.create/v5',
       study_id: studyId,
@@ -1285,12 +1355,12 @@ function App() {
       model_revision_id: selectedRevisionId,
       case_revision_id: selectedCaseRevision.case_revision_id,
       intent: selectedCaseRevision.mode,
-      artifact_revision_ids: selectedArtifactRevisionIds,
+      artifact_revision_ids: artifactRevisionIds,
       artifact_qualification_requirements: [],
       artifact_operating_envelopes: [],
       result_projections: resultProjections,
       acceptance_criteria: acceptanceCriteria,
-      trajectory_validation_bindings: [],
+      trajectory_validation_bindings: trajectoryValidationBindings,
     }
     setCasePublishing(true)
     setCaseOperationError('')
@@ -2088,6 +2158,7 @@ function App() {
             onRevisePerformanceMap={(revision) => {
               void revisePerformanceMap(revision)
             }}
+            onAddValidationSeries={() => setAddingValidationSeries(true)}
             onBuild={() => setWorkspaceView('topology')}
           />
         ) : workspaceView === 'studies' ? (
@@ -2461,6 +2532,13 @@ function App() {
             onSubmit={publishPerformanceMap}
           />
         )}
+      {(workspaceView === 'definition' || workspaceView === 'studies') &&
+        addingValidationSeries && (
+          <ValidationSeriesArtifactForm
+            onCancel={() => setAddingValidationSeries(false)}
+            onSubmit={publishValidationSeries}
+          />
+        )}
       {workspaceView === 'topology' &&
         (definingComponent || revisingComponent) &&
         catalog && (
@@ -2495,6 +2573,7 @@ function App() {
             topology={topology}
             catalog={topologyCatalog}
             base={activePublishedStudy}
+            validationSeries={validationSeries}
             transient={
               selectedCaseRevision.mode.includes('dynamic') ||
               selectedCaseRevision.mode.includes('transient')

@@ -39,6 +39,7 @@ import type {
   StudyRevisionList,
   ExpressionComponentDefinition,
   TopologyDocument,
+  ValidationSeriesArtifact,
 } from './types'
 
 class ApiError extends Error {
@@ -315,6 +316,27 @@ export const api = {
       artifact_id: artifactId,
       artifact_type: 'thermox.performance_map',
       artifact_schema_version: 'thermox.performance_map/v1',
+    })
+    if (parentArtifactRevisionId) {
+      query.set('parent_revision_id', parentArtifactRevisionId)
+    }
+    return postJson<ArtifactRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
+      definition,
+      signal,
+    )
+  },
+  createValidationSeriesRevision: (
+    projectId: string,
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: ValidationSeriesArtifact,
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams({
+      artifact_id: artifactId,
+      artifact_type: 'thermox.validation_series',
+      artifact_schema_version: 'thermox.validation_series/v1',
     })
     if (parentArtifactRevisionId) {
       query.set('parent_revision_id', parentArtifactRevisionId)
