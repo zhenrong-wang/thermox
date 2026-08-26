@@ -47,12 +47,12 @@ void print_usage(std::ostream& out) {
            " [--jacobian-absolute-tolerance <value>]"
            " [--jacobian-relative-tolerance <value>]"
            " [--verify-nonlinear-response]"
-           " [--nonlinear-response-perturbation <value>]"
+           " [--nonlinear-response-perturbation <value>]..."
            " [--nonlinear-response-absolute-normalized-tolerance <value>]"
            " [--nonlinear-response-relative-tolerance <value>]"
            " [--verify-nonlinear-trajectory]"
            " [--nonlinear-trajectory-duration <seconds>]"
-           " [--nonlinear-trajectory-perturbation <value>]"
+           " [--nonlinear-trajectory-perturbation <value>]..."
            " [--nonlinear-trajectory-relative-tolerance <value>]"
            " [--residual-tolerance <value>]"
            " [--structural-policy automatic|monolithic|blocks|tearing]"
@@ -230,6 +230,8 @@ void print_small_signal_text(
         }
         std::cout << "nonlinear_response_probes: "
                   << response.nonlinear_response_probes.size()
+                  << "\nnonlinear_response_envelope_levels: "
+                  << response.nonlinear_response_envelope.size()
                   << "\nnonlinear_response_maximum_normalized_absolute_error: "
                   << maximum_normalized_absolute_error << "\n";
     }
@@ -243,6 +245,8 @@ void print_small_signal_text(
         }
         std::cout << "nonlinear_trajectory_probes: "
                   << response.nonlinear_trajectory_probes.size()
+                  << "\nnonlinear_trajectory_envelope_levels: "
+                  << response.nonlinear_trajectory_envelope.size()
                   << "\nnonlinear_trajectory_maximum_normalized_absolute_error: "
                   << maximum_normalized_absolute_error << "\n";
     }
@@ -301,11 +305,11 @@ int main(int argc, char** argv) {
     std::string jacobian_fd_epsilon_text;
     std::string jacobian_absolute_tolerance_text;
     std::string jacobian_relative_tolerance_text;
-    std::string nonlinear_response_perturbation_text;
+    std::vector<std::string> nonlinear_response_perturbation_texts;
     std::string nonlinear_response_absolute_tolerance_text;
     std::string nonlinear_response_relative_tolerance_text;
     std::string nonlinear_trajectory_duration_text;
-    std::string nonlinear_trajectory_perturbation_text;
+    std::vector<std::string> nonlinear_trajectory_perturbation_texts;
     std::string nonlinear_trajectory_relative_tolerance_text;
     std::string format = "text";
     std::vector<std::string> performance_map_paths;
@@ -355,7 +359,7 @@ int main(int argc, char** argv) {
             verify_nonlinear_response = true;
         } else if (arg == "--nonlinear-response-perturbation" &&
                    i + 1 < argc) {
-            nonlinear_response_perturbation_text = argv[++i];
+            nonlinear_response_perturbation_texts.emplace_back(argv[++i]);
         } else if (
             arg == "--nonlinear-response-absolute-normalized-tolerance" &&
             i + 1 < argc) {
@@ -370,7 +374,7 @@ int main(int argc, char** argv) {
             nonlinear_trajectory_duration_text = argv[++i];
         } else if (arg == "--nonlinear-trajectory-perturbation" &&
                    i + 1 < argc) {
-            nonlinear_trajectory_perturbation_text = argv[++i];
+            nonlinear_trajectory_perturbation_texts.emplace_back(argv[++i]);
         } else if (arg == "--nonlinear-trajectory-relative-tolerance" &&
                    i + 1 < argc) {
             nonlinear_trajectory_relative_tolerance_text = argv[++i];
@@ -545,7 +549,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (command != "linearize" &&
-        (!nonlinear_response_perturbation_text.empty() ||
+        (!nonlinear_response_perturbation_texts.empty() ||
          !nonlinear_response_absolute_tolerance_text.empty() ||
          !nonlinear_response_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear response options are only valid for "
@@ -553,7 +557,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (command == "linearize" && !verify_nonlinear_response &&
-        (!nonlinear_response_perturbation_text.empty() ||
+        (!nonlinear_response_perturbation_texts.empty() ||
          !nonlinear_response_absolute_tolerance_text.empty() ||
          !nonlinear_response_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear response options require "
@@ -567,7 +571,7 @@ int main(int argc, char** argv) {
     }
     if (command != "linearize" &&
         (!nonlinear_trajectory_duration_text.empty() ||
-         !nonlinear_trajectory_perturbation_text.empty() ||
+         !nonlinear_trajectory_perturbation_texts.empty() ||
          !nonlinear_trajectory_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear trajectory options are only valid for "
                      "linearize\n";
@@ -575,7 +579,7 @@ int main(int argc, char** argv) {
     }
     if (command == "linearize" && !verify_nonlinear_trajectory &&
         (!nonlinear_trajectory_duration_text.empty() ||
-         !nonlinear_trajectory_perturbation_text.empty() ||
+         !nonlinear_trajectory_perturbation_texts.empty() ||
          !nonlinear_trajectory_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear trajectory options require "
                      "--verify-nonlinear-trajectory\n";
@@ -869,12 +873,17 @@ int main(int argc, char** argv) {
                         jacobian_relative_tolerance_text,
                         "--jacobian-relative-tolerance");
             }
-            if (!nonlinear_response_perturbation_text.empty()) {
+            if (!nonlinear_response_perturbation_texts.empty()) {
                 request.settings
-                    .nonlinear_response_relative_perturbation =
-                    parse_positive_number(
-                        nonlinear_response_perturbation_text,
-                        "--nonlinear-response-perturbation");
+                    .nonlinear_response_relative_perturbations.clear();
+                for (const auto& value :
+                     nonlinear_response_perturbation_texts) {
+                    request.settings
+                        .nonlinear_response_relative_perturbations
+                        .push_back(parse_positive_number(
+                            value,
+                            "--nonlinear-response-perturbation"));
+                }
             }
             if (!nonlinear_response_absolute_tolerance_text.empty()) {
                 request.settings
@@ -896,12 +905,17 @@ int main(int argc, char** argv) {
                         nonlinear_trajectory_duration_text,
                         "--nonlinear-trajectory-duration");
             }
-            if (!nonlinear_trajectory_perturbation_text.empty()) {
+            if (!nonlinear_trajectory_perturbation_texts.empty()) {
                 request.settings
-                    .nonlinear_trajectory_relative_perturbation =
-                    parse_positive_number(
-                        nonlinear_trajectory_perturbation_text,
-                        "--nonlinear-trajectory-perturbation");
+                    .nonlinear_trajectory_relative_perturbations.clear();
+                for (const auto& value :
+                     nonlinear_trajectory_perturbation_texts) {
+                    request.settings
+                        .nonlinear_trajectory_relative_perturbations
+                        .push_back(parse_positive_number(
+                            value,
+                            "--nonlinear-trajectory-perturbation"));
+                }
             }
             if (!nonlinear_trajectory_relative_tolerance_text.empty()) {
                 request.settings

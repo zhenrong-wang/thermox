@@ -2603,6 +2603,12 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
                 }),
         "NASA A/B/C/D columns must predict independently perturbed "
         "nonlinear DAE rate and gas-path output responses");
+    require(
+        response.nonlinear_response_envelope.size() == 1 &&
+            response.nonlinear_response_envelope[0].probe_count == 5 &&
+            response.nonlinear_response_envelope[0].passed,
+        "NASA response validation must expose its local-linearity "
+        "envelope level");
     double maximum_output_response_normalized_error = 0.0;
     for (const auto& probe : response.nonlinear_response_probes) {
         for (const auto& output : probe.outputs) {
@@ -2631,6 +2637,12 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
                 }),
         "NASA A/B/C/D columns must predict finite-window nonlinear DAE "
         "state and gas-path output trajectories");
+    require(
+        response.nonlinear_trajectory_envelope.size() == 1 &&
+            response.nonlinear_trajectory_envelope[0].probe_count == 5 &&
+            response.nonlinear_trajectory_envelope[0].passed,
+        "NASA trajectory validation must expose its local-linearity "
+        "envelope level");
     double maximum_output_trajectory_normalized_error = 0.0;
     for (const auto& probe : response.nonlinear_trajectory_probes) {
         for (const auto& sample : probe.samples) {
@@ -7892,6 +7904,10 @@ void test_small_signal_linearization_service() {
     request.settings.verify_jacobian = true;
     request.settings.verify_nonlinear_response = true;
     request.settings.verify_nonlinear_trajectory = true;
+    request.settings.nonlinear_response_relative_perturbations = {
+        1.0e-4, 3.0e-4};
+    request.settings.nonlinear_trajectory_relative_perturbations = {
+        1.0e-4, 3.0e-4};
     const auto response =
         service.run_small_signal_linearization(request);
     require(
@@ -7901,7 +7917,7 @@ void test_small_signal_linearization_service() {
     require(
         response.metadata.operation == "small_signal_linearization" &&
             response.metadata.solver.contract_version ==
-                "thermox.index1-small-signal/v2",
+                "thermox.index1-small-signal/v3",
         "small-signal result must identify its operation and contract");
     require(
         response.state_names ==
@@ -7929,23 +7945,63 @@ void test_small_signal_linearization_service() {
         "small-signal service must gate the calculation on requested "
         "DAE Jacobian verification");
     require(
-        response.nonlinear_response_probes.size() == 2 &&
+        response.nonlinear_response_probes.size() == 4 &&
             response.nonlinear_response_probes[0].passed &&
-            response.nonlinear_response_probes[1].passed &&
+            response.nonlinear_response_probes[3].passed &&
             response.nonlinear_response_probes[0].outputs.size() == 2 &&
-            response.nonlinear_response_probes[1].outputs.size() == 2,
-        "small-signal service must validate A/B/C/D columns against "
-        "consistent nonlinear DAE responses");
+            response.nonlinear_response_probes[3].outputs.size() == 2 &&
+            std::abs(response.nonlinear_response_probes[0]
+                         .state_perturbations[0]) <
+                std::abs(response.nonlinear_response_probes[2]
+                             .state_perturbations[0]) &&
+            std::abs(response.nonlinear_response_probes[1]
+                         .input_perturbations[0]) <
+                std::abs(response.nonlinear_response_probes[3]
+                             .input_perturbations[0]),
+        "small-signal service must validate A/B/C/D columns across an "
+        "ordered nonlinear response perturbation ladder");
     require(
-        response.nonlinear_trajectory_probes.size() == 2 &&
+        response.nonlinear_response_envelope.size() == 2 &&
+            response.nonlinear_response_envelope[0]
+                    .relative_perturbation == 1.0e-4 &&
+            response.nonlinear_response_envelope[0].probe_count == 2 &&
+            response.nonlinear_response_envelope[0].passed &&
+            response.nonlinear_response_envelope[1]
+                    .relative_perturbation == 3.0e-4 &&
+            response.nonlinear_response_envelope[1].probe_count == 2 &&
+            response.nonlinear_response_envelope[1].passed,
+        "small-signal response must expose a structured linearity "
+        "envelope summary");
+    require(
+        response.nonlinear_trajectory_probes.size() == 4 &&
             response.nonlinear_trajectory_probes[0].passed &&
-            response.nonlinear_trajectory_probes[1].passed &&
+            response.nonlinear_trajectory_probes[3].passed &&
             response.nonlinear_trajectory_probes[0].samples[0]
                     .outputs.size() == 2 &&
-            response.nonlinear_trajectory_probes[1].samples[0]
-                    .outputs.size() == 2,
-        "small-signal service must validate A/B/C/D columns over finite "
-        "nonlinear trajectories");
+            response.nonlinear_trajectory_probes[3].samples[0]
+                    .outputs.size() == 2 &&
+            std::abs(response.nonlinear_trajectory_probes[0]
+                         .state_perturbations[0]) <
+                std::abs(response.nonlinear_trajectory_probes[2]
+                             .state_perturbations[0]) &&
+            std::abs(response.nonlinear_trajectory_probes[1]
+                         .input_perturbations[0]) <
+                std::abs(response.nonlinear_trajectory_probes[3]
+                             .input_perturbations[0]),
+        "small-signal service must validate A/B/C/D columns over a "
+        "finite-trajectory perturbation ladder");
+    require(
+        response.nonlinear_trajectory_envelope.size() == 2 &&
+            response.nonlinear_trajectory_envelope[0]
+                    .relative_perturbation == 1.0e-4 &&
+            response.nonlinear_trajectory_envelope[0].probe_count == 2 &&
+            response.nonlinear_trajectory_envelope[0].passed &&
+            response.nonlinear_trajectory_envelope[1]
+                    .relative_perturbation == 3.0e-4 &&
+            response.nonlinear_trajectory_envelope[1].probe_count == 2 &&
+            response.nonlinear_trajectory_envelope[1].passed,
+        "small-signal trajectory must expose a structured linearity "
+        "envelope summary");
     const auto json = thermox::service::
         serialize_small_signal_linearization_response_json(response);
     require(
@@ -7966,11 +8022,36 @@ void test_small_signal_linearization_service() {
                 std::string::npos &&
             json.find("\"nonlinear_response_probes\": [") !=
                 std::string::npos &&
+            json.find("\"nonlinear_response_envelope\": [") !=
+                std::string::npos &&
             json.find("\"nonlinear_trajectory_probes\": [") !=
+                std::string::npos &&
+            json.find("\"nonlinear_trajectory_envelope\": [") !=
+                std::string::npos &&
+            json.find(
+                "nonlinear_response_relative_perturbation[1]") !=
+                std::string::npos &&
+            json.find(
+                "nonlinear_trajectory_relative_perturbation[1]") !=
                 std::string::npos &&
             json.find("\"output_name\": \"store.temperature\"") !=
                 std::string::npos,
         "small-signal JSON must preserve named matrix coordinates");
+
+    auto invalid_ladder = request;
+    invalid_ladder.settings.verify_jacobian = false;
+    invalid_ladder.settings.verify_nonlinear_trajectory = false;
+    invalid_ladder.model_json = "{";
+    invalid_ladder.settings.nonlinear_response_relative_perturbations = {
+        3.0e-4, 1.0e-4};
+    const auto rejected =
+        service.run_small_signal_linearization(invalid_ladder);
+    require(
+        !rejected.succeeded() &&
+            rejected.error.code ==
+                "invalid_nonlinear_response_settings",
+        "small-signal service must reject an unordered perturbation "
+        "ladder before running nonlinear probes");
 }
 
 void test_structured_compilation_failure() {

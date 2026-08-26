@@ -162,6 +162,8 @@ Delivered:
     sensitivity evidence. ✅
 12. Finite-perturbation consistent-response and finite-window trajectory gates for every selected
     C/D output, including serialized per-output errors and public AGTF30 pressure-response evidence. ✅
+13. Ordered multi-amplitude response and trajectory validation ladders with bound-safe disturbance
+    construction and structured per-level local-linearity envelope summaries. ✅
 
 ## Reusable dynamic equipment primitives
 

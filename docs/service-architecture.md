@@ -54,6 +54,8 @@ The current synchronous service exposes:
   differential, algebraic, or direct-feedthrough graph outputs;
 - opt-in finite-perturbation and finite-window nonlinear acceptance gates that preserve per-state
   and per-output absolute, relative, and declared-scale-normalized discrepancies;
+- ordered multi-amplitude disturbance ladders with structured per-level response and trajectory
+  linearity-envelope summaries, exposed through the service contract and thin CLI;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by

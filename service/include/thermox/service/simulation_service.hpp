@@ -1307,11 +1307,13 @@ struct SmallSignalLinearizationSettings {
     bool verify_jacobian{false};
     JacobianVerificationOptions jacobian_verification;
     bool verify_nonlinear_response{false};
-    double nonlinear_response_relative_perturbation{3.0e-4};
+    std::vector<double> nonlinear_response_relative_perturbations{
+        3.0e-4};
     double nonlinear_response_absolute_normalized_tolerance{1.0e-5};
     double nonlinear_response_relative_tolerance{2.0e-2};
     bool verify_nonlinear_trajectory{false};
-    double nonlinear_trajectory_relative_perturbation{3.0e-4};
+    std::vector<double> nonlinear_trajectory_relative_perturbations{
+        3.0e-4};
     double nonlinear_trajectory_duration{1.0e-2};
     std::size_t nonlinear_trajectory_sample_count{2};
     double nonlinear_trajectory_absolute_normalized_tolerance{1.0e-5};
@@ -1338,6 +1340,14 @@ struct SmallSignalLinearizationDiagnostics {
     std::string message;
 };
 
+struct SmallSignalLinearityEnvelopeLevel {
+    double relative_perturbation{0.0};
+    std::size_t probe_count{0};
+    bool passed{false};
+    double maximum_normalized_absolute_error{0.0};
+    double maximum_relative_error{0.0};
+};
+
 struct SmallSignalLinearizationResponse {
     OperationStatus status{OperationStatus::invalid_request};
     ServiceError error;
@@ -1353,8 +1363,12 @@ struct SmallSignalLinearizationResponse {
     DaeJacobianVerificationReport jacobian_verification;
     std::vector<DaeLinearizationResponseProbeResult>
         nonlinear_response_probes;
+    std::vector<SmallSignalLinearityEnvelopeLevel>
+        nonlinear_response_envelope;
     std::vector<DaeLinearizationTrajectoryProbeResult>
         nonlinear_trajectory_probes;
+    std::vector<SmallSignalLinearityEnvelopeLevel>
+        nonlinear_trajectory_envelope;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

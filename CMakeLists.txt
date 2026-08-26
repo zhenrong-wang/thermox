@@ -70,6 +70,21 @@ add_test(
         --mode weighted-measurements
         --max-iterations 6
         --format json)
+add_test(
+    NAME platform_small_signal_envelope_cli
+    COMMAND thermox_cli linearize
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/lumped_thermal_storage.json
+        --case charge
+        --input-variable heater.outlet.Q_dot
+        --output-variable store.temperature
+        --output-variable heater.outlet.Q_dot
+        --verify-nonlinear-response
+        --nonlinear-response-perturbation 1e-4
+        --nonlinear-response-perturbation 3e-4
+        --verify-nonlinear-trajectory
+        --nonlinear-trajectory-perturbation 1e-4
+        --nonlinear-trajectory-perturbation 3e-4
+        --format json)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)

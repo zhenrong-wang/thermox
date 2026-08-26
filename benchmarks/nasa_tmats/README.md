@@ -442,6 +442,13 @@ output error is 0.117%. Over the 0.010 s trajectory window, the corresponding ma
 and 0.106%. Raw relative errors on nominally zero extraction-to-pressure channels are intentionally
 not used as evidence: their normalized absolute discrepancies remain below `5.54e-10`.
 
+The v3 service contract additionally exercises a response-amplitude ladder at relative
+disturbances of 0.01%, 0.03%, and 0.1%. All 15 independent state/input-column probes pass. The
+maximum selected-output normalized absolute errors grow from `3.11e-7` through `2.80e-6` to
+`3.10e-5`, while the largest materially nonzero relative output discrepancies are 0.0569%, 0.117%,
+and 0.388%, respectively. This is evidence for a measured local-linearity envelope, not a claim
+that the linear model remains predictive for arbitrary large disturbances.
+
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
 solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:

@@ -3219,6 +3219,25 @@ std::string serialize_small_signal_linearization_response_json(
         }
         out << ']';
     };
+    const auto linearity_envelope = [&](const auto& levels) {
+        out << '[';
+        for (std::size_t index = 0; index < levels.size(); ++index) {
+            if (index != 0U) out << ", ";
+            const auto& level = levels[index];
+            out << "{\"relative_perturbation\": ";
+            json_number(out, level.relative_perturbation);
+            out << ", \"probe_count\": " << level.probe_count
+                << ", \"passed\": "
+                << (level.passed ? "true" : "false")
+                << ", \"maximum_normalized_absolute_error\": ";
+            json_number(
+                out, level.maximum_normalized_absolute_error);
+            out << ", \"maximum_relative_error\": ";
+            json_number(out, level.maximum_relative_error);
+            out << '}';
+        }
+        out << ']';
+    };
     out << "{\n  \"schema_version\": ";
     json_string(out, result_schema_v5);
     out << ",\n  \"status\": ";
@@ -3371,6 +3390,8 @@ std::string serialize_small_signal_linearization_response_json(
         out << '}';
     }
     out << ']';
+    out << ",\n  \"nonlinear_response_envelope\": ";
+    linearity_envelope(response.nonlinear_response_envelope);
     out << ",\n  \"nonlinear_trajectory_probes\": [";
     for (std::size_t probe_index = 0;
          probe_index < response.nonlinear_trajectory_probes.size();
@@ -3455,6 +3476,8 @@ std::string serialize_small_signal_linearization_response_json(
         out << '}';
     }
     out << ']';
+    out << ",\n  \"nonlinear_trajectory_envelope\": ";
+    linearity_envelope(response.nonlinear_trajectory_envelope);
     out << ",\n  \"diagnostics\": {\"success\": "
         << (response.diagnostics.success ? "true" : "false")
         << ", \"residual_evaluations\": "

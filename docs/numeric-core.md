@@ -201,6 +201,14 @@ represent those discontinuities. Service and CLI gates can exercise every state 
 independently; relative and scale-normalized absolute tolerances jointly protect material state and
 output responses as well as nominally zero cross-couplings.
 
+The service-level `thermox.index1-small-signal/v3` contract accepts strictly increasing response
+and trajectory perturbation ladders. Every magnitude is applied independently to every state and
+input column, and the response includes a structured level summary containing the probe count,
+aggregate pass state, and maximum relative and declared-scale-normalized errors. This establishes
+an auditable local-linearity envelope instead of treating one arbitrarily selected disturbance as
+representative. A requested disturbance must fit within at least one direction of the variable's
+declared physical bounds; otherwise validation fails explicitly.
+
 ## Nonlinear globalization
 
 `solve_newton` supports two execution policies without changing the compiled physical equations:
