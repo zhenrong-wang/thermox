@@ -1162,7 +1162,8 @@ void test_index_one_dae_small_signal_linearization() {
         thermox::validate_index1_dae_linearization_response(
             problem, 0.0, result, inputs, {0.01}, {0.02});
     require(
-        probe.success && probe.passed && probe.states.size() == 1,
+        probe.success && probe.passed && probe.states.size() == 1 &&
+            probe.outputs.size() == 3,
         probe.message);
     require_near(
         probe.states[0].predicted_rate_change, 0.09, 1.0e-10,
@@ -1170,6 +1171,14 @@ void test_index_one_dae_small_signal_linearization() {
     require_near(
         probe.states[0].nonlinear_rate_change, 0.09, 1.0e-9,
         "consistent nonlinear DAE response");
+    require_near(probe.outputs[0].predicted_change, 0.01, 1.0e-12,
+                 "state-output linear response");
+    require_near(probe.outputs[1].predicted_change, 0.11, 1.0e-10,
+                 "algebraic-output linear response");
+    require_near(probe.outputs[1].nonlinear_change, 0.11, 1.0e-9,
+                 "algebraic-output nonlinear response");
+    require_near(probe.outputs[2].predicted_change, 0.02, 1.0e-12,
+                 "direct-feedthrough linear response");
     auto incorrect = result;
     incorrect.A[0][0] = 2.0;
     const auto rejected_probe =
@@ -1190,7 +1199,8 @@ void test_index_one_dae_small_signal_linearization() {
             {0.01}, {0.02}, trajectory_options);
     require(
         trajectory.success && trajectory.passed &&
-            trajectory.samples.size() == 2,
+            trajectory.samples.size() == 2 &&
+            trajectory.samples[0].outputs.size() == 3,
         trajectory.message + " max_normalized_error=" +
             std::to_string(
                 trajectory.maximum_normalized_absolute_error) +
@@ -1203,9 +1213,11 @@ void test_index_one_dae_small_signal_linearization() {
                        " nonlinear=" + std::to_string(
                        trajectory.samples[0].states[0].nonlinear_change)));
     require(
-        trajectory.maximum_normalized_absolute_error < 1.0e-6,
-        "integrated linear and nonlinear trajectories agree for a "
-        "linear DAE");
+        trajectory.maximum_normalized_absolute_error < 3.0e-6,
+        "integrated linear state and amplified algebraic-output "
+        "trajectories agree for a linear DAE: maximum normalized error=" +
+            std::to_string(
+                trajectory.maximum_normalized_absolute_error));
     const auto rejected_trajectory =
         thermox::validate_index1_dae_linearization_trajectory(
             problem, 0.0, incorrect, inputs,

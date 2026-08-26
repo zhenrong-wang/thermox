@@ -435,6 +435,13 @@ C entries differ by 1.10% to 16.07% and the two fuel-to-pressure D entries diffe
 17.40%. These remain partial cross-code results consistent with the already visible fuel-gain and
 gas-path convention differences; they are not calibrated away.
 
+The nonlinear gates now cover those selected C/D outputs as well as the rotor states. Across all
+five independent state/input perturbations, the consistent-response check keeps the maximum
+pressure-output normalized absolute error below `2.80e-6`; the largest materially nonzero relative
+output error is 0.117%. Over the 0.010 s trajectory window, the corresponding maxima are `2.69e-6`
+and 0.106%. Raw relative errors on nominally zero extraction-to-pressure channels are intentionally
+not used as evidence: their normalized absolute discrepancies remain below `5.54e-10`.
+
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
 solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:

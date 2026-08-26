@@ -74,12 +74,22 @@ struct DaeLinearizationResponseProbeState {
     double relative_error{0.0};
 };
 
+struct DaeLinearizationResponseProbeOutput {
+    std::string output_name;
+    double predicted_change{0.0};
+    double nonlinear_change{0.0};
+    double absolute_error{0.0};
+    double normalized_absolute_error{0.0};
+    double relative_error{0.0};
+};
+
 struct DaeLinearizationResponseProbeResult {
     bool success{false};
     bool passed{false};
     std::vector<double> state_perturbations;
     std::vector<double> input_perturbations;
     std::vector<DaeLinearizationResponseProbeState> states;
+    std::vector<DaeLinearizationResponseProbeOutput> outputs;
     double maximum_normalized_absolute_error{0.0};
     double maximum_relative_error{0.0};
     SolverDiagnostics nonlinear_diagnostics;
@@ -104,9 +114,19 @@ struct DaeLinearizationTrajectoryProbeState {
     double relative_error{0.0};
 };
 
+struct DaeLinearizationTrajectoryProbeOutput {
+    std::string output_name;
+    double linear_change{0.0};
+    double nonlinear_change{0.0};
+    double absolute_error{0.0};
+    double normalized_absolute_error{0.0};
+    double relative_error{0.0};
+};
+
 struct DaeLinearizationTrajectoryProbeSample {
     double time{0.0};
     std::vector<DaeLinearizationTrajectoryProbeState> states;
+    std::vector<DaeLinearizationTrajectoryProbeOutput> outputs;
 };
 
 struct DaeLinearizationTrajectoryProbeResult {

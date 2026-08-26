@@ -3341,6 +3341,25 @@ std::string serialize_small_signal_linearization_response_json(
             json_number(out, state.relative_error);
             out << '}';
         }
+        out << "], \"outputs\": [";
+        for (std::size_t output_index = 0;
+             output_index < probe.outputs.size(); ++output_index) {
+            if (output_index != 0U) out << ", ";
+            const auto& output = probe.outputs[output_index];
+            out << "{\"output_name\": ";
+            json_string(out, output.output_name);
+            out << ", \"predicted_change\": ";
+            json_number(out, output.predicted_change);
+            out << ", \"nonlinear_change\": ";
+            json_number(out, output.nonlinear_change);
+            out << ", \"absolute_error\": ";
+            json_number(out, output.absolute_error);
+            out << ", \"normalized_absolute_error\": ";
+            json_number(out, output.normalized_absolute_error);
+            out << ", \"relative_error\": ";
+            json_number(out, output.relative_error);
+            out << '}';
+        }
         out << "], \"maximum_normalized_absolute_error\": ";
         json_number(out, probe.maximum_normalized_absolute_error);
         out << ", \"maximum_relative_error\": ";
@@ -3400,6 +3419,25 @@ std::string serialize_small_signal_linearization_response_json(
                 json_number(out, state.normalized_absolute_error);
                 out << ", \"relative_error\": ";
                 json_number(out, state.relative_error);
+                out << '}';
+            }
+            out << "], \"outputs\": [";
+            for (std::size_t output_index = 0;
+                 output_index < sample.outputs.size(); ++output_index) {
+                if (output_index != 0U) out << ", ";
+                const auto& output = sample.outputs[output_index];
+                out << "{\"output_name\": ";
+                json_string(out, output.output_name);
+                out << ", \"linear_change\": ";
+                json_number(out, output.linear_change);
+                out << ", \"nonlinear_change\": ";
+                json_number(out, output.nonlinear_change);
+                out << ", \"absolute_error\": ";
+                json_number(out, output.absolute_error);
+                out << ", \"normalized_absolute_error\": ";
+                json_number(out, output.normalized_absolute_error);
+                out << ", \"relative_error\": ";
+                json_number(out, output.relative_error);
                 out << '}';
             }
             out << "]}";

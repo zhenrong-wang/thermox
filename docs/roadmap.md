@@ -160,6 +160,8 @@ Delivered:
 11. Complete native-coordinate A/B/C/D export for caller-selected differential, algebraic, and
     direct-feedthrough graph outputs, with service/CLI contracts and public AGTF30 gas-path pressure
     sensitivity evidence. ✅
+12. Finite-perturbation consistent-response and finite-window trajectory gates for every selected
+    C/D output, including serialized per-output errors and public AGTF30 pressure-response evidence. ✅
 
 ## Reusable dynamic equipment primitives
 

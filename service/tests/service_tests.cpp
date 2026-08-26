@@ -2598,10 +2598,23 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
                 response.nonlinear_response_probes.begin(),
                 response.nonlinear_response_probes.end(),
                 [](const auto& probe) {
-                    return probe.success && probe.passed;
+                    return probe.success && probe.passed &&
+                        probe.outputs.size() == 4U;
                 }),
-        "NASA A/B columns must predict independently perturbed nonlinear "
-        "DAE rate responses");
+        "NASA A/B/C/D columns must predict independently perturbed "
+        "nonlinear DAE rate and gas-path output responses");
+    double maximum_output_response_normalized_error = 0.0;
+    for (const auto& probe : response.nonlinear_response_probes) {
+        for (const auto& output : probe.outputs) {
+            maximum_output_response_normalized_error = std::max(
+                maximum_output_response_normalized_error,
+                output.normalized_absolute_error);
+        }
+    }
+    require(
+        maximum_output_response_normalized_error < 3.0e-6,
+        "NASA nonlinear C/D response errors must remain below the "
+        "declared normalized output scale band");
     require(
         response.nonlinear_trajectory_probes.size() == 5 &&
             std::all_of(
@@ -2609,10 +2622,29 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
                 response.nonlinear_trajectory_probes.end(),
                 [](const auto& probe) {
                     return probe.success && probe.passed &&
-                        probe.samples.size() == 2;
+                        probe.samples.size() == 2 &&
+                        std::all_of(
+                            probe.samples.begin(), probe.samples.end(),
+                            [](const auto& sample) {
+                                return sample.outputs.size() == 4U;
+                            });
                 }),
-        "NASA A/B columns must predict finite-window nonlinear DAE "
-        "trajectories");
+        "NASA A/B/C/D columns must predict finite-window nonlinear DAE "
+        "state and gas-path output trajectories");
+    double maximum_output_trajectory_normalized_error = 0.0;
+    for (const auto& probe : response.nonlinear_trajectory_probes) {
+        for (const auto& sample : probe.samples) {
+            for (const auto& output : sample.outputs) {
+                maximum_output_trajectory_normalized_error = std::max(
+                    maximum_output_trajectory_normalized_error,
+                    output.normalized_absolute_error);
+            }
+        }
+    }
+    require(
+        maximum_output_trajectory_normalized_error < 3.0e-6,
+        "NASA nonlinear C/D trajectory errors must remain below the "
+        "declared normalized output scale band");
 
     constexpr double radians_per_second_per_rpm =
         2.0 * 3.14159265358979323846 / 60.0;
@@ -7899,15 +7931,21 @@ void test_small_signal_linearization_service() {
     require(
         response.nonlinear_response_probes.size() == 2 &&
             response.nonlinear_response_probes[0].passed &&
-            response.nonlinear_response_probes[1].passed,
-        "small-signal service must validate state and input columns "
-        "against consistent nonlinear DAE responses");
+            response.nonlinear_response_probes[1].passed &&
+            response.nonlinear_response_probes[0].outputs.size() == 2 &&
+            response.nonlinear_response_probes[1].outputs.size() == 2,
+        "small-signal service must validate A/B/C/D columns against "
+        "consistent nonlinear DAE responses");
     require(
         response.nonlinear_trajectory_probes.size() == 2 &&
             response.nonlinear_trajectory_probes[0].passed &&
-            response.nonlinear_trajectory_probes[1].passed,
-        "small-signal service must validate state and input columns "
-        "over finite nonlinear trajectories");
+            response.nonlinear_trajectory_probes[1].passed &&
+            response.nonlinear_trajectory_probes[0].samples[0]
+                    .outputs.size() == 2 &&
+            response.nonlinear_trajectory_probes[1].samples[0]
+                    .outputs.size() == 2,
+        "small-signal service must validate A/B/C/D columns over finite "
+        "nonlinear trajectories");
     const auto json = thermox::service::
         serialize_small_signal_linearization_response_json(response);
     require(
@@ -7929,6 +7967,8 @@ void test_small_signal_linearization_service() {
             json.find("\"nonlinear_response_probes\": [") !=
                 std::string::npos &&
             json.find("\"nonlinear_trajectory_probes\": [") !=
+                std::string::npos &&
+            json.find("\"output_name\": \"store.temperature\"") !=
                 std::string::npos,
         "small-signal JSON must preserve named matrix coordinates");
 }

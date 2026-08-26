@@ -459,14 +459,28 @@ validate_index1_dae_linearization_response(
     const std::size_t state_count =
         linearization.differential_state_indices.size();
     const std::size_t input_count = inputs.size();
+    const std::size_t output_count =
+        linearization.output_indices.size();
     if (state_perturbations.size() != state_count ||
         input_perturbations.size() != input_count ||
         linearization.A.size() != state_count ||
         linearization.B.size() != state_count ||
-        linearization.input_indices.size() != input_count) {
+        linearization.input_indices.size() != input_count ||
+        linearization.output_names.size() != output_count ||
+        linearization.C.size() != output_count ||
+        linearization.D.size() != output_count) {
         throw std::invalid_argument(
             "nonlinear response probe dimensions do not match the "
             "linearization");
+    }
+    for (std::size_t output = 0; output < output_count; ++output) {
+        if (linearization.output_indices[output] >=
+                problem.variable_names.size() ||
+            linearization.C[output].size() != state_count ||
+            linearization.D[output].size() != input_count) {
+            throw std::invalid_argument(
+                "linearization output matrix dimensions are inconsistent");
+        }
     }
     bool nonzero_perturbation = false;
     for (const double value : state_perturbations) {
@@ -637,9 +651,47 @@ validate_index1_dae_linearization_response(
             normalized_absolute_error,
             relative_error});
     }
+    result.outputs.reserve(output_count);
+    for (std::size_t output = 0; output < output_count; ++output) {
+        double predicted_change = 0.0;
+        for (std::size_t state = 0; state < state_count; ++state) {
+            predicted_change += linearization.C[output][state] *
+                state_perturbations[state];
+        }
+        for (std::size_t input = 0; input < input_count; ++input) {
+            predicted_change += linearization.D[output][input] *
+                input_perturbations[input];
+        }
+        const auto variable = linearization.output_indices[output];
+        const double nonlinear_change =
+            initialized.state[variable] -
+            linearization.operating_state[variable];
+        const double absolute_error = std::abs(
+            nonlinear_change - predicted_change);
+        const double scale = problem.variable_scales[variable];
+        const double normalized_absolute_error = absolute_error / scale;
+        const double reference = std::max(
+            std::abs(nonlinear_change), std::abs(predicted_change));
+        const double relative_error = reference == 0.0
+            ? 0.0
+            : absolute_error / reference;
+        result.maximum_normalized_absolute_error = std::max(
+            result.maximum_normalized_absolute_error,
+            normalized_absolute_error);
+        result.maximum_relative_error = std::max(
+            result.maximum_relative_error, relative_error);
+        result.passed = result.passed &&
+            absolute_error <=
+                options.absolute_normalized_tolerance * scale +
+                    options.relative_tolerance * reference;
+        result.outputs.push_back({
+            linearization.output_names[output], predicted_change,
+            nonlinear_change, absolute_error,
+            normalized_absolute_error, relative_error});
+    }
     result.message = result.passed
-        ? "linearized rate response agrees with the consistent nonlinear DAE response"
-        : "linearized rate response differs from the consistent nonlinear DAE response";
+        ? "linearized A/B/C/D response agrees with the consistent nonlinear DAE response"
+        : "linearized A/B/C/D response differs from the consistent nonlinear DAE response";
     return result;
 }
 
@@ -677,13 +729,27 @@ validate_index1_dae_linearization_trajectory(
     const std::size_t state_count =
         linearization.differential_state_indices.size();
     const std::size_t input_count = inputs.size();
+    const std::size_t output_count =
+        linearization.output_indices.size();
     if (state_perturbations.size() != state_count ||
         input_perturbations.size() != input_count ||
         linearization.A.size() != state_count ||
         linearization.B.size() != state_count ||
-        linearization.input_indices.size() != input_count) {
+        linearization.input_indices.size() != input_count ||
+        linearization.output_names.size() != output_count ||
+        linearization.C.size() != output_count ||
+        linearization.D.size() != output_count) {
         throw std::invalid_argument(
             "trajectory probe dimensions do not match the linearization");
+    }
+    for (std::size_t output = 0; output < output_count; ++output) {
+        if (linearization.output_indices[output] >=
+                problem.variable_names.size() ||
+            linearization.C[output].size() != state_count ||
+            linearization.D[output].size() != input_count) {
+            throw std::invalid_argument(
+                "linearization output matrix dimensions are inconsistent");
+        }
     }
     bool nonzero = false;
     for (const double value : state_perturbations) {
@@ -938,11 +1004,48 @@ validate_index1_dae_linearization_trajectory(
                 linear_state[index], nonlinear_change,
                 absolute_error, normalized_error, relative_error});
         }
+        for (std::size_t index = 0; index < output_count; ++index) {
+            double linear_change = 0.0;
+            for (std::size_t state = 0; state < state_count; ++state) {
+                linear_change += linearization.C[index][state] *
+                    linear_state[state];
+            }
+            for (std::size_t input = 0; input < input_count; ++input) {
+                linear_change += linearization.D[index][input] *
+                    input_perturbations[input];
+            }
+            const auto variable = linearization.output_indices[index];
+            const double nonlinear_change =
+                nonlinear_state->state[variable] -
+                nominal_state->state[variable];
+            const double absolute_error = std::abs(
+                nonlinear_change - linear_change);
+            const double scale = problem.variable_scales[variable];
+            const double normalized_error = absolute_error / scale;
+            const double reference = std::max(
+                std::abs(nonlinear_change), std::abs(linear_change));
+            const double relative_error = reference == 0.0
+                ? 0.0
+                : absolute_error / reference;
+            result.maximum_normalized_absolute_error = std::max(
+                result.maximum_normalized_absolute_error,
+                normalized_error);
+            result.maximum_relative_error = std::max(
+                result.maximum_relative_error, relative_error);
+            result.passed = result.passed &&
+                absolute_error <=
+                    options.absolute_normalized_tolerance * scale +
+                        options.relative_tolerance * reference;
+            output.outputs.push_back({
+                linearization.output_names[index], linear_change,
+                nonlinear_change, absolute_error,
+                normalized_error, relative_error});
+        }
         result.samples.push_back(std::move(output));
     }
     result.message = result.passed
-        ? "linear A/B trajectory agrees with the nonlinear DAE trajectory"
-        : "linear A/B trajectory differs from the nonlinear DAE trajectory";
+        ? "linear A/B/C/D trajectory agrees with the nonlinear DAE trajectory"
+        : "linear A/B/C/D trajectory differs from the nonlinear DAE trajectory";
     return result;
 }
 

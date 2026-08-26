@@ -52,6 +52,8 @@ The current synchronous service exposes:
 - canonical model JSON and steady/transient/calibration result JSON.
 - native-coordinate A/B/C/D small-signal models with declared exogenous inputs and caller-selected
   differential, algebraic, or direct-feedthrough graph outputs;
+- opt-in finite-perturbation and finite-window nonlinear acceptance gates that preserve per-state
+  and per-output absolute, relative, and declared-scale-normalized discrepancies;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by
