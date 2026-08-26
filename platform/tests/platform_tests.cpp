@@ -1063,6 +1063,8 @@ void test_component_catalog_exposes_parameter_contracts() {
         "sink.signal.boundary",
         "source.control.boundary",
         "sink.control.boundary",
+        "source.force.boundary",
+        "sink.force.boundary",
         "compressor.fluid.isentropic_efficiency",
         "compressor.fluid.performance_map",
         "compressor.fluid.variable_geometry_map",
@@ -1089,6 +1091,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.splitter.controlled_fraction",
         "junction.material.cross_bleed.performance_map",
         "transport.material.perfect_gas_mach_scaled_loss",
+        "transport.material.freestream_momentum",
         "terminal.material.perfect_gas_convergent_nozzle",
         "valve.fluid.isenthalpic_pressure_ratio",
         "valve.fluid.actuated_nonflashing_liquid",
@@ -1132,6 +1135,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "shaft.inertia.multi_load",
         "generator.electrical.efficiency",
         "converter.fluid_to_electrical.polynomial_efficiency",
+        "balance.force.propulsive",
         "control.proportional.normalized",
         "control.first_order_lag.normalized",
         "control.pi_bounded.normalized"};
@@ -4224,7 +4228,7 @@ void test_perfect_gas_convergent_material_nozzle() {
       "nozzle.inlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
       "nozzle.inlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
       "nozzle.mach": 1.0,
-      "nozzle.gross_thrust": 2000.0
+      "nozzle.thrust.F": 2000.0
     }
   }, {
     "id": "choked_transient", "mode": "dynamic_transient",
@@ -4242,7 +4246,7 @@ void test_perfect_gas_convergent_material_nozzle() {
       "nozzle.inlet.m_dot[N2]": {"value": 5.0, "unit": "kg/s"},
       "nozzle.inlet.m_dot[O2]": {"value": 1.25, "unit": "kg/s"},
       "nozzle.mach": 1.0,
-      "nozzle.gross_thrust": 2000.0
+      "nozzle.thrust.F": 2000.0
     }
   }]
 })json");
@@ -4268,7 +4272,7 @@ void test_perfect_gas_convergent_material_nozzle() {
     };
     require_near(value("nozzle.mach"), 1.0, 1.0e-10,
                  "convergent nozzle must choke at sufficient pressure ratio");
-    require(value("nozzle.gross_thrust") > 1000.0,
+    require(value("nozzle.thrust.F") > 1000.0,
             "convergent nozzle must publish positive gross thrust");
     require_near(
         value("source.outlet.m_dot[N2]") /

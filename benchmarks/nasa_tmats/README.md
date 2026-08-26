@@ -320,9 +320,10 @@ python3 scripts/build_agtf30_nozzle_closed_twin_spool_benchmark.py \
 
 Warm-start results condition only initial guesses; the nozzle equations, component parameters,
 boundaries, and converged acceptance outputs do not depend on them. This qualifies a complete
-map-driven **zero-VBV steady gas path** against the public cross-code reference. Net thrust remains
-reserved until the generic ambient/inlet ram-drag path is connected. The fifth sea-level-static
-point and the published transient remain reserved until the generic VBV is present.
+map-driven **zero-VBV steady gas path** against the public cross-code reference. The fifth
+sea-level-static point and the published transient remain reserved until the generic VBV is
+present. The separate propulsive-force declaration below closes the flight-point ram-drag and net
+thrust gate.
 
 ## AGTF30 map-driven variable-bleed-valve calculation
 
@@ -349,8 +350,7 @@ degR, NASA's `Valve_TMATS_body.c` relation gives 4.633915 lbm/s (2.101908 kg/s).
 Thermox map-bound cross-bleed component reproduces that flow to numerical precision and closes
 both donor removal and receiver addition exactly. This is a staged component/subsystem
 qualification; the fully coupled fifth static engine point remains reserved while its nozzle/VBV
-closure is conditioned. Net thrust remains a separate gate because ram drag is not yet represented
-in the graph.
+closure is conditioned. Flight-point ram drag and net thrust are qualified separately below.
 
 `agtf30_vbv_bypass_branch.json` then relaxes the bypass pressure and closes it through the source
 duct-17 loss model and scheduled 8000 in2 convergent nozzle. This three-component predictive
@@ -385,7 +385,28 @@ percent, station-5 temperature -1.014 percent, VBV flow -0.369 percent, and bypa
 percent. Both shaft balances close to numerical precision. Fuel remains -15.24 percent, consistent
 with the previously declared combustion/fuel-model prediction limitation; no calibration is
 applied. Its combined gross thrust is +0.3261 percent relative to the checksum-pinned NASA output.
-Net thrust remains reserved until the generic inlet ram-drag path is qualified.
+
+## AGTF30 generic propulsive-force calculation
+
+`agtf30_propulsive_force.json` extends the four nonzero-Mach whole-engine points with two generic
+components. `transport.material.freestream_momentum` conservatively passes the inlet material state
+and calculates ram drag from total mass flow and declared freestream velocity;
+`balance.force.propulsive` accepts an instance-sized set of gross-force ports and closes net force
+against drag. Core and bypass nozzle thrust are ordinary typed force ports, so neither component
+contains AGTF30-specific equations.
+
+```sh
+python3 scripts/build_agtf30_propulsive_force_benchmark.py
+```
+
+Freestream speed is calculated from each published Mach number and static ambient temperature with
+the declared ideal-air relation. No NASA force output is used as an equation, boundary, parameter,
+or correction factor; source force values only seed initial guesses and define acceptance tests.
+Across the four points, Thermox ram-drag error is -0.123% to -0.057% and net-thrust error is
++0.844% to +1.258% relative to the checksum-pinned NASA outputs. The larger relative net error is
+the expected conditioning of subtracting two larger forces. This completes the steady flight-point
+net-thrust cross-code gate, but remains computational cross-code evidence rather than independent
+hardware validation.
 
 ## AGTF30 transient source baseline
 

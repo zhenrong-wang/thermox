@@ -64,7 +64,7 @@
     },
     {
       "id": "nasa_tmats_gas_turbines",
-      "status": "nozzle_closed_zero_vbv_whole_gas_path_cross_code_complete",
+      "status": "steady_flight_point_net_thrust_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -96,7 +96,9 @@
         "hpt_inverse_map_flow_compatibility",
         "continuous_twin_spool_mass_energy_and_shaft_closure",
         "ducted_core_and_bypass_paths",
-        "zero_vbv_nozzle_capacity_and_gross_thrust"
+        "zero_vbv_nozzle_capacity_and_gross_thrust",
+        "generic_freestream_ram_drag_and_propulsive_force_balance",
+        "four_point_net_thrust_cross_code"
       ],
       "latest_result": {
         "topology": "nozzle_closed_fan_splitter_LPC_HPC_combustor_HPT_LPT_with_two_shafts",
@@ -109,8 +111,10 @@
         "solved_hp_speed_maximum_absolute_error_percent": 0.1093,
         "solved_bypass_ratio_maximum_absolute_error_percent": 0.6133,
         "combined_gross_thrust_maximum_absolute_error_percent": 0.25,
-        "classification": "multi_point_nozzle_closed_zero_vbv_whole_gas_path_cross_code_reproduction",
-        "reserved": ["net_thrust_with_inlet_ram_drag", "nonzero_vbv_operation", "fuel_flow_prediction", "fuel_step_transient"]
+        "ram_drag_maximum_absolute_error_percent": 0.12254,
+        "net_thrust_maximum_absolute_error_percent": 1.257601,
+        "classification": "multi_point_steady_flight_net_thrust_cross_code_reproduction",
+        "reserved": ["fuel_flow_prediction", "fuel_step_transient", "independent_hardware_validation"]
       }
     },
     {

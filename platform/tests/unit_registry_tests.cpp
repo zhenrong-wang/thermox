@@ -78,6 +78,13 @@ int main() {
                 std::abs(customary_flow.value_si - 45.359237) <
                     1.0e-12,
             "pound-mass per second must normalize to SI mass flow");
+        const auto customary_velocity = units.convert(100.0, "ft/s");
+        require(
+            customary_velocity.dimension == "speed" &&
+                customary_velocity.unit == "m/s" &&
+                std::abs(customary_velocity.value_si - 30.48) <
+                    1.0e-12,
+            "freestream velocity must normalize to SI speed");
         const auto& pressure_gradient =
             units.require_dimension("pressure_gradient");
         require(

@@ -2978,6 +2978,89 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class FreestreamMomentumMaterialModel final : public ComponentModel {
+public:
+    FreestreamMomentumMaterialModel()
+        : descriptor_(make_descriptor(
+              "transport.material.freestream_momentum",
+              {{"inlet", "material", "in"},
+               {"outlet", "material", "out"},
+               {"drag", "force", "out"}})) {
+        descriptor_.template_kind = "transport.freestream_momentum";
+        descriptor_.display_name = "Freestream momentum accounting";
+        descriptor_.category = "Propulsion performance";
+        descriptor_.model_name =
+            "Zero-loss stream pass-through with ram drag";
+        descriptor_.parameters = {
+            {"freestream_velocity", "speed", true, std::nullopt,
+             0.0, std::numeric_limits<double>::infinity(), true, true},
+            {"momentum_coefficient", "dimensionless", false, 1.0,
+             0.0, std::numeric_limits<double>::infinity(), true, true},
+        };
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto inlet_species =
+            require_port_species(context, "inlet");
+        const auto outlet_species =
+            require_port_species(context, "outlet");
+        if (inlet_species != outlet_species) {
+            throw std::invalid_argument(
+                "freestream momentum component requires identical "
+                "inlet and outlet material species bases");
+        }
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto drag = require_port_variable(context, "drag.F");
+        const double velocity = required_parameter(
+            context.component, "freestream_velocity");
+        const double coefficient = parameter_or(
+            context.component, "momentum_coefficient", 1.0);
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "pressure_continuity",
+            {{outlet_p, 1.0}, {inlet_p, -1.0}}, 0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "enthalpy_continuity",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}}, 0.0, 100000.0);
+        std::vector<LinearTerm> momentum{{drag, 1.0}};
+        for (const auto& species : inlet_species) {
+            const auto inlet_flow = require_port_variable(
+                context, "inlet.m_dot[" + species + "]");
+            const auto outlet_flow = require_port_variable(
+                context, "outlet.m_dot[" + species + "]");
+            system.add_linear_equation(
+                prefix + "species_" + species,
+                {{outlet_flow, 1.0}, {inlet_flow, -1.0}},
+                0.0, 100.0);
+            momentum.push_back(
+                {inlet_flow, -coefficient * velocity});
+        }
+        system.add_linear_equation(
+            prefix + "ram_drag", std::move(momentum),
+            0.0, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class PerfectGasConvergentMaterialNozzleModel final
     : public ComponentModel {
 public:
@@ -2986,7 +3069,8 @@ public:
               "terminal.material.perfect_gas_convergent_nozzle",
               {{"inlet", "material", "in"},
                {"area_ratio", "signal", "in"},
-               {"back_pressure_ratio", "signal", "in"}})) {
+               {"back_pressure_ratio", "signal", "in"},
+               {"thrust", "force", "out"}})) {
         descriptor_.template_kind = "terminal.material.nozzle";
         descriptor_.display_name = "Convergent gas nozzle";
         descriptor_.category = "Gas-path terminals";
@@ -3007,9 +3091,6 @@ public:
         descriptor_.internal_variables = {
             {"mach", DaeVariableKind::algebraic, 0.8, 1.0,
              0.0, 1.0, 0.0, 1.0, "dimensionless"},
-            {"gross_thrust", DaeVariableKind::algebraic, 100000.0,
-             100000.0, 0.0, 100000.0, 0.0,
-             std::numeric_limits<double>::infinity(), "force"},
         };
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
@@ -3042,7 +3123,7 @@ public:
             context, "back_pressure_ratio.value");
         const auto mach = require_internal_variable(context, "mach");
         const auto gross_thrust =
-            require_internal_variable(context, "gross_thrust");
+            require_port_variable(context, "thrust.F");
         const double reference_area = required_parameter(
             context.component, "reference_throat_area");
         const double reference_pressure = required_parameter(
@@ -4086,6 +4167,8 @@ void register_transport_component_models(
         ControlledMaterialCrossBleedModel>());
     registry.register_model(std::make_shared<
         PerfectGasMachScaledMaterialDuctModel>());
+    registry.register_model(std::make_shared<
+        FreestreamMomentumMaterialModel>());
     registry.register_model(std::make_shared<
         PerfectGasConvergentMaterialNozzleModel>());
 }

@@ -40,6 +40,8 @@ standard_connector_domains() {
          "electrical_link",
          {{"P", 0.0, 1000000.0, "power", false},
           {"frequency", 50.0, 50.0, "frequency", false}}},
+        {"force", "thermox.connector.force/v1", "force_link",
+         {{"F", 0.0, 100000.0, "force", false}}},
         {"signal", "thermox.connector.signal/v1",
          "signal_link",
          {{"value", 0.0, 1.0, "dimensionless", false}}},

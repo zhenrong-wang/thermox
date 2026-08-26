@@ -596,8 +596,22 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 87,
+        response.components.size() == 91,
         "service must expose the complete component registry");
+    require(
+        std::any_of(
+            response.components.begin(), response.components.end(),
+            [](const auto& component) {
+                return component.kind ==
+                    "transport.material.freestream_momentum";
+            }) &&
+            std::any_of(
+                response.components.begin(), response.components.end(),
+                [](const auto& component) {
+                    return component.kind ==
+                        "balance.force.propulsive";
+                }),
+        "service catalog must expose generic propulsive-force physics");
     require(
         std::any_of(
             response.components.begin(), response.components.end(),
@@ -1175,7 +1189,14 @@ void test_catalog_discovery() {
                 water_heos->capabilities.end(),
         "catalog must expose regime-spanning HEOS water metadata");
     require(
-        response.connector_domains.size() == 7,
+        response.connector_domains.size() == 8 &&
+            std::any_of(
+                response.connector_domains.begin(),
+                response.connector_domains.end(),
+                [](const auto& connector) {
+                    return connector.domain == "force" &&
+                        connector.connection_kind == "force_link";
+                }),
         "catalog must expose connector contracts");
     const auto zuber_findlay = std::find_if(
         response.correlation_templates.begin(),
@@ -2230,10 +2251,10 @@ void test_nasa_agtf30_open_vbv_bypass_branch_benchmark() {
         "nozzle-coupled VBV flow must remain within 0.01 percent of "
         "the NASA source relation");
 
-    const auto& nozzle = require_component_result(
-        response.graph, "bypass_exit");
     const double gross_thrust = require_result_value(
-        nozzle.internal_values, "gross_thrust").value_si;
+        require_port_result(response.graph, "bypass_exit", "thrust")
+            .primary_values,
+        "F").value_si;
     require(
         std::isfinite(gross_thrust) && gross_thrust > 0.0,
         "open bypass branch must produce finite positive gross thrust");
@@ -2276,9 +2297,9 @@ void test_nasa_agtf30_core_exhaust_branch_benchmark() {
         std::abs(inlet_flow - outlet_flow) < 1.0e-10,
         "core exhaust duct must conserve mass exactly");
     const double gross_thrust = require_result_value(
-        require_component_result(response.graph, "core_exit")
-            .internal_values,
-        "gross_thrust").value_si;
+        require_port_result(response.graph, "core_exit", "thrust")
+            .primary_values,
+        "F").value_si;
     require(
         std::isfinite(gross_thrust) && gross_thrust > 0.0,
         "core exhaust branch must produce finite positive gross thrust");
@@ -2389,6 +2410,74 @@ void test_nasa_agtf30_open_vbv_static_whole_engine_benchmark() {
         std::abs(0.99 * lpt_power - lpc_power - fan_power) < 1.0e-6 &&
             std::abs(hpt_power - hpc_power - 260997.475) < 1.0e-6,
         "open-VBV whole-engine graph must close both shaft balances exactly");
+}
+
+void test_nasa_agtf30_propulsive_force_benchmark() {
+    struct ReferencePoint {
+        std::string case_id;
+        double ram_drag_n;
+        double net_thrust_n;
+    };
+    const std::vector<ReferencePoint> cases = {
+        {"sea_level_mach_03_1500", 70626.09421795256,
+         36914.196040946284},
+        {"alt_10000_mach_05_1750", 101481.30864426575,
+         31720.525654840825},
+        {"alt_25000_mach_06_2000", 77754.18142415346,
+         25021.403512507473},
+        {"alt_30000_mach_072_2000", 81603.42416802999,
+         19418.391867256018},
+    };
+    const auto model = read_source_file(
+        "benchmarks/nasa_tmats/agtf30_propulsive_force.json");
+    std::vector<thermox::service::PerformanceMapArtifactInput> maps;
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/agtf30_fan_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpc_map.json",
+             "benchmarks/nasa_tmats/agtf30_hpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_lpt_map.json",
+             "benchmarks/nasa_tmats/agtf30_vbv_map.json"}) {
+        maps.push_back(thermox::service::
+            parse_performance_map_artifact_declaration_json(
+                read_source_file(path)));
+    }
+    const auto relative_error = [](double actual, double expected) {
+        return std::abs(actual / expected - 1.0);
+    };
+    for (const auto& point : cases) {
+        thermox::service::SteadySimulationRequest request;
+        request.model_json = model;
+        request.case_id = point.case_id;
+        request.artifacts.performance_maps = maps;
+        request.solver.residual_tolerance = 1.0e-9;
+        const auto response =
+            thermox::service::SimulationService{}.run_steady(request);
+        require(
+            response.succeeded() && response.diagnostics.converged &&
+                response.diagnostics.final_residual_norm < 2.0e-10,
+            "NASA AGTF30 propulsive-force point must solve: " +
+                point.case_id);
+
+        const double ram_drag = require_result_value(
+            require_port_result(
+                response.graph, "freestream_momentum", "drag")
+                .primary_values,
+            "F").value_si;
+        const double net_thrust = require_result_value(
+            require_port_result(
+                response.graph, "propulsive_force", "net")
+                .primary_values,
+            "F").value_si;
+        require(
+            relative_error(ram_drag, point.ram_drag_n) < 0.002,
+            "generic freestream momentum must reproduce NASA ram drag "
+            "within 0.2 percent: " + point.case_id);
+        require(
+            relative_error(net_thrust, point.net_thrust_n) < 0.015,
+            "generic propulsive force balance must reproduce NASA net "
+            "thrust within 1.5 percent: " + point.case_id);
+    }
 }
 
 void test_nasa_agtf30_continuous_twin_spool_benchmark() {
@@ -7496,7 +7585,7 @@ void test_steady_service() {
                 "1.0.0",
         "medium provenance must include requested and resolved package versions");
     require(
-        response.metadata.connector_domains.size() == 7,
+        response.metadata.connector_domains.size() == 8,
         "result provenance must include connector contracts");
     require(
         response.diagnostics.converged &&
@@ -8895,6 +8984,7 @@ int main() {
         test_nasa_agtf30_open_vbv_bypass_branch_benchmark();
         test_nasa_agtf30_core_exhaust_branch_benchmark();
         test_nasa_agtf30_open_vbv_static_whole_engine_benchmark();
+        test_nasa_agtf30_propulsive_force_benchmark();
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_nasa_agtf30_partial_small_signal_benchmark();
         test_cantera_brayton_integration_benchmark();

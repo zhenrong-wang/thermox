@@ -95,9 +95,9 @@ def main() -> None:
         })
         guesses.update({
             "bypass_exit.mach": 1.0,
-            "bypass_exit.gross_thrust": 500000.0,
+            "bypass_exit.thrust.F": 500000.0,
             "core_exit.mach": 1.0,
-            "core_exit.gross_thrust": 50000.0,
+            "core_exit.thrust.F": 50000.0,
         })
         # The parent benchmark assembled its initial state from independently
         # validated spool slices. Normalize every connected material endpoint

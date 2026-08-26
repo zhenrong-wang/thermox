@@ -107,12 +107,10 @@ Newton iterations. Inlet-flow error is at most 1.634%, HPT outlet-flow error 1.3
 pressure error 4.521% against T-MATS. The uncalibrated equilibrium fuel result remains 15.656--
 16.088% low, so fuel prediction remains explicitly reserved.
 
-This advances the program from sliced component/spool checks to a continuous map-driven engine
-core. It does not complete the whole-engine gate: Mach-dependent duct losses, the variable bleed
-valve, and core/bypass nozzles are still absent, and therefore fan operating-line prediction and
-net thrust are not yet qualified. The next implementation sequence is those generic transport and
-terminal-flow components, followed by the fifth nonzero-VBV point and NASA's published fuel-step
-transient. No discrepancy in the current comparison should be hidden with a case-specific factor.
+This advanced the program from sliced component/spool checks to a continuous map-driven engine
+core. Subsequent generic duct, variable-bleed, nozzle, freestream-momentum, and force-balance gates
+now complete the steady flight-point topology. NASA's published fuel-step transient remains open.
+No discrepancy in the comparison is hidden with a case-specific factor.
 
 The first whole-engine prerequisite is also complete: five generic area-based gas ducts reproduce
 the source model's local-Mach quadratic loss law. With no output fitting, inlet-flow error falls
@@ -125,16 +123,16 @@ The nozzle gate is now complete for the four zero-VBV points. Generic convergent
 close the core and bypass paths, releasing bypass ratio and HP speed as solved quantities. Their
 maximum cross-code errors are 0.613% and 0.109%, respectively, while combined gross thrust remains
 within approximately 0.25%. This is the first complete steady AGTF30 gas-path reproduction, but it
-is still cross-code rather than hardware evidence. Net thrust awaits generic ambient/inlet ram
-drag.
+is still cross-code rather than hardware evidence. The generic ambient/inlet ram-drag gate is
+reported below.
 
 The generic VBV gate is now implemented as an artifact-driven controlled material cross-bleed
 junction. It uses pressure ratio and position to evaluate corrected bleed capacity, preserves the
 donor composition, and conserves species and enthalpy while mixing into the receiving stream. The
 NASA flow curve is bound as ordinary instance data. Inserting the component into the complete
 nozzle-closed graph leaves all four closed-valve points convergent and produces exactly zero bleed.
-The fifth open-VBV point still needs to be assembled from the public source boundaries; net thrust
-additionally requires a generic freestream/ram-drag closure.
+The fifth open-VBV point still needs to be assembled from the public source boundaries. The four
+nonzero-Mach net-thrust points are closed by the later generic freestream/ram-drag gate.
 
 Attempting that large sea-level-static move exposed a separate generic numerical gap: component
 homotopy existed, but fixed ambient, shaft-speed, nozzle-area, and actuator boundaries remained at
@@ -156,10 +154,12 @@ Fuel remains -15.24% and is explicitly unqualified; the difference is not calibr
 The previously reserved propulsion outputs have now been extracted directly from NASA's pinned
 `outputs.mat`. A checksum-guarded artifact preserves the published ram drag, combined gross
 thrust, net thrust, bypass/core gross thrust, and TSFC fields for five healthy points. Thermox's
-already solved combined gross thrust differs by +0.1408% to +0.3261% across those points. This
-completes the source-extraction and gross-thrust comparison gates; net thrust remains open until a
-generic freestream-momentum component is connected, and the comparison remains cross-code rather
-than hardware evidence.
+already solved combined gross thrust differs by +0.1408% to +0.3261% across those points. A generic
+freestream-momentum component and instance-sized propulsive force balance now close all four
+nonzero-Mach points: ram-drag error is -0.123% to -0.057%, and net-thrust error is +0.844% to
++1.258%. Freestream speed comes from published Mach and static temperature through the declared
+ideal-air relation; source forces are acceptance targets and initial guesses only. This qualifies
+steady net thrust within the public cross-code scope, not against independent hardware evidence.
 
 Thermox now also has an executable held-out gate for multi-operating-point local-model families.
 Validation cases are excluded from interpolation construction, independently initialized and

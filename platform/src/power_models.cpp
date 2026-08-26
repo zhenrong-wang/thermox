@@ -743,6 +743,73 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class PropulsiveForceBalanceModel final : public ComponentModel {
+public:
+    PropulsiveForceBalanceModel() {
+        descriptor_.kind = "balance.force.propulsive";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "balance.force";
+        descriptor_.display_name = "Propulsive force balance";
+        descriptor_.category = "Propulsion performance";
+        descriptor_.model_name =
+            "Instance-sized gross thrust minus ram drag";
+        descriptor_.ports = {
+            {"drag", "force", "in"},
+            {"net", "force", "out"},
+        };
+        descriptor_.port_groups = {{
+            "gross", "gross_", "force", "in", 1U, 64U, 1U}};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const override {
+        auto result = descriptor_;
+        if (component.port_counts.size() != 1U ||
+            !component.port_counts.contains("gross")) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' must declare exactly port_counts.gross");
+        }
+        const auto count = component.port_counts.at("gross");
+        if (count == 0U || count > 64U) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' gross-force port count must be in [1, 64]");
+        }
+        for (std::size_t index = 1; index <= count; ++index) {
+            result.ports.push_back({
+                "gross_" + std::to_string(index), "force", "in"});
+        }
+        return result;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto net = require_port_variable(context, "net.F");
+        const auto drag = require_port_variable(context, "drag.F");
+        std::vector<LinearTerm> balance{{net, 1.0}, {drag, 1.0}};
+        const auto count = context.component.port_counts.at("gross");
+        for (std::size_t index = 1; index <= count; ++index) {
+            balance.push_back({require_port_variable(
+                context,
+                "gross_" + std::to_string(index) + ".F"), -1.0});
+        }
+        system.add_linear_equation(
+            "component." + context.component.id + ".force_balance",
+            std::move(balance), 0.0, 100000.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_power_component_models(ComponentRegistry& registry) {
@@ -759,6 +826,8 @@ void register_power_component_models(ComponentRegistry& registry) {
         std::make_shared<FluidToElectricalPolynomialModel>());
     registry.register_model(
         std::make_shared<TwoPortShaftInertiaModel>());
+    registry.register_model(
+        std::make_shared<PropulsiveForceBalanceModel>());
 }
 
 }  // namespace thermox::platform

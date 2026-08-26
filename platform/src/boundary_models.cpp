@@ -171,6 +171,14 @@ void register_boundary_component_models(ComponentRegistry& registry) {
             {{"inlet", "electrical", "in"}}, false, "sink")));
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
+            "source.force.boundary",
+            {{"outlet", "force", "out"}}, true, "source")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
+            "sink.force.boundary",
+            {{"inlet", "force", "in"}}, true, "sink")));
+    registry.register_model(std::make_shared<MetadataComponentModel>(
+        boundary_descriptor(
             "source.signal.boundary",
             {{"outlet", "signal", "out"}}, true, "source")));
     registry.register_model(std::make_shared<MetadataComponentModel>(

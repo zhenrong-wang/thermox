@@ -1,8 +1,8 @@
 {
   "schema_version": "thermox.model/v2",
   "model": {
-    "id": "nasa_agtf30_vbv_nozzle_twin_spool",
-    "name": "NASA AGTF30 nozzle-closed twin spool with VBV",
+    "id": "nasa_agtf30_propulsive_force",
+    "name": "NASA AGTF30 gas path with generic propulsive force accounting",
     "revision": "1",
     "media": [],
     "materials": [
@@ -261,7 +261,9 @@
         "id": "lp_shaft",
         "kind": "shaft.train.multi_load",
         "version": "1.0.0",
-        "port_counts": {"load": 2},
+        "port_counts": {
+          "load": 2
+        },
         "parameters": {
           "mechanical_efficiency": 0.99,
           "fixed_loss": {
@@ -283,7 +285,9 @@
         "id": "hp_shaft",
         "kind": "shaft.train.multi_load",
         "version": "1.0.0",
-        "port_counts": {"load": 2},
+        "port_counts": {
+          "load": 2
+        },
         "parameters": {
           "mechanical_efficiency": 1.0,
           "fixed_loss": {
@@ -390,13 +394,37 @@
           "receiver_inlet": "reacting_gas",
           "receiver_outlet": "reacting_gas"
         }
+      },
+      {
+        "id": "freestream_momentum",
+        "kind": "transport.material.freestream_momentum",
+        "version": "1.0.0",
+        "parameters": {
+          "freestream_velocity": {
+            "value": 0.0,
+            "unit": "m/s"
+          },
+          "momentum_coefficient": 1.0
+        },
+        "materials": {
+          "inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "propulsive_force",
+        "kind": "balance.force.propulsive",
+        "version": "1.0.0",
+        "port_counts": {
+          "gross": 2
+        }
       }
     ],
     "connections": [
       {
         "id": "station2_fan",
         "from": "station_2.outlet",
-        "to": "fan.inlet",
+        "to": "freestream_momentum.inlet",
         "kind": "material_link"
       },
       {
@@ -554,6 +582,30 @@
         "from": "vbv.donor_outlet",
         "to": "duct_25.inlet",
         "kind": "material_link"
+      },
+      {
+        "id": "freestream_to_fan",
+        "from": "freestream_momentum.outlet",
+        "to": "fan.inlet",
+        "kind": "material_link"
+      },
+      {
+        "id": "bypass_gross_force",
+        "from": "bypass_exit.thrust",
+        "to": "propulsive_force.gross_1",
+        "kind": "force_link"
+      },
+      {
+        "id": "core_gross_force",
+        "from": "core_exit.thrust",
+        "to": "propulsive_force.gross_2",
+        "kind": "force_link"
+      },
+      {
+        "id": "freestream_drag_force",
+        "from": "freestream_momentum.drag",
+        "to": "propulsive_force.drag",
+        "kind": "force_link"
       }
     ]
   },
@@ -990,7 +1042,39 @@
         "vbv.donor_outlet.m_dot[CO2]": 0,
         "vbv.donor_outlet.m_dot[H2O]": 0,
         "vbv.donor_outlet.m_dot[CO]": 0,
-        "vbv.donor_outlet.m_dot[H2]": 0
+        "vbv.donor_outlet.m_dot[H2]": 0,
+        "freestream_momentum.inlet.p": {
+          "value": 15.5959388828,
+          "unit": "psia"
+        },
+        "freestream_momentum.outlet.p": 107530.21335598768,
+        "freestream_momentum.inlet.h": 10595.186072880137,
+        "freestream_momentum.outlet.h": 10595.186072880137,
+        "freestream_momentum.inlet.m_dot[CH4]": 0,
+        "freestream_momentum.outlet.m_dot[CH4]": 0,
+        "freestream_momentum.inlet.m_dot[O2]": 157.08075534261414,
+        "freestream_momentum.outlet.m_dot[O2]": 157.08075534261414,
+        "freestream_momentum.inlet.m_dot[N2]": 519.9914659617572,
+        "freestream_momentum.outlet.m_dot[N2]": 519.9914659617572,
+        "freestream_momentum.inlet.m_dot[CO2]": 0,
+        "freestream_momentum.outlet.m_dot[CO2]": 0,
+        "freestream_momentum.inlet.m_dot[H2O]": 0,
+        "freestream_momentum.outlet.m_dot[H2O]": 0,
+        "freestream_momentum.inlet.m_dot[CO]": 0,
+        "freestream_momentum.outlet.m_dot[CO]": 0,
+        "freestream_momentum.inlet.m_dot[H2]": 0,
+        "freestream_momentum.outlet.m_dot[H2]": 0,
+        "freestream_momentum.drag.F": 70626.09421795256,
+        "propulsive_force.drag.F": 70626.09421795256,
+        "propulsive_force.gross_1.F": 500000.0,
+        "propulsive_force.gross_2.F": 50000.0,
+        "propulsive_force.net.F": 36914.196040946284
+      },
+      "parameter_overrides": {
+        "components.freestream_momentum.parameters.freestream_velocity": {
+          "value": 104.71165059391909,
+          "unit": "m/s"
+        }
       }
     },
     {
@@ -1425,7 +1509,39 @@
         "vbv.donor_outlet.m_dot[CO2]": 0,
         "vbv.donor_outlet.m_dot[H2O]": 0,
         "vbv.donor_outlet.m_dot[CO]": 0,
-        "vbv.donor_outlet.m_dot[H2]": 0
+        "vbv.donor_outlet.m_dot[H2]": 0,
+        "freestream_momentum.inlet.p": {
+          "value": 11.9662568707,
+          "unit": "psia"
+        },
+        "freestream_momentum.outlet.p": 82504.43683118052,
+        "freestream_momentum.inlet.h": -16488.04122414809,
+        "freestream_momentum.outlet.h": -16488.04122414809,
+        "freestream_momentum.inlet.m_dot[CH4]": 0,
+        "freestream_momentum.outlet.m_dot[CH4]": 0,
+        "freestream_momentum.inlet.m_dot[O2]": 143.69776354346425,
+        "freestream_momentum.outlet.m_dot[O2]": 143.69776354346425,
+        "freestream_momentum.inlet.m_dot[N2]": 475.6891482818127,
+        "freestream_momentum.outlet.m_dot[N2]": 475.6891482818127,
+        "freestream_momentum.inlet.m_dot[CO2]": 0,
+        "freestream_momentum.outlet.m_dot[CO2]": 0,
+        "freestream_momentum.inlet.m_dot[H2O]": 0,
+        "freestream_momentum.outlet.m_dot[H2O]": 0,
+        "freestream_momentum.inlet.m_dot[CO]": 0,
+        "freestream_momentum.outlet.m_dot[CO]": 0,
+        "freestream_momentum.inlet.m_dot[H2]": 0,
+        "freestream_momentum.outlet.m_dot[H2]": 0,
+        "freestream_momentum.drag.F": 101481.30864426575,
+        "propulsive_force.drag.F": 101481.30864426575,
+        "propulsive_force.gross_1.F": 500000.0,
+        "propulsive_force.gross_2.F": 50000.0,
+        "propulsive_force.net.F": 31720.525654840825
+      },
+      "parameter_overrides": {
+        "components.freestream_momentum.parameters.freestream_velocity": {
+          "value": 164.19720820578831,
+          "unit": "m/s"
+        }
       }
     },
     {
@@ -1860,7 +1976,39 @@
         "vbv.donor_outlet.m_dot[CO2]": 0,
         "vbv.donor_outlet.m_dot[H2O]": 0,
         "vbv.donor_outlet.m_dot[CO]": 0,
-        "vbv.donor_outlet.m_dot[H2]": 0
+        "vbv.donor_outlet.m_dot[H2]": 0,
+        "freestream_momentum.inlet.p": {
+          "value": 6.9515950704,
+          "unit": "psia"
+        },
+        "freestream_momentum.outlet.p": 47929.56081079111,
+        "freestream_momentum.inlet.h": -48538.24623986551,
+        "freestream_momentum.outlet.h": -48538.24623986551,
+        "freestream_momentum.inlet.m_dot[CH4]": 0,
+        "freestream_momentum.outlet.m_dot[CH4]": 0,
+        "freestream_momentum.inlet.m_dot[O2]": 98.27129555966216,
+        "freestream_momentum.outlet.m_dot[O2]": 98.27129555966216,
+        "freestream_momentum.inlet.m_dot[N2]": 325.31187495612306,
+        "freestream_momentum.outlet.m_dot[N2]": 325.31187495612306,
+        "freestream_momentum.inlet.m_dot[CO2]": 0,
+        "freestream_momentum.outlet.m_dot[CO2]": 0,
+        "freestream_momentum.inlet.m_dot[H2O]": 0,
+        "freestream_momentum.outlet.m_dot[H2O]": 0,
+        "freestream_momentum.inlet.m_dot[CO]": 0,
+        "freestream_momentum.outlet.m_dot[CO]": 0,
+        "freestream_momentum.inlet.m_dot[H2]": 0,
+        "freestream_momentum.outlet.m_dot[H2]": 0,
+        "freestream_momentum.drag.F": 77754.18142415346,
+        "propulsive_force.drag.F": 77754.18142415346,
+        "propulsive_force.gross_1.F": 500000.0,
+        "propulsive_force.gross_2.F": 50000.0,
+        "propulsive_force.net.F": 25021.403512507473
+      },
+      "parameter_overrides": {
+        "components.freestream_momentum.parameters.freestream_velocity": {
+          "value": 183.6487818816994,
+          "unit": "m/s"
+        }
       }
     },
     {
@@ -2295,7 +2443,39 @@
         "vbv.donor_outlet.m_dot[CO2]": 0,
         "vbv.donor_outlet.m_dot[H2O]": 0,
         "vbv.donor_outlet.m_dot[CO]": 0,
-        "vbv.donor_outlet.m_dot[H2]": 0
+        "vbv.donor_outlet.m_dot[H2]": 0,
+        "freestream_momentum.inlet.p": {
+          "value": 6.1639786109,
+          "unit": "psia"
+        },
+        "freestream_momentum.outlet.p": 42499.13648243433,
+        "freestream_momentum.inlet.h": -45895.13331252954,
+        "freestream_momentum.outlet.h": -45895.13331252954,
+        "freestream_momentum.inlet.m_dot[CH4]": 0,
+        "freestream_momentum.outlet.m_dot[CH4]": 0,
+        "freestream_momentum.inlet.m_dot[O2]": 86.81637339396663,
+        "freestream_momentum.outlet.m_dot[O2]": 86.81637339396663,
+        "freestream_momentum.inlet.m_dot[N2]": 287.39213261451016,
+        "freestream_momentum.outlet.m_dot[N2]": 287.39213261451016,
+        "freestream_momentum.inlet.m_dot[CO2]": 0,
+        "freestream_momentum.outlet.m_dot[CO2]": 0,
+        "freestream_momentum.inlet.m_dot[H2O]": 0,
+        "freestream_momentum.outlet.m_dot[H2O]": 0,
+        "freestream_momentum.inlet.m_dot[CO]": 0,
+        "freestream_momentum.outlet.m_dot[CO]": 0,
+        "freestream_momentum.inlet.m_dot[H2]": 0,
+        "freestream_momentum.outlet.m_dot[H2]": 0,
+        "freestream_momentum.drag.F": 81603.42416802999,
+        "propulsive_force.drag.F": 81603.42416802999,
+        "propulsive_force.gross_1.F": 500000.0,
+        "propulsive_force.gross_2.F": 50000.0,
+        "propulsive_force.net.F": 19418.391867256018
+      },
+      "parameter_overrides": {
+        "components.freestream_momentum.parameters.freestream_velocity": {
+          "value": 218.3260065247806,
+          "unit": "m/s"
+        }
       }
     }
   ]

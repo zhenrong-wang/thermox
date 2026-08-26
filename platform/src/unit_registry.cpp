@@ -331,7 +331,12 @@ UnitRegistry make_default_unit_registry() {
             accepted("N/m"),
             accepted("mN/m", 1.0e-3),
         }));
-    display_only("speed", "m/s", display("m/s"));
+    registry.register_dimension(dimension(
+        "speed", "m/s", display("m/s"),
+        {
+            accepted("m/s"),
+            accepted("ft/s", 0.3048),
+        }));
     display_only("acceleration", "m/s2", display("m/s²"));
     return registry;
 }
