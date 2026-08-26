@@ -1802,6 +1802,9 @@ std::string encode_request(
             [](const service::TrajectoryValidationPlan& validation) {
                 Tree encoded;
                 encoded.put(
+                    "artifact_revision_id",
+                    validation.artifact_revision_id);
+                encoded.put(
                     "artifact_json",
                     service::serialize_validation_series_artifact_json(
                         validation.artifact));
@@ -1977,6 +1980,8 @@ service::SimulationJobRequest decode_request(
                 *encoded,
                 [](const Tree& item) {
                     service::TrajectoryValidationPlan validation;
+                    validation.artifact_revision_id =
+                        item.get<std::string>("artifact_revision_id");
                     validation.artifact =
                         service::parse_validation_series_artifact_json(
                             item.get<std::string>("artifact_json"));

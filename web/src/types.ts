@@ -785,6 +785,27 @@ export interface SimulationJob {
     result_projections: ResultProjection[]
     acceptance_criteria: EngineeringAcceptanceCriterion[]
     trajectory_validation_count: number
+    trajectory_validations: Array<{
+      artifact_revision_id: string
+      artifact_id: string
+      source_reference: string
+      source_checksum_sha256: string
+      evidence_basis: string
+      acquisition: 'measured' | 'computational' | 'derived' | 'digitized'
+      note: string
+      limitations: string[]
+      bindings: Array<{
+        signal_id: string
+        projection_id: string
+        comparison: 'absolute' | 'projected_change'
+        time_offset_si: number
+        baseline_time_si: number
+        absolute_tolerance_si: number
+        relative_tolerance: number
+        uncertainty_multiplier: number
+        maximum_interpolation_gap_si: number
+      }>
+    }>
     validation_prediction_count: number
     reconciliation_held_out_case_count: number
     fingerprint: string

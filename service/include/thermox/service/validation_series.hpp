@@ -93,6 +93,7 @@ struct TrajectoryValidationSummary {
 };
 
 struct TrajectoryValidationPlan {
+    std::string artifact_revision_id;
     ValidationSeriesArtifact artifact;
     std::vector<TrajectoryValidationBinding> bindings;
 };

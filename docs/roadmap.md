@@ -183,6 +183,9 @@ Delivered:
     contracts, with exact evidence revisions kept outside executable physics inputs. ✅
 20. Job v19 automatic transient validation with fingerprinted evidence snapshots, exact reference
     output scheduling, worker-side evaluation, and immutable result-artifact evidence. ✅
+21. Revision-backed HTTP validation workflow from immutable evidence publication through Study,
+    run configuration, durable worker execution, and auditable result retrieval; Job v19 exposes
+    the exact evidence revision and comparison policy before execution. ✅
 
 ## Reusable dynamic equipment primitives
 

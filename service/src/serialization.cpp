@@ -4055,6 +4055,71 @@ std::string serialize_job_record_json(
     out << ']';
     out << ", \"trajectory_validation_count\": "
         << record.request.trajectory_validations.size();
+    out << ", \"trajectory_validations\": [";
+    for (std::size_t index = 0;
+         index < record.request.trajectory_validations.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        const auto& validation =
+            record.request.trajectory_validations[index];
+        out << "{\"artifact_revision_id\": ";
+        json_string(out, validation.artifact_revision_id);
+        out << ", \"artifact_id\": ";
+        json_string(out, validation.artifact.id);
+        out << ", \"source_reference\": ";
+        json_string(out, validation.artifact.source.reference);
+        out << ", \"source_checksum_sha256\": ";
+        json_string(out, validation.artifact.source.checksum_sha256);
+        out << ", \"evidence_basis\": ";
+        json_string(
+            out,
+            to_string(validation.artifact.source.evidence_basis));
+        out << ", \"acquisition\": ";
+        json_string(out, validation.artifact.source.acquisition);
+        out << ", \"note\": ";
+        json_string(out, validation.artifact.source.note);
+        out << ", \"limitations\": [";
+        for (std::size_t limitation_index = 0;
+             limitation_index <
+                 validation.artifact.source.limitations.size();
+             ++limitation_index) {
+            if (limitation_index != 0U) out << ", ";
+            json_string(
+                out,
+                validation.artifact.source
+                    .limitations[limitation_index]);
+        }
+        out << ']';
+        out << ", \"bindings\": [";
+        for (std::size_t binding_index = 0;
+             binding_index < validation.bindings.size();
+             ++binding_index) {
+            if (binding_index != 0U) out << ", ";
+            const auto& binding =
+                validation.bindings[binding_index];
+            out << "{\"signal_id\": ";
+            json_string(out, binding.signal_id);
+            out << ", \"projection_id\": ";
+            json_string(out, binding.projection.id);
+            out << ", \"comparison\": ";
+            json_string(out, to_string(binding.comparison));
+            out << ", \"time_offset_si\": ";
+            json_number(out, binding.time_offset_si);
+            out << ", \"baseline_time_si\": ";
+            json_number(out, binding.baseline_time_si);
+            out << ", \"absolute_tolerance_si\": ";
+            json_number(out, binding.absolute_tolerance_si);
+            out << ", \"relative_tolerance\": ";
+            json_number(out, binding.relative_tolerance);
+            out << ", \"uncertainty_multiplier\": ";
+            json_number(out, binding.uncertainty_multiplier);
+            out << ", \"maximum_interpolation_gap_si\": ";
+            json_number(out, binding.maximum_interpolation_gap_si);
+            out << '}';
+        }
+        out << "]}";
+    }
+    out << ']';
     out << ", \"validation_prediction_count\": "
         << record.request.calibration_predictions.size();
     out << ", \"reconciliation_held_out_case_count\": "

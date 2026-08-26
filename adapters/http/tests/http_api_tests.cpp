@@ -1616,6 +1616,235 @@ void test_authored_component_job_workflow() {
         "HTTP comparison must preserve Team non-disclosure");
 }
 
+void test_revision_backed_transient_validation_workflow() {
+    const auto runtime =
+        thermox::service::make_default_simulation_runtime();
+    const auto jobs =
+        thermox::service::make_in_memory_job_repository();
+    const auto results =
+        thermox::service::make_in_memory_result_artifact_store();
+    const auto job_service = std::make_shared<
+        thermox::service::SimulationJobService>(
+            runtime, jobs, results);
+    const auto projects = std::make_shared<
+        thermox::service::ProjectService>(
+            thermox::service::make_in_memory_project_repository());
+    const thermox::service::IdentityContext identity{
+        "validation-user", "validation-team", "http-validation"};
+    thermox::http::Api api{runtime, job_service, projects};
+    const auto project = projects->create_project({
+        identity, "Transient validation workflow", {},
+    });
+
+    const auto evidence = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/artifact-revisions"
+                "?artifact_id=analytical-storage-rise"
+                "&artifact_type=thermox.validation_series"
+                "&artifact_schema_version="
+                "thermox.validation_series%2Fv1",
+            R"json({
+              "schema_version": "thermox.validation_series/v1",
+              "id": "analytical-storage-rise",
+              "source": {
+                "reference": "Independent constant-energy balance",
+                "checksum_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "evidence_basis": "independent_reference",
+                "acquisition": "derived",
+                "limitations": ["Ideal lumped-capacitance reference"]
+              },
+              "time_unit": "s",
+              "signals": [{
+                "id": "temperature_rise",
+                "dimension": "temperature",
+                "unit": "K",
+                "samples": [
+                  {"time": 0.1, "value": 0.06666666666666667},
+                  {"time": 0.2, "value": 0.13333333333333333}
+                ]
+              }]
+            })json"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        evidence.status == 201 &&
+            evidence.headers.contains("Location") &&
+            evidence.body.find("thermox.validation_series") !=
+                std::string::npos,
+        "the HTTP artifact boundary must publish immutable "
+        "trajectory evidence");
+    const auto evidence_revision_id =
+        evidence.headers.at("Location").substr(
+            evidence.headers.at("Location").find_last_of('/') + 1U);
+
+    const auto model = projects->create_model_revision({
+        identity,
+        project.project_id,
+        {},
+        R"json({
+          "schema_version": "thermox.topology/v1",
+          "model": {
+            "id": "validated_storage",
+            "media": [],
+            "components": [{
+              "id": "heater",
+              "kind": "source.heat.boundary",
+              "version": "1.0.0"
+            }, {
+              "id": "store",
+              "kind": "storage.thermal.lumped",
+              "version": "1.0.0",
+              "parameters": {
+                "thermal_capacity": {"value": 2.0, "unit": "MJ/K"}
+              }
+            }],
+            "connections": [{
+              "id": "charging_heat",
+              "from": "heater.outlet",
+              "to": "store.thermal",
+              "kind": "heat_link",
+              "contract_version": "thermox.connector.heat/v1"
+            }]
+          }
+        })json",
+    });
+    const auto simulation_case = projects->create_case_revision({
+        identity,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        R"json({
+          "schema_version": "thermox.case/v1",
+          "case": {
+            "id": "charge",
+            "mode": "dynamic_transient",
+            "parameter_overrides": {
+              "components.store.parameters.thermal_capacity": {
+                "value": 1.5, "unit": "MJ/K"
+              }
+            },
+            "fixed_values": {
+              "heater.outlet.Q_dot": {"value": 1.0, "unit": "MW"}
+            },
+            "initial_guesses": {
+              "store.temperature": {"value": 300.0, "unit": "K"}
+            }
+          }
+        })json",
+    });
+
+    const auto study = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/study-revisions",
+            std::string{
+                R"({"schema_version":"thermox.study_revision.create/v5",)"
+                R"("study_id":"validated-storage-study",)"
+                R"("model_revision_id":")"} +
+                model.model_revision_id +
+                R"(","case_revision_id":")" +
+                simulation_case.case_revision_id +
+                R"(","intent":"dynamic_transient",)"
+                R"("artifact_revision_ids":[")" +
+                evidence_revision_id +
+                R"("],"result_projections":[{)"
+                R"("id":"storage_temperature",)"
+                R"("scope":"component_internal",)"
+                R"("component_id":"store",)"
+                R"("value_name":"temperature",)"
+                R"("dimension":"temperature",)"
+                R"("aggregation":"final"}],)"
+                R"("trajectory_validation_bindings":[{)"
+                R"("id":"analytical-rise-check",)"
+                R"("artifact_revision_id":")" +
+                evidence_revision_id +
+                R"(","signal_id":"temperature_rise",)"
+                R"("projection_id":"storage_temperature",)"
+                R"("comparison":"projected_change",)"
+                R"("time_offset_si":0.0,"baseline_time_si":0.0,)"
+                R"("absolute_tolerance_si":0.0001,)"
+                R"("relative_tolerance":0.0,)"
+                R"("uncertainty_multiplier":0.0,)"
+                R"("maximum_interpolation_gap_si":0.0}]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        study.status == 201 && study.headers.contains("Location") &&
+            study.body.find("analytical-rise-check") !=
+                std::string::npos,
+        "a Study must bind an exact evidence revision to a "
+        "dimension-compatible transient projection");
+    const auto study_revision_id = study.headers.at("Location").substr(
+        study.headers.at("Location").find_last_of('/') + 1U);
+
+    const auto run = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/run-configuration-revisions",
+            std::string{
+                R"({"schema_version":"thermox.run_configuration.create/v3",)"
+                R"("run_configuration_id":"validated-storage-run",)"
+                R"("study_revision_id":")"} +
+                study_revision_id +
+                R"(","transient_solver":{"end_time":0.2,)"
+                R"("max_step":0.05}})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        run.status == 201 && run.headers.contains("Location"),
+        "the evidence-bound Study must remain executable through a "
+        "run configuration");
+    const auto run_revision_id = run.headers.at("Location").substr(
+        run.headers.at("Location").find_last_of('/') + 1U);
+
+    auto submission = authenticated({
+        "POST",
+        "/api/v1/jobs?project_id=" + project.project_id +
+            "&run_configuration_revision_id=" + run_revision_id,
+        {{"Idempotency-Key", "validated-storage-job"}},
+        {},
+    }, identity.user_id, identity.team_id);
+    const auto queued = api.handle(submission);
+    require(
+        queued.status == 202 && queued.headers.contains("Location") &&
+            queued.body.find(evidence_revision_id) !=
+                std::string::npos &&
+            queued.body.find("trajectory_validations") !=
+                std::string::npos &&
+            queued.body.find("Ideal lumped-capacitance reference") !=
+                std::string::npos,
+        "job submission must snapshot evidence and validation policy "
+        "without consulting mutable state later: " +
+            std::to_string(queued.status) + " " + queued.body);
+    const auto completed =
+        job_service->run_next("transient-validation-worker");
+    require(
+        completed &&
+            completed->state ==
+                thermox::service::SimulationJobState::succeeded,
+        "the common worker must execute the evidence-bound transient job");
+
+    const auto result = api.handle(authenticated({
+        "GET", queued.headers.at("Location") + "/result", {}, {},
+    }, identity.user_id, identity.team_id));
+    require(
+        result.status == 200 &&
+            result.body.find("\"trajectory_validations\": [") !=
+                std::string::npos &&
+            result.body.find("\"artifact_id\": "
+                             "\"analytical-storage-rise\"") !=
+                std::string::npos &&
+            result.body.find("\"exact_alignment_count\": 2") !=
+                std::string::npos &&
+            result.body.find("\"passed\": true") !=
+                std::string::npos &&
+            result.body.find("Ideal lumped-capacitance reference") !=
+                std::string::npos,
+        "the persisted result must expose passing independently "
+        "derived evidence, exact alignment, and source limitations");
+}
+
 void test_team_scoped_projects_and_model_revisions() {
     thermox::http::Api api;
     auto invalid_create = authenticated(json_post(
@@ -1947,6 +2176,7 @@ int main() {
         test_transport_guards();
         test_tenant_scoped_asynchronous_jobs();
         test_authored_component_job_workflow();
+        test_revision_backed_transient_validation_workflow();
         test_team_scoped_projects_and_model_revisions();
         std::cout << "http api tests passed\n";
         return 0;

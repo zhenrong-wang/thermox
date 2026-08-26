@@ -557,6 +557,7 @@ std::string request_fingerprint(
     }
     stream << '|' << request.trajectory_validations.size() << '|';
     for (const auto& validation : request.trajectory_validations) {
+        append_string(stream, validation.artifact_revision_id);
         append_string(
             stream,
             serialize_validation_series_artifact_json(
@@ -734,6 +735,13 @@ void validate_request(const SimulationJobRequest& request) {
     }
     std::set<std::string> validation_artifacts;
     for (const auto& validation : request.trajectory_validations) {
+        if (request.source_revisions &&
+            !request.source_revisions->study_revision_id.empty() &&
+            validation.artifact_revision_id.empty()) {
+            throw JobRequestError(
+                "Study-backed trajectory validation requires exact "
+                "artifact revision provenance");
+        }
         try {
             (void)serialize_validation_series_artifact_json(
                 validation.artifact);

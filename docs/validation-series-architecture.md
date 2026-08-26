@@ -72,4 +72,13 @@ cannot accidentally enter model compilation. Job v19 snapshots the resolved evid
 into its fingerprinted request, schedules every reference and change-baseline timestamp as a
 required transient output, evaluates the completed graph trajectory in the worker, and embeds the
 full alignment and classified pass/fail evidence in the immutable result artifact. Workers never
-need to query mutable Project state.
+need to query mutable Project state. The public Job v19 request summary retains the exact Project
+artifact revision ID, canonical artifact identity, source checksum/reference, evidence class,
+acquisition method, graph binding, time alignment, and tolerance policy. An operator can therefore
+audit the dataset and policy before execution as well as the verdict afterward.
+
+The HTTP integration suite exercises this complete path with an independently derived constant-
+energy balance: publish a validation-series revision, bind it to a transient lumped-storage Study,
+publish a run configuration, queue the revision-backed job, execute it through the common worker,
+and retrieve two exactly aligned passing samples plus the declared analytical limitation from the
+immutable result artifact.

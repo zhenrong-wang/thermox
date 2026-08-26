@@ -3690,6 +3690,8 @@ Response Api::handle(const Request& request) const {
             for (const auto& evidence :
                  resolved->artifacts.validation_series) {
                 service::TrajectoryValidationPlan plan;
+                plan.artifact_revision_id =
+                    evidence.source.artifact_revision_id;
                 plan.artifact = evidence.artifact;
                 for (const auto& declaration :
                      resolved->study.trajectory_validation_bindings) {

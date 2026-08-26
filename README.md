@@ -174,6 +174,10 @@ Implemented in this sprint:
 - Study-owned, dimensioned engineering acceptance criteria bind canonical-SI bounds to declared
   result projections. Durable jobs snapshot and evaluate them after successful steady/transient
   projection while keeping engineering verdicts separate from numerical job status.
+- Provider-neutral validation-series artifacts bind immutable measured, computational, derived, or
+  digitized trajectories to dimension-compatible transient projections. Job records expose the
+  exact evidence revision and alignment/tolerance policy before execution; result artifacts retain
+  per-sample verdicts, source provenance, uncertainty, and limitations afterward.
 - Transient result projections support full-trajectory, absolute-window, and named-event-relative
   final/minimum/maximum/mean/RMS reductions with exact boundary interpolation and durable window
   evidence; comparisons reject otherwise similar values when their resolved windows differ.
