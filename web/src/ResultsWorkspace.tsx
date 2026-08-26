@@ -36,6 +36,7 @@ import type {
   SimulationJobComparison,
   SimulationResult,
   TopologyDocument,
+  ValidationCampaignCatalogEntry,
 } from './types'
 
 interface ResultsWorkspaceProps {
@@ -47,6 +48,7 @@ interface ResultsWorkspaceProps {
   loading: boolean
   error: string
   comparisonJobs: SimulationJob[]
+  validationCampaigns: ValidationCampaignCatalogEntry[]
   comparison?: SimulationJobComparison
   comparisonLoading: boolean
   comparisonError: string
@@ -56,7 +58,10 @@ interface ResultsWorkspaceProps {
   onRetry: () => void
   onCompare: (candidateJobId: string) => void
   onClearComparison: () => void
-  onGenerateValidationReport: (jobIds: string[]) => void
+  onGenerateValidationReport: (
+    campaignArtifactRevisionId: string,
+    jobIds: string[],
+  ) => void
   onClearValidationReport: () => void
 }
 
@@ -236,6 +241,7 @@ export function ResultsWorkspace({
   loading,
   error,
   comparisonJobs,
+  validationCampaigns,
   comparison,
   comparisonLoading,
   comparisonError,
@@ -256,6 +262,7 @@ export function ResultsWorkspace({
   const [selection, setSelection] = useState<GraphSelection>()
   const [candidateJobId, setCandidateJobId] = useState('')
   const [validationJobIds, setValidationJobIds] = useState<string[]>([])
+  const [campaignRevisionId, setCampaignRevisionId] = useState('')
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -315,8 +322,16 @@ export function ResultsWorkspace({
       candidate.state === 'succeeded' &&
       Boolean(candidate.result_summary),
   )
+  const selectedCampaign = validationCampaigns.find(
+    (campaign) =>
+      campaign.source.artifact_revision_id === campaignRevisionId,
+  )
   const validationCandidates = comparisonJobs.filter((candidate) =>
-    ['succeeded', 'failed', 'cancelled'].includes(candidate.state),
+    ['succeeded', 'failed', 'cancelled'].includes(candidate.state) &&
+    Boolean(candidate.request.source_revisions?.study_revision_id) &&
+    selectedCampaign?.definition.study_revision_ids.includes(
+      candidate.request.source_revisions?.study_revision_id ?? '',
+    ),
   )
 
   useEffect(() => {
@@ -328,6 +343,14 @@ export function ResultsWorkspace({
   }, [job?.job_id, comparisonJobs])
 
   useEffect(() => {
+    setCampaignRevisionId((current) =>
+      validationCampaigns.some(
+        (campaign) => campaign.source.artifact_revision_id === current,
+      ) ? current : validationCampaigns[0]?.source.artifact_revision_id ?? '',
+    )
+  }, [validationCampaigns])
+
+  useEffect(() => {
     const available = new Set(
       validationCandidates.map((candidate) => candidate.job_id),
     )
@@ -337,7 +360,7 @@ export function ResultsWorkspace({
       return job && available.has(job.job_id) ? [job.job_id] : []
     })
     onClearValidationReport()
-  }, [job?.job_id, comparisonJobs])
+  }, [job?.job_id, comparisonJobs, campaignRevisionId])
 
   if (!job) {
     return (
@@ -435,13 +458,44 @@ export function ResultsWorkspace({
             <span className="section-kicker">Validation campaign</span>
             <strong>Build evidence coverage report</strong>
           </span>
-          <small>{validationJobIds.length} of {validationCandidates.length} selected</small>
+          <small>
+            {validationJobIds.length} of{' '}
+            {selectedCampaign?.definition.study_revision_ids.length ?? 0}{' '}
+            Studies selected
+          </small>
         </summary>
         <p>
-          Select terminal Study jobs from this Project. Agreement is reported
-          only against each job&apos;s immutable evidence and is not a global
-          engineering-readiness verdict.
+          Select one terminal job for every Study pinned by an immutable
+          campaign. Agreement remains scoped to its exact evidence and is not
+          a global engineering-readiness verdict.
         </p>
+        <select
+          aria-label="Validation campaign"
+          value={campaignRevisionId}
+          onChange={(event) => {
+            setCampaignRevisionId(event.target.value)
+            setValidationJobIds([])
+            onClearValidationReport()
+          }}
+        >
+          {!validationCampaigns.length && (
+            <option value="">No validation campaign published</option>
+          )}
+          {validationCampaigns.map((campaign) => (
+            <option
+              value={campaign.source.artifact_revision_id}
+              key={campaign.source.artifact_revision_id}
+            >
+              {campaign.definition.name} · revision {campaign.source.revision_number}
+            </option>
+          ))}
+        </select>
+        {selectedCampaign && (
+          <p>
+            <strong>{selectedCampaign.definition.objective}</strong>{' · '}
+            {selectedCampaign.definition.study_revision_ids.length} Studies
+          </p>
+        )}
         <div className="validation-job-picker">
           {validationCandidates.map((candidate) => (
             <label key={candidate.job_id}>
@@ -449,8 +503,19 @@ export function ResultsWorkspace({
                 type="checkbox"
                 checked={validationJobIds.includes(candidate.job_id)}
                 onChange={(event) => {
+                  const studyRevisionId =
+                    candidate.request.source_revisions?.study_revision_id
                   setValidationJobIds((current) => event.target.checked
-                    ? [...current, candidate.job_id]
+                    ? [
+                        ...current.filter((jobId) => {
+                          const selected = comparisonJobs.find(
+                            (item) => item.job_id === jobId,
+                          )
+                          return selected?.request.source_revisions
+                            ?.study_revision_id !== studyRevisionId
+                        }),
+                        candidate.job_id,
+                      ]
                     : current.filter((jobId) => jobId !== candidate.job_id))
                   onClearValidationReport()
                 }}
@@ -471,8 +536,16 @@ export function ResultsWorkspace({
         <button
           type="button"
           className="secondary-button"
-          disabled={!validationJobIds.length || validationReportLoading}
-          onClick={() => onGenerateValidationReport(validationJobIds)}
+          disabled={
+            !campaignRevisionId ||
+            validationJobIds.length !==
+              selectedCampaign?.definition.study_revision_ids.length ||
+            validationReportLoading
+          }
+          onClick={() => onGenerateValidationReport(
+            campaignRevisionId,
+            validationJobIds,
+          )}
         >
           {validationReportLoading ? 'Building report…' : 'Build report'}
         </button>
@@ -796,6 +869,14 @@ export function ResultsWorkspace({
                 </div>
                 <strong>{validationReport.coverage.job_count} jobs</strong>
               </header>
+              <div className="comparison-provenance">
+                <span>Campaign <code>{validationReport.campaign.name}</code></span>
+                <span>Revision <code>{validationReport.campaign.artifact_revision_id}</code></span>
+                <span>{validationReport.campaign.objective}</span>
+                {validationReport.campaign.limitations.map((limitation) => (
+                  <span key={limitation}>Limitation: {limitation}</span>
+                ))}
+              </div>
               <div className="validation-coverage-strip">
                 <span>Numerically succeeded <strong>{validationReport.coverage.succeeded_count}</strong></span>
                 <span>Evidence declared <strong>{validationReport.coverage.evidence_declared_count}</strong></span>

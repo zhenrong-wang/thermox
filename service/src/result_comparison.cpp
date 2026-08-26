@@ -285,7 +285,8 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
 std::optional<JobValidationReport>
 SimulationJobService::validation_report(
     const IdentityContext& identity,
-    const std::vector<std::string>& job_ids) const {
+    const std::vector<std::string>& job_ids,
+    const ValidationCampaignReference& campaign) const {
     constexpr std::size_t maximum_report_jobs = 100U;
     if (job_ids.empty() || job_ids.size() > maximum_report_jobs) {
         throw JobValidationReportError(
@@ -294,6 +295,19 @@ SimulationJobService::validation_report(
     std::set<std::string> unique_ids;
     JobValidationReport report;
     report.team_id = identity.team_id;
+    if (campaign.artifact_revision_id.empty() ||
+        campaign.artifact_checksum.empty() ||
+        campaign.artifact.study_revision_ids.empty()) {
+        throw JobValidationReportError(
+            "validation report requires exact campaign provenance");
+    }
+    report.campaign_artifact_revision_id =
+        campaign.artifact_revision_id;
+    report.campaign_artifact_checksum = campaign.artifact_checksum;
+    report.campaign_id = campaign.artifact.id;
+    report.campaign_name = campaign.artifact.name;
+    report.campaign_objective = campaign.artifact.objective;
+    report.campaign_limitations = campaign.artifact.limitations;
     report.job_count = job_ids.size();
     report.jobs.reserve(job_ids.size());
     for (const auto& job_id : job_ids) {
@@ -395,6 +409,21 @@ SimulationJobService::validation_report(
             }
         }
         report.jobs.push_back(std::move(entry));
+    }
+    std::set<std::string> selected_studies;
+    for (const auto& entry : report.jobs) {
+        if (!selected_studies.insert(entry.study_revision_id).second) {
+            throw JobValidationReportError(
+                "validation campaign requires exactly one job per Study");
+        }
+    }
+    const std::set<std::string> campaign_studies{
+        campaign.artifact.study_revision_ids.begin(),
+        campaign.artifact.study_revision_ids.end()};
+    if (selected_studies != campaign_studies) {
+        throw JobValidationReportError(
+            "selected jobs must cover every validation campaign Study "
+            "exactly once");
     }
     return report;
 }

@@ -1778,6 +1778,32 @@ void test_revision_backed_transient_validation_workflow() {
     const auto study_revision_id = study.headers.at("Location").substr(
         study.headers.at("Location").find_last_of('/') + 1U);
 
+    const auto campaign = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/artifact-revisions"
+                "?artifact_id=storage-validation-campaign"
+                "&artifact_type=thermox.validation_campaign"
+                "&artifact_schema_version="
+                "thermox.validation_campaign%2Fv1",
+            std::string{
+                R"({"schema_version":"thermox.validation_campaign/v1",)"
+                R"("id":"storage-validation-campaign",)"
+                R"("name":"Storage transient validation",)"
+                R"("objective":"Verify storage response against analytical evidence",)"
+                R"("study_revision_ids":[")"} +
+                study_revision_id +
+                R"("],"limitations":["Ideal lumped storage"]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        campaign.status == 201 && campaign.headers.contains("Location"),
+        "the HTTP artifact boundary must publish immutable validation "
+        "campaign scope");
+    const auto campaign_revision_id =
+        campaign.headers.at("Location").substr(
+            campaign.headers.at("Location").find_last_of('/') + 1U);
+
     const auto run = api.handle(authenticated(
         json_post(
             "/api/v1/projects/" + project.project_id +
@@ -1866,10 +1892,13 @@ void test_revision_backed_transient_validation_workflow() {
         queued.headers.at("Location").find_last_of('/') + 1U);
     const auto validation_report = api.handle(authenticated(
         json_post(
-            "/api/v1/job-validation-reports",
+            "/api/v1/projects/" + project.project_id +
+                "/validation-reports",
             std::string{
-                R"({"schema_version":"thermox.job_validation_report.create/v1",)"
-                R"("job_ids":[")"} +
+                R"({"schema_version":"thermox.job_validation_report.create/v2",)"
+                R"("campaign_artifact_revision_id":")"} +
+                campaign_revision_id +
+                R"(","job_ids":[")" +
                 job_id + R"("]})"),
         identity.user_id,
         identity.team_id));
@@ -1877,7 +1906,9 @@ void test_revision_backed_transient_validation_workflow() {
         validation_report.status == 200 &&
             validation_report.body.find(
                 "\"schema_version\": "
-                "\"thermox.job_validation_report/v1\"") !=
+                "\"thermox.job_validation_report/v2\"") !=
+                std::string::npos &&
+            validation_report.body.find(campaign_revision_id) !=
                 std::string::npos &&
             validation_report.body.find(
                 "\"evidence_declared_count\": 1") !=
@@ -1894,10 +1925,13 @@ void test_revision_backed_transient_validation_workflow() {
 
     const auto cross_team_report = api.handle(authenticated(
         json_post(
-            "/api/v1/job-validation-reports",
+            "/api/v1/projects/" + project.project_id +
+                "/validation-reports",
             std::string{
-                R"({"schema_version":"thermox.job_validation_report.create/v1",)"
-                R"("job_ids":[")"} +
+                R"({"schema_version":"thermox.job_validation_report.create/v2",)"
+                R"("campaign_artifact_revision_id":")"} +
+                campaign_revision_id +
+                R"(","job_ids":[")" +
                 job_id + R"("]})"),
         "other-user",
         "other-team"));

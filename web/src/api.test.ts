@@ -119,9 +119,17 @@ describe('reconciliation revision API', () => {
 describe('validation report API', () => {
   it('submits only the explicitly selected immutable job identities', async () => {
     const response = {
-      schema_version: 'thermox.job_validation_report/v1',
+      schema_version: 'thermox.job_validation_report/v2',
       team_id: 'team-a',
       project_id: 'project-a',
+      campaign: {
+        artifact_revision_id: 'campaign-r2',
+        artifact_checksum: 'sha256:campaign',
+        id: 'campaign-a',
+        name: 'Campaign A',
+        objective: 'Check reference agreement',
+        limitations: [],
+      },
       coverage: {
         job_count: 2,
         succeeded_count: 1,
@@ -148,15 +156,18 @@ describe('validation report API', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(api.validationReport(['job-2', 'job-1'])).resolves.toEqual(
-      response,
-    )
+    await expect(api.validationReport(
+      'project/a',
+      'campaign-r2',
+      ['job-2', 'job-1'],
+    )).resolves.toEqual(response)
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/job-validation-reports',
+      '/api/v1/projects/project%2Fa/validation-reports',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          schema_version: 'thermox.job_validation_report.create/v1',
+          schema_version: 'thermox.job_validation_report.create/v2',
+          campaign_artifact_revision_id: 'campaign-r2',
           job_ids: ['job-2', 'job-1'],
         }),
       }),

@@ -1339,6 +1339,23 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         team_a,
         cancelled_queued.job_id,
         cancelled_queued.revision);
+    const thermox::service::ValidationCampaignReference campaign{
+        "campaign-revision-1",
+        "sha256:campaign-checksum",
+        {
+            thermox::service::validation_campaign_schema_v1,
+            "comparison-campaign",
+            "Comparison campaign",
+            "Track immutable reference agreement across Studies",
+            {
+                baseline.request.source_revisions->study_revision_id,
+                candidate.request.source_revisions->study_revision_id,
+                mismatched.request.source_revisions->study_revision_id,
+                cancelled.request.source_revisions->study_revision_id,
+            },
+            {"Synthetic service regression evidence"},
+        },
+    };
     const auto report = service.validation_report(
         team_a,
         {
@@ -1346,7 +1363,8 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             candidate.job_id,
             mismatched.job_id,
             cancelled.job_id,
-        });
+        },
+        campaign);
     require(
         report && report->job_count == 4U &&
             report->succeeded_count == 3U &&
@@ -1368,18 +1386,34 @@ void test_completed_study_jobs_compare_by_projected_identity() {
         "evaluation, and sample coverage without a global verdict");
     require(
         !service.validation_report(
-            team_b, {baseline.job_id, candidate.job_id}),
+            team_b,
+            {baseline.job_id, candidate.job_id},
+            campaign),
         "validation reports must preserve Team non-disclosure");
     bool duplicate_report_rejected = false;
     try {
         (void)service.validation_report(
-            team_a, {baseline.job_id, baseline.job_id});
+            team_a,
+            {baseline.job_id, baseline.job_id},
+            campaign);
     } catch (const thermox::service::JobValidationReportError&) {
         duplicate_report_rejected = true;
     }
     require(
         duplicate_report_rejected,
         "validation reports must reject duplicate job identities");
+    bool incomplete_campaign_rejected = false;
+    try {
+        (void)service.validation_report(
+            team_a,
+            {baseline.job_id, candidate.job_id},
+            campaign);
+    } catch (const thermox::service::JobValidationReportError&) {
+        incomplete_campaign_rejected = true;
+    }
+    require(
+        incomplete_campaign_rejected,
+        "validation reports must cover every campaign Study exactly once");
     auto calibration_request = candidate_request;
     calibration_request.mode =
         thermox::service::SimulationJobMode::calibration;
@@ -1397,7 +1431,9 @@ void test_completed_study_jobs_compare_by_projected_identity() {
     bool calibration_report_rejected = false;
     try {
         (void)service.validation_report(
-            team_a, {calibration_cancelled.job_id});
+            team_a,
+            {calibration_cancelled.job_id},
+            campaign);
     } catch (const thermox::service::JobValidationReportError&) {
         calibration_report_rejected = true;
     }
@@ -1410,7 +1446,9 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             *report);
     require(
         report_json.find(
-            "\"thermox.job_validation_report/v1\"") !=
+            "\"thermox.job_validation_report/v2\"") !=
+                std::string::npos &&
+            report_json.find("\"campaign-revision-1\"") !=
                 std::string::npos &&
             report_json.find("\"evidence_declared_count\": 4") !=
                 std::string::npos &&

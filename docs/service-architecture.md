@@ -215,7 +215,7 @@ The application boundary needed by a thin network adapter is now complete:
 | Submit a calculation | `SimulationJobService::submit` | `thermox.job/v19` JSON |
 | Inspect a calculation | `SimulationJobService::get` | `thermox.job/v19` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v6` JSON |
-| Summarize validation coverage | `SimulationJobService::validation_report` | `thermox.job_validation_report/v1` JSON |
+| Summarize an immutable validation campaign | `ValidationCampaignReportService::report` | `thermox.job_validation_report/v2` JSON |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
 request mode, case, exact source revision IDs and checksums, stable request fingerprint, state,
@@ -292,7 +292,7 @@ The initial routes are:
 | `GET`, `POST` | `/api/v1/jobs?project_id=...&reconciliation_revision_id=...` | List or submit reconciliation-revision-backed asynchronous jobs |
 | `GET` | `/api/v1/jobs/{job_id}` | Read Team-scoped job status |
 | `GET` | `/api/v1/jobs/{job_id}/result` | Retrieve a succeeded simulation, calibration, or reconciliation result |
-| `POST` | `/api/v1/job-validation-reports` | Summarize numerical completion, immutable evidence coverage, reference agreement, and sample alignment across selected terminal Study jobs |
+| `POST` | `/api/v1/projects/{project_id}/validation-reports` | Resolve an exact `thermox.validation_campaign/v1` artifact and summarize one terminal job per pinned Study |
 
 The structural-policy audit compiles the submitted model/case/artifact set once, then executes the
 factory-neutral core audit against that compiled problem. Its versioned response retains compilation

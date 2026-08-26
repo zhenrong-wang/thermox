@@ -97,6 +97,8 @@ import type {
   StudyTrajectoryValidationBinding,
   TopologyDocument,
   ValidationDiagnostic,
+  ValidationCampaignArtifact,
+  ValidationCampaignCatalogEntry,
   ValidationSeriesArtifact,
   ValidationSeriesCatalogEntry,
 } from './types'
@@ -160,6 +162,9 @@ function App() {
   const [addingValidationSeries, setAddingValidationSeries] = useState(false)
   const [validationSeries, setValidationSeries] = useState<
     ValidationSeriesCatalogEntry[]
+  >([])
+  const [validationCampaigns, setValidationCampaigns] = useState<
+    ValidationCampaignCatalogEntry[]
   >([])
   const [revisingPerformanceMap, setRevisingPerformanceMap] = useState<{
     source: ArtifactRevision
@@ -332,6 +337,32 @@ function App() {
       return { source, definition: content.artifact }
     }))
       .then(setValidationSeries)
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setOperationError(errorMessage(reason))
+      })
+    return () => controller.abort()
+  }, [artifactRevisions, selectedProjectId])
+
+  useEffect(() => {
+    setValidationCampaigns([])
+    if (!selectedProjectId) return
+    const sources = artifactRevisions.filter(
+      (revision) => revision.artifact_type === 'thermox.validation_campaign',
+    )
+    if (!sources.length) return
+    const controller = new AbortController()
+    Promise.all(sources.map(async (source) => {
+      const content = await api.artifactRevision<ValidationCampaignArtifact>(
+        selectedProjectId,
+        source.artifact_revision_id,
+        controller.signal,
+      )
+      return { source, definition: content.artifact }
+    }))
+      .then((campaigns) => setValidationCampaigns(campaigns.sort(
+        (left, right) =>
+          right.source.created_at_epoch_ms - left.source.created_at_epoch_ms,
+      )))
       .catch((reason: unknown) => {
         if (!isAbortError(reason)) setOperationError(errorMessage(reason))
       })
@@ -1720,11 +1751,19 @@ function App() {
     }
   }
 
-  async function generateValidationReport(jobIds: string[]) {
+  async function generateValidationReport(
+    campaignArtifactRevisionId: string,
+    jobIds: string[],
+  ) {
+    if (!selectedProjectId) return
     setValidationReportLoading(true)
     setValidationReportError('')
     try {
-      setValidationReport(await api.validationReport(jobIds))
+      setValidationReport(await api.validationReport(
+        selectedProjectId,
+        campaignArtifactRevisionId,
+        jobIds,
+      ))
     } catch (reason) {
       setValidationReport(undefined)
       setValidationReportError(errorMessage(reason))
@@ -2254,6 +2293,7 @@ function App() {
             loading={resultLoading}
             error={resultError}
             comparisonJobs={comparisonJobs}
+            validationCampaigns={validationCampaigns}
             comparison={resultComparison}
             comparisonLoading={comparisonLoading}
             comparisonError={comparisonError}
@@ -2270,8 +2310,8 @@ function App() {
               setResultComparison(undefined)
               setComparisonError('')
             }}
-            onGenerateValidationReport={(jobIds) => {
-              void generateValidationReport(jobIds)
+            onGenerateValidationReport={(campaignRevisionId, jobIds) => {
+              void generateValidationReport(campaignRevisionId, jobIds)
             }}
             onClearValidationReport={() => {
               setValidationReport(undefined)

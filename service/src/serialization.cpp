@@ -4334,6 +4334,23 @@ std::string serialize_job_validation_report_json(
     json_string(out, report.team_id);
     out << ",\n  \"project_id\": ";
     json_string(out, report.project_id);
+    out << ",\n  \"campaign\": {\"artifact_revision_id\": ";
+    json_string(out, report.campaign_artifact_revision_id);
+    out << ", \"artifact_checksum\": ";
+    json_string(out, report.campaign_artifact_checksum);
+    out << ", \"id\": ";
+    json_string(out, report.campaign_id);
+    out << ", \"name\": ";
+    json_string(out, report.campaign_name);
+    out << ", \"objective\": ";
+    json_string(out, report.campaign_objective);
+    out << ", \"limitations\": [";
+    for (std::size_t index = 0;
+         index < report.campaign_limitations.size(); ++index) {
+        if (index != 0U) out << ", ";
+        json_string(out, report.campaign_limitations[index]);
+    }
+    out << "]}";
     out << ",\n  \"coverage\": {\"job_count\": "
         << report.job_count
         << ", \"succeeded_count\": "

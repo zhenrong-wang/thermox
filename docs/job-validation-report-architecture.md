@@ -1,30 +1,46 @@
-# Job Validation Report Architecture
+# Validation Campaign and Report Architecture
 
-`thermox.job_validation_report/v1` is a service-owned read model over persisted, revision-backed
-Study jobs. It answers a deliberately narrow question: across a caller-selected set of calculations,
-how much reference evidence was declared, evaluated, and matched?
+Thermox separates immutable validation intent from a report generated over concrete executions.
 
-The report does not execute a model, reinterpret a result artifact, or persist a new engineering
-claim. It summarizes the immutable job request and compact terminal result summary already retained
-by the platform. Full per-sample errors, tolerances, provenance, uncertainty, and source limitations
-remain in `thermox.result/v6`.
+- `thermox.validation_campaign/v1` is a typed, content-addressed Project artifact. It declares an
+  identity, name, engineering objective, one to 100 exact Study revision IDs, and known campaign
+  limitations.
+- `thermox.job_validation_report/v2` is a service-owned read model over one selected terminal job
+  for every Study in that exact campaign revision.
 
-## Selection contract
+Neither object executes a model or persists a new physics result. Full per-sample errors,
+tolerances, provenance, uncertainty, and source limitations remain in `thermox.result/v6`.
 
-`POST /api/v1/job-validation-reports` accepts
-`thermox.job_validation_report.create/v1` with one to 100 unique job IDs. Every selected job must:
+## Publication contract
+
+Campaigns use the ordinary Project artifact-revision API with artifact type
+`thermox.validation_campaign` and schema `thermox.validation_campaign/v1`. Publication rejects
+empty or duplicate Study IDs and any Study revision outside the Team-scoped Project. Canonical
+payload bytes are stored through the existing object-store abstraction; revision metadata and
+checksums remain in the durable Project repository.
+
+This makes campaign definitions usable by HTTP, future RPC adapters, CLI clients, and the web UI
+without adding transport-specific or filesystem persistence.
+
+## Report selection contract
+
+`POST /api/v1/projects/{project_id}/validation-reports` accepts
+`thermox.job_validation_report.create/v2` with an exact campaign artifact revision ID and job IDs.
+Every selected job must:
 
 - be visible to the caller's Team;
 - be terminal;
-- originate from a revision-backed Study; and
-- belong to the same Project.
+- be a steady or transient revision-backed Study job;
+- belong to the campaign's exact Project; and
+- provide exactly one execution for each Study pinned by the campaign, with no extras.
 
-Requested order is retained. If any ID is outside the Team boundary, the whole request returns the
-same not-found response as an unknown job, preserving tenant non-disclosure.
+If the campaign or any job is outside the Team boundary, the request returns the same not-found
+response as an unknown resource, preserving tenant non-disclosure.
 
 ## Independent report dimensions
 
-The response keeps four concerns separate:
+The response retains the campaign revision ID and checksum, objective, limitations, and four
+separate concerns:
 
 - numerical execution: succeeded versus unsuccessful terminal jobs;
 - evidence coverage: jobs that declared at least one exact validation artifact revision;
@@ -41,14 +57,14 @@ sample/alignment counts, and one status:
   produce an evaluable result.
 
 The report intentionally has no global `passed`, `credible`, or `engineering_ready` field. A matched
-set only establishes agreement with the selected evidence under its exact declared policies. It
-does not establish model validity outside those cases, evidence independence, uncertainty quality,
-or fitness for a different engineering decision.
+campaign only establishes agreement with its selected evidence under its exact declared policies.
+It does not establish model validity outside those cases, evidence independence, uncertainty
+quality, or fitness for a different engineering decision.
 
-## Adapter boundary
+## Application boundary
 
-`SimulationJobService::validation_report` owns authorization, selection invariants, consistency
-checks, and aggregation. HTTP, future RPC adapters, the web client, and direct C++ callers consume
-the same application contract. This keeps validation semantics out of transport and UI code while
-the Results workspace renders an explicit caller-selected matrix. Future RPC and export layers can
-render the same report without changing the solver or physics core.
+`ValidationCampaignReportService` resolves and integrity-checks the exact campaign artifact through
+`ProjectService`, then delegates job authorization and aggregation to `SimulationJobService`. The
+Results workspace renders that application response and never derives campaign verdicts itself.
+Future RPC and export layers can consume the same contract without changing the solver, physics
+core, or persistence model.

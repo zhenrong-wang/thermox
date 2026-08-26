@@ -4,6 +4,7 @@
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/validation_series.hpp"
+#include "thermox/service/validation_campaign.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -19,8 +20,8 @@ namespace thermox::service {
 inline constexpr char job_schema_v19[] = "thermox.job/v19";
 inline constexpr char job_comparison_schema_v3[] =
     "thermox.job_comparison/v3";
-inline constexpr char job_validation_report_schema_v1[] =
-    "thermox.job_validation_report/v1";
+inline constexpr char job_validation_report_schema_v2[] =
+    "thermox.job_validation_report/v2";
 
 enum class SimulationJobMode {
     steady,
@@ -205,9 +206,15 @@ struct JobValidationReportEntry {
 };
 
 struct JobValidationReport {
-    std::string schema_version{job_validation_report_schema_v1};
+    std::string schema_version{job_validation_report_schema_v2};
     std::string team_id;
     std::string project_id;
+    std::string campaign_artifact_revision_id;
+    std::string campaign_artifact_checksum;
+    std::string campaign_id;
+    std::string campaign_name;
+    std::string campaign_objective;
+    std::vector<std::string> campaign_limitations;
     std::size_t job_count{0};
     std::size_t succeeded_count{0};
     std::size_t unsuccessful_count{0};
@@ -365,7 +372,8 @@ public:
         const std::string& candidate_job_id) const;
     [[nodiscard]] std::optional<JobValidationReport> validation_report(
         const IdentityContext& identity,
-        const std::vector<std::string>& job_ids) const;
+        const std::vector<std::string>& job_ids,
+        const ValidationCampaignReference& campaign) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
         const std::string& worker_id,
         const SimulationWorkerSettings& settings = {});

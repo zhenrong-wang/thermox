@@ -3733,6 +3733,16 @@ code {
   color: #718690;
 }
 
+.validation-report-control > select {
+  width: min(100%, 620px);
+  height: 32px;
+  border: 1px solid #cad8df;
+  border-radius: 4px;
+  background: #fff;
+  color: #3f6072;
+  font-size: 8px;
+}
+
 .validation-job-picker {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

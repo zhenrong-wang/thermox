@@ -193,6 +193,9 @@ Delivered:
 24. Multi-job Validation Report v1 with Team/Project-scoped terminal Study selection, exact evidence
     revision coverage, independent numerical/evaluation/match counts, sample/alignment aggregation,
     and no global engineering-readiness verdict. ✅
+25. Immutable Validation Campaign v1 artifacts and campaign-bound Report v2, requiring complete
+    one-terminal-job-per-pinned-Study coverage through a service-owned coordinator and thin Results
+    workspace. ✅
 
 ## Reusable dynamic equipment primitives
 

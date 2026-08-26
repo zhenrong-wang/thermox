@@ -83,9 +83,10 @@ publish a run configuration, queue the revision-backed job, execute it through t
 and retrieve two exactly aligned passing samples plus the declared analytical limitation from the
 immutable result artifact.
 
-For campaigns spanning multiple jobs, `thermox.job_validation_report/v1` aggregates the compact
-terminal facts without weakening this evidence model. It reports numerical completion, declaration
-and evaluation coverage, matched/not-matched counts, sample verdicts, and exact/interpolated
-alignment counts while retaining every selected evidence artifact revision ID. See
+For campaigns spanning multiple jobs, an immutable `thermox.validation_campaign/v1` artifact pins
+the exact Study scope and `thermox.job_validation_report/v2` aggregates one selected terminal job
+per Study without weakening this evidence model. It reports numerical completion, declaration and
+evaluation coverage, matched/not-matched counts, sample verdicts, and exact/interpolated alignment
+counts while retaining the campaign and evidence artifact revision IDs. See
 [Job Validation Report Architecture](job-validation-report-architecture.md). It intentionally does
 not convert reference agreement into a global credibility or engineering-readiness badge.

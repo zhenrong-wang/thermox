@@ -3,6 +3,7 @@
 #include "thermox/service/identity.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/validation_campaign.hpp"
 #include "thermox/service/validation_series.hpp"
 #include "thermox/platform/unit_registry.hpp"
 

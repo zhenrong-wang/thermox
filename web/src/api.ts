@@ -597,13 +597,16 @@ export const api = {
       signal,
     ),
   validationReport: (
+    projectId: string,
+    campaignArtifactRevisionId: string,
     jobIds: string[],
     signal?: AbortSignal,
   ) =>
     postJson<JobValidationReport>(
-      '/api/v1/job-validation-reports',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/validation-reports`,
       {
-        schema_version: 'thermox.job_validation_report.create/v1',
+        schema_version: 'thermox.job_validation_report.create/v2',
+        campaign_artifact_revision_id: campaignArtifactRevisionId,
         job_ids: jobIds,
       },
       signal,

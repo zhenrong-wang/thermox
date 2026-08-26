@@ -1076,6 +1076,40 @@ void test_projects_and_immutable_model_revisions(
         "PostgreSQL studies must preserve exact bindings and "
         "Team isolation");
 
+    const auto validation_campaign =
+        projects.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "postgres-validation-campaign",
+            {},
+            thermox::service::validation_campaign_artifact_type,
+            thermox::service::validation_campaign_schema_v1,
+            std::string{
+                R"({"schema_version":"thermox.validation_campaign/v1",)"
+                R"("id":"postgres-validation-campaign",)"
+                R"("name":"PostgreSQL validation campaign",)"
+                R"("objective":"Prove durable campaign provenance",)"
+                R"("study_revision_ids":[")"} +
+                study.study_revision_id +
+                R"("],"limitations":[]})",
+        });
+    const auto validation_campaign_content =
+        projects.get_artifact_revision_content(
+            team_a,
+            project.project_id,
+            validation_campaign.artifact_revision_id);
+    require(
+        validation_campaign_content &&
+            validation_campaign.content.checksum.starts_with("sha256:") &&
+            validation_campaign_content->canonical_artifact_json.find(
+                study.study_revision_id) != std::string::npos &&
+            !projects.get_artifact_revision_content(
+                team_b,
+                project.project_id,
+                validation_campaign.artifact_revision_id),
+        "PostgreSQL/object-store persistence must retain immutable "
+        "validation campaigns under Team isolation");
+
     auto transient_case_json = simulation_case.str();
     const auto case_id = transient_case_json.find("\"id\": \"design\"");
     const auto case_mode =

@@ -1255,7 +1255,8 @@ ProjectService::create_artifact_revision(
             platform::expression_component_artifact_type &&
         request.artifact_type !=
             assembly_template_artifact_type &&
-        request.artifact_type != validation_series_artifact_type) {
+        request.artifact_type != validation_series_artifact_type &&
+        request.artifact_type != validation_campaign_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
             request.artifact_type);
@@ -1310,6 +1311,35 @@ ProjectService::create_artifact_revision(
             }
             canonical =
                 serialize_validation_series_artifact_json(artifact);
+        } else if (request.artifact_type ==
+                   validation_campaign_artifact_type) {
+            if (request.artifact_schema_version !=
+                validation_campaign_schema_v1) {
+                throw ValidationCampaignError(
+                    "unsupported validation-campaign schema version: " +
+                    request.artifact_schema_version);
+            }
+            const auto artifact =
+                parse_validation_campaign_artifact_json(
+                    request.artifact_json);
+            if (artifact.id != request.artifact_id) {
+                throw ValidationCampaignError(
+                    "validation-campaign payload ID must match the "
+                    "project artifact ID");
+            }
+            for (const auto& study_revision_id :
+                 artifact.study_revision_ids) {
+                if (!repository_->get_study_revision(
+                        request.identity.team_id,
+                        request.project_id,
+                        study_revision_id)) {
+                    throw ValidationCampaignError(
+                        "validation-campaign Study revision was not "
+                        "found in the Project: " + study_revision_id);
+                }
+            }
+            canonical =
+                serialize_validation_campaign_artifact_json(artifact);
         } else {
             canonical =
                 detail::canonicalize_assembly_template_payload(

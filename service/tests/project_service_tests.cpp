@@ -1609,6 +1609,65 @@ void test_validation_series_are_immutable_project_evidence() {
         "transient Studies must persist dimensionally checked bindings "
         "between pinned evidence signals and graph projections");
 
+    const auto campaign = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "rotor-response-campaign",
+        {},
+        validation_campaign_artifact_type,
+        validation_campaign_schema_v1,
+        std::string{
+            R"({"schema_version":"thermox.validation_campaign/v1",)"
+            R"("id":"rotor-response-campaign",)"
+            R"("name":"Rotor response qualification",)"
+            R"("objective":"Compare transient rotor response with independent evidence",)"
+            R"("study_revision_ids":[")"} +
+            validation_study.study_revision_id +
+            R"("],"limitations":["Single operating point"]})",
+    });
+    const auto campaign_content =
+        service.get_artifact_revision_content(
+            team_a,
+            project.project_id,
+            campaign.artifact_revision_id);
+    require(
+        campaign_content &&
+            campaign.artifact_type == validation_campaign_artifact_type &&
+            campaign.content.checksum.starts_with("sha256:") &&
+            campaign_content->canonical_artifact_json.find(
+                validation_study.study_revision_id) != std::string::npos &&
+            parse_validation_campaign_artifact_json(
+                campaign_content->canonical_artifact_json)
+                    .objective.find("independent evidence") !=
+                std::string::npos,
+        "validation campaigns must be immutable typed artifacts that "
+        "pin exact Project Study revisions");
+
+    bool missing_campaign_study_rejected = false;
+    try {
+        (void)service.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "invalid-campaign",
+            {},
+            validation_campaign_artifact_type,
+            validation_campaign_schema_v1,
+            R"json({
+              "schema_version": "thermox.validation_campaign/v1",
+              "id": "invalid-campaign",
+              "name": "Invalid campaign",
+              "objective": "Must not publish",
+              "study_revision_ids": ["missing-study"]
+            })json",
+        });
+    } catch (const ProjectRequestError&) {
+        missing_campaign_study_rejected = true;
+    }
+    require(
+        missing_campaign_study_rejected,
+        "validation-campaign publication must reject Study revisions "
+        "outside the exact Project scope");
+
     auto invalid_binding = validation_study_request;
     invalid_binding.study_id = "invalid-trajectory-validation";
     invalid_binding.trajectory_validation_bindings.front().signal_id =

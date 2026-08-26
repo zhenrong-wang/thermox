@@ -949,9 +949,17 @@ export interface SimulationJobComparison {
 }
 
 export interface JobValidationReport {
-  schema_version: 'thermox.job_validation_report/v1'
+  schema_version: 'thermox.job_validation_report/v2'
   team_id: string
   project_id: string
+  campaign: {
+    artifact_revision_id: string
+    artifact_checksum: string
+    id: string
+    name: string
+    objective: string
+    limitations: string[]
+  }
   coverage: {
     job_count: number
     succeeded_count: number
@@ -980,6 +988,20 @@ export interface JobValidationReport {
     interpolated_alignment_count: number
     evidence_artifact_revision_ids: string[]
   }>
+}
+
+export interface ValidationCampaignArtifact {
+  schema_version: 'thermox.validation_campaign/v1'
+  id: string
+  name: string
+  objective: string
+  study_revision_ids: string[]
+  limitations: string[]
+}
+
+export interface ValidationCampaignCatalogEntry {
+  source: ArtifactRevision
+  definition: ValidationCampaignArtifact
 }
 
 export interface GraphResultValue {

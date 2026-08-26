@@ -2,6 +2,7 @@
 
 #include "thermox/service/simulation_jobs.hpp"
 #include "thermox/service/projects.hpp"
+#include "thermox/service/validation_campaign_service.hpp"
 
 #include <cstddef>
 #include <map>

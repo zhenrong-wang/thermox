@@ -19,6 +19,8 @@ add_library(thermox_service
     src/simulation_service.cpp
     src/thermal_feasibility.cpp
     src/validation_evidence.cpp
+    src/validation_campaign.cpp
+    src/validation_campaign_service.cpp
     src/validation_series.cpp
 )
 add_library(thermox::service ALIAS thermox_service)

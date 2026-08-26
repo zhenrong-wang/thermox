@@ -891,7 +891,7 @@ parse_job_comparison_request(const Request& request) {
     };
 }
 
-std::vector<std::string>
+std::pair<std::string, std::vector<std::string>>
 parse_job_validation_report_request(const Request& request) {
     boost::json::value value;
     try {
@@ -908,6 +908,7 @@ parse_job_validation_report_request(const Request& request) {
     const auto& root = value.as_object();
     for (const auto& field : root) {
         if (field.key() != "schema_version" &&
+            field.key() != "campaign_artifact_revision_id" &&
             field.key() != "job_ids") {
             throw std::invalid_argument(
                 "unknown job validation report field: " +
@@ -915,7 +916,7 @@ parse_job_validation_report_request(const Request& request) {
         }
     }
     if (require_json_string(root, "schema_version") !=
-        "thermox.job_validation_report.create/v1") {
+        "thermox.job_validation_report.create/v2") {
         throw std::invalid_argument(
             "unsupported job validation report schema_version");
     }
@@ -932,7 +933,10 @@ parse_job_validation_report_request(const Request& request) {
         }
         job_ids.emplace_back(item.as_string());
     }
-    return job_ids;
+    return {
+        require_json_string(root, "campaign_artifact_revision_id"),
+        std::move(job_ids),
+    };
 }
 
 service::CreatePerformanceMapQualityReviewRequest
@@ -2384,6 +2388,7 @@ struct Api::Impl {
           projects(std::move(project_service)),
           project_validation(projects, runtime),
           project_components(projects, std::move(runtime)),
+          campaign_reports(projects, jobs),
           options(api_options) {
         if (options.maximum_body_bytes == 0U) {
             throw std::invalid_argument(
@@ -2404,6 +2409,7 @@ struct Api::Impl {
     std::shared_ptr<service::ProjectService> projects;
     service::ProjectModelValidationService project_validation;
     service::ProjectComponentCatalogService project_components;
+    service::ValidationCampaignReportService campaign_reports;
     ApiOptions options;
 };
 
@@ -2594,6 +2600,39 @@ Response Api::handle(const Request& request) const {
                 "/calibration-revisions";
             constexpr std::string_view reconciliations_segment =
                 "/reconciliation-revisions";
+            constexpr std::string_view validation_reports_segment =
+                "/validation-reports";
+            if (remainder == validation_reports_segment) {
+                if (method != "post") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "validation reports only support POST");
+                    response.headers["Allow"] = "POST";
+                    return response;
+                }
+                reject_unknown_query(target.query, {});
+                require_json_request(
+                    request, impl_->options.maximum_body_bytes);
+                const auto [campaign_revision_id, job_ids] =
+                    parse_job_validation_report_request(request);
+                const auto report = impl_->campaign_reports.report(
+                    identity,
+                    project_id,
+                    campaign_revision_id,
+                    job_ids);
+                if (!report) {
+                    return error_response(
+                        404,
+                        "validation_report_resource_not_found",
+                        "the validation campaign or one or more jobs "
+                        "were not found");
+                }
+                return json_response(
+                    200,
+                    service::serialize_job_validation_report_json(
+                        *report));
+            }
             if (remainder == component_catalog_segment) {
                 reject_unknown_query(target.query, {});
                 if (method != "get") {
@@ -3833,32 +3872,6 @@ Response Api::handle(const Request& request) const {
                 200,
                 service::serialize_job_comparison_json(
                     *comparison));
-        }
-
-        if (target.path == "/api/v1/job-validation-reports") {
-            if (method != "post") {
-                auto response = error_response(
-                    405, "method_not_allowed",
-                    "job validation reports only support POST");
-                response.headers["Allow"] = "POST";
-                return response;
-            }
-            reject_unknown_query(target.query, {});
-            require_json_request(
-                request, impl_->options.maximum_body_bytes);
-            const auto& identity = require_identity(request);
-            const auto report = impl_->jobs->validation_report(
-                identity,
-                parse_job_validation_report_request(request));
-            if (!report) {
-                return error_response(
-                    404, "validation_report_job_not_found",
-                    "one or more validation report jobs were not found");
-            }
-            return json_response(
-                200,
-                service::serialize_job_validation_report_json(
-                    *report));
         }
 
         constexpr std::string_view job_prefix =
