@@ -30,7 +30,7 @@ their evaluation time; change retains the end time, while mean and RMS values re
 window instead of inventing a representative sample time.
 
 Event-relative windows currently require non-negative offsets. An offset of zero evaluates the
-post-transition sample recorded at the event. `thermox.result/v5` retains the ordinary graph as the
+post-transition sample recorded at the event. `thermox.result/v6` retains the ordinary graph as the
 right limit and adds `graph_before_discontinuity` as the left limit whenever a trajectory sample
 follows a scheduled input jump or event transition. Interpolation approaching that timestamp ends
 at the left limit, crosses the jump with zero duration, and resumes from the right limit. It never
@@ -59,7 +59,7 @@ window evidence must all match before Thermox reports a numerical delta; incompa
 reported explicitly rather than compared as if they represented the same engineering quantity.
 
 The thin Results workspace displays the compact summary as the run's configured reductions. It
-requests the full `thermox.result/v5` artifact only when a user selects a succeeded job, then joins
+requests the full `thermox.result/v6` artifact only when a user selects a succeeded job, then joins
 the immutable projection selectors to the current steady graph or selected transient sample for
 the node overlay. The same graph feeds system-balance, KPI, component, internal-state, and
 port/stream tables. The browser does not derive thermal-cycle semantics: custom components,

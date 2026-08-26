@@ -2006,7 +2006,7 @@ std::string serialize_validate_response_json(
     const ValidateModelResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2108,7 +2108,7 @@ std::string serialize_steady_response_json(
     const SteadySimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2437,7 +2437,7 @@ std::string serialize_calibration_response_json(
     const CalibrationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2625,7 +2625,7 @@ std::string serialize_engineering_study_response_json(
     const EngineeringStudyResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -2714,7 +2714,7 @@ std::string serialize_data_reconciliation_response_json(
     const DataReconciliationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3054,7 +3054,7 @@ std::string serialize_transient_response_json(
     const TransientSimulationResponse& response) {
     std::ostringstream out;
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3190,7 +3190,7 @@ std::string serialize_transient_response_json(
             << (event.transitioned ? "true" : "false")
             << ", \"priority\": " << event.priority << "}";
     }
-    out << "]\n}\n";
+    out << "],\n  \"trajectory_validations\": []\n}\n";
     return out.str();
 }
 
@@ -3239,7 +3239,7 @@ std::string serialize_small_signal_linearization_response_json(
         out << ']';
     };
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"status\": ";
     json_string(out, to_string(response.status));
     out << ",\n  \"error\": ";
@@ -3550,7 +3550,7 @@ std::string serialize_small_signal_model_family_response_json(
             << (validation.passed ? "true" : "false") << '}';
     };
     out << "{\n  \"schema_version\": ";
-    json_string(out, result_schema_v5);
+    json_string(out, result_schema_v6);
     out << ",\n  \"contract_version\": ";
     json_string(out, response.contract_version);
     out << ",\n  \"status\": ";
@@ -4053,6 +4053,8 @@ std::string serialize_job_record_json(
             << '}';
     }
     out << ']';
+    out << ", \"trajectory_validation_count\": "
+        << record.request.trajectory_validations.size();
     out << ", \"validation_prediction_count\": "
         << record.request.calibration_predictions.size();
     out << ", \"reconciliation_held_out_case_count\": "

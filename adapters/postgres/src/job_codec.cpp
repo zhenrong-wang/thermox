@@ -1591,6 +1591,43 @@ Tree acceptance_criterion(
     return tree;
 }
 
+Tree trajectory_validation_binding(
+    const service::TrajectoryValidationBinding& value) {
+    Tree tree;
+    tree.put("signal_id", value.signal_id);
+    tree.add_child("projection", result_projection(value.projection));
+    tree.put("comparison", service::to_string(value.comparison));
+    tree.put("time_offset_si", value.time_offset_si);
+    tree.put("baseline_time_si", value.baseline_time_si);
+    tree.put("absolute_tolerance_si", value.absolute_tolerance_si);
+    tree.put("relative_tolerance", value.relative_tolerance);
+    tree.put("uncertainty_multiplier", value.uncertainty_multiplier);
+    tree.put(
+        "maximum_interpolation_gap_si",
+        value.maximum_interpolation_gap_si);
+    return tree;
+}
+
+service::TrajectoryValidationBinding
+decode_trajectory_validation_binding(const Tree& tree) {
+    service::TrajectoryValidationBinding value;
+    value.signal_id = tree.get<std::string>("signal_id");
+    value.projection =
+        decode_result_projection(tree.get_child("projection"));
+    value.comparison = service::trajectory_comparison_from_string(
+        tree.get<std::string>("comparison"));
+    value.time_offset_si = tree.get<double>("time_offset_si");
+    value.baseline_time_si = tree.get<double>("baseline_time_si");
+    value.absolute_tolerance_si =
+        tree.get<double>("absolute_tolerance_si");
+    value.relative_tolerance = tree.get<double>("relative_tolerance");
+    value.uncertainty_multiplier =
+        tree.get<double>("uncertainty_multiplier");
+    value.maximum_interpolation_gap_si =
+        tree.get<double>("maximum_interpolation_gap_si");
+    return value;
+}
+
 service::EngineeringAcceptanceCriterion
 decode_acceptance_criterion(const Tree& tree) {
     service::EngineeringAcceptanceCriterion value;
@@ -1758,6 +1795,26 @@ std::string encode_request(
             [](const service::EngineeringAcceptanceCriterion& criterion) {
                 return acceptance_criterion(criterion);
             }));
+    tree.add_child(
+        "trajectory_validations",
+        array(
+            request.trajectory_validations,
+            [](const service::TrajectoryValidationPlan& validation) {
+                Tree encoded;
+                encoded.put(
+                    "artifact_json",
+                    service::serialize_validation_series_artifact_json(
+                        validation.artifact));
+                encoded.add_child(
+                    "bindings",
+                    array(
+                        validation.bindings,
+                        [](const service::TrajectoryValidationBinding&
+                               binding) {
+                            return trajectory_validation_binding(binding);
+                        }));
+                return encoded;
+            }));
     return write(tree);
 }
 
@@ -1913,6 +1970,26 @@ service::SimulationJobRequest decode_request(
     service::validate_engineering_acceptance_criteria(
         request.acceptance_criteria,
         request.result_projections);
+    if (const auto encoded =
+            tree.get_child_optional("trajectory_validations")) {
+        request.trajectory_validations =
+            decode_array<service::TrajectoryValidationPlan>(
+                *encoded,
+                [](const Tree& item) {
+                    service::TrajectoryValidationPlan validation;
+                    validation.artifact =
+                        service::parse_validation_series_artifact_json(
+                            item.get<std::string>("artifact_json"));
+                    validation.bindings = decode_array<
+                        service::TrajectoryValidationBinding>(
+                        item.get_child("bindings"),
+                        [](const Tree& binding) {
+                            return decode_trajectory_validation_binding(
+                                binding);
+                        });
+                    return validation;
+                });
+    }
     return request;
 }
 

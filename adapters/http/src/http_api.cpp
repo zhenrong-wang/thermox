@@ -3687,6 +3687,75 @@ Response Api::handle(const Request& request) const {
                 resolved->study.result_projections;
             command.acceptance_criteria =
                 resolved->study.acceptance_criteria;
+            for (const auto& evidence :
+                 resolved->artifacts.validation_series) {
+                service::TrajectoryValidationPlan plan;
+                plan.artifact = evidence.artifact;
+                for (const auto& declaration :
+                     resolved->study.trajectory_validation_bindings) {
+                    if (declaration.artifact_revision_id !=
+                        evidence.source.artifact_revision_id) {
+                        continue;
+                    }
+                    const auto projection = std::find_if(
+                        resolved->study.result_projections.begin(),
+                        resolved->study.result_projections.end(),
+                        [&](const auto& candidate) {
+                            return candidate.id ==
+                                declaration.projection_id;
+                        });
+                    if (projection ==
+                        resolved->study.result_projections.end()) {
+                        throw service::ProjectStateError(
+                            "persisted trajectory-validation projection "
+                            "was not found");
+                    }
+                    plan.bindings.push_back({
+                        declaration.signal_id,
+                        *projection,
+                        declaration.comparison,
+                        declaration.time_offset_si,
+                        declaration.baseline_time_si,
+                        declaration.absolute_tolerance_si,
+                        declaration.relative_tolerance,
+                        declaration.uncertainty_multiplier,
+                        declaration.maximum_interpolation_gap_si,
+                    });
+                    const auto signal = std::find_if(
+                        evidence.artifact.signals.begin(),
+                        evidence.artifact.signals.end(),
+                        [&](const auto& candidate) {
+                            return candidate.id ==
+                                declaration.signal_id;
+                        });
+                    if (signal == evidence.artifact.signals.end()) {
+                        throw service::ProjectStateError(
+                            "persisted trajectory-validation signal "
+                            "was not found");
+                    }
+                    for (const auto& sample : signal->samples) {
+                        command.transient_solver.required_output_times
+                            .push_back(
+                                declaration.time_offset_si +
+                                sample.time_si);
+                    }
+                    if (declaration.comparison ==
+                        service::TrajectoryComparison::projected_change) {
+                        command.transient_solver.required_output_times
+                            .push_back(declaration.baseline_time_si);
+                    }
+                }
+                if (!plan.bindings.empty()) {
+                    command.trajectory_validations.push_back(
+                        std::move(plan));
+                }
+            }
+            auto& output_times =
+                command.transient_solver.required_output_times;
+            std::sort(output_times.begin(), output_times.end());
+            output_times.erase(
+                std::unique(output_times.begin(), output_times.end()),
+                output_times.end());
             const auto record = impl_->jobs->submit(command);
             return job_record_response(
                 record,

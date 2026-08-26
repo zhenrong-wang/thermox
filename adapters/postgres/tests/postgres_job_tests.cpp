@@ -593,7 +593,7 @@ void test_atomic_claim_and_terminal_publication(
     const thermox::service::ResultArtifactManifest manifest{
         "artifact-a",
         "application/json",
-        thermox::service::result_schema_v5,
+        thermox::service::result_schema_v6,
         42,
         "sha256:test",
     };

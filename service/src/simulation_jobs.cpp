@@ -2,6 +2,8 @@
 
 #include "thermox/service/serialization.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <iomanip>
 #include <atomic>
@@ -10,6 +12,7 @@
 #include <thread>
 #include <limits>
 #include <sstream>
+#include <set>
 #include <string_view>
 #include <utility>
 
@@ -552,11 +555,49 @@ std::string request_fingerprint(
         stream << criterion.lower_inclusive << '|'
                << criterion.upper_inclusive << '|';
     }
+    stream << '|' << request.trajectory_validations.size() << '|';
+    for (const auto& validation : request.trajectory_validations) {
+        append_string(
+            stream,
+            serialize_validation_series_artifact_json(
+                validation.artifact));
+        stream << validation.bindings.size() << '|';
+        for (const auto& binding : validation.bindings) {
+            append_string(stream, binding.signal_id);
+            append_string(stream, binding.projection.id);
+            append_string(stream, to_string(binding.projection.scope));
+            append_string(stream, binding.projection.component_id);
+            append_string(stream, binding.projection.port_name);
+            append_string(stream, binding.projection.value_name);
+            append_string(stream, binding.projection.dimension);
+            append_string(
+                stream, to_string(binding.projection.aggregation));
+            stream << binding.projection.window.has_value() << '|';
+            if (binding.projection.window) {
+                append_string(
+                    stream,
+                    to_string(binding.projection.window->anchor));
+                stream << binding.projection.window->start_time << '|'
+                       << binding.projection.window->end_time << '|';
+                append_string(
+                    stream, binding.projection.window->event_name);
+                stream << binding.projection.window->event_occurrence
+                       << '|';
+            }
+            append_string(stream, to_string(binding.comparison));
+            stream << binding.time_offset_si << '|'
+                   << binding.baseline_time_si << '|'
+                   << binding.absolute_tolerance_si << '|'
+                   << binding.relative_tolerance << '|'
+                   << binding.uncertainty_multiplier << '|'
+                   << binding.maximum_interpolation_gap_si << '|';
+        }
+    }
     return fnv1a64(stream.str());
 }
 
 void validate_request(const SimulationJobRequest& request) {
-    if (request.schema_version != job_schema_v18) {
+    if (request.schema_version != job_schema_v19) {
         throw JobRequestError(
             "unsupported job schema version: " +
             request.schema_version);
@@ -685,6 +726,26 @@ void validate_request(const SimulationJobRequest& request) {
         throw JobRequestError(
             "steady jobs only support unwindowed final result "
             "projections");
+    }
+    if (!request.trajectory_validations.empty() &&
+        request.mode != SimulationJobMode::transient) {
+        throw JobRequestError(
+            "trajectory validation is only available for transient jobs");
+    }
+    std::set<std::string> validation_artifacts;
+    for (const auto& validation : request.trajectory_validations) {
+        try {
+            (void)serialize_validation_series_artifact_json(
+                validation.artifact);
+        } catch (const ValidationSeriesError& error) {
+            throw JobRequestError(error.what());
+        }
+        if (validation.bindings.empty() ||
+            !validation_artifacts.insert(validation.artifact.id).second) {
+            throw JobRequestError(
+                "trajectory validation plans require unique artifacts "
+                "and at least one binding");
+        }
     }
 }
 
@@ -1177,8 +1238,30 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                     *summary,
                     claimed->request.acceptance_criteria);
         }
-        const auto content =
-            serialize_transient_response_json(response);
+        std::vector<TrajectoryValidationSummary>
+            trajectory_validations;
+        trajectory_validations.reserve(
+            claimed->request.trajectory_validations.size());
+        for (const auto& validation :
+             claimed->request.trajectory_validations) {
+            trajectory_validations.push_back(
+                evaluate_trajectory_validation(
+                    validation.artifact,
+                    validation.bindings,
+                    response.trajectory,
+                    response.events));
+        }
+        auto result_document = nlohmann::json::parse(
+            serialize_transient_response_json(response));
+        result_document["trajectory_validations"] =
+            nlohmann::json::array();
+        for (const auto& validation : trajectory_validations) {
+            result_document["trajectory_validations"].push_back(
+                nlohmann::json::parse(
+                    serialize_trajectory_validation_summary_json(
+                        validation)));
+        }
+        const auto content = result_document.dump(2) + "\n";
         const auto manifest = impl_->artifacts->put_json(
             claimed->job_id,
             response.metadata.result_schema_version,
@@ -1202,6 +1285,17 @@ std::optional<SimulationJobRecord> SimulationJobService::run_next(
                 error_schema_v1,
                 "result_projection_failed",
                 "result",
+                error.what(),
+            },
+            std::nullopt);
+    } catch (const ValidationSeriesError& error) {
+        return impl_->jobs->publish_failure(
+            claimed->job_id,
+            claimed->revision,
+            {
+                error_schema_v1,
+                "trajectory_validation_failed",
+                "validation",
                 error.what(),
             },
             std::nullopt);

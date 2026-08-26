@@ -21,7 +21,7 @@ const emptyGraph: GraphResult = {
 describe('result presentation', () => {
   it('selects a bounded transient graph sample', () => {
     const result = {
-      schema_version: 'thermox.result/v5',
+      schema_version: 'thermox.result/v6',
       status: 'succeeded',
       trajectory: [
         { time: 0, graph: emptyGraph },

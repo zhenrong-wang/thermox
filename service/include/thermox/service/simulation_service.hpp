@@ -15,7 +15,7 @@
 namespace thermox::service {
 
 inline constexpr char command_schema_v1[] = "thermox.command/v1";
-inline constexpr char result_schema_v5[] = "thermox.result/v5";
+inline constexpr char result_schema_v6[] = "thermox.result/v6";
 inline constexpr char error_schema_v1[] = "thermox.error/v1";
 inline constexpr char catalog_schema_v13[] = "thermox.catalog/v13";
 inline constexpr char correlation_instantiation_schema_v1[] =
@@ -385,7 +385,7 @@ struct RevisionProvenance {
 };
 
 struct ExecutionMetadata {
-    std::string result_schema_version{result_schema_v5};
+    std::string result_schema_version{result_schema_v6};
     std::string command_schema_version;
     std::string platform_version;
     std::string operation;

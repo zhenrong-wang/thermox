@@ -68,5 +68,8 @@ a Study. A Study v5 binding names the exact artifact revision, signal, result pr
 mode, clock alignment, tolerance, uncertainty multiplier, and interpolation policy. Publication
 checks artifact selection, signal existence, projection dimension, uniqueness, finite policy, and
 transient intent. Resolution keeps evidence beside the executable physics artifact bundle, so it
-cannot accidentally enter model compilation. Automatic evaluation output on the immutable job
-record is the remaining orchestration integration.
+cannot accidentally enter model compilation. Job v19 snapshots the resolved evidence and bindings
+into its fingerprinted request, schedules every reference and change-baseline timestamp as a
+required transient output, evaluates the completed graph trajectory in the worker, and embeds the
+full alignment and classified pass/fail evidence in the immutable result artifact. Workers never
+need to query mutable Project state.

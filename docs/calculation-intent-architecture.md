@@ -271,7 +271,7 @@ logic.
 
 ## Durable execution boundary
 
-`thermox.job/v18` carries data reconciliation through the same Team-scoped idempotency, leased
+`thermox.job/v19` carries data reconciliation through the same Team-scoped idempotency, leased
 worker, checksummed result-artifact, and execution-provenance boundary used by forward simulation
 and calibration. The durable request preserves hard-versus-weighted mode, solver policy,
 profile-likelihood and joint-region policies, and held-out observations; the worker delegates

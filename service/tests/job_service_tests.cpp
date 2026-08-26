@@ -505,7 +505,7 @@ void test_success_publishes_a_readable_artifact() {
     const auto& manifest = *completed->result_artifact;
     require(
         manifest.schema_version ==
-                thermox::service::result_schema_v5 &&
+                thermox::service::result_schema_v6 &&
             manifest.media_type == "application/json" &&
             manifest.byte_size > 0 &&
             manifest.checksum.starts_with("fnv1a64:"),
@@ -518,7 +518,7 @@ void test_success_publishes_a_readable_artifact() {
                 manifest.artifact_id &&
             result->content.size() == manifest.byte_size &&
             result->content.find("\"schema_version\": "
-                                 "\"thermox.result/v5\"") !=
+                                 "\"thermox.result/v6\"") !=
                 std::string::npos,
         "the application service must retrieve a published "
         "artifact through its manifest");
@@ -530,7 +530,7 @@ void test_success_publishes_a_readable_artifact() {
         thermox::service::serialize_job_record_json(*completed);
     require(
         json.find("\"schema_version\": "
-                  "\"thermox.job/v18\"") != std::string::npos &&
+                  "\"thermox.job/v19\"") != std::string::npos &&
             json.find("\"state\": \"succeeded\"") !=
                 std::string::npos &&
             json.find("\"result_artifact\": {") !=
@@ -667,7 +667,7 @@ void test_reconciliation_jobs_use_the_worker_artifact_boundary() {
     const auto status =
         thermox::service::serialize_job_record_json(*completed);
     require(
-        status.find("\"schema_version\": \"thermox.job/v18\"") !=
+        status.find("\"schema_version\": \"thermox.job/v19\"") !=
                 std::string::npos &&
             status.find("\"mode\": \"reconciliation\"") !=
                 std::string::npos &&
@@ -754,6 +754,50 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
     request.case_id = "charge";
     request.transient_solver.end_time = 0.2;
     request.transient_solver.max_step = 0.05;
+    request.transient_solver.required_output_times = {0.1, 0.2};
+    thermox::service::TrajectoryValidationPlan validation;
+    validation.artifact =
+        thermox::service::parse_validation_series_artifact_json(
+            R"json({
+              "schema_version": "thermox.validation_series/v1",
+              "id": "storage-temperature-rise",
+              "source": {
+                "reference": "Analytical constant-heat-input balance",
+                "checksum_sha256": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+                "evidence_basis": "independent_reference",
+                "acquisition": "derived",
+                "limitations": []
+              },
+              "time_unit": "s",
+              "signals": [{
+                "id": "temperature_rise",
+                "dimension": "temperature",
+                "unit": "K",
+                "samples": [
+                  {"time": 0.1, "value": 0.06666666666666667},
+                  {"time": 0.2, "value": 0.13333333333333333}
+                ]
+              }]
+            })json");
+    validation.bindings = {{
+        "temperature_rise",
+        {
+            "storage_temperature",
+            thermox::service::ResultValueScope::component_internal,
+            "store",
+            {},
+            "temperature",
+            "temperature",
+        },
+        thermox::service::TrajectoryComparison::projected_change,
+        0.0,
+        0.0,
+        1.0e-4,
+        0.0,
+        0.0,
+        0.0,
+    }};
+    request.trajectory_validations.push_back(std::move(validation));
     (void)service.submit(request);
 
     const auto completed = service.run_next("worker-transient");
@@ -771,8 +815,16 @@ void test_transient_jobs_use_the_same_artifact_boundary() {
     require(
         content.has_value() &&
             content->find("\"trajectory\": [") !=
+                std::string::npos &&
+            content->find("\"trajectory_validations\": [") !=
+                std::string::npos &&
+            content->find("\"artifact_id\": "
+                          "\"storage-temperature-rise\"") !=
+                std::string::npos &&
+            content->find("\"passed\": true") !=
                 std::string::npos,
-        "transient job artifact must retain its trajectory");
+        "transient job artifact must retain its trajectory and "
+        "automatic immutable-reference validation evidence");
 }
 
 void test_cancel_and_optimistic_revision_rules() {
@@ -1105,7 +1157,7 @@ void test_completed_study_jobs_compare_by_projected_identity() {
             true, 1, 0, {}};
     const thermox::service::ResultArtifactManifest manifest{
         "comparison-artifact", "application/json",
-        thermox::service::result_schema_v5, 2, "checksum"};
+        thermox::service::result_schema_v6, 2, "checksum"};
     const auto claimed_baseline = jobs->claim_next("comparison-worker");
     require(
         claimed_baseline && claimed_baseline->job_id == baseline.job_id,

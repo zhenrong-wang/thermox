@@ -7395,7 +7395,7 @@ void test_transient_expression_component_flows_through_service() {
         thermox::service::serialize_transient_response_json(
             held_response);
     require(
-        held_json.find("\"schema_version\": \"thermox.result/v5\"") !=
+        held_json.find("\"schema_version\": \"thermox.result/v6\"") !=
                 std::string::npos &&
             held_json.find(
                 "\"graph_before_discontinuity\": {") !=
@@ -7578,7 +7578,7 @@ void test_steady_service() {
         "steady result must identify operation");
     require(
         response.metadata.result_schema_version ==
-            thermox::service::result_schema_v5,
+            thermox::service::result_schema_v6,
         "steady result contract must be versioned");
     require(
         response.metadata.platform_version == "0.2.0",
@@ -7744,7 +7744,7 @@ void test_steady_service() {
             std::string::npos,
         "steady JSON must expose service status");
     require(
-        json.find("\"schema_version\": \"thermox.result/v5\"") !=
+        json.find("\"schema_version\": \"thermox.result/v6\"") !=
             std::string::npos,
         "steady JSON must expose result schema");
     require(

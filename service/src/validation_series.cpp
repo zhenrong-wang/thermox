@@ -1,4 +1,5 @@
 #include "thermox/service/validation_series.hpp"
+#include "thermox/service/serialization.hpp"
 
 #include "thermox/platform/unit_registry.hpp"
 
@@ -250,6 +251,34 @@ std::string serialize_validation_series_artifact_json(
         }
         root["signals"].push_back(std::move(encoded));
     }
+    return root.dump(2) + "\n";
+}
+
+std::string serialize_trajectory_validation_summary_json(
+    const TrajectoryValidationSummary& summary) {
+    validate_validation_evidence_summary(summary.evidence);
+    if (summary.schema_version != trajectory_validation_schema_v1 ||
+        summary.artifact_id.empty() ||
+        !std::isfinite(summary.maximum_alignment_gap_si) ||
+        summary.maximum_alignment_gap_si < 0.0 ||
+        summary.exact_alignment_count +
+                summary.interpolated_alignment_count !=
+            summary.evidence.criteria.size()) {
+        throw ValidationSeriesError(
+            "trajectory-validation summary is inconsistent");
+    }
+    Json root{
+        {"schema_version", summary.schema_version},
+        {"artifact_id", summary.artifact_id},
+        {"exact_alignment_count", summary.exact_alignment_count},
+        {"interpolated_alignment_count",
+         summary.interpolated_alignment_count},
+        {"maximum_alignment_gap_si",
+         summary.maximum_alignment_gap_si},
+        {"evidence", Json::parse(
+             serialize_validation_evidence_summary_json(
+                 summary.evidence))},
+    };
     return root.dump(2) + "\n";
 }
 

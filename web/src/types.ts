@@ -189,7 +189,7 @@ export interface ProjectModelValidation {
   case_checksum: string
   artifact_revisions: ArtifactRevision[]
   validation: {
-    schema_version: 'thermox.result/v5'
+    schema_version: 'thermox.result/v6'
     status: string
     error: {
       schema_version: string
@@ -570,7 +570,7 @@ export interface CreateReconciliationRevision {
 }
 
 export interface ReconciliationResult {
-  schema_version: 'thermox.result/v5'
+  schema_version: 'thermox.result/v6'
   status: 'succeeded'
   calculation_intent: 'data_reconciliation'
   reconciliation_mode: ReconciliationMode
@@ -729,7 +729,7 @@ export interface ResultSummaryValue {
 }
 
 export interface SimulationJob {
-  schema_version: 'thermox.job/v18'
+  schema_version: 'thermox.job/v19'
   job_id: string
   owner: {
     team_id: string
@@ -739,7 +739,7 @@ export interface SimulationJob {
   created_at_unix_ms: number
   state: SimulationJobState
   request: {
-    schema_version: 'thermox.job/v18'
+    schema_version: 'thermox.job/v19'
     mode: 'steady' | 'transient' | 'calibration' | 'reconciliation'
     case_id: string
     calibration_id: string
@@ -755,6 +755,7 @@ export interface SimulationJob {
     }>
     result_projections: ResultProjection[]
     acceptance_criteria: EngineeringAcceptanceCriterion[]
+    trajectory_validation_count: number
     validation_prediction_count: number
     reconciliation_held_out_case_count: number
     fingerprint: string
@@ -933,7 +934,7 @@ export interface ThermalFeasibilitySummary {
 }
 
 export interface SteadySimulationResult {
-  schema_version: 'thermox.result/v5'
+  schema_version: 'thermox.result/v6'
   status: 'succeeded'
   error: {
     schema_version: string
@@ -1033,8 +1034,44 @@ export interface TransientGraphSample {
   graph: GraphResult
 }
 
+export interface TrajectoryValidationResult {
+  schema_version: 'thermox.trajectory_validation/v1'
+  artifact_id: string
+  exact_alignment_count: number
+  interpolated_alignment_count: number
+  maximum_alignment_gap_si: number
+  evidence: {
+    schema_version: 'thermox.validation_evidence/v1'
+    passed: boolean
+    passed_count: number
+    failed_count: number
+    evidence_classes: Array<{
+      basis: string
+      passed_count: number
+      failed_count: number
+    }>
+    criteria: Array<{
+      criterion_id: string
+      observed_value_id: string
+      layer: string
+      basis: string
+      dimension: string
+      actual_value_si: number
+      reference_value_si: number
+      signed_error_si: number
+      absolute_error_si: number
+      relative_error: number | null
+      allowed_absolute_error_si: number
+      source_reference: string
+      note: string
+      passed: boolean
+    }>
+    limitations: string[]
+  }
+}
+
 export interface TransientSimulationResult {
-  schema_version: 'thermox.result/v5'
+  schema_version: 'thermox.result/v6'
   status: 'succeeded'
   error: {
     schema_version: string
@@ -1085,6 +1122,7 @@ export interface TransientSimulationResult {
   }
   thermal_feasibility: ThermalFeasibilitySummary
   trajectory: TransientGraphSample[]
+  trajectory_validations: TrajectoryValidationResult[]
   events: Array<TransientGraphSample & {
     name: string
     terminal: boolean

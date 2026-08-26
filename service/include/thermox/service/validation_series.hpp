@@ -92,6 +92,11 @@ struct TrajectoryValidationSummary {
     ValidationEvidenceSummary evidence;
 };
 
+struct TrajectoryValidationPlan {
+    ValidationSeriesArtifact artifact;
+    std::vector<TrajectoryValidationBinding> bindings;
+};
+
 class ValidationSeriesError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
@@ -102,6 +107,9 @@ ValidationSeriesArtifact parse_validation_series_artifact_json(
 
 std::string serialize_validation_series_artifact_json(
     const ValidationSeriesArtifact& artifact);
+
+std::string serialize_trajectory_validation_summary_json(
+    const TrajectoryValidationSummary& summary);
 
 TrajectoryValidationSummary evaluate_trajectory_validation(
     const ValidationSeriesArtifact& artifact,

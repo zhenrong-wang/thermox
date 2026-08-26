@@ -3,6 +3,7 @@
 #include "thermox/service/identity.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/validation_series.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -15,7 +16,7 @@
 
 namespace thermox::service {
 
-inline constexpr char job_schema_v18[] = "thermox.job/v18";
+inline constexpr char job_schema_v19[] = "thermox.job/v19";
 inline constexpr char job_comparison_schema_v2[] =
     "thermox.job_comparison/v2";
 
@@ -40,7 +41,7 @@ std::string to_string(SimulationJobState state);
 bool is_terminal(SimulationJobState state);
 
 struct SimulationJobRequest {
-    std::string schema_version{job_schema_v18};
+    std::string schema_version{job_schema_v19};
     IdentityContext identity;
     std::string idempotency_key;
     SimulationJobMode mode{SimulationJobMode::steady};
@@ -65,12 +66,13 @@ struct SimulationJobRequest {
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;
+    std::vector<TrajectoryValidationPlan> trajectory_validations;
 };
 
 struct ResultArtifactManifest {
     std::string artifact_id;
     std::string media_type{"application/json"};
-    std::string schema_version{result_schema_v5};
+    std::string schema_version{result_schema_v6};
     std::uint64_t byte_size{0};
     std::string checksum;
 };
@@ -81,7 +83,7 @@ struct ResultArtifact {
 };
 
 struct SimulationJobRecord {
-    std::string schema_version{job_schema_v18};
+    std::string schema_version{job_schema_v19};
     std::string job_id;
     std::string team_id;
     std::string submitted_by_user_id;

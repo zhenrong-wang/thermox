@@ -7,7 +7,7 @@ import type { RevisionProvenance, SimulationResult } from './types'
 
 function steadyResult(): SimulationResult {
   return {
-    schema_version: 'thermox.result/v5',
+    schema_version: 'thermox.result/v6',
     status: 'succeeded',
     error: { schema_version: '', code: '', stage: '', message: '' },
     metadata: {} as SimulationResult['metadata'],
@@ -112,11 +112,12 @@ describe('resultDiagnosticSummary', () => {
 
   it('surfaces transient integration evidence', () => {
     const result = {
-      schema_version: 'thermox.result/v5',
+      schema_version: 'thermox.result/v6',
       status: 'succeeded',
       error: { schema_version: '', code: '', stage: '', message: '' },
       metadata: {} as SimulationResult['metadata'],
       trajectory: [],
+      trajectory_validations: [],
       events: [],
       thermal_feasibility: {
         schema_version: 'thermox.thermal_feasibility/v1',

@@ -58,10 +58,10 @@ int main() {
                 make_object_result_artifact_store(
                     objects, "integration/results");
         const std::string content =
-            R"({"schema_version":"thermox.result/v5","provider":"s3-compatible"})";
+            R"({"schema_version":"thermox.result/v6","provider":"s3-compatible"})";
         const auto manifest = writer->put_json(
             "integration-job",
-            thermox::service::result_schema_v5,
+            thermox::service::result_schema_v6,
             content);
 
         auto second_client =
