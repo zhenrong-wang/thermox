@@ -51,14 +51,14 @@ qualified engineering risk from being confused with an unusable calculation inpu
 Persisted performance-map quality reviews remain separate from this calculatability gate. A review
 captures a named engineer's disposition, scope, rationale, and the service-derived quality snapshot
 for one exact artifact revision. It neither blesses invalid bytes nor changes the map contract.
-An immutable `thermox.study_revision/v4` can explicitly require one exact review for a selected
+An immutable `thermox.study_revision/v5` can explicitly require one exact review for a selected
 artifact and declare whether `approved` and/or `approved_with_conditions` satisfies its policy.
 Publication rejects missing, cross-artifact, rejected, or otherwise unacceptable evidence. Run
 resolution verifies the pinned evidence again before durable submission. This is a visible Study
 governance gate, not a hidden change to model readiness; Studies that declare no requirements retain
 the ordinary calculation gate.
 
-Study v3 may additionally define dimensioned operating envelopes for typed inputs of selected
+Study v5 may additionally define dimensioned operating envelopes for typed inputs of selected
 performance maps, correlations, and regime maps. These are validated at publication and overlaid
 onto request-scoped artifact objects for both steady and transient execution. They do not change
 source-artifact readiness or a correlation's native applicability evidence; they are a stricter

@@ -405,6 +405,24 @@ std::string study_identity(
         out << criterion.lower_inclusive << '|'
             << criterion.upper_inclusive << '|';
     }
+    out << request.trajectory_validation_bindings.size() << '|';
+    for (const auto& binding :
+         request.trajectory_validation_bindings) {
+        const auto append = [&](const std::string& value) {
+            out << value.size() << ':' << value << '|';
+        };
+        append(binding.id);
+        append(binding.artifact_revision_id);
+        append(binding.signal_id);
+        append(binding.projection_id);
+        append(to_string(binding.comparison));
+        out << binding.time_offset_si << '|'
+            << binding.baseline_time_si << '|'
+            << binding.absolute_tolerance_si << '|'
+            << binding.relative_tolerance << '|'
+            << binding.uncertainty_multiplier << '|'
+            << binding.maximum_interpolation_gap_si << '|';
+    }
     return out.str();
 }
 
@@ -1618,8 +1636,10 @@ ProjectService::resolve_artifact_revisions(
         } else if (
             revision->artifact_type ==
             validation_series_artifact_type) {
-            result.validation_series.push_back(
-                parse_validation_series_artifact_json(*payload));
+            result.validation_series.push_back({
+                *revision,
+                parse_validation_series_artifact_json(*payload),
+            });
         } else {
             throw ProjectStateError(
                 "persisted engineering artifact type is not "
@@ -1963,6 +1983,80 @@ StudyRevisionRecord ProjectService::create_study_revision(
     } catch (const ResultProjectionError& error) {
         throw ProjectRequestError(error.what());
     }
+    auto trajectory_bindings =
+        request.trajectory_validation_bindings;
+    std::sort(
+        trajectory_bindings.begin(), trajectory_bindings.end(),
+        [](const auto& left, const auto& right) {
+            return left.id < right.id;
+        });
+    std::set<std::pair<std::string, std::string>> bound_signals;
+    for (const auto& binding : trajectory_bindings) {
+        const auto projection = std::find_if(
+            request.result_projections.begin(),
+            request.result_projections.end(),
+            [&](const auto& candidate) {
+                return candidate.id == binding.projection_id;
+            });
+        const auto evidence = std::find_if(
+            resolved_artifacts->validation_series.begin(),
+            resolved_artifacts->validation_series.end(),
+            [&](const auto& candidate) {
+                return candidate.source.artifact_revision_id ==
+                    binding.artifact_revision_id;
+            });
+        const auto signal = evidence ==
+                resolved_artifacts->validation_series.end()
+            ? static_cast<const ValidationSeriesSignal*>(nullptr)
+            : [&]() -> const ValidationSeriesSignal* {
+                const auto found = std::find_if(
+                    evidence->artifact.signals.begin(),
+                    evidence->artifact.signals.end(),
+                    [&](const auto& candidate) {
+                        return candidate.id == binding.signal_id;
+                    });
+                return found == evidence->artifact.signals.end()
+                    ? nullptr : &*found;
+            }();
+        if (binding.id.empty() ||
+            binding.artifact_revision_id.empty() ||
+            binding.signal_id.empty() ||
+            binding.projection_id.empty() ||
+            projection == request.result_projections.end() ||
+            signal == nullptr ||
+            projection->dimension != signal->dimension ||
+            projection->window.has_value() ||
+            !std::isfinite(binding.time_offset_si) ||
+            !std::isfinite(binding.baseline_time_si) ||
+            !std::isfinite(binding.absolute_tolerance_si) ||
+            !std::isfinite(binding.relative_tolerance) ||
+            !std::isfinite(binding.uncertainty_multiplier) ||
+            !std::isfinite(binding.maximum_interpolation_gap_si) ||
+            binding.absolute_tolerance_si < 0.0 ||
+            binding.relative_tolerance < 0.0 ||
+            binding.uncertainty_multiplier < 0.0 ||
+            binding.maximum_interpolation_gap_si < 0.0 ||
+            !bound_signals.emplace(
+                binding.artifact_revision_id,
+                binding.signal_id).second) {
+            throw ProjectRequestError(
+                "trajectory-validation binding is missing, duplicated, "
+                "dimensionally inconsistent, or has invalid policy");
+        }
+    }
+    if (std::adjacent_find(
+            trajectory_bindings.begin(), trajectory_bindings.end(),
+            [](const auto& left, const auto& right) {
+                return left.id == right.id;
+            }) != trajectory_bindings.end()) {
+        throw ProjectRequestError(
+            "trajectory-validation binding IDs must be unique");
+    }
+    if (!trajectory_bindings.empty() &&
+        run_mode(request.intent) != "transient") {
+        throw ProjectRequestError(
+            "trajectory validation requires a transient Study");
+    }
     if (run_mode(request.intent) == "steady" &&
         std::any_of(
             request.result_projections.begin(),
@@ -1990,8 +2084,15 @@ StudyRevisionRecord ProjectService::create_study_revision(
         operating_envelopes,
         request.result_projections,
         request.acceptance_criteria,
+        trajectory_bindings,
         checksum(study_identity(
-            request, artifact_ids, qualification_requirements,
+            [&]() {
+                auto canonical = request;
+                canonical.trajectory_validation_bindings =
+                    trajectory_bindings;
+                return canonical;
+            }(),
+            artifact_ids, qualification_requirements,
             operating_envelopes)));
 }
 

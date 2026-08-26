@@ -844,6 +844,35 @@ void study_revision_json(
             << (criterion.upper_inclusive ? "true" : "false")
             << '}';
     }
+    out << "], \"trajectory_validation_bindings\": [";
+    for (std::size_t index = 0;
+         index < revision.trajectory_validation_bindings.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        const auto& binding =
+            revision.trajectory_validation_bindings[index];
+        out << "{\"id\": ";
+        json_string(out, binding.id);
+        out << ", \"artifact_revision_id\": ";
+        json_string(out, binding.artifact_revision_id);
+        out << ", \"signal_id\": ";
+        json_string(out, binding.signal_id);
+        out << ", \"projection_id\": ";
+        json_string(out, binding.projection_id);
+        out << ", \"comparison\": ";
+        json_string(out, to_string(binding.comparison));
+        out << ", \"time_offset_si\": " << binding.time_offset_si
+            << ", \"baseline_time_si\": "
+            << binding.baseline_time_si
+            << ", \"absolute_tolerance_si\": "
+            << binding.absolute_tolerance_si
+            << ", \"relative_tolerance\": "
+            << binding.relative_tolerance
+            << ", \"uncertainty_multiplier\": "
+            << binding.uncertainty_multiplier
+            << ", \"maximum_interpolation_gap_si\": "
+            << binding.maximum_interpolation_gap_si << '}';
+    }
     out << "], \"checksum\": ";
     json_string(out, revision.checksum);
     out << ", \"created_by_user_id\": ";

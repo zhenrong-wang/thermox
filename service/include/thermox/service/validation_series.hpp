@@ -69,6 +69,20 @@ struct TrajectoryValidationBinding {
     double maximum_interpolation_gap_si{0.0};
 };
 
+struct StudyTrajectoryValidationBinding {
+    std::string id;
+    std::string artifact_revision_id;
+    std::string signal_id;
+    std::string projection_id;
+    TrajectoryComparison comparison{TrajectoryComparison::absolute};
+    double time_offset_si{0.0};
+    double baseline_time_si{0.0};
+    double absolute_tolerance_si{0.0};
+    double relative_tolerance{0.0};
+    double uncertainty_multiplier{0.0};
+    double maximum_interpolation_gap_si{0.0};
+};
+
 struct TrajectoryValidationSummary {
     std::string schema_version{trajectory_validation_schema_v1};
     std::string artifact_id;

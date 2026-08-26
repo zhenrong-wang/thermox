@@ -28,8 +28,8 @@ inline constexpr char artifact_revision_content_schema_v1[] =
     "thermox.artifact_revision_content/v1";
 inline constexpr char performance_map_quality_review_schema_v1[] =
     "thermox.performance_map_quality_review/v1";
-inline constexpr char study_revision_schema_v4[] =
-    "thermox.study_revision/v4";
+inline constexpr char study_revision_schema_v5[] =
+    "thermox.study_revision/v5";
 inline constexpr char calibration_revision_schema_v1[] =
     "thermox.calibration_revision/v1";
 inline constexpr char reconciliation_revision_schema_v1[] =
@@ -158,7 +158,7 @@ struct ArtifactOperatingEnvelope {
 };
 
 struct StudyRevisionRecord {
-    std::string schema_version{study_revision_schema_v4};
+    std::string schema_version{study_revision_schema_v5};
     std::string study_revision_id;
     std::string study_id;
     std::string project_id;
@@ -175,6 +175,8 @@ struct StudyRevisionRecord {
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;
+    std::vector<StudyTrajectoryValidationBinding>
+        trajectory_validation_bindings;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
@@ -373,6 +375,8 @@ public:
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
+        const std::vector<StudyTrajectoryValidationBinding>&
+            trajectory_validation_bindings,
         const std::string& checksum) = 0;
     virtual std::optional<StudyRevisionRecord> get_study_revision(
         const std::string& team_id,
@@ -579,6 +583,8 @@ struct CreateStudyRevisionRequest {
     std::vector<ResultProjection> result_projections;
     std::vector<EngineeringAcceptanceCriterion>
         acceptance_criteria;
+    std::vector<StudyTrajectoryValidationBinding>
+        trajectory_validation_bindings;
 };
 
 struct CreateCalibrationRevisionRequest {
@@ -608,10 +614,15 @@ struct CreateReconciliationRevisionRequest {
     JointConfidenceRegionSettings joint_confidence_region;
 };
 
+struct ResolvedValidationSeriesArtifact {
+    ArtifactRevisionRecord source;
+    ValidationSeriesArtifact artifact;
+};
+
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
     SimulationComponentBundle components;
-    std::vector<ValidationSeriesArtifact> validation_series;
+    std::vector<ResolvedValidationSeriesArtifact> validation_series;
     std::vector<ArtifactRevisionRecord> revisions;
 };
 

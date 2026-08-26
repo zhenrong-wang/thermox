@@ -457,6 +457,8 @@ public:
         const std::vector<ResultProjection>& result_projections,
         const std::vector<EngineeringAcceptanceCriterion>&
             acceptance_criteria,
+        const std::vector<StudyTrajectoryValidationBinding>&
+            trajectory_validation_bindings,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
         const auto simulation_case = case_revisions_.find(case_revision_id);
@@ -502,6 +504,8 @@ public:
             artifact_operating_envelopes;
         record.result_projections = result_projections;
         record.acceptance_criteria = acceptance_criteria;
+        record.trajectory_validation_bindings =
+            trajectory_validation_bindings;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;
         record.created_at = std::chrono::system_clock::now();

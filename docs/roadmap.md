@@ -179,6 +179,8 @@ Delivered:
 18. Provider-neutral validation-series artifacts with checksum provenance, unit and uncertainty
     normalization, timestamp alignment policy, generic graph bindings, and classified trajectory
     evidence; exercised by the public AGTF30 fuel-step benchmark. ✅
+19. Immutable Study v5 trajectory-validation bindings across in-memory, PostgreSQL, HTTP, and web
+    contracts, with exact evidence revisions kept outside executable physics inputs. ✅
 
 ## Reusable dynamic equipment primitives
 

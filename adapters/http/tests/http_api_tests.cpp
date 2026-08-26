@@ -745,7 +745,7 @@ void test_tenant_scoped_asynchronous_jobs() {
             "/study-revisions",
         std::string{
             R"({"schema_version":)"
-            R"("thermox.study_revision.create/v4",)"
+            R"("thermox.study_revision.create/v5",)"
             R"("study_id":"http-design-study",)"
             R"("model_revision_id":")"} +
             model.model_revision_id +
@@ -1436,7 +1436,7 @@ void test_authored_component_job_workflow() {
                 "/study-revisions",
             std::string{
                 R"({"schema_version":)"
-                R"("thermox.study_revision.create/v4",)"
+                R"("thermox.study_revision.create/v5",)"
                 R"("study_id":"authored-gain-study",)"
                 R"("model_revision_id":")"} +
                 model.model_revision_id +

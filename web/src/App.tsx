@@ -1279,7 +1279,7 @@ function App() {
       (revision) => revision.study_id === studyId,
     )
     const request: CreateStudyRevision = {
-      schema_version: 'thermox.study_revision.create/v4',
+      schema_version: 'thermox.study_revision.create/v5',
       study_id: studyId,
       parent_study_revision_id: parent?.study_revision_id ?? '',
       model_revision_id: selectedRevisionId,
@@ -1290,6 +1290,7 @@ function App() {
       artifact_operating_envelopes: [],
       result_projections: resultProjections,
       acceptance_criteria: acceptanceCriteria,
+      trajectory_validation_bindings: [],
     }
     setCasePublishing(true)
     setCaseOperationError('')

@@ -514,6 +514,69 @@ decode_acceptance_criteria(const std::string& payload) {
     return criteria;
 }
 
+std::string trajectory_validation_bindings_payload(
+    const std::vector<service::StudyTrajectoryValidationBinding>&
+        bindings) {
+    Tree values;
+    for (const auto& binding : bindings) {
+        Tree value;
+        value.put("id", binding.id);
+        value.put("artifact_revision_id", binding.artifact_revision_id);
+        value.put("signal_id", binding.signal_id);
+        value.put("projection_id", binding.projection_id);
+        value.put("comparison", service::to_string(binding.comparison));
+        value.put("time_offset_si", binding.time_offset_si);
+        value.put("baseline_time_si", binding.baseline_time_si);
+        value.put(
+            "absolute_tolerance_si", binding.absolute_tolerance_si);
+        value.put("relative_tolerance", binding.relative_tolerance);
+        value.put(
+            "uncertainty_multiplier", binding.uncertainty_multiplier);
+        value.put(
+            "maximum_interpolation_gap_si",
+            binding.maximum_interpolation_gap_si);
+        values.push_back({"", value});
+    }
+    Tree wrapper;
+    wrapper.add_child("items", values);
+    return write_tree(wrapper);
+}
+
+std::vector<service::StudyTrajectoryValidationBinding>
+decode_trajectory_validation_bindings(const std::string& payload) {
+    const auto tree = read_tree(payload);
+    std::vector<service::StudyTrajectoryValidationBinding> bindings;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::runtime_error(
+                "persisted trajectory-validation bindings are not an array");
+        }
+        service::StudyTrajectoryValidationBinding binding;
+        binding.id = value.get<std::string>("id");
+        binding.artifact_revision_id =
+            value.get<std::string>("artifact_revision_id");
+        binding.signal_id = value.get<std::string>("signal_id");
+        binding.projection_id =
+            value.get<std::string>("projection_id");
+        binding.comparison =
+            service::trajectory_comparison_from_string(
+                value.get<std::string>("comparison"));
+        binding.time_offset_si = value.get<double>("time_offset_si");
+        binding.baseline_time_si =
+            value.get<double>("baseline_time_si");
+        binding.absolute_tolerance_si =
+            value.get<double>("absolute_tolerance_si");
+        binding.relative_tolerance =
+            value.get<double>("relative_tolerance");
+        binding.uncertainty_multiplier =
+            value.get<double>("uncertainty_multiplier");
+        binding.maximum_interpolation_gap_si =
+            value.get<double>("maximum_interpolation_gap_si");
+        bindings.push_back(std::move(binding));
+    }
+    return bindings;
+}
+
 std::string operating_envelopes_payload(
     const std::vector<service::ArtifactOperatingEnvelope>& envelopes) {
     Tree values;
@@ -780,11 +843,13 @@ service::StudyRevisionRecord decode_study_revision(
         decode_acceptance_criteria(field(result, row, 10));
     record.artifact_operating_envelopes =
         decode_operating_envelopes(field(result, row, 11));
+    record.trajectory_validation_bindings =
+        decode_trajectory_validation_bindings(field(result, row, 12));
     service::validate_engineering_acceptance_criteria(
         record.acceptance_criteria, record.result_projections);
-    record.checksum = field(result, row, 12);
-    record.created_by_user_id = field(result, row, 13);
-    record.created_at = decode_time(field(result, row, 14));
+    record.checksum = field(result, row, 13);
+    record.created_by_user_id = field(result, row, 14);
+    record.created_at = decode_time(field(result, row, 15));
     return record;
 }
 
@@ -906,6 +971,7 @@ constexpr const char study_revision_columns[] =
     "model_revision_id, case_revision_id, intent, "
     "result_projections_payload, acceptance_criteria_payload, "
     "artifact_operating_envelopes_payload, "
+    "trajectory_validation_bindings_payload, "
     "checksum, created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
     "::bigint::text";
@@ -1604,6 +1670,8 @@ public:
         const std::vector<service::ResultProjection>& result_projections,
         const std::vector<service::EngineeringAcceptanceCriterion>&
             acceptance_criteria,
+        const std::vector<service::StudyTrajectoryValidationBinding>&
+            trajectory_validation_bindings,
         const std::string& checksum) override {
         auto connection = connect(connection_string_);
         (void)execute(
@@ -1648,17 +1716,22 @@ public:
             acceptance_criteria_payload(acceptance_criteria);
         const auto envelopes_payload =
             operating_envelopes_payload(artifact_operating_envelopes);
+        const auto trajectory_bindings_payload =
+            trajectory_validation_bindings_payload(
+                trajectory_validation_bindings);
         const auto sql =
             std::string("INSERT INTO thermox_study_revisions (") +
             "study_id, project_id, team_id, revision_number, "
             "parent_study_revision_id, model_revision_id, "
             "case_revision_id, intent, result_projections_payload, "
             "acceptance_criteria_payload, "
-            "artifact_operating_envelopes_payload, checksum, "
+            "artifact_operating_envelopes_payload, "
+            "trajectory_validation_bindings_payload, checksum, "
             "created_by_user_id) VALUES ("
             "$1, $2, $3, $4::bigint, $5, $6, $7, $8, "
             "($9::jsonb)->'items', ($10::jsonb)->'items', "
-            "($11::jsonb)->'items', $12, $13) RETURNING " +
+            "($11::jsonb)->'items', ($12::jsonb)->'items', "
+            "$13, $14) RETURNING " +
             study_revision_columns;
         const auto result = execute(
             connection.get(),
@@ -1668,7 +1741,7 @@ public:
              model_revision_id.c_str(), case_revision_id.c_str(),
              intent.c_str(), projections_payload.c_str(),
              criteria_payload.c_str(), envelopes_payload.c_str(),
-             checksum.c_str(),
+             trajectory_bindings_payload.c_str(), checksum.c_str(),
              created_by_user_id.c_str()});
         auto record = decode_study_revision(result.get());
         for (std::size_t index = 0;

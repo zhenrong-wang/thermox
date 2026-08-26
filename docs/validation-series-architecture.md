@@ -64,6 +64,9 @@ uncertainties, and `independent_reference` basis, then bind them to the same gra
 
 The canonical parser, serializer, and evaluator are exposed through the service library. Validation
 series can also be stored as immutable, content-addressed Project artifact revisions and selected by
-a Study. Resolution keeps them beside the executable physics artifact bundle, so reference evidence
-cannot accidentally enter model compilation. Declarative validation bindings and evaluation output
-on the immutable job record are the next orchestration integration.
+a Study. A Study v5 binding names the exact artifact revision, signal, result projection, comparison
+mode, clock alignment, tolerance, uncertainty multiplier, and interpolation policy. Publication
+checks artifact selection, signal existence, projection dimension, uniqueness, finite policy, and
+transient intent. Resolution keeps evidence beside the executable physics artifact bundle, so it
+cannot accidentally enter model compilation. Automatic evaluation output on the immutable job
+record is the remaining orchestration integration.

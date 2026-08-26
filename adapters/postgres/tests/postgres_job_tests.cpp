@@ -106,6 +106,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "018_study_operating_envelopes.sql",
              "019_reconciliation_revisions.sql",
              "020_reconciliation_jobs.sql",
+             "021_study_trajectory_validation.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -1098,6 +1099,55 @@ void test_projects_and_immutable_model_revisions(
             "load_step",
             1U,
         };
+    const auto validation_series = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "postgres-shaft-speed-evidence",
+        {},
+        thermox::service::validation_series_artifact_type,
+        thermox::service::validation_series_schema_v1,
+        R"json({
+          "schema_version": "thermox.validation_series/v1",
+          "id": "postgres-shaft-speed-evidence",
+          "source": {
+            "reference": "PostgreSQL contract test sensor export",
+            "checksum_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            "evidence_basis": "independent_reference",
+            "acquisition": "measured",
+            "limitations": []
+          },
+          "time_unit": "s",
+          "signals": [{
+            "id": "shaft_speed",
+            "dimension": "angular_speed",
+            "unit": "rpm",
+            "samples": [{"time": 0.0, "value": 3000.0}]
+          }]
+        })json",
+    });
+    transient_study_request.artifact_revision_ids.push_back(
+        validation_series.artifact_revision_id);
+    transient_study_request.result_projections.push_back({
+        "shaft_speed",
+        thermox::service::ResultValueScope::component_internal,
+        "compressor",
+        {},
+        "shaft_speed",
+        "angular_speed",
+    });
+    transient_study_request.trajectory_validation_bindings = {{
+        "measured_shaft_speed",
+        validation_series.artifact_revision_id,
+        "shaft_speed",
+        "shaft_speed",
+        thermox::service::TrajectoryComparison::absolute,
+        0.0,
+        0.0,
+        2.0,
+        0.01,
+        2.0,
+        0.1,
+    }};
     const auto transient_study =
         projects.create_study_revision(transient_study_request);
     const auto loaded_transient_study = projects.get_study_revision(
@@ -1109,9 +1159,14 @@ void test_projects_and_immutable_model_revisions(
             loaded_transient_study->result_projections.front().window
                     ->event_name == "load_step" &&
             loaded_transient_study->result_projections.front().window
-                    ->event_occurrence == 1U,
+                    ->event_occurrence == 1U &&
+            loaded_transient_study->trajectory_validation_bindings
+                    .size() == 1U &&
+            loaded_transient_study->trajectory_validation_bindings.front()
+                    .artifact_revision_id ==
+                validation_series.artifact_revision_id,
         "PostgreSQL Studies must preserve typed event-window "
-        "projection definitions");
+        "projections and trajectory-validation bindings");
 
     thermox::service::CreateCalibrationRevisionRequest
         calibration_request;

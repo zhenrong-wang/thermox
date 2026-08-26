@@ -1490,9 +1490,9 @@ void test_validation_series_are_immutable_project_evidence() {
             content->canonical_artifact_json.find(
                 "\"time_unit\": \"s\"") != std::string::npos &&
             resolved->validation_series.size() == 1U &&
-            resolved->validation_series.front().source.acquisition ==
+            resolved->validation_series.front().artifact.source.acquisition ==
                 "measured" &&
-            resolved->validation_series.front().signals.front()
+            resolved->validation_series.front().artifact.signals.front()
                     .samples.back().time_si == 0.5 &&
             resolved->snapshot.performance_maps.empty() &&
             resolved->snapshot.references.empty(),
@@ -1542,6 +1542,87 @@ void test_validation_series_are_immutable_project_evidence() {
             resolved_run->artifacts.snapshot.references.empty(),
         "Studies and run configurations must pin validation evidence "
         "without injecting it into physics compilation inputs");
+
+    auto transient_case_json = read_source_file(
+        "core/examples/air_compressor.design.case.json");
+    const auto mode_position = transient_case_json.find(
+        "steady_state_design");
+    require(
+        mode_position != std::string::npos,
+        "test fixture must declare its steady mode");
+    transient_case_json.replace(
+        mode_position,
+        std::string("steady_state_design").size(),
+        "dynamic_transient");
+    const auto transient_case = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        transient_case_json,
+    });
+    CreateStudyRevisionRequest validation_study_request;
+    validation_study_request.identity = team_a;
+    validation_study_request.project_id = project.project_id;
+    validation_study_request.study_id = "trajectory-validation";
+    validation_study_request.model_revision_id =
+        model.model_revision_id;
+    validation_study_request.case_revision_id =
+        transient_case.case_revision_id;
+    validation_study_request.intent = transient_case.mode;
+    validation_study_request.artifact_revision_ids = {
+        revision.artifact_revision_id};
+    validation_study_request.result_projections = {{
+        "shaft-speed",
+        ResultValueScope::component_internal,
+        "compressor",
+        {},
+        "shaft_speed",
+        "angular_speed",
+    }};
+    validation_study_request.trajectory_validation_bindings = {{
+        "measured-shaft-speed",
+        revision.artifact_revision_id,
+        "shaft_speed",
+        "shaft-speed",
+        TrajectoryComparison::absolute,
+        0.0,
+        0.0,
+        2.0,
+        0.01,
+        2.0,
+        0.1,
+    }};
+    const auto validation_study =
+        service.create_study_revision(validation_study_request);
+    const auto serialized_study =
+        serialize_study_revision_json(validation_study);
+    require(
+        validation_study.schema_version == study_revision_schema_v5 &&
+            validation_study.trajectory_validation_bindings.size() == 1U &&
+            validation_study.trajectory_validation_bindings.front()
+                    .artifact_revision_id ==
+                revision.artifact_revision_id &&
+            serialized_study.find(
+                "\"trajectory_validation_bindings\": [") !=
+                std::string::npos,
+        "transient Studies must persist dimensionally checked bindings "
+        "between pinned evidence signals and graph projections");
+
+    auto invalid_binding = validation_study_request;
+    invalid_binding.study_id = "invalid-trajectory-validation";
+    invalid_binding.trajectory_validation_bindings.front().signal_id =
+        "missing_signal";
+    bool invalid_binding_rejected = false;
+    try {
+        (void)service.create_study_revision(invalid_binding);
+    } catch (const ProjectRequestError&) {
+        invalid_binding_rejected = true;
+    }
+    require(
+        invalid_binding_rejected,
+        "Study publication must reject validation bindings whose "
+        "signal is absent from the selected immutable evidence");
 
     bool invalid_schema_rejected = false;
     try {

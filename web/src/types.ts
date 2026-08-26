@@ -343,8 +343,22 @@ export interface EngineeringAcceptanceSummary {
   criteria: EngineeringAcceptanceResult[]
 }
 
+export interface StudyTrajectoryValidationBinding {
+  id: string
+  artifact_revision_id: string
+  signal_id: string
+  projection_id: string
+  comparison: 'absolute' | 'projected_change'
+  time_offset_si: number
+  baseline_time_si: number
+  absolute_tolerance_si: number
+  relative_tolerance: number
+  uncertainty_multiplier: number
+  maximum_interpolation_gap_si: number
+}
+
 export interface StudyRevision {
-  schema_version: 'thermox.study_revision/v4'
+  schema_version: 'thermox.study_revision/v5'
   study_revision_id: string
   study_id: string
   project_id: string
@@ -359,6 +373,7 @@ export interface StudyRevision {
   artifact_operating_envelopes: ArtifactOperatingEnvelope[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
+  trajectory_validation_bindings: StudyTrajectoryValidationBinding[]
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
@@ -390,7 +405,7 @@ export interface StudyRevisionList {
 }
 
 export interface CreateStudyRevision {
-  schema_version: 'thermox.study_revision.create/v4'
+  schema_version: 'thermox.study_revision.create/v5'
   study_id: string
   parent_study_revision_id: string
   model_revision_id: string
@@ -401,6 +416,7 @@ export interface CreateStudyRevision {
   artifact_operating_envelopes: ArtifactOperatingEnvelope[]
   result_projections: ResultProjection[]
   acceptance_criteria: EngineeringAcceptanceCriterion[]
+  trajectory_validation_bindings: StudyTrajectoryValidationBinding[]
 }
 
 export interface CalibrationDocument {

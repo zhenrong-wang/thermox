@@ -82,7 +82,8 @@ The current synchronous service exposes:
   idempotency keys,
   optimistic revisions, worker claims, revision-source execution provenance, and result-artifact
   manifests.
-- `thermox.study_revision/v4` artifact-generic, dimensioned operating envelopes bound by the
+- `thermox.study_revision/v5` artifact-generic operating envelopes and trajectory-validation
+  bindings bound by the
   service to performance maps, correlations, and regime maps before execution.
 - `thermox.reconciliation_revision/v1` immutable constraint/held-out Study bindings, canonical
   adjustable/observation definitions, hard-versus-weighted mode,

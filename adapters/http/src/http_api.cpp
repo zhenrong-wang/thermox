@@ -1582,6 +1582,61 @@ parse_acceptance_criteria(
     return result;
 }
 
+std::vector<service::StudyTrajectoryValidationBinding>
+parse_trajectory_validation_bindings(
+    const boost::property_tree::ptree& tree) {
+    const std::set<std::string> fields = {
+        "id", "artifact_revision_id", "signal_id", "projection_id",
+        "comparison", "time_offset_si", "baseline_time_si",
+        "absolute_tolerance_si", "relative_tolerance",
+        "uncertainty_multiplier", "maximum_interpolation_gap_si",
+    };
+    std::vector<service::StudyTrajectoryValidationBinding> result;
+    for (const auto& [key, value] : tree) {
+        if (!key.empty()) {
+            throw std::invalid_argument(
+                "trajectory_validation_bindings must be an array");
+        }
+        for (const auto& [field, unused] : value) {
+            (void)unused;
+            if (!fields.contains(field)) {
+                throw std::invalid_argument(
+                    "unknown trajectory-validation binding field: " +
+                    field);
+            }
+        }
+        service::StudyTrajectoryValidationBinding binding;
+        binding.id = value.get<std::string>("id", "");
+        binding.artifact_revision_id =
+            value.get<std::string>("artifact_revision_id", "");
+        binding.signal_id =
+            value.get<std::string>("signal_id", "");
+        binding.projection_id =
+            value.get<std::string>("projection_id", "");
+        try {
+            binding.comparison =
+                service::trajectory_comparison_from_string(
+                    value.get<std::string>("comparison", "absolute"));
+        } catch (const service::ValidationSeriesError& error) {
+            throw std::invalid_argument(error.what());
+        }
+        binding.time_offset_si =
+            value.get<double>("time_offset_si", 0.0);
+        binding.baseline_time_si =
+            value.get<double>("baseline_time_si", 0.0);
+        binding.absolute_tolerance_si =
+            value.get<double>("absolute_tolerance_si", 0.0);
+        binding.relative_tolerance =
+            value.get<double>("relative_tolerance", 0.0);
+        binding.uncertainty_multiplier =
+            value.get<double>("uncertainty_multiplier", 0.0);
+        binding.maximum_interpolation_gap_si = value.get<double>(
+            "maximum_interpolation_gap_si", 0.0);
+        result.push_back(std::move(binding));
+    }
+    return result;
+}
+
 service::CreateRunConfigurationRevisionRequest
 parse_create_run_configuration_request(
     const Request& request) {
@@ -1650,7 +1705,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         "model_revision_id", "case_revision_id", "intent",
         "artifact_revision_ids", "result_projections",
         "acceptance_criteria", "artifact_qualification_requirements",
-        "artifact_operating_envelopes",
+        "artifact_operating_envelopes", "trajectory_validation_bindings",
     };
     for (const auto& [key, unused] : tree) {
         (void)unused;
@@ -1660,7 +1715,7 @@ service::CreateStudyRevisionRequest parse_create_study_request(
         }
     }
     if (tree.get<std::string>("schema_version", "") !=
-        "thermox.study_revision.create/v4") {
+        "thermox.study_revision.create/v5") {
         throw std::invalid_argument(
             "unsupported study create schema_version");
     }
@@ -1813,6 +1868,11 @@ service::CreateStudyRevisionRequest parse_create_study_request(
             tree.get_child_optional("acceptance_criteria")) {
         command.acceptance_criteria =
             parse_acceptance_criteria(*criteria);
+    }
+    if (const auto bindings =
+            tree.get_child_optional("trajectory_validation_bindings")) {
+        command.trajectory_validation_bindings =
+            parse_trajectory_validation_bindings(*bindings);
     }
     return command;
 }
