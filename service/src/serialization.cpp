@@ -3346,6 +3346,71 @@ std::string serialize_small_signal_linearization_response_json(
         out << '}';
     }
     out << ']';
+    out << ",\n  \"nonlinear_trajectory_probes\": [";
+    for (std::size_t probe_index = 0;
+         probe_index < response.nonlinear_trajectory_probes.size();
+         ++probe_index) {
+        if (probe_index != 0U) out << ", ";
+        const auto& probe =
+            response.nonlinear_trajectory_probes[probe_index];
+        const auto number_array = [&](const auto& values) {
+            out << '[';
+            for (std::size_t index = 0;
+                 index < values.size(); ++index) {
+                if (index != 0U) out << ", ";
+                json_number(out, values[index]);
+            }
+            out << ']';
+        };
+        out << "{\"success\": "
+            << (probe.success ? "true" : "false")
+            << ", \"passed\": "
+            << (probe.passed ? "true" : "false")
+            << ", \"state_perturbations\": ";
+        number_array(probe.state_perturbations);
+        out << ", \"input_perturbations\": ";
+        number_array(probe.input_perturbations);
+        out << ", \"samples\": [";
+        for (std::size_t sample_index = 0;
+             sample_index < probe.samples.size(); ++sample_index) {
+            if (sample_index != 0U) out << ", ";
+            const auto& sample = probe.samples[sample_index];
+            out << "{\"time\": ";
+            json_number(out, sample.time);
+            out << ", \"states\": [";
+            for (std::size_t state_index = 0;
+                 state_index < sample.states.size(); ++state_index) {
+                if (state_index != 0U) out << ", ";
+                const auto& state = sample.states[state_index];
+                out << "{\"state_name\": ";
+                json_string(out, state.state_name);
+                out << ", \"linear_change\": ";
+                json_number(out, state.linear_change);
+                out << ", \"nonlinear_change\": ";
+                json_number(out, state.nonlinear_change);
+                out << ", \"absolute_error\": ";
+                json_number(out, state.absolute_error);
+                out << ", \"normalized_absolute_error\": ";
+                json_number(out, state.normalized_absolute_error);
+                out << ", \"relative_error\": ";
+                json_number(out, state.relative_error);
+                out << '}';
+            }
+            out << "]}";
+        }
+        out << "], \"maximum_normalized_absolute_error\": ";
+        json_number(out, probe.maximum_normalized_absolute_error);
+        out << ", \"maximum_relative_error\": ";
+        json_number(out, probe.maximum_relative_error);
+        out << ", \"accepted_steps\": "
+            << probe.nonlinear_diagnostics.accepted_steps
+            << ", \"rejected_steps\": "
+            << probe.nonlinear_diagnostics.rejected_steps
+            << ", \"message\": ";
+        json_string(out, probe.message);
+        out << '}';
+    }
+    out << ']';
     out << ",\n  \"diagnostics\": {\"success\": "
         << (response.diagnostics.success ? "true" : "false")
         << ", \"residual_evaluations\": "

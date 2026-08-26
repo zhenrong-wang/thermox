@@ -5517,6 +5517,15 @@ SimulationService::run_small_signal_linearization(
         provenance.settings.push_back({
             "nonlinear_response_relative_perturbation",
             request.settings.nonlinear_response_relative_perturbation});
+        provenance.settings.push_back({
+            "verify_nonlinear_trajectory",
+            request.settings.verify_nonlinear_trajectory ? 1.0 : 0.0});
+        provenance.settings.push_back({
+            "nonlinear_trajectory_duration",
+            request.settings.nonlinear_trajectory_duration});
+        provenance.settings.push_back({
+            "nonlinear_trajectory_relative_perturbation",
+            request.settings.nonlinear_trajectory_relative_perturbation});
         response.metadata = execution_metadata(
             document, request.schema_version,
             graph.case_id.value_or(""), "small_signal_linearization",
@@ -5632,6 +5641,24 @@ SimulationService::run_small_signal_linearization(
             result.diagnostics.message);
         return response;
     }
+    const auto column_perturbation = [&](
+        std::size_t variable, double relative_perturbation) {
+        const double operating_magnitude = std::abs(
+            result.operating_state[variable]);
+        const double declared_scale =
+            graph.problem.variable_scales[variable];
+        const double reference =
+            operating_magnitude > 1.0e-12 * declared_scale
+                ? operating_magnitude
+                : declared_scale;
+        double delta =
+            relative_perturbation * reference;
+        if (result.operating_state[variable] + delta >
+            graph.problem.upper_bounds[variable]) {
+            delta = -delta;
+        }
+        return delta;
+    };
     if (request.settings.verify_nonlinear_response) {
         const auto& settings = request.settings;
         if (!std::isfinite(
@@ -5655,24 +5682,6 @@ SimulationService::run_small_signal_linearization(
         probe_options.relative_tolerance =
             settings.nonlinear_response_relative_tolerance;
         probe_options.nonlinear_solver = nonlinear_options;
-        const auto perturbation = [&](std::size_t variable) {
-            const double operating_magnitude = std::abs(
-                result.operating_state[variable]);
-            const double declared_scale =
-                graph.problem.variable_scales[variable];
-            const double reference =
-                operating_magnitude > 1.0e-12 * declared_scale
-                    ? operating_magnitude
-                    : declared_scale;
-            double delta =
-                settings.nonlinear_response_relative_perturbation *
-                reference;
-            if (result.operating_state[variable] + delta >
-                graph.problem.upper_bounds[variable]) {
-                delta = -delta;
-            }
-            return delta;
-        };
         try {
             for (std::size_t column = 0;
                  column < result.differential_state_indices.size();
@@ -5680,8 +5689,9 @@ SimulationService::run_small_signal_linearization(
                 std::vector<double> state_delta(
                     result.differential_state_indices.size(), 0.0);
                 std::vector<double> input_delta(inputs.size(), 0.0);
-                state_delta[column] = perturbation(
-                    result.differential_state_indices[column]);
+                state_delta[column] = column_perturbation(
+                    result.differential_state_indices[column],
+                    settings.nonlinear_response_relative_perturbation);
                 response.nonlinear_response_probes.push_back(
                     validate_index1_dae_linearization_response(
                         graph.problem, request.settings.time,
@@ -5693,8 +5703,9 @@ SimulationService::run_small_signal_linearization(
                 std::vector<double> state_delta(
                     result.differential_state_indices.size(), 0.0);
                 std::vector<double> input_delta(inputs.size(), 0.0);
-                input_delta[column] = perturbation(
-                    inputs[column].variable);
+                input_delta[column] = column_perturbation(
+                    inputs[column].variable,
+                    settings.nonlinear_response_relative_perturbation);
                 response.nonlinear_response_probes.push_back(
                     validate_index1_dae_linearization_response(
                         graph.problem, request.settings.time,
@@ -5719,6 +5730,89 @@ SimulationService::run_small_signal_linearization(
             response.error = make_error(
                 "nonlinear_response_verification_failed",
                 "nonlinear_response_verification",
+                failed->message);
+            return response;
+        }
+    }
+    if (request.settings.verify_nonlinear_trajectory) {
+        const auto& settings = request.settings;
+        if (!std::isfinite(settings.nonlinear_trajectory_duration) ||
+            settings.nonlinear_trajectory_duration <= 0.0 ||
+            !std::isfinite(
+                settings.nonlinear_trajectory_relative_perturbation) ||
+            settings.nonlinear_trajectory_relative_perturbation <= 0.0 ||
+            settings.nonlinear_trajectory_sample_count == 0U ||
+            !std::isfinite(
+                settings.nonlinear_trajectory_absolute_normalized_tolerance) ||
+            settings.nonlinear_trajectory_absolute_normalized_tolerance < 0.0 ||
+            !std::isfinite(
+                settings.nonlinear_trajectory_relative_tolerance) ||
+            settings.nonlinear_trajectory_relative_tolerance < 0.0) {
+            response.error = make_error(
+                "invalid_nonlinear_trajectory_settings", "request",
+                "nonlinear trajectory duration and sample count must be "
+                "positive and tolerances must be finite and non-negative");
+            return response;
+        }
+        DaeLinearizationTrajectoryProbeOptions trajectory_options;
+        trajectory_options.duration =
+            settings.nonlinear_trajectory_duration;
+        trajectory_options.sample_count =
+            settings.nonlinear_trajectory_sample_count;
+        trajectory_options.absolute_normalized_tolerance =
+            settings.nonlinear_trajectory_absolute_normalized_tolerance;
+        trajectory_options.relative_tolerance =
+            settings.nonlinear_trajectory_relative_tolerance;
+        trajectory_options.nonlinear_integration.nonlinear_options =
+            nonlinear_options;
+        try {
+            for (std::size_t column = 0;
+                 column < result.differential_state_indices.size();
+                 ++column) {
+                std::vector<double> state_delta(
+                    result.differential_state_indices.size(), 0.0);
+                std::vector<double> input_delta(inputs.size(), 0.0);
+                state_delta[column] = column_perturbation(
+                    result.differential_state_indices[column],
+                    settings.nonlinear_trajectory_relative_perturbation);
+                response.nonlinear_trajectory_probes.push_back(
+                    validate_index1_dae_linearization_trajectory(
+                        graph.problem, request.settings.time,
+                        result, inputs, state_delta, input_delta,
+                        trajectory_options));
+            }
+            for (std::size_t column = 0;
+                 column < inputs.size(); ++column) {
+                std::vector<double> state_delta(
+                    result.differential_state_indices.size(), 0.0);
+                std::vector<double> input_delta(inputs.size(), 0.0);
+                input_delta[column] = column_perturbation(
+                    inputs[column].variable,
+                    settings.nonlinear_trajectory_relative_perturbation);
+                response.nonlinear_trajectory_probes.push_back(
+                    validate_index1_dae_linearization_trajectory(
+                        graph.problem, request.settings.time,
+                        result, inputs, state_delta, input_delta,
+                        trajectory_options));
+            }
+        } catch (const std::exception& ex) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "nonlinear_trajectory_verification_exception",
+                "nonlinear_trajectory_verification", ex.what());
+            return response;
+        }
+        const auto failed = std::find_if(
+            response.nonlinear_trajectory_probes.begin(),
+            response.nonlinear_trajectory_probes.end(),
+            [](const auto& probe) {
+                return !probe.success || !probe.passed;
+            });
+        if (failed != response.nonlinear_trajectory_probes.end()) {
+            response.status = OperationStatus::solver_failed;
+            response.error = make_error(
+                "nonlinear_trajectory_verification_failed",
+                "nonlinear_trajectory_verification",
                 failed->message);
             return response;
         }

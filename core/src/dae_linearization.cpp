@@ -576,4 +576,307 @@ validate_index1_dae_linearization_response(
     return result;
 }
 
+DaeLinearizationTrajectoryProbeResult
+validate_index1_dae_linearization_trajectory(
+    const DaeProblem& problem,
+    double time,
+    const DaeLinearizationResult& linearization,
+    const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<double>& state_perturbations,
+    const std::vector<double>& input_perturbations,
+    const DaeLinearizationTrajectoryProbeOptions& options) {
+    DaeLinearizationTrajectoryProbeResult result;
+    result.state_perturbations = state_perturbations;
+    result.input_perturbations = input_perturbations;
+    if (!linearization.diagnostics.success) {
+        result.message =
+            "trajectory probe requires a successful linearization";
+        return result;
+    }
+    if (!std::isfinite(time) || !std::isfinite(options.duration) ||
+        options.duration <= 0.0 || options.sample_count == 0U ||
+        options.linear_substeps_per_sample == 0U ||
+        !std::isfinite(options.absolute_normalized_tolerance) ||
+        options.absolute_normalized_tolerance < 0.0 ||
+        !std::isfinite(options.relative_tolerance) ||
+        options.relative_tolerance < 0.0) {
+        throw std::invalid_argument(
+            "trajectory probe duration and counts must be positive and "
+            "tolerances must be finite and non-negative");
+    }
+    validate_problem_vectors(
+        problem, linearization.operating_state,
+        linearization.operating_derivative);
+    const std::size_t state_count =
+        linearization.differential_state_indices.size();
+    const std::size_t input_count = inputs.size();
+    if (state_perturbations.size() != state_count ||
+        input_perturbations.size() != input_count ||
+        linearization.A.size() != state_count ||
+        linearization.B.size() != state_count ||
+        linearization.input_indices.size() != input_count) {
+        throw std::invalid_argument(
+            "trajectory probe dimensions do not match the linearization");
+    }
+    bool nonzero = false;
+    for (const double value : state_perturbations) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument(
+                "trajectory state perturbations must be finite");
+        }
+        nonzero = nonzero || value != 0.0;
+    }
+    for (std::size_t index = 0; index < input_count; ++index) {
+        if (!std::isfinite(input_perturbations[index]) ||
+            inputs[index].variable != linearization.input_indices[index] ||
+            inputs[index].fixed_residual >=
+                problem.residual_names.size()) {
+            throw std::invalid_argument(
+                "trajectory input perturbations must match the "
+                "linearization");
+        }
+        nonzero = nonzero || input_perturbations[index] != 0.0;
+    }
+    if (!nonzero) {
+        throw std::invalid_argument(
+            "trajectory probe requires a nonzero perturbation");
+    }
+    const double end_time = time + options.duration;
+    if (!std::isfinite(end_time)) {
+        throw std::invalid_argument(
+            "trajectory probe end time must be finite");
+    }
+    for (const double breakpoint : problem.time_breakpoints) {
+        if (breakpoint > time && breakpoint <= end_time) {
+            throw std::invalid_argument(
+                "trajectory probe window cannot cross a declared DAE "
+                "time breakpoint");
+        }
+    }
+
+    DaeProblem probe = problem;
+    probe.initial_state = linearization.operating_state;
+    probe.initial_derivative = linearization.operating_derivative;
+    for (std::size_t index = 0; index < state_count; ++index) {
+        probe.initial_state[
+            linearization.differential_state_indices[index]] +=
+            state_perturbations[index];
+    }
+    std::vector<std::pair<std::size_t, std::pair<std::size_t, double>>>
+        released_inputs;
+    for (std::size_t index = 0; index < input_count; ++index) {
+        const auto variable = inputs[index].variable;
+        probe.initial_state[variable] += input_perturbations[index];
+        released_inputs.push_back({
+            inputs[index].fixed_residual,
+            {variable, probe.initial_state[variable]}});
+    }
+    for (std::size_t variable = 0;
+         variable < probe.initial_state.size(); ++variable) {
+        if (probe.initial_state[variable] < probe.lower_bounds[variable] ||
+            probe.initial_state[variable] > probe.upper_bounds[variable]) {
+            throw std::invalid_argument(
+                "trajectory perturbation places variable '" +
+                problem.variable_names[variable] +
+                "' outside its bounds");
+        }
+    }
+    const auto original_residual = problem.residual;
+    probe.residual =
+        [original_residual, released_inputs](
+            double evaluation_time,
+            const std::vector<double>& state,
+            const std::vector<double>& derivative,
+            std::vector<double>& residual) {
+            auto status = original_residual(
+                evaluation_time, state, derivative, residual);
+            if (!status.ok()) return status;
+            for (const auto& [row, target] : released_inputs) {
+                residual[row] = state[target.first] - target.second;
+            }
+            return EvaluationStatus::success();
+        };
+    if (problem.residual_subset) {
+        const auto original_subset = problem.residual_subset;
+        probe.residual_subset =
+            [original_subset, released_inputs](
+                double evaluation_time,
+                const std::vector<double>& state,
+                const std::vector<double>& derivative,
+                const std::vector<std::size_t>& rows,
+                std::vector<double>& residual) {
+                auto status = original_subset(
+                    evaluation_time, state, derivative, rows, residual);
+                if (!status.ok()) return status;
+                for (std::size_t output = 0;
+                     output < rows.size(); ++output) {
+                    for (const auto& [row, target] : released_inputs) {
+                        if (rows[output] == row) {
+                            residual[output] =
+                                state[target.first] - target.second;
+                            break;
+                        }
+                    }
+                }
+                return EvaluationStatus::success();
+            };
+    }
+
+    TimeIntegrationOptions integration =
+        options.nonlinear_integration;
+    integration.start_time = time;
+    integration.end_time = end_time;
+    integration.compute_consistent_initial_conditions = true;
+    integration.required_output_times.clear();
+    const double sample_interval =
+        options.duration / static_cast<double>(options.sample_count);
+    for (std::size_t sample = 1;
+         sample <= options.sample_count; ++sample) {
+        integration.required_output_times.push_back(
+            time + sample_interval * static_cast<double>(sample));
+    }
+    integration.initial_step = std::min(
+        integration.initial_step, sample_interval);
+    integration.max_step = std::min(
+        integration.max_step, sample_interval);
+    DaeProblem nominal = problem;
+    nominal.initial_state = linearization.operating_state;
+    nominal.initial_derivative = linearization.operating_derivative;
+    const auto nominal_nonlinear = integrate_dae(nominal, integration);
+    if (!nominal_nonlinear.diagnostics.success) {
+        result.message =
+            "nominal nonlinear trajectory integration failed: " +
+            nominal_nonlinear.diagnostics.message;
+        return result;
+    }
+    const auto nonlinear = integrate_dae(probe, integration);
+    result.nonlinear_diagnostics = nonlinear.diagnostics;
+    if (!nonlinear.diagnostics.success) {
+        result.message =
+            "nonlinear trajectory probe integration failed: " +
+            nonlinear.diagnostics.message;
+        return result;
+    }
+    if (!nominal_nonlinear.events.empty() || !nonlinear.events.empty()) {
+        result.message =
+            "nonlinear trajectory probe encountered a discrete event";
+        return result;
+    }
+
+    std::vector<double> linear_state = state_perturbations;
+    double linear_time = time;
+    const auto rhs = [&](const std::vector<double>& state) {
+        std::vector<double> rate(state_count, 0.0);
+        for (std::size_t row = 0; row < state_count; ++row) {
+            for (std::size_t column = 0;
+                 column < state_count; ++column) {
+                rate[row] += linearization.A[row][column] * state[column];
+            }
+            for (std::size_t column = 0;
+                 column < input_count; ++column) {
+                rate[row] += linearization.B[row][column] *
+                    input_perturbations[column];
+            }
+        }
+        return rate;
+    };
+    const auto add_scaled = [](
+        const std::vector<double>& base,
+        const std::vector<double>& increment,
+        double scale) {
+        auto result = base;
+        for (std::size_t index = 0; index < result.size(); ++index) {
+            result[index] += scale * increment[index];
+        }
+        return result;
+    };
+    result.success = true;
+    result.passed = true;
+    for (std::size_t sample = 0;
+         sample < options.sample_count; ++sample) {
+        const double target_time =
+            integration.required_output_times[sample];
+        const double step = (target_time - linear_time) /
+            static_cast<double>(options.linear_substeps_per_sample);
+        for (std::size_t substep = 0;
+             substep < options.linear_substeps_per_sample; ++substep) {
+            const auto k1 = rhs(linear_state);
+            const auto k2 = rhs(add_scaled(linear_state, k1, 0.5 * step));
+            const auto k3 = rhs(add_scaled(linear_state, k2, 0.5 * step));
+            const auto k4 = rhs(add_scaled(linear_state, k3, step));
+            for (std::size_t index = 0;
+                 index < state_count; ++index) {
+                linear_state[index] += step / 6.0 *
+                    (k1[index] + 2.0 * k2[index] +
+                     2.0 * k3[index] + k4[index]);
+            }
+        }
+        linear_time = target_time;
+        const auto nonlinear_state = std::find_if(
+            nonlinear.trajectory.begin(), nonlinear.trajectory.end(),
+            [target_time](const auto& value) {
+                return std::abs(value.time - target_time) <=
+                    1.0e-12 * std::max(1.0, std::abs(target_time));
+            });
+        if (nonlinear_state == nonlinear.trajectory.end()) {
+            result.success = false;
+            result.passed = false;
+            result.message =
+                "nonlinear trajectory omitted a required sample time";
+            return result;
+        }
+        const auto nominal_state = std::find_if(
+            nominal_nonlinear.trajectory.begin(),
+            nominal_nonlinear.trajectory.end(),
+            [target_time](const auto& value) {
+                return std::abs(value.time - target_time) <=
+                    1.0e-12 * std::max(1.0, std::abs(target_time));
+            });
+        if (nominal_state == nominal_nonlinear.trajectory.end()) {
+            result.success = false;
+            result.passed = false;
+            result.message =
+                "nominal nonlinear trajectory omitted a required sample time";
+            return result;
+        }
+        DaeLinearizationTrajectoryProbeSample output;
+        output.time = target_time;
+        for (std::size_t index = 0; index < state_count; ++index) {
+            const auto variable =
+                linearization.differential_state_indices[index];
+            const double nonlinear_change =
+                nonlinear_state->state[variable] -
+                nominal_state->state[variable];
+            const double absolute_error = std::abs(
+                nonlinear_change - linear_state[index]);
+            const double scale = problem.variable_scales[variable];
+            const double normalized_error = absolute_error / scale;
+            const double reference = std::max(
+                std::abs(nonlinear_change),
+                std::abs(linear_state[index]));
+            const double relative_error = reference == 0.0
+                ? 0.0
+                : absolute_error / reference;
+            result.maximum_normalized_absolute_error = std::max(
+                result.maximum_normalized_absolute_error,
+                normalized_error);
+            result.maximum_relative_error = std::max(
+                result.maximum_relative_error, relative_error);
+            result.passed = result.passed &&
+                absolute_error <=
+                    options.absolute_normalized_tolerance * scale +
+                        options.relative_tolerance * reference;
+            output.states.push_back({
+                linearization.differential_state_names[index],
+                linear_state[index], nonlinear_change,
+                absolute_error, normalized_error, relative_error});
+        }
+        result.samples.push_back(std::move(output));
+    }
+    result.message = result.passed
+        ? "linear A/B trajectory agrees with the nonlinear DAE trajectory"
+        : "linear A/B trajectory differs from the nonlinear DAE trajectory";
+    return result;
+}
+
 }  // namespace thermox

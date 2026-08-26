@@ -521,6 +521,20 @@
       "maximum_zero_cross_coupling_normalized_error": 3.38485e-9,
       "result": "pass"
     },
+    "nonlinear_trajectory_verification": {
+      "independent_probes": 5,
+      "relative_perturbation": 0.0003,
+      "duration_seconds": 0.01,
+      "sample_times_seconds": [0.005, 0.01],
+      "accepted_steps_per_perturbed_probe": 5,
+      "rejected_steps_per_perturbed_probe": 0,
+      "maximum_normalized_absolute_error": 7.235572745980079e-9,
+      "maximum_raw_relative_error_percent": 3.0769835757565516,
+      "maximum_raw_relative_error_normalized_absolute_error": 5.6237013459826134e-11,
+      "maximum_relative_error_above_one_native_energy_unit_percent": 0.048549401931570805,
+      "result": "pass",
+      "declared_limit": "This compares nominal-versus-perturbed Thermox nonlinear DAE trajectories with the integrated Thermox A/B model. No public NASA time-history reference is available, so it is a finite-window self-consistency qualification rather than transient predictive validation."
+    },
     "state_matrix_A_rpm": [
       [-2.5583, 1.1149094051],
       [0.6055949727, -1.92434]
@@ -529,7 +543,7 @@
     "hp_signed_extraction_gain_rpm_s_per_hp": [0.0, 1.5171712181],
     "lp_signed_extraction_gain_rpm_s_per_hp": [0.9276316365, 0.0],
     "classification": "public_source_partial_dynamic_cross_code_reproduction",
-    "declared_limit": "All three public inputs are represented, but HP/LP extraction and fuel gains retain material cross-code differences. This does not qualify transient prediction."
+    "declared_limit": "All three public inputs are represented and the local linear model passes finite-window nonlinear self-consistency probes, but HP/LP extraction and fuel gains retain material cross-code differences and no NASA time history is compared. This does not qualify transient prediction."
   },
   "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, full-graph transient DAE composition/equilibrium hold, and a complete-input but partial small-signal cross-code reproduction against public NASA code paths. They are not independent hardware validation, net-thrust qualification, fuel-flow predictive qualification, or full transient predictive validation."
 }

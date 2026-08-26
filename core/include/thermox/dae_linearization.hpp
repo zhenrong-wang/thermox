@@ -72,6 +72,41 @@ struct DaeLinearizationResponseProbeResult {
     std::string message;
 };
 
+struct DaeLinearizationTrajectoryProbeOptions {
+    double duration{1.0e-2};
+    std::size_t sample_count{2};
+    std::size_t linear_substeps_per_sample{10};
+    double absolute_normalized_tolerance{1.0e-5};
+    double relative_tolerance{1.0e-2};
+    TimeIntegrationOptions nonlinear_integration;
+};
+
+struct DaeLinearizationTrajectoryProbeState {
+    std::string state_name;
+    double linear_change{0.0};
+    double nonlinear_change{0.0};
+    double absolute_error{0.0};
+    double normalized_absolute_error{0.0};
+    double relative_error{0.0};
+};
+
+struct DaeLinearizationTrajectoryProbeSample {
+    double time{0.0};
+    std::vector<DaeLinearizationTrajectoryProbeState> states;
+};
+
+struct DaeLinearizationTrajectoryProbeResult {
+    bool success{false};
+    bool passed{false};
+    std::vector<double> state_perturbations;
+    std::vector<double> input_perturbations;
+    std::vector<DaeLinearizationTrajectoryProbeSample> samples;
+    double maximum_normalized_absolute_error{0.0};
+    double maximum_relative_error{0.0};
+    TimeIntegrationDiagnostics nonlinear_diagnostics;
+    std::string message;
+};
+
 // Linearize an initialized index-1 DAE by assembling the local DAE tangent
 // system and eliminating algebraic variables and differential rates through
 // one factorization. Input fixed-value residuals must be supplied explicitly.
@@ -94,5 +129,17 @@ validate_index1_dae_linearization_response(
     const std::vector<double>& state_perturbations,
     const std::vector<double>& input_perturbations,
     const DaeLinearizationResponseProbeOptions& options = {});
+
+// Compare a finite-duration nonlinear DAE trajectory with the integrated
+// local A/B model for fixed input and initial differential-state changes.
+DaeLinearizationTrajectoryProbeResult
+validate_index1_dae_linearization_trajectory(
+    const DaeProblem& problem,
+    double time,
+    const DaeLinearizationResult& linearization,
+    const std::vector<DaeLinearizationInput>& inputs,
+    const std::vector<double>& state_perturbations,
+    const std::vector<double>& input_perturbations,
+    const DaeLinearizationTrajectoryProbeOptions& options = {});
 
 }  // namespace thermox

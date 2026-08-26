@@ -415,6 +415,17 @@ difference is 0.0156%; nominally zero cross-couplings remain below `3.4e-9` of t
 scale. This validates the local A/B representation against Thermox's own nonlinear equations; it
 does not remove the separately reported differences from NASA's A/B matrices.
 
+A third opt-in gate carries the same five independent perturbations through finite nonlinear DAE
+trajectories and integrates the A/B model over the identical window. It compares the perturbed
+trajectory with a separately integrated nominal trajectory, so the operating point's nonzero
+nominal derivative is not mistaken for perturbation response. At 0.005 s and 0.010 s, all five
+trajectory probes pass with five accepted nonlinear steps and no rejection per perturbed run. The
+largest normalized absolute state discrepancy is `7.24e-9`. The largest raw relative discrepancy,
+3.08%, belongs to a near-zero cross-coupling with only `5.62e-11` normalized absolute error; the
+largest relative discrepancy among responses exceeding one native energy unit is 0.0486%. This is
+a finite-window self-consistency qualification of Thermox's nonlinear DAE and its local A/B model,
+not comparison with a NASA time history.
+
 Thermox's generic index-1 DAE tangent linearizer releases fuel flow plus independent HP and LP
 extractions as exogenous inputs, forms the scaled local response Jacobian, factors it once, and
 solves five sensitivity right-hand sides. In native rotor-energy coordinates it obtains:

@@ -1162,6 +1162,40 @@ void test_index_one_dae_small_signal_linearization() {
         rejected_probe.success && !rejected_probe.passed &&
             rejected_probe.states[0].relative_error > 0.4,
         "nonlinear response probe rejects an incorrect A column");
+    thermox::DaeLinearizationTrajectoryProbeOptions trajectory_options;
+    trajectory_options.duration = 0.1;
+    trajectory_options.sample_count = 2;
+    trajectory_options.nonlinear_integration.initial_step = 0.01;
+    trajectory_options.nonlinear_integration.max_step = 0.05;
+    const auto trajectory =
+        thermox::validate_index1_dae_linearization_trajectory(
+            problem, 0.0, result, inputs,
+            {0.01}, {0.02}, trajectory_options);
+    require(
+        trajectory.success && trajectory.passed &&
+            trajectory.samples.size() == 2,
+        trajectory.message + " max_normalized_error=" +
+            std::to_string(
+                trajectory.maximum_normalized_absolute_error) +
+            " max_relative_error=" +
+            std::to_string(trajectory.maximum_relative_error) +
+            (trajectory.samples.empty()
+                 ? std::string{}
+                 : " linear=" + std::to_string(
+                       trajectory.samples[0].states[0].linear_change) +
+                       " nonlinear=" + std::to_string(
+                       trajectory.samples[0].states[0].nonlinear_change)));
+    require(
+        trajectory.maximum_normalized_absolute_error < 1.0e-6,
+        "integrated linear and nonlinear trajectories agree for a "
+        "linear DAE");
+    const auto rejected_trajectory =
+        thermox::validate_index1_dae_linearization_trajectory(
+            problem, 0.0, incorrect, inputs,
+            {0.01}, {0.0}, trajectory_options);
+    require(
+        rejected_trajectory.success && !rejected_trajectory.passed,
+        "trajectory probe rejects an incorrect A matrix");
 }
 
 }  // namespace

@@ -2521,6 +2521,7 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
     request.settings.relative_perturbation = 3.0e-4;
     request.settings.verify_jacobian = true;
     request.settings.verify_nonlinear_response = true;
+    request.settings.verify_nonlinear_trajectory = true;
     request.settings.jacobian_verification.absolute_tolerance = 2.0e-6;
     request.settings.jacobian_verification.relative_tolerance = 5.0e-4;
     request.settings.nonlinear_solver.residual_tolerance = 1.0e-8;
@@ -2570,6 +2571,17 @@ void test_nasa_agtf30_partial_small_signal_benchmark() {
                 }),
         "NASA A/B columns must predict independently perturbed nonlinear "
         "DAE rate responses");
+    require(
+        response.nonlinear_trajectory_probes.size() == 5 &&
+            std::all_of(
+                response.nonlinear_trajectory_probes.begin(),
+                response.nonlinear_trajectory_probes.end(),
+                [](const auto& probe) {
+                    return probe.success && probe.passed &&
+                        probe.samples.size() == 2;
+                }),
+        "NASA A/B columns must predict finite-window nonlinear DAE "
+        "trajectories");
 
     constexpr double radians_per_second_per_rpm =
         2.0 * 3.14159265358979323846 / 60.0;
@@ -7783,6 +7795,7 @@ void test_small_signal_linearization_service() {
     request.input_variables = {"heater.outlet.Q_dot"};
     request.settings.verify_jacobian = true;
     request.settings.verify_nonlinear_response = true;
+    request.settings.verify_nonlinear_trajectory = true;
     const auto response =
         service.run_small_signal_linearization(request);
     require(
@@ -7820,6 +7833,12 @@ void test_small_signal_linearization_service() {
             response.nonlinear_response_probes[1].passed,
         "small-signal service must validate state and input columns "
         "against consistent nonlinear DAE responses");
+    require(
+        response.nonlinear_trajectory_probes.size() == 2 &&
+            response.nonlinear_trajectory_probes[0].passed &&
+            response.nonlinear_trajectory_probes[1].passed,
+        "small-signal service must validate state and input columns "
+        "over finite nonlinear trajectories");
     const auto json = thermox::service::
         serialize_small_signal_linearization_response_json(response);
     require(
@@ -7834,6 +7853,8 @@ void test_small_signal_linearization_service() {
             json.find("\"derivative_jacobian\": ") !=
                 std::string::npos &&
             json.find("\"nonlinear_response_probes\": [") !=
+                std::string::npos &&
+            json.find("\"nonlinear_trajectory_probes\": [") !=
                 std::string::npos,
         "small-signal JSON must preserve named matrix coordinates");
 }

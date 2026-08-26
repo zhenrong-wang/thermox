@@ -1310,6 +1310,12 @@ struct SmallSignalLinearizationSettings {
     double nonlinear_response_relative_perturbation{3.0e-4};
     double nonlinear_response_absolute_normalized_tolerance{1.0e-5};
     double nonlinear_response_relative_tolerance{2.0e-2};
+    bool verify_nonlinear_trajectory{false};
+    double nonlinear_trajectory_relative_perturbation{3.0e-4};
+    double nonlinear_trajectory_duration{1.0e-2};
+    std::size_t nonlinear_trajectory_sample_count{2};
+    double nonlinear_trajectory_absolute_normalized_tolerance{1.0e-5};
+    double nonlinear_trajectory_relative_tolerance{2.0e-2};
     SteadySolverSettings nonlinear_solver;
 };
 
@@ -1343,6 +1349,8 @@ struct SmallSignalLinearizationResponse {
     DaeJacobianVerificationReport jacobian_verification;
     std::vector<DaeLinearizationResponseProbeResult>
         nonlinear_response_probes;
+    std::vector<DaeLinearizationTrajectoryProbeResult>
+        nonlinear_trajectory_probes;
 
     [[nodiscard]] bool succeeded() const {
         return status == OperationStatus::succeeded;

@@ -154,6 +154,9 @@ Delivered:
    implicit integration, and independent state/state-rate derivative verification. ✅
 9. Finite-perturbation nonlinear DAE response probes for every A/B column, with service/CLI
    acceptance gates and public AGTF30 regression evidence. ✅
+10. Finite-window nominal-versus-perturbed nonlinear DAE trajectory probes against integrated A/B
+    responses, with exact sample times, breakpoint/event guards, service/CLI gates, and public
+    AGTF30 self-consistency evidence. ✅
 
 ## Reusable dynamic equipment primitives
 

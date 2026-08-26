@@ -186,6 +186,16 @@ the complete nonlinear DAE consistency with the perturbed differential states an
 held fixed, and compares the actual differential-state rate change with `A·Δx + B·Δu`. Together,
 the checks distinguish derivative implementation errors from finite-amplitude linearization error.
 
+`validate_index1_dae_linearization_trajectory` extends that check over a finite time window. It
+integrates separate nominal and perturbed nonlinear DAE trajectories at exact requested sample
+times, integrates `δx_dot = A·δx + B·δu` over the same intervals, and compares their state
+deviations in declared state scales. Comparing two nonlinear trajectories is essential when the
+linearization point has a nonzero nominal state derivative. The validator rejects windows that
+cross declared time breakpoints or encounter discrete events, since one fixed A/B model does not
+represent those discontinuities. Service and CLI gates can exercise every state and input column
+independently; relative and scale-normalized absolute tolerances jointly protect both material
+responses and nominally zero cross-couplings.
+
 ## Nonlinear globalization
 
 `solve_newton` supports two execution policies without changing the compiled physical equations:
