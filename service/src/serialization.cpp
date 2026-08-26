@@ -3493,6 +3493,47 @@ std::string serialize_small_signal_linearization_response_json(
     return out.str();
 }
 
+std::string serialize_small_signal_model_family_response_json(
+    const SmallSignalModelFamilyResponse& response) {
+    std::ostringstream out;
+    const auto string_array = [&](const auto& values) {
+        out << '[';
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            if (index != 0U) out << ", ";
+            json_string(out, values[index]);
+        }
+        out << ']';
+    };
+    out << "{\n  \"schema_version\": ";
+    json_string(out, result_schema_v5);
+    out << ",\n  \"contract_version\": ";
+    json_string(out, response.contract_version);
+    out << ",\n  \"status\": ";
+    json_string(out, to_string(response.status));
+    out << ",\n  \"error\": ";
+    error_json(out, response.error);
+    out << ",\n  \"states\": ";
+    string_array(response.state_names);
+    out << ",\n  \"inputs\": ";
+    string_array(response.input_names);
+    out << ",\n  \"outputs\": ";
+    string_array(response.output_names);
+    out << ",\n  \"operating_points\": [";
+    for (std::size_t index = 0;
+         index < response.operating_points.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& point = response.operating_points[index];
+        out << "{\"case_id\": ";
+        json_string(out, point.case_id);
+        out << ", \"linearization\": "
+            << serialize_small_signal_linearization_response_json(
+                   point.linearization)
+            << '}';
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_result_summary_json(
     const ResultSummary& summary) {
     std::ostringstream out;

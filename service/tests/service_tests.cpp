@@ -8054,6 +8054,101 @@ void test_small_signal_linearization_service() {
         "ladder before running nonlinear probes");
 }
 
+void test_small_signal_model_family_service() {
+    thermox::service::SmallSignalModelFamilyRequest request;
+    request.model_json = read_source_file(
+        "core/examples/lumped_thermal_storage.json");
+    request.case_ids = {"charge", "charge_high_capacity"};
+    request.input_variables = {"heater.outlet.Q_dot"};
+    request.output_variables = {
+        "store.temperature", "heater.outlet.Q_dot"};
+    const auto response = thermox::service::SimulationService{}
+        .run_small_signal_model_family(request);
+    require(
+        response.succeeded() &&
+            response.contract_version ==
+                "thermox.index1-model-family/v1" &&
+            response.operating_points.size() == 2 &&
+            response.state_names ==
+                std::vector<std::string>{"store.temperature"} &&
+            response.input_names == request.input_variables &&
+            response.output_names == request.output_variables,
+        "model-family service must preserve common ordered model "
+        "identities across independently initialized cases: " +
+            response.error.message);
+    require(
+        response.operating_points[0].case_id == "charge" &&
+            response.operating_points[1].case_id ==
+                "charge_high_capacity" &&
+            std::abs(
+                response.operating_points[0].linearization.B[0][0] -
+                1.0 / 1.5e6) < 1.0e-12 &&
+            std::abs(
+                response.operating_points[1].linearization.B[0][0] -
+                1.0 / 3.0e6) < 1.0e-12,
+        "model-family points must retain distinct case-owned physical "
+        "parameters and local matrices");
+    const auto json = thermox::service::
+        serialize_small_signal_model_family_response_json(response);
+    require(
+        json.find("\"operating_points\": [") != std::string::npos &&
+            json.find("\"case_id\": \"charge\"") !=
+                std::string::npos &&
+            json.find("\"case_id\": \"charge_high_capacity\"") !=
+                std::string::npos &&
+            json.find("\"linearization\": {") !=
+                std::string::npos,
+        "model-family JSON must embed auditable per-point "
+        "linearization results");
+
+    auto duplicate = request;
+    duplicate.case_ids = {"charge", "charge"};
+    const auto rejected = thermox::service::SimulationService{}
+        .run_small_signal_model_family(duplicate);
+    require(
+        !rejected.succeeded() &&
+            rejected.error.code == "invalid_operating_points" &&
+            rejected.operating_points.empty(),
+        "model-family service must reject duplicate operating points "
+        "before executing them");
+
+    request.model_json = read_source_file(
+        "core/examples/"
+        "dynamic_bidirectional_regime_spanning_rigid_volume.json");
+    request.case_ids = {
+        "liquid_to_two_phase", "two_phase_to_liquid",
+        "two_phase_to_vapor", "vapor_to_two_phase"};
+    request.input_variables = {"thermal_boundary.outlet.Q_dot"};
+    request.output_variables = {
+        "vessel.pressure", "vessel.enthalpy"};
+    const auto regimes = thermox::service::SimulationService{}
+        .run_small_signal_model_family(request);
+    require(
+        regimes.succeeded() && regimes.operating_points.size() == 4 &&
+            regimes.state_names == std::vector<std::string>{
+                "vessel.mass", "vessel.total_energy"},
+        "model-family service must linearize independently initialized "
+        "liquid, two-phase, and vapor operating points: " +
+            regimes.error.message);
+    require(
+        regimes.operating_points[0].linearization.C[0][0] > 0.0 &&
+            regimes.operating_points[1].linearization.C[0][0] < 0.0 &&
+            regimes.operating_points[2].linearization.C[0][0] < 0.0 &&
+            regimes.operating_points[3].linearization.C[0][0] < 0.0 &&
+            std::all_of(
+                regimes.operating_points.begin(),
+                regimes.operating_points.end(),
+                [](const auto& point) {
+                    return std::abs(
+                        point.linearization.B[0][0]) < 1.0e-12 &&
+                        std::abs(
+                            point.linearization.B[1][0] - 1.0) <
+                            1.0e-12;
+                }),
+        "model-family matrices must retain regime-dependent property "
+        "sensitivities and the common energy-input balance");
+}
+
 void test_structured_compilation_failure() {
     thermox::service::SimulationService service;
     thermox::service::SteadySimulationRequest request;
@@ -8728,6 +8823,7 @@ int main() {
         test_explicit_system_boundary_balance();
         test_transient_service();
         test_small_signal_linearization_service();
+        test_small_signal_model_family_service();
         test_structured_compilation_failure();
         test_invalid_solver_settings();
         test_system_agnostic_result_projection();

@@ -56,6 +56,8 @@ The current synchronous service exposes:
   and per-output absolute, relative, and declared-scale-normalized discrepancies;
 - ordered multi-amplitude disturbance ladders with structured per-level response and trajectory
   linearity-envelope summaries, exposed through the service contract and thin CLI;
+- ordered multi-operating-point model families that independently execute immutable cases, embed
+  each complete local model, and reject inconsistent state/input/output coordinate systems;
 - exact transient output schedules and mixed steady/transient held-out engineering-study evidence;
 - typed case-owned piecewise-linear and right-continuous sample-and-hold input schedules compiled
   into ordinary graph boundary equations, with problem-owned knot/discontinuity times enforced by

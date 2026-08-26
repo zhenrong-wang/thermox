@@ -60,6 +60,12 @@ void print_usage(std::ostream& out) {
            " [--trust-region-initial-radius <value>]"
            " [--trust-region-minimum-radius <value>]"
            " [--format text|json]\n"
+        << "  thermox_cli linearize-family --model <path>"
+           " --case <id> --case <id>..."
+           " --input-variable <graph-variable>..."
+           " [--output-variable <graph-variable>]..."
+           " [same linearization and verification options as linearize]"
+           " [--format text|json]\n"
         << "  thermox_cli performance-test --input <path>"
            " [--format text|json]\n"
         << "  thermox_cli study --input <path>"
@@ -279,6 +285,21 @@ void print_small_signal_text(
     print_matrix("D", response.D);
 }
 
+void print_small_signal_family_text(
+    const thermox::service::SmallSignalModelFamilyResponse& response) {
+    std::cout << "status: "
+              << thermox::service::to_string(response.status)
+              << "\noperating_points: "
+              << response.operating_points.size() << '\n';
+    if (!response.error.code.empty()) {
+        std::cout << "error: " << response.error.message << '\n';
+    }
+    for (const auto& point : response.operating_points) {
+        std::cout << "\ncase: " << point.case_id << '\n';
+        print_small_signal_text(point.linearization);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -291,6 +312,7 @@ int main(int argc, char** argv) {
     std::string model_path;
     std::string input_path;
     std::string case_id;
+    std::vector<std::string> case_ids;
     std::string calibration_id;
     std::string reconciliation_id;
     std::string max_iterations_text;
@@ -337,6 +359,7 @@ int main(int argc, char** argv) {
             input_path = argv[++i];
         } else if (arg == "--case" && i + 1 < argc) {
             case_id = argv[++i];
+            case_ids.push_back(case_id);
         } else if (arg == "--performance-map" && i + 1 < argc) {
             performance_map_paths.emplace_back(argv[++i]);
         } else if (arg == "--input-variable" && i + 1 < argc) {
@@ -439,13 +462,24 @@ int main(int argc, char** argv) {
     }
 
     if (command != "solve" && command != "simulate" &&
-        command != "linearize" &&
+        command != "linearize" && command != "linearize-family" &&
         command != "performance-test" && command != "study" &&
         command != "iso2314-equivalent-cooling" &&
         command != "calibrate" &&
         command != "reconcile") {
         std::cerr << "Unknown command: " << command << "\n";
         print_usage(std::cerr);
+        return 2;
+    }
+    const bool linearization_command =
+        command == "linearize" || command == "linearize-family";
+    if (command == "linearize-family" && case_ids.size() < 2U) {
+        std::cerr << "linearize-family requires at least two --case IDs\n";
+        return 2;
+    }
+    if (command != "linearize-family" && case_ids.size() > 1U) {
+        std::cerr << "multiple --case IDs are only valid for "
+                     "linearize-family\n";
         return 2;
     }
     if (command != "performance-test" && command != "study" &&
@@ -485,16 +519,16 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (command != "solve" && command != "simulate" &&
-        command != "linearize" &&
+        !linearization_command &&
         !performance_map_paths.empty()) {
         std::cerr << "--performance-map is only valid for solve or "
-                     "simulate or linearize\n";
+                     "simulate or linearization commands\n";
         return 2;
     }
-    if (command != "solve" && command != "linearize" &&
+    if (command != "solve" && !linearization_command &&
         !residual_tolerance_text.empty()) {
         std::cerr << "--residual-tolerance is only valid for solve or "
-                     "linearize\n";
+                     "linearization commands\n";
         return 2;
     }
     if (command != "solve" &&
@@ -507,35 +541,37 @@ int main(int argc, char** argv) {
         std::cerr << "Missing required --end-time for simulate\n";
         return 2;
     }
-    if (command == "linearize" && input_variables.empty()) {
-        std::cerr << "Missing required --input-variable for linearize\n";
+    if (linearization_command && input_variables.empty()) {
+        std::cerr << "Missing required --input-variable for "
+                     "linearization\n";
         return 2;
     }
-    if (command != "linearize" && !input_variables.empty()) {
-        std::cerr << "--input-variable is only valid for linearize\n";
+    if (!linearization_command && !input_variables.empty()) {
+        std::cerr << "--input-variable is only valid for linearization\n";
         return 2;
     }
-    if (command != "linearize" && !output_variables.empty()) {
-        std::cerr << "--output-variable is only valid for linearize\n";
+    if (!linearization_command && !output_variables.empty()) {
+        std::cerr << "--output-variable is only valid for linearization\n";
         return 2;
     }
-    if (command != "linearize" && !relative_perturbation_text.empty()) {
-        std::cerr << "--relative-perturbation is only valid for linearize\n";
+    if (!linearization_command && !relative_perturbation_text.empty()) {
+        std::cerr << "--relative-perturbation is only valid for "
+                     "linearization\n";
         return 2;
     }
-    if (command != "linearize" && verify_jacobian) {
-        std::cerr << "--verify-jacobian is only valid for linearize\n";
+    if (!linearization_command && verify_jacobian) {
+        std::cerr << "--verify-jacobian is only valid for linearization\n";
         return 2;
     }
-    if (command != "linearize" &&
+    if (!linearization_command &&
         (!jacobian_fd_epsilon_text.empty() ||
          !jacobian_absolute_tolerance_text.empty() ||
          !jacobian_relative_tolerance_text.empty())) {
         std::cerr << "Jacobian verification tolerances are only valid "
-                     "for linearize\n";
+                     "for linearization commands\n";
         return 2;
     }
-    if (command == "linearize" && !verify_jacobian &&
+    if (linearization_command && !verify_jacobian &&
         (!jacobian_fd_epsilon_text.empty() ||
          !jacobian_absolute_tolerance_text.empty() ||
          !jacobian_relative_tolerance_text.empty())) {
@@ -543,20 +579,20 @@ int main(int argc, char** argv) {
                      "--verify-jacobian\n";
         return 2;
     }
-    if (command != "linearize" && verify_nonlinear_response) {
+    if (!linearization_command && verify_nonlinear_response) {
         std::cerr << "--verify-nonlinear-response is only valid for "
-                     "linearize\n";
+                     "linearization commands\n";
         return 2;
     }
-    if (command != "linearize" &&
+    if (!linearization_command &&
         (!nonlinear_response_perturbation_texts.empty() ||
          !nonlinear_response_absolute_tolerance_text.empty() ||
          !nonlinear_response_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear response options are only valid for "
-                     "linearize\n";
+                     "linearization commands\n";
         return 2;
     }
-    if (command == "linearize" && !verify_nonlinear_response &&
+    if (linearization_command && !verify_nonlinear_response &&
         (!nonlinear_response_perturbation_texts.empty() ||
          !nonlinear_response_absolute_tolerance_text.empty() ||
          !nonlinear_response_relative_tolerance_text.empty())) {
@@ -564,20 +600,20 @@ int main(int argc, char** argv) {
                      "--verify-nonlinear-response\n";
         return 2;
     }
-    if (command != "linearize" && verify_nonlinear_trajectory) {
+    if (!linearization_command && verify_nonlinear_trajectory) {
         std::cerr << "--verify-nonlinear-trajectory is only valid for "
-                     "linearize\n";
+                     "linearization commands\n";
         return 2;
     }
-    if (command != "linearize" &&
+    if (!linearization_command &&
         (!nonlinear_trajectory_duration_text.empty() ||
          !nonlinear_trajectory_perturbation_texts.empty() ||
          !nonlinear_trajectory_relative_tolerance_text.empty())) {
         std::cerr << "Nonlinear trajectory options are only valid for "
-                     "linearize\n";
+                     "linearization commands\n";
         return 2;
     }
-    if (command == "linearize" && !verify_nonlinear_trajectory &&
+    if (linearization_command && !verify_nonlinear_trajectory &&
         (!nonlinear_trajectory_duration_text.empty() ||
          !nonlinear_trajectory_perturbation_texts.empty() ||
          !nonlinear_trajectory_relative_tolerance_text.empty())) {
@@ -844,7 +880,7 @@ int main(int argc, char** argv) {
             return response.succeeded() ? 0 : 1;
         }
 
-        if (command == "linearize") {
+        if (linearization_command) {
             thermox::service::SmallSignalLinearizationRequest request;
             request.model_json = model_json;
             request.case_id = case_id;
@@ -963,6 +999,31 @@ int main(int argc, char** argv) {
                     .trust_region_minimum_radius = parse_positive_number(
                         trust_region_minimum_radius_text,
                         "--trust-region-minimum-radius");
+            }
+            if (command == "linearize-family") {
+                thermox::service::SmallSignalModelFamilyRequest
+                    family_request;
+                family_request.schema_version = request.schema_version;
+                family_request.model_json = std::move(request.model_json);
+                family_request.case_ids = case_ids;
+                family_request.input_variables =
+                    std::move(request.input_variables);
+                family_request.output_variables =
+                    std::move(request.output_variables);
+                family_request.settings = request.settings;
+                family_request.artifacts = std::move(request.artifacts);
+                family_request.components = std::move(request.components);
+                const auto response =
+                    service.run_small_signal_model_family(
+                        family_request);
+                if (format == "json") {
+                    std::cout << thermox::service::
+                        serialize_small_signal_model_family_response_json(
+                            response);
+                } else {
+                    print_small_signal_family_text(response);
+                }
+                return response.succeeded() ? 0 : 1;
             }
             const auto response =
                 service.run_small_signal_linearization(request);

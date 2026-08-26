@@ -85,6 +85,18 @@ add_test(
         --nonlinear-trajectory-perturbation 1e-4
         --nonlinear-trajectory-perturbation 3e-4
         --format json)
+add_test(
+    NAME platform_small_signal_model_family_cli
+    COMMAND thermox_cli linearize-family
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_bidirectional_regime_spanning_rigid_volume.json
+        --case liquid_to_two_phase
+        --case two_phase_to_liquid
+        --case two_phase_to_vapor
+        --case vapor_to_two_phase
+        --input-variable thermal_boundary.outlet.Q_dot
+        --output-variable vessel.pressure
+        --output-variable vessel.enthalpy
+        --format json)
 
 add_executable(thermox_platform_tests platform/tests/platform_tests.cpp)
 target_link_libraries(thermox_platform_tests PRIVATE thermox_platform)

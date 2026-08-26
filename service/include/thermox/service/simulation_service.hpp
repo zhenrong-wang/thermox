@@ -1375,6 +1375,37 @@ struct SmallSignalLinearizationResponse {
     }
 };
 
+struct SmallSignalModelFamilyRequest {
+    std::string schema_version{command_schema_v1};
+    std::string model_json;
+    std::vector<std::string> case_ids;
+    std::vector<std::string> input_variables;
+    std::vector<std::string> output_variables;
+    SmallSignalLinearizationSettings settings;
+    SimulationArtifactBundle artifacts;
+    SimulationComponentBundle components;
+};
+
+struct SmallSignalModelFamilyPoint {
+    std::string case_id;
+    SmallSignalLinearizationResponse linearization;
+};
+
+struct SmallSignalModelFamilyResponse {
+    std::string contract_version{
+        "thermox.index1-model-family/v1"};
+    OperationStatus status{OperationStatus::invalid_request};
+    ServiceError error;
+    std::vector<std::string> state_names;
+    std::vector<std::string> input_names;
+    std::vector<std::string> output_names;
+    std::vector<SmallSignalModelFamilyPoint> operating_points;
+
+    [[nodiscard]] bool succeeded() const {
+        return status == OperationStatus::succeeded;
+    }
+};
+
 struct StudyObservation {
     std::string id;
     std::string target;
@@ -1639,6 +1670,9 @@ public:
     [[nodiscard]] SmallSignalLinearizationResponse
     run_small_signal_linearization(
         const SmallSignalLinearizationRequest& request) const;
+    [[nodiscard]] SmallSignalModelFamilyResponse
+    run_small_signal_model_family(
+        const SmallSignalModelFamilyRequest& request) const;
 
 private:
     struct Impl;

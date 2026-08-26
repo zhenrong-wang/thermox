@@ -5935,4 +5935,80 @@ SimulationService::run_small_signal_linearization(
     return response;
 }
 
+SmallSignalModelFamilyResponse
+SimulationService::run_small_signal_model_family(
+    const SmallSignalModelFamilyRequest& request) const {
+    SmallSignalModelFamilyResponse response;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema", "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.model_json.empty() || request.input_variables.empty() ||
+        request.case_ids.size() < 2U) {
+        response.error = make_error(
+            "invalid_request", "request",
+            "model_json, at least one input variable, and at least two "
+            "case IDs are required for a small-signal model family");
+        return response;
+    }
+    std::set<std::string> unique_cases;
+    for (const auto& case_id : request.case_ids) {
+        if (case_id.empty() || !unique_cases.insert(case_id).second) {
+            response.error = make_error(
+                "invalid_operating_points", "case_ids",
+                "model-family case IDs must be nonempty and unique");
+            return response;
+        }
+    }
+
+    response.operating_points.reserve(request.case_ids.size());
+    for (const auto& case_id : request.case_ids) {
+        SmallSignalLinearizationRequest point_request;
+        point_request.schema_version = request.schema_version;
+        point_request.model_json = request.model_json;
+        point_request.case_id = case_id;
+        point_request.input_variables = request.input_variables;
+        point_request.output_variables = request.output_variables;
+        point_request.settings = request.settings;
+        point_request.artifacts = request.artifacts;
+        point_request.components = request.components;
+
+        auto linearization =
+            run_small_signal_linearization(point_request);
+        response.operating_points.push_back({
+            case_id, std::move(linearization)});
+        const auto& point = response.operating_points.back();
+        if (!point.linearization.succeeded()) {
+            response.status = point.linearization.status;
+            response.error = make_error(
+                "operating_point_linearization_failed", case_id,
+                "small-signal linearization failed for operating point '" +
+                    case_id + "': " +
+                    point.linearization.error.message);
+            return response;
+        }
+        if (response.operating_points.size() == 1U) {
+            response.state_names = point.linearization.state_names;
+            response.input_names = point.linearization.input_names;
+            response.output_names = point.linearization.output_names;
+            continue;
+        }
+        if (point.linearization.state_names != response.state_names ||
+            point.linearization.input_names != response.input_names ||
+            point.linearization.output_names != response.output_names) {
+            response.status = OperationStatus::compilation_failed;
+            response.error = make_error(
+                "inconsistent_model_family", case_id,
+                "operating points in one model family must expose "
+                "identical ordered state, input, and output identities");
+            return response;
+        }
+    }
+    response.status = OperationStatus::succeeded;
+    return response;
+}
+
 }  // namespace thermox::service

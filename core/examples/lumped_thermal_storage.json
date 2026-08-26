@@ -55,6 +55,28 @@
           "unit": "K"
         }
       }
+    },
+    {
+      "id": "charge_high_capacity",
+      "mode": "dynamic_transient",
+      "parameter_overrides": {
+        "components.store.parameters.thermal_capacity": {
+          "value": 3.0,
+          "unit": "MJ/K"
+        }
+      },
+      "fixed_values": {
+        "heater.outlet.Q_dot": {
+          "value": 2.0,
+          "unit": "MW"
+        }
+      },
+      "initial_guesses": {
+        "store.temperature": {
+          "value": 330.0,
+          "unit": "K"
+        }
+      }
     }
   ]
 }

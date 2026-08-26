@@ -209,6 +209,12 @@ an auditable local-linearity envelope instead of treating one arbitrarily select
 representative. A requested disturbance must fit within at least one direction of the variable's
 declared physical bounds; otherwise validation fails explicitly.
 
+For multiple independently initialized cases, the service composes these single-point operations
+into `thermox.index1-model-family/v1`. Every member retains its complete A/B/C/D model and nonlinear
+evidence, while the family gate requires identical ordered state, input, and output coordinates.
+See [small-signal-model-family.md](small-signal-model-family.md) for the contract and multi-regime
+validation scope.
+
 ## Nonlinear globalization
 
 `solve_newton` supports two execution policies without changing the compiled physical equations:

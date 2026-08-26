@@ -164,6 +164,9 @@ Delivered:
     C/D output, including serialized per-output errors and public AGTF30 pressure-response evidence. ✅
 13. Ordered multi-amplitude response and trajectory validation ladders with bound-safe disturbance
     construction and structured per-level local-linearity envelope summaries. ✅
+14. Multi-operating-point local model families with independent case initialization, complete
+    per-point A/B/C/D evidence, coordinate-consistency gates, service/CLI contracts, and a
+    liquid/two-phase/vapor property-regime validation. ✅
 
 ## Reusable dynamic equipment primitives
 
