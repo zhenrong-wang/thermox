@@ -190,6 +190,9 @@ Delivered:
     HTTP, and web execution views, explicitly independent of numerical success/failure state. ✅
 23. Job Comparison v3 reference-validation regression transitions guarded by exact immutable
     evidence and policy compatibility, exposed consistently through HTTP and web analysis. ✅
+24. Multi-job Validation Report v1 with Team/Project-scoped terminal Study selection, exact evidence
+    revision coverage, independent numerical/evaluation/match counts, sample/alignment aggregation,
+    and no global engineering-readiness verdict. ✅
 
 ## Reusable dynamic equipment primitives
 

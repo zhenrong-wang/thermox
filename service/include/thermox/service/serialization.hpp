@@ -45,6 +45,8 @@ std::string serialize_job_record_json(
     const SimulationJobRecord& record);
 std::string serialize_job_comparison_json(
     const SimulationJobComparison& comparison);
+std::string serialize_job_validation_report_json(
+    const JobValidationReport& report);
 std::string serialize_job_page_json(
     const SimulationJobPage& page,
     const std::string& next_cursor);

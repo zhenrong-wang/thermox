@@ -1861,6 +1861,49 @@ void test_revision_backed_transient_validation_workflow() {
                 std::string::npos,
         "the persisted result must expose passing independently "
         "derived evidence, exact alignment, and source limitations");
+
+    const auto job_id = queued.headers.at("Location").substr(
+        queued.headers.at("Location").find_last_of('/') + 1U);
+    const auto validation_report = api.handle(authenticated(
+        json_post(
+            "/api/v1/job-validation-reports",
+            std::string{
+                R"({"schema_version":"thermox.job_validation_report.create/v1",)"
+                R"("job_ids":[")"} +
+                job_id + R"("]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        validation_report.status == 200 &&
+            validation_report.body.find(
+                "\"schema_version\": "
+                "\"thermox.job_validation_report/v1\"") !=
+                std::string::npos &&
+            validation_report.body.find(
+                "\"evidence_declared_count\": 1") !=
+                std::string::npos &&
+            validation_report.body.find("\"matched_count\": 1") !=
+                std::string::npos &&
+            validation_report.body.find(
+                "\"exact_alignment_count\": 2") !=
+                std::string::npos &&
+            validation_report.body.find(evidence_revision_id) !=
+                std::string::npos,
+        "the validation-report boundary must aggregate persisted "
+        "numerical, evidence, verdict, and alignment facts");
+
+    const auto cross_team_report = api.handle(authenticated(
+        json_post(
+            "/api/v1/job-validation-reports",
+            std::string{
+                R"({"schema_version":"thermox.job_validation_report.create/v1",)"
+                R"("job_ids":[")"} +
+                job_id + R"("]})"),
+        "other-user",
+        "other-team"));
+    require(
+        cross_team_report.status == 404,
+        "validation reports must preserve tenant non-disclosure");
 }
 
 void test_team_scoped_projects_and_model_revisions() {

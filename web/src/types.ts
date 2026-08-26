@@ -948,6 +948,40 @@ export interface SimulationJobComparison {
   values: ComparedResultValue[]
 }
 
+export interface JobValidationReport {
+  schema_version: 'thermox.job_validation_report/v1'
+  team_id: string
+  project_id: string
+  coverage: {
+    job_count: number
+    succeeded_count: number
+    unsuccessful_count: number
+    evidence_declared_count: number
+    evaluated_count: number
+    matched_count: number
+    not_matched_count: number
+    unevaluated_count: number
+  }
+  samples: {
+    passed_count: number
+    failed_count: number
+    exact_alignment_count: number
+    interpolated_alignment_count: number
+  }
+  jobs: Array<{
+    job_id: string
+    study_revision_id: string
+    mode: string
+    state: SimulationJobState
+    validation_status: string
+    passed_count: number
+    failed_count: number
+    exact_alignment_count: number
+    interpolated_alignment_count: number
+    evidence_artifact_revision_ids: string[]
+  }>
+}
+
 export interface GraphResultValue {
   name: string
   dimension: string

@@ -29,6 +29,7 @@ isolated example models.
 - [Calculation Readiness Architecture](docs/readiness-architecture.md)
 - [Engineering Acceptance Architecture](docs/engineering-acceptance-architecture.md)
 - [Study Comparison Architecture](docs/study-comparison-architecture.md)
+- [Job Validation Report Architecture](docs/job-validation-report-architecture.md)
 - [Local Compose Stack](docs/local-compose.md)
 
 ## Current C++ numeric core
@@ -188,6 +189,10 @@ Implemented in this sprint:
   and relative deltas through one service-owned contract used by HTTP and web clients. Reference-
   validation transitions are reported only when both jobs used identical evidence revisions and
   alignment/tolerance policies.
+- Service-owned multi-job validation reports summarize caller-selected terminal Study jobs across
+  numerical completion, declared evidence, evaluated agreement, sample verdicts, and timestamp
+  alignment. They retain exact evidence revision IDs and deliberately make no global
+  engineering-readiness claim.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, transient, and explicit structural-policy audit HTTP routes onto
   `thermox_service`, with strict query decoding, JSON content checks, body limits, transport status

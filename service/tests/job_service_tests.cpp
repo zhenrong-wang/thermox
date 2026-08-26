@@ -1326,6 +1326,74 @@ void test_completed_study_jobs_compare_by_projected_identity() {
                 "not_evaluated",
         "reference-validation transitions must be suppressed when "
         "the immutable evidence or tolerance policy differs");
+
+    auto cancelled_request = candidate_request;
+    cancelled_request.idempotency_key =
+        "comparison-cancelled-validation";
+    cancelled_request.source_revisions->study_revision_id =
+        "study-cancelled-validation";
+    const auto cancelled_queued = jobs->create_or_get(
+        cancelled_request,
+        "comparison-cancelled-validation-fingerprint");
+    const auto cancelled = service.cancel(
+        team_a,
+        cancelled_queued.job_id,
+        cancelled_queued.revision);
+    const auto report = service.validation_report(
+        team_a,
+        {
+            baseline.job_id,
+            candidate.job_id,
+            mismatched.job_id,
+            cancelled.job_id,
+        });
+    require(
+        report && report->job_count == 4U &&
+            report->succeeded_count == 3U &&
+            report->unsuccessful_count == 1U &&
+            report->evidence_declared_count == 4U &&
+            report->evaluated_count == 3U &&
+            report->matched_count == 2U &&
+            report->not_matched_count == 1U &&
+            report->unevaluated_count == 1U &&
+            report->passed_sample_count == 2U &&
+            report->failed_sample_count == 1U &&
+            report->exact_alignment_count == 3U &&
+            report->jobs.back().validation_status ==
+                "not_evaluated_execution_unsuccessful" &&
+            report->jobs.back().evidence_artifact_revision_ids ==
+                std::vector<std::string>{
+                    "artifact-revision-reference-1"},
+        "multi-job validation reports must expose numerical, evidence, "
+        "evaluation, and sample coverage without a global verdict");
+    require(
+        !service.validation_report(
+            team_b, {baseline.job_id, candidate.job_id}),
+        "validation reports must preserve Team non-disclosure");
+    bool duplicate_report_rejected = false;
+    try {
+        (void)service.validation_report(
+            team_a, {baseline.job_id, baseline.job_id});
+    } catch (const thermox::service::JobValidationReportError&) {
+        duplicate_report_rejected = true;
+    }
+    require(
+        duplicate_report_rejected,
+        "validation reports must reject duplicate job identities");
+    const auto report_json =
+        thermox::service::serialize_job_validation_report_json(
+            *report);
+    require(
+        report_json.find(
+            "\"thermox.job_validation_report/v1\"") !=
+                std::string::npos &&
+            report_json.find("\"evidence_declared_count\": 4") !=
+                std::string::npos &&
+            report_json.find(
+                "\"not_evaluated_execution_unsuccessful\"") !=
+                std::string::npos,
+        "validation report JSON must retain versioned coverage and "
+        "per-job evaluation status");
 }
 
 }  // namespace

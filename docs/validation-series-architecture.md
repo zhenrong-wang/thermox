@@ -82,3 +82,10 @@ energy balance: publish a validation-series revision, bind it to a transient lum
 publish a run configuration, queue the revision-backed job, execute it through the common worker,
 and retrieve two exactly aligned passing samples plus the declared analytical limitation from the
 immutable result artifact.
+
+For campaigns spanning multiple jobs, `thermox.job_validation_report/v1` aggregates the compact
+terminal facts without weakening this evidence model. It reports numerical completion, declaration
+and evaluation coverage, matched/not-matched counts, sample verdicts, and exact/interpolated
+alignment counts while retaining every selected evidence artifact revision ID. See
+[Job Validation Report Architecture](job-validation-report-architecture.md). It intentionally does
+not convert reference agreement into a global credibility or engineering-readiness badge.

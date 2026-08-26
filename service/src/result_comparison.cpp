@@ -282,4 +282,119 @@ std::optional<SimulationJobComparison> SimulationJobService::compare(
     return comparison;
 }
 
+std::optional<JobValidationReport>
+SimulationJobService::validation_report(
+    const IdentityContext& identity,
+    const std::vector<std::string>& job_ids) const {
+    constexpr std::size_t maximum_report_jobs = 100U;
+    if (job_ids.empty() || job_ids.size() > maximum_report_jobs) {
+        throw JobValidationReportError(
+            "validation reports require between 1 and 100 jobs");
+    }
+    std::set<std::string> unique_ids;
+    JobValidationReport report;
+    report.team_id = identity.team_id;
+    report.job_count = job_ids.size();
+    report.jobs.reserve(job_ids.size());
+    for (const auto& job_id : job_ids) {
+        if (job_id.empty() || !unique_ids.insert(job_id).second) {
+            throw JobValidationReportError(
+                "validation report job IDs must be non-empty and unique");
+        }
+        const auto job = get(identity, job_id);
+        if (!job) return std::nullopt;
+        if (!is_terminal(job->state)) {
+            throw JobValidationReportError(
+                "validation reports require terminal jobs");
+        }
+        if (!job->request.source_revisions ||
+            job->request.source_revisions->project_id.empty() ||
+            job->request.source_revisions->study_revision_id.empty()) {
+            throw JobValidationReportError(
+                "validation reports require revision-backed Study jobs");
+        }
+        const auto& source = *job->request.source_revisions;
+        if (report.project_id.empty()) {
+            report.project_id = source.project_id;
+        } else if (report.project_id != source.project_id) {
+            throw JobValidationReportError(
+                "validation report jobs must belong to one Project");
+        }
+
+        JobValidationReportEntry entry;
+        entry.job_id = job->job_id;
+        entry.study_revision_id = source.study_revision_id;
+        entry.mode = to_string(job->request.mode);
+        entry.state = to_string(job->state);
+        for (const auto& validation :
+             job->request.trajectory_validations) {
+            if (validation.artifact_revision_id.empty()) {
+                throw JobValidationReportError(
+                    "validation report evidence lacks exact revision "
+                    "provenance");
+            }
+            entry.evidence_artifact_revision_ids.push_back(
+                validation.artifact_revision_id);
+        }
+        std::sort(
+            entry.evidence_artifact_revision_ids.begin(),
+            entry.evidence_artifact_revision_ids.end());
+        entry.evidence_artifact_revision_ids.erase(
+            std::unique(
+                entry.evidence_artifact_revision_ids.begin(),
+                entry.evidence_artifact_revision_ids.end()),
+            entry.evidence_artifact_revision_ids.end());
+        const bool evidence_declared =
+            !entry.evidence_artifact_revision_ids.empty();
+        if (evidence_declared) ++report.evidence_declared_count;
+
+        if (job->state == SimulationJobState::succeeded) {
+            ++report.succeeded_count;
+            if (!evidence_declared) {
+                entry.validation_status = "not_declared";
+            } else {
+                if (!job->result_summary ||
+                    !job->result_summary->trajectory_validation ||
+                    job->result_summary->trajectory_validation
+                            ->validation_count !=
+                        job->request.trajectory_validations.size()) {
+                    throw JobValidationReportError(
+                        "successful evidence-bound job lacks a "
+                        "consistent validation summary");
+                }
+                const auto& validation =
+                    *job->result_summary->trajectory_validation;
+                entry.validation_status =
+                    validation.passed ? "matched" : "not_matched";
+                entry.passed_count = validation.passed_count;
+                entry.failed_count = validation.failed_count;
+                entry.exact_alignment_count =
+                    validation.exact_alignment_count;
+                entry.interpolated_alignment_count =
+                    validation.interpolated_alignment_count;
+                ++report.evaluated_count;
+                if (validation.passed) ++report.matched_count;
+                else ++report.not_matched_count;
+                report.passed_sample_count += validation.passed_count;
+                report.failed_sample_count += validation.failed_count;
+                report.exact_alignment_count +=
+                    validation.exact_alignment_count;
+                report.interpolated_alignment_count +=
+                    validation.interpolated_alignment_count;
+            }
+        } else {
+            ++report.unsuccessful_count;
+            if (evidence_declared) {
+                entry.validation_status =
+                    "not_evaluated_execution_unsuccessful";
+                ++report.unevaluated_count;
+            } else {
+                entry.validation_status = "not_declared";
+            }
+        }
+        report.jobs.push_back(std::move(entry));
+    }
+    return report;
+}
+
 }  // namespace thermox::service

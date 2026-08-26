@@ -4325,6 +4325,75 @@ std::string serialize_job_comparison_json(
     return out.str();
 }
 
+std::string serialize_job_validation_report_json(
+    const JobValidationReport& report) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, report.schema_version);
+    out << ",\n  \"team_id\": ";
+    json_string(out, report.team_id);
+    out << ",\n  \"project_id\": ";
+    json_string(out, report.project_id);
+    out << ",\n  \"coverage\": {\"job_count\": "
+        << report.job_count
+        << ", \"succeeded_count\": "
+        << report.succeeded_count
+        << ", \"unsuccessful_count\": "
+        << report.unsuccessful_count
+        << ", \"evidence_declared_count\": "
+        << report.evidence_declared_count
+        << ", \"evaluated_count\": "
+        << report.evaluated_count
+        << ", \"matched_count\": "
+        << report.matched_count
+        << ", \"not_matched_count\": "
+        << report.not_matched_count
+        << ", \"unevaluated_count\": "
+        << report.unevaluated_count << '}';
+    out << ",\n  \"samples\": {\"passed_count\": "
+        << report.passed_sample_count
+        << ", \"failed_count\": "
+        << report.failed_sample_count
+        << ", \"exact_alignment_count\": "
+        << report.exact_alignment_count
+        << ", \"interpolated_alignment_count\": "
+        << report.interpolated_alignment_count << '}';
+    out << ",\n  \"jobs\": [";
+    for (std::size_t index = 0; index < report.jobs.size(); ++index) {
+        if (index != 0U) out << ", ";
+        const auto& job = report.jobs[index];
+        out << "{\"job_id\": ";
+        json_string(out, job.job_id);
+        out << ", \"study_revision_id\": ";
+        json_string(out, job.study_revision_id);
+        out << ", \"mode\": ";
+        json_string(out, job.mode);
+        out << ", \"state\": ";
+        json_string(out, job.state);
+        out << ", \"validation_status\": ";
+        json_string(out, job.validation_status);
+        out << ", \"passed_count\": " << job.passed_count
+            << ", \"failed_count\": " << job.failed_count
+            << ", \"exact_alignment_count\": "
+            << job.exact_alignment_count
+            << ", \"interpolated_alignment_count\": "
+            << job.interpolated_alignment_count
+            << ", \"evidence_artifact_revision_ids\": [";
+        for (std::size_t evidence_index = 0;
+             evidence_index <
+                 job.evidence_artifact_revision_ids.size();
+             ++evidence_index) {
+            if (evidence_index != 0U) out << ", ";
+            json_string(
+                out,
+                job.evidence_artifact_revision_ids[evidence_index]);
+        }
+        out << "]}";
+    }
+    out << "]\n}\n";
+    return out.str();
+}
+
 std::string serialize_job_page_json(
     const SimulationJobPage& page,
     const std::string& next_cursor) {

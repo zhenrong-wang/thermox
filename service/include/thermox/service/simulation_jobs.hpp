@@ -19,6 +19,8 @@ namespace thermox::service {
 inline constexpr char job_schema_v19[] = "thermox.job/v19";
 inline constexpr char job_comparison_schema_v3[] =
     "thermox.job_comparison/v3";
+inline constexpr char job_validation_report_schema_v1[] =
+    "thermox.job_validation_report/v1";
 
 enum class SimulationJobMode {
     steady,
@@ -189,6 +191,38 @@ struct SimulationJobComparison {
     TrajectoryValidationComparison trajectory_validation;
 };
 
+struct JobValidationReportEntry {
+    std::string job_id;
+    std::string study_revision_id;
+    std::string mode;
+    std::string state;
+    std::string validation_status;
+    std::size_t passed_count{0};
+    std::size_t failed_count{0};
+    std::size_t exact_alignment_count{0};
+    std::size_t interpolated_alignment_count{0};
+    std::vector<std::string> evidence_artifact_revision_ids;
+};
+
+struct JobValidationReport {
+    std::string schema_version{job_validation_report_schema_v1};
+    std::string team_id;
+    std::string project_id;
+    std::size_t job_count{0};
+    std::size_t succeeded_count{0};
+    std::size_t unsuccessful_count{0};
+    std::size_t evidence_declared_count{0};
+    std::size_t evaluated_count{0};
+    std::size_t matched_count{0};
+    std::size_t not_matched_count{0};
+    std::size_t unevaluated_count{0};
+    std::size_t passed_sample_count{0};
+    std::size_t failed_sample_count{0};
+    std::size_t exact_alignment_count{0};
+    std::size_t interpolated_alignment_count{0};
+    std::vector<JobValidationReportEntry> jobs;
+};
+
 struct SimulationWorkerSettings {
     std::chrono::milliseconds lease_duration{30000};
     std::chrono::milliseconds heartbeat_interval{10000};
@@ -211,6 +245,11 @@ public:
 };
 
 class JobComparisonError : public std::invalid_argument {
+public:
+    using std::invalid_argument::invalid_argument;
+};
+
+class JobValidationReportError : public std::invalid_argument {
 public:
     using std::invalid_argument::invalid_argument;
 };
@@ -324,6 +363,9 @@ public:
         const IdentityContext& identity,
         const std::string& baseline_job_id,
         const std::string& candidate_job_id) const;
+    [[nodiscard]] std::optional<JobValidationReport> validation_report(
+        const IdentityContext& identity,
+        const std::vector<std::string>& job_ids) const;
     [[nodiscard]] std::optional<SimulationJobRecord> run_next(
         const std::string& worker_id,
         const SimulationWorkerSettings& settings = {});
