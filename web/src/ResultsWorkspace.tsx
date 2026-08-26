@@ -31,6 +31,7 @@ import {
 } from './resultPresentation'
 import type {
   CatalogComponent,
+  JobValidationReport,
   SimulationJob,
   SimulationJobComparison,
   SimulationResult,
@@ -49,9 +50,14 @@ interface ResultsWorkspaceProps {
   comparison?: SimulationJobComparison
   comparisonLoading: boolean
   comparisonError: string
+  validationReport?: JobValidationReport
+  validationReportLoading: boolean
+  validationReportError: string
   onRetry: () => void
   onCompare: (candidateJobId: string) => void
   onClearComparison: () => void
+  onGenerateValidationReport: (jobIds: string[]) => void
+  onClearValidationReport: () => void
 }
 
 const scopeLabels: Record<ResultScopeFilter, string> = {
@@ -233,9 +239,14 @@ export function ResultsWorkspace({
   comparison,
   comparisonLoading,
   comparisonError,
+  validationReport,
+  validationReportLoading,
+  validationReportError,
   onRetry,
   onCompare,
   onClearComparison,
+  onGenerateValidationReport,
+  onClearValidationReport,
 }: ResultsWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
   const [sampleIndex, setSampleIndex] = useState(0)
@@ -244,6 +255,7 @@ export function ResultsWorkspace({
   const [seriesKey, setSeriesKey] = useState('')
   const [selection, setSelection] = useState<GraphSelection>()
   const [candidateJobId, setCandidateJobId] = useState('')
+  const [validationJobIds, setValidationJobIds] = useState<string[]>([])
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -299,7 +311,12 @@ export function ResultsWorkspace({
   const candidates = comparisonJobs.filter(
     (candidate) =>
       candidate.job_id !== job?.job_id &&
-      candidate.request.mode === job?.request.mode,
+      candidate.request.mode === job?.request.mode &&
+      candidate.state === 'succeeded' &&
+      Boolean(candidate.result_summary),
+  )
+  const validationCandidates = comparisonJobs.filter((candidate) =>
+    ['succeeded', 'failed', 'cancelled'].includes(candidate.state),
   )
 
   useEffect(() => {
@@ -308,6 +325,18 @@ export function ResultsWorkspace({
         ? current
         : candidates[0]?.job_id ?? '',
     )
+  }, [job?.job_id, comparisonJobs])
+
+  useEffect(() => {
+    const available = new Set(
+      validationCandidates.map((candidate) => candidate.job_id),
+    )
+    setValidationJobIds((current) => {
+      const retained = current.filter((jobId) => available.has(jobId))
+      if (retained.length) return retained
+      return job && available.has(job.job_id) ? [job.job_id] : []
+    })
+    onClearValidationReport()
   }, [job?.job_id, comparisonJobs])
 
   if (!job) {
@@ -399,6 +428,57 @@ export function ResultsWorkspace({
       </section>
       {comparisonError && (
         <div className="operation-banner is-error">{comparisonError}</div>
+      )}
+      <details className="validation-report-control">
+        <summary>
+          <span>
+            <span className="section-kicker">Validation campaign</span>
+            <strong>Build evidence coverage report</strong>
+          </span>
+          <small>{validationJobIds.length} of {validationCandidates.length} selected</small>
+        </summary>
+        <p>
+          Select terminal Study jobs from this Project. Agreement is reported
+          only against each job&apos;s immutable evidence and is not a global
+          engineering-readiness verdict.
+        </p>
+        <div className="validation-job-picker">
+          {validationCandidates.map((candidate) => (
+            <label key={candidate.job_id}>
+              <input
+                type="checkbox"
+                checked={validationJobIds.includes(candidate.job_id)}
+                onChange={(event) => {
+                  setValidationJobIds((current) => event.target.checked
+                    ? [...current, candidate.job_id]
+                    : current.filter((jobId) => jobId !== candidate.job_id))
+                  onClearValidationReport()
+                }}
+              />
+              <span>
+                <strong>
+                  {candidate.request.source_revisions?.study_revision_id ?? 'Study'}
+                </strong>
+                <small>{candidate.state} · {candidate.request.mode}</small>
+                <code>{candidate.job_id}</code>
+              </span>
+            </label>
+          ))}
+          {!validationCandidates.length && (
+            <p>No terminal revision-backed Study jobs are available.</p>
+          )}
+        </div>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!validationJobIds.length || validationReportLoading}
+          onClick={() => onGenerateValidationReport(validationJobIds)}
+        >
+          {validationReportLoading ? 'Building report…' : 'Build report'}
+        </button>
+      </details>
+      {validationReportError && (
+        <div className="operation-banner is-error">{validationReportError}</div>
       )}
       {loading && <div className="result-loading">Loading full result…</div>}
       {!loading && result && !graph && (
@@ -704,6 +784,71 @@ export function ResultsWorkspace({
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+          {validationReport && (
+            <section className="validation-report-card">
+              <header>
+                <div>
+                  <span className="section-kicker">Service-owned evidence matrix</span>
+                  <h2>Validation coverage</h2>
+                </div>
+                <strong>{validationReport.coverage.job_count} jobs</strong>
+              </header>
+              <div className="validation-coverage-strip">
+                <span>Numerically succeeded <strong>{validationReport.coverage.succeeded_count}</strong></span>
+                <span>Evidence declared <strong>{validationReport.coverage.evidence_declared_count}</strong></span>
+                <span>Evaluated <strong>{validationReport.coverage.evaluated_count}</strong></span>
+                <span>Matched <strong>{validationReport.coverage.matched_count}</strong></span>
+                <span>Not matched <strong>{validationReport.coverage.not_matched_count}</strong></span>
+                <span>Unevaluated <strong>{validationReport.coverage.unevaluated_count}</strong></span>
+              </div>
+              <div className="comparison-table-wrap">
+                <table className="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Study / job</th>
+                      <th>Numerical state</th>
+                      <th>Reference status</th>
+                      <th>Samples pass / fail</th>
+                      <th>Alignment exact / interpolated</th>
+                      <th>Evidence revisions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validationReport.jobs.map((entry) => (
+                      <tr key={entry.job_id}>
+                        <td>
+                          <strong>{entry.study_revision_id}</strong><br />
+                          <code>{entry.job_id}</code>
+                        </td>
+                        <td>{entry.state}</td>
+                        <td>
+                          <span className={`validation-report-status ${entry.validation_status}`}>
+                            {entry.validation_status.replaceAll('_', ' ')}
+                          </span>
+                        </td>
+                        <td>{entry.passed_count} / {entry.failed_count}</td>
+                        <td>{entry.exact_alignment_count} / {entry.interpolated_alignment_count}</td>
+                        <td>{entry.evidence_artifact_revision_ids.length
+                          ? entry.evidence_artifact_revision_ids.map((revisionId) => (
+                              <code className="validation-evidence-id" key={revisionId}>
+                                {revisionId}
+                              </code>
+                            ))
+                          : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <footer>
+                {validationReport.samples.passed_count} passed and{' '}
+                {validationReport.samples.failed_count} failed reference samples ·{' '}
+                {validationReport.samples.exact_alignment_count} exact and{' '}
+                {validationReport.samples.interpolated_alignment_count} interpolated alignments
+              </footer>
             </section>
           )}
 

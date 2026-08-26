@@ -309,7 +309,9 @@ SimulationJobService::validation_report(
         }
         if (!job->request.source_revisions ||
             job->request.source_revisions->project_id.empty() ||
-            job->request.source_revisions->study_revision_id.empty()) {
+            job->request.source_revisions->study_revision_id.empty() ||
+            (job->request.mode != SimulationJobMode::steady &&
+             job->request.mode != SimulationJobMode::transient)) {
             throw JobValidationReportError(
                 "validation reports require revision-backed Study jobs");
         }

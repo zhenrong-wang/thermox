@@ -116,6 +116,54 @@ describe('reconciliation revision API', () => {
   })
 })
 
+describe('validation report API', () => {
+  it('submits only the explicitly selected immutable job identities', async () => {
+    const response = {
+      schema_version: 'thermox.job_validation_report/v1',
+      team_id: 'team-a',
+      project_id: 'project-a',
+      coverage: {
+        job_count: 2,
+        succeeded_count: 1,
+        unsuccessful_count: 1,
+        evidence_declared_count: 2,
+        evaluated_count: 1,
+        matched_count: 1,
+        not_matched_count: 0,
+        unevaluated_count: 1,
+      },
+      samples: {
+        passed_count: 2,
+        failed_count: 0,
+        exact_alignment_count: 2,
+        interpolated_alignment_count: 0,
+      },
+      jobs: [],
+    }
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.validationReport(['job-2', 'job-1'])).resolves.toEqual(
+      response,
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/job-validation-reports',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          schema_version: 'thermox.job_validation_report.create/v1',
+          job_ids: ['job-2', 'job-1'],
+        }),
+      }),
+    )
+  })
+})
+
 describe('correlation artifact authoring API', () => {
   it('retrieves an exact immutable artifact payload for revision editing', async () => {
     const content = {

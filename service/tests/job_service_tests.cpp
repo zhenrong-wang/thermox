@@ -1380,6 +1380,31 @@ void test_completed_study_jobs_compare_by_projected_identity() {
     require(
         duplicate_report_rejected,
         "validation reports must reject duplicate job identities");
+    auto calibration_request = candidate_request;
+    calibration_request.mode =
+        thermox::service::SimulationJobMode::calibration;
+    calibration_request.idempotency_key =
+        "comparison-calibration-validation";
+    calibration_request.source_revisions->study_revision_id =
+        "study-calibration-validation";
+    const auto calibration_queued = jobs->create_or_get(
+        calibration_request,
+        "comparison-calibration-validation-fingerprint");
+    const auto calibration_cancelled = service.cancel(
+        team_a,
+        calibration_queued.job_id,
+        calibration_queued.revision);
+    bool calibration_report_rejected = false;
+    try {
+        (void)service.validation_report(
+            team_a, {calibration_cancelled.job_id});
+    } catch (const thermox::service::JobValidationReportError&) {
+        calibration_report_rejected = true;
+    }
+    require(
+        calibration_report_rejected,
+        "validation reports must remain scoped to steady/transient "
+        "Study jobs rather than calibration or reconciliation jobs");
     const auto report_json =
         thermox::service::serialize_job_validation_report_json(
             *report);

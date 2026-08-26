@@ -50,5 +50,5 @@ or fitness for a different engineering decision.
 `SimulationJobService::validation_report` owns authorization, selection invariants, consistency
 checks, and aggregation. HTTP, future RPC adapters, the web client, and direct C++ callers consume
 the same application contract. This keeps validation semantics out of transport and UI code while
-allowing a future matrix/export layer to render the report without changing the solver or physics
-core.
+the Results workspace renders an explicit caller-selected matrix. Future RPC and export layers can
+render the same report without changing the solver or physics core.

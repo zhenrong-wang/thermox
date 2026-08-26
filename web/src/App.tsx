@@ -77,6 +77,7 @@ import type {
   CreateStudyRevision,
   EngineeringAcceptanceCriterion,
   GraphEditOperation,
+  JobValidationReport,
   MediumDefinition,
   MaterialDefinition,
   PerformanceMapArtifactDefinition,
@@ -228,6 +229,10 @@ function App() {
     useState<SimulationJobComparison>()
   const [comparisonLoading, setComparisonLoading] = useState(false)
   const [comparisonError, setComparisonError] = useState('')
+  const [validationReport, setValidationReport] =
+    useState<JobValidationReport>()
+  const [validationReportLoading, setValidationReportLoading] = useState(false)
+  const [validationReportError, setValidationReportError] = useState('')
 
   useEffect(() => {
     setSubmissionIdempotencyKey('')
@@ -896,12 +901,16 @@ function App() {
   useEffect(() => {
     setResultComparison(undefined)
     setComparisonError('')
+    setValidationReport(undefined)
+    setValidationReportError('')
     setComparisonJobs([])
     if (workspaceView !== 'results' || !selectedProjectId) return
     const controller = new AbortController()
     api.projectJobs(selectedProjectId, controller.signal)
       .then((page) => setComparisonJobs(page.jobs.filter((job) =>
-        job.state === 'succeeded' && Boolean(job.result_summary),
+        ['succeeded', 'failed', 'cancelled'].includes(job.state) &&
+        ['steady', 'transient'].includes(job.request.mode) &&
+        Boolean(job.request.source_revisions?.study_revision_id),
       )))
       .catch((reason: unknown) => {
         if (!isAbortError(reason)) setComparisonError(errorMessage(reason))
@@ -1711,6 +1720,19 @@ function App() {
     }
   }
 
+  async function generateValidationReport(jobIds: string[]) {
+    setValidationReportLoading(true)
+    setValidationReportError('')
+    try {
+      setValidationReport(await api.validationReport(jobIds))
+    } catch (reason) {
+      setValidationReport(undefined)
+      setValidationReportError(errorMessage(reason))
+    } finally {
+      setValidationReportLoading(false)
+    }
+  }
+
   async function updateComponent(component: ComponentDefinition) {
     await publishEdits(
       [
@@ -2235,6 +2257,9 @@ function App() {
             comparison={resultComparison}
             comparisonLoading={comparisonLoading}
             comparisonError={comparisonError}
+            validationReport={validationReport}
+            validationReportLoading={validationReportLoading}
+            validationReportError={validationReportError}
             onRetry={() => {
               void retryResult()
             }}
@@ -2244,6 +2269,13 @@ function App() {
             onClearComparison={() => {
               setResultComparison(undefined)
               setComparisonError('')
+            }}
+            onGenerateValidationReport={(jobIds) => {
+              void generateValidationReport(jobIds)
+            }}
+            onClearValidationReport={() => {
+              setValidationReport(undefined)
+              setValidationReportError('')
             }}
           />
         )}

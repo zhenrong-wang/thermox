@@ -3708,6 +3708,59 @@ code {
   font-size: 8px;
 }
 
+.validation-report-control {
+  padding: 9px 20px;
+  border-bottom: 1px solid #dce4e8;
+  background: #fbfcfd;
+  color: #5c7480;
+  font-size: 8px;
+}
+
+.validation-report-control summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.validation-report-control summary > span {
+  display: grid;
+  gap: 2px;
+}
+
+.validation-report-control > p {
+  max-width: 760px;
+  color: #718690;
+}
+
+.validation-job-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px;
+  margin: 9px 0;
+}
+
+.validation-job-picker label {
+  display: flex;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid #dce5e9;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.validation-job-picker label > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.validation-job-picker code {
+  overflow: hidden;
+  color: #587789;
+  text-overflow: ellipsis;
+}
+
 .result-loading {
   padding: 60px 20px;
   color: #6f818c;
@@ -3819,6 +3872,92 @@ code {
   border: 1px solid #cbdce4;
   border-radius: 5px;
   background: #fbfcfd;
+}
+
+.validation-report-card {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid #cbdce4;
+  border-radius: 5px;
+  background: #fbfcfd;
+}
+
+.validation-report-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dce6eb;
+  background: #f3f8fa;
+}
+
+.validation-report-card h2 {
+  margin: 2px 0 0;
+  color: #34586b;
+  font-size: 11px;
+}
+
+.validation-report-card > header > strong {
+  color: #52768a;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.validation-coverage-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid #e2e9ed;
+  background: #e2e9ed;
+}
+
+.validation-coverage-strip span {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #70848e;
+  font-size: 7px;
+}
+
+.validation-coverage-strip strong {
+  color: #3d687c;
+  font-size: 12px;
+}
+
+.validation-report-status {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 9px;
+  background: #edf2f4;
+  color: #667d89;
+  font-size: 7px;
+  text-transform: capitalize;
+}
+
+.validation-report-status.matched {
+  background: #e4f2eb;
+  color: #2e7457;
+}
+
+.validation-report-status.not_matched,
+.validation-report-status.not_evaluated_execution_unsuccessful {
+  background: #fae8e6;
+  color: #994d47;
+}
+
+.validation-evidence-id {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  color: #3d687c;
+  text-overflow: ellipsis;
+}
+
+.validation-report-card > footer {
+  padding: 8px 12px;
+  color: #70848e;
+  font-size: 8px;
 }
 
 .study-comparison-card > header {
