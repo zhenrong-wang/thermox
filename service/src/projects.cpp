@@ -1236,7 +1236,8 @@ ProjectService::create_artifact_revision(
         request.artifact_type !=
             platform::expression_component_artifact_type &&
         request.artifact_type !=
-            assembly_template_artifact_type) {
+            assembly_template_artifact_type &&
+        request.artifact_type != validation_series_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
             request.artifact_type);
@@ -1273,6 +1274,24 @@ ProjectService::create_artifact_revision(
                 detail::canonicalize_expression_component_payload(
                     request.artifact_schema_version,
                     request.artifact_json);
+        } else if (request.artifact_type ==
+                   validation_series_artifact_type) {
+            if (request.artifact_schema_version !=
+                validation_series_schema_v1) {
+                throw ValidationSeriesError(
+                    "unsupported validation-series schema version: " +
+                    request.artifact_schema_version);
+            }
+            const auto artifact =
+                parse_validation_series_artifact_json(
+                    request.artifact_json);
+            if (artifact.id != request.artifact_id) {
+                throw ValidationSeriesError(
+                    "validation-series payload ID must match the "
+                    "project artifact ID");
+            }
+            canonical =
+                serialize_validation_series_artifact_json(artifact);
         } else {
             canonical =
                 detail::canonicalize_assembly_template_payload(
@@ -1596,6 +1615,11 @@ ProjectService::resolve_artifact_revisions(
                 revision->artifact_revision_id,
                 revision->content.checksum.substr(7),
             });
+        } else if (
+            revision->artifact_type ==
+            validation_series_artifact_type) {
+            result.validation_series.push_back(
+                parse_validation_series_artifact_json(*payload));
         } else {
             throw ProjectStateError(
                 "persisted engineering artifact type is not "

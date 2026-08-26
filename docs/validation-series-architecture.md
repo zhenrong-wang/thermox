@@ -62,6 +62,8 @@ That artifact is computational and derived from NASA's local A/B model. Replacin
 data requires no numerical-core change: publish measured signals with their checksum, units,
 uncertainties, and `independent_reference` basis, then bind them to the same graph outputs.
 
-This milestone exposes the canonical parser, serializer, and evaluator through the service library.
-Immutable Project artifact revisions and Study/job bindings are the next persistence integration;
-until then, callers supply the declaration directly after retrieving it from their chosen provider.
+The canonical parser, serializer, and evaluator are exposed through the service library. Validation
+series can also be stored as immutable, content-addressed Project artifact revisions and selected by
+a Study. Resolution keeps them beside the executable physics artifact bundle, so reference evidence
+cannot accidentally enter model compilation. Declarative validation bindings and evaluation output
+on the immutable job record are the next orchestration integration.

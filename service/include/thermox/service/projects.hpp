@@ -3,6 +3,7 @@
 #include "thermox/service/identity.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/validation_series.hpp"
 #include "thermox/platform/unit_registry.hpp"
 
 #include <chrono>
@@ -610,6 +611,7 @@ struct CreateReconciliationRevisionRequest {
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
     SimulationComponentBundle components;
+    std::vector<ValidationSeriesArtifact> validation_series;
     std::vector<ArtifactRevisionRecord> revisions;
 };
 

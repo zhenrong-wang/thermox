@@ -1443,6 +1443,126 @@ void test_artifact_revisions_are_snapshotted_and_scoped() {
         "but hide provider object keys");
 }
 
+void test_validation_series_are_immutable_project_evidence() {
+    using namespace thermox::service;
+    ProjectService service{make_in_memory_project_repository()};
+    const auto project = service.create_project({
+        team_a, "Transient evidence", {}});
+    const auto revision = service.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "measured-speed-response",
+        {},
+        validation_series_artifact_type,
+        validation_series_schema_v1,
+        R"json({
+          "schema_version": "thermox.validation_series/v1",
+          "id": "measured-speed-response",
+          "source": {
+            "reference": "Plant historian export 2026-08-01",
+            "checksum_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "evidence_basis": "independent_reference",
+            "acquisition": "measured",
+            "limitations": ["sensor lag not independently characterized"]
+          },
+          "time_unit": "ms",
+          "signals": [{
+            "id": "shaft_speed",
+            "dimension": "angular_speed",
+            "unit": "rpm",
+            "samples": [
+              {"time": 0.0, "value": 3000.0, "standard_uncertainty": 1.0},
+              {"time": 500.0, "value": 3030.0, "standard_uncertainty": 1.0}
+            ]
+          }]
+        })json",
+    });
+    const auto content = service.get_artifact_revision_content(
+        team_a, project.project_id, revision.artifact_revision_id);
+    const auto resolved = service.resolve_artifact_revisions(
+        team_a,
+        project.project_id,
+        {revision.artifact_revision_id});
+    require(
+        content && resolved &&
+            revision.artifact_type == validation_series_artifact_type &&
+            revision.content.checksum.starts_with("sha256:") &&
+            content->canonical_artifact_json.find(
+                "\"time_unit\": \"s\"") != std::string::npos &&
+            resolved->validation_series.size() == 1U &&
+            resolved->validation_series.front().source.acquisition ==
+                "measured" &&
+            resolved->validation_series.front().signals.front()
+                    .samples.back().time_si == 0.5 &&
+            resolved->snapshot.performance_maps.empty() &&
+            resolved->snapshot.references.empty(),
+        "validation series must persist canonically and resolve as "
+        "immutable evidence outside the executable physics bundle");
+
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const auto simulation_case = service.create_case_revision({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.design.case.json"),
+    });
+    CreateStudyRevisionRequest study_request;
+    study_request.identity = team_a;
+    study_request.project_id = project.project_id;
+    study_request.study_id = "measured-transient-evidence";
+    study_request.model_revision_id = model.model_revision_id;
+    study_request.case_revision_id = simulation_case.case_revision_id;
+    study_request.intent = simulation_case.mode;
+    study_request.artifact_revision_ids = {
+        revision.artifact_revision_id};
+    const auto study = service.create_study_revision(study_request);
+    CreateRunConfigurationRevisionRequest run_request;
+    run_request.identity = team_a;
+    run_request.project_id = project.project_id;
+    run_request.run_configuration_id = "measured-evidence-run";
+    run_request.study_revision_id = study.study_revision_id;
+    const auto run = service.create_run_configuration_revision(run_request);
+    const auto resolved_run = service.resolve_run_configuration(
+        team_a, project.project_id,
+        run.run_configuration_revision_id);
+    require(
+        study.artifact_revision_ids ==
+                std::vector<std::string>{revision.artifact_revision_id} &&
+            resolved_run &&
+            resolved_run->artifacts.validation_series.size() == 1U &&
+            resolved_run->artifacts.snapshot.performance_maps.empty() &&
+            resolved_run->artifacts.snapshot.references.empty(),
+        "Studies and run configurations must pin validation evidence "
+        "without injecting it into physics compilation inputs");
+
+    bool invalid_schema_rejected = false;
+    try {
+        (void)service.create_artifact_revision({
+            team_a,
+            project.project_id,
+            "invalid-evidence",
+            {},
+            validation_series_artifact_type,
+            "thermox.validation_series/v0",
+            content->canonical_artifact_json,
+        });
+    } catch (const ProjectRequestError&) {
+        invalid_schema_rejected = true;
+    }
+    require(
+        invalid_schema_rejected,
+        "validation-series revision metadata must match the supported "
+        "canonical schema");
+}
+
 void test_performance_map_quality_reviews_are_immutable_and_pinned() {
     using namespace thermox::service;
     ProjectService service{make_in_memory_project_repository()};
@@ -2582,6 +2702,7 @@ int main() {
         test_correlation_artifact_is_executable_input();
         test_regime_map_artifact_is_executable_input();
         test_artifact_revisions_are_snapshotted_and_scoped();
+        test_validation_series_are_immutable_project_evidence();
         test_performance_map_quality_reviews_are_immutable_and_pinned();
         test_run_configurations_bind_complete_execution_intent();
         test_studies_bind_immutable_engineering_intent();
