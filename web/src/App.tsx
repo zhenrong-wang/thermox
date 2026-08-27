@@ -1811,6 +1811,22 @@ function App() {
     }
   }
 
+  async function exportValidationReport(
+    campaignArtifactRevisionId: string,
+    jobIds: string[],
+    format: 'markdown' | 'csv',
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before exporting a report.')
+    }
+    return api.validationReportExport(
+      selectedProjectId,
+      campaignArtifactRevisionId,
+      jobIds,
+      format,
+    )
+  }
+
   async function updateComponent(component: ComponentDefinition) {
     await publishEdits(
       [
@@ -2352,6 +2368,7 @@ function App() {
             onGenerateValidationReport={(campaignRevisionId, jobIds) => {
               void generateValidationReport(campaignRevisionId, jobIds)
             }}
+            onExportValidationReport={exportValidationReport}
             onClearValidationReport={() => {
               setValidationReport(undefined)
               setValidationReportError('')

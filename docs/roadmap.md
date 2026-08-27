@@ -198,6 +198,9 @@ Delivered:
     workspace. ✅
 26. Typed Studies-workspace validation-campaign authoring with exact Study selection, objective and
     limitation declaration, immutable child revisions, and service-authoritative publication. ✅
+27. Deterministic server-owned Validation Report v2 Markdown and row-level CSV exports, preserving
+    exact campaign/job/evidence provenance and the explicit no-global-verdict boundary through thin
+    HTTP and web clients. ✅
 
 ## Reusable dynamic equipment primitives
 

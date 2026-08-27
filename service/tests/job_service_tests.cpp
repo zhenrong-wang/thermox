@@ -1457,6 +1457,34 @@ void test_completed_study_jobs_compare_by_projected_identity() {
                 std::string::npos,
         "validation report JSON must retain versioned coverage and "
         "per-job evaluation status");
+    const auto report_markdown =
+        thermox::service::serialize_job_validation_report_markdown(
+            *report);
+    require(
+        report_markdown.find("# Thermox validation campaign report") !=
+                std::string::npos &&
+            report_markdown.find("campaign-revision-1") !=
+                std::string::npos &&
+            report_markdown.find("Synthetic service regression evidence") !=
+                std::string::npos &&
+            report_markdown.find(
+                "not a global verdict") != std::string::npos,
+        "Markdown exports must preserve exact campaign provenance, "
+        "limitations, and the bounded interpretation of coverage");
+    const auto report_csv =
+        thermox::service::serialize_job_validation_report_csv(*report);
+    require(
+        report_csv.find("campaign_artifact_revision_id") !=
+                std::string::npos &&
+            report_csv.find("\"campaign-revision-1\"") !=
+                std::string::npos &&
+            report_csv.find("\"artifact-revision-reference-1\"") !=
+                std::string::npos &&
+            report_csv.find(
+                "\"not_evaluated_execution_unsuccessful\"") !=
+                std::string::npos,
+        "CSV exports must retain row-level provenance, evidence, and "
+        "evaluation status");
 }
 
 }  // namespace

@@ -193,7 +193,9 @@ Implemented in this sprint:
   and limitations. Service-owned reports require one selected terminal job per pinned Study and
   summarize numerical completion, declared evidence, evaluated agreement, sample verdicts, and
   timestamp alignment while deliberately making no global engineering-readiness claim. The Studies
-  workspace authors new and child campaign revisions through the same typed artifact API.
+  workspace authors new and child campaign revisions through the same typed artifact API. The
+  Results workspace downloads deterministic service-rendered Markdown review reports or row-level
+  CSV exchange data from those same exact campaign and job identities.
 - A separate framework-neutral `thermox_http_api` adapter maps health, catalog, compile-aware
   validation, steady, transient, and explicit structural-policy audit HTTP routes onto
   `thermox_service`, with strict query decoding, JSON content checks, body limits, transport status

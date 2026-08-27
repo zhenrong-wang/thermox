@@ -16,6 +16,7 @@ import {
   type TransientSeriesPoint,
 } from './resultExploration'
 import { TopologyCanvas } from './TopologyCanvas'
+import type { ReportDownload } from './api'
 import type { GraphSelection } from './InspectorPanel'
 import {
   exactRevisionProvenance,
@@ -62,6 +63,11 @@ interface ResultsWorkspaceProps {
     campaignArtifactRevisionId: string,
     jobIds: string[],
   ) => void
+  onExportValidationReport: (
+    campaignArtifactRevisionId: string,
+    jobIds: string[],
+    format: 'markdown' | 'csv',
+  ) => Promise<ReportDownload>
   onClearValidationReport: () => void
 }
 
@@ -79,9 +85,9 @@ function safeFilePart(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_')
 }
 
-function downloadCsv(content: string, filename: string) {
+function downloadText(content: string, filename: string, mediaType: string) {
   const url = URL.createObjectURL(
-    new Blob([content], { type: 'text/csv;charset=utf-8' }),
+    new Blob([content], { type: mediaType }),
   )
   const link = document.createElement('a')
   link.href = url
@@ -252,6 +258,7 @@ export function ResultsWorkspace({
   onCompare,
   onClearComparison,
   onGenerateValidationReport,
+  onExportValidationReport,
   onClearValidationReport,
 }: ResultsWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
@@ -263,6 +270,10 @@ export function ResultsWorkspace({
   const [candidateJobId, setCandidateJobId] = useState('')
   const [validationJobIds, setValidationJobIds] = useState<string[]>([])
   const [campaignRevisionId, setCampaignRevisionId] = useState('')
+  const [exportingFormat, setExportingFormat] = useState<
+    'markdown' | 'csv' | ''
+  >('')
+  const [exportError, setExportError] = useState('')
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -387,6 +398,27 @@ export function ResultsWorkspace({
     topologyRevisionId,
     Boolean(topology),
   )
+  async function exportValidationReport(format: 'markdown' | 'csv') {
+    if (!validationReport) return
+    setExportingFormat(format)
+    setExportError('')
+    try {
+      const download = await onExportValidationReport(
+        validationReport.campaign.artifact_revision_id,
+        validationReport.jobs.map((entry) => entry.job_id),
+        format,
+      )
+      downloadText(download.content, download.filename, download.mediaType)
+    } catch (reason) {
+      setExportError(
+        reason instanceof Error
+          ? reason.message
+          : 'Validation report export failed.',
+      )
+    } finally {
+      setExportingFormat('')
+    }
+  }
   return (
     <section className="results-workspace">
       <header className="results-header">
@@ -867,8 +899,33 @@ export function ResultsWorkspace({
                   <span className="section-kicker">Service-owned evidence matrix</span>
                   <h2>Validation coverage</h2>
                 </div>
-                <strong>{validationReport.coverage.job_count} jobs</strong>
+                <div>
+                  <strong>{validationReport.coverage.job_count} jobs</strong>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={Boolean(exportingFormat)}
+                    onClick={() => void exportValidationReport('markdown')}
+                  >
+                    {exportingFormat === 'markdown'
+                      ? 'Exporting…'
+                      : 'Download Markdown'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={Boolean(exportingFormat)}
+                    onClick={() => void exportValidationReport('csv')}
+                  >
+                    {exportingFormat === 'csv'
+                      ? 'Exporting…'
+                      : 'Download CSV'}
+                  </button>
+                </div>
               </header>
+              {exportError && (
+                <div className="operation-banner is-error">{exportError}</div>
+              )}
               <div className="comparison-provenance">
                 <span>Campaign <code>{validationReport.campaign.name}</code></span>
                 <span>Revision <code>{validationReport.campaign.artifact_revision_id}</code></span>
@@ -1173,7 +1230,7 @@ export function ResultsWorkspace({
                   className="secondary-button"
                   disabled={!filteredRows.length}
                   onClick={() =>
-                    downloadCsv(
+                    downloadText(
                       resultRowsCsv(
                         filteredRows,
                         isTransientResult(result) ? sampleIndex : 0,
@@ -1181,6 +1238,7 @@ export function ResultsWorkspace({
                         unitDimensions,
                       ),
                       `${resultFilename}-sample-${sampleIndex}.csv`,
+                      'text/csv;charset=utf-8',
                     )
                   }
                 >
@@ -1190,9 +1248,10 @@ export function ResultsWorkspace({
                   type="button"
                   className="secondary-button"
                   onClick={() =>
-                    downloadCsv(
+                    downloadText(
                       simulationResultCsv(result, unitDimensions),
                       `${resultFilename}-complete.csv`,
+                      'text/csv;charset=utf-8',
                     )
                   }
                 >

@@ -221,6 +221,42 @@ describe('validation report API', () => {
       }),
     )
   })
+
+  it('downloads the server-rendered validation report representation', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response('# Thermox validation campaign report', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition':
+            'attachment; filename="thermox-validation-campaign-a.md"',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.validationReportExport(
+      'project/a',
+      'campaign-r2',
+      ['job-2', 'job-1'],
+      'markdown',
+    )).resolves.toEqual({
+      content: '# Thermox validation campaign report',
+      filename: 'thermox-validation-campaign-a.md',
+      mediaType: 'text/markdown; charset=utf-8',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project%2Fa/validation-report-exports?format=markdown',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          schema_version: 'thermox.job_validation_report.create/v2',
+          campaign_artifact_revision_id: 'campaign-r2',
+          job_ids: ['job-2', 'job-1'],
+        }),
+      }),
+    )
+  })
 })
 
 describe('correlation artifact authoring API', () => {

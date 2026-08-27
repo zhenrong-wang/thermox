@@ -73,3 +73,19 @@ quality, or fitness for a different engineering decision.
 Results workspace renders that application response and never derives campaign verdicts itself.
 Future RPC and export layers can consume the same contract without changing the solver, physics
 core, or persistence model.
+
+## Deterministic export boundary
+
+`POST /api/v1/projects/{project_id}/validation-report-exports?format=markdown|csv` accepts the
+same `thermox.job_validation_report.create/v2` body as the JSON report route. The service resolves
+and aggregates the report again from the exact campaign artifact revision and selected job IDs,
+then renders it directly:
+
+- Markdown is the human-review representation, including objective, limitations, exact campaign
+  revision/checksum, coverage totals, and the Study/job evidence matrix.
+- CSV is row-level engineering exchange data with campaign provenance repeated on every job row.
+
+Both responses are non-cacheable downloads. The web client only saves the returned bytes and
+server-selected filename; it does not reproduce report calculations or derive a verdict. The
+Markdown representation explicitly states that campaign-scoped coverage is not a global
+engineering-readiness claim.

@@ -4411,6 +4411,126 @@ std::string serialize_job_validation_report_json(
     return out.str();
 }
 
+std::string serialize_job_validation_report_markdown(
+    const JobValidationReport& report) {
+    const auto markdown = [](std::string_view value) {
+        std::string escaped;
+        escaped.reserve(value.size());
+        for (const char character : value) {
+            if (character == '\\' || character == '|' ||
+                character == '`') {
+                escaped.push_back('\\');
+            }
+            if (character == '\n' || character == '\r') {
+                escaped += " ";
+            } else {
+                escaped.push_back(character);
+            }
+        }
+        return escaped;
+    };
+    const auto evidence = [&](const JobValidationReportEntry& job) {
+        std::string joined;
+        for (std::size_t index = 0;
+             index < job.evidence_artifact_revision_ids.size(); ++index) {
+            if (index != 0U) joined += "; ";
+            joined += markdown(
+                job.evidence_artifact_revision_ids[index]);
+        }
+        return joined.empty() ? std::string{"—"} : joined;
+    };
+
+    std::ostringstream out;
+    out << "# Thermox validation campaign report\n\n"
+        << "- Campaign: **" << markdown(report.campaign_name)
+        << "** (`" << markdown(report.campaign_id) << "`)\n"
+        << "- Objective: " << markdown(report.campaign_objective) << "\n"
+        << "- Campaign artifact revision: `"
+        << markdown(report.campaign_artifact_revision_id) << "`\n"
+        << "- Campaign artifact checksum: `"
+        << markdown(report.campaign_artifact_checksum) << "`\n"
+        << "- Team / project: `" << markdown(report.team_id) << "` / `"
+        << markdown(report.project_id) << "`\n\n"
+        << "## Declared limitations\n\n";
+    if (report.campaign_limitations.empty()) {
+        out << "- None declared.\n";
+    } else {
+        for (const auto& limitation : report.campaign_limitations) {
+            out << "- " << markdown(limitation) << "\n";
+        }
+    }
+    out << "\n## Coverage\n\n"
+        << "- Jobs: " << report.job_count << " ("
+        << report.succeeded_count << " numerically succeeded, "
+        << report.unsuccessful_count << " unsuccessful)\n"
+        << "- Evidence: " << report.evidence_declared_count
+        << " declared, " << report.evaluated_count << " evaluated, "
+        << report.unevaluated_count << " unevaluated\n"
+        << "- Agreement: " << report.matched_count << " matched, "
+        << report.not_matched_count << " not matched\n"
+        << "- Reference samples: " << report.passed_sample_count
+        << " passed, " << report.failed_sample_count << " failed\n"
+        << "- Alignments: " << report.exact_alignment_count
+        << " exact, " << report.interpolated_alignment_count
+        << " interpolated\n\n"
+        << "## Study/job matrix\n\n"
+        << "| Study revision | Job | Mode | Numerical state | Reference status | Pass / fail | Exact / interpolated | Evidence artifact revisions |\n"
+        << "|---|---|---|---|---|---:|---:|---|\n";
+    for (const auto& job : report.jobs) {
+        out << "| " << markdown(job.study_revision_id)
+            << " | " << markdown(job.job_id)
+            << " | " << markdown(job.mode)
+            << " | " << markdown(job.state)
+            << " | " << markdown(job.validation_status)
+            << " | " << job.passed_count << " / " << job.failed_count
+            << " | " << job.exact_alignment_count << " / "
+            << job.interpolated_alignment_count
+            << " | " << evidence(job) << " |\n";
+    }
+    out << "\n> This report records campaign-scoped numerical and reference-evidence coverage. It is not a global verdict that Thermox, a model, or a system is engineering-ready.\n";
+    return out.str();
+}
+
+std::string serialize_job_validation_report_csv(
+    const JobValidationReport& report) {
+    const auto csv = [](std::string_view value) {
+        std::string escaped{"\""};
+        for (const char character : value) {
+            if (character == '"') escaped.push_back('"');
+            escaped.push_back(character);
+        }
+        escaped.push_back('"');
+        return escaped;
+    };
+    const auto joined = [&](const std::vector<std::string>& values) {
+        std::string value;
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            if (index != 0U) value.push_back(';');
+            value += values[index];
+        }
+        return csv(value);
+    };
+
+    std::ostringstream out;
+    out << "campaign_id,campaign_name,campaign_objective,campaign_limitations,campaign_artifact_revision_id,campaign_artifact_checksum,team_id,project_id,study_revision_id,job_id,mode,numerical_state,validation_status,passed_samples,failed_samples,exact_alignments,interpolated_alignments,evidence_artifact_revision_ids\r\n";
+    for (const auto& job : report.jobs) {
+        out << csv(report.campaign_id) << ','
+            << csv(report.campaign_name) << ','
+            << csv(report.campaign_objective) << ','
+            << joined(report.campaign_limitations) << ','
+            << csv(report.campaign_artifact_revision_id) << ','
+            << csv(report.campaign_artifact_checksum) << ','
+            << csv(report.team_id) << ',' << csv(report.project_id) << ','
+            << csv(job.study_revision_id) << ',' << csv(job.job_id) << ','
+            << csv(job.mode) << ',' << csv(job.state) << ','
+            << csv(job.validation_status) << ',' << job.passed_count << ','
+            << job.failed_count << ',' << job.exact_alignment_count << ','
+            << job.interpolated_alignment_count << ','
+            << joined(job.evidence_artifact_revision_ids) << "\r\n";
+    }
+    return out.str();
+}
+
 std::string serialize_job_page_json(
     const SimulationJobPage& page,
     const std::string& next_cursor) {

@@ -216,6 +216,7 @@ The application boundary needed by a thin network adapter is now complete:
 | Inspect a calculation | `SimulationJobService::get` | `thermox.job/v19` JSON |
 | Retrieve results | `SimulationJobService::get_result` | stored `thermox.result/v6` JSON |
 | Summarize an immutable validation campaign | `ValidationCampaignReportService::report` | `thermox.job_validation_report/v2` JSON |
+| Export an immutable validation campaign report | `ValidationCampaignReportService::report` plus deterministic service serialization | Markdown or row-level CSV download |
 
 Job-status JSON intentionally omits the submitted model body and idempotency key. It exposes the
 request mode, case, exact source revision IDs and checksums, stable request fingerprint, state,

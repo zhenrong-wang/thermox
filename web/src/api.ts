@@ -54,6 +54,12 @@ class ApiError extends Error {
   }
 }
 
+export interface ReportDownload {
+  content: string
+  filename: string
+  mediaType: string
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     headers: { Accept: 'application/json' },
@@ -91,6 +97,37 @@ async function postJson<T>(
     )
   }
   return (await response.json()) as T
+}
+
+async function postDownload(
+  path: string,
+  body: unknown,
+  fallbackFilename: string,
+  signal?: AbortSignal,
+): Promise<ReportDownload> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'text/markdown, text/csv',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!response.ok) {
+    const responseBody = await response.text()
+    throw new ApiError(
+      response.status,
+      responseBody || `${response.status} ${response.statusText}`,
+    )
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const filenameMatch = disposition.match(/filename="([^"]+)"/i)
+  return {
+    content: await response.text(),
+    filename: filenameMatch?.[1] ?? fallbackFilename,
+    mediaType: response.headers.get('Content-Type') ?? 'text/plain',
+  }
 }
 
 async function postValidation(
@@ -631,6 +668,23 @@ export const api = {
         campaign_artifact_revision_id: campaignArtifactRevisionId,
         job_ids: jobIds,
       },
+      signal,
+    ),
+  validationReportExport: (
+    projectId: string,
+    campaignArtifactRevisionId: string,
+    jobIds: string[],
+    format: 'markdown' | 'csv',
+    signal?: AbortSignal,
+  ) =>
+    postDownload(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/validation-report-exports?format=${format}`,
+      {
+        schema_version: 'thermox.job_validation_report.create/v2',
+        campaign_artifact_revision_id: campaignArtifactRevisionId,
+        job_ids: jobIds,
+      },
+      `thermox-validation-report.${format === 'markdown' ? 'md' : 'csv'}`,
       signal,
     ),
   submitSimulation: (

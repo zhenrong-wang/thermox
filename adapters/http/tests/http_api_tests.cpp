@@ -1923,6 +1923,51 @@ void test_revision_backed_transient_validation_workflow() {
         "the validation-report boundary must aggregate persisted "
         "numerical, evidence, verdict, and alignment facts");
 
+    const std::string export_body =
+        std::string{
+            R"({"schema_version":"thermox.job_validation_report.create/v2",)"
+            R"("campaign_artifact_revision_id":")"} +
+        campaign_revision_id + R"(","job_ids":[")" +
+        job_id + R"("]})";
+    const auto markdown_export = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/validation-report-exports?format=markdown",
+            export_body),
+        identity.user_id,
+        identity.team_id));
+    require(
+        markdown_export.status == 200 &&
+            markdown_export.headers.at("Content-Type") ==
+                "text/markdown; charset=utf-8" &&
+            markdown_export.headers.at("Content-Disposition").find(
+                ".md\"") != std::string::npos &&
+            markdown_export.body.find(campaign_revision_id) !=
+                std::string::npos &&
+            markdown_export.body.find("not a global verdict") !=
+                std::string::npos,
+        "Markdown report exports must be server-owned downloads with "
+        "immutable provenance and bounded claims");
+    const auto csv_export = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/validation-report-exports?format=csv",
+            export_body),
+        identity.user_id,
+        identity.team_id));
+    require(
+        csv_export.status == 200 &&
+            csv_export.headers.at("Content-Type") ==
+                "text/csv; charset=utf-8" &&
+            csv_export.headers.at("Content-Disposition").find(
+                ".csv\"") != std::string::npos &&
+            csv_export.body.find("study_revision_id,job_id") !=
+                std::string::npos &&
+            csv_export.body.find(evidence_revision_id) !=
+                std::string::npos,
+        "CSV report exports must be downloadable row-level engineering "
+        "exchange data");
+
     const auto cross_team_report = api.handle(authenticated(
         json_post(
             "/api/v1/projects/" + project.project_id +

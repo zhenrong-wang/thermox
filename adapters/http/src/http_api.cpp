@@ -172,6 +172,36 @@ Response json_response(int status, std::string body) {
     return response;
 }
 
+Response download_response(
+    std::string body,
+    std::string content_type,
+    std::string filename) {
+    Response response;
+    response.status = 200;
+    response.headers = {
+        {"Cache-Control", "no-store"},
+        {"Content-Disposition",
+         "attachment; filename=\"" + filename + "\""},
+        {"Content-Type", std::move(content_type)},
+        {"X-Content-Type-Options", "nosniff"},
+    };
+    response.body = std::move(body);
+    return response;
+}
+
+std::string safe_download_name(std::string_view value) {
+    std::string safe;
+    safe.reserve(value.size());
+    for (const unsigned char character : value) {
+        safe.push_back(
+            std::isalnum(character) || character == '-' ||
+                    character == '_'
+                ? static_cast<char>(character)
+                : '_');
+    }
+    return safe.empty() ? std::string{"campaign"} : safe;
+}
+
 Response error_response(
     int status,
     const std::string& code,
@@ -2602,6 +2632,55 @@ Response Api::handle(const Request& request) const {
                 "/reconciliation-revisions";
             constexpr std::string_view validation_reports_segment =
                 "/validation-reports";
+            constexpr std::string_view validation_report_exports_segment =
+                "/validation-report-exports";
+            if (remainder == validation_report_exports_segment) {
+                if (method != "post") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "validation report exports only support POST");
+                    response.headers["Allow"] = "POST";
+                    return response;
+                }
+                reject_unknown_query(target.query, {"format"});
+                const auto format = optional_query(target.query, "format");
+                if (format != "markdown" && format != "csv") {
+                    throw std::invalid_argument(
+                        "validation report export format must be "
+                        "markdown or csv");
+                }
+                require_json_request(
+                    request, impl_->options.maximum_body_bytes);
+                const auto [campaign_revision_id, job_ids] =
+                    parse_job_validation_report_request(request);
+                const auto report = impl_->campaign_reports.report(
+                    identity,
+                    project_id,
+                    campaign_revision_id,
+                    job_ids);
+                if (!report) {
+                    return error_response(
+                        404,
+                        "validation_report_resource_not_found",
+                        "the validation campaign or one or more jobs "
+                        "were not found");
+                }
+                const auto base_name =
+                    "thermox-validation-" +
+                    safe_download_name(report->campaign_id);
+                if (format == "markdown") {
+                    return download_response(
+                        service::serialize_job_validation_report_markdown(
+                            *report),
+                        "text/markdown; charset=utf-8",
+                        base_name + ".md");
+                }
+                return download_response(
+                    service::serialize_job_validation_report_csv(*report),
+                    "text/csv; charset=utf-8",
+                    base_name + ".csv");
+            }
             if (remainder == validation_reports_segment) {
                 if (method != "post") {
                     auto response = error_response(
