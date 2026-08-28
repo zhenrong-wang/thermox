@@ -99,6 +99,29 @@ ComponentModelDescriptor make_map_turbomachinery_descriptor(
     return out;
 }
 
+ComponentModelDescriptor make_pump_map_descriptor() {
+    auto out = make_descriptor(
+        "pump.fluid.performance_map", "in");
+    out.version = "1.0.0";
+    out.supports_transient = true;
+    out.uses_quasi_steady_transient_equations = true;
+    out.model_name = "Mass-flow/speed performance map";
+    out.parameters = {
+        {"flow_capacity_scale", "dimensionless", false, 1.0,
+         0.0, std::numeric_limits<double>::infinity(), false, true},
+        {"pressure_rise_scale", "dimensionless", false, 1.0,
+         0.0, std::numeric_limits<double>::infinity(), false, true},
+        {"efficiency_scale", "dimensionless", false, 1.0,
+         0.0, std::numeric_limits<double>::infinity(), false, true},
+    };
+    out.artifacts = {{
+        "performance_map",
+        performance_map_artifact_type,
+        true,
+    }};
+    return out;
+}
+
 struct TurbomachineryMapPoint {
     double pressure_ratio{0.0};
     double efficiency{0.0};
@@ -114,6 +137,122 @@ struct TurbomachineryMapContract {
     std::size_t pressure_ratio{0};
     std::size_t efficiency{0};
 };
+
+struct PumpMapPoint {
+    double pressure_rise{0.0};
+    double efficiency{0.0};
+    double pressure_rise_flow_derivative{0.0};
+    double pressure_rise_speed_derivative{0.0};
+    double coordinate_derivative_scale{1.0};
+};
+
+struct PumpMapContract {
+    std::size_t pressure_rise{0};
+    std::size_t efficiency{0};
+};
+
+PumpMapContract validate_pump_map(
+    const PerformanceMapArtifact& artifact) {
+    if (!artifact.map) {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' pump model requires an ordinary two-coordinate map");
+    }
+    const auto& map = *artifact.map;
+    if (map.primary_variable().name != "mass_flow" ||
+        map.primary_variable().dimension != "mass_flow") {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' pump primary axis must be 'mass_flow' with dimension "
+            "'mass_flow'");
+    }
+    if (map.family_variable().name != "angular_speed" ||
+        map.family_variable().dimension != "angular_speed") {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' pump family axis must be 'angular_speed' with dimension "
+            "'angular_speed'");
+    }
+    PumpMapContract result;
+    bool found_pressure_rise = false;
+    bool found_efficiency = false;
+    const auto& outputs = map.output_variables();
+    for (std::size_t index = 0; index < outputs.size(); ++index) {
+        if (outputs[index].name == "pressure_rise" &&
+            outputs[index].dimension == "pressure") {
+            result.pressure_rise = index;
+            found_pressure_rise = true;
+        }
+        if (outputs[index].name == "isentropic_efficiency" &&
+            outputs[index].dimension == "dimensionless") {
+            result.efficiency = index;
+            found_efficiency = true;
+        }
+    }
+    if (!found_pressure_rise || !found_efficiency) {
+        throw std::invalid_argument(
+            "performance-map artifact '" + artifact.id +
+            "' pump outputs must include pressure-dimensioned "
+            "'pressure_rise' and dimensionless "
+            "'isentropic_efficiency'");
+    }
+    return result;
+}
+
+EvaluationStatus evaluate_pump_map(
+    const PerformanceMapArtifact& artifact,
+    const PumpMapContract& contract,
+    double mass_flow,
+    double angular_speed,
+    double flow_capacity_scale,
+    double pressure_rise_scale,
+    double efficiency_scale,
+    PumpMapPoint& point,
+    const performance_map_continuation::Seed* continuation_seed = nullptr,
+    double continuation_parameter = 1.0) {
+    const double map_mass_flow = mass_flow / flow_capacity_scale;
+    const double evaluation_mass_flow = continuation_seed == nullptr
+        ? map_mass_flow
+        : continuation_seed->primary_coordinate +
+              continuation_parameter *
+                  (map_mass_flow -
+                   continuation_seed->primary_coordinate);
+    const double evaluation_speed = continuation_seed == nullptr
+        ? angular_speed
+        : continuation_seed->family_coordinate +
+              continuation_parameter *
+                  (angular_speed -
+                   continuation_seed->family_coordinate);
+    try {
+        const auto evaluated = artifact.map->evaluate(
+            evaluation_mass_flow, evaluation_speed);
+        point.pressure_rise = pressure_rise_scale *
+            evaluated.outputs.at(contract.pressure_rise);
+        point.efficiency = efficiency_scale *
+            evaluated.outputs.at(contract.efficiency);
+        point.pressure_rise_flow_derivative =
+            pressure_rise_scale / flow_capacity_scale *
+            evaluated.primary_derivatives.at(contract.pressure_rise);
+        point.pressure_rise_speed_derivative =
+            pressure_rise_scale *
+            evaluated.family_derivatives.at(contract.pressure_rise);
+    } catch (const MapDomainError& error) {
+        return EvaluationStatus::recoverable(error.what());
+    }
+    if (!std::isfinite(point.pressure_rise) ||
+        point.pressure_rise <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "pump map pressure rise must be finite and positive");
+    }
+    if (!std::isfinite(point.efficiency) ||
+        point.efficiency <= 0.0 || point.efficiency > 1.0) {
+        return EvaluationStatus::recoverable(
+            "pump map isentropic efficiency must be in (0, 1]");
+    }
+    point.coordinate_derivative_scale =
+        continuation_seed == nullptr ? 1.0 : continuation_parameter;
+    return EvaluationStatus::success();
+}
 
 TurbomachineryMapContract validate_turbomachinery_map(
     const PerformanceMapArtifact& artifact,
@@ -916,6 +1055,194 @@ private:
     bool variable_geometry_{false};
 };
 
+class PumpMapModel final : public ComponentModel {
+public:
+    PumpMapModel() : descriptor_(make_pump_map_descriptor()) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto artifact = require_performance_map(
+            context, "performance_map");
+        const auto contract = validate_pump_map(*artifact);
+        const auto continuation_seed =
+            performance_map_continuation::seed(*artifact, false);
+        const auto continuation_artifact =
+            std::make_shared<const PerformanceMapArtifact>(
+                performance_map_continuation::linear_extension(
+                    *artifact, false));
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const double flow_capacity_scale = parameter_or(
+            context.component, "flow_capacity_scale", 1.0);
+        const double pressure_rise_scale = parameter_or(
+            context.component, "pressure_rise_scale", 1.0);
+        const double efficiency_scale = parameter_or(
+            context.component, "efficiency_scale", 1.0);
+
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto shaft_w =
+            require_port_variable(context, "shaft.W_dot");
+        const auto shaft_omega =
+            require_port_variable(context, "shaft.omega");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}},
+            0.0, 100.0);
+
+        const auto continued_map_point =
+            [artifact, continuation_artifact, contract,
+             inlet_m, shaft_omega, flow_capacity_scale,
+             pressure_rise_scale, efficiency_scale,
+             continuation_seed](
+                const std::vector<double>& x,
+                double continuation_parameter,
+                PumpMapPoint& point) {
+                const auto& selected_artifact =
+                    continuation_parameter < 1.0
+                    ? *continuation_artifact
+                    : *artifact;
+                return evaluate_pump_map(
+                    selected_artifact, contract,
+                    x.at(inlet_m), x.at(shaft_omega),
+                    flow_capacity_scale, pressure_rise_scale,
+                    efficiency_scale, point, &continuation_seed,
+                    continuation_parameter);
+            };
+
+        system.add_continuation_checked_sparse_equation(
+            prefix + "map_pressure_rise",
+            [continued_map_point, inlet_p, outlet_p](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                double& residual) {
+                PumpMapPoint point;
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
+                if (!status.ok()) return status;
+                double anchor_pressure_rise =
+                    anchor.at(outlet_p) - anchor.at(inlet_p);
+                if (!std::isfinite(anchor_pressure_rise)) {
+                    anchor_pressure_rise = 0.0;
+                }
+                const double staged_pressure_rise =
+                    anchor_pressure_rise + continuation_parameter *
+                        (point.pressure_rise - anchor_pressure_rise);
+                residual = x.at(outlet_p) - x.at(inlet_p) -
+                    staged_pressure_rise;
+                return EvaluationStatus::success();
+            },
+            {inlet_m, inlet_p, outlet_p, shaft_omega},
+            [continued_map_point, inlet_m, inlet_p,
+             outlet_p, shaft_omega](
+                const std::vector<double>& x,
+                const std::vector<double>& anchor,
+                double continuation_parameter,
+                std::vector<EquationPartial>& jacobian) {
+                PumpMapPoint point;
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
+                if (!status.ok()) {
+                    throw std::runtime_error(status.message);
+                }
+                double anchor_pressure_rise =
+                    anchor.at(outlet_p) - anchor.at(inlet_p);
+                if (!std::isfinite(anchor_pressure_rise)) {
+                    anchor_pressure_rise = 0.0;
+                }
+                const double staged_pressure_rise =
+                    anchor_pressure_rise + continuation_parameter *
+                        (point.pressure_rise - anchor_pressure_rise);
+                const double derivative_scale =
+                    continuation_parameter *
+                    point.coordinate_derivative_scale;
+                jacobian.push_back({
+                    inlet_m,
+                    -derivative_scale *
+                        point.pressure_rise_flow_derivative});
+                jacobian.push_back({inlet_p, -1.0});
+                jacobian.push_back({outlet_p, 1.0});
+                jacobian.push_back({
+                    shaft_omega,
+                    -derivative_scale *
+                        point.pressure_rise_speed_derivative});
+                return x.at(outlet_p) - x.at(inlet_p) -
+                    staged_pressure_rise;
+            },
+            1.0e6);
+        system.add_continuation_checked_equation(
+            prefix + "map_isentropic_efficiency",
+            [continued_map_point, properties, inlet_p, inlet_h,
+             outlet_p, outlet_h](
+                const std::vector<double>& x,
+                const std::vector<double>&,
+                double continuation_parameter,
+                double& residual) {
+                PumpMapPoint point;
+                const auto status = continued_map_point(
+                    x, continuation_parameter, point);
+                if (!status.ok()) return status;
+                const auto inlet = properties->state_ph(
+                    x.at(inlet_p), x.at(inlet_h));
+                if (!inlet.ok()) return property_failure(inlet);
+                const auto isentropic = properties->state_ps(
+                    x.at(outlet_p),
+                    inlet.state.entropy_j_kg_k);
+                if (!isentropic.ok()) {
+                    return property_failure(isentropic);
+                }
+                residual = x.at(outlet_h) - x.at(inlet_h) -
+                    (isentropic.state.enthalpy_j_kg -
+                     x.at(inlet_h)) / point.efficiency;
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+        system.add_sparse_equation(
+            prefix + "shaft_power",
+            [inlet_m, inlet_h, outlet_h, shaft_w](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double enthalpy_change =
+                    x.at(outlet_h) - x.at(inlet_h);
+                jacobian.push_back({shaft_w, 1.0});
+                jacobian.push_back({inlet_m, -enthalpy_change});
+                jacobian.push_back({inlet_h, x.at(inlet_m)});
+                jacobian.push_back({outlet_h, -x.at(inlet_m)});
+                return x.at(shaft_w) -
+                    x.at(inlet_m) * enthalpy_change;
+            },
+            1.0e6);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_turbomachinery_component_models(
@@ -926,6 +1253,7 @@ void register_turbomachinery_component_models(
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "pump.fluid.isentropic_efficiency", true));
+    registry.register_model(std::make_shared<PumpMapModel>());
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "turbine.fluid.isentropic_efficiency", false));

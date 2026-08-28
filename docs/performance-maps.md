@@ -215,6 +215,28 @@ to radians and may be overridden per operating case. This supports IGV angle, gu
 or blade pitch without changing graph topology or treating measured mass flow as a hidden map
 input.
 
+## Pump maps
+
+`pump.fluid.performance_map` deliberately uses a different contract from gas-path corrected maps.
+Its ordinary two-coordinate artifact declares:
+
+- primary axis: `mass_flow`, dimension `mass_flow`;
+- family axis: `angular_speed`, dimension `angular_speed`;
+- outputs: `pressure_rise`, dimension `pressure`, and `isentropic_efficiency`, dimensionless.
+
+The component closes `p_out - p_in = pressure_rise`, evaluates the isentropic outlet state through
+the bound fluid property package, and reports positive shaft input power. Three positive
+component-owned scales—`flow_capacity_scale`, `pressure_rise_scale`, and `efficiency_scale`—support
+calibration while leaving the immutable source map unchanged. The model is also available as a
+quasi-steady closure in transient graphs.
+
+This separate contract is intentional. Applying compressor-style inlet-temperature and
+inlet-pressure corrections to a liquid or positive-displacement pump would invent gas-path physics.
+A pump vendor or fitted engineering artifact must instead describe the applicable fluid, speed,
+flow, and pressure domain explicitly through its provenance and operating envelope. Volumetric-flow
+or displacement/leakage formulations may be added as separate component kinds; they must not be
+silently coerced into this mass-flow map.
+
 ## Continuation initialization
 
 Fluid map-driven compressors and turbines expose an anchor-aware continuation path. The compiler

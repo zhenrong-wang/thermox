@@ -977,6 +977,8 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain heat sink boundary");
     require(registry.contains("pump.fluid.isentropic_efficiency"),
             "default registry should contain property-aware pump");
+    require(registry.contains("pump.fluid.performance_map"),
+            "default registry should contain map-driven pump");
     require(registry.contains("junction.fluid.mixer.two_inlet"),
             "default registry should contain two-inlet mixer");
     require(registry.contains("junction.fluid.splitter.two_outlet"),
@@ -1079,6 +1081,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.coordinate_map.fractional_bleeds",
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
+        "pump.fluid.performance_map",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
         "turbine.fluid.variable_geometry_map",
@@ -2345,6 +2348,147 @@ void test_map_continuation_recovers_out_of_domain_flow_guess() {
                     .reached_parameter < 1.0,
         "continuation-only map extension must not admit an "
         "out-of-domain target operating point");
+}
+
+void test_map_driven_pump_solves_real_fluid_operating_point() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mapped_r245fa_pump",
+    "media": [{
+      "id": "working_fluid",
+      "backend": "coolprop_heos",
+      "substance": "R245fa"
+    }],
+    "components": [{
+      "id": "pump",
+      "kind": "pump.fluid.performance_map",
+      "artifacts": {"performance_map": "r245fa-pump-map"},
+      "media": {"inlet": "working_fluid", "outlet": "working_fluid"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "pump.inlet.m_dot": {"value": 0.03, "unit": "kg/s"},
+      "pump.inlet.p": {"value": 300.0, "unit": "kPa"},
+      "pump.inlet.T": {"value": 300.0, "unit": "K"},
+      "pump.shaft.omega": 30.0
+    },
+    "initial_guesses": {
+      "pump.outlet.p": {"value": 765.0, "unit": "kPa"},
+      "pump.outlet.h": {"value": 240.0, "unit": "kJ/kg"},
+      "pump.shaft.W_dot": {"value": 0.03, "unit": "kW"}
+    }
+  }]
+})json");
+
+    const auto map = std::make_shared<
+        const thermox::platform::PerformanceMap>(
+        thermox::platform::MapVariable{"mass_flow", "mass_flow"},
+        thermox::platform::MapVariable{
+            "angular_speed", "angular_speed"},
+        std::vector<thermox::platform::MapVariable>{
+            {"pressure_rise", "pressure"},
+            {"isentropic_efficiency", "dimensionless"}},
+        std::vector<thermox::platform::MapCurve>{
+            {20.0,
+             {{0.01, {300000.0, 0.55}},
+              {0.03, {280000.0, 0.60}},
+              {0.05, {250000.0, 0.55}}}},
+            {40.0,
+             {{0.01, {700000.0, 0.65}},
+              {0.03, {650000.0, 0.70}},
+              {0.05, {600000.0, 0.65}}}}});
+    thermox::platform::EngineeringArtifactRegistry maps;
+    maps.register_artifact({
+        "r245fa-pump-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "test-r245fa-pump-map", std::string(64, '9'), map});
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        properties, maps, "operating_point");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto selected = map->evaluate(0.03, 30.0);
+    const double expected_pressure = 300000.0 +
+        selected.outputs.at(0);
+    const auto working_fluid = properties.create(
+        "coolprop_heos", "R245fa");
+    const auto inlet = working_fluid->state_ph(
+        value("pump.inlet.p"), value("pump.inlet.h"));
+    require(inlet.ok(), "mapped R245fa pump inlet state");
+    const auto isentropic = working_fluid->state_ps(
+        expected_pressure, inlet.state.entropy_j_kg_k);
+    require(isentropic.ok(), "mapped R245fa pump isentropic state");
+    const double expected_enthalpy = value("pump.inlet.h") +
+        (isentropic.state.enthalpy_j_kg -
+         value("pump.inlet.h")) / selected.outputs.at(1);
+    require_near(
+        value("pump.outlet.p"), expected_pressure, 1.0e-5,
+        "mapped pump pressure rise");
+    require_near(
+        value("pump.outlet.h"), expected_enthalpy, 1.0e-5,
+        "mapped pump isentropic efficiency");
+    require_near(
+        value("pump.shaft.W_dot"),
+        0.03 * (expected_enthalpy - value("pump.inlet.h")),
+        1.0e-7, "mapped pump shaft power");
+
+    auto transient_document = document;
+    transient_document.cases.front().mode = "dynamic_transient";
+    const auto transient_graph =
+        thermox::platform::compile_transient_model_graph(
+            transient_document,
+            thermox::platform::make_default_component_registry(),
+            properties, maps, "operating_point");
+    require(
+        transient_graph.problem.variable_names.size() ==
+            graph.problem.variable_names.size(),
+        "mapped pump must expose its quasi-steady closure in transient "
+        "graphs");
+
+    auto invalid_document = document;
+    invalid_document.components.front().artifact_bindings.at(
+        "performance_map") = "gas-contract-map";
+    thermox::platform::EngineeringArtifactRegistry invalid_maps;
+    invalid_maps.register_artifact({
+        "gas-contract-map",
+        thermox::platform::performance_map_artifact_schema_v1,
+        "wrong-pump-contract", std::string(64, '8'),
+        std::make_shared<const thermox::platform::PerformanceMap>(
+            thermox::platform::MapVariable{
+                "corrected_mass_flow", "mass_flow"},
+            thermox::platform::MapVariable{
+                "corrected_speed", "angular_speed"},
+            std::vector<thermox::platform::MapVariable>{
+                {"pressure_ratio", "dimensionless"},
+                {"isentropic_efficiency", "dimensionless"}},
+            std::vector<thermox::platform::MapCurve>{
+                {20.0, {{0.01, {2.0, 0.6}},
+                        {0.05, {2.0, 0.6}}}},
+                {40.0, {{0.01, {3.0, 0.7}},
+                        {0.05, {3.0, 0.7}}}}})});
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                invalid_document,
+                thermox::platform::make_default_component_registry(),
+                properties, invalid_maps, "operating_point");
+        },
+        "pump primary axis must be 'mass_flow'");
 }
 
 void test_map_driven_turbine_solves_bound_operating_point() {
@@ -8963,6 +9107,7 @@ int main() {
         test_hierarchical_assembly_composes_compressor_stages();
         test_map_driven_compressor_solves_bound_operating_point();
         test_map_continuation_recovers_out_of_domain_flow_guess();
+        test_map_driven_pump_solves_real_fluid_operating_point();
         test_map_driven_turbine_solves_bound_operating_point();
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();

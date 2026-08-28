@@ -608,7 +608,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 98,
+        response.components.size() == 99,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -1167,6 +1167,25 @@ void test_catalog_discovery() {
             mapped_turbine->artifacts.front().role ==
                 "performance_map",
         "catalog must expose mapped turbine artifact contract");
+    const auto mapped_pump = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind == "pump.fluid.performance_map";
+        });
+    require(
+        mapped_pump != response.components.end() &&
+            mapped_pump->supports_steady &&
+            mapped_pump->supports_transient &&
+            mapped_pump->artifacts.size() == 1 &&
+            std::any_of(
+                mapped_pump->parameters.begin(),
+                mapped_pump->parameters.end(),
+                [](const auto& parameter) {
+                    return parameter.name == "pressure_rise_scale" &&
+                        parameter.default_value_si ==
+                            std::optional<double>{1.0};
+                }),
+        "catalog must expose mapped pump steady/transient contract");
     const auto composition_source = std::find_if(
         response.components.begin(),
         response.components.end(),

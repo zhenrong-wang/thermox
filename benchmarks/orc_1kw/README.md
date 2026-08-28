@@ -53,9 +53,15 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   closure. This supplies the generic binding point for future ORC evaporator/condenser correlations
   without embedding R245fa or this dataset in platform code; it is not evidence for a particular
   boiling or condensation law until such an artifact is sourced and validated.
-- External-boundary prediction remains open. It still requires generic speed-dependent pump and
-  expander behavior and traceable or training-only calibrated geometry/component artifacts. The
-  dataset's measured charge alone cannot identify the individual exchanger and receiver volumes.
+- A generic real-fluid pump performance-map component now closes pressure rise, isentropic outlet
+  enthalpy, and shaft power from mass flow and shaft speed. Its synthetic R245fa regression proves
+  the platform contract and explicitly rejects gas-path corrected maps. The 77 measurements do not
+  themselves define a defensible non-rectangular pump map, so no hardware-validation claim is made
+  until the paper, OEM data, or a preregistered training-only model supplies its form.
+- External-boundary prediction remains open. It still requires generic scroll-expander
+  filling/leakage/heat-loss behavior, traceable heat-exchanger and receiver geometry, and a sourced
+  or training-only pump artifact. The dataset's measured charge alone cannot identify the individual
+  exchanger and receiver volumes.
 
 ## Evidence discipline
 
