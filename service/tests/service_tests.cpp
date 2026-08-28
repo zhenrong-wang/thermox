@@ -728,19 +728,20 @@ void test_catalog_discovery() {
         response.components.begin(), response.components.end(),
         [](const auto& component) {
             return component.kind ==
-                "heat_exchanger.fluid.steady_finite_volume_cell";
+                "heat_exchanger.fluid.finite_volume_cell";
         });
     require(
         finite_volume_cell != response.components.end() &&
             finite_volume_cell->supports_steady &&
-            !finite_volume_cell->supports_transient &&
-            finite_volume_cell->parameters.size() == 8U &&
+            finite_volume_cell->supports_transient &&
+            finite_volume_cell->parameters.size() == 9U &&
+            finite_volume_cell->internal_variables.size() == 9U &&
             has_inventory_port(
                 *finite_volume_cell, "hot_inventory") &&
             has_inventory_port(
                 *finite_volume_cell, "cold_inventory"),
-        "catalog must expose geometry-closed steady exchanger "
-        "holdup");
+        "catalog must expose conservative finite-volume exchanger "
+        "dynamics");
     const auto total_charge = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

@@ -67,25 +67,35 @@ declared as graphs of generic cells rather than introduced as cycle-specific sol
 The runnable [two-cell counterflow reference](distributed-heat-exchanger.md) demonstrates this
 ordering with boundary components and verifies both the steady and transient graph.
 
-## Geometry-closed steady holdup
+## Geometry-closed steady and transient holdup
 
-`heat_exchanger.fluid.steady_finite_volume_cell` implements the same mixed-cell steady heat duty
+`heat_exchanger.fluid.finite_volume_cell` implements the same mixed-cell steady heat duty
 and pressure-loss equations, but replaces prescribed hot/cold masses with `hot_fluid_volume` and
-`cold_fluid_volume`. Each inventory output is closed at the mixed outlet state:
+`cold_fluid_volume`. In steady operation each inventory output is closed at the mixed bulk state:
 
 ```text
-M_hot  = rho_hot(p_hot,out, h_hot,out) V_hot
-M_cold = rho_cold(p_cold,out, h_cold,out) V_cold
+M_hot  = rho_hot(p_hot,bulk, h_hot,bulk) V_hot
+M_cold = rho_cold(p_cold,bulk, h_cold,bulk) V_cold
 ```
 
 The two inventory ports retain distinct medium identities. A system may therefore include only the
 working-fluid side in a refrigerant charge constraint while independently reporting the utility
-side. Multiple finite-volume cells form a distributed steady exchanger whose total holdup changes
-with pressure, enthalpy, phase, and the selected property package.
+side. Multiple finite-volume cells form a distributed exchanger whose total holdup changes with
+pressure, enthalpy, phase, and the selected property package.
 
-This model is steady-only. A faithful variable-mass transient exchanger requires differential mass
-and internal-energy balances on each cell; using an algebraic steady charge closure inside the
-existing constant-holdup DAE would be physically and numerically incorrect.
+In transient operation, each side owns differential mass and total-internal-energy states:
+
+```text
+dM/dt = m_dot,in - m_dot,out
+dU/dt = m_dot,in h_in - m_dot,out h_bulk - Q_dot,to_wall
+M      = rho(p_bulk, h_bulk) V
+U      = M u(p_bulk, h_bulk)
+```
+
+The wall temperature remains a separate differential state. The formulation permits filling,
+draining, compression, and thermal expansion while retaining exact mass and total-energy
+accounting. A flow/enthalpy inlet paired with a pressure outlet is one valid causal boundary set;
+fixing both inlet and outlet pressure in addition to inlet flow over-specifies a side.
 
 ## Run the reference
 
@@ -100,16 +110,15 @@ The gas-to-water example binds ideal-gas air on the hot side and IF97 water on t
 ```
 
 The regression checks consistent initialization, adaptive integration, cross-property-package
-operation, positive hot-to-cold transfer, and exact total stored-energy-rate closure against the
-boundary enthalpy flows.
+operation, nonzero mass accumulation, geometry closure, positive hot-to-cold transfer, and exact
+total stored-energy-rate closure against the boundary enthalpy flows.
 
 ## Scope and limits
 
-The constant-holdup masses are equipment parameters, so connecting only these cells to a fixed
-total-charge constraint is redundant; at least one variable-mass, geometry-closed inventory is
-needed for charge to determine pressure. The constant-holdup approximation neglects fluid mass accumulation, compressible pressure-wave
-dynamics, axial conduction, heat loss to ambient, radiation, fouling evolution, flow reversal, and
-finite transport delay. It is suitable as the first index-1 thermal cell and as a building block for
-spatial discretization. Variable-mass vessels and two-phase level dynamics belong to the registered
-rigid-volume and equilibrium-drum components. A future phase-change cell may add void-fraction and
-moving-boundary correlations as a separate calculation model under the same physical template.
+The older `heat_exchanger.fluid.dynamic_cell` keeps constant masses as equipment parameters and is
+useful when pressure inventory dynamics are intentionally outside the model boundary. The
+finite-volume model is the appropriate cell when charge must determine pressure dynamically. Both
+approximations neglect compressible pressure-wave propagation, axial conduction, heat loss to
+ambient, radiation, fouling evolution, flow reversal, and finite transport delay. A future
+phase-change cell may add void-fraction and moving-boundary correlations as a separate calculation
+model under the same physical template.

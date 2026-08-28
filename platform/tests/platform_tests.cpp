@@ -1118,7 +1118,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.fluid.dynamic_cell",
-        "heat_exchanger.fluid.steady_finite_volume_cell",
+        "heat_exchanger.fluid.finite_volume_cell",
         "heat_exchanger.material_fluid.fixed_duty",
         "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",
@@ -6202,17 +6202,14 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
     };
     replace_text(
         "heat_exchanger.fluid.dynamic_cell",
-        "heat_exchanger.fluid.steady_finite_volume_cell");
+        "heat_exchanger.fluid.finite_volume_cell");
     replace_text(
         "\"hot_fluid_mass\": " + format(hot_mass),
         "\"hot_fluid_volume\": " + format(hot_volume));
     replace_text(
         "\"cold_fluid_mass\": " + format(cold_mass),
         "\"cold_fluid_volume\": " + format(cold_volume));
-    replace_text(
-        "        \"wall_thermal_capacity\": {\"value\": 50.0, \"unit\": \"kJ/K\"},\n",
-        "");
-    const auto finite_document =
+    auto finite_document =
         thermox::platform::parse_model_document_text(finite_text);
     const auto finite_graph = thermox::platform::compile_model_graph(
         finite_document, registry, properties, "steady");
@@ -6225,10 +6222,10 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
             finite_graph.problem.variable_names, name));
     };
     const auto finite_hot_state = air->state_ph(
-        finite_value("cell.hot_out.p"),
+        finite_value("cell.hot_in.p"),
         finite_value("cell.hot_out.h"));
     const auto finite_cold_state = water->state_ph(
-        finite_value("cell.cold_out.p"),
+        finite_value("cell.cold_in.p"),
         finite_value("cell.cold_out.h"));
     require(finite_hot_state.ok() && finite_cold_state.ok(),
             "finite-volume exchanger outlet states evaluate");
@@ -6242,6 +6239,140 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
         cold_volume * finite_cold_state.state.density_kg_m3,
         1.0e-10,
         "finite-volume cold holdup follows geometry and properties");
+
+    auto finite_transient_document = finite_document;
+    const auto finite_transient_case = std::find_if(
+        finite_transient_document.cases.begin(),
+        finite_transient_document.cases.end(),
+        [](const auto& candidate) { return candidate.id == "transient"; });
+    require(finite_transient_case != finite_transient_document.cases.end(),
+            "finite-volume transient case exists");
+    constexpr double outlet_flow = 0.8;
+    const double finite_hot_outlet_pressure = 2.0e5 -
+        loss_scale * outlet_flow * outlet_flow /
+            hot_initial.state.density_kg_m3;
+    const double finite_cold_outlet_pressure = 2.0e5 -
+        loss_scale * outlet_flow * outlet_flow /
+            cold_initial.state.density_kg_m3;
+    finite_transient_case->fixed_values.erase("cell.hot_in.p");
+    finite_transient_case->fixed_values.erase("cell.cold_in.p");
+    finite_transient_case->fixed_values.emplace(
+        "cell.hot_out.p",
+        thermox::platform::ScalarValue{
+            finite_hot_outlet_pressure, "Pa", "pressure"});
+    finite_transient_case->fixed_values.emplace(
+        "cell.cold_out.p",
+        thermox::platform::ScalarValue{
+            finite_cold_outlet_pressure, "Pa", "pressure"});
+    finite_transient_case->initial_guesses.erase("cell.hot_out.p");
+    finite_transient_case->initial_guesses.erase("cell.cold_out.p");
+    finite_transient_case->initial_guesses.emplace(
+        "cell.hot_mass",
+        thermox::platform::ScalarValue{hot_mass, "kg", "mass"});
+    finite_transient_case->initial_guesses.emplace(
+        "cell.hot_pressure",
+        thermox::platform::ScalarValue{2.0e5, "Pa", "pressure"});
+    finite_transient_case->initial_guesses.emplace(
+        "cell.cold_mass",
+        thermox::platform::ScalarValue{cold_mass, "kg", "mass"});
+    finite_transient_case->initial_guesses.emplace(
+        "cell.cold_pressure",
+        thermox::platform::ScalarValue{2.0e5, "Pa", "pressure"});
+    const auto finite_transient_graph =
+        thermox::platform::compile_transient_model_graph(
+            finite_transient_document, registry, properties,
+            "transient");
+    const auto finite_initialized =
+        thermox::make_consistent_initial_conditions(
+            finite_transient_graph.problem, 0.0);
+    require(finite_initialized.diagnostics.converged,
+            "finite-volume exchanger consistent initialization: " +
+                finite_initialized.diagnostics.message);
+    const auto finite_index = [&](const std::string& name) {
+        return require_variable_index(
+            finite_transient_graph.problem.variable_names, name);
+    };
+    const auto& finite_x = finite_initialized.state;
+    const auto& finite_x_dot = finite_initialized.derivative;
+    require_near(
+        finite_x_dot.at(finite_index("cell.hot_mass")),
+        finite_x.at(finite_index("cell.hot_in.m_dot")) -
+            finite_x.at(finite_index("cell.hot_out.m_dot")),
+        1.0e-10,
+        "finite-volume hot mass rate closes inlet minus outlet flow");
+    require_near(
+        finite_x_dot.at(finite_index("cell.cold_mass")),
+        finite_x.at(finite_index("cell.cold_in.m_dot")) -
+            finite_x.at(finite_index("cell.cold_out.m_dot")),
+        1.0e-10,
+        "finite-volume cold mass rate closes inlet minus outlet flow");
+    require(
+        finite_x_dot.at(finite_index("cell.hot_mass")) > 0.19 &&
+            finite_x_dot.at(finite_index("cell.cold_mass")) > 0.19,
+        "finite-volume test exercises nonzero accumulation");
+    require_near(
+        finite_x.at(finite_index("cell.hot_inventory.mass")),
+        finite_x.at(finite_index("cell.hot_mass")), 1.0e-12,
+        "finite-volume hot inventory exposes differential mass");
+    require_near(
+        finite_x.at(finite_index("cell.cold_inventory.mass")),
+        finite_x.at(finite_index("cell.cold_mass")), 1.0e-12,
+        "finite-volume cold inventory exposes differential mass");
+    const double finite_stored_energy_rate =
+        finite_x_dot.at(finite_index("cell.hot_total_energy")) +
+        finite_x_dot.at(finite_index("cell.cold_total_energy")) +
+        50000.0 * finite_x_dot.at(
+            finite_index("cell.wall_temperature"));
+    const double finite_boundary_energy_rate =
+        finite_x.at(finite_index("cell.hot_in.m_dot")) *
+            finite_x.at(finite_index("cell.hot_in.h")) -
+        finite_x.at(finite_index("cell.hot_out.m_dot")) *
+            finite_x.at(finite_index("cell.hot_out.h")) +
+        finite_x.at(finite_index("cell.cold_in.m_dot")) *
+            finite_x.at(finite_index("cell.cold_in.h")) -
+        finite_x.at(finite_index("cell.cold_out.m_dot")) *
+            finite_x.at(finite_index("cell.cold_out.h"));
+    require_near(
+        finite_stored_energy_rate, finite_boundary_energy_rate,
+        1.0e-7,
+        "finite-volume transient closes total stored-energy rate");
+    thermox::TimeIntegrationOptions finite_options;
+    finite_options.end_time = 0.1;
+    finite_options.initial_step = 0.005;
+    finite_options.max_step = 0.02;
+    const auto finite_result = thermox::integrate_dae(
+        finite_transient_graph.problem, finite_options);
+    require(finite_result.diagnostics.success,
+            "finite-volume exchanger transient integration: " +
+                finite_result.diagnostics.message);
+    const auto& finite_start = finite_result.trajectory.front().state;
+    const auto& finite_final = finite_result.trajectory.back().state;
+    require(
+        finite_final.at(finite_index("cell.hot_mass")) >
+            finite_start.at(finite_index("cell.hot_mass")),
+        "finite-volume hot inventory increases during filling");
+    require(
+        std::abs(finite_final.at(finite_index("cell.cold_mass")) -
+                 finite_start.at(finite_index("cell.cold_mass"))) > 1.0e-6,
+        "finite-volume cold inventory responds dynamically");
+    const auto finite_final_hot_state = air->state_ph(
+        finite_final.at(finite_index("cell.hot_pressure")),
+        finite_final.at(finite_index("cell.hot_enthalpy")));
+    const auto finite_final_cold_state = water->state_ph(
+        finite_final.at(finite_index("cell.cold_pressure")),
+        finite_final.at(finite_index("cell.cold_enthalpy")));
+    require(finite_final_hot_state.ok() && finite_final_cold_state.ok(),
+            "finite-volume final thermodynamic states evaluate");
+    require_near(
+        finite_final.at(finite_index("cell.hot_mass")),
+        hot_volume * finite_final_hot_state.state.density_kg_m3,
+        1.0e-9,
+        "finite-volume hot geometry closure remains satisfied");
+    require_near(
+        finite_final.at(finite_index("cell.cold_mass")),
+        cold_volume * finite_final_cold_state.state.density_kg_m3,
+        1.0e-9,
+        "finite-volume cold geometry closure remains satisfied");
 
     const auto graph =
         thermox::platform::compile_transient_model_graph(

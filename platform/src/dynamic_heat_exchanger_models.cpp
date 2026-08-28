@@ -25,12 +25,12 @@ public:
     explicit DynamicHeatExchangerCellModel(bool finite_volume)
         : finite_volume_(finite_volume) {
         descriptor_.kind = finite_volume_
-            ? "heat_exchanger.fluid.steady_finite_volume_cell"
+            ? "heat_exchanger.fluid.finite_volume_cell"
             : "heat_exchanger.fluid.dynamic_cell";
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "heat_exchanger.fluid.cell";
         descriptor_.display_name = finite_volume_
-            ? "Steady finite-volume heat-exchanger cell"
+            ? "Finite-volume heat-exchanger cell"
             : "Dynamic heat-exchanger cell";
         descriptor_.category = "Heat transfer";
         descriptor_.model_name = finite_volume_
@@ -44,6 +44,9 @@ public:
             {"hot_inventory", "inventory", "out", 1U, "hot_out"},
             {"cold_inventory", "inventory", "out", 1U, "cold_out"}};
         descriptor_.parameters = {
+            {"wall_thermal_capacity", "thermal_capacity", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
             {"hot_side_UA", "thermal_conductance", true,
              std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -81,38 +84,71 @@ public:
                     {"cold_fluid_mass", "mass", true,
                      std::nullopt, 0.0,
                      std::numeric_limits<double>::infinity(),
-                     false, true},
-                    {"wall_thermal_capacity", "thermal_capacity", true,
-                     std::nullopt, 0.0,
-                     std::numeric_limits<double>::infinity(),
                      false, true}});
         }
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph};
         descriptor_.supports_steady = true;
-        descriptor_.supports_transient = !finite_volume_;
-        if (!finite_volume_) descriptor_.internal_variables = {
-            {"hot_total_energy", DaeVariableKind::differential,
-             300000.0, 1.0e6, 0.0, 1.0e5,
-             -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity(), "energy"},
-            {"hot_enthalpy", DaeVariableKind::algebraic,
-             500000.0, 100000.0, 0.0, 100000.0,
-             -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity(),
-             "specific_enthalpy"},
-            {"cold_total_energy", DaeVariableKind::differential,
-             200000.0, 1.0e6, 0.0, 1.0e5,
-             -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity(), "energy"},
-            {"cold_enthalpy", DaeVariableKind::algebraic,
-             300000.0, 100000.0, 0.0, 100000.0,
-             -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::infinity(),
-             "specific_enthalpy"},
-            {"wall_temperature", DaeVariableKind::differential,
-             350.0, 100.0, 0.0, 10.0, 0.0,
-             std::numeric_limits<double>::infinity(), "temperature"}};
+        descriptor_.supports_transient = true;
+        if (finite_volume_) {
+            descriptor_.internal_variables = {
+                {"hot_mass", DaeVariableKind::differential,
+                 1.0, 10.0, 0.0, 1.0, 1.0e-12,
+                 std::numeric_limits<double>::infinity(), "mass"},
+                {"hot_total_energy", DaeVariableKind::differential,
+                 300000.0, 1.0e6, 0.0, 1.0e5,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(), "energy"},
+                {"hot_pressure", DaeVariableKind::algebraic,
+                 200000.0, 100000.0, 0.0, 100000.0, 1.0,
+                 std::numeric_limits<double>::infinity(), "pressure"},
+                {"hot_enthalpy", DaeVariableKind::algebraic,
+                 500000.0, 100000.0, 0.0, 100000.0,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(),
+                 "specific_enthalpy"},
+                {"cold_mass", DaeVariableKind::differential,
+                 1.0, 10.0, 0.0, 1.0, 1.0e-12,
+                 std::numeric_limits<double>::infinity(), "mass"},
+                {"cold_total_energy", DaeVariableKind::differential,
+                 200000.0, 1.0e6, 0.0, 1.0e5,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(), "energy"},
+                {"cold_pressure", DaeVariableKind::algebraic,
+                 200000.0, 100000.0, 0.0, 100000.0, 1.0,
+                 std::numeric_limits<double>::infinity(), "pressure"},
+                {"cold_enthalpy", DaeVariableKind::algebraic,
+                 300000.0, 100000.0, 0.0, 100000.0,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(),
+                 "specific_enthalpy"},
+                {"wall_temperature", DaeVariableKind::differential,
+                 350.0, 100.0, 0.0, 10.0, 0.0,
+                 std::numeric_limits<double>::infinity(), "temperature"}};
+        } else {
+            descriptor_.internal_variables = {
+                {"hot_total_energy", DaeVariableKind::differential,
+                 300000.0, 1.0e6, 0.0, 1.0e5,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(), "energy"},
+                {"hot_enthalpy", DaeVariableKind::algebraic,
+                 500000.0, 100000.0, 0.0, 100000.0,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(),
+                 "specific_enthalpy"},
+                {"cold_total_energy", DaeVariableKind::differential,
+                 200000.0, 1.0e6, 0.0, 1.0e5,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(), "energy"},
+                {"cold_enthalpy", DaeVariableKind::algebraic,
+                 300000.0, 100000.0, 0.0, 100000.0,
+                 -std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::infinity(),
+                 "specific_enthalpy"},
+                {"wall_temperature", DaeVariableKind::differential,
+                 350.0, 100.0, 0.0, 10.0, 0.0,
+                 std::numeric_limits<double>::infinity(), "temperature"}};
+        }
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -178,11 +214,11 @@ public:
             add_steady_inventory_closure(
                 system, prefix + "hot_inventory", hot_properties,
                 hot_holdup_parameter, hot_inventory,
-                hot_out_p, hot_out_h);
+                hot_in_p, hot_out_h);
             add_steady_inventory_closure(
                 system, prefix + "cold_inventory", cold_properties,
                 cold_holdup_parameter, cold_inventory,
-                cold_out_p, cold_out_h);
+                cold_in_p, cold_out_h);
         } else {
             system.add_linear_equation(
                 prefix + "hot_inventory",
@@ -252,14 +288,14 @@ public:
     void add_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system) const override {
-        if (finite_volume_) {
-            throw std::logic_error(
-                "steady finite-volume heat-exchanger cell does not "
-                "support transient compilation");
-        }
         const auto hot_properties = validate_media(context);
         const auto cold_properties =
             require_property_package(context, "cold_in");
+        if (finite_volume_) {
+            add_finite_volume_transient_equations(
+                context, system, hot_properties, cold_properties);
+            return;
+        }
         const double hot_fluid_mass = required_parameter(
             context.component, "hot_fluid_mass");
         const double cold_fluid_mass = required_parameter(
@@ -366,6 +402,228 @@ public:
     }
 
 private:
+    static void add_finite_volume_transient_equations(
+        const ComponentCompileContext& context,
+        DaeEquationSystemBuilder& system,
+        const std::shared_ptr<const physics::PropertyPackage>&
+            hot_properties,
+        const std::shared_ptr<const physics::PropertyPackage>&
+            cold_properties) {
+        const double hot_volume = required_parameter(
+            context.component, "hot_fluid_volume");
+        const double cold_volume = required_parameter(
+            context.component, "cold_fluid_volume");
+        const double wall_capacity = required_parameter(
+            context.component, "wall_thermal_capacity");
+        const double hot_ua = required_parameter(
+            context.component, "hot_side_UA");
+        const double cold_ua = required_parameter(
+            context.component, "cold_side_UA");
+        const double hot_diameter = required_parameter(
+            context.component, "hot_flow_diameter");
+        const double cold_diameter = required_parameter(
+            context.component, "cold_flow_diameter");
+        const double hot_area = std::numbers::pi * hot_diameter *
+            hot_diameter / 4.0;
+        const double cold_area = std::numbers::pi * cold_diameter *
+            cold_diameter / 4.0;
+        const double hot_loss_scale = required_parameter(
+            context.component, "hot_loss_coefficient") /
+            (2.0 * hot_area * hot_area);
+        const double cold_loss_scale = required_parameter(
+            context.component, "cold_loss_coefficient") /
+            (2.0 * cold_area * cold_area);
+
+        const auto hot_in_m = require_port_variable(context, "hot_in.m_dot");
+        const auto hot_in_p = require_port_variable(context, "hot_in.p");
+        const auto hot_in_h = require_port_variable(context, "hot_in.h");
+        const auto hot_out_m = require_port_variable(context, "hot_out.m_dot");
+        const auto hot_out_p = require_port_variable(context, "hot_out.p");
+        const auto hot_out_h = require_port_variable(context, "hot_out.h");
+        const auto cold_in_m = require_port_variable(context, "cold_in.m_dot");
+        const auto cold_in_p = require_port_variable(context, "cold_in.p");
+        const auto cold_in_h = require_port_variable(context, "cold_in.h");
+        const auto cold_out_m = require_port_variable(context, "cold_out.m_dot");
+        const auto cold_out_p = require_port_variable(context, "cold_out.p");
+        const auto cold_out_h = require_port_variable(context, "cold_out.h");
+        const auto hot_inventory = require_port_variable(
+            context, "hot_inventory.mass");
+        const auto cold_inventory = require_port_variable(
+            context, "cold_inventory.mass");
+        const auto hot_mass = require_internal_variable(context, "hot_mass");
+        const auto hot_energy = require_internal_variable(
+            context, "hot_total_energy");
+        const auto hot_pressure = require_internal_variable(
+            context, "hot_pressure");
+        const auto hot_enthalpy = require_internal_variable(
+            context, "hot_enthalpy");
+        const auto cold_mass = require_internal_variable(context, "cold_mass");
+        const auto cold_energy = require_internal_variable(
+            context, "cold_total_energy");
+        const auto cold_pressure = require_internal_variable(
+            context, "cold_pressure");
+        const auto cold_enthalpy = require_internal_variable(
+            context, "cold_enthalpy");
+        const auto wall_temperature = require_internal_variable(
+            context, "wall_temperature");
+        const std::string prefix = "component." + context.component.id + ".";
+
+        add_mass_accumulation(
+            system, prefix + "hot_mass_accumulation",
+            hot_mass, hot_in_m, hot_out_m);
+        add_mass_accumulation(
+            system, prefix + "cold_mass_accumulation",
+            cold_mass, cold_in_m, cold_out_m);
+        system.add_linear_equation(
+            prefix + "hot_inventory_port",
+            {{hot_inventory, 1.0, 0.0}, {hot_mass, -1.0, 0.0}},
+            0.0, 10.0);
+        system.add_linear_equation(
+            prefix + "cold_inventory_port",
+            {{cold_inventory, 1.0, 0.0}, {cold_mass, -1.0, 0.0}},
+            0.0, 10.0);
+        system.add_linear_equation(
+            prefix + "hot_bulk_pressure",
+            {{hot_in_p, 1.0, 0.0}, {hot_pressure, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "cold_bulk_pressure",
+            {{cold_in_p, 1.0, 0.0}, {cold_pressure, -1.0, 0.0}},
+            0.0, 100000.0);
+        add_fluid_energy_equation(
+            system, prefix + "hot_energy_accumulation",
+            hot_properties, hot_energy, hot_in_m, hot_in_h,
+            hot_out_m, hot_pressure, hot_enthalpy,
+            wall_temperature, hot_ua);
+        add_fluid_energy_equation(
+            system, prefix + "cold_energy_accumulation",
+            cold_properties, cold_energy, cold_in_m, cold_in_h,
+            cold_out_m, cold_pressure, cold_enthalpy,
+            wall_temperature, cold_ua);
+        add_wall_energy_equation(
+            system, prefix + "wall_energy_accumulation",
+            hot_properties, cold_properties, hot_pressure,
+            hot_enthalpy, cold_pressure, cold_enthalpy,
+            wall_temperature, hot_ua, cold_ua, wall_capacity);
+        system.add_linear_equation(
+            prefix + "hot_outlet_enthalpy",
+            {{hot_out_h, 1.0, 0.0}, {hot_enthalpy, -1.0, 0.0}},
+            0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "cold_outlet_enthalpy",
+            {{cold_out_h, 1.0, 0.0}, {cold_enthalpy, -1.0, 0.0}},
+            0.0, 100000.0);
+        add_transient_pressure_loss(
+            system, prefix + "hot_pressure_loss", hot_properties,
+            hot_out_m, hot_pressure, hot_enthalpy, hot_out_p,
+            hot_loss_scale);
+        add_transient_pressure_loss(
+            system, prefix + "cold_pressure_loss", cold_properties,
+            cold_out_m, cold_pressure, cold_enthalpy, cold_out_p,
+            cold_loss_scale);
+        add_transient_volume_closure(
+            system, prefix + "hot_volume_closure", hot_properties,
+            hot_volume, hot_mass, hot_pressure, hot_enthalpy);
+        add_transient_volume_closure(
+            system, prefix + "cold_volume_closure", cold_properties,
+            cold_volume, cold_mass, cold_pressure, cold_enthalpy);
+        add_variable_mass_energy_closure(
+            system, prefix + "hot_energy_closure", hot_properties,
+            hot_energy, hot_mass, hot_pressure, hot_enthalpy);
+        add_variable_mass_energy_closure(
+            system, prefix + "cold_energy_closure", cold_properties,
+            cold_energy, cold_mass, cold_pressure, cold_enthalpy);
+    }
+
+    static void add_mass_accumulation(
+        DaeEquationSystemBuilder& system,
+        const std::string& name,
+        std::size_t mass,
+        std::size_t inlet_m,
+        std::size_t outlet_m) {
+        system.add_linear_equation(
+            name,
+            {{mass, 0.0, 1.0}, {inlet_m, -1.0, 0.0},
+             {outlet_m, 1.0, 0.0}},
+            0.0, 100.0);
+    }
+
+    static void add_transient_volume_closure(
+        DaeEquationSystemBuilder& system,
+        const std::string& name,
+        std::shared_ptr<const physics::PropertyPackage> properties,
+        double volume,
+        std::size_t mass,
+        std::size_t pressure,
+        std::size_t enthalpy) {
+        system.add_sparse_equation(
+            name, {mass, pressure, enthalpy},
+            [properties = std::move(properties), volume, mass,
+             pressure, enthalpy](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) return property_failure(state);
+                residual = x.at(mass) -
+                    volume * state.state.density_kg_m3;
+                jacobian.push_back({mass, 1.0, 0.0});
+                jacobian.push_back({
+                    pressure,
+                    -volume * state.derivatives
+                        .density_wrt_pressure_at_enthalpy,
+                    0.0});
+                jacobian.push_back({
+                    enthalpy,
+                    -volume * state.derivatives
+                        .density_wrt_enthalpy_at_pressure,
+                    0.0});
+                return EvaluationStatus::success();
+            },
+            10.0);
+    }
+
+    static void add_variable_mass_energy_closure(
+        DaeEquationSystemBuilder& system,
+        const std::string& name,
+        std::shared_ptr<const physics::PropertyPackage> properties,
+        std::size_t energy,
+        std::size_t mass,
+        std::size_t pressure,
+        std::size_t enthalpy) {
+        system.add_sparse_equation(
+            name, {energy, mass, pressure, enthalpy},
+            [properties = std::move(properties), energy, mass,
+             pressure, enthalpy](
+                double, const std::vector<double>& x,
+                const std::vector<double>&, double& residual,
+                std::vector<DaeEquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) return property_failure(state);
+                residual = x.at(energy) - x.at(mass) *
+                    state.state.internal_energy_j_kg;
+                jacobian.push_back({energy, 1.0, 0.0});
+                jacobian.push_back({
+                    mass, -state.state.internal_energy_j_kg, 0.0});
+                jacobian.push_back({
+                    pressure,
+                    -x.at(mass) * state.derivatives
+                        .internal_energy_wrt_pressure_at_enthalpy,
+                    0.0});
+                jacobian.push_back({
+                    enthalpy,
+                    -x.at(mass) * state.derivatives
+                        .internal_energy_wrt_enthalpy_at_pressure,
+                    0.0});
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+    }
+
     static void add_steady_inventory_closure(
         EquationSystemBuilder& system,
         const std::string& name,

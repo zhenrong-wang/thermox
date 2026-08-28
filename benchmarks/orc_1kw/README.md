@@ -38,10 +38,11 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   variable-mass two-phase cells, correlated volumes, and equilibrium drums expose their applicable
   fluid inventory. Distributed graphs can therefore report and constrain charge without reaching
   into component internals.
-- A steady finite-volume exchanger cell now computes each side's property-backed mass from its own
-  geometry and mixed outlet state. Inventory links are medium-aware, preventing utility-fluid mass
-  from entering a refrigerant charge balance. Rigid volumes provide the corresponding generic
-  receiver/accumulator closure.
+- A steady/transient finite-volume exchanger cell now computes each side's property-backed mass
+  from its own geometry and mixed state. Its transient form conserves differential mass, fluid
+  internal energy, and wall energy during filling or draining. Inventory links are medium-aware,
+  preventing utility-fluid mass from entering a refrigerant charge balance. Rigid volumes provide
+  the corresponding generic receiver/accumulator closure.
 - External-boundary prediction remains open. It still requires generic speed-dependent pump and
   expander behavior and traceable or training-only calibrated geometry/component artifacts. The
   dataset's measured charge alone cannot identify the individual exchanger and receiver volumes.
