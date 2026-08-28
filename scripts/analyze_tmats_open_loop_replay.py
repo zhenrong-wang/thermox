@@ -122,10 +122,22 @@ def analyze(reference: dict, result: dict) -> dict:
             "s2_total_pressure",
         }
     ]
+    closed_loop = (
+        result["metadata"]["model"]["case_id"] ==
+        "nasa_speed_control_replay"
+    )
     return {
         "schema_version": "thermox.cross_code_trajectory_summary/v1",
-        "id": "nasa_tmats_simple_gas_turbine_open_loop_baseline",
-        "classification": "public_source_full_nonlinear_open_loop_cross_code_baseline",
+        "id": (
+            "nasa_tmats_simple_gas_turbine_closed_loop_comparison"
+            if closed_loop
+            else "nasa_tmats_simple_gas_turbine_open_loop_aligned"
+        ),
+        "classification": (
+            "public_source_full_nonlinear_closed_loop_cross_code_validation"
+            if closed_loop
+            else "public_source_full_nonlinear_open_loop_cross_code_validation"
+        ),
         "reference_artifact_id": reference["id"],
         "reference_source_sha256": reference["source"]["checksum_sha256"],
         "model_id": result["metadata"]["model"]["id"],
@@ -133,7 +145,11 @@ def analyze(reference: dict, result: dict) -> dict:
         "simulation_diagnostics": result["diagnostics"],
         "comparison": {
             "alignment": "701 exact timestamps on the 0.015 s NASA grid",
-            "forced_input": "NASA fuel-flow history with linear interpolation",
+            "forced_input": (
+                "NASA speed-demand history; Thermox PI predicts fuel flow"
+                if closed_loop
+                else "NASA fuel-flow history with linear interpolation"
+            ),
             "signal_count": len(summaries),
             "sample_comparison_count": sum(
                 item["sample_count"] for item in summaries
@@ -145,18 +161,26 @@ def analyze(reference: dict, result: dict) -> dict:
         },
         "interpretation": {
             "positive": [
-                "The generic 145-variable nonlinear DAE integrated the complete 10.5 s replay.",
+                "The generic nonlinear DAE integrated the complete 10.5 s replay.",
                 "All 701 NASA timestamps aligned exactly; no data resampling or fitted trajectory was used.",
-                "Fuel input is reproduced exactly and the model remains inside both public component maps.",
-                "The compressor temperature and rotor-speed trajectories remain materially closer than downstream thrust and pressure.",
+                (
+                    "Fuel flow is predicted by the generic sensor/PI/source control path."
+                    if closed_loop
+                    else "Fuel input is reproduced exactly to isolate plant physics."
+                ),
+                "The plant uses source-declared maps, losses, LHV, nozzle area, and shaft inertia without trajectory fitting.",
             ],
             "retained_gaps": [
-                "T-MATS FAR-table thermodynamics and Thermox equilibrium methane chemistry use different energy and property conventions.",
-                "The Thermox convergent nozzle is a generic perfect-gas model rather than the complete T-MATS nozzle table implementation.",
-                "NASA's sensor and PI speed controller are excluded from this open-loop plant replay.",
+                "T-MATS FAR-table properties and Thermox equilibrium species properties remain different model forms.",
+                "The generic nozzle uses a thermally-perfect critical-pressure estimate rather than T-MATS' complete gamma/R tables.",
+                (
+                    "The open-loop replay excludes NASA's sensor and PI controller."
+                    if not closed_loop
+                    else "Controller coefficients reproduce the published example and are not independently identified hardware parameters."
+                ),
                 "The source is computational cross-code evidence, not hardware measurement.",
             ],
-            "qualification": "baseline_only_no_engineering_acceptance_badge",
+            "qualification": "cross_code_validation_not_hardware_qualification",
         },
     }
 

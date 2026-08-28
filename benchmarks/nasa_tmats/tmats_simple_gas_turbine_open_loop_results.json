@@ -1,29 +1,29 @@
 {
   "schema_version": "thermox.cross_code_trajectory_summary/v1",
-  "id": "nasa_tmats_simple_gas_turbine_open_loop_baseline",
-  "classification": "public_source_full_nonlinear_open_loop_cross_code_baseline",
+  "id": "nasa_tmats_simple_gas_turbine_open_loop_aligned",
+  "classification": "public_source_full_nonlinear_open_loop_cross_code_validation",
   "reference_artifact_id": "nasa_tmats_simple_gas_turbine_nonlinear_dynamic",
   "reference_source_sha256": "bc3df719ce1baffd94855c0b0ae2770196bd92ad74c2f908e98783e1fae0f42c",
   "model_id": "nasa_tmats_simple_gas_turbine_open_loop",
   "case_id": "nasa_fuel_history_replay",
   "simulation_diagnostics": {
     "success": true,
-    "accepted_steps": 766,
-    "rejected_steps": 17,
+    "accepted_steps": 769,
+    "rejected_steps": 15,
     "maximum_order_used": 2,
-    "nonlinear_solves": 2350,
-    "nonlinear_iterations": 2548,
-    "symbolic_factorizations": 2548,
-    "numeric_factorizations": 2548,
-    "factorization_quality_observations": 2548,
-    "last_reciprocal_pivot_ratio": 7.838014372882401e-06,
-    "minimum_reciprocal_pivot_ratio": 4.600341214679272e-07,
-    "minimum_absolute_pivot_at_minimum_ratio": 1.3145488495203108e-05,
-    "maximum_absolute_pivot_at_minimum_ratio": 28.57502928969061,
+    "nonlinear_solves": 2352,
+    "nonlinear_iterations": 2521,
+    "symbolic_factorizations": 2521,
+    "numeric_factorizations": 2521,
+    "factorization_quality_observations": 2521,
+    "last_reciprocal_pivot_ratio": 1.63116009086038e-05,
+    "minimum_reciprocal_pivot_ratio": 6.69326742291811e-08,
+    "minimum_absolute_pivot_at_minimum_ratio": 4.469752731882107e-06,
+    "maximum_absolute_pivot_at_minimum_ratio": 66.77983187370388,
     "accepted_pivot_count_at_minimum_ratio": 145,
     "factorization_size_at_minimum_ratio": 145,
     "factorization_quality_method": "umfpack-u-diagonal-ratio",
-    "maximum_linear_backward_error": 1.8137483260218033e-16,
+    "maximum_linear_backward_error": 4.925201943545122e-17,
     "linear_refinement_attempts": 0,
     "linear_refinement_successes": 0,
     "structural_block_solves": 0,
@@ -38,11 +38,11 @@
     "linear_solver_backend": "umfpack",
     "final_time": 10.5,
     "last_step": 0.015000000000000568,
-    "last_error_norm": 0.0027948897483421518,
-    "maximum_accepted_error_norm": 0.9199144222861935,
-    "maximum_error_ratio": 5.925388155114968,
+    "last_error_norm": 0.008911268303956868,
+    "maximum_accepted_error_norm": 0.9835287491149027,
+    "maximum_error_ratio": 5.006050599803999,
     "limiting_error_variable": "shaft.rotational_energy",
-    "maximum_absolute_normalized_residual": 9.754888713359833e-09,
+    "maximum_absolute_normalized_residual": 9.55437496304512e-09,
     "limiting_nonlinear_residual": "component.turbine.shaft_power",
     "message": "integration reached end_time"
   },
@@ -51,56 +51,56 @@
     "forced_input": "NASA fuel-flow history with linear interpolation",
     "signal_count": 21,
     "sample_comparison_count": 14721,
-    "predictive_signal_mean_mape_percent": 7.06381509199646,
+    "predictive_signal_mean_mape_percent": 0.5052888259968538,
     "signals": [
       {
         "signal_id": "shaft_speed",
         "dimension": "angular_speed",
         "sample_count": 701,
-        "minimum_relative_error_percent": 0.0,
-        "maximum_relative_error_percent": 4.474977173331451,
-        "mean_absolute_relative_error_percent": 2.7811614002337937,
-        "final_relative_error_percent": 1.1627435757247895,
-        "maximum_absolute_error_si": 46.861851375774904
+        "minimum_relative_error_percent": -0.0599406345793585,
+        "maximum_relative_error_percent": 0.020376853957881913,
+        "mean_absolute_relative_error_percent": 0.02472078789975761,
+        "final_relative_error_percent": 0.0132312407542301,
+        "maximum_absolute_error_si": 0.6264227210319859
       },
       {
         "signal_id": "fuel_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
         "minimum_relative_error_percent": 0.0,
-        "maximum_relative_error_percent": 0.0,
-        "mean_absolute_relative_error_percent": 0.0,
+        "maximum_relative_error_percent": 3.9968028886505635e-13,
+        "mean_absolute_relative_error_percent": 5.701573307632758e-16,
         "final_relative_error_percent": 0.0,
-        "maximum_absolute_error_si": 0.0
+        "maximum_absolute_error_si": 1.7763568394002505e-15
       },
       {
         "signal_id": "net_thrust",
         "dimension": "force",
         "sample_count": 701,
-        "minimum_relative_error_percent": 10.470065763892556,
-        "maximum_relative_error_percent": 21.538488279573855,
-        "mean_absolute_relative_error_percent": 16.233710444412115,
-        "final_relative_error_percent": 15.713194204031211,
-        "maximum_absolute_error_si": 8021.110826174729
+        "minimum_relative_error_percent": 0.3959776701993212,
+        "maximum_relative_error_percent": 0.8075534363543246,
+        "mean_absolute_relative_error_percent": 0.5483354158738037,
+        "final_relative_error_percent": 0.7395470807533666,
+        "maximum_absolute_error_si": 297.0107327788064
       },
       {
         "signal_id": "s0_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17581936561174016,
-        "maximum_relative_error_percent": 11.763173407149186,
-        "mean_absolute_relative_error_percent": 6.239193943987396,
-        "final_relative_error_percent": 7.117556114160384,
-        "maximum_absolute_error_si": 4.782442349118746
+        "minimum_relative_error_percent": -0.20412016682638257,
+        "maximum_relative_error_percent": 0.13536418363242486,
+        "mean_absolute_relative_error_percent": 0.07551220613253451,
+        "final_relative_error_percent": 0.07710715465656381,
+        "maximum_absolute_error_si": 0.09203413761264301
       },
       {
         "signal_id": "s0_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
         "minimum_relative_error_percent": -2.78913752094212e-06,
-        "maximum_relative_error_percent": -2.6895066507215404e-06,
-        "mean_absolute_relative_error_percent": 2.784924732795577e-06,
-        "final_relative_error_percent": -2.7891374654309686e-06,
+        "maximum_relative_error_percent": -2.6899964922222352e-06,
+        "mean_absolute_relative_error_percent": 2.784930484321002e-06,
+        "final_relative_error_percent": -2.7631696375429726e-06,
         "maximum_absolute_error_si": 8.036899998842273e-06
       },
       {
@@ -117,21 +117,21 @@
         "signal_id": "s2_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17581936561174016,
-        "maximum_relative_error_percent": 11.763173407149186,
-        "mean_absolute_relative_error_percent": 6.239193943987396,
-        "final_relative_error_percent": 7.117556114160384,
-        "maximum_absolute_error_si": 4.782442349118746
+        "minimum_relative_error_percent": -0.20412016682638257,
+        "maximum_relative_error_percent": 0.13536418363242486,
+        "mean_absolute_relative_error_percent": 0.07551220613253451,
+        "final_relative_error_percent": 0.07710715465656381,
+        "maximum_absolute_error_si": 0.09203413761264301
       },
       {
         "signal_id": "s2_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
-        "minimum_relative_error_percent": -2.787902475542836e-06,
-        "maximum_relative_error_percent": -2.7879023201116127e-06,
-        "mean_absolute_relative_error_percent": 2.7879024156604786e-06,
-        "final_relative_error_percent": -2.7879023978272244e-06,
-        "maximum_absolute_error_si": 8.033341202917654e-06
+        "minimum_relative_error_percent": -2.7879024977472966e-06,
+        "maximum_relative_error_percent": -2.787902297907152e-06,
+        "mean_absolute_relative_error_percent": 2.787902418812182e-06,
+        "final_relative_error_percent": -2.787902420031685e-06,
+        "maximum_absolute_error_si": 8.033341259761073e-06
       },
       {
         "signal_id": "s2_total_pressure",
@@ -147,138 +147,138 @@
         "signal_id": "s3_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17581936561174016,
-        "maximum_relative_error_percent": 11.763173407149186,
-        "mean_absolute_relative_error_percent": 6.239193943987396,
-        "final_relative_error_percent": 7.117556114160384,
-        "maximum_absolute_error_si": 4.782442349118746
+        "minimum_relative_error_percent": -0.20412016682638257,
+        "maximum_relative_error_percent": 0.13536418363242486,
+        "mean_absolute_relative_error_percent": 0.07551220613253451,
+        "final_relative_error_percent": 0.07710715465656381,
+        "maximum_absolute_error_si": 0.09203413761264301
       },
       {
         "signal_id": "s3_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
-        "minimum_relative_error_percent": 0.5704360479228399,
-        "maximum_relative_error_percent": 4.556282547968493,
-        "mean_absolute_relative_error_percent": 3.2502613855712337,
-        "final_relative_error_percent": 2.111653860276941,
-        "maximum_absolute_error_si": 32.81680261891381
+        "minimum_relative_error_percent": -0.538818431217436,
+        "maximum_relative_error_percent": -0.352664003045311,
+        "mean_absolute_relative_error_percent": 0.47282249865801823,
+        "final_relative_error_percent": -0.3665610861159796,
+        "maximum_absolute_error_si": 3.9397617882955274
       },
       {
         "signal_id": "s3_total_pressure",
         "dimension": "pressure",
         "sample_count": 701,
-        "minimum_relative_error_percent": 3.376918248171301,
-        "maximum_relative_error_percent": 13.347641900124362,
-        "mean_absolute_relative_error_percent": 8.832066067938648,
-        "final_relative_error_percent": 9.346819086655156,
-        "maximum_absolute_error_si": 218346.4493357865
+        "minimum_relative_error_percent": -1.0808945455520247,
+        "maximum_relative_error_percent": -0.37754566448411353,
+        "mean_absolute_relative_error_percent": 0.8282280487526129,
+        "final_relative_error_percent": -0.4256930264542991,
+        "maximum_absolute_error_si": 21466.31869711238
       },
       {
         "signal_id": "s4_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17069841143003694,
-        "maximum_relative_error_percent": 11.504746261347076,
-        "mean_absolute_relative_error_percent": 6.101815254512408,
-        "final_relative_error_percent": 7.002341143155033,
-        "maximum_absolute_error_si": 4.782442349118739
+        "minimum_relative_error_percent": -0.19910699169708446,
+        "maximum_relative_error_percent": 0.132886856030634,
+        "mean_absolute_relative_error_percent": 0.0735140101922364,
+        "final_relative_error_percent": 0.07585898766697685,
+        "maximum_absolute_error_si": 0.09203413761252932
       },
       {
         "signal_id": "s4_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
-        "minimum_relative_error_percent": 3.1617370840770986,
-        "maximum_relative_error_percent": 7.416509553279926,
-        "mean_absolute_relative_error_percent": 5.193328868417056,
-        "final_relative_error_percent": 4.559868304323977,
-        "maximum_absolute_error_si": 126.82172557054628
+        "minimum_relative_error_percent": -2.088763619284295,
+        "maximum_relative_error_percent": -0.7412897826244325,
+        "mean_absolute_relative_error_percent": 1.6237638334758755,
+        "final_relative_error_percent": -1.0714676486496377,
+        "maximum_absolute_error_si": 35.717692346187505
       },
       {
         "signal_id": "s4_total_pressure",
         "dimension": "pressure",
         "sample_count": 701,
-        "minimum_relative_error_percent": 3.376918248171301,
-        "maximum_relative_error_percent": 13.34764190012434,
-        "mean_absolute_relative_error_percent": 8.83206606793865,
-        "final_relative_error_percent": 9.346819086655156,
-        "maximum_absolute_error_si": 207429.12686899747
+        "minimum_relative_error_percent": -1.0808945455520136,
+        "maximum_relative_error_percent": -0.37754566448411353,
+        "mean_absolute_relative_error_percent": 0.8282280487526129,
+        "final_relative_error_percent": -0.4256930264542991,
+        "maximum_absolute_error_si": 20393.002762256656
       },
       {
         "signal_id": "s5_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17069841143003694,
-        "maximum_relative_error_percent": 11.504746261347076,
-        "mean_absolute_relative_error_percent": 6.101815254512408,
-        "final_relative_error_percent": 7.002341143155033,
-        "maximum_absolute_error_si": 4.782442349118739
+        "minimum_relative_error_percent": -0.19910699169708446,
+        "maximum_relative_error_percent": 0.132886856030634,
+        "mean_absolute_relative_error_percent": 0.0735140101922364,
+        "final_relative_error_percent": 0.07585898766697685,
+        "maximum_absolute_error_si": 0.09203413761252932
       },
       {
         "signal_id": "s5_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
-        "minimum_relative_error_percent": 3.432955159508433,
-        "maximum_relative_error_percent": 8.359143537802382,
-        "mean_absolute_relative_error_percent": 5.724642384882203,
-        "final_relative_error_percent": 5.218462569813087,
-        "maximum_absolute_error_si": 113.92505924372517
+        "minimum_relative_error_percent": -1.6680905184943806,
+        "maximum_relative_error_percent": -0.4434093612535994,
+        "mean_absolute_relative_error_percent": 1.2520164073122304,
+        "final_relative_error_percent": -0.7794260427855693,
+        "maximum_absolute_error_si": 22.734064833791535
       },
       {
         "signal_id": "s5_total_pressure",
         "dimension": "pressure",
         "sample_count": 701,
-        "minimum_relative_error_percent": 4.353532468268195,
-        "maximum_relative_error_percent": 14.010370322742816,
-        "mean_absolute_relative_error_percent": 9.713067437976338,
-        "final_relative_error_percent": 10.754374819795466,
-        "maximum_absolute_error_si": 70416.73965285462
+        "minimum_relative_error_percent": 0.2529791857146746,
+        "maximum_relative_error_percent": 0.5458563362652269,
+        "mean_absolute_relative_error_percent": 0.4037055538351007,
+        "final_relative_error_percent": 0.47005491653289155,
+        "maximum_absolute_error_si": 3008.43348337349
       },
       {
         "signal_id": "s7_mass_flow",
         "dimension": "mass_flow",
         "sample_count": 701,
-        "minimum_relative_error_percent": -0.17069841143003694,
-        "maximum_relative_error_percent": 11.504746261347076,
-        "mean_absolute_relative_error_percent": 6.101815254512408,
-        "final_relative_error_percent": 7.002341143155033,
-        "maximum_absolute_error_si": 4.782442349118739
+        "minimum_relative_error_percent": -0.19910699169708446,
+        "maximum_relative_error_percent": 0.132886856030634,
+        "mean_absolute_relative_error_percent": 0.0735140101922364,
+        "final_relative_error_percent": 0.07585898766697685,
+        "maximum_absolute_error_si": 0.09203413761252932
       },
       {
         "signal_id": "s7_total_temperature",
         "dimension": "temperature",
         "sample_count": 701,
-        "minimum_relative_error_percent": 3.432955157017714,
-        "maximum_relative_error_percent": 8.359143537802382,
-        "mean_absolute_relative_error_percent": 5.724642381097577,
-        "final_relative_error_percent": 5.218462569813087,
-        "maximum_absolute_error_si": 113.92505924372517
+        "minimum_relative_error_percent": -1.6680905415100367,
+        "maximum_relative_error_percent": -0.4434093612535994,
+        "mean_absolute_relative_error_percent": 1.252016418580234,
+        "final_relative_error_percent": -0.7794260427855915,
+        "maximum_absolute_error_si": 22.734065147467163
       },
       {
         "signal_id": "s7_total_pressure",
         "dimension": "pressure",
         "sample_count": 701,
-        "minimum_relative_error_percent": 4.353532468268173,
-        "maximum_relative_error_percent": 14.010370322742816,
-        "mean_absolute_relative_error_percent": 9.713067437976338,
-        "final_relative_error_percent": 10.754374819795443,
-        "maximum_absolute_error_si": 69712.57225632598
+        "minimum_relative_error_percent": 0.2529791857146968,
+        "maximum_relative_error_percent": 0.5458563362652491,
+        "mean_absolute_relative_error_percent": 0.40370555383510104,
+        "final_relative_error_percent": 0.47005491653291376,
+        "maximum_absolute_error_si": 2978.34914853971
       }
     ]
   },
   "interpretation": {
     "positive": [
-      "The generic 145-variable nonlinear DAE integrated the complete 10.5 s replay.",
+      "The generic nonlinear DAE integrated the complete 10.5 s replay.",
       "All 701 NASA timestamps aligned exactly; no data resampling or fitted trajectory was used.",
-      "Fuel input is reproduced exactly and the model remains inside both public component maps.",
-      "The compressor temperature and rotor-speed trajectories remain materially closer than downstream thrust and pressure."
+      "Fuel input is reproduced exactly to isolate plant physics.",
+      "The plant uses source-declared maps, losses, LHV, nozzle area, and shaft inertia without trajectory fitting."
     ],
     "retained_gaps": [
-      "T-MATS FAR-table thermodynamics and Thermox equilibrium methane chemistry use different energy and property conventions.",
-      "The Thermox convergent nozzle is a generic perfect-gas model rather than the complete T-MATS nozzle table implementation.",
-      "NASA's sensor and PI speed controller are excluded from this open-loop plant replay.",
+      "T-MATS FAR-table properties and Thermox equilibrium species properties remain different model forms.",
+      "The generic nozzle uses a thermally-perfect critical-pressure estimate rather than T-MATS' complete gamma/R tables.",
+      "The open-loop replay excludes NASA's sensor and PI controller.",
       "The source is computational cross-code evidence, not hardware measurement."
     ],
-    "qualification": "baseline_only_no_engineering_acceptance_badge"
+    "qualification": "cross_code_validation_not_hardware_qualification"
   },
-  "thermox_result_sha256": "37b37f7963e01e2604530b8f310c9fac0f740939ddb12dad4ba762365422d0ef"
+  "thermox_result_sha256": "5f8b76c23ee54235eed8048d98a3da2612cd4f4584f3b97b39e25a1109b350ba"
 }

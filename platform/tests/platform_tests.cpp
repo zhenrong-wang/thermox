@@ -75,6 +75,9 @@ public:
                 thermox::physics::ThermochemistryCapability::state_ps ||
             capability ==
                 thermox::physics::ThermochemistryCapability::
+                    lower_heating_value ||
+            capability ==
+                thermox::physics::ThermochemistryCapability::
                     equilibrium_hp;
     }
     thermox::physics::ThermochemicalResult state_pt(
@@ -118,9 +121,9 @@ public:
         double,
         const thermox::physics::SpeciesComposition&) const override {
         return {
-            0.0,
-            thermox::physics::PropertyStatus::unsupported,
-            "test backend does not implement heating values",
+            10.0e6,
+            thermox::physics::PropertyStatus::success,
+            {},
         };
     }
 
@@ -993,7 +996,7 @@ void test_component_registry_exposes_default_models() {
                 "transport.material.perfect_gas_mach_scaled_loss"),
             "default registry should contain Mach-scaled material duct");
     require(registry.contains(
-                "terminal.material.perfect_gas_convergent_nozzle"),
+                "terminal.material.convergent_nozzle"),
             "default registry should contain convergent material nozzle");
     require(registry.contains("shaft.combiner.two_driver"),
             "default registry should contain shaft combiner");
@@ -1052,6 +1055,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "sink.fluid.boundary",
         "source.material.boundary",
         "source.material.fixed_composition",
+        "source.material.controlled_fixed_composition",
         "sink.material.boundary",
         "source.heat.boundary",
         "sink.heat.boundary",
@@ -1092,7 +1096,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "junction.material.cross_bleed.performance_map",
         "transport.material.perfect_gas_mach_scaled_loss",
         "transport.material.freestream_momentum",
-        "terminal.material.perfect_gas_convergent_nozzle",
+        "terminal.material.convergent_nozzle",
         "valve.fluid.isenthalpic_pressure_ratio",
         "valve.fluid.actuated_nonflashing_liquid",
         "restriction.fluid.orifice.nonflashing_liquid",
@@ -1110,6 +1114,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "regulator.material.isenthalpic_network_pressure",
         "combustor.material.adiabatic_equilibrium",
         "combustor.material.equilibrium_heat_release_efficiency",
+        "combustor.material.equilibrium_declared_lhv",
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.fluid.dynamic_cell",
@@ -1133,11 +1138,13 @@ void test_component_catalog_exposes_parameter_contracts() {
         "gearbox.shaft.fixed_ratio",
         "shaft.inertia.two_port",
         "shaft.inertia.multi_load",
+        "sensor.shaft.normalized_speed",
         "generator.electrical.efficiency",
         "converter.fluid_to_electrical.polynomial_efficiency",
         "balance.force.propulsive",
         "control.proportional.normalized",
         "control.first_order_lag.normalized",
+        "sensor.first_order_lag.normalized",
         "control.pi_bounded.normalized"};
     std::sort(expected_kinds.begin(), expected_kinds.end());
     require(registry.kinds() == expected_kinds,
@@ -4197,13 +4204,12 @@ void test_perfect_gas_convergent_material_nozzle() {
       "materials": {"outlet": "air"}
     }, {
       "id": "nozzle",
-      "kind": "terminal.material.perfect_gas_convergent_nozzle",
+      "kind": "terminal.material.convergent_nozzle",
       "parameters": {
         "reference_throat_area": 0.01,
         "reference_back_pressure": {"value": 100.0, "unit": "kPa"},
         "discharge_coefficient": 1.0,
-        "gross_thrust_coefficient": 0.99,
-        "heat_capacity_ratio": 1.4
+        "velocity_coefficient": 0.99
       },
       "materials": {"inlet": "air"}
     }],
@@ -4253,7 +4259,8 @@ void test_perfect_gas_convergent_material_nozzle() {
     thermox::physics::ThermochemistryPackageRegistry chemistry;
     chemistry.register_backend(
         {"test_backend", "test-thermochemistry", "1.0.0",
-         {thermox::physics::ThermochemistryCapability::state_ph}},
+         {thermox::physics::ThermochemistryCapability::state_ph,
+          thermox::physics::ThermochemistryCapability::state_ps}},
         [](std::string_view, std::string_view) {
             return std::make_shared<
                 const TestThermochemistryPackage>();
@@ -4488,7 +4495,9 @@ void test_adiabatic_equilibrium_combustor() {
     chemistry.register_backend(
         {"test_backend", "test-thermochemistry", "1.0.0",
          {thermox::physics::ThermochemistryCapability::
-              equilibrium_hp}},
+              equilibrium_hp,
+          thermox::physics::ThermochemistryCapability::
+              lower_heating_value}},
         [](std::string_view, std::string_view) {
             return std::make_shared<
                 const TestThermochemistryPackage>();

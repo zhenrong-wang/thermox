@@ -1,0 +1,32 @@
+{
+  "schema_version": "thermox.component_boundary_comparison/v1",
+  "id": "nasa_tmats_simple_gas_turbine_component_boundary_slices",
+  "classification": "public_source_exact_boundary_cross_code_diagnostic",
+  "inputs": {
+    "combustor_result_sha256": "3bca3dd5649cb17d7e3e1506df2006acc69cf166ceed04eac7173d140c082fc8",
+    "nozzle_capacity_result_sha256": "cecefc29e328678c48f22a0e59ff80fc3ae2f6dde44e1c7e298028c10648e473",
+    "nozzle_area_result_sha256": "af4488598040dc73436db0d23efc9f87edc8b6fd9c97a22dab565d94f83b0a1e"
+  },
+  "combustor": {
+    "boundary": "exact NASA station 3 plus 3 lbm/s methane",
+    "reference_outlet_temperature_k": 1709.9920745663924,
+    "thermox_outlet_temperature_k": 1677.3137159388416,
+    "relative_error_percent": -1.9110239815489871
+  },
+  "nozzle_fixed_oem_area": {
+    "reference_flow_kg_s": 46.71999782283288,
+    "thermox_flow_kg_s": 46.10253279242378,
+    "flow_relative_error_percent": -1.321628979416034,
+    "reference_thrust_n": 47443.49416356525,
+    "thermox_thrust_n": 47468.008964102264,
+    "thrust_relative_error_percent": 0.051671574721079416,
+    "mach": 1
+  },
+  "nozzle_fixed_measured_flow": {
+    "required_area_ratio": 1.0133932995222326,
+    "area_difference_percent": 1.339329952223256,
+    "thermox_thrust_n": 48103.7622258815,
+    "thrust_relative_error_percent": 1.391693579819231
+  },
+  "interpretation": "Declared-LHV alignment removes the dominant combustor bias; remaining temperature and capacity differences are attributable to empirical FAR-table versus equilibrium-species properties."
+}

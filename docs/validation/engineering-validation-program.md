@@ -79,15 +79,19 @@ combined MAPE and 0.283% maximum absolute error. A generic instance-sized fracti
 group carries the three source-declared extraction states and their work contribution; no
 case-specific correction is fitted.
 
-The coupled dynamic shaft/combustor/turbine/nozzle implementation is now executable as an open-loop
-plant replay. NASA's full nonlinear 701-point fuel history drives a generic 145-variable Thermox
-graph over 10.5 s. The solve reaches every reference timestamp with a maximum normalized residual
-of `9.75e-9`; shaft-speed MAPE is 2.781%, while the mean of the 16 predictive-signal MAPEs is
-7.064%. Net thrust remains 10.47--21.54% high. This closes the nonlinear reference-acquisition and
-whole-window execution gates, but not transient prediction: gas-property/combustion conventions,
-the detailed nozzle relation, and the source controller still require separate alignment. The
-Sandia sCO2 transient follows once authoritative numeric response data are obtained or digitization
-uncertainty is formally included in every acceptance limit.
+The coupled dynamic shaft/combustor/turbine/nozzle implementation now completes both open-loop and
+closed-loop 10.5 s replays against NASA's full nonlinear 701-point reference. Exact-boundary slices
+first exposed and corrected generic declared-LHV and convergent-nozzle pressure-thrust semantics.
+The aligned open-loop plant reaches every timestamp with a `9.55e-9` maximum normalized residual;
+shaft-speed MAPE is 0.025% and predictive-signal mean MAPE is 0.505%. The closed-loop graph then
+replaces forced fuel with a shaft-speed pickup, 0.05 s sensor, published PI controller, and
+commanded fuel source. It reaches every timestamp with a `9.08e-9` residual; shaft-speed MAPE is
+0.00875%, predicted fuel-flow MAPE is 0.443%, net-thrust MAPE is 0.788%, and predictive plant-signal
+mean MAPE is 0.502%. This closes the public nonlinear cross-code transient gate for this model.
+It does not close hardware qualification: the remaining FAR-table/equilibrium-property difference,
+published controller assumptions, and absence of measured uncertainty remain explicit limits.
+The Sandia sCO2 transient follows once authoritative numeric response data are obtained or
+digitization uncertainty is formally included in every acceptance limit.
 
 The first turbine prerequisite is complete. A generic coordinate-map material turbine consumes
 the native pressure-ratio/corrected-speed map orientation and solves pressure ratio through
@@ -116,9 +120,9 @@ pressure error 4.521% against T-MATS. The uncalibrated equilibrium fuel result r
 This advanced the program from sliced component/spool checks to a continuous map-driven engine
 core. Subsequent generic duct, variable-bleed, nozzle, freestream-momentum, and force-balance gates
 now complete the steady flight-point topology. The previously missing nonlinear reference is now
-exported from NASA's unmodified simple-gas-turbine Simulink example and exercised by the open-loop
-plant replay. Closed-loop controller reproduction and model-form alignment remain open.
-No discrepancy in the comparison is hidden with a case-specific factor.
+exported from NASA's unmodified simple-gas-turbine Simulink example and exercised by aligned
+open-loop and closed-loop Thermox replays. Model-form differences are quantified by exact-boundary
+component slices; no discrepancy is hidden with a case-specific factor.
 
 The first whole-engine prerequisite is also complete: five generic area-based gas ducts reproduce
 the source model's local-Mach quadratic loss law. With no output fitting, inlet-flow error falls

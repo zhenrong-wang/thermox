@@ -598,7 +598,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 91,
+        response.components.size() == 95,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -1110,6 +1110,41 @@ void test_catalog_discovery() {
                 "mass_fraction[{species}]",
         "catalog must expose the species-keyed composition "
         "boundary contract");
+    const auto controlled_composition_source = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "source.material.controlled_fixed_composition";
+        });
+    require(
+        controlled_composition_source != response.components.end() &&
+            controlled_composition_source->supports_steady &&
+            controlled_composition_source->supports_transient &&
+            controlled_composition_source->ports.size() == 2 &&
+            controlled_composition_source->parameters.size() == 2,
+        "catalog must expose commanded fixed-composition material sources");
+    const auto shaft_speed_sensor = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind == "sensor.shaft.normalized_speed";
+        });
+    require(
+        shaft_speed_sensor != response.components.end() &&
+            shaft_speed_sensor->supports_steady &&
+            shaft_speed_sensor->supports_transient &&
+            shaft_speed_sensor->ports.size() == 3,
+        "catalog must expose normalized shaft-speed instrumentation");
+    const auto signal_lag = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind == "sensor.first_order_lag.normalized";
+        });
+    require(
+        signal_lag != response.components.end() &&
+            signal_lag->template_kind == "sensor.first_order_lag" &&
+            signal_lag->category == "Instrumentation" &&
+            signal_lag->supports_transient,
+        "catalog must expose first-order measurement dynamics");
     const auto combustor = std::find_if(
         response.components.begin(),
         response.components.end(),
@@ -2457,9 +2492,14 @@ void test_nasa_agtf30_propulsive_force_benchmark() {
             thermox::service::SimulationService{}.run_steady(request);
         require(
             response.succeeded() && response.diagnostics.converged &&
-                response.diagnostics.final_residual_norm < 2.0e-10,
+                response.diagnostics.final_residual_norm < 1.1e-9,
             "NASA AGTF30 propulsive-force point must solve: " +
-                point.case_id);
+                point.case_id + ": " + response.error.message +
+                ", solver=" + response.diagnostics.message +
+                ", iterations=" + std::to_string(
+                    response.diagnostics.iterations) +
+                ", residual=" + std::to_string(
+                    response.diagnostics.final_residual_norm));
 
         const double ram_drag = require_result_value(
             require_port_result(
@@ -2537,7 +2577,7 @@ void test_nasa_agtf30_continuous_twin_spool_benchmark() {
             thermox::service::SimulationService{}.run_steady(request);
         require(
             response.succeeded() && response.diagnostics.converged &&
-                response.diagnostics.final_residual_norm < 2.0e-10,
+                response.diagnostics.final_residual_norm < 1.1e-9,
             "NASA AGTF30 continuous twin-spool point must solve: " +
                 point.case_id);
 

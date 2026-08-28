@@ -1,0 +1,340 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_tmats_combustor_boundary_slice",
+    "name": "NASA T-MATS combustor exact-boundary diagnostic",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "reacting_gas",
+        "backend": "cantera",
+        "mechanism": "benchmarks/nasa_tmats/agtf30_major_products.yaml",
+        "phase": "gas",
+        "package_version": "3.2.0",
+        "species": [
+          "CH4",
+          "O2",
+          "N2",
+          "CO2",
+          "H2O",
+          "CO",
+          "H2"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "air",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[O2]": 0.232,
+          "mass_fraction[N2]": 0.768
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "fuel",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[CH4]": 1.0
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "combustor",
+        "kind": "combustor.material.equilibrium_declared_lhv",
+        "version": "1.0.0",
+        "parameters": {
+          "pressure_ratio": 0.95,
+          "combustion_efficiency": 1.0,
+          "fuel_lower_heating_value": {
+            "value": 42.79846824,
+            "unit": "MJ/kg"
+          }
+        },
+        "materials": {
+          "air_inlet": "reacting_gas",
+          "fuel_inlet": "reacting_gas",
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "exhaust",
+        "kind": "sink.material.boundary",
+        "version": "1.0.0",
+        "materials": {
+          "inlet": "reacting_gas"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "s3",
+        "kind": "material_link",
+        "from": "air.outlet",
+        "to": "combustor.air_inlet"
+      },
+      {
+        "id": "fuel_link",
+        "kind": "material_link",
+        "from": "fuel.outlet",
+        "to": "combustor.fuel_inlet"
+      },
+      {
+        "id": "s4",
+        "kind": "material_link",
+        "from": "combustor.outlet",
+        "to": "exhaust.inlet"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "exact_station_3_and_fuel",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "air.outlet.p": {
+          "value": 288.041812601952,
+          "unit": "psia"
+        },
+        "air.outlet.T": {
+          "value": 1316.1339585749665,
+          "unit": "degR"
+        },
+        "air.outlet.m_dot[N2]": {
+          "value": 76.79997242338017,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.T": {
+          "value": 300.0,
+          "unit": "K"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 3.0,
+          "unit": "lbm/s"
+        }
+      },
+      "initial_guesses": {
+        "air.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[O2]": {
+          "value": 23.19999166956276,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[N2]": {
+          "value": 76.79997242338017,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "air.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[O2]": {
+          "value": 23.19999166956276,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[N2]": {
+          "value": 76.79997242338017,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.air_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[CH4]": {
+          "value": 3.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "fuel.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[CH4]": {
+          "value": 3.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[O2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[N2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2O]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.fuel_inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "combustor.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "exhaust.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "air.outlet.h": {
+          "value": 460.0,
+          "unit": "kJ/kg"
+        },
+        "combustor.air_inlet.p": {
+          "value": 288.041812601952,
+          "unit": "psia"
+        },
+        "combustor.air_inlet.h": {
+          "value": 460.0,
+          "unit": "kJ/kg"
+        },
+        "fuel.outlet.p": {
+          "value": 288.041812601952,
+          "unit": "psia"
+        },
+        "fuel.outlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.fuel_inlet.p": {
+          "value": 288.041812601952,
+          "unit": "psia"
+        },
+        "combustor.fuel_inlet.h": {
+          "value": -4.65,
+          "unit": "MJ/kg"
+        },
+        "combustor.outlet.p": {
+          "value": 273.6397219718544,
+          "unit": "psia"
+        },
+        "combustor.outlet.h": {
+          "value": 1.5,
+          "unit": "MJ/kg"
+        },
+        "exhaust.inlet.p": {
+          "value": 273.6397219718544,
+          "unit": "psia"
+        },
+        "exhaust.inlet.h": {
+          "value": 1.5,
+          "unit": "MJ/kg"
+        }
+      }
+    }
+  ]
+}

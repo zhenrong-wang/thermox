@@ -596,19 +596,51 @@ python3 scripts/analyze_tmats_open_loop_replay.py \
   benchmarks/nasa_tmats/tmats_simple_gas_turbine_open_loop_results.json
 ```
 
-The 145-variable nonlinear DAE reaches 10.5 s in 766 accepted steps with 17 adaptive rejections;
-the maximum normalized nonlinear residual is `9.75e-9`. All 701 NASA timestamps align exactly.
-Fuel flow is identical by construction. Shaft-speed error ranges from 0% to +4.475% and averages
-2.781% absolute. Compressor discharge-temperature error ranges from +0.570% to +4.556%; its
-pressure error is +3.377% to +13.348%. Combustor and turbine-exit temperature errors are
-+3.162% to +7.417% and +3.433% to +8.359%. Flow errors reach +11.763%, while net-thrust error is
-+10.470% to +21.538%. The mean of the 16 predictive-signal MAPEs is 7.064%; it is a diagnostic
-summary, not an engineering acceptance score.
+Exact-boundary component slices identified two model-form errors in the first declaration. The
+combustor's declared LHV did not govern heat release at unit efficiency, and the original nozzle
+used fully expanded momentum without convergent-nozzle pressure thrust. The generic combustor now
+adjusts backend chemical heat release to the declared effective LHV. The generic convergent nozzle
+uses composition-dependent thermochemistry, an isentropic exit flash, choking, capacity, momentum,
+and pressure thrust. At exact NASA boundaries, combustor outlet temperature is 1.911% low; the
+fixed-area nozzle flow is 1.322% low while thrust is 0.052% high. The measured flow requires a
+1.339% larger effective area. These residuals expose the remaining empirical FAR-table versus
+equilibrium-species property difference rather than hiding it with fitted factors. See
+`tmats_component_boundary_slice_results.json`.
 
-This result proves that the generic nonlinear graph, public maps, shaft state, input schedule,
-unit normalization, and exact-time evidence alignment execute together over the complete reference
-window. It also disproves full transient predictive equivalence in the present declaration. The
-dominant retained model-form differences are T-MATS' FAR-table gas thermodynamics versus Thermox's
-equilibrium methane chemistry and the complete T-MATS nozzle tables versus the current generic
-perfect-gas nozzle. The next slice should align those physical conventions before adding the NASA
-sensor and PI controller. The source remains computational rather than hardware evidence.
+With those generic corrections, the open-loop DAE reaches 10.5 s in 769 accepted steps with 15
+adaptive rejections and a `9.55e-9` maximum normalized residual. All 701 NASA timestamps align
+exactly. Fuel is still identical by construction, but predictive-signal mean MAPE falls from the
+diagnostic first result of 7.064% to 0.505%. Shaft-speed MAPE is 0.025%, flow MAPE is about 0.075%,
+net-thrust MAPE is 0.548%, and all station errors remain within about 2.1%.
+
+## Nonlinear closed-loop replay
+
+`tmats_simple_gas_turbine_closed_loop.json` replaces the forced fuel history with reusable
+platform components: a normalized shaft-speed pickup, a 0.05 s first-order signal sensor, the
+published PI coefficients, and a commanded fixed-composition fuel source. The only forced dynamic
+input is NASA's 10,000-to-9,000 rpm demand. The 701-point schedule is the exact native time grid;
+it does not alter the piecewise-linear demand.
+
+```sh
+python3 scripts/build_tmats_simple_gas_turbine_closed_loop.py \
+  benchmarks/nasa_tmats/tmats_gasturbine_dyn_validation_series.json \
+  benchmarks/nasa_tmats/tmats_simple_gas_turbine_closed_loop.json
+./build/thermox_cli simulate \
+  --model benchmarks/nasa_tmats/tmats_simple_gas_turbine_closed_loop.json \
+  --case nasa_speed_control_replay \
+  --performance-map benchmarks/nasa_tmats/hpc_map.json \
+  --performance-map benchmarks/nasa_tmats/hpt_map.json \
+  --end-time 10.5 --format json > /tmp/thermox-tmats-closed-loop.json
+python3 scripts/analyze_tmats_open_loop_replay.py \
+  benchmarks/nasa_tmats/tmats_gasturbine_dyn_validation_series.json \
+  /tmp/thermox-tmats-closed-loop.json \
+  benchmarks/nasa_tmats/tmats_simple_gas_turbine_closed_loop_results.json
+```
+
+The closed-loop run reaches 10.5 s in 785 accepted steps with 34 rejections and a `9.08e-9`
+maximum normalized residual. Shaft-speed MAPE is 0.00875%, predicted fuel-flow MAPE is 0.443%,
+net-thrust MAPE is 0.788%, and predictive plant-signal mean MAPE is 0.502%. The largest transient
+station discrepancy is about 4.0%; most station MAPEs remain below 1.6%. This is strong nonlinear
+cross-code evidence for the generic plant, DAE kernel, and control path. It is not hardware
+qualification: T-MATS is computational evidence, and its controller coefficients and empirical
+gas tables are source-model assumptions rather than independently identified OEM data.

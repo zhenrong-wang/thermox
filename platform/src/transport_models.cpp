@@ -2874,18 +2874,19 @@ public:
                 for (double& fraction : fractions) {
                     fraction /= total_flow;
                 }
+                const physics::SpeciesComposition composition{
+                    physics::CompositionBasis::mass_fraction,
+                    species, fractions};
                 const auto state = properties->state_ph(
-                    x.at(inlet_p), x.at(inlet_h),
-                    {physics::CompositionBasis::mass_fraction,
-                     species, std::move(fractions)});
+                    x.at(inlet_p), x.at(inlet_h), composition);
                 if (!state.ok()) {
                     return state.status ==
                             physics::PropertyStatus::backend_error
                         ? EvaluationStatus::fatal(state.message)
                         : EvaluationStatus::recoverable(state.message);
                 }
-                const double density =
-                    state.state.thermodynamic.density_kg_m3;
+                const auto& total = state.state.thermodynamic;
+                const double density = total.density_kg_m3;
                 const double pressure = x.at(inlet_p);
                 const double local_mach = x.at(mach);
                 if (!std::isfinite(density) || density <= 0.0 ||
@@ -3063,12 +3064,12 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
-class PerfectGasConvergentMaterialNozzleModel final
+class ConvergentMaterialNozzleModel final
     : public ComponentModel {
 public:
-    PerfectGasConvergentMaterialNozzleModel()
+    ConvergentMaterialNozzleModel()
         : descriptor_(make_descriptor(
-              "terminal.material.perfect_gas_convergent_nozzle",
+              "terminal.material.convergent_nozzle",
               {{"inlet", "material", "in"},
                {"area_ratio", "signal", "in"},
                {"back_pressure_ratio", "signal", "in"},
@@ -3076,7 +3077,8 @@ public:
         descriptor_.template_kind = "terminal.material.nozzle";
         descriptor_.display_name = "Convergent gas nozzle";
         descriptor_.category = "Gas-path terminals";
-        descriptor_.model_name = "Perfect-gas choked/un-choked flow";
+        descriptor_.model_name =
+            "Thermochemistry-backed choked/un-choked flow";
         descriptor_.system_boundary_role = "sink";
         descriptor_.parameters = {
             {"reference_throat_area", "area", true, std::nullopt,
@@ -3085,10 +3087,8 @@ public:
              0.0, std::numeric_limits<double>::infinity(), false, true},
             {"discharge_coefficient", "dimensionless", false, 1.0,
              0.0, 1.0, false, true},
-            {"gross_thrust_coefficient", "dimensionless", false, 1.0,
+            {"velocity_coefficient", "dimensionless", false, 1.0,
              0.0, std::numeric_limits<double>::infinity(), false, true},
-            {"heat_capacity_ratio", "dimensionless", false, 1.4,
-             1.0, 2.0, false, true},
         };
         descriptor_.internal_variables = {
             {"mach", DaeVariableKind::algebraic, 0.8, 1.0,
@@ -3096,6 +3096,7 @@ public:
         };
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::state_ph,
+            physics::ThermochemistryCapability::state_ps,
         };
         descriptor_.supports_transient = true;
         descriptor_.uses_quasi_steady_transient_equations = true;
@@ -3132,15 +3133,13 @@ public:
             context.component, "reference_back_pressure");
         const double discharge = parameter_or(
             context.component, "discharge_coefficient", 1.0);
-        const double thrust_coefficient = parameter_or(
-            context.component, "gross_thrust_coefficient", 1.0);
-        const double gamma = parameter_or(
-            context.component, "heat_capacity_ratio", 1.4);
+        const double velocity_coefficient = parameter_or(
+            context.component, "velocity_coefficient", 1.0);
 
         const auto evaluate =
             [properties, species, flows, inlet_p, inlet_h, area_ratio,
              back_pressure_ratio, mach, gross_thrust, reference_area,
-             reference_pressure, discharge, thrust_coefficient, gamma](
+             reference_pressure, discharge, velocity_coefficient](
                 const std::vector<double>& x,
                 std::array<double, 3>& residuals) {
                 double total_flow = 0.0;
@@ -3162,18 +3161,19 @@ public:
                         "total mass flow");
                 }
                 for (double& fraction : fractions) fraction /= total_flow;
+                const physics::SpeciesComposition composition{
+                    physics::CompositionBasis::mass_fraction,
+                    species, fractions};
                 const auto state = properties->state_ph(
-                    x.at(inlet_p), x.at(inlet_h),
-                    {physics::CompositionBasis::mass_fraction,
-                     species, std::move(fractions)});
+                    x.at(inlet_p), x.at(inlet_h), composition);
                 if (!state.ok()) {
                     return state.status ==
                             physics::PropertyStatus::backend_error
                         ? EvaluationStatus::fatal(state.message)
                         : EvaluationStatus::recoverable(state.message);
                 }
-                const double density =
-                    state.state.thermodynamic.density_kg_m3;
+                const auto& total = state.state.thermodynamic;
+                const double density = total.density_kg_m3;
                 const double pressure = x.at(inlet_p);
                 const double area =
                     reference_area * x.at(area_ratio);
@@ -3185,31 +3185,64 @@ public:
                         "convergent material nozzle requires positive area "
                         "and total pressure above back pressure");
                 }
-                const double exponent = (gamma - 1.0) / gamma;
-                const double unchoked_mach = std::sqrt(
-                    2.0 / (gamma - 1.0) *
-                    (std::pow(pressure / back_pressure, exponent) - 1.0));
-                const double target_mach =
-                    std::min(1.0, unchoked_mach);
+                if (!(total.cp_j_kg_k > total.cv_j_kg_k) ||
+                    !(total.cv_j_kg_k > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "convergent material nozzle requires positive "
+                        "thermochemical heat capacities");
+                }
+                const double gamma =
+                    total.cp_j_kg_k / total.cv_j_kg_k;
+                const double critical_pressure = pressure * std::pow(
+                    2.0 / (gamma + 1.0), gamma / (gamma - 1.0));
+                const bool choked = back_pressure <= critical_pressure;
+                const double exit_pressure =
+                    choked ? critical_pressure : back_pressure;
+                const auto exit = properties->state_ps(
+                    exit_pressure, total.entropy_j_kg_k, composition);
+                if (!exit.ok()) {
+                    return exit.status ==
+                            physics::PropertyStatus::backend_error
+                        ? EvaluationStatus::fatal(exit.message)
+                        : EvaluationStatus::recoverable(exit.message);
+                }
+                const auto& exit_bulk = exit.state.thermodynamic;
+                const double kinetic_enthalpy =
+                    total.enthalpy_j_kg - exit_bulk.enthalpy_j_kg;
+                if (!(kinetic_enthalpy >= 0.0) ||
+                    !(exit_bulk.density_kg_m3 > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "convergent material nozzle produced a nonphysical "
+                        "isentropic exit state");
+                }
+                const double exit_velocity =
+                    std::sqrt(2.0 * kinetic_enthalpy);
+                double exit_sound_speed = exit_bulk.speed_of_sound_m_s;
+                if (!(exit_sound_speed > 0.0) &&
+                    exit_bulk.cp_j_kg_k > exit_bulk.cv_j_kg_k &&
+                    exit_bulk.cv_j_kg_k > 0.0) {
+                    exit_sound_speed = std::sqrt(
+                        exit_bulk.cp_j_kg_k / exit_bulk.cv_j_kg_k *
+                        exit_pressure / exit_bulk.density_kg_m3);
+                }
+                if (!(exit_sound_speed > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "convergent material nozzle requires positive exit "
+                        "speed of sound");
+                }
+                const double target_mach = choked
+                    ? 1.0
+                    : exit_velocity / exit_sound_speed;
                 const double local_mach = x.at(mach);
-                const double correction = std::pow(
-                    1.0 + 0.5 * (gamma - 1.0) *
-                        local_mach * local_mach,
-                    -(gamma + 1.0) /
-                        (2.0 * (gamma - 1.0)));
-                const double sound_speed =
-                    std::sqrt(gamma * pressure / density);
-                const double capacity = discharge * area * density *
-                    sound_speed * local_mach * correction;
-                const double ideal_velocity = std::sqrt(
-                    2.0 * gamma / (gamma - 1.0) * pressure / density *
-                    (1.0 - std::pow(
-                        back_pressure / pressure, exponent)));
+                const double capacity = discharge * area *
+                    exit_bulk.density_kg_m3 *
+                    exit_velocity;
                 residuals = {
                     total_flow - capacity,
                     local_mach - target_mach,
-                    x.at(gross_thrust) - thrust_coefficient *
-                        total_flow * ideal_velocity,
+                    x.at(gross_thrust) -
+                        (velocity_coefficient * total_flow * exit_velocity +
+                         (exit_pressure - back_pressure) * area),
                 };
                 return EvaluationStatus::success();
             };
@@ -4172,7 +4205,7 @@ void register_transport_component_models(
     registry.register_model(std::make_shared<
         FreestreamMomentumMaterialModel>());
     registry.register_model(std::make_shared<
-        PerfectGasConvergentMaterialNozzleModel>());
+        ConvergentMaterialNozzleModel>());
 }
 
 }  // namespace thermox::platform

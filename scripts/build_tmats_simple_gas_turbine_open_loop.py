@@ -97,7 +97,7 @@ def build(reference: dict) -> dict:
         },
         {
             "id": "combustor",
-            "kind": "combustor.material.equilibrium_heat_release_efficiency",
+            "kind": "combustor.material.equilibrium_declared_lhv",
             "version": "1.0.0",
             "parameters": {
                 "pressure_ratio": 0.95,
@@ -143,14 +143,13 @@ def build(reference: dict) -> dict:
         },
         {
             "id": "nozzle",
-            "kind": "terminal.material.perfect_gas_convergent_nozzle",
+            "kind": "terminal.material.convergent_nozzle",
             "version": "1.0.0",
             "parameters": {
                 "reference_throat_area": _value(110.868590, "in2"),
                 "reference_back_pressure": _value(14.696, "psia"),
                 "discharge_coefficient": 1.0,
-                "gross_thrust_coefficient": 0.99,
-                "heat_capacity_ratio": 1.33,
+                "velocity_coefficient": 0.99,
             },
             "materials": {"inlet": "reacting_gas"},
         },

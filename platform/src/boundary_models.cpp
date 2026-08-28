@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -124,6 +125,106 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class ControlledFixedCompositionMaterialSourceModel final
+    : public ComponentModel {
+public:
+    ControlledFixedCompositionMaterialSourceModel() {
+        descriptor_ = boundary_descriptor(
+            "source.material.controlled_fixed_composition",
+            {{"command", "control", "in"},
+             {"outlet", "material", "out"}},
+            true, "source");
+        descriptor_.template_kind = "source.material";
+        descriptor_.display_name = "Controlled material source";
+        descriptor_.category = "Boundaries";
+        descriptor_.model_name =
+            "Fixed composition with commanded total mass flow";
+        descriptor_.uses_quasi_steady_transient_equations = true;
+        descriptor_.parameters = {
+            {"reference_mass_flow", "mass_flow", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+            {"mass_fraction[{species}]", "dimensionless", false,
+             0.0, 0.0, 1.0, true, true},
+        };
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        using component_model_support::require_port_species;
+        using component_model_support::require_port_variable;
+        const auto species = require_port_species(context, "outlet");
+        if (species.empty()) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' controlled material source requires a nonempty "
+                "species basis");
+        }
+        std::vector<double> fractions;
+        std::vector<std::size_t> flows;
+        std::set<std::string> expected_parameters{
+            "reference_mass_flow"};
+        double sum = 0.0;
+        for (const auto& name : species) {
+            const auto parameter = "mass_fraction[" + name + "]";
+            expected_parameters.insert(parameter);
+            const double fraction = component_model_support::parameter_or(
+                context.component, parameter, 0.0);
+            fractions.push_back(fraction);
+            sum += fraction;
+            flows.push_back(require_port_variable(
+                context, "outlet.m_dot[" + name + "]"));
+        }
+        for (const auto& [name, _] : context.component.parameters) {
+            if (!expected_parameters.contains(name)) {
+                throw std::invalid_argument(
+                    "component '" + context.component.id +
+                    "' controlled material source parameter references "
+                    "a species outside its material basis: " + name);
+            }
+        }
+        if (!std::isfinite(sum) || std::abs(sum - 1.0) > 1.0e-10) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' controlled material source mass fractions must sum "
+                "to one");
+        }
+        const auto reference = static_cast<std::size_t>(std::distance(
+            fractions.begin(), std::max_element(
+                fractions.begin(), fractions.end())));
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        for (std::size_t row = 0; row < species.size(); ++row) {
+            if (row == reference) continue;
+            system.add_linear_equation(
+                prefix + "composition." + species[row],
+                {{flows[row], fractions[reference]},
+                 {flows[reference], -fractions[row]}},
+                0.0, 100.0);
+        }
+        std::vector<LinearTerm> commanded_flow;
+        commanded_flow.reserve(flows.size() + 1);
+        for (const auto flow : flows) {
+            commanded_flow.push_back({flow, 1.0});
+        }
+        commanded_flow.push_back({
+            require_port_variable(context, "command.value"),
+            -component_model_support::required_parameter(
+                context.component, "reference_mass_flow")});
+        system.add_linear_equation(
+            prefix + "commanded_total_mass_flow",
+            std::move(commanded_flow), 0.0, 100.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
 
 void register_boundary_component_models(ComponentRegistry& registry) {
@@ -141,6 +242,8 @@ void register_boundary_component_models(ComponentRegistry& registry) {
             {{"outlet", "material", "out"}}, true, "source")));
     registry.register_model(
         std::make_shared<FixedCompositionMaterialSourceModel>());
+    registry.register_model(std::make_shared<
+        ControlledFixedCompositionMaterialSourceModel>());
     registry.register_model(std::make_shared<MetadataComponentModel>(
         boundary_descriptor(
             "sink.material.boundary",

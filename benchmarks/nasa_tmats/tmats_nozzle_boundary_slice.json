@@ -1,0 +1,310 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "nasa_tmats_nozzle_boundary_slice",
+    "name": "NASA T-MATS nozzle exact-boundary diagnostics",
+    "revision": "1",
+    "media": [],
+    "materials": [
+      {
+        "id": "reacting_gas",
+        "backend": "cantera",
+        "mechanism": "benchmarks/nasa_tmats/agtf30_major_products.yaml",
+        "phase": "gas",
+        "package_version": "3.2.0",
+        "species": [
+          "CH4",
+          "O2",
+          "N2",
+          "CO2",
+          "H2O",
+          "CO",
+          "H2"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "gas",
+        "kind": "source.material.fixed_composition",
+        "version": "1.0.0",
+        "parameters": {
+          "mass_fraction[CH4]": 0.0,
+          "mass_fraction[O2]": 0.1087378640776699,
+          "mass_fraction[N2]": 0.7456310679611651,
+          "mass_fraction[CO2]": 0.08009708737864078,
+          "mass_fraction[H2O]": 0.06553398058252427,
+          "mass_fraction[CO]": 0.0,
+          "mass_fraction[H2]": 0.0
+        },
+        "materials": {
+          "outlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "area",
+        "kind": "source.signal.boundary",
+        "version": "1.0.0"
+      },
+      {
+        "id": "back_pressure",
+        "kind": "source.signal.boundary",
+        "version": "1.0.0"
+      },
+      {
+        "id": "nozzle",
+        "kind": "terminal.material.convergent_nozzle",
+        "version": "1.0.0",
+        "parameters": {
+          "reference_throat_area": {
+            "value": 110.86859,
+            "unit": "in2"
+          },
+          "reference_back_pressure": {
+            "value": 14.696,
+            "unit": "psia"
+          },
+          "discharge_coefficient": 1.0,
+          "velocity_coefficient": 0.99
+        },
+        "materials": {
+          "inlet": "reacting_gas"
+        }
+      },
+      {
+        "id": "thrust_sink",
+        "kind": "sink.force.boundary",
+        "version": "1.0.0"
+      }
+    ],
+    "connections": [
+      {
+        "id": "s7",
+        "kind": "material_link",
+        "from": "gas.outlet",
+        "to": "nozzle.inlet"
+      },
+      {
+        "id": "area_link",
+        "kind": "signal_link",
+        "from": "area.outlet",
+        "to": "nozzle.area_ratio"
+      },
+      {
+        "id": "back_pressure_link",
+        "kind": "signal_link",
+        "from": "back_pressure.outlet",
+        "to": "nozzle.back_pressure_ratio"
+      },
+      {
+        "id": "thrust",
+        "kind": "force_link",
+        "from": "nozzle.thrust",
+        "to": "thrust_sink.inlet"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "fixed_oem_area_predict_flow",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "gas.outlet.p": {
+          "value": 88.9221828301095,
+          "unit": "psia"
+        },
+        "gas.outlet.T": {
+          "value": 2453.1832204022294,
+          "unit": "degR"
+        },
+        "back_pressure.outlet.value": 1.0,
+        "area.outlet.value": 1.0
+      },
+      "initial_guesses": {
+        "gas.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.h": {
+          "value": 900.0,
+          "unit": "kJ/kg"
+        },
+        "nozzle.inlet.p": {
+          "value": 88.9221828301095,
+          "unit": "psia"
+        },
+        "nozzle.inlet.h": {
+          "value": 900.0,
+          "unit": "kJ/kg"
+        },
+        "area.outlet.value": 1.0,
+        "nozzle.area_ratio.value": 1.0,
+        "back_pressure.outlet.value": 1.0,
+        "nozzle.back_pressure_ratio.value": 1.0,
+        "nozzle.mach": 1.0,
+        "nozzle.thrust.F": {
+          "value": 10665.721779868387,
+          "unit": "lbf"
+        },
+        "thrust_sink.inlet.F": {
+          "value": 10665.721779868387,
+          "unit": "lbf"
+        }
+      }
+    },
+    {
+      "id": "fixed_measured_flow_predict_effective_area",
+      "mode": "steady_state_off_design",
+      "fixed_values": {
+        "gas.outlet.p": {
+          "value": 88.9221828301095,
+          "unit": "psia"
+        },
+        "gas.outlet.T": {
+          "value": 2453.1832204022294,
+          "unit": "degR"
+        },
+        "back_pressure.outlet.value": 1.0,
+        "gas.outlet.m_dot[N2]": {
+          "value": 76.79997322658268,
+          "unit": "lbm/s"
+        }
+      },
+      "initial_guesses": {
+        "gas.outlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CH4]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[O2]": {
+          "value": 11.2,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[N2]": {
+          "value": 76.8,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CO2]": {
+          "value": 8.25,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[H2O]": {
+          "value": 6.75,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[CO]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "nozzle.inlet.m_dot[H2]": {
+          "value": 0.0,
+          "unit": "lbm/s"
+        },
+        "gas.outlet.h": {
+          "value": 900.0,
+          "unit": "kJ/kg"
+        },
+        "nozzle.inlet.p": {
+          "value": 88.9221828301095,
+          "unit": "psia"
+        },
+        "nozzle.inlet.h": {
+          "value": 900.0,
+          "unit": "kJ/kg"
+        },
+        "area.outlet.value": 1.0,
+        "nozzle.area_ratio.value": 1.0,
+        "back_pressure.outlet.value": 1.0,
+        "nozzle.back_pressure_ratio.value": 1.0,
+        "nozzle.mach": 1.0,
+        "nozzle.thrust.F": {
+          "value": 10665.721779868387,
+          "unit": "lbf"
+        },
+        "thrust_sink.inlet.F": {
+          "value": 10665.721779868387,
+          "unit": "lbf"
+        }
+      }
+    }
+  ]
+}

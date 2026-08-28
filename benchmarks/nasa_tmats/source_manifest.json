@@ -618,32 +618,65 @@
     "time_grid_seconds": 0.015,
     "time_extent_seconds": [0.0, 10.5],
     "classification": "public_source_full_nonlinear_dynamic_reference_trajectory",
-    "declared_limit": "This is an independently executed computational reference, not hardware measurement. The equivalent Thermox graph and cross-code trajectory comparison remain the next validation slice."
+    "declared_limit": "This is an independently executed computational reference, not hardware measurement. Equivalent open-loop and closed-loop Thermox comparisons are separately classified below."
+  },
+  "tmats_simple_gas_turbine_component_boundary_diagnostics": {
+    "combustor_model": "tmats_combustor_boundary_slice.json",
+    "combustor_model_sha256": "41bde550e9aef8c1d310cecde2e6f81bb3d04e62f765e20c6e99d1c3d6106f75",
+    "nozzle_model": "tmats_nozzle_boundary_slice.json",
+    "nozzle_model_sha256": "2968a8b9abf0bebd5f7b5a83a30a309c5101075c01aadbda0f5d9172877516d5",
+    "result_summary": "tmats_component_boundary_slice_results.json",
+    "result_summary_sha256": "53dba8d78d4a89b0e6f9c929065b26215e19f665be5a285b220a9beb6011fba1",
+    "combustor_temperature_error_percent": -1.9110239815489871,
+    "fixed_area_nozzle_flow_error_percent": -1.321628979416034,
+    "fixed_area_nozzle_thrust_error_percent": 0.051671574721079416,
+    "measured_flow_required_area_difference_percent": 1.339329952223256,
+    "classification": "public_source_exact_boundary_cross_code_diagnostic",
+    "declared_limit": "The slices isolate component model form at exact reference boundaries; they do not independently validate the upstream or downstream coupled plant."
   },
   "tmats_simple_gas_turbine_open_loop_execution": {
     "model": "tmats_simple_gas_turbine_open_loop.json",
-    "model_file_sha256": "a5c4309bbb82cf7c78cce3ad08e721175243bebf7b0ec85f8e366ef8ac40aa48",
+    "model_file_sha256": "1e07e2989e7e59a8df2023e4ef6626bae8044fa468ade1875a500cec7c1174ec",
     "hpc_map": "hpc_map.json",
     "hpt_map": "hpt_map.json",
     "hpt_map_payload_sha256": "dcd92284793238aaca133c3e433103aff6deaec975d206172c81a1bdbbc8ef01",
     "reference": "tmats_gasturbine_dyn_validation_series.json",
     "result_summary": "tmats_simple_gas_turbine_open_loop_results.json",
+    "result_summary_sha256": "65bdfc371ec393754515e10c51fd62c0df6d6ba636487aa3d5e0d518ae575758",
     "forced_input": "NASA fuel-flow history with linear interpolation",
     "topology": "ambient_inlet_compressor_equilibrium_combustor_turbine_duct_convergent_nozzle_single_inertial_shaft",
     "results": {
       "graph_variable_count": 145,
-      "accepted_steps": 766,
-      "rejected_steps": 17,
-      "maximum_absolute_normalized_residual": 9.754888713359833e-9,
+      "accepted_steps": 769,
+      "rejected_steps": 15,
+      "maximum_absolute_normalized_residual": 9.55437496304512e-9,
       "exact_reference_timestamp_count": 701,
-      "shaft_speed_error_percent_range": [0.0, 4.474977173331451],
-      "compressor_temperature_error_percent_range": [0.5704360479228399, 4.556282547968493],
-      "compressor_pressure_error_percent_range": [3.376918248171301, 13.347641900124362],
-      "net_thrust_error_percent_range": [10.470065763892556, 21.538488279573855],
-      "predictive_signal_mean_mape_percent": 7.06381509199646
+      "shaft_speed_mape_percent": 0.02472078789975761,
+      "net_thrust_mape_percent": 0.5483354158738037,
+      "predictive_signal_mean_mape_percent": 0.5052888259968538
     },
-    "classification": "public_source_full_nonlinear_open_loop_cross_code_baseline",
-    "declared_limit": "Fuel flow is a forced NASA input and the speed controller is excluded. Retained gas-property, combustion, and nozzle model-form differences prevent transient predictive qualification."
+    "classification": "public_source_full_nonlinear_open_loop_cross_code_validation",
+    "declared_limit": "Fuel flow is a forced NASA input and the speed controller is excluded. The result isolates aligned plant physics and remains computational rather than hardware evidence."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, a finite-window nonlinear Thermox trajectory against the public NASA linear response, and a complete nonlinear open-loop Thermox plant replay against 701 exact NASA timestamps. They are not independent hardware validation, fuel-flow predictive qualification, closed-loop controller reproduction, or full transient predictive validation."
+  "tmats_simple_gas_turbine_closed_loop_execution": {
+    "model": "tmats_simple_gas_turbine_closed_loop.json",
+    "model_file_sha256": "3802cf59254fc7ae35c9c6eb839cc28fa96026e319989cfdb2f273ddf1d55cf8",
+    "reference": "tmats_gasturbine_dyn_validation_series.json",
+    "result_summary": "tmats_simple_gas_turbine_closed_loop_results.json",
+    "result_summary_sha256": "f688cc2156c46f2eaae3a7a5859fc84704a4b82c05298b31f623d8523374824d",
+    "forced_input": "NASA speed-demand history on the exact 0.015 s grid; Thermox PI predicts fuel flow",
+    "results": {
+      "accepted_steps": 785,
+      "rejected_steps": 34,
+      "maximum_absolute_normalized_residual": 9.08260140568018e-9,
+      "exact_reference_timestamp_count": 701,
+      "shaft_speed_mape_percent": 0.008747502641011972,
+      "fuel_flow_mape_percent": 0.443161065213206,
+      "net_thrust_mape_percent": 0.7882717422060641,
+      "predictive_signal_mean_mape_percent": 0.5020025629256794
+    },
+    "classification": "public_source_full_nonlinear_closed_loop_cross_code_validation",
+    "declared_limit": "This validates reproduction of the published computational plant and controller, not hardware dynamics or independently identified OEM control parameters."
+  },
+  "interpretation_limit": "These tests validate deterministic import, map-driven components, coupled gas paths, exact shaft conservation, propulsion accounting, dynamic DAE execution, exact-boundary model-form diagnosis, and full nonlinear open-loop and closed-loop cross-code trajectories at 701 exact NASA timestamps. They are not independent hardware validation, uncertainty-qualified acceptance tests, or substitutes for OEM component and controller data."
 }

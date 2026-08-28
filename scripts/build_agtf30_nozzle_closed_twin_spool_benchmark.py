@@ -28,15 +28,14 @@ def _nozzle(
 ) -> dict:
     return {
         "id": component_id,
-        "kind": "terminal.material.perfect_gas_convergent_nozzle",
+        "kind": "terminal.material.convergent_nozzle",
         "version": "1.0.0",
         "parameters": {
             "reference_throat_area": reference_area_in2 * IN2_TO_M2,
             "reference_back_pressure":
                 REFERENCE_AMBIENT_PSIA * PSIA_TO_PA,
             "discharge_coefficient": 1.0,
-            "gross_thrust_coefficient": thrust_coefficient,
-            "heat_capacity_ratio": 1.4,
+            "velocity_coefficient": thrust_coefficient,
         },
         "materials": {"inlet": "reacting_gas"},
     }

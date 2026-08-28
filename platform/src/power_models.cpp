@@ -743,6 +743,72 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class NormalizedShaftSpeedSensorModel final
+    : public ComponentModel {
+public:
+    NormalizedShaftSpeedSensorModel() {
+        descriptor_.kind = "sensor.shaft.normalized_speed";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "sensor.shaft_speed";
+        descriptor_.display_name = "Normalized shaft-speed sensor";
+        descriptor_.category = "Instrumentation";
+        descriptor_.model_name =
+            "Lossless shaft pass-through with normalized speed signal";
+        descriptor_.ports = {
+            {"inlet", "shaft", "in"},
+            {"outlet", "shaft", "out"},
+            {"measurement", "signal", "out"},
+        };
+        descriptor_.parameters = {
+            {"reference_speed", "angular_speed", true,
+             std::nullopt, 0.0,
+             std::numeric_limits<double>::infinity(), false, true},
+        };
+        descriptor_.supports_steady = true;
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto inlet_power =
+            require_port_variable(context, "inlet.W_dot");
+        const auto inlet_speed =
+            require_port_variable(context, "inlet.omega");
+        const auto outlet_power =
+            require_port_variable(context, "outlet.W_dot");
+        const auto outlet_speed =
+            require_port_variable(context, "outlet.omega");
+        const auto measurement =
+            require_port_variable(context, "measurement.value");
+        const double reference_speed = required_parameter(
+            context.component, "reference_speed");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "power_continuity",
+            {{outlet_power, 1.0}, {inlet_power, -1.0}},
+            0.0, 1.0e6);
+        system.add_linear_equation(
+            prefix + "speed_continuity",
+            {{outlet_speed, 1.0}, {inlet_speed, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "normalized_measurement",
+            {{measurement, 1.0},
+             {inlet_speed, -1.0 / reference_speed}},
+            0.0, 1.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class PropulsiveForceBalanceModel final : public ComponentModel {
 public:
     PropulsiveForceBalanceModel() {
@@ -826,6 +892,8 @@ void register_power_component_models(ComponentRegistry& registry) {
         std::make_shared<FluidToElectricalPolynomialModel>());
     registry.register_model(
         std::make_shared<TwoPortShaftInertiaModel>());
+    registry.register_model(std::make_shared<
+        NormalizedShaftSpeedSensorModel>());
     registry.register_model(
         std::make_shared<PropulsiveForceBalanceModel>());
 }

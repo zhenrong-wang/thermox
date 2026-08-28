@@ -86,12 +86,27 @@ private:
 class NormalizedFirstOrderControlLagModel final
     : public ComponentModel {
 public:
-    NormalizedFirstOrderControlLagModel() {
-        descriptor_.kind = "control.first_order_lag.normalized";
+    explicit NormalizedFirstOrderControlLagModel(
+        bool signal_sensor = false) {
+        descriptor_.kind = signal_sensor
+            ? "sensor.first_order_lag.normalized"
+            : "control.first_order_lag.normalized";
         descriptor_.version = "1.0.0";
+        descriptor_.template_kind = signal_sensor
+            ? "sensor.first_order_lag"
+            : "control.first_order_lag";
+        descriptor_.display_name = signal_sensor
+            ? "First-order sensor lag"
+            : "First-order control lag";
+        descriptor_.category = signal_sensor
+            ? "Instrumentation"
+            : "Control";
+        const std::string domain = signal_sensor
+            ? "signal"
+            : "control";
         descriptor_.ports = {
-            {"command", "control", "in"},
-            {"response", "control", "out"},
+            {"command", domain, "in"},
+            {"response", domain, "out"},
         };
         descriptor_.parameters = {
             {"gain", "dimensionless", false, 1.0,
@@ -345,6 +360,8 @@ void register_control_component_models(
     registry.register_model(
         std::make_shared<
             NormalizedFirstOrderControlLagModel>());
+    registry.register_model(std::make_shared<
+        NormalizedFirstOrderControlLagModel>(true));
     registry.register_model(
         std::make_shared<BoundedNormalizedPiControllerModel>());
 }

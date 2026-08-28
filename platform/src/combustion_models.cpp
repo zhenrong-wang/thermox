@@ -18,6 +18,7 @@ namespace {
 using component_model_support::require_port_species;
 using component_model_support::require_port_variable;
 using component_model_support::require_thermochemistry_package;
+using component_model_support::parameter_or;
 using component_model_support::required_parameter;
 
 struct EquilibriumEvaluation {
@@ -38,7 +39,10 @@ public:
         std::size_t air_enthalpy,
         std::size_t fuel_enthalpy,
         std::size_t outlet_pressure,
-        double fuel_heat_loss_j_kg)
+        double fixed_fuel_heat_loss_j_kg,
+        std::optional<double> declared_effective_lhv_j_kg,
+        double heating_value_reference_pressure_pa,
+        double heating_value_reference_temperature_k)
         : package_(std::move(package)),
           species_(std::move(species)),
           air_flow_(std::move(air_flow)),
@@ -46,7 +50,12 @@ public:
           air_enthalpy_(air_enthalpy),
           fuel_enthalpy_(fuel_enthalpy),
           outlet_pressure_(outlet_pressure),
-          fuel_heat_loss_j_kg_(fuel_heat_loss_j_kg) {}
+          fixed_fuel_heat_loss_j_kg_(fixed_fuel_heat_loss_j_kg),
+          declared_effective_lhv_j_kg_(declared_effective_lhv_j_kg),
+          heating_value_reference_pressure_pa_(
+              heating_value_reference_pressure_pa),
+          heating_value_reference_temperature_k_(
+              heating_value_reference_temperature_k) {}
 
     EquilibriumEvaluation evaluate(
         const std::vector<double>& x,
@@ -70,6 +79,7 @@ public:
         }
         last_key_ = std::move(key);
         std::vector<double> mass_fractions(species_.size(), 0.0);
+        std::vector<double> fuel_fractions(species_.size(), 0.0);
         double air_mass = 0.0;
         double fuel_mass = 0.0;
         const bool target_problem =
@@ -110,6 +120,7 @@ public:
                 return last_;
             }
             mass_fractions[index] = air + fuel;
+            fuel_fractions[index] = fuel;
             air_mass += air;
             fuel_mass += fuel;
         }
@@ -125,10 +136,44 @@ public:
         for (double& value : mass_fractions) {
             value /= total_mass;
         }
+        double fuel_heat_adjustment_j_kg = 0.0;
+        if (declared_effective_lhv_j_kg_ && fuel_mass > 0.0) {
+            for (double& value : fuel_fractions) {
+                value /= fuel_mass;
+            }
+            if (fuel_fractions != heating_value_fuel_fractions_ ||
+                !backend_lhv_j_kg_) {
+                const auto backend_heating_value =
+                    package_->lower_heating_value(
+                        heating_value_reference_pressure_pa_,
+                        heating_value_reference_temperature_k_,
+                        physics::SpeciesComposition{
+                            physics::CompositionBasis::mass_fraction,
+                            species_, fuel_fractions});
+                if (!backend_heating_value.ok()) {
+                    last_ = {
+                        backend_heating_value.status ==
+                                physics::PropertyStatus::backend_error
+                            ? EvaluationStatus::fatal(
+                                  backend_heating_value.message)
+                            : EvaluationStatus::recoverable(
+                                  backend_heating_value.message),
+                        {}, 0.0};
+                    return last_;
+                }
+                heating_value_fuel_fractions_ = fuel_fractions;
+                backend_lhv_j_kg_ =
+                    backend_heating_value.lower_heating_value_j_kg;
+            }
+            fuel_heat_adjustment_j_kg =
+                *backend_lhv_j_kg_ -
+                *declared_effective_lhv_j_kg_;
+        }
         const double mixed_enthalpy =
             (air_mass * x.at(air_enthalpy_) +
              fuel_mass * x.at(fuel_enthalpy_) -
-             fuel_mass * fuel_heat_loss_j_kg_) /
+             fuel_mass * (fixed_fuel_heat_loss_j_kg_ +
+                          fuel_heat_adjustment_j_kg)) /
             total_mass;
         const double outlet_pressure = target_problem
             ? x.at(outlet_pressure_)
@@ -159,30 +204,43 @@ private:
     std::size_t air_enthalpy_;
     std::size_t fuel_enthalpy_;
     std::size_t outlet_pressure_;
-    double fuel_heat_loss_j_kg_{0.0};
+    double fixed_fuel_heat_loss_j_kg_{0.0};
+    std::optional<double> declared_effective_lhv_j_kg_;
+    double heating_value_reference_pressure_pa_{101325.0};
+    double heating_value_reference_temperature_k_{298.15};
     mutable std::mutex mutex_;
     mutable std::vector<double> last_key_;
     mutable EquilibriumEvaluation last_;
+    mutable std::vector<double> heating_value_fuel_fractions_;
+    mutable std::optional<double> backend_lhv_j_kg_;
 };
 
 class EquilibriumCombustorModel final
     : public ComponentModel {
 public:
     explicit EquilibriumCombustorModel(
-        bool heat_release_efficiency = false)
-        : heat_release_efficiency_(heat_release_efficiency) {
-        descriptor_.kind = heat_release_efficiency_
-            ? "combustor.material.equilibrium_heat_release_efficiency"
-            : "combustor.material.adiabatic_equilibrium";
+        bool heat_release_efficiency = false,
+        bool align_declared_lhv = false)
+        : heat_release_efficiency_(heat_release_efficiency),
+          align_declared_lhv_(align_declared_lhv) {
+        descriptor_.kind = align_declared_lhv_
+            ? "combustor.material.equilibrium_declared_lhv"
+            : heat_release_efficiency_
+                ? "combustor.material.equilibrium_heat_release_efficiency"
+                : "combustor.material.adiabatic_equilibrium";
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "combustor.material";
-        descriptor_.display_name = heat_release_efficiency_
-            ? "Equilibrium combustor (heat-release efficiency)"
-            : "Adiabatic equilibrium combustor";
+        descriptor_.display_name = align_declared_lhv_
+            ? "Equilibrium combustor (declared LHV)"
+            : heat_release_efficiency_
+                ? "Equilibrium combustor (heat-release efficiency)"
+                : "Adiabatic equilibrium combustor";
         descriptor_.category = "Combustion";
-        descriptor_.model_name = heat_release_efficiency_
-            ? "Equilibrium combustor with declared fuel heat loss"
-            : "Adiabatic equilibrium combustor";
+        descriptor_.model_name = align_declared_lhv_
+            ? "Equilibrium chemistry aligned to declared fuel LHV"
+            : heat_release_efficiency_
+                ? "Equilibrium combustor with declared fuel heat loss"
+                : "Adiabatic equilibrium combustor";
         descriptor_.ports = {
             {"air_inlet", "material", "in"},
             {"fuel_inlet", "material", "in"},
@@ -198,9 +256,23 @@ public:
                 {"fuel_lower_heating_value", "specific_enthalpy", true,
                  std::nullopt, 0.0,
                  std::numeric_limits<double>::infinity(), false, true});
+            if (align_declared_lhv_) {
+                descriptor_.parameters.push_back(
+                    {"heating_value_reference_pressure", "pressure", false,
+                     101325.0, 0.0,
+                     std::numeric_limits<double>::infinity(), false, true});
+                descriptor_.parameters.push_back(
+                    {"heating_value_reference_temperature", "temperature", false,
+                     298.15, 0.0,
+                     std::numeric_limits<double>::infinity(), false, true});
+            }
         }
         descriptor_.required_thermochemistry_capabilities = {
             physics::ThermochemistryCapability::equilibrium_hp};
+        if (align_declared_lhv_) {
+            descriptor_.required_thermochemistry_capabilities.push_back(
+                physics::ThermochemistryCapability::lower_heating_value);
+        }
         descriptor_.supports_transient = true;
         descriptor_.uses_quasi_steady_transient_equations = true;
     }
@@ -268,20 +340,37 @@ public:
         const double pressure_ratio =
             required_parameter(
                 context.component, "pressure_ratio");
-        double fuel_heat_loss_j_kg = 0.0;
+        std::optional<double> declared_effective_lhv_j_kg;
+        double fixed_fuel_heat_loss_j_kg = 0.0;
+        double heating_value_reference_pressure_pa = 101325.0;
+        double heating_value_reference_temperature_k = 298.15;
         if (heat_release_efficiency_) {
             const double efficiency = required_parameter(
                 context.component, "combustion_efficiency");
             const double lower_heating_value = required_parameter(
                 context.component, "fuel_lower_heating_value");
-            fuel_heat_loss_j_kg =
-                (1.0 - efficiency) * lower_heating_value;
+            if (align_declared_lhv_) {
+                declared_effective_lhv_j_kg =
+                    efficiency * lower_heating_value;
+                heating_value_reference_pressure_pa = parameter_or(
+                    context.component,
+                    "heating_value_reference_pressure", 101325.0);
+                heating_value_reference_temperature_k = parameter_or(
+                    context.component,
+                    "heating_value_reference_temperature", 298.15);
+            } else {
+                fixed_fuel_heat_loss_j_kg =
+                    (1.0 - efficiency) * lower_heating_value;
+            }
         }
         const auto cache = std::make_shared<EquilibriumCache>(
             package, species, air_flow, fuel_flow,
             require_port_variable(context, "air_inlet.h"),
             require_port_variable(context, "fuel_inlet.h"),
-            outlet_p, fuel_heat_loss_j_kg);
+            outlet_p, fixed_fuel_heat_loss_j_kg,
+            declared_effective_lhv_j_kg,
+            heating_value_reference_pressure_pa,
+            heating_value_reference_temperature_k);
         const std::string prefix =
             "component." + context.component.id + ".";
         system.add_linear_equation(
@@ -375,6 +464,7 @@ public:
 private:
     ComponentModelDescriptor descriptor_;
     bool heat_release_efficiency_{false};
+    bool align_declared_lhv_{false};
 };
 
 }  // namespace
@@ -385,6 +475,8 @@ void register_combustion_component_models(
         EquilibriumCombustorModel>());
     registry.register_model(std::make_shared<
         EquilibriumCombustorModel>(true));
+    registry.register_model(std::make_shared<
+        EquilibriumCombustorModel>(true, true));
 }
 
 }  // namespace thermox::platform
