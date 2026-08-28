@@ -48,9 +48,11 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   equilibrium regime traversal; it does not substitute for equipment-specific boiling,
   condensation, void-fraction, or dryout correlations.
 - A correlation-driven finite-volume variant accepts independent, versioned hot/cold conductance
-  artifacts with state, flow, transport, quality, and saturation inputs. This supplies the generic
-  binding point for future ORC evaporator/condenser correlations without embedding R245fa or this
-  dataset in platform code.
+  artifacts with state, flow, transport, quality, saturation, and transient wall-superheat inputs.
+  A saturation-crossing transient regression exercises the wall-dependent path and total-energy
+  closure. This supplies the generic binding point for future ORC evaporator/condenser correlations
+  without embedding R245fa or this dataset in platform code; it is not evidence for a particular
+  boiling or condensation law until such an artifact is sourced and validated.
 - External-boundary prediction remains open. It still requires generic speed-dependent pump and
   expander behavior and traceable or training-only calibrated geometry/component artifacts. The
   dataset's measured charge alone cannot identify the individual exchanger and receiver volumes.

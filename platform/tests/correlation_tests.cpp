@@ -127,6 +127,31 @@ cold_side_conductance_correlation() {
           {}}}};
 }
 
+thermox::platform::CorrelationArtifact
+cold_side_wall_dependent_conductance_correlation() {
+    return {
+        "cold-side-wall-dependent-conductance",
+        thermox::platform::correlation_artifact_schema_v2,
+        "test-1", std::string(64, 'e'),
+        {{"vapor_quality", "dimensionless"},
+         {"wall_temperature", "temperature"},
+         {"wall_to_fluid_temperature_difference",
+          "temperature_difference"},
+         {"liquid_density", "density"},
+         {"vapor_density", "density"},
+         {"latent_heat", "specific_enthalpy"}},
+        {"thermal_conductance", "thermal_conductance"},
+        {{"default", "general", 0,
+          {{"base", 0.2}, {"quality_gain", 0.01},
+           {"superheat_gain", 0.001}},
+          "base + quality_gain * vapor_quality + "
+          "superheat_gain * "
+          "abs(wall_to_fluid_temperature_difference) + "
+          "0 * wall_temperature + 0 * liquid_density + "
+          "0 * vapor_density + 0 * latent_heat",
+          {}}}};
+}
+
 void test_packaged_zuber_findlay_template_has_physical_limits() {
     const auto templates = thermox::platform::
         make_default_correlation_template_registry();
@@ -1194,11 +1219,14 @@ void test_finite_volume_exchanger_uses_conductance_correlations() {
     cell.parameters.erase("cold_side_UA");
     cell.artifact_bindings = {
         {"hot_side_conductance_correlation", "hot-side-conductance"},
-        {"cold_side_conductance_correlation", "cold-side-conductance"}};
+        {"cold_side_conductance_correlation",
+         "cold-side-wall-dependent-conductance"}};
 
     thermox::platform::EngineeringArtifactRegistry artifacts;
     artifacts.register_artifact(hot_side_conductance_correlation());
     artifacts.register_artifact(cold_side_conductance_correlation());
+    artifacts.register_artifact(
+        cold_side_wall_dependent_conductance_correlation());
     const auto properties =
         thermox::physics::make_default_property_package_registry();
     const auto components =
@@ -1258,6 +1286,27 @@ void test_finite_volume_exchanger_uses_conductance_correlations() {
         steady_hot_duty, steady_cold_duty, 1.0e-6,
         "correlated steady exchanger conserves energy");
 
+    auto wall_dependent_steady_document = steady_document;
+    for (auto& component : wall_dependent_steady_document.components) {
+        if (component.kind ==
+            "heat_exchanger.fluid.finite_volume_correlated_cell") {
+            component.artifact_bindings.at(
+                "cold_side_conductance_correlation") =
+                "cold-side-wall-dependent-conductance";
+        }
+    }
+    bool rejected = false;
+    try {
+        (void)thermox::platform::compile_model_graph(
+            wall_dependent_steady_document, components, properties,
+            artifacts, "steady");
+    } catch (const std::invalid_argument& error) {
+        rejected = std::string(error.what()).find(
+            "require transient compilation") != std::string::npos;
+    }
+    require(rejected,
+            "steady exchanger rejects correlations requiring wall state");
+
     const auto graph = thermox::platform::compile_transient_model_graph(
         document, components, properties, artifacts, "boil_to_vapor");
     thermox::TimeIntegrationOptions options;
@@ -1304,14 +1353,14 @@ void test_finite_volume_exchanger_uses_conductance_correlations() {
         hot_side_conductance_correlation());
     invalid_artifacts.register_artifact(
         thermox::platform::CorrelationArtifact{
-            "cold-side-conductance",
+            "cold-side-wall-dependent-conductance",
             thermox::platform::correlation_artifact_schema_v2,
             "invalid-1", std::string(64, 'c'),
             {{"temperature", "temperature"}},
             {"heat_transfer_coefficient", "thermal_conductance"},
             {{"default", "general", 0, {{"value", 1.0}},
               "value + 0 * temperature", {}}}});
-    bool rejected = false;
+    rejected = false;
     try {
         (void)thermox::platform::compile_transient_model_graph(
             invalid_document, components, properties,
@@ -1335,7 +1384,7 @@ void test_finite_volume_exchanger_uses_conductance_correlations() {
             {{"default", "general", 0, {{"value", 1.0}},
               "value + 0 * dynamic_viscosity", {}}}});
     unsupported_property_artifacts.register_artifact(
-        cold_side_conductance_correlation());
+        cold_side_wall_dependent_conductance_correlation());
     rejected = false;
     try {
         (void)thermox::platform::compile_transient_model_graph(

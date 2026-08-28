@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -338,12 +339,21 @@ public:
                 *hot_correlation, *hot_properties, "hot-side");
             validate_conductance_correlation(
                 *cold_correlation, *cold_properties, "cold-side");
+            if (requires_wall_state(*hot_correlation) ||
+                requires_wall_state(*cold_correlation)) {
+                throw std::invalid_argument(
+                    "wall-dependent heat-transfer correlations require "
+                    "transient compilation because steady compilation has "
+                    "no wall-temperature state");
+            }
             add_steady_correlated_heat_transfer(
                 system, prefix + "mixed_cell_heat_transfer",
                 {hot_correlation, hot_properties, hot_in_m, hot_in_m,
-                 hot_in_p, hot_out_h, hot_diameter, hot_area},
+                 hot_in_p, hot_out_h, std::nullopt,
+                 hot_diameter, hot_area},
                 {cold_correlation, cold_properties, cold_in_m, cold_in_m,
-                 cold_in_p, cold_out_h, cold_diameter, cold_area},
+                 cold_in_p, cold_out_h, std::nullopt,
+                 cold_diameter, cold_area},
                 hot_in_h);
         } else {
             const double hot_ua = required_parameter(
@@ -484,6 +494,7 @@ private:
         std::size_t outlet_mass_flow{};
         std::size_t pressure{};
         std::size_t enthalpy{};
+        std::optional<std::size_t> wall_temperature;
         double diameter{};
         double area{};
     };
@@ -496,6 +507,9 @@ private:
             {"pressure", "pressure"},
             {"enthalpy", "specific_enthalpy"},
             {"temperature", "temperature"},
+            {"wall_temperature", "temperature"},
+            {"wall_to_fluid_temperature_difference",
+             "temperature_difference"},
             {"density", "density"},
             {"vapor_quality", "dimensionless"},
             {"specific_heat_capacity", "specific_heat_capacity"},
@@ -509,6 +523,17 @@ private:
             {"vapor_density", "density"},
             {"latent_heat", "specific_enthalpy"}};
         return contract;
+    }
+
+    static bool requires_wall_state(
+        const CorrelationArtifact& correlation) {
+        return std::any_of(
+            correlation.inputs().begin(), correlation.inputs().end(),
+            [](const auto& input) {
+                return input.name == "wall_temperature" ||
+                    input.name ==
+                        "wall_to_fluid_temperature_difference";
+            });
     }
 
     static void validate_conductance_correlation(
@@ -582,6 +607,21 @@ private:
                 inputs.emplace(input.name, x.at(closure.enthalpy));
             } else if (input.name == "temperature") {
                 inputs.emplace(input.name, state.state.temperature_k);
+            } else if (input.name == "wall_temperature" ||
+                       input.name ==
+                           "wall_to_fluid_temperature_difference") {
+                if (!closure.wall_temperature.has_value()) {
+                    return EvaluationStatus::fatal(
+                        "wall-dependent heat-transfer correlation has no "
+                        "wall-temperature state");
+                }
+                const double wall_temperature =
+                    x.at(*closure.wall_temperature);
+                inputs.emplace(
+                    input.name,
+                    input.name == "wall_temperature"
+                        ? wall_temperature
+                        : wall_temperature - state.state.temperature_k);
             } else if (input.name == "density") {
                 inputs.emplace(input.name, state.state.density_kg_m3);
             } else if (input.name == "vapor_quality") {
@@ -915,11 +955,12 @@ private:
                 *cold_correlation, *cold_properties, "cold-side");
             const ConductanceClosure hot_closure{
                 hot_correlation, hot_properties, hot_in_m, hot_out_m,
-                hot_pressure, hot_enthalpy, hot_diameter, hot_area};
+                hot_pressure, hot_enthalpy, wall_temperature,
+                hot_diameter, hot_area};
             const ConductanceClosure cold_closure{
                 cold_correlation, cold_properties,
                 cold_in_m, cold_out_m, cold_pressure, cold_enthalpy,
-                cold_diameter, cold_area};
+                wall_temperature, cold_diameter, cold_area};
             add_correlated_fluid_energy_equation(
                 system, prefix + "hot_energy_accumulation",
                 hot_closure, hot_energy, hot_in_m, hot_in_h,

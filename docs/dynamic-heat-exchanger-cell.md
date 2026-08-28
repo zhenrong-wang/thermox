@@ -140,8 +140,16 @@ Both artifacts must output `thermal_conductance` with dimension `thermal_conduct
 artifact declares only the local inputs it uses. The model supplies dimension-checked pressure,
 enthalpy, temperature, density, vapor quality, heat capacity, transport properties, mass flow,
 mass flux, Reynolds and Prandtl numbers, diameter, area, and—when requested—saturated liquid/vapor
-density and latent heat. Requesting transport or saturation inputs requires the bound property
-package to advertise the corresponding capability.
+density and latent heat. In transient compilation it also supplies `wall_temperature` and the
+signed `wall_to_fluid_temperature_difference = T_wall - T_fluid`. This permits conductance laws
+that depend on wall superheat or subcooling without duplicating the wall balance inside an
+artifact. Requesting transport or saturation inputs requires the bound property package to
+advertise the corresponding capability.
+
+Wall-independent artifacts work in both steady and transient compilation. The steady formulation
+eliminates wall temperature analytically, so an artifact requesting either wall input is rejected
+for steady compilation rather than being evaluated with an invented wall state. A future explicit
+steady wall formulation can relax that boundary without changing the artifact contract.
 
 Correlation applicability envelopes and candidate selection remain owned by the normal artifact
 layer. Consequently, a user can bind different single-phase, boiling, or condensation conductance
@@ -159,6 +167,6 @@ ambient, radiation, fouling evolution, flow reversal, and finite transport delay
 specialized cell may add slip-dependent void fraction, moving boundaries, boiling/condensation heat
 transfer, dryout, and critical-flow correlations under the same physical template. Those closures
 must be selected explicitly; they are not implied by successful homogeneous-equilibrium traversal
-of a saturation boundary. The current conductance contract does not expose wall superheat as a
-correlation input, so nucleate-boiling laws that require wall temperature remain a subsequent,
-explicit contract extension rather than an invented approximation.
+of a saturation boundary. The conductance contract now exposes transient wall superheat, but does
+not itself provide a nucleate-boiling, condensation, dryout, or critical-heat-flux law. Those remain
+versioned engineering artifacts whose applicability and validation evidence must be supplied.
