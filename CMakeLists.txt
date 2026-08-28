@@ -173,6 +173,9 @@ add_executable(thermox_correlation_tests
 target_link_libraries(thermox_correlation_tests PRIVATE
     thermox_platform
 )
+target_compile_definitions(thermox_correlation_tests PRIVATE
+    THERMOX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 add_test(
     NAME thermox_correlation_tests
     COMMAND thermox_correlation_tests

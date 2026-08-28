@@ -127,6 +127,28 @@ energy from a closed ideal-gas side through the wall until the water becomes vap
 It crosses the saturation boundary without a model switch or rejected integration step while
 conserving each side's mass, total fluid-plus-wall energy, and both geometric volume closures.
 
+## Correlation-driven conductance
+
+`heat_exchanger.fluid.finite_volume_correlated_cell` retains the same ports, geometric inventory,
+mass/energy balances, wall state, and pressure-loss parameters. Instead of fixed `hot_side_UA` and
+`cold_side_UA`, each component instance must bind two independent `thermox.correlation` artifacts:
+
+- `hot_side_conductance_correlation`;
+- `cold_side_conductance_correlation`.
+
+Both artifacts must output `thermal_conductance` with dimension `thermal_conductance` (W/K). An
+artifact declares only the local inputs it uses. The model supplies dimension-checked pressure,
+enthalpy, temperature, density, vapor quality, heat capacity, transport properties, mass flow,
+mass flux, Reynolds and Prandtl numbers, diameter, area, and—when requested—saturated liquid/vapor
+density and latent heat. Requesting transport or saturation inputs requires the bound property
+package to advertise the corresponding capability.
+
+Correlation applicability envelopes and candidate selection remain owned by the normal artifact
+layer. Consequently, a user can bind different single-phase, boiling, or condensation conductance
+families to component instances without changing the exchanger equations or numerical kernel.
+Invalid output dimensions, unsupported inputs, missing property capabilities, and nonpositive
+conductance are rejected explicitly.
+
 ## Scope and limits
 
 The older `heat_exchanger.fluid.dynamic_cell` keeps constant masses as equipment parameters and is
@@ -137,4 +159,6 @@ ambient, radiation, fouling evolution, flow reversal, and finite transport delay
 specialized cell may add slip-dependent void fraction, moving boundaries, boiling/condensation heat
 transfer, dryout, and critical-flow correlations under the same physical template. Those closures
 must be selected explicitly; they are not implied by successful homogeneous-equilibrium traversal
-of a saturation boundary.
+of a saturation boundary. The current conductance contract does not expose wall superheat as a
+correlation input, so nucleate-boiling laws that require wall temperature remain a subsequent,
+explicit contract extension rather than an invented approximation.

@@ -47,6 +47,10 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   boundary with no model switch or rejected integration step. This validates homogeneous-
   equilibrium regime traversal; it does not substitute for equipment-specific boiling,
   condensation, void-fraction, or dryout correlations.
+- A correlation-driven finite-volume variant accepts independent, versioned hot/cold conductance
+  artifacts with state, flow, transport, quality, and saturation inputs. This supplies the generic
+  binding point for future ORC evaporator/condenser correlations without embedding R245fa or this
+  dataset in platform code.
 - External-boundary prediction remains open. It still requires generic speed-dependent pump and
   expander behavior and traceable or training-only calibrated geometry/component artifacts. The
   dataset's measured charge alone cannot identify the individual exchanger and receiver volumes.

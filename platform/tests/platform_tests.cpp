@@ -1119,6 +1119,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.fluid.dynamic_cell",
         "heat_exchanger.fluid.finite_volume_cell",
+        "heat_exchanger.fluid.finite_volume_correlated_cell",
         "heat_exchanger.material_fluid.fixed_duty",
         "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",

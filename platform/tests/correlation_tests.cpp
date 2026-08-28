@@ -92,6 +92,41 @@ two_phase_friction_pressure_gradient_correlation() {
          std::string(64, '8')});
 }
 
+thermox::platform::CorrelationArtifact
+hot_side_conductance_correlation() {
+    return {
+        "hot-side-conductance",
+        thermox::platform::correlation_artifact_schema_v2,
+        "test-1", std::string(64, 'a'),
+        {{"temperature", "temperature"},
+         {"mass_flow", "mass_flow"},
+         {"diameter", "length"}},
+        {"thermal_conductance", "thermal_conductance"},
+        {{"default", "general", 0,
+          {{"base", 0.2}, {"temperature_gain", 1.0e-4},
+           {"flow_gain", 0.01}},
+          "base + temperature_gain * (temperature - 400) + "
+          "flow_gain * abs(mass_flow) + 0 * diameter", {}}}};
+}
+
+thermox::platform::CorrelationArtifact
+cold_side_conductance_correlation() {
+    return {
+        "cold-side-conductance",
+        thermox::platform::correlation_artifact_schema_v2,
+        "test-1", std::string(64, 'b'),
+        {{"vapor_quality", "dimensionless"},
+         {"liquid_density", "density"},
+         {"vapor_density", "density"},
+         {"latent_heat", "specific_enthalpy"}},
+        {"thermal_conductance", "thermal_conductance"},
+        {{"default", "general", 0,
+          {{"base", 0.2}, {"quality_gain", 0.01}},
+          "base + quality_gain * vapor_quality + "
+          "0 * liquid_density + 0 * vapor_density + 0 * latent_heat",
+          {}}}};
+}
+
 void test_packaged_zuber_findlay_template_has_physical_limits() {
     const auto templates = thermox::platform::
         make_default_correlation_template_registry();
@@ -1147,6 +1182,173 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
         1.0e-6, "balanced enthalpy flow preserves inventory energy");
 }
 
+void test_finite_volume_exchanger_uses_conductance_correlations() {
+    auto document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/regime_spanning_finite_volume_heat_exchanger.json");
+    require(document.components.size() == 1U,
+            "correlated exchanger reference has one component");
+    auto& cell = document.components.front();
+    cell.kind = "heat_exchanger.fluid.finite_volume_correlated_cell";
+    cell.parameters.erase("hot_side_UA");
+    cell.parameters.erase("cold_side_UA");
+    cell.artifact_bindings = {
+        {"hot_side_conductance_correlation", "hot-side-conductance"},
+        {"cold_side_conductance_correlation", "cold-side-conductance"}};
+
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(hot_side_conductance_correlation());
+    artifacts.register_artifact(cold_side_conductance_correlation());
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+
+    auto steady_document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/two_cell_counterflow_heat_exchanger.json");
+    for (auto& component : steady_document.components) {
+        if (component.kind != "heat_exchanger.fluid.dynamic_cell") {
+            continue;
+        }
+        component.kind =
+            "heat_exchanger.fluid.finite_volume_correlated_cell";
+        component.parameters.erase("hot_fluid_mass");
+        component.parameters.erase("cold_fluid_mass");
+        component.parameters.erase("hot_side_UA");
+        component.parameters.erase("cold_side_UA");
+        component.parameters.emplace(
+            "hot_fluid_volume",
+            thermox::platform::ScalarValue{0.5, "m3", "volume"});
+        component.parameters.emplace(
+            "cold_fluid_volume",
+            thermox::platform::ScalarValue{0.05, "m3", "volume"});
+        component.artifact_bindings = {
+            {"hot_side_conductance_correlation",
+             "hot-side-conductance"},
+            {"cold_side_conductance_correlation",
+             "cold-side-conductance"}};
+    }
+    const auto steady_graph = thermox::platform::compile_model_graph(
+        steady_document, components, properties, artifacts, "steady");
+    const auto steady = thermox::solve_newton(steady_graph.problem);
+    require(steady.diagnostics.converged,
+            "correlated exchanger steady solve: " +
+                steady.diagnostics.message);
+    const auto steady_index = [&](const std::string& name) {
+        const auto found = std::find(
+            steady_graph.problem.variable_names.begin(),
+            steady_graph.problem.variable_names.end(), name);
+        require(found != steady_graph.problem.variable_names.end(),
+                "correlated steady variable exists: " + name);
+        return static_cast<std::size_t>(
+            found - steady_graph.problem.variable_names.begin());
+    };
+    const double steady_hot_duty =
+        steady.x.at(steady_index("hot_source.outlet.m_dot")) *
+        (steady.x.at(steady_index("hot_source.outlet.h")) -
+         steady.x.at(steady_index("hot_sink.inlet.h")));
+    const double steady_cold_duty =
+        steady.x.at(steady_index("cold_source.outlet.m_dot")) *
+        (steady.x.at(steady_index("cold_sink.inlet.h")) -
+         steady.x.at(steady_index("cold_source.outlet.h")));
+    require(steady_hot_duty > 0.0,
+            "correlated steady exchanger transfers heat hot to cold");
+    require_close(
+        steady_hot_duty, steady_cold_duty, 1.0e-6,
+        "correlated steady exchanger conserves energy");
+
+    const auto graph = thermox::platform::compile_transient_model_graph(
+        document, components, properties, artifacts, "boil_to_vapor");
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 10.0;
+    options.initial_step = 0.01;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            "correlated exchanger integration: " +
+                result.diagnostics.message);
+    const auto index = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(found != graph.problem.variable_names.end(),
+                "correlated exchanger variable exists: " + name);
+        return static_cast<std::size_t>(
+            found - graph.problem.variable_names.begin());
+    };
+    const auto& initial = result.trajectory.front().state;
+    const auto& final = result.trajectory.back().state;
+    const auto water = properties.create("coolprop_heos", "Water");
+    const auto final_water = water->state_ph(
+        final.at(index("cell.cold_pressure")),
+        final.at(index("cell.cold_enthalpy")));
+    require(final_water.ok() &&
+                final_water.state.phase == thermox::physics::Phase::vapor,
+            "correlated conductance remains valid across saturation");
+    const double initial_total =
+        initial.at(index("cell.hot_total_energy")) +
+        initial.at(index("cell.cold_total_energy")) +
+        10.0 * initial.at(index("cell.wall_temperature"));
+    const double final_total =
+        final.at(index("cell.hot_total_energy")) +
+        final.at(index("cell.cold_total_energy")) +
+        10.0 * final.at(index("cell.wall_temperature"));
+    require_close(
+        final_total, initial_total, 1.0e-6,
+        "correlated exchanger conserves total stored energy");
+
+    auto invalid_document = document;
+    thermox::platform::EngineeringArtifactRegistry invalid_artifacts;
+    invalid_artifacts.register_artifact(
+        hot_side_conductance_correlation());
+    invalid_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "cold-side-conductance",
+            thermox::platform::correlation_artifact_schema_v2,
+            "invalid-1", std::string(64, 'c'),
+            {{"temperature", "temperature"}},
+            {"heat_transfer_coefficient", "thermal_conductance"},
+            {{"default", "general", 0, {{"value", 1.0}},
+              "value + 0 * temperature", {}}}});
+    bool rejected = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            invalid_document, components, properties,
+            invalid_artifacts, "boil_to_vapor");
+    } catch (const std::invalid_argument& error) {
+        rejected = std::string(error.what()).find(
+            "thermal_conductance") != std::string::npos;
+    }
+    require(rejected,
+            "exchanger rejects correlation output with wrong contract");
+
+    thermox::platform::EngineeringArtifactRegistry
+        unsupported_property_artifacts;
+    unsupported_property_artifacts.register_artifact(
+        thermox::platform::CorrelationArtifact{
+            "hot-side-conductance",
+            thermox::platform::correlation_artifact_schema_v2,
+            "invalid-transport-1", std::string(64, 'd'),
+            {{"dynamic_viscosity", "dynamic_viscosity"}},
+            {"thermal_conductance", "thermal_conductance"},
+            {{"default", "general", 0, {{"value", 1.0}},
+              "value + 0 * dynamic_viscosity", {}}}});
+    unsupported_property_artifacts.register_artifact(
+        cold_side_conductance_correlation());
+    rejected = false;
+    try {
+        (void)thermox::platform::compile_transient_model_graph(
+            document, components, properties,
+            unsupported_property_artifacts, "boil_to_vapor");
+    } catch (const std::invalid_argument& error) {
+        rejected = std::string(error.what()).find(
+            "transport properties") != std::string::npos;
+    }
+    require(rejected,
+            "exchanger rejects unavailable correlation property inputs");
+}
+
 }  // namespace
 
 int main() {
@@ -1162,6 +1364,7 @@ int main() {
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
         test_two_phase_inventory_uses_correlation_for_outlet_quality();
+        test_finite_volume_exchanger_uses_conductance_correlations();
     } catch (const std::exception& error) {
         std::cerr << "correlation tests failed: "
                   << error.what() << '\n';

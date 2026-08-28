@@ -608,7 +608,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 97,
+        response.components.size() == 98,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -742,6 +742,28 @@ void test_catalog_discovery() {
                 *finite_volume_cell, "cold_inventory"),
         "catalog must expose conservative finite-volume exchanger "
         "dynamics");
+    const auto correlated_finite_volume_cell = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "heat_exchanger.fluid.finite_volume_correlated_cell";
+        });
+    require(
+        correlated_finite_volume_cell != response.components.end() &&
+            correlated_finite_volume_cell->supports_steady &&
+            correlated_finite_volume_cell->supports_transient &&
+            correlated_finite_volume_cell->parameters.size() == 7U &&
+            correlated_finite_volume_cell->internal_variables.size() == 9U &&
+            correlated_finite_volume_cell->artifacts.size() == 2U &&
+            std::all_of(
+                correlated_finite_volume_cell->artifacts.begin(),
+                correlated_finite_volume_cell->artifacts.end(),
+                [](const auto& artifact) {
+                    return artifact.required &&
+                        artifact.artifact_type == "thermox.correlation";
+                }),
+        "catalog must expose independently bound hot/cold conductance "
+        "correlations");
     const auto total_charge = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {

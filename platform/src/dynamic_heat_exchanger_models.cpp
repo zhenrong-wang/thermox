@@ -3,11 +3,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace thermox::platform {
@@ -15,27 +18,90 @@ namespace thermox::platform {
 namespace {
 
 using component_model_support::property_failure;
+using component_model_support::require_correlation;
 using component_model_support::require_internal_variable;
 using component_model_support::require_port_variable;
 using component_model_support::require_property_package;
 using component_model_support::required_parameter;
 
+using NumericDaeResidual = std::function<EvaluationStatus(
+    const std::vector<double>&,
+    const std::vector<double>&,
+    double&)>;
+
+void add_numeric_sparse_dae_equation(
+    DaeEquationSystemBuilder& system,
+    std::string name,
+    std::vector<std::size_t> state_variables,
+    std::vector<DaeEquationPartial> exact_rate_partials,
+    NumericDaeResidual evaluate,
+    double scale) {
+    std::sort(state_variables.begin(), state_variables.end());
+    state_variables.erase(
+        std::unique(state_variables.begin(), state_variables.end()),
+        state_variables.end());
+    std::vector<std::size_t> sparsity = state_variables;
+    for (const auto& partial : exact_rate_partials) {
+        sparsity.push_back(partial.variable);
+    }
+    system.add_sparse_equation(
+        std::move(name), std::move(sparsity),
+        [state_variables = std::move(state_variables),
+         exact_rate_partials = std::move(exact_rate_partials),
+         evaluate = std::move(evaluate)](
+            double, const std::vector<double>& x,
+            const std::vector<double>& x_dot, double& residual,
+            std::vector<DaeEquationPartial>& jacobian) {
+            auto status = evaluate(x, x_dot, residual);
+            if (!status.ok()) return status;
+            for (const auto variable : state_variables) {
+                std::vector<double> perturbed = x;
+                const double step = 1.0e-6 *
+                    std::max(std::abs(x.at(variable)), 1.0);
+                perturbed.at(variable) += step;
+                double shifted = 0.0;
+                status = evaluate(perturbed, x_dot, shifted);
+                if (!status.ok()) return status;
+                jacobian.push_back(
+                    {variable, (shifted - residual) / step, 0.0});
+            }
+            jacobian.insert(
+                jacobian.end(), exact_rate_partials.begin(),
+                exact_rate_partials.end());
+            return EvaluationStatus::success();
+        },
+        scale);
+}
+
 class DynamicHeatExchangerCellModel final : public ComponentModel {
 public:
-    explicit DynamicHeatExchangerCellModel(bool finite_volume)
-        : finite_volume_(finite_volume) {
-        descriptor_.kind = finite_volume_
-            ? "heat_exchanger.fluid.finite_volume_cell"
-            : "heat_exchanger.fluid.dynamic_cell";
+    explicit DynamicHeatExchangerCellModel(
+        bool finite_volume,
+        bool correlated_heat_transfer = false)
+        : finite_volume_(finite_volume),
+          correlated_heat_transfer_(correlated_heat_transfer) {
+        if (correlated_heat_transfer_ && !finite_volume_) {
+            throw std::logic_error(
+                "correlated exchanger heat transfer requires finite volume");
+        }
+        descriptor_.kind = correlated_heat_transfer_
+            ? "heat_exchanger.fluid.finite_volume_correlated_cell"
+            : (finite_volume_
+                ? "heat_exchanger.fluid.finite_volume_cell"
+                : "heat_exchanger.fluid.dynamic_cell");
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "heat_exchanger.fluid.cell";
-        descriptor_.display_name = finite_volume_
-            ? "Finite-volume heat-exchanger cell"
-            : "Dynamic heat-exchanger cell";
+        descriptor_.display_name = correlated_heat_transfer_
+            ? "Correlation-driven finite-volume heat-exchanger cell"
+            : (finite_volume_
+                ? "Finite-volume heat-exchanger cell"
+                : "Dynamic heat-exchanger cell");
         descriptor_.category = "Heat transfer";
-        descriptor_.model_name = finite_volume_
-            ? "Property-backed geometric fluid holdup"
-            : "Well-mixed constant-holdup fluids with wall capacitance";
+        descriptor_.model_name = correlated_heat_transfer_
+            ? "Artifact-driven conductance with geometric fluid holdup"
+            : (finite_volume_
+                ? "Property-backed geometric fluid holdup"
+                : "Well-mixed constant-holdup fluids with wall capacitance");
         descriptor_.ports = {
             {"hot_in", "fluid", "in"},
             {"hot_out", "fluid", "out"},
@@ -45,12 +111,6 @@ public:
             {"cold_inventory", "inventory", "out", 1U, "cold_out"}};
         descriptor_.parameters = {
             {"wall_thermal_capacity", "thermal_capacity", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
-            {"hot_side_UA", "thermal_conductance", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
-            {"cold_side_UA", "thermal_conductance", true,
              std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
             {"hot_flow_diameter", "length", true, std::nullopt, 0.0,
@@ -63,6 +123,24 @@ public:
             {"cold_loss_coefficient", "dimensionless", true,
              std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true}};
+        if (correlated_heat_transfer_) {
+            descriptor_.artifacts = {
+                {"hot_side_conductance_correlation",
+                 correlation_artifact_type, true},
+                {"cold_side_conductance_correlation",
+                 correlation_artifact_type, true}};
+        } else {
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin() + 1,
+                {"hot_side_UA", "thermal_conductance", true,
+                 std::nullopt, 0.0,
+                 std::numeric_limits<double>::infinity(), false, true});
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin() + 2,
+                {"cold_side_UA", "thermal_conductance", true,
+                 std::nullopt, 0.0,
+                 std::numeric_limits<double>::infinity(), false, true});
+        }
         if (finite_volume_) {
             descriptor_.parameters.insert(
                 descriptor_.parameters.begin(), {
@@ -161,12 +239,6 @@ public:
         const auto hot_properties = validate_media(context);
         const auto cold_properties =
             require_property_package(context, "cold_in");
-        const double hot_ua =
-            required_parameter(context.component, "hot_side_UA");
-        const double cold_ua =
-            required_parameter(context.component, "cold_side_UA");
-        const double effective_ua =
-            hot_ua * cold_ua / (hot_ua + cold_ua);
         const double hot_holdup_parameter = required_parameter(
             context.component, finite_volume_
                 ? "hot_fluid_volume" : "hot_fluid_mass");
@@ -257,32 +329,34 @@ public:
                        x.at(cold_in_m) * cold_delta;
             },
             1.0e6);
-        system.add_checked_equation(
-            prefix + "mixed_cell_heat_transfer",
-            [hot_properties, cold_properties, effective_ua,
-             hot_in_m, hot_in_p, hot_in_h, hot_out_h,
-             cold_in_p, cold_out_h](
-                const std::vector<double>& x, double& residual) {
-                const auto hot = hot_properties->state_ph(
-                    x.at(hot_in_p), x.at(hot_out_h));
-                if (!hot.ok()) return property_failure(hot);
-                const auto cold = cold_properties->state_ph(
-                    x.at(cold_in_p), x.at(cold_out_h));
-                if (!cold.ok()) return property_failure(cold);
-                const double difference =
-                    hot.state.temperature_k - cold.state.temperature_k;
-                if (!std::isfinite(difference) || difference <= 0.0) {
-                    return EvaluationStatus::recoverable(
-                        "dynamic heat-exchanger cell requires hot bulk "
-                        "temperature above cold bulk temperature");
-                }
-                residual =
-                    x.at(hot_in_m) *
-                        (x.at(hot_in_h) - x.at(hot_out_h)) -
-                    effective_ua * difference;
-                return EvaluationStatus::success();
-            },
-            1.0e6);
+        if (correlated_heat_transfer_) {
+            const auto hot_correlation = require_correlation(
+                context, "hot_side_conductance_correlation");
+            const auto cold_correlation = require_correlation(
+                context, "cold_side_conductance_correlation");
+            validate_conductance_correlation(
+                *hot_correlation, *hot_properties, "hot-side");
+            validate_conductance_correlation(
+                *cold_correlation, *cold_properties, "cold-side");
+            add_steady_correlated_heat_transfer(
+                system, prefix + "mixed_cell_heat_transfer",
+                {hot_correlation, hot_properties, hot_in_m, hot_in_m,
+                 hot_in_p, hot_out_h, hot_diameter, hot_area},
+                {cold_correlation, cold_properties, cold_in_m, cold_in_m,
+                 cold_in_p, cold_out_h, cold_diameter, cold_area},
+                hot_in_h);
+        } else {
+            const double hot_ua = required_parameter(
+                context.component, "hot_side_UA");
+            const double cold_ua = required_parameter(
+                context.component, "cold_side_UA");
+            add_steady_fixed_heat_transfer(
+                system, prefix + "mixed_cell_heat_transfer",
+                hot_properties, cold_properties,
+                hot_ua * cold_ua / (hot_ua + cold_ua),
+                hot_in_m, hot_in_p, hot_in_h, hot_out_h,
+                cold_in_p, cold_out_h);
+        }
     }
 
     void add_transient_equations(
@@ -293,7 +367,8 @@ public:
             require_property_package(context, "cold_in");
         if (finite_volume_) {
             add_finite_volume_transient_equations(
-                context, system, hot_properties, cold_properties);
+                context, system, hot_properties, cold_properties,
+                correlated_heat_transfer_);
             return;
         }
         const double hot_fluid_mass = required_parameter(
@@ -402,23 +477,362 @@ public:
     }
 
 private:
+    struct ConductanceClosure {
+        std::shared_ptr<const CorrelationArtifact> correlation;
+        std::shared_ptr<const physics::PropertyPackage> properties;
+        std::size_t inlet_mass_flow{};
+        std::size_t outlet_mass_flow{};
+        std::size_t pressure{};
+        std::size_t enthalpy{};
+        double diameter{};
+        double area{};
+    };
+
+    static const std::map<std::string, std::string>&
+    conductance_input_contract() {
+        static const std::map<std::string, std::string> contract{
+            {"mass_flow", "mass_flow"},
+            {"mass_flux", "mass_flux"},
+            {"pressure", "pressure"},
+            {"enthalpy", "specific_enthalpy"},
+            {"temperature", "temperature"},
+            {"density", "density"},
+            {"vapor_quality", "dimensionless"},
+            {"specific_heat_capacity", "specific_heat_capacity"},
+            {"dynamic_viscosity", "dynamic_viscosity"},
+            {"thermal_conductivity", "thermal_conductivity"},
+            {"reynolds_number", "dimensionless"},
+            {"prandtl_number", "dimensionless"},
+            {"diameter", "length"},
+            {"area", "area"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"latent_heat", "specific_enthalpy"}};
+        return contract;
+    }
+
+    static void validate_conductance_correlation(
+        const CorrelationArtifact& correlation,
+        const physics::PropertyPackage& properties,
+        const std::string& side) {
+        if (correlation.output().name != "thermal_conductance" ||
+            correlation.output().dimension != "thermal_conductance") {
+            throw std::invalid_argument(
+                side + " heat-transfer correlation output must be named "
+                "'thermal_conductance' with thermal_conductance dimension");
+        }
+        bool needs_transport = false;
+        bool needs_saturation = false;
+        for (const auto& input : correlation.inputs()) {
+            const auto supported = conductance_input_contract().find(
+                input.name);
+            if (supported == conductance_input_contract().end() ||
+                input.dimension != supported->second) {
+                throw std::invalid_argument(
+                    side + " heat-transfer correlation input '" +
+                    input.name + "' has unsupported name or dimension");
+            }
+            needs_transport = needs_transport ||
+                input.name == "dynamic_viscosity" ||
+                input.name == "thermal_conductivity" ||
+                input.name == "reynolds_number" ||
+                input.name == "prandtl_number";
+            needs_saturation = needs_saturation ||
+                input.name == "liquid_density" ||
+                input.name == "vapor_density" ||
+                input.name == "latent_heat";
+        }
+        if (needs_transport &&
+            !properties.supports(
+                physics::PropertyCapability::transport)) {
+            throw std::invalid_argument(
+                side + " heat-transfer correlation requires transport "
+                "properties unsupported by its medium");
+        }
+        if (needs_saturation &&
+            !properties.supports(
+                physics::PropertyCapability::saturation_p)) {
+            throw std::invalid_argument(
+                side + " heat-transfer correlation requires saturation "
+                "properties unsupported by its medium");
+        }
+    }
+
+    static EvaluationStatus evaluate_conductance(
+        const ConductanceClosure& closure,
+        const std::vector<double>& x,
+        double& conductance) {
+        const auto state = closure.properties->state_ph(
+            x.at(closure.pressure), x.at(closure.enthalpy));
+        if (!state.ok()) return property_failure(state);
+        std::map<std::string, double> inputs;
+        const double flow = 0.5 *
+            (x.at(closure.inlet_mass_flow) +
+             x.at(closure.outlet_mass_flow));
+        const double mass_flux = std::abs(flow) / closure.area;
+        bool saturation_requested = false;
+        for (const auto& input : closure.correlation->inputs()) {
+            if (input.name == "mass_flow") {
+                inputs.emplace(input.name, flow);
+            } else if (input.name == "mass_flux") {
+                inputs.emplace(input.name, mass_flux);
+            } else if (input.name == "pressure") {
+                inputs.emplace(input.name, x.at(closure.pressure));
+            } else if (input.name == "enthalpy") {
+                inputs.emplace(input.name, x.at(closure.enthalpy));
+            } else if (input.name == "temperature") {
+                inputs.emplace(input.name, state.state.temperature_k);
+            } else if (input.name == "density") {
+                inputs.emplace(input.name, state.state.density_kg_m3);
+            } else if (input.name == "vapor_quality") {
+                inputs.emplace(input.name, state.state.vapor_quality);
+            } else if (input.name == "specific_heat_capacity") {
+                inputs.emplace(input.name, state.state.cp_j_kg_k);
+            } else if (input.name == "dynamic_viscosity") {
+                inputs.emplace(input.name, state.state.viscosity_pa_s);
+            } else if (input.name == "thermal_conductivity") {
+                inputs.emplace(
+                    input.name,
+                    state.state.thermal_conductivity_w_m_k);
+            } else if (input.name == "reynolds_number") {
+                if (!(state.state.viscosity_pa_s > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "heat-transfer correlation requires positive "
+                        "dynamic viscosity for Reynolds number");
+                }
+                inputs.emplace(
+                    input.name,
+                    mass_flux * closure.diameter /
+                        state.state.viscosity_pa_s);
+            } else if (input.name == "prandtl_number") {
+                if (!(state.state.thermal_conductivity_w_m_k > 0.0)) {
+                    return EvaluationStatus::recoverable(
+                        "heat-transfer correlation requires positive "
+                        "thermal conductivity for Prandtl number");
+                }
+                inputs.emplace(
+                    input.name,
+                    state.state.cp_j_kg_k *
+                        state.state.viscosity_pa_s /
+                        state.state.thermal_conductivity_w_m_k);
+            } else if (input.name == "diameter") {
+                inputs.emplace(input.name, closure.diameter);
+            } else if (input.name == "area") {
+                inputs.emplace(input.name, closure.area);
+            } else {
+                saturation_requested = true;
+            }
+        }
+        if (saturation_requested) {
+            const auto saturation = closure.properties->saturation_p(
+                x.at(closure.pressure));
+            if (!saturation.ok()) return property_failure(saturation);
+            for (const auto& input : closure.correlation->inputs()) {
+                if (input.name == "liquid_density") {
+                    inputs.emplace(
+                        input.name,
+                        saturation.liquid.density_kg_m3);
+                } else if (input.name == "vapor_density") {
+                    inputs.emplace(
+                        input.name,
+                        saturation.vapor.density_kg_m3);
+                } else if (input.name == "latent_heat") {
+                    inputs.emplace(
+                        input.name,
+                        saturation.vapor.enthalpy_j_kg -
+                            saturation.liquid.enthalpy_j_kg);
+                }
+            }
+        }
+        const auto evaluated = closure.correlation->evaluate(inputs);
+        if (!evaluated.error.empty()) {
+            return EvaluationStatus::recoverable(evaluated.error);
+        }
+        if (!std::isfinite(evaluated.value) ||
+            evaluated.value <= 0.0) {
+            return EvaluationStatus::recoverable(
+                "heat-transfer correlation must produce positive finite "
+                "thermal conductance");
+        }
+        conductance = evaluated.value;
+        return EvaluationStatus::success();
+    }
+
+    static void add_steady_fixed_heat_transfer(
+        EquationSystemBuilder& system,
+        const std::string& name,
+        std::shared_ptr<const physics::PropertyPackage> hot_properties,
+        std::shared_ptr<const physics::PropertyPackage> cold_properties,
+        double effective_ua,
+        std::size_t hot_in_m,
+        std::size_t hot_in_p,
+        std::size_t hot_in_h,
+        std::size_t hot_out_h,
+        std::size_t cold_in_p,
+        std::size_t cold_out_h) {
+        system.add_checked_equation(
+            name,
+            [hot_properties = std::move(hot_properties),
+             cold_properties = std::move(cold_properties), effective_ua,
+             hot_in_m, hot_in_p, hot_in_h, hot_out_h,
+             cold_in_p, cold_out_h](
+                const std::vector<double>& x, double& residual) {
+                const auto hot = hot_properties->state_ph(
+                    x.at(hot_in_p), x.at(hot_out_h));
+                if (!hot.ok()) return property_failure(hot);
+                const auto cold = cold_properties->state_ph(
+                    x.at(cold_in_p), x.at(cold_out_h));
+                if (!cold.ok()) return property_failure(cold);
+                const double difference =
+                    hot.state.temperature_k - cold.state.temperature_k;
+                if (!std::isfinite(difference) || difference <= 0.0) {
+                    return EvaluationStatus::recoverable(
+                        "dynamic heat-exchanger cell requires hot bulk "
+                        "temperature above cold bulk temperature");
+                }
+                residual = x.at(hot_in_m) *
+                        (x.at(hot_in_h) - x.at(hot_out_h)) -
+                    effective_ua * difference;
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+    }
+
+    static void add_steady_correlated_heat_transfer(
+        EquationSystemBuilder& system,
+        const std::string& name,
+        ConductanceClosure hot,
+        ConductanceClosure cold,
+        std::size_t hot_in_h) {
+        system.add_checked_equation(
+            name,
+            [hot = std::move(hot), cold = std::move(cold), hot_in_h](
+                const std::vector<double>& x, double& residual) {
+                const auto hot_state = hot.properties->state_ph(
+                    x.at(hot.pressure), x.at(hot.enthalpy));
+                if (!hot_state.ok()) return property_failure(hot_state);
+                const auto cold_state = cold.properties->state_ph(
+                    x.at(cold.pressure), x.at(cold.enthalpy));
+                if (!cold_state.ok()) return property_failure(cold_state);
+                double hot_ua = 0.0;
+                auto status = evaluate_conductance(hot, x, hot_ua);
+                if (!status.ok()) return status;
+                double cold_ua = 0.0;
+                status = evaluate_conductance(cold, x, cold_ua);
+                if (!status.ok()) return status;
+                const double difference = hot_state.state.temperature_k -
+                    cold_state.state.temperature_k;
+                if (!std::isfinite(difference) || difference <= 0.0) {
+                    return EvaluationStatus::recoverable(
+                        "correlated heat-exchanger cell requires hot bulk "
+                        "temperature above cold bulk temperature");
+                }
+                const double effective_ua =
+                    hot_ua * cold_ua / (hot_ua + cold_ua);
+                residual = x.at(hot.inlet_mass_flow) *
+                        (x.at(hot_in_h) - x.at(hot.enthalpy)) -
+                    effective_ua * difference;
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+    }
+
+    static void add_correlated_fluid_energy_equation(
+        DaeEquationSystemBuilder& system,
+        const std::string& name,
+        ConductanceClosure closure,
+        std::size_t energy,
+        std::size_t inlet_m,
+        std::size_t inlet_h,
+        std::size_t outlet_m,
+        std::size_t wall_temperature) {
+        add_numeric_sparse_dae_equation(
+            system, name,
+            {inlet_m, inlet_h, outlet_m,
+             closure.inlet_mass_flow, closure.outlet_mass_flow,
+             closure.pressure, closure.enthalpy, wall_temperature},
+            {{energy, 0.0, 1.0}},
+            [closure = std::move(closure), energy, inlet_m, inlet_h,
+             outlet_m, wall_temperature](
+                const std::vector<double>& x,
+                const std::vector<double>& x_dot,
+                double& residual) {
+                const auto state = closure.properties->state_ph(
+                    x.at(closure.pressure), x.at(closure.enthalpy));
+                if (!state.ok()) return property_failure(state);
+                double conductance = 0.0;
+                const auto status = evaluate_conductance(
+                    closure, x, conductance);
+                if (!status.ok()) return status;
+                const double heat = conductance *
+                    (state.state.temperature_k -
+                     x.at(wall_temperature));
+                residual = x_dot.at(energy) -
+                    x.at(inlet_m) * x.at(inlet_h) +
+                    x.at(outlet_m) * x.at(closure.enthalpy) + heat;
+                return EvaluationStatus::success();
+            },
+            1.0e6);
+    }
+
+    static void add_correlated_wall_energy_equation(
+        DaeEquationSystemBuilder& system,
+        const std::string& name,
+        ConductanceClosure hot,
+        ConductanceClosure cold,
+        std::size_t wall_temperature,
+        double wall_capacity) {
+        add_numeric_sparse_dae_equation(
+            system, name,
+            {hot.inlet_mass_flow, hot.outlet_mass_flow,
+             hot.pressure, hot.enthalpy,
+             cold.inlet_mass_flow, cold.outlet_mass_flow,
+             cold.pressure, cold.enthalpy, wall_temperature},
+            {{wall_temperature, 0.0, wall_capacity}},
+            [hot = std::move(hot), cold = std::move(cold),
+             wall_temperature, wall_capacity](
+                const std::vector<double>& x,
+                const std::vector<double>& x_dot,
+                double& residual) {
+                const auto hot_state = hot.properties->state_ph(
+                    x.at(hot.pressure), x.at(hot.enthalpy));
+                if (!hot_state.ok()) return property_failure(hot_state);
+                const auto cold_state = cold.properties->state_ph(
+                    x.at(cold.pressure), x.at(cold.enthalpy));
+                if (!cold_state.ok()) return property_failure(cold_state);
+                double hot_ua = 0.0;
+                auto status = evaluate_conductance(hot, x, hot_ua);
+                if (!status.ok()) return status;
+                double cold_ua = 0.0;
+                status = evaluate_conductance(cold, x, cold_ua);
+                if (!status.ok()) return status;
+                const double hot_heat = hot_ua *
+                    (hot_state.state.temperature_k -
+                     x.at(wall_temperature));
+                const double cold_heat = cold_ua *
+                    (x.at(wall_temperature) -
+                     cold_state.state.temperature_k);
+                residual = wall_capacity * x_dot.at(wall_temperature) -
+                    hot_heat + cold_heat;
+                return EvaluationStatus::success();
+            },
+            std::max(wall_capacity, 1.0));
+    }
+
     static void add_finite_volume_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system,
         const std::shared_ptr<const physics::PropertyPackage>&
             hot_properties,
         const std::shared_ptr<const physics::PropertyPackage>&
-            cold_properties) {
+            cold_properties,
+        bool correlated_heat_transfer) {
         const double hot_volume = required_parameter(
             context.component, "hot_fluid_volume");
         const double cold_volume = required_parameter(
             context.component, "cold_fluid_volume");
         const double wall_capacity = required_parameter(
             context.component, "wall_thermal_capacity");
-        const double hot_ua = required_parameter(
-            context.component, "hot_side_UA");
-        const double cold_ua = required_parameter(
-            context.component, "cold_side_UA");
         const double hot_diameter = required_parameter(
             context.component, "hot_flow_diameter");
         const double cold_diameter = required_parameter(
@@ -490,21 +904,55 @@ private:
             prefix + "cold_bulk_pressure",
             {{cold_in_p, 1.0, 0.0}, {cold_pressure, -1.0, 0.0}},
             0.0, 100000.0);
-        add_fluid_energy_equation(
-            system, prefix + "hot_energy_accumulation",
-            hot_properties, hot_energy, hot_in_m, hot_in_h,
-            hot_out_m, hot_pressure, hot_enthalpy,
-            wall_temperature, hot_ua);
-        add_fluid_energy_equation(
-            system, prefix + "cold_energy_accumulation",
-            cold_properties, cold_energy, cold_in_m, cold_in_h,
-            cold_out_m, cold_pressure, cold_enthalpy,
-            wall_temperature, cold_ua);
-        add_wall_energy_equation(
-            system, prefix + "wall_energy_accumulation",
-            hot_properties, cold_properties, hot_pressure,
-            hot_enthalpy, cold_pressure, cold_enthalpy,
-            wall_temperature, hot_ua, cold_ua, wall_capacity);
+        if (correlated_heat_transfer) {
+            const auto hot_correlation = require_correlation(
+                context, "hot_side_conductance_correlation");
+            const auto cold_correlation = require_correlation(
+                context, "cold_side_conductance_correlation");
+            validate_conductance_correlation(
+                *hot_correlation, *hot_properties, "hot-side");
+            validate_conductance_correlation(
+                *cold_correlation, *cold_properties, "cold-side");
+            const ConductanceClosure hot_closure{
+                hot_correlation, hot_properties, hot_in_m, hot_out_m,
+                hot_pressure, hot_enthalpy, hot_diameter, hot_area};
+            const ConductanceClosure cold_closure{
+                cold_correlation, cold_properties,
+                cold_in_m, cold_out_m, cold_pressure, cold_enthalpy,
+                cold_diameter, cold_area};
+            add_correlated_fluid_energy_equation(
+                system, prefix + "hot_energy_accumulation",
+                hot_closure, hot_energy, hot_in_m, hot_in_h,
+                hot_out_m, wall_temperature);
+            add_correlated_fluid_energy_equation(
+                system, prefix + "cold_energy_accumulation",
+                cold_closure, cold_energy, cold_in_m, cold_in_h,
+                cold_out_m, wall_temperature);
+            add_correlated_wall_energy_equation(
+                system, prefix + "wall_energy_accumulation",
+                hot_closure, cold_closure, wall_temperature,
+                wall_capacity);
+        } else {
+            const double hot_ua = required_parameter(
+                context.component, "hot_side_UA");
+            const double cold_ua = required_parameter(
+                context.component, "cold_side_UA");
+            add_fluid_energy_equation(
+                system, prefix + "hot_energy_accumulation",
+                hot_properties, hot_energy, hot_in_m, hot_in_h,
+                hot_out_m, hot_pressure, hot_enthalpy,
+                wall_temperature, hot_ua);
+            add_fluid_energy_equation(
+                system, prefix + "cold_energy_accumulation",
+                cold_properties, cold_energy, cold_in_m, cold_in_h,
+                cold_out_m, cold_pressure, cold_enthalpy,
+                wall_temperature, cold_ua);
+            add_wall_energy_equation(
+                system, prefix + "wall_energy_accumulation",
+                hot_properties, cold_properties, hot_pressure,
+                hot_enthalpy, cold_pressure, cold_enthalpy,
+                wall_temperature, hot_ua, cold_ua, wall_capacity);
+        }
         system.add_linear_equation(
             prefix + "hot_outlet_enthalpy",
             {{hot_out_h, 1.0, 0.0}, {hot_enthalpy, -1.0, 0.0}},
@@ -979,6 +1427,7 @@ private:
 
     ComponentModelDescriptor descriptor_;
     bool finite_volume_{false};
+    bool correlated_heat_transfer_{false};
 };
 
 }  // namespace
@@ -989,6 +1438,8 @@ void register_dynamic_heat_transfer_component_models(
         std::make_shared<DynamicHeatExchangerCellModel>(false));
     registry.register_model(
         std::make_shared<DynamicHeatExchangerCellModel>(true));
+    registry.register_model(
+        std::make_shared<DynamicHeatExchangerCellModel>(true, true));
 }
 
 }  // namespace thermox::platform
