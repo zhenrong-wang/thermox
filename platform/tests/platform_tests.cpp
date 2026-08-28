@@ -1131,6 +1131,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "volume.fluid.rigid_adiabatic",
         "volume.fluid.rigid_heat_transfer",
         "volume.fluid.equilibrium_two_phase_correlated_outlet",
+        "balance.fluid.fixed_total_charge",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
         "shaft.train.multi_load",
@@ -7400,6 +7401,97 @@ void test_transient_model_compiles_and_integrates_lumped_storage() {
         "compiled storage follows energy accumulation");
 }
 
+void test_steady_total_charge_solves_inventory_pressure() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "steady_total_charge",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }],
+    "components": [
+      {
+        "id": "known_volume",
+        "kind": "volume.fluid.rigid_adiabatic",
+        "parameters": {"volume": {"value": 1.0, "unit": "m3"}},
+        "media": {"inlet": "air", "outlet": "air"}
+      },
+      {
+        "id": "solved_volume",
+        "kind": "volume.fluid.rigid_adiabatic",
+        "parameters": {"volume": {"value": 2.0, "unit": "m3"}},
+        "media": {"inlet": "air", "outlet": "air"}
+      },
+      {
+        "id": "charge",
+        "kind": "balance.fluid.fixed_total_charge",
+        "port_counts": {"inventory": 2},
+        "parameters": {
+          "total_charge": {
+            "value": 5.8072009291521489,
+            "unit": "kg"
+          }
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "known_inventory",
+        "from": "known_volume.inventory",
+        "to": "charge.inventory_1",
+        "kind": "inventory_link"
+      },
+      {
+        "id": "solved_inventory",
+        "from": "solved_volume.inventory",
+        "to": "charge.inventory_2",
+        "kind": "inventory_link"
+      }
+    ]
+  },
+  "cases": [{
+    "id": "design",
+    "mode": "steady_state_design",
+    "fixed_values": {
+      "known_volume.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "known_volume.inlet.p": {"value": 100.0, "unit": "kPa"},
+      "known_volume.inlet.h": {"value": 301.35, "unit": "kJ/kg"},
+      "solved_volume.inlet.m_dot": {"value": 1.0, "unit": "kg/s"},
+      "solved_volume.inlet.h": {"value": 301.35, "unit": "kJ/kg"}
+    },
+    "initial_guesses": {
+      "solved_volume.inlet.p": {"value": 200.0, "unit": "kPa"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::make_default_property_package_registry(),
+        "design");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names,
+            "solved_volume.inlet.p")),
+        200000.0, 1.0e-5,
+        "fixed total charge determines the unfixed inventory pressure");
+    require_near(
+        result.x.at(require_variable_index(
+            graph.problem.variable_names,
+            "charge.inventory_1.mass")) +
+            result.x.at(require_variable_index(
+                graph.problem.variable_names,
+                "charge.inventory_2.mass")),
+        5.8072009291521489, 1.0e-10,
+        "inventory accounting ports close total system charge");
+}
+
 void test_transient_model_integrates_rigid_fluid_volume() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -8613,6 +8705,7 @@ int main() {
         test_compiler_reports_under_and_over_specification();
         test_compiler_reports_square_structural_singularity();
         test_component_property_capabilities_are_validated();
+        test_steady_total_charge_solves_inventory_pressure();
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();

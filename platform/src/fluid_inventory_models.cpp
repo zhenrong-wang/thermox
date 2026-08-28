@@ -89,7 +89,8 @@ public:
             "Regime-spanning pressure-enthalpy inventory";
         descriptor_.ports = {
             {"inlet", "fluid", "in"},
-            {"outlet", "fluid", "out"}};
+            {"outlet", "fluid", "out"},
+            {"inventory", "inventory", "out"}};
         if (heat_transfer_) {
             descriptor_.ports.push_back(
                 {"heat", "heat", "in"});
@@ -97,7 +98,7 @@ public:
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true}};
-        descriptor_.supports_steady = false;
+        descriptor_.supports_steady = true;
         descriptor_.supports_transient = true;
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph};
@@ -124,10 +125,141 @@ public:
     }
 
     void add_equations(
-        const ComponentCompileContext&,
-        EquationSystemBuilder&) const override {
-        throw std::logic_error(
-            "rigid fluid volume is a transient-only component");
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const double volume =
+            required_parameter(context.component, "volume");
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const auto inlet_m =
+            require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p =
+            require_port_variable(context, "inlet.p");
+        const auto inlet_h =
+            require_port_variable(context, "inlet.h");
+        const auto outlet_m =
+            require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p =
+            require_port_variable(context, "outlet.p");
+        const auto outlet_h =
+            require_port_variable(context, "outlet.h");
+        const auto inventory_mass =
+            require_port_variable(context, "inventory.mass");
+        const auto heat_flow = heat_transfer_
+            ? std::optional<std::size_t>(require_port_variable(
+                  context, "heat.Q_dot"))
+            : std::nullopt;
+        const auto heat_temperature = heat_transfer_
+            ? std::optional<std::size_t>(require_port_variable(
+                  context, "heat.T"))
+            : std::nullopt;
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_continuity",
+            {{outlet_p, 1.0}, {inlet_p, -1.0}},
+            0.0, 100000.0);
+        auto energy_pattern = std::vector<std::size_t>{
+            inlet_m, inlet_h, outlet_h};
+        if (heat_flow) energy_pattern.push_back(*heat_flow);
+        system.add_sparse_equation(
+            prefix + "steady_energy_balance", energy_pattern,
+            [inlet_m, inlet_h, outlet_h, heat_flow](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const double delta_h =
+                    x.at(outlet_h) - x.at(inlet_h);
+                jacobian.push_back({inlet_m, delta_h});
+                jacobian.push_back({inlet_h, -x.at(inlet_m)});
+                jacobian.push_back({outlet_h, x.at(inlet_m)});
+                double residual = x.at(inlet_m) * delta_h;
+                if (heat_flow) {
+                    residual -= x.at(*heat_flow);
+                    jacobian.push_back({*heat_flow, -1.0});
+                }
+                return residual;
+            },
+            1.0e6);
+        system.add_checked_sparse_equation(
+            prefix + "volume_closure",
+            [properties, volume, inventory_mass, outlet_p, outlet_h](
+                const std::vector<double>& x, double& residual) {
+                const auto state = properties->state_ph(
+                    x.at(outlet_p), x.at(outlet_h));
+                if (!state.ok()) return property_failure(state);
+                residual = x.at(inventory_mass) -
+                    volume * state.state.density_kg_m3;
+                return EvaluationStatus::success();
+            },
+            {inventory_mass, outlet_p, outlet_h},
+            [properties, volume, inventory_mass, outlet_p, outlet_h](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(outlet_p), x.at(outlet_h));
+                if (!state.ok()) throw std::runtime_error(state.message);
+                jacobian.push_back({inventory_mass, 1.0});
+                jacobian.push_back({
+                    outlet_p,
+                    -volume * state.derivatives
+                        .density_wrt_pressure_at_enthalpy});
+                jacobian.push_back({
+                    outlet_h,
+                    -volume * state.derivatives
+                        .density_wrt_enthalpy_at_pressure});
+                return x.at(inventory_mass) -
+                    volume * state.state.density_kg_m3;
+            },
+            10.0);
+        if (heat_temperature) {
+            system.add_checked_sparse_equation(
+                prefix + "heat_surface_temperature",
+                [properties, heat_temperature = *heat_temperature,
+                 outlet_p, outlet_h](
+                    const std::vector<double>& x,
+                    double& residual) {
+                    const auto state = properties->state_ph(
+                        x.at(outlet_p), x.at(outlet_h));
+                    if (!state.ok()) return property_failure(state);
+                    residual = x.at(heat_temperature) -
+                        state.state.temperature_k;
+                    return EvaluationStatus::success();
+                },
+                {heat_temperature.value(), outlet_p, outlet_h},
+                [properties, heat_temperature = *heat_temperature,
+                 outlet_p, outlet_h](
+                    const std::vector<double>& x,
+                    std::vector<EquationPartial>& jacobian) {
+                    const auto state =
+                        physics::state_ph_derivatives_with_fallback(
+                            *properties, x.at(outlet_p),
+                            x.at(outlet_h));
+                    if (!state.ok())
+                        throw std::runtime_error(state.message);
+                    jacobian.push_back({heat_temperature, 1.0});
+                    jacobian.push_back({
+                        outlet_p,
+                        -state.derivatives
+                            .temperature_wrt_pressure_at_enthalpy});
+                    jacobian.push_back({
+                        outlet_h,
+                        -state.derivatives
+                            .temperature_wrt_enthalpy_at_pressure});
+                    return x.at(heat_temperature) -
+                        state.state.temperature_k;
+                },
+                1000.0);
+        }
     }
 
     void add_transient_equations(
@@ -152,6 +284,8 @@ public:
             require_port_variable(context, "outlet.p");
         const auto outlet_h =
             require_port_variable(context, "outlet.h");
+        const auto inventory_mass =
+            require_port_variable(context, "inventory.mass");
         const auto mass =
             require_internal_variable(context, "mass");
         const auto energy =
@@ -176,6 +310,10 @@ public:
             {{mass, 0.0, 1.0}, {inlet_m, -1.0, 0.0},
              {outlet_m, 1.0, 0.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "inventory_port",
+            {{inventory_mass, 1.0, 0.0}, {mass, -1.0, 0.0}},
+            0.0, 10.0);
         auto energy_pattern = std::vector<std::size_t>{
             energy, inlet_m, inlet_h, outlet_m, outlet_h};
         if (heat_flow) energy_pattern.push_back(*heat_flow);
@@ -317,6 +455,77 @@ public:
 private:
     ComponentModelDescriptor descriptor_;
     bool heat_transfer_{false};
+};
+
+class FixedTotalFluidChargeModel final : public ComponentModel {
+public:
+    FixedTotalFluidChargeModel() {
+        descriptor_.kind = "balance.fluid.fixed_total_charge";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "balance.fluid.charge";
+        descriptor_.display_name = "Fixed total fluid charge";
+        descriptor_.category = "System constraints";
+        descriptor_.model_name =
+            "Instance-sized algebraic inventory mass balance";
+        descriptor_.port_groups = {{
+            "inventory", "inventory_", "inventory", "in",
+            1U, 256U, 1U}};
+        descriptor_.parameters = {{
+            "total_charge", "mass", true, std::nullopt,
+            0.0, std::numeric_limits<double>::infinity(),
+            false, true}};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    ComponentModelDescriptor instance_descriptor(
+        const ComponentDefinition& component) const override {
+        auto result = descriptor_;
+        if (component.port_counts.size() != 1U ||
+            !component.port_counts.contains("inventory")) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' must declare exactly port_counts.inventory");
+        }
+        const auto count = component.port_counts.at("inventory");
+        if (count == 0U || count > 256U) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' inventory port count must be in [1, 256]");
+        }
+        for (std::size_t index = 1; index <= count; ++index) {
+            result.ports.push_back({
+                "inventory_" + std::to_string(index),
+                "inventory", "in"});
+        }
+        return result;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const double total =
+            required_parameter(context.component, "total_charge");
+        std::vector<LinearTerm> terms;
+        const auto count =
+            context.component.port_counts.at("inventory");
+        terms.reserve(count);
+        for (std::size_t index = 1; index <= count; ++index) {
+            terms.push_back({require_port_variable(
+                context, "inventory_" + std::to_string(index) +
+                    ".mass"), 1.0});
+        }
+        system.add_linear_equation(
+            "component." + context.component.id + ".total_charge",
+            std::move(terms), total, std::max(total, 1.0));
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
 };
 
 class CorrelatedTwoPhaseFluidVolumeModel final
@@ -643,6 +852,8 @@ void register_fluid_inventory_component_models(
         std::make_shared<RigidFluidVolumeModel>(true));
     registry.register_model(
         std::make_shared<CorrelatedTwoPhaseFluidVolumeModel>());
+    registry.register_model(
+        std::make_shared<FixedTotalFluidChargeModel>());
 }
 
 }  // namespace thermox::platform

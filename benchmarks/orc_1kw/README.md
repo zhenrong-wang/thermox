@@ -30,9 +30,13 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   metrology, ambient losses, and instrument uncertainty are recovered from the papers.
 - Case 73 produces a slightly nonpositive pump fluid-power estimate from its measured PT pair and
   is flagged rather than corrected or removed.
-- External-boundary prediction remains open. It requires generic speed-dependent pump and
-  expander behavior, distributed two-phase heat-exchanger inventory, passive receiver/charge
-  closure, and traceable geometry or calibrated component artifacts.
+- A generic steady/transient inventory accounting contract is now available: rigid volumes expose
+  property-backed holdup and `balance.fluid.fixed_total_charge` imposes a system-level charge.
+  This removes the need to invent a loop pressure once the physical volumes are known.
+- External-boundary prediction remains open. It still requires generic speed-dependent pump and
+  expander behavior, distributed two-phase heat-exchanger and passive-receiver geometry, and
+  traceable or training-only calibrated component artifacts. The dataset's measured charge alone
+  cannot identify those individual holdups.
 
 ## Evidence discipline
 

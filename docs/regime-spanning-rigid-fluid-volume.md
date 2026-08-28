@@ -1,7 +1,7 @@
 # Regime-spanning rigid fluid volume
 
 `volume.fluid.rigid_heat_transfer` is the general equilibrium fluid-inventory
-component for transient graphs. It complements
+component for steady and transient graphs. It complements
 `volume.fluid.rigid_adiabatic` with a heat port while retaining the same
 conserved states and property contract.
 
@@ -19,6 +19,18 @@ selected property package closes
 M = rho(p, h) V
 U = M u(p, h)
 ```
+
+In a steady graph the same component removes accumulation, enforces ordinary mass and energy
+balance, and exposes its algebraic holdup through the `inventory` port:
+
+```text
+m_inventory = rho(p, h) V
+```
+
+One `balance.fluid.fixed_total_charge` component can collect any number of those ports and impose
+`sum(m_inventory) = total_charge`. The constraint is intentionally system-level while geometry and
+state remain component-level. This cleanly supports charge-sensitive ORC, refrigeration, heat-pump,
+and closed-Brayton calculations without embedding a cycle-specific pressure assumption.
 
 This formulation does not encode a liquid-only or vapor-only component. Phase
 identity is a result of the registered property package, so the same declared
@@ -60,7 +72,9 @@ phase-aware finite-difference fallback.
 
 ## Validity and current limit
 
-The component represents one homogeneous equilibrium bulk state. It does not
+The component represents one homogeneous equilibrium bulk state. Its steady holdup therefore
+accounts only for volumes explicitly represented by these components; pipes, heat-exchanger cells,
+receivers, separators, and other equipment require their own geometric inventory models. It does not
 model stratification, a resolved interface, nucleation hysteresis, metastable
 states, critical heat flux, dryout, or flow-regime switching. Those effects
 belong in specialized registered components and correlations.

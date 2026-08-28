@@ -48,6 +48,16 @@ The evidence service remains the authority for classification. Numerical closure
 promoted into physical validation, calibrated reproduction cannot be presented as independent
 prediction, and a digitized chart cannot be represented as a raw instrument series.
 
+The first ORC accounting slice is complete across all 77 measured points. Thermox reconstructs
+R245fa states through its provider-open CoolProp HEOS package and obtains a closed-loop energy
+residual of 0.763% mean absolute and 1.552% maximum absolute, within the preregistered 1%/2%
+accounting gate. This validates property reconstruction and conservation against hardware data; it
+is not external-boundary prediction because measured internal pressures and temperatures are used.
+The platform now also has a generic inventory connector, property-backed steady rigid-volume
+holdup, and an instance-sized fixed-total-charge constraint. The next ORC gate must supply or
+identify component volumes and freeze pump, expander, heat-exchanger, and receiver model artifacts
+on cases 1--68 before cases 69--77 are opened.
+
 ## First implementation sequence
 
 The Solar Two nitrate-salt loop exposed a general property gap. Thermox now has both a

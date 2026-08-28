@@ -598,7 +598,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 95,
+        response.components.size() == 96,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -712,6 +712,21 @@ void test_catalog_discovery() {
             dynamic_cell->supports_transient &&
             dynamic_cell->internal_variables.size() == 5,
         "catalog must expose steady/transient heat-exchanger cells");
+    const auto total_charge = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "balance.fluid.fixed_total_charge";
+        });
+    require(
+        total_charge != response.components.end() &&
+            total_charge->supports_steady &&
+            total_charge->supports_transient &&
+            total_charge->port_groups.size() == 1U &&
+            total_charge->port_groups.front().name == "inventory" &&
+            total_charge->port_groups.front().maximum_count == 256U,
+        "catalog must expose the instance-sized total fluid charge "
+        "constraint");
     const auto material_fluid_cell = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1227,13 +1242,23 @@ void test_catalog_discovery() {
                 water_heos->capabilities.end(),
         "catalog must expose open-substance HEOS metadata");
     require(
-        response.connector_domains.size() == 8 &&
+        response.connector_domains.size() == 9 &&
             std::any_of(
                 response.connector_domains.begin(),
                 response.connector_domains.end(),
                 [](const auto& connector) {
                     return connector.domain == "force" &&
                         connector.connection_kind == "force_link";
+                }) &&
+            std::any_of(
+                response.connector_domains.begin(),
+                response.connector_domains.end(),
+                [](const auto& connector) {
+                    return connector.domain == "inventory" &&
+                        connector.connection_kind ==
+                            "inventory_link" &&
+                        connector.variables.size() == 1U &&
+                        connector.variables.front().name == "mass";
                 }),
         "catalog must expose connector contracts");
     const auto zuber_findlay = std::find_if(
@@ -7821,7 +7846,7 @@ void test_steady_service() {
                 "1.0.0",
         "medium provenance must include requested and resolved package versions");
     require(
-        response.metadata.connector_domains.size() == 8,
+        response.metadata.connector_domains.size() == 9,
         "result provenance must include connector contracts");
     require(
         response.diagnostics.converged &&

@@ -91,7 +91,7 @@ annotations:
 Port names, domains, directions, and maximum connection counts come exclusively from the resolved
 component descriptor. Component instances bind a declared medium only to their fluid ports and a
 declared material only to their composition-aware material ports. Heat, shaft, electrical, signal,
-and control ports require no instance declaration.
+control, and inventory ports require no instance declaration.
 
 ```yaml
 kind: turbine.fluid.isentropic_efficiency
@@ -193,6 +193,22 @@ The built-in contracts currently carry normalized dimensionless values. Register
 and first-order-lag components provide algebraic and dynamic control paths without embedding
 equipment-specific actuator semantics.
 
+### 5.7 Fluid-inventory accounting domain
+
+The inventory domain carries one algebraic variable, `mass` in kg. It does not transport fluid and
+does not duplicate the pressure/enthalpy state on a fluid connector. An inventory-bearing physical
+component computes its holdup from geometry and the bound property package, then exposes only that
+mass to a system constraint.
+
+`balance.fluid.fixed_total_charge` owns an instance-sized `inventory` port group. Its
+`total_charge` parameter closes the sum of connected holdups. This permits a steady closed-loop
+pressure to be solved from total charge, equipment volumes, and thermodynamic state rather than
+invented as a boundary. The same connector exposes a transient volume's live conserved mass, so
+steady and transient accounting share one topology contract.
+
+Inventory links are accounting relations, not fluid-flow links: they carry no enthalpy, pressure,
+or mass flow and must never be used to connect equipment flow paths.
+
 ## 6. Connection
 
 ```yaml
@@ -216,6 +232,7 @@ the exact domain contract with `contract_version`; compilation rejects a mismatc
 - `shaft_link`: mechanical power/speed connection.
 - `electrical_link`: electrical power/frequency connection.
 - `signal_link`: control/equation signal.
+- `inventory_link`: non-flow fluid-holdup accounting.
 
 Every built-in port currently has maximum connection count `1`. A direct fan-out is invalid because
 equating one stream to several streams would duplicate flow rather than conserve it. Branching,
