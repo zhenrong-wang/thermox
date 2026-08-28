@@ -198,6 +198,13 @@ UnitRegistry make_default_unit_registry() {
             accepted("mm", 1.0e-3),
         }));
     registry.register_dimension(dimension(
+        "force", "N", display("kN", 1.0e-3),
+        {
+            accepted("N"),
+            accepted("kN", 1.0e3),
+            accepted("lbf", 4.4482216152605),
+        }));
+    registry.register_dimension(dimension(
         "mass_flow", "kg/s", display("kg/s"),
         {
             accepted("kg/s"),

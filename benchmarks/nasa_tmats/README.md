@@ -527,3 +527,37 @@ differences agree with the independently reported local fuel-gain mismatch and a
 This is executable finite-window cross-code trajectory evidence. It is still partial: NASA's
 reference is a local linear response, not an exported nonlinear Simulink trajectory or hardware
 measurement.
+
+## Full nonlinear simple-gas-turbine reference trajectory
+
+`tmats_gasturbine_dyn_validation_series.json` removes the most important reference-data gap above.
+It contains 701 samples from NASA's unmodified `GasTurbine_Dyn_Template.mdl` on its native 0.015 s
+grid from 0 through 10.5 s. The reference starts at 10,000 rpm; NASA's supplied controller demand
+steps to 9,000 rpm at 5 s. The artifact preserves shaft speed, fuel flow, net thrust, and total
+mass flow, temperature, and pressure at stations 0, 2, 3, 4, 5, and 7. All customary units are
+declared at the artifact boundary and normalized through the generic platform unit registry.
+
+The exporter pins T-MATS commit `ad6e4d5d0d76c229db4eb72ca40ef58d5ddc4014` and the model-file
+checksum before executing. It compiles NASA's MEX blocks when necessary, loads the supplied model
+without modifying it, reproduces the supplied setup in headless MATLAB R2023a / Simulink 10.7, and
+writes deterministic full-precision CSV. The importer validates the exact columns, time extent,
+time grid, finiteness, and sample count before producing the transport-neutral validation artifact:
+
+```sh
+scripts/export_tmats_gasturbine_dyn_reference.sh \
+  /path/to/T-MATS /tmp/tmats-gasturbine-dyn-reference.csv
+python3 scripts/import_tmats_gasturbine_dyn_reference.py \
+  /tmp/tmats-gasturbine-dyn-reference.csv \
+  benchmarks/nasa_tmats/tmats_gasturbine_dyn_validation_series.json
+```
+
+The raw CSV SHA-256 is
+`bc3df719ce1baffd94855c0b0ae2770196bd92ad74c2f908e98783e1fae0f42c`. MATLAB and compiled MEX
+binaries are intentionally not repository dependencies; they are isolated reference-generation
+tools. The committed artifact is parse-tested by the ordinary Thermox evidence contract.
+
+This is materially stronger than a local A/B trajectory because it is an independently executed,
+full nonlinear reference with controller, map nonlinearities, shaft inertia, and station histories.
+It does not by itself qualify Thermox dynamics: the next validation slice must declare the
+equivalent generic Thermox graph, bind the reference signals, and report retained cross-code
+differences. Nor is it hardware evidence; NASA's public example defines the comparison scope.

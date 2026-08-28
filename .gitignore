@@ -13,6 +13,8 @@
 *.dll
 *.exe
 .cache/
+__pycache__/
+*.py[cod]
 .vscode/
 
 # Test-generated model inputs

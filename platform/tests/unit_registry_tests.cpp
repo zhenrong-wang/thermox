@@ -78,6 +78,14 @@ int main() {
                 std::abs(customary_flow.value_si - 45.359237) <
                     1.0e-12,
             "pound-mass per second must normalize to SI mass flow");
+        const auto customary_force = units.convert(1000.0, "lbf");
+        require(
+            customary_force.dimension == "force" &&
+                customary_force.unit == "N" &&
+                std::abs(
+                    customary_force.value_si - 4448.2216152605) <
+                    1.0e-9,
+            "pound-force must normalize to SI force");
         const auto customary_velocity = units.convert(100.0, "ft/s");
         require(
             customary_velocity.dimension == "speed" &&

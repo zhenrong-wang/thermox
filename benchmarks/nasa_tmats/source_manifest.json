@@ -606,5 +606,19 @@
     "classification": "authoritative_public_cross_code_reference_extraction",
     "declared_limit": "Source-output extraction and generic graph-based gross-thrust, ram-drag, and net-thrust comparisons are complete. The source remains a code reference rather than hardware evidence, and fuel-flow prediction remains unqualified."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, and a finite-window nonlinear Thermox trajectory against the public NASA linear response. They are not independent hardware validation, fuel-flow predictive qualification, nonlinear reference-trajectory qualification, or full transient predictive validation."
+  "tmats_simple_gas_turbine_nonlinear_reference": {
+    "artifact": "tmats_gasturbine_dyn_validation_series.json",
+    "source_model": "Trunk/TMATS_Examples/Example_GasTurbine_Dyn/GasTurbine_Dyn_Template.mdl",
+    "source_model_sha256": "99d95a3f42a12dd42ee5c4353b8d3ae6db2a54f7ac15a106fc72d0eebbb31376",
+    "source_revision": "ad6e4d5d0d76c229db4eb72ca40ef58d5ddc4014",
+    "execution_environment": "MATLAB R2023a / Simulink 10.7 on glnxa64",
+    "source_csv_sha256": "bc3df719ce1baffd94855c0b0ae2770196bd92ad74c2f908e98783e1fae0f42c",
+    "sample_count": 701,
+    "signal_count": 21,
+    "time_grid_seconds": 0.015,
+    "time_extent_seconds": [0.0, 10.5],
+    "classification": "public_source_full_nonlinear_dynamic_reference_trajectory",
+    "declared_limit": "This is an independently executed computational reference, not hardware measurement. The equivalent Thermox graph and cross-code trajectory comparison remain the next validation slice."
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, a finite-window nonlinear Thermox trajectory against the public NASA linear response, and a checksum-pinned full nonlinear NASA trajectory ready for graph binding. They are not independent hardware validation, fuel-flow predictive qualification, nonlinear Thermox-to-reference trajectory qualification, or full transient predictive validation."
 }

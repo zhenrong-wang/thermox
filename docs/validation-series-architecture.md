@@ -62,6 +62,13 @@ That artifact is computational and derived from NASA's local A/B model. Replacin
 data requires no numerical-core change: publish measured signals with their checksum, units,
 uncertainties, and `independent_reference` basis, then bind them to the same graph outputs.
 
+The same contract now carries the separately executed full nonlinear NASA T-MATS simple-gas-
+turbine trajectory. Its 21 signals and 14,721 samples include rotor speed, commanded fuel response,
+net thrust, and six station histories. This reference is intentionally committed before an
+equivalent Thermox graph is tuned: source evidence and model implementation remain separate, and
+future differences cannot be hidden by regenerating the reference. The artifact is computational
+cross-code evidence, not experimental evidence.
+
 The canonical parser, serializer, and evaluator are exposed through the service library. Validation
 series can also be stored as immutable, content-addressed Project artifact revisions and selected by
 a Study. A Study v5 binding names the exact artifact revision, signal, result projection, comparison

@@ -8955,6 +8955,28 @@ void test_validation_series_contract() {
             "simulation gaps");
     } catch (const thermox::service::ValidationSeriesError&) {
     }
+
+    const auto tmats_reference = thermox::service::
+        parse_validation_series_artifact_json(read_source_file(
+            "benchmarks/nasa_tmats/"
+            "tmats_gasturbine_dyn_validation_series.json"));
+    const auto thrust = std::find_if(
+        tmats_reference.signals.begin(),
+        tmats_reference.signals.end(),
+        [](const auto& signal) { return signal.id == "net_thrust"; });
+    require(
+        tmats_reference.signals.size() == 21U &&
+            tmats_reference.source.acquisition == "computational" &&
+            thrust != tmats_reference.signals.end() &&
+            thrust->dimension == "force" &&
+            thrust->canonical_unit == "N" &&
+            thrust->samples.size() == 701U &&
+            std::abs(
+                thrust->samples.front().value_si -
+                10665.721779868387 * 4.4482216152605) < 1.0e-8 &&
+            thrust->samples.back().time_si == 10.5,
+        "the checksum-pinned nonlinear NASA T-MATS trajectory must "
+        "parse completely and normalize pound-force to SI");
 }
 
 void test_validation_evidence_contract() {
