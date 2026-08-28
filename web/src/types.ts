@@ -1576,6 +1576,7 @@ export interface CatalogPort {
   domain: string
   direction: 'in' | 'out' | 'bidirectional'
   maximum_connections: number
+  medium_source_port: string
 }
 
 export interface CatalogPortGroup {
@@ -1727,7 +1728,7 @@ export interface CatalogCorrelationFamilyTemplate {
 }
 
 export interface Catalog {
-  schema_version: 'thermox.catalog/v13'
+  schema_version: 'thermox.catalog/v14'
   status: string
   fingerprint: string
   components: CatalogComponent[]

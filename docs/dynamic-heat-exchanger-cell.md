@@ -67,6 +67,26 @@ declared as graphs of generic cells rather than introduced as cycle-specific sol
 The runnable [two-cell counterflow reference](distributed-heat-exchanger.md) demonstrates this
 ordering with boundary components and verifies both the steady and transient graph.
 
+## Geometry-closed steady holdup
+
+`heat_exchanger.fluid.steady_finite_volume_cell` implements the same mixed-cell steady heat duty
+and pressure-loss equations, but replaces prescribed hot/cold masses with `hot_fluid_volume` and
+`cold_fluid_volume`. Each inventory output is closed at the mixed outlet state:
+
+```text
+M_hot  = rho_hot(p_hot,out, h_hot,out) V_hot
+M_cold = rho_cold(p_cold,out, h_cold,out) V_cold
+```
+
+The two inventory ports retain distinct medium identities. A system may therefore include only the
+working-fluid side in a refrigerant charge constraint while independently reporting the utility
+side. Multiple finite-volume cells form a distributed steady exchanger whose total holdup changes
+with pressure, enthalpy, phase, and the selected property package.
+
+This model is steady-only. A faithful variable-mass transient exchanger requires differential mass
+and internal-energy balances on each cell; using an algebraic steady charge closure inside the
+existing constant-holdup DAE would be physically and numerically incorrect.
+
 ## Run the reference
 
 The gas-to-water example binds ideal-gas air on the hot side and IF97 water on the cold side:

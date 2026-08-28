@@ -62,6 +62,7 @@ const projectEntry: ProjectComponentCatalogEntry = {
         domain: 'signal',
         direction: 'in',
         maximum_connections: 1,
+        medium_source_port: '',
       },
     ],
   },
@@ -121,7 +122,7 @@ const historicalEntry: ProjectComponentCatalogEntry = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v13',
+  schema_version: 'thermox.catalog/v14',
   status: 'succeeded',
   fingerprint: 'fnv1a64:base',
   components: [native],

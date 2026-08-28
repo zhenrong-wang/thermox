@@ -25,7 +25,7 @@ const topology: TopologyDocument = {
 }
 
 const catalog: Catalog = {
-  schema_version: 'thermox.catalog/v13',
+  schema_version: 'thermox.catalog/v14',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],
@@ -54,6 +54,7 @@ const catalog: Catalog = {
           domain: 'fluid',
           direction: 'out',
           maximum_connections: 1,
+          medium_source_port: '',
         },
       ],
       parameters: [],
@@ -78,6 +79,7 @@ const catalog: Catalog = {
           domain: 'fluid',
           direction: 'in',
           maximum_connections: 1,
+          medium_source_port: '',
         },
       ],
       parameters: [],

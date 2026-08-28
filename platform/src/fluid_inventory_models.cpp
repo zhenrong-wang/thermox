@@ -90,7 +90,7 @@ public:
         descriptor_.ports = {
             {"inlet", "fluid", "in"},
             {"outlet", "fluid", "out"},
-            {"inventory", "inventory", "out"}};
+            {"inventory", "inventory", "out", 1U, "outlet"}};
         if (heat_transfer_) {
             descriptor_.ports.push_back(
                 {"heat", "heat", "in"});
@@ -499,7 +499,7 @@ public:
         for (std::size_t index = 1; index <= count; ++index) {
             result.ports.push_back({
                 "inventory_" + std::to_string(index),
-                "inventory", "in"});
+                "inventory", "in", 1U, {}});
         }
         return result;
     }
@@ -544,7 +544,7 @@ public:
             {"inlet", "fluid", "in"},
             {"outlet", "fluid", "out"},
             {"heat", "heat", "in"},
-            {"inventory", "inventory", "out"}};
+            {"inventory", "inventory", "out", 1U, "outlet"}};
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},

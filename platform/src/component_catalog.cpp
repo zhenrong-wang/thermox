@@ -99,6 +99,28 @@ void validate_component_descriptor(
                 "' declares duplicate port: " + port.name);
         }
     }
+    for (const auto& port : descriptor.ports) {
+        if (port.medium_source_port.empty()) continue;
+        if (port.domain != "inventory") {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' declares a medium source on non-inventory port: " +
+                port.name);
+        }
+        const auto source = std::find_if(
+            descriptor.ports.begin(), descriptor.ports.end(),
+            [&](const auto& candidate) {
+                return candidate.name == port.medium_source_port;
+            });
+        if (source == descriptor.ports.end() ||
+            source->domain != "fluid") {
+            throw std::invalid_argument(
+                "component model '" + descriptor.kind +
+                "' inventory port '" + port.name +
+                "' references a non-fluid medium source: " +
+                port.medium_source_port);
+        }
+    }
     std::map<std::string, bool> port_groups;
     for (const auto& group : descriptor.port_groups) {
         if (group.name.empty() || group.port_name_prefix.empty() ||

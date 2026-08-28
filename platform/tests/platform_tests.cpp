@@ -1118,6 +1118,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "heat_exchanger.fluid.fixed_duty",
         "heat_exchanger.fluid.counterflow_ua",
         "heat_exchanger.fluid.dynamic_cell",
+        "heat_exchanger.fluid.steady_finite_volume_cell",
         "heat_exchanger.material_fluid.fixed_duty",
         "heat_exchanger.material_fluid.energy_balance",
         "heat_exchanger.material_fluid.counterflow_ua",
@@ -6191,6 +6192,57 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
         steady_value("cell.cold_inventory.mass"), cold_mass, 1.0e-12,
         "steady cell exposes declared cold-side holdup");
 
+    std::string finite_text = text;
+    const auto replace_text = [&](const std::string& from,
+                                  const std::string& to) {
+        const auto position = finite_text.find(from);
+        require(position != std::string::npos,
+                "finite-volume test replacement token exists: " + from);
+        finite_text.replace(position, from.size(), to);
+    };
+    replace_text(
+        "heat_exchanger.fluid.dynamic_cell",
+        "heat_exchanger.fluid.steady_finite_volume_cell");
+    replace_text(
+        "\"hot_fluid_mass\": " + format(hot_mass),
+        "\"hot_fluid_volume\": " + format(hot_volume));
+    replace_text(
+        "\"cold_fluid_mass\": " + format(cold_mass),
+        "\"cold_fluid_volume\": " + format(cold_volume));
+    replace_text(
+        "        \"wall_thermal_capacity\": {\"value\": 50.0, \"unit\": \"kJ/K\"},\n",
+        "");
+    const auto finite_document =
+        thermox::platform::parse_model_document_text(finite_text);
+    const auto finite_graph = thermox::platform::compile_model_graph(
+        finite_document, registry, properties, "steady");
+    const auto finite = thermox::solve_newton(finite_graph.problem);
+    require(finite.diagnostics.converged,
+            "finite-volume exchanger steady solve: " +
+                finite.diagnostics.message);
+    const auto finite_value = [&](const std::string& name) {
+        return finite.x.at(require_variable_index(
+            finite_graph.problem.variable_names, name));
+    };
+    const auto finite_hot_state = air->state_ph(
+        finite_value("cell.hot_out.p"),
+        finite_value("cell.hot_out.h"));
+    const auto finite_cold_state = water->state_ph(
+        finite_value("cell.cold_out.p"),
+        finite_value("cell.cold_out.h"));
+    require(finite_hot_state.ok() && finite_cold_state.ok(),
+            "finite-volume exchanger outlet states evaluate");
+    require_near(
+        finite_value("cell.hot_inventory.mass"),
+        hot_volume * finite_hot_state.state.density_kg_m3,
+        1.0e-10,
+        "finite-volume hot holdup follows geometry and properties");
+    require_near(
+        finite_value("cell.cold_inventory.mass"),
+        cold_volume * finite_cold_state.state.density_kg_m3,
+        1.0e-10,
+        "finite-volume cold holdup follows geometry and properties");
+
     const auto graph =
         thermox::platform::compile_transient_model_graph(
             document, registry, properties, "transient");
@@ -7449,6 +7501,7 @@ void test_steady_total_charge_solves_inventory_pressure() {
         "id": "charge",
         "kind": "balance.fluid.fixed_total_charge",
         "port_counts": {"inventory": 2},
+        "media": {"inventory_1": "air", "inventory_2": "air"},
         "parameters": {
           "total_charge": {
             "value": 5.8072009291521489,
@@ -7495,6 +7548,14 @@ void test_steady_total_charge_solves_inventory_pressure() {
     const auto result = thermox::solve_newton(graph.problem);
     require(result.diagnostics.converged,
             result.diagnostics.message);
+    require(
+        std::all_of(
+            graph.port_variables.begin(), graph.port_variables.end(),
+            [](const auto& variable) {
+                return variable.domain != "inventory" ||
+                    variable.medium_id == "air";
+            }),
+        "compiled inventory variables retain their working medium");
     require_near(
         result.x.at(require_variable_index(
             graph.problem.variable_names,
@@ -7510,6 +7571,25 @@ void test_steady_total_charge_solves_inventory_pressure() {
                 "charge.inventory_2.mass")),
         5.8072009291521489, 1.0e-10,
         "inventory accounting ports close total system charge");
+
+    auto incompatible = document;
+    incompatible.media.push_back({
+        "water", "water_steam_if97", "Water", {}});
+    const auto charge = std::find_if(
+        incompatible.components.begin(), incompatible.components.end(),
+        [](const auto& component) { return component.id == "charge"; });
+    require(charge != incompatible.components.end(),
+            "charge component exists in medium-compatibility test");
+    charge->medium_bindings.at("inventory_2") = "water";
+    require_throws(
+        [&]() {
+            (void)thermox::platform::compile_model_graph(
+                incompatible,
+                thermox::platform::make_default_component_registry(),
+                thermox::physics::make_default_property_package_registry(),
+                "design");
+        },
+        "links incompatible inventory media");
 }
 
 void test_transient_model_integrates_rigid_fluid_volume() {

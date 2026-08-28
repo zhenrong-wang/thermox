@@ -184,6 +184,23 @@ const std::string& require_medium_binding(
     return medium->second;
 }
 
+const std::string& resolved_port_medium_binding(
+    const ComponentDefinition& component,
+    const PortModelDescriptor& port) {
+    if (port.domain == "fluid" ||
+        (port.domain == "inventory" &&
+         port.medium_source_port.empty())) {
+        return require_medium_binding(component, port.name);
+    }
+    if (port.domain == "inventory") {
+        return require_medium_binding(
+            component, port.medium_source_port);
+    }
+    throw std::logic_error(
+        "port does not carry a fluid-medium identity: " +
+        component.id + "." + port.name);
+}
+
 const std::string& require_material_binding(
     const ComponentDefinition& component,
     const std::string& port_name) {
@@ -315,14 +332,16 @@ ValidatedConnection validate_connection(
             from_port.domain + "' provides version '" +
             connector.contract_version + "'");
     }
-    if (from_port.domain == "fluid" &&
-        require_medium_binding(
-            from_definition, result.from_port) !=
-            require_medium_binding(
-                to_definition, result.to_port)) {
+    if ((from_port.domain == "fluid" ||
+         from_port.domain == "inventory") &&
+        resolved_port_medium_binding(
+            from_definition, from_port) !=
+            resolved_port_medium_binding(
+                to_definition, to_port)) {
         throw std::invalid_argument(
             "connection '" + connection.id +
-            "' links incompatible fluid media");
+            "' links incompatible " + from_port.domain +
+            " media");
     }
     if (from_port.domain == "material" &&
         require_material_binding(
@@ -571,6 +590,14 @@ void validate_component_bindings(
                 "' is missing medium binding for fluid port: " +
                 expected.name);
         }
+        if (expected.domain == "inventory" &&
+            expected.medium_source_port.empty() &&
+            medium_binding == component.medium_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' is missing medium binding for inventory port: " +
+                expected.name);
+        }
         if (expected.domain == "material" &&
             material_binding ==
                 component.material_bindings.end()) {
@@ -580,11 +607,24 @@ void validate_component_bindings(
                 expected.name);
         }
         if (expected.domain != "fluid" &&
+            !(expected.domain == "inventory" &&
+              expected.medium_source_port.empty()) &&
             medium_binding != component.medium_bindings.end()) {
             throw std::invalid_argument(
                 "component '" + component.id +
                 "' supplies a medium binding for non-fluid port: " +
                 expected.name);
+        }
+        if (expected.domain == "inventory" &&
+            !expected.medium_source_port.empty() &&
+            component.medium_bindings.find(
+                expected.medium_source_port) ==
+                component.medium_bindings.end()) {
+            throw std::invalid_argument(
+                "component '" + component.id +
+                "' inventory port '" + expected.name +
+                "' references an unbound fluid port: " +
+                expected.medium_source_port);
         }
         if (expected.domain != "material" &&
             material_binding !=
@@ -1547,6 +1587,15 @@ CompiledModelGraph compile_flat_model_graph(
                                            medium_id);
                 context.port_properties.emplace(
                     port.name, package->second);
+            } else if (port.domain == "inventory") {
+                medium_id = resolved_port_medium_binding(
+                    component, port);
+                if (!medium_properties.contains(medium_id)) {
+                    throw std::invalid_argument(
+                        "component '" + component.id +
+                        "' inventory port '" + port.name +
+                        "' references unknown medium: " + medium_id);
+                }
             } else if (port.domain == "material") {
                 medium_id =
                     require_material_binding(component, port.name);
@@ -2320,6 +2369,15 @@ CompiledTransientModelGraph compile_flat_transient_model_graph(
                 }
                 context.port_properties.emplace(
                     port.name, package->second);
+            } else if (port.domain == "inventory") {
+                medium_id = resolved_port_medium_binding(
+                    component, port);
+                if (!medium_properties.contains(medium_id)) {
+                    throw std::invalid_argument(
+                        "component '" + component.id +
+                        "' inventory port '" + port.name +
+                        "' references unknown medium: " + medium_id);
+                }
             } else if (port.domain == "material") {
                 medium_id =
                     require_material_binding(component, port.name);

@@ -55,8 +55,9 @@ accounting gate. This validates property reconstruction and conservation against
 is not external-boundary prediction because measured internal pressures and temperatures are used.
 The platform now also has a generic inventory connector, property-backed steady rigid-volume
 holdup, an instance-sized fixed-total-charge constraint, and inventory exposure from constant-mass
-exchanger cells plus variable-mass two-phase cells, correlated volumes, and drums. The next ORC gate must supply or
-identify component volumes and freeze pump, expander, heat-exchanger, and receiver model artifacts
+exchanger cells plus variable-mass two-phase cells, correlated volumes, and drums. The next ORC
+gate must supply or identify component volumes. A medium-safe steady finite-volume exchanger and generic rigid receiver
+can then close charge; pump, expander, heat-transfer, and pressure-loss artifacts must be frozen
 on cases 1--68 before cases 69--77 are opened.
 
 ## First implementation sequence

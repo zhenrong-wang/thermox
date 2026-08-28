@@ -101,7 +101,8 @@ public:
             {"liquid_outlet", "fluid", "out"},
             {"heat", "heat", "in"},
             {"level_signal", "signal", "out"},
-            {"inventory", "inventory", "out"},
+            {"inventory", "inventory", "out", 1U,
+             "liquid_outlet"},
         };
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,

@@ -26,8 +26,8 @@ const compressor: CatalogComponent = {
   events: [],
   default_mode: '',
   ports: [
-    { name: 'inlet', domain: 'fluid', direction: 'in', maximum_connections: 1 },
-    { name: 'outlet', domain: 'fluid', direction: 'out', maximum_connections: 1 },
+    { name: 'inlet', domain: 'fluid', direction: 'in', maximum_connections: 1, medium_source_port: '' },
+    { name: 'outlet', domain: 'fluid', direction: 'out', maximum_connections: 1, medium_source_port: '' },
   ],
   parameters: [],
   artifacts: [],
@@ -57,6 +57,7 @@ describe('assembly authoring projection', () => {
         domain: 'fluid',
         direction: 'in',
         maximum_connections: 1,
+        medium_source_port: '',
       },
     ])
   })

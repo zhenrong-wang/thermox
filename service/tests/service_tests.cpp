@@ -602,13 +602,13 @@ void test_catalog_discovery() {
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
-            thermox::service::catalog_schema_v13,
+            thermox::service::catalog_schema_v14,
         "catalog contract must be versioned");
     require(
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 96,
+        response.components.size() == 97,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -724,6 +724,23 @@ void test_catalog_discovery() {
             has_inventory_port(*dynamic_cell, "hot_inventory") &&
             has_inventory_port(*dynamic_cell, "cold_inventory"),
         "catalog must expose steady/transient heat-exchanger cells");
+    const auto finite_volume_cell = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "heat_exchanger.fluid.steady_finite_volume_cell";
+        });
+    require(
+        finite_volume_cell != response.components.end() &&
+            finite_volume_cell->supports_steady &&
+            !finite_volume_cell->supports_transient &&
+            finite_volume_cell->parameters.size() == 8U &&
+            has_inventory_port(
+                *finite_volume_cell, "hot_inventory") &&
+            has_inventory_port(
+                *finite_volume_cell, "cold_inventory"),
+        "catalog must expose geometry-closed steady exchanger "
+        "holdup");
     const auto total_charge = std::find_if(
         response.components.begin(), response.components.end(),
         [](const auto& component) {
@@ -1371,7 +1388,7 @@ void test_catalog_discovery() {
     const auto json =
         thermox::service::serialize_catalog_response_json(response);
     require(
-        json.find("\"schema_version\": \"thermox.catalog/v13\"") !=
+        json.find("\"schema_version\": \"thermox.catalog/v14\"") !=
             std::string::npos,
         "catalog JSON must expose its schema");
     require(
@@ -1383,6 +1400,10 @@ void test_catalog_discovery() {
             json.find("\"port_name_prefix\": \"bleed_\"") !=
                 std::string::npos,
         "catalog JSON must serialize instance-sized port groups");
+    require(
+        json.find("\"medium_source_port\": \"hot_out\"") !=
+            std::string::npos,
+        "catalog JSON must serialize inventory medium provenance");
     require(
         json.find("\"correlation_templates\": [") !=
                 std::string::npos &&

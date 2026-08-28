@@ -126,7 +126,7 @@ The public C++ interface is
 
 Every registered backend also supplies catalog metadata: backend ID, implementation name/version,
 supported substances where applicable, and capabilities. `thermox_service` publishes separate
-fixed-fluid and thermochemistry backend catalogs through `thermox.catalog/v13`, allowing graph
+fixed-fluid and thermochemistry backend catalogs through `thermox.catalog/v14`, allowing graph
 clients to reject unsupported backend/component combinations before simulation submission.
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the primary

@@ -208,6 +208,22 @@ conserved mass for initialization and reporting, but the fixed-total-charge comp
 the differential mass balances already conserve total charge and an additional algebraic sum would
 overconstrain the DAE.
 
+Every inventory port has a resolved medium identity. Physical equipment inherits it from the
+associated fluid port; each generated input of a total-charge component binds it explicitly:
+
+```yaml
+kind: balance.fluid.fixed_total_charge
+port_counts: {inventory: 2}
+media:
+  inventory_1: refrigerant
+  inventory_2: refrigerant
+parameters:
+  total_charge: {value: 5.0, unit: kg}
+```
+
+Compilation rejects an inventory link whose endpoints resolve different media. Consequently, air,
+water, refrigerant, and oil inventories cannot be accidentally combined into one charge equation.
+
 Inventory links are accounting relations, not fluid-flow links: they carry no enthalpy, pressure,
 or mass flow and must never be used to connect equipment flow paths.
 
@@ -359,7 +375,7 @@ parameter schemas and frontend display metadata remain future extensions.
 
 `ComponentRegistry::descriptors()` returns a stable, kind-ordered snapshot. `thermox_service`
 publishes that snapshot together with property backend IDs and connector-domain contracts as
-`thermox.catalog/v13`, including physical-template identity, calculation-model labels,
+`thermox.catalog/v14`, including physical-template identity, calculation-model labels,
 internal-state names, dimensions, kinds, component event-surface metadata, connector link contracts,
 numerical connector metadata, and a deterministic
 runtime fingerprint. Optional model behavior reads

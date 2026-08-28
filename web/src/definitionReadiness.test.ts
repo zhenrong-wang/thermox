@@ -6,7 +6,7 @@ import {
 import type { Catalog, TopologyDocument } from './types'
 
 const catalog = {
-  schema_version: 'thermox.catalog/v13',
+  schema_version: 'thermox.catalog/v14',
   status: 'succeeded',
   fingerprint: 'test',
   unit_dimensions: [],
@@ -36,6 +36,7 @@ const catalog = {
           domain: 'fluid',
           direction: 'in',
           maximum_connections: 1,
+          medium_source_port: '',
         },
       ],
       parameters: [

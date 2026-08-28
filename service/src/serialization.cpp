@@ -1564,6 +1564,8 @@ std::string serialize_catalog_response_json(
             json_string(out, port.direction);
             out << ", \"maximum_connections\": "
                 << port.maximum_connections;
+            out << ", \"medium_source_port\": ";
+            json_string(out, port.medium_source_port);
             out << "}";
         }
         out << "], \"port_groups\": [";

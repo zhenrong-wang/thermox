@@ -2545,7 +2545,8 @@ CatalogResponse SimulationService::get_catalog(
         for (const auto& port : descriptor.ports) {
             component.ports.push_back(
                 {port.name, port.domain, port.direction,
-                 port.maximum_connections});
+                 port.maximum_connections,
+                 port.medium_source_port});
         }
         for (const auto& group : descriptor.port_groups) {
             component.port_groups.push_back({

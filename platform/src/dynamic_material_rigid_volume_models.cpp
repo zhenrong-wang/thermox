@@ -163,7 +163,7 @@ public:
             {"hot_out", "material", "out"},
             {"cold_in", "fluid", "in"},
             {"cold_out", "fluid", "out"},
-            {"inventory", "inventory", "out"}};
+            {"inventory", "inventory", "out", 1U, "cold_out"}};
         descriptor_.parameters = {
             {"fluid_volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},

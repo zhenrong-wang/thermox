@@ -22,29 +22,28 @@ using component_model_support::required_parameter;
 
 class DynamicHeatExchangerCellModel final : public ComponentModel {
 public:
-    DynamicHeatExchangerCellModel() {
-        descriptor_.kind = "heat_exchanger.fluid.dynamic_cell";
+    explicit DynamicHeatExchangerCellModel(bool finite_volume)
+        : finite_volume_(finite_volume) {
+        descriptor_.kind = finite_volume_
+            ? "heat_exchanger.fluid.steady_finite_volume_cell"
+            : "heat_exchanger.fluid.dynamic_cell";
         descriptor_.version = "1.0.0";
         descriptor_.template_kind = "heat_exchanger.fluid.cell";
-        descriptor_.display_name = "Dynamic heat-exchanger cell";
+        descriptor_.display_name = finite_volume_
+            ? "Steady finite-volume heat-exchanger cell"
+            : "Dynamic heat-exchanger cell";
         descriptor_.category = "Heat transfer";
-        descriptor_.model_name =
-            "Well-mixed constant-holdup fluids with wall capacitance";
+        descriptor_.model_name = finite_volume_
+            ? "Property-backed geometric fluid holdup"
+            : "Well-mixed constant-holdup fluids with wall capacitance";
         descriptor_.ports = {
             {"hot_in", "fluid", "in"},
             {"hot_out", "fluid", "out"},
             {"cold_in", "fluid", "in"},
             {"cold_out", "fluid", "out"},
-            {"hot_inventory", "inventory", "out"},
-            {"cold_inventory", "inventory", "out"}};
+            {"hot_inventory", "inventory", "out", 1U, "hot_out"},
+            {"cold_inventory", "inventory", "out", 1U, "cold_out"}};
         descriptor_.parameters = {
-            {"hot_fluid_mass", "mass", true, std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
-            {"cold_fluid_mass", "mass", true, std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
-            {"wall_thermal_capacity", "thermal_capacity", true,
-             std::nullopt, 0.0,
-             std::numeric_limits<double>::infinity(), false, true},
             {"hot_side_UA", "thermal_conductance", true,
              std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -61,11 +60,38 @@ public:
             {"cold_loss_coefficient", "dimensionless", true,
              std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true}};
+        if (finite_volume_) {
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin(), {
+                    {"hot_fluid_volume", "volume", true,
+                     std::nullopt, 0.0,
+                     std::numeric_limits<double>::infinity(),
+                     false, true},
+                    {"cold_fluid_volume", "volume", true,
+                     std::nullopt, 0.0,
+                     std::numeric_limits<double>::infinity(),
+                     false, true}});
+        } else {
+            descriptor_.parameters.insert(
+                descriptor_.parameters.begin(), {
+                    {"hot_fluid_mass", "mass", true,
+                     std::nullopt, 0.0,
+                     std::numeric_limits<double>::infinity(),
+                     false, true},
+                    {"cold_fluid_mass", "mass", true,
+                     std::nullopt, 0.0,
+                     std::numeric_limits<double>::infinity(),
+                     false, true},
+                    {"wall_thermal_capacity", "thermal_capacity", true,
+                     std::nullopt, 0.0,
+                     std::numeric_limits<double>::infinity(),
+                     false, true}});
+        }
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::state_ph};
         descriptor_.supports_steady = true;
-        descriptor_.supports_transient = true;
-        descriptor_.internal_variables = {
+        descriptor_.supports_transient = !finite_volume_;
+        if (!finite_volume_) descriptor_.internal_variables = {
             {"hot_total_energy", DaeVariableKind::differential,
              300000.0, 1.0e6, 0.0, 1.0e5,
              -std::numeric_limits<double>::infinity(),
@@ -105,10 +131,12 @@ public:
             required_parameter(context.component, "cold_side_UA");
         const double effective_ua =
             hot_ua * cold_ua / (hot_ua + cold_ua);
-        const double hot_fluid_mass = required_parameter(
-            context.component, "hot_fluid_mass");
-        const double cold_fluid_mass = required_parameter(
-            context.component, "cold_fluid_mass");
+        const double hot_holdup_parameter = required_parameter(
+            context.component, finite_volume_
+                ? "hot_fluid_volume" : "hot_fluid_mass");
+        const double cold_holdup_parameter = required_parameter(
+            context.component, finite_volume_
+                ? "cold_fluid_volume" : "cold_fluid_mass");
         const double hot_diameter = required_parameter(
             context.component, "hot_flow_diameter");
         const double cold_diameter = required_parameter(
@@ -146,12 +174,23 @@ public:
         system.add_linear_equation(
             prefix + "cold_mass_continuity",
             {{cold_out_m, 1.0}, {cold_in_m, -1.0}}, 0.0, 100.0);
-        system.add_linear_equation(
-            prefix + "hot_inventory",
-            {{hot_inventory, 1.0}}, hot_fluid_mass, 10.0);
-        system.add_linear_equation(
-            prefix + "cold_inventory",
-            {{cold_inventory, 1.0}}, cold_fluid_mass, 10.0);
+        if (finite_volume_) {
+            add_steady_inventory_closure(
+                system, prefix + "hot_inventory", hot_properties,
+                hot_holdup_parameter, hot_inventory,
+                hot_out_p, hot_out_h);
+            add_steady_inventory_closure(
+                system, prefix + "cold_inventory", cold_properties,
+                cold_holdup_parameter, cold_inventory,
+                cold_out_p, cold_out_h);
+        } else {
+            system.add_linear_equation(
+                prefix + "hot_inventory",
+                {{hot_inventory, 1.0}}, hot_holdup_parameter, 10.0);
+            system.add_linear_equation(
+                prefix + "cold_inventory",
+                {{cold_inventory, 1.0}}, cold_holdup_parameter, 10.0);
+        }
         add_steady_pressure_loss(
             system, prefix + "hot_pressure_loss", hot_properties,
             hot_in_m, hot_in_p, hot_out_p, hot_out_h,
@@ -213,6 +252,11 @@ public:
     void add_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system) const override {
+        if (finite_volume_) {
+            throw std::logic_error(
+                "steady finite-volume heat-exchanger cell does not "
+                "support transient compilation");
+        }
         const auto hot_properties = validate_media(context);
         const auto cold_properties =
             require_property_package(context, "cold_in");
@@ -322,6 +366,50 @@ public:
     }
 
 private:
+    static void add_steady_inventory_closure(
+        EquationSystemBuilder& system,
+        const std::string& name,
+        std::shared_ptr<const physics::PropertyPackage> properties,
+        double volume,
+        std::size_t inventory_mass,
+        std::size_t pressure,
+        std::size_t enthalpy) {
+        system.add_checked_sparse_equation(
+            name,
+            [properties, volume, inventory_mass, pressure, enthalpy](
+                const std::vector<double>& x, double& residual) {
+                const auto state = properties->state_ph(
+                    x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) return property_failure(state);
+                residual = x.at(inventory_mass) -
+                    volume * state.state.density_kg_m3;
+                return EvaluationStatus::success();
+            },
+            {inventory_mass, pressure, enthalpy},
+            [properties, volume, inventory_mass, pressure, enthalpy](
+                const std::vector<double>& x,
+                std::vector<EquationPartial>& jacobian) {
+                const auto state =
+                    physics::state_ph_derivatives_with_fallback(
+                        *properties, x.at(pressure), x.at(enthalpy));
+                if (!state.ok()) {
+                    throw std::runtime_error(state.message);
+                }
+                jacobian.push_back({inventory_mass, 1.0});
+                jacobian.push_back({
+                    pressure,
+                    -volume * state.derivatives
+                        .density_wrt_pressure_at_enthalpy});
+                jacobian.push_back({
+                    enthalpy,
+                    -volume * state.derivatives
+                        .density_wrt_enthalpy_at_pressure});
+                return x.at(inventory_mass) -
+                    volume * state.state.density_kg_m3;
+            },
+            10.0);
+    }
+
     static void add_steady_pressure_loss(
         EquationSystemBuilder& system,
         const std::string& name,
@@ -632,6 +720,7 @@ private:
     }
 
     ComponentModelDescriptor descriptor_;
+    bool finite_volume_{false};
 };
 
 }  // namespace
@@ -639,7 +728,9 @@ private:
 void register_dynamic_heat_transfer_component_models(
     ComponentRegistry& registry) {
     registry.register_model(
-        std::make_shared<DynamicHeatExchangerCellModel>());
+        std::make_shared<DynamicHeatExchangerCellModel>(false));
+    registry.register_model(
+        std::make_shared<DynamicHeatExchangerCellModel>(true));
 }
 
 }  // namespace thermox::platform

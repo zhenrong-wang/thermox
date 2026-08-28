@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace thermox::platform {
@@ -40,10 +41,28 @@ struct RuntimeExtensionDescriptor {
 };
 
 struct PortModelDescriptor {
+    PortModelDescriptor() = default;
+    PortModelDescriptor(
+        std::string port_name,
+        std::string port_domain,
+        std::string port_direction,
+        std::size_t port_maximum_connections = 1,
+        std::string inventory_medium_source_port = {})
+        : name(std::move(port_name)),
+          domain(std::move(port_domain)),
+          direction(std::move(port_direction)),
+          maximum_connections(port_maximum_connections),
+          medium_source_port(
+              std::move(inventory_medium_source_port)) {}
+
     std::string name;
     std::string domain;
     std::string direction;
     std::size_t maximum_connections{1};
+    // Inventory accounting ports inherit their medium identity from a
+    // physical fluid port. Empty means the component instance must bind a
+    // medium directly to this inventory port (used by system constraints).
+    std::string medium_source_port;
 };
 
 struct ParameterModelDescriptor {
