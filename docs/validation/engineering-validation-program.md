@@ -54,7 +54,8 @@ residual of 0.763% mean absolute and 1.552% maximum absolute, within the preregi
 accounting gate. This validates property reconstruction and conservation against hardware data; it
 is not external-boundary prediction because measured internal pressures and temperatures are used.
 The platform now also has a generic inventory connector, property-backed steady rigid-volume
-holdup, and an instance-sized fixed-total-charge constraint. The next ORC gate must supply or
+holdup, an instance-sized fixed-total-charge constraint, and inventory exposure from constant-mass
+exchanger cells plus variable-mass two-phase cells, correlated volumes, and drums. The next ORC gate must supply or
 identify component volumes and freeze pump, expander, heat-exchanger, and receiver model artifacts
 on cases 1--68 before cases 69--77 are opened.
 

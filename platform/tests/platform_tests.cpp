@@ -6184,6 +6184,12 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
             "steady dynamic-cell limit transfers heat hot to cold");
     require_near(steady_hot_duty, steady_cold_duty, 1.0e-6,
                  "steady dynamic-cell limit conserves energy");
+    require_near(
+        steady_value("cell.hot_inventory.mass"), hot_mass, 1.0e-12,
+        "steady cell exposes declared hot-side holdup");
+    require_near(
+        steady_value("cell.cold_inventory.mass"), cold_mass, 1.0e-12,
+        "steady cell exposes declared cold-side holdup");
 
     const auto graph =
         thermox::platform::compile_transient_model_graph(
@@ -6207,6 +6213,12 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
         wall_capacity *
             initialized.derivative.at(wall_temperature);
     const auto& x = initialized.state;
+    require_near(x.at(index("cell.hot_inventory.mass")),
+                 hot_mass, 1.0e-12,
+                 "transient cell exposes declared hot-side holdup");
+    require_near(x.at(index("cell.cold_inventory.mass")),
+                 cold_mass, 1.0e-12,
+                 "transient cell exposes declared cold-side holdup");
     const double boundary_energy_rate =
         x.at(index("cell.hot_in.m_dot")) *
             x.at(index("cell.hot_in.h")) -
@@ -6390,6 +6402,10 @@ void test_dynamic_material_fluid_cell_conserves_species_and_energy() {
          steady_value("cell.cold_in.h"));
     require_near(steady_hot_duty, steady_cold_duty, 1.0e-5,
                  "material-fluid steady cell energy closure");
+    require_near(
+        steady_value("cell.cold_inventory.mass"), cold_mass,
+        1.0e-12,
+        "material-fluid steady cell exposes cold-side holdup");
 
     const auto graph =
         thermox::platform::compile_transient_model_graph(
@@ -6416,6 +6432,10 @@ void test_dynamic_material_fluid_cell_conserves_species_and_energy() {
         return require_variable_index(graph.problem.variable_names, name);
     };
     const auto& final = transient.trajectory.back();
+    require_near(
+        final.state.at(index("cell.cold_inventory.mass")),
+        cold_mass, 1.0e-12,
+        "material-fluid transient cell exposes cold-side holdup");
     require(final.state.at(index("cell.cold_enthalpy")) >
                 cold_initial.state.enthalpy_j_kg,
             "material exhaust heats the cold-fluid holdup");
@@ -8006,6 +8026,11 @@ void test_dynamic_equilibrium_drum_conserves_inventory() {
             initialized.diagnostics.message);
     require_near(initialized.derivative.at(mass), 0.0, 1.0e-9,
                  "closed drum has zero mass derivative");
+    const auto inventory = require_variable_index(
+        graph.problem.variable_names, "drum.inventory.mass");
+    require_near(initialized.state.at(inventory), initial_mass,
+                 1.0e-10,
+                 "drum inventory port exposes conserved mass");
     require_near(initialized.derivative.at(energy), 1.0e4, 1.0e-5,
                  "drum heat input becomes stored-energy derivative");
 
@@ -8019,6 +8044,8 @@ void test_dynamic_equilibrium_drum_conserves_inventory() {
     const auto& final = result.trajectory.back().state;
     require_near(final.at(mass), initial_mass, 1.0e-8,
                  "closed drum conserves total mass");
+    require_near(final.at(inventory), final.at(mass), 1.0e-10,
+                 "drum inventory port follows live conserved mass");
     require_near(final.at(energy), initial_energy + 1000.0, 1.0e-3,
                  "drum integrates applied heat into internal energy");
     require(final.at(quality) >= 0.0 && final.at(quality) <= 1.0,

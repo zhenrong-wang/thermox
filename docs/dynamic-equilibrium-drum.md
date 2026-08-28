@@ -8,8 +8,9 @@ The component is transient-only. Its typed ports are:
 
 - one fluid inlet;
 - saturated-vapor and saturated-liquid outlets;
-- one heat inlet, with positive `Q_dot` adding energy to the drum.
+- one heat inlet, with positive `Q_dot` adding energy to the drum;
 - one normalized level-signal output, equal to `liquid_level / vessel_height`.
+- one inventory-accounting output carrying the live total mass.
 
 All fluid ports use the same registered medium. The property backend must provide saturation states
 at pressure.
@@ -58,6 +59,11 @@ calibration variable. The normalized level signal allows the drum to connect to 
 dimensionless control blocks without exposing an internal implementation variable. Equating inlet
 port pressure to vessel pressure also gives an upstream feed valve the downstream pressure needed
 to solve its flow law.
+
+The inventory output is similarly narrow: it exposes conserved mass for total-charge accounting
+but carries no flow, pressure, enthalpy, phase, or level semantics. A drum, receiver, or accumulator
+can therefore contribute to a system constraint without coupling that constraint to its private
+equilibrium formulation.
 
 ## Initialization
 

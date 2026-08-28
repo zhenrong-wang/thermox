@@ -40,6 +40,10 @@ inlet enthalpy are boundary/topology inputs; both fluid-port pressures equal inv
 Pumps, valves, circulation paths, and external restrictions should be declared as separate
 components.
 
+The `inventory` accounting port follows the live differential mass `M`. This lets distributed
+evaporator or condenser cells participate in whole-loop charge accounting during a transient
+without exposing their private energy, pressure, or quality states as connector variables.
+
 ## Runnable reference
 
 ```sh

@@ -1118,6 +1118,8 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
     require_close(value("volume.outlet.h"),
                   outlet_enthalpy, 1.0e-5,
                   "outlet enthalpy follows correlated flow quality");
+    require_close(value("volume.inventory.mass"), mass, 1.0e-10,
+                  "correlated volume exposes live inventory mass");
 
     thermox::TimeIntegrationOptions options;
     options.end_time = 0.1;

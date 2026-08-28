@@ -132,7 +132,8 @@ public:
             {"hot_in", "material", "in"},
             {"hot_out", "material", "out"},
             {"cold_in", "fluid", "in"},
-            {"cold_out", "fluid", "out"}};
+            {"cold_out", "fluid", "out"},
+            {"cold_inventory", "inventory", "out"}};
         descriptor_.parameters = {
             {"cold_fluid_mass", "mass", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -197,6 +198,9 @@ public:
             prefix + "cold_mass_continuity",
             {{data.cold_out_m, 1.0}, {data.cold_in_m, -1.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "cold_inventory",
+            {{data.cold_inventory, 1.0}}, data.cold_mass, 10.0);
         add_steady_hot_pressure_loss(
             system, prefix + "hot_pressure_loss", data);
         add_steady_cold_pressure_loss(
@@ -231,6 +235,10 @@ public:
             {{data.cold_out_m, 1.0, 0.0},
              {data.cold_in_m, -1.0, 0.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "cold_inventory",
+            {{data.cold_inventory, 1.0, 0.0}},
+            data.cold_mass, 10.0);
         add_transient_hot_pressure_loss(
             system, prefix + "hot_pressure_loss", data);
         add_transient_cold_pressure_loss(
@@ -260,6 +268,7 @@ private:
         std::size_t hot_in_p{}, hot_in_h{}, hot_out_p{}, hot_out_h{};
         std::size_t cold_in_m{}, cold_in_p{}, cold_in_h{};
         std::size_t cold_out_m{}, cold_out_p{}, cold_out_h{};
+        std::size_t cold_inventory{};
         std::size_t cold_energy{}, cold_enthalpy{}, wall_temperature{};
         double cold_mass{}, wall_capacity{}, hot_ua{}, cold_ua{};
         double hot_loss_scale{}, cold_loss_scale{};
@@ -308,6 +317,8 @@ private:
         data.cold_out_m = require_port_variable(context, "cold_out.m_dot");
         data.cold_out_p = require_port_variable(context, "cold_out.p");
         data.cold_out_h = require_port_variable(context, "cold_out.h");
+        data.cold_inventory = require_port_variable(
+            context, "cold_inventory.mass");
         data.cold_mass = required_parameter(
             context.component, "cold_fluid_mass");
         data.wall_capacity = required_parameter(

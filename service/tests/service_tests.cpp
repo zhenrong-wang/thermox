@@ -589,6 +589,16 @@ void test_request_contract_validation() {
 void test_catalog_discovery() {
     thermox::service::SimulationService service;
     const auto response = service.get_catalog();
+    const auto has_inventory_port = [](const auto& component,
+                                       const std::string& name) {
+        return std::any_of(
+            component.ports.begin(), component.ports.end(),
+            [&](const auto& port) {
+                return port.name == name &&
+                    port.domain == "inventory" &&
+                    port.direction == "out";
+            });
+    };
     require(response.succeeded(), "default catalog must load");
     require(
         response.schema_version ==
@@ -710,7 +720,9 @@ void test_catalog_discovery() {
         dynamic_cell != response.components.end() &&
             dynamic_cell->supports_steady &&
             dynamic_cell->supports_transient &&
-            dynamic_cell->internal_variables.size() == 5,
+            dynamic_cell->internal_variables.size() == 5 &&
+            has_inventory_port(*dynamic_cell, "hot_inventory") &&
+            has_inventory_port(*dynamic_cell, "cold_inventory"),
         "catalog must expose steady/transient heat-exchanger cells");
     const auto total_charge = std::find_if(
         response.components.begin(), response.components.end(),
@@ -721,7 +733,7 @@ void test_catalog_discovery() {
     require(
         total_charge != response.components.end() &&
             total_charge->supports_steady &&
-            total_charge->supports_transient &&
+            !total_charge->supports_transient &&
             total_charge->port_groups.size() == 1U &&
             total_charge->port_groups.front().name == "inventory" &&
             total_charge->port_groups.front().maximum_count == 256U,
@@ -737,7 +749,9 @@ void test_catalog_discovery() {
         material_fluid_cell != response.components.end() &&
             material_fluid_cell->supports_steady &&
             material_fluid_cell->supports_transient &&
-            material_fluid_cell->internal_variables.size() == 3,
+            material_fluid_cell->internal_variables.size() == 3 &&
+            has_inventory_port(
+                *material_fluid_cell, "cold_inventory"),
         "catalog must expose the composition-aware dynamic "
         "material-to-fluid cell");
     const auto two_phase_cell = std::find_if(
@@ -750,7 +764,8 @@ void test_catalog_discovery() {
         two_phase_cell != response.components.end() &&
             !two_phase_cell->supports_steady &&
             two_phase_cell->supports_transient &&
-            two_phase_cell->internal_variables.size() == 5,
+            two_phase_cell->internal_variables.size() == 5 &&
+            has_inventory_port(*two_phase_cell, "inventory"),
         "catalog must expose the equilibrium two-phase inventory "
         "cell");
     const auto two_phase_loss = std::find_if(
@@ -808,6 +823,8 @@ void test_catalog_discovery() {
             correlated_inventory->supports_transient &&
             correlated_inventory->parameters.size() == 2 &&
             correlated_inventory->internal_variables.size() == 6 &&
+            has_inventory_port(
+                *correlated_inventory, "inventory") &&
             correlated_inventory->artifacts.size() == 1 &&
             correlated_inventory->artifacts.front().role ==
                 "void_fraction_correlation" &&
@@ -992,7 +1009,8 @@ void test_catalog_discovery() {
             drum->template_kind == "drum.fluid" &&
             drum->category == "Fluid inventory" &&
             !drum->supports_steady && drum->supports_transient &&
-            drum->ports.size() == 5 &&
+            drum->ports.size() == 6 &&
+            has_inventory_port(*drum, "inventory") &&
             drum->internal_variables.size() == 5 &&
             drum->required_property_capabilities ==
                 std::vector<std::string>{"saturation_p"},

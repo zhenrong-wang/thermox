@@ -474,8 +474,7 @@ public:
             "total_charge", "mass", true, std::nullopt,
             0.0, std::numeric_limits<double>::infinity(),
             false, true}};
-        descriptor_.supports_transient = true;
-        descriptor_.uses_quasi_steady_transient_equations = true;
+        descriptor_.supports_transient = false;
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -544,7 +543,8 @@ public:
         descriptor_.ports = {
             {"inlet", "fluid", "in"},
             {"outlet", "fluid", "out"},
-            {"heat", "heat", "in"}};
+            {"heat", "heat", "in"},
+            {"inventory", "inventory", "out"}};
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -602,6 +602,11 @@ public:
              {data.inlet_m, -1.0, 0.0},
              {data.outlet_m, 1.0, 0.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "inventory_port",
+            {{data.inventory_mass, 1.0, 0.0},
+             {data.mass, -1.0, 0.0}},
+            0.0, 10.0);
         system.add_sparse_equation(
             prefix + "energy_accumulation",
             {data.energy, data.inlet_m, data.inlet_h,
@@ -774,6 +779,7 @@ private:
         std::size_t inlet_m{}, inlet_h{};
         std::size_t outlet_m{}, outlet_p{}, outlet_h{};
         std::size_t heat_flow{}, heat_temperature{};
+        std::size_t inventory_mass{};
         std::size_t mass{}, energy{}, pressure{};
         std::size_t holdup_quality{}, void_fraction{}, outlet_quality{};
         double volume{}, diameter{}, area{};
@@ -822,6 +828,8 @@ private:
         data.outlet_h = require_port_variable(context, "outlet.h");
         data.heat_flow = require_port_variable(context, "heat.Q_dot");
         data.heat_temperature = require_port_variable(context, "heat.T");
+        data.inventory_mass = require_port_variable(
+            context, "inventory.mass");
         data.mass = require_internal_variable(context, "mass");
         data.energy = require_internal_variable(context, "total_energy");
         data.pressure = require_internal_variable(context, "pressure");

@@ -203,8 +203,10 @@ mass to a system constraint.
 `balance.fluid.fixed_total_charge` owns an instance-sized `inventory` port group. Its
 `total_charge` parameter closes the sum of connected holdups. This permits a steady closed-loop
 pressure to be solved from total charge, equipment volumes, and thermodynamic state rather than
-invented as a boundary. The same connector exposes a transient volume's live conserved mass, so
-steady and transient accounting share one topology contract.
+invented as a boundary. In transient graphs the same connector domain exposes each volume's live
+conserved mass for initialization and reporting, but the fixed-total-charge component is not used:
+the differential mass balances already conserve total charge and an additional algebraic sum would
+overconstrain the DAE.
 
 Inventory links are accounting relations, not fluid-flow links: they carry no enthalpy, pressure,
 or mass flow and must never be used to connect equipment flow paths.

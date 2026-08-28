@@ -34,7 +34,9 @@ public:
             {"hot_in", "fluid", "in"},
             {"hot_out", "fluid", "out"},
             {"cold_in", "fluid", "in"},
-            {"cold_out", "fluid", "out"}};
+            {"cold_out", "fluid", "out"},
+            {"hot_inventory", "inventory", "out"},
+            {"cold_inventory", "inventory", "out"}};
         descriptor_.parameters = {
             {"hot_fluid_mass", "mass", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -103,6 +105,10 @@ public:
             required_parameter(context.component, "cold_side_UA");
         const double effective_ua =
             hot_ua * cold_ua / (hot_ua + cold_ua);
+        const double hot_fluid_mass = required_parameter(
+            context.component, "hot_fluid_mass");
+        const double cold_fluid_mass = required_parameter(
+            context.component, "cold_fluid_mass");
         const double hot_diameter = required_parameter(
             context.component, "hot_flow_diameter");
         const double cold_diameter = required_parameter(
@@ -127,6 +133,10 @@ public:
         const auto cold_out_m = require_port_variable(context, "cold_out.m_dot");
         const auto cold_out_p = require_port_variable(context, "cold_out.p");
         const auto cold_out_h = require_port_variable(context, "cold_out.h");
+        const auto hot_inventory = require_port_variable(
+            context, "hot_inventory.mass");
+        const auto cold_inventory = require_port_variable(
+            context, "cold_inventory.mass");
         const std::string prefix =
             "component." + context.component.id + ".";
 
@@ -136,6 +146,12 @@ public:
         system.add_linear_equation(
             prefix + "cold_mass_continuity",
             {{cold_out_m, 1.0}, {cold_in_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "hot_inventory",
+            {{hot_inventory, 1.0}}, hot_fluid_mass, 10.0);
+        system.add_linear_equation(
+            prefix + "cold_inventory",
+            {{cold_inventory, 1.0}}, cold_fluid_mass, 10.0);
         add_steady_pressure_loss(
             system, prefix + "hot_pressure_loss", hot_properties,
             hot_in_m, hot_in_p, hot_out_p, hot_out_h,
@@ -234,6 +250,10 @@ public:
         const auto cold_out_m = require_port_variable(context, "cold_out.m_dot");
         const auto cold_out_p = require_port_variable(context, "cold_out.p");
         const auto cold_out_h = require_port_variable(context, "cold_out.h");
+        const auto hot_inventory = require_port_variable(
+            context, "hot_inventory.mass");
+        const auto cold_inventory = require_port_variable(
+            context, "cold_inventory.mass");
         const auto hot_energy =
             require_internal_variable(context, "hot_total_energy");
         const auto hot_enthalpy =
@@ -255,6 +275,12 @@ public:
             prefix + "cold_mass_continuity",
             {{cold_out_m, 1.0, 0.0}, {cold_in_m, -1.0, 0.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "hot_inventory",
+            {{hot_inventory, 1.0, 0.0}}, hot_fluid_mass, 10.0);
+        system.add_linear_equation(
+            prefix + "cold_inventory",
+            {{cold_inventory, 1.0, 0.0}}, cold_fluid_mass, 10.0);
         add_fluid_energy_equation(
             system, prefix + "hot_energy_accumulation",
             hot_properties, hot_energy, hot_in_m, hot_in_h,

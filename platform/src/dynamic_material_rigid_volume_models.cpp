@@ -162,7 +162,8 @@ public:
             {"hot_in", "material", "in"},
             {"hot_out", "material", "out"},
             {"cold_in", "fluid", "in"},
-            {"cold_out", "fluid", "out"}};
+            {"cold_out", "fluid", "out"},
+            {"inventory", "inventory", "out"}};
         descriptor_.parameters = {
             {"fluid_volume", "volume", true, std::nullopt, 0.0,
              std::numeric_limits<double>::infinity(), false, true},
@@ -236,6 +237,11 @@ public:
              {data.cold_out_m, 1.0, 0.0}},
             0.0, 100.0);
         system.add_linear_equation(
+            prefix + "inventory_port",
+            {{data.inventory_mass, 1.0, 0.0},
+             {data.fluid_mass, -1.0, 0.0}},
+            0.0, 10.0);
+        system.add_linear_equation(
             prefix + "fluid_inlet_pressure",
             {{data.cold_in_p, 1.0, 0.0},
              {data.fluid_pressure, -1.0, 0.0}},
@@ -270,6 +276,7 @@ private:
         std::size_t hot_in_p{}, hot_in_h{}, hot_out_p{}, hot_out_h{};
         std::size_t cold_in_m{}, cold_in_p{}, cold_in_h{};
         std::size_t cold_out_m{}, cold_out_p{}, cold_out_h{};
+        std::size_t inventory_mass{};
         std::size_t fluid_mass{}, fluid_energy{};
         std::size_t fluid_pressure{}, vapor_quality{};
         std::size_t wall_temperature{};
@@ -319,6 +326,8 @@ private:
         data.cold_out_m = require_port_variable(context, "cold_out.m_dot");
         data.cold_out_p = require_port_variable(context, "cold_out.p");
         data.cold_out_h = require_port_variable(context, "cold_out.h");
+        data.inventory_mass = require_port_variable(
+            context, "inventory.mass");
         data.fluid_mass = require_internal_variable(context, "fluid_mass");
         data.fluid_energy = require_internal_variable(
             context, "fluid_total_energy");

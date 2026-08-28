@@ -28,6 +28,10 @@ U_cold = M_cold u(p_cold, h_cold)
 Q_cold = UA_cold (T_wall - T_cold)
 ```
 
+Its `cold_inventory` port exposes `M_cold` to the same accounting domain used by rigid volumes and
+system total-charge constraints. The hot material stream is quasi-steady and therefore owns no
+inventory port in this model.
+
 The wall adds a second differential state:
 
 ```text

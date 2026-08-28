@@ -8,6 +8,10 @@ The component has `hot_in`, `hot_out`, `cold_in`, and `cold_out` fluid ports. Ea
 different registered property package. This allows gas-to-water, water-to-water, refrigerant, CO₂,
 and other combinations without changing the component equations.
 
+`hot_inventory` and `cold_inventory` accounting ports expose the two declared holdup masses in
+both steady and transient graphs. They can feed system inventory reporting or a total-charge
+constraint in a steady graph, but do not transport fluid or add a second pressure/enthalpy state.
+
 ## Physical model
 
 Each side is a well-mixed, constant-holdup control volume. For fluid mass `M`, stored internal
@@ -81,7 +85,9 @@ boundary enthalpy flows.
 
 ## Scope and limits
 
-The constant-holdup approximation neglects fluid mass accumulation, compressible pressure-wave
+The constant-holdup masses are equipment parameters, so connecting only these cells to a fixed
+total-charge constraint is redundant; at least one variable-mass, geometry-closed inventory is
+needed for charge to determine pressure. The constant-holdup approximation neglects fluid mass accumulation, compressible pressure-wave
 dynamics, axial conduction, heat loss to ambient, radiation, fouling evolution, flow reversal, and
 finite transport delay. It is suitable as the first index-1 thermal cell and as a building block for
 spatial discretization. Variable-mass vessels and two-phase level dynamics belong to the registered

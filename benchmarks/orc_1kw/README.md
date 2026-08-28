@@ -31,10 +31,15 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
 - Case 73 produces a slightly nonpositive pump fluid-power estimate from its measured PT pair and
   is flagged rather than corrected or removed.
 - A generic steady/transient inventory accounting contract is now available: rigid volumes expose
-  property-backed holdup and `balance.fluid.fixed_total_charge` imposes a system-level charge.
+  property-backed holdup and the steady-only `balance.fluid.fixed_total_charge` imposes a
+  system-level charge. Transient graphs conserve charge through their differential mass balances.
   This removes the need to invent a loop pressure once the physical volumes are known.
+- Constant-holdup heat-exchanger cells expose both side inventories; composition-aware cells,
+  variable-mass two-phase cells, correlated volumes, and equilibrium drums expose their applicable
+  fluid inventory. Distributed graphs can therefore report and constrain charge without reaching
+  into component internals.
 - External-boundary prediction remains open. It still requires generic speed-dependent pump and
-  expander behavior, distributed two-phase heat-exchanger and passive-receiver geometry, and
+  expander behavior, steady variable-holdup heat-exchanger and passive-receiver geometry, and
   traceable or training-only calibrated component artifacts. The dataset's measured charge alone
   cannot identify those individual holdups.
 

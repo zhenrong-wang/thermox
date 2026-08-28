@@ -101,6 +101,7 @@ public:
             {"liquid_outlet", "fluid", "out"},
             {"heat", "heat", "in"},
             {"level_signal", "signal", "out"},
+            {"inventory", "inventory", "out"},
         };
         descriptor_.parameters = {
             {"volume", "volume", true, std::nullopt, 0.0,
@@ -182,6 +183,8 @@ public:
             require_port_variable(context, "heat.T");
         const auto level_signal =
             require_port_variable(context, "level_signal.value");
+        const auto inventory_mass =
+            require_port_variable(context, "inventory.mass");
         const auto mass =
             require_internal_variable(context, "total_mass");
         const auto energy = require_internal_variable(
@@ -202,6 +205,10 @@ public:
              {vapor_m, 1.0, 0.0},
              {liquid_m, 1.0, 0.0}},
             0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "inventory_port",
+            {{inventory_mass, 1.0, 0.0}, {mass, -1.0, 0.0}},
+            0.0, 10.0);
         system.add_sparse_equation(
             prefix + "energy_accumulation",
             {energy, inlet_m, inlet_h, vapor_m, vapor_h,
