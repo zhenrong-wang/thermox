@@ -620,5 +620,30 @@
     "classification": "public_source_full_nonlinear_dynamic_reference_trajectory",
     "declared_limit": "This is an independently executed computational reference, not hardware measurement. The equivalent Thermox graph and cross-code trajectory comparison remain the next validation slice."
   },
-  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, a finite-window nonlinear Thermox trajectory against the public NASA linear response, and a checksum-pinned full nonlinear NASA trajectory ready for graph binding. They are not independent hardware validation, fuel-flow predictive qualification, nonlinear Thermox-to-reference trajectory qualification, or full transient predictive validation."
+  "tmats_simple_gas_turbine_open_loop_execution": {
+    "model": "tmats_simple_gas_turbine_open_loop.json",
+    "model_file_sha256": "a5c4309bbb82cf7c78cce3ad08e721175243bebf7b0ec85f8e366ef8ac40aa48",
+    "hpc_map": "hpc_map.json",
+    "hpt_map": "hpt_map.json",
+    "hpt_map_payload_sha256": "dcd92284793238aaca133c3e433103aff6deaec975d206172c81a1bdbbc8ef01",
+    "reference": "tmats_gasturbine_dyn_validation_series.json",
+    "result_summary": "tmats_simple_gas_turbine_open_loop_results.json",
+    "forced_input": "NASA fuel-flow history with linear interpolation",
+    "topology": "ambient_inlet_compressor_equilibrium_combustor_turbine_duct_convergent_nozzle_single_inertial_shaft",
+    "results": {
+      "graph_variable_count": 145,
+      "accepted_steps": 766,
+      "rejected_steps": 17,
+      "maximum_absolute_normalized_residual": 9.754888713359833e-9,
+      "exact_reference_timestamp_count": 701,
+      "shaft_speed_error_percent_range": [0.0, 4.474977173331451],
+      "compressor_temperature_error_percent_range": [0.5704360479228399, 4.556282547968493],
+      "compressor_pressure_error_percent_range": [3.376918248171301, 13.347641900124362],
+      "net_thrust_error_percent_range": [10.470065763892556, 21.538488279573855],
+      "predictive_signal_mean_mape_percent": 7.06381509199646
+    },
+    "classification": "public_source_full_nonlinear_open_loop_cross_code_baseline",
+    "declared_limit": "Fuel flow is a forced NASA input and the speed controller is excluded. Retained gas-property, combustion, and nozzle model-form differences prevent transient predictive qualification."
+  },
+  "interpretation_limit": "These tests validate deterministic import, coordinate-map interpolation, off-design thermochemistry, nonzero variable-bleed flow and routing, predictive static terminal pressure closure, a fully coupled open-VBV static whole-engine point, bleed/cooling routing, duct loss, nozzle capacity, exact two-shaft conservation, traceable public gross/ram/net-thrust extraction, generic steady ram-drag and net-force closure, full-graph transient DAE composition/equilibrium hold, a complete-input partial small-signal cross-code reproduction, a finite-window nonlinear Thermox trajectory against the public NASA linear response, and a complete nonlinear open-loop Thermox plant replay against 701 exact NASA timestamps. They are not independent hardware validation, fuel-flow predictive qualification, closed-loop controller reproduction, or full transient predictive validation."
 }

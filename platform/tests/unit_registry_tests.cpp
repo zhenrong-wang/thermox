@@ -86,6 +86,13 @@ int main() {
                     customary_force.value_si - 4448.2216152605) <
                     1.0e-9,
             "pound-force must normalize to SI force");
+        const auto customary_area = units.convert(110.868590, "in2");
+        require(
+            customary_area.dimension == "area" &&
+                customary_area.unit == "m2" &&
+                std::abs(customary_area.value_si - 0.0715279795244) <
+                    1.0e-15,
+            "square inches must normalize to SI area");
         const auto customary_velocity = units.convert(100.0, "ft/s");
         require(
             customary_velocity.dimension == "speed" &&

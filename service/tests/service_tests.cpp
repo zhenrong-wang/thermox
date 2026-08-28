@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -2916,6 +2917,99 @@ void test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark() {
             validation.evidence.failed_count == 0U,
         "generic change projections and classified evidence must qualify "
         "the finite-window NASA fuel-step comparison");
+}
+
+void test_nasa_tmats_nonlinear_open_loop_initial_slice() {
+    thermox::service::TransientSimulationRequest request;
+    request.model_json = read_source_file(
+        "benchmarks/nasa_tmats/"
+        "tmats_simple_gas_turbine_open_loop.json");
+    request.case_id = "nasa_fuel_history_replay";
+    for (const auto* path : {
+             "benchmarks/nasa_tmats/hpc_map.json",
+             "benchmarks/nasa_tmats/hpt_map.json"}) {
+        request.artifacts.performance_maps.push_back(
+            thermox::service::
+                parse_performance_map_artifact_declaration_json(
+                    read_source_file(path)));
+    }
+    request.solver.end_time = 0.015;
+    request.solver.required_output_times = {0.015};
+
+    const auto response =
+        thermox::service::SimulationService{}.run_transient(request);
+    require(
+        response.succeeded() && response.diagnostics.success &&
+            response.diagnostics.rejected_steps == 0U &&
+            response.diagnostics.maximum_absolute_normalized_residual <
+                1.0e-8,
+        "NASA simple gas-turbine open-loop initial slice must "
+        "integrate: " + response.error.message);
+
+    auto reference = thermox::service::
+        parse_validation_series_artifact_json(read_source_file(
+            "benchmarks/nasa_tmats/"
+            "tmats_gasturbine_dyn_validation_series.json"));
+    const std::set<std::string> selected{
+        "shaft_speed", "s0_mass_flow", "s3_total_temperature",
+        "s4_total_temperature", "net_thrust"};
+    std::erase_if(reference.signals, [&](const auto& signal) {
+        return !selected.contains(signal.id);
+    });
+    for (auto& signal : reference.signals) {
+        signal.samples.resize(2U);
+    }
+    const auto binding = [](
+        std::string signal_id,
+        thermox::service::ResultValueScope scope,
+        std::string component,
+        std::string port,
+        std::string value,
+        std::string dimension,
+        double relative_tolerance) {
+        return thermox::service::TrajectoryValidationBinding{
+            std::move(signal_id),
+            {
+                {}, scope, std::move(component), std::move(port),
+                std::move(value), std::move(dimension),
+            },
+            thermox::service::TrajectoryComparison::absolute,
+            0.0, 0.0, 0.0, relative_tolerance, 0.0, 0.0,
+        };
+    };
+    const std::vector<thermox::service::TrajectoryValidationBinding>
+        bindings{
+            binding(
+                "shaft_speed",
+                thermox::service::ResultValueScope::component_internal,
+                "shaft", {}, "omega", "angular_speed", 0.001),
+            binding(
+                "s0_mass_flow",
+                thermox::service::ResultValueScope::port_derived,
+                "ambient", "outlet", "m_dot_total", "mass_flow",
+                0.01),
+            binding(
+                "s3_total_temperature",
+                thermox::service::ResultValueScope::port_derived,
+                "compressor", "outlet", "T", "temperature", 0.01),
+            binding(
+                "s4_total_temperature",
+                thermox::service::ResultValueScope::port_derived,
+                "combustor", "outlet", "T", "temperature", 0.08),
+            binding(
+                "net_thrust",
+                thermox::service::ResultValueScope::port_primary,
+                "nozzle", "thrust", "F", "force", 0.12),
+        };
+    const auto validation = thermox::service::
+        evaluate_trajectory_validation(
+            reference, bindings, response.trajectory, response.events);
+    require(
+        validation.exact_alignment_count == 10U &&
+            validation.interpolated_alignment_count == 0U &&
+            validation.evidence.passed,
+        "the independently exported NASA initial trajectory slice must "
+        "bind to generic Thermox shaft, material, and force results");
 }
 
 void test_cantera_brayton_integration_benchmark() {
@@ -9256,6 +9350,7 @@ int main() {
         test_nasa_agtf30_continuous_twin_spool_benchmark();
         test_nasa_agtf30_partial_small_signal_benchmark();
         test_nasa_agtf30_nonlinear_fuel_step_cross_code_benchmark();
+        test_nasa_tmats_nonlinear_open_loop_initial_slice();
         test_cantera_brayton_integration_benchmark();
         test_netl_b31a_hrsg_boundary_benchmark();
         test_netl_b31a_segmented_triple_pressure_hrsg();

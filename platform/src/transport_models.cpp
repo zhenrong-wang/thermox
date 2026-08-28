@@ -2715,6 +2715,8 @@ public:
         descriptor_.parameters = {
             {"pressure_ratio", "dimensionless", true,
              std::nullopt, 0.0, 1.0, false, true}};
+        descriptor_.supports_transient = true;
+        descriptor_.uses_quasi_steady_transient_equations = true;
     }
 
     const ComponentModelDescriptor& descriptor() const override {

@@ -324,7 +324,15 @@ UnitRegistry make_default_unit_registry() {
         "specific_heat_capacity", "J/kg/K",
         display("kJ/kg/K", 1.0e-3));
     display_only("density", "kg/m3", display("kg/m³"));
-    display_only("area", "m2", display("m²"));
+    registry.register_dimension(dimension(
+        "area", "m2", display("m²"),
+        {
+            accepted("m2", 1.0, 0.0, {"m^2"}),
+            accepted("cm2", 1.0e-4, 0.0, {"cm^2"}),
+            accepted("mm2", 1.0e-6, 0.0, {"mm^2"}),
+            accepted("in2", 0.00064516, 0.0, {"in^2"}),
+            accepted("ft2", 0.09290304, 0.0, {"ft^2"}),
+        }));
     display_only(
         "mass_flux", "kg/m2/s", display("kg/(m²·s)"));
     display_only(

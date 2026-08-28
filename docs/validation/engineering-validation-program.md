@@ -79,7 +79,13 @@ combined MAPE and 0.283% maximum absolute error. A generic instance-sized fracti
 group carries the three source-declared extraction states and their work contribution; no
 case-specific correction is fitted.
 
-The next T-MATS implementation is therefore the coupled shaft/combustor/turbine/nozzle system. The
+The coupled dynamic shaft/combustor/turbine/nozzle implementation is now executable as an open-loop
+plant replay. NASA's full nonlinear 701-point fuel history drives a generic 145-variable Thermox
+graph over 10.5 s. The solve reaches every reference timestamp with a maximum normalized residual
+of `9.75e-9`; shaft-speed MAPE is 2.781%, while the mean of the 16 predictive-signal MAPEs is
+7.064%. Net thrust remains 10.47--21.54% high. This closes the nonlinear reference-acquisition and
+whole-window execution gates, but not transient prediction: gas-property/combustion conventions,
+the detailed nozzle relation, and the source controller still require separate alignment. The
 Sandia sCO2 transient follows once authoritative numeric response data are obtained or digitization
 uncertainty is formally included in every acceptance limit.
 
@@ -109,8 +115,9 @@ pressure error 4.521% against T-MATS. The uncalibrated equilibrium fuel result r
 
 This advanced the program from sliced component/spool checks to a continuous map-driven engine
 core. Subsequent generic duct, variable-bleed, nozzle, freestream-momentum, and force-balance gates
-now complete the steady flight-point topology. An external nonlinear fuel-step time history remains
-open; the public source exposes a local linear dynamic reference only.
+now complete the steady flight-point topology. The previously missing nonlinear reference is now
+exported from NASA's unmodified simple-gas-turbine Simulink example and exercised by the open-loop
+plant replay. Closed-loop controller reproduction and model-form alignment remain open.
 No discrepancy in the comparison is hidden with a case-specific factor.
 
 The first whole-engine prerequisite is also complete: five generic area-based gas ducts reproduce

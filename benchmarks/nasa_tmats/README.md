@@ -561,3 +561,54 @@ full nonlinear reference with controller, map nonlinearities, shaft inertia, and
 It does not by itself qualify Thermox dynamics: the next validation slice must declare the
 equivalent generic Thermox graph, bind the reference signals, and report retained cross-code
 differences. Nor is it hardware evidence; NASA's public example defines the comparison scope.
+
+## Nonlinear open-loop plant replay
+
+`tmats_simple_gas_turbine_open_loop.json` is the first equivalent generic Thermox graph. It
+connects an atmosphere boundary, fixed-ratio inlet loss, coordinate-map compressor, equilibrium
+combustor, coordinate-map turbine, fixed-ratio duct loss, convergent nozzle, and a physical
+single-shaft inertia. `hpt_map.json` is imported without fitting from NASA's `setup_HPT.m`; its raw
+pressure-ratio coordinate and component scalers remain separately auditable. No T-MATS component
+kind or solver branch was added.
+
+The graph replays NASA's exported fuel-flow history with linear interpolation. This is intentional:
+it isolates plant physics from NASA's 0.05 s speed sensor and PI controller. Ambient pressure and
+temperature, inlet pressure loss, fuel flow, component maps/scalers, burner pressure loss, duct
+loss, nozzle area, and shaft inertia come from the pinned source. No Thermox parameter was fitted
+to the trajectory.
+
+```sh
+python3 scripts/import_tmats_matlab_turbine_map.py \
+  /path/to/T-MATS/Trunk/TMATS_Examples/Example_GasTurbine_Dyn/SimSetup/setup_HPT.m \
+  benchmarks/nasa_tmats/hpt_map.json
+python3 scripts/build_tmats_simple_gas_turbine_open_loop.py \
+  benchmarks/nasa_tmats/tmats_gasturbine_dyn_validation_series.json \
+  benchmarks/nasa_tmats/tmats_simple_gas_turbine_open_loop.json
+./build/thermox_cli simulate \
+  --model benchmarks/nasa_tmats/tmats_simple_gas_turbine_open_loop.json \
+  --case nasa_fuel_history_replay \
+  --performance-map benchmarks/nasa_tmats/hpc_map.json \
+  --performance-map benchmarks/nasa_tmats/hpt_map.json \
+  --end-time 10.5 --format json > /tmp/thermox-tmats-replay.json
+python3 scripts/analyze_tmats_open_loop_replay.py \
+  benchmarks/nasa_tmats/tmats_gasturbine_dyn_validation_series.json \
+  /tmp/thermox-tmats-replay.json \
+  benchmarks/nasa_tmats/tmats_simple_gas_turbine_open_loop_results.json
+```
+
+The 145-variable nonlinear DAE reaches 10.5 s in 766 accepted steps with 17 adaptive rejections;
+the maximum normalized nonlinear residual is `9.75e-9`. All 701 NASA timestamps align exactly.
+Fuel flow is identical by construction. Shaft-speed error ranges from 0% to +4.475% and averages
+2.781% absolute. Compressor discharge-temperature error ranges from +0.570% to +4.556%; its
+pressure error is +3.377% to +13.348%. Combustor and turbine-exit temperature errors are
++3.162% to +7.417% and +3.433% to +8.359%. Flow errors reach +11.763%, while net-thrust error is
++10.470% to +21.538%. The mean of the 16 predictive-signal MAPEs is 7.064%; it is a diagnostic
+summary, not an engineering acceptance score.
+
+This result proves that the generic nonlinear graph, public maps, shaft state, input schedule,
+unit normalization, and exact-time evidence alignment execute together over the complete reference
+window. It also disproves full transient predictive equivalence in the present declaration. The
+dominant retained model-form differences are T-MATS' FAR-table gas thermodynamics versus Thermox's
+equilibrium methane chemistry and the complete T-MATS nozzle tables versus the current generic
+perfect-gas nozzle. The next slice should align those physical conventions before adding the NASA
+sensor and PI controller. The source remains computational rather than hardware evidence.

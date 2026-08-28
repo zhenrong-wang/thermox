@@ -64,7 +64,7 @@
     },
     {
       "id": "nasa_tmats_gas_turbines",
-      "status": "steady_net_thrust_and_local_transient_cross_code_complete",
+      "status": "steady_net_thrust_and_full_nonlinear_open_loop_cross_code_complete",
       "role": "map_rich_steady_transient_cross_code",
       "evidence_basis": [
         "derived_reference",
@@ -73,7 +73,7 @@
       "strengths": [
         "Apache-2.0 source and non-proprietary component maps",
         "multi-spool topology with bleeds, cooling, nozzles, shafts, and controls",
-        "published steady outputs and local dynamic linearization"
+        "published steady outputs, local dynamic linearization, and an executable full nonlinear reference trajectory"
       ],
       "limits": [
         "reference outputs are computational rather than independent hardware measurements",
@@ -99,7 +99,8 @@
         "zero_vbv_nozzle_capacity_and_gross_thrust",
         "generic_freestream_ram_drag_and_propulsive_force_balance",
         "four_point_net_thrust_cross_code",
-        "nonlinear_fuel_step_against_public_linear_reference"
+        "nonlinear_fuel_step_against_public_linear_reference",
+        "full_nonlinear_open_loop_plant_replay_against_701_exact_timestamps"
       ],
       "latest_result": {
         "topology": "nozzle_closed_fan_splitter_LPC_HPC_combustor_HPT_LPT_with_two_shafts",
@@ -112,13 +113,16 @@
         "solved_hp_speed_maximum_absolute_error_percent": 0.1093,
         "solved_bypass_ratio_maximum_absolute_error_percent": 0.6133,
         "combined_gross_thrust_maximum_absolute_error_percent": 0.25,
+        "nonlinear_open_loop_shaft_speed_mape_percent": 2.7812,
+        "nonlinear_open_loop_predictive_signal_mean_mape_percent": 7.0638,
+        "nonlinear_open_loop_net_thrust_error_percent_range": [10.4701, 21.5385],
         "ram_drag_maximum_absolute_error_percent": 0.12254,
         "net_thrust_maximum_absolute_error_percent": 1.257601,
         "fuel_step_duration_seconds": 0.05,
         "fuel_step_lp_speed_error_percent_range": [17.8105, 18.1198],
         "fuel_step_hp_speed_error_percent_range": [21.6405, 21.8856],
-        "classification": "steady_net_thrust_and_partial_dynamic_cross_code_reproduction",
-        "reserved": ["fuel_flow_prediction", "nonlinear_reference_transient", "independent_hardware_validation"]
+        "classification": "steady_net_thrust_and_full_nonlinear_open_loop_cross_code_baseline",
+        "reserved": ["fuel_flow_prediction", "closed_loop_controller_reproduction", "full_transient_predictive_validation", "independent_hardware_validation"]
       }
     },
     {
