@@ -1,0 +1,53 @@
+{
+  "schema_version": "thermox.hardware_validation_contract/v1",
+  "benchmark_id": "orc_1kw_r245fa",
+  "working_fluid": {
+    "backend": "coolprop_heos",
+    "substance": "R245fa",
+    "package_version": "8.0.0"
+  },
+  "topology": [
+    "diaphragm_pump",
+    "brazed_plate_evaporator",
+    "scroll_expander",
+    "brazed_plate_condenser",
+    "passive_liquid_receiver"
+  ],
+  "classification_ladder": [
+    {
+      "stage": "measured_state_accounting",
+      "inputs": "All measured component boundary states and flows",
+      "outputs": "Independent property reconstruction, duties, efficiencies, and mass/energy closure",
+      "claim_limit": "Boundary-constrained physical consistency only; not prediction"
+    },
+    {
+      "stage": "component_blocked_validation",
+      "inputs": "Measured inlet boundaries and controls",
+      "outputs": "Held-out component outlet state, flow, torque, and duty",
+      "claim_limit": "Component-level calibrated validation"
+    },
+    {
+      "stage": "external_boundary_system_prediction",
+      "inputs": ["Thw,in", "Phw,in", "VFRhw", "Tcw,in", "Pcw,in", "VFRcw", "Npp", "Nex", "Mch", "Tamb"],
+      "outputs": ["high_pressure", "low_pressure", "working_fluid_mass_flow", "component_outlet_temperatures", "expander_torque", "heat_source_outlet_temperature", "heat_sink_outlet_temperature", "net_power", "thermal_efficiency"],
+      "claim_limit": "Independent hardware system validation only after frozen calibration and held-out acceptance"
+    }
+  ],
+  "split": {
+    "calibration_and_internal_cross_validation_cases": "1-68",
+    "primary_frozen_holdout_cases": "69-77",
+    "rationale": "Cases 1-68 are structured charge, sink-temperature, and expander-speed sweeps. Cases 69-77 change source/sink flow and combined boundaries, creating a blocked extrapolative holdout rather than a random row split.",
+    "anti_leakage_rule": "No parameter, model selection, scaling, or acceptance threshold may be changed after inspecting Thermox errors on cases 69-77. Any such change creates a new benchmark revision and a new untouched holdout requirement."
+  },
+  "calibration_domains": {
+    "component": ["pump flow and efficiency model", "evaporator heat-transfer and pressure-loss model", "expander filling, leakage, heat-loss, and mechanical model", "condenser heat-transfer and pressure-loss model", "receiver volume and passive liquid-level model"],
+    "system": ["ambient heat loss", "connecting-line volume and pressure loss", "working-fluid charge allocation"],
+    "forbidden": ["case-index correction", "direct use of held-out internal measurements", "unreported per-case efficiency", "post-hoc global output multiplier"]
+  },
+  "provisional_acceptance": {
+    "status": "pending measurement-uncertainty extraction from the associated papers",
+    "numerical": ["all solves converge", "scaled residual norm <= 1e-8", "mass closure <= 1e-8 relative", "reported component and system energy residuals"],
+    "physical": ["primary-output held-out MAPE <= 8%", "no primary held-out absolute relative error > 15%", "no systematic residual trend across source temperature, flow, charge, or speed"],
+    "note": "The physical bands are preregistered provisional gates informed by the associated publication. They must be tightened or uncertainty-normalized when authoritative instrument uncertainties are extracted."
+  }
+}

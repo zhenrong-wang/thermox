@@ -16,22 +16,17 @@ namespace {
 
 using StatePtr = std::unique_ptr<CoolProp::AbstractState>;
 
-CoolProp::AbstractState& backend_state(CoolPropFluid fluid) {
-    thread_local StatePtr co2{
-        CoolProp::AbstractState::factory("HEOS", "CO2")};
-    thread_local StatePtr water{
-        CoolProp::AbstractState::factory("IF97", "Water")};
-    thread_local StatePtr water_heos{
-        CoolProp::AbstractState::factory("HEOS", "Water")};
-    switch (fluid) {
-        case CoolPropFluid::co2:
-            return *co2;
-        case CoolPropFluid::water_if97:
-            return *water;
-        case CoolPropFluid::water_heos:
-            return *water_heos;
+CoolProp::AbstractState& backend_state(CoolPropBackendRef selection) {
+    thread_local std::unordered_map<std::string, StatePtr> states;
+    const std::string key = std::string{selection.backend} + "::" +
+        std::string{selection.substance};
+    auto [position, inserted] = states.try_emplace(key);
+    if (inserted) {
+        position->second.reset(CoolProp::AbstractState::factory(
+            std::string{selection.backend},
+            std::string{selection.substance}));
     }
-    return *water;
+    return *position->second;
 }
 
 CoolProp::AbstractState& incompressible_backend_state(
@@ -151,17 +146,18 @@ bool valid_input(double first, double second) {
 }
 
 bool outside_limits(
-    CoolPropFluid fluid, CoolPropFlash flash,
+    CoolPropBackendRef selection,
+    CoolProp::AbstractState& state,
+    CoolPropFlash flash,
     double pressure, double second) {
-    const double maximum_pressure =
-        fluid == CoolPropFluid::co2 ? 800e6 : 100e6;
-    if (pressure > maximum_pressure) return true;
+    if (selection.backend == "IF97") {
+        if (pressure > 100e6) return true;
+        if (flash != CoolPropFlash::pt) return false;
+        return second < 273.15 || second > 2273.15;
+    }
+    if (pressure > state.pmax()) return true;
     if (flash != CoolPropFlash::pt) return false;
-    if (fluid == CoolPropFluid::co2)
-        return second < 216.592 || second > 2000.0;
-    if (fluid == CoolPropFluid::water_heos)
-        return second < 273.16 || second > 2000.0;
-    return second < 273.15 || second > 2273.15;
+    return second < state.Tmin() || second > state.Tmax();
 }
 
 CoolProp::input_pairs input_pair(CoolPropFlash flash) {
@@ -189,19 +185,23 @@ void update(
 }  // namespace
 
 PropertyResult coolprop_state(
-    CoolPropFluid fluid, CoolPropFlash flash, double first, double second) {
+    CoolPropBackendRef selection,
+    CoolPropFlash flash,
+    double first,
+    double second) {
     if (!valid_input(first, second)) {
         return error_result(
             PropertyStatus::invalid_input,
             "property inputs must be finite and pressure must be positive");
     }
-    if (outside_limits(fluid, flash, first, second)) {
-        return error_result(
-            PropertyStatus::out_of_range,
-            "property inputs are outside the backend validity limits");
-    }
     try {
-        auto& state = backend_state(fluid);
+        auto& state = backend_state(selection);
+        if (outside_limits(
+                selection, state, flash, first, second)) {
+            return error_result(
+                PropertyStatus::out_of_range,
+                "property inputs are outside the backend validity limits");
+        }
         update(state, flash, first, second);
         return {read_state(state), PropertyStatus::success, {}};
     } catch (CoolProp::CoolPropBaseError& error) {
@@ -251,22 +251,25 @@ PropertyResult coolprop_incompressible_state(
 }
 
 PhDerivativesResult coolprop_state_ph_derivatives(
-    CoolPropFluid fluid, double pressure, double enthalpy) {
+    CoolPropBackendRef selection,
+    double pressure,
+    double enthalpy) {
     if (!valid_input(pressure, enthalpy)) {
         return {
             {}, {}, PropertyDerivativeSource::analytic,
             PropertyStatus::invalid_input,
             "property inputs must be finite and pressure must be positive"};
     }
-    if (outside_limits(
-            fluid, CoolPropFlash::ph, pressure, enthalpy)) {
-        return {
-            {}, {}, PropertyDerivativeSource::analytic,
-            PropertyStatus::out_of_range,
-            "property inputs are outside the backend validity limits"};
-    }
     try {
-        auto& state = backend_state(fluid);
+        auto& state = backend_state(selection);
+        if (outside_limits(
+                selection, state, CoolPropFlash::ph,
+                pressure, enthalpy)) {
+            return {
+                {}, {}, PropertyDerivativeSource::analytic,
+                PropertyStatus::out_of_range,
+                "property inputs are outside the backend validity limits"};
+        }
         update(
             state, CoolPropFlash::ph, pressure, enthalpy);
         const auto thermodynamic_state = read_state(state);
@@ -378,13 +381,13 @@ PhDerivativesResult coolprop_state_ph_derivatives(
 }
 
 SaturationResult coolprop_saturation_p(
-    CoolPropFluid fluid, double pressure_pa) {
+    CoolPropBackendRef selection, double pressure_pa) {
     if (!std::isfinite(pressure_pa) || pressure_pa <= 0.0) {
         return {{}, {}, PropertyStatus::invalid_input,
                 "saturation pressure must be finite and positive"};
     }
     try {
-        auto& state = backend_state(fluid);
+        auto& state = backend_state(selection);
         const double triple_pressure = state.p_triple();
         const double critical_pressure = state.p_critical();
         if (pressure_pa < triple_pressure || pressure_pa >= critical_pressure) {
@@ -416,6 +419,12 @@ SaturationResult coolprop_saturation_p(
     } catch (const std::exception& error) {
         return {{}, {}, PropertyStatus::backend_error, error.what()};
     }
+}
+
+PropertyLimits coolprop_limits(CoolPropBackendRef selection) {
+    auto& state = backend_state(selection);
+    return {
+        state.p_triple(), state.pmax(), state.Tmin(), state.Tmax()};
 }
 
 std::string_view coolprop_version() noexcept {

@@ -1,0 +1,20 @@
+{
+  "schema_version": "thermox.measured_state_audit/v1",
+  "benchmark_id": "orc_1kw_r245fa",
+  "classification": "boundary_constrained_measured_state_accounting",
+  "case_count": 77,
+  "property_provider": {"backend": "coolprop_heos", "substance": "R245fa", "implementation": "coolprop-heos", "version": "8.0.0"},
+  "assumptions": ["water volume flow is converted to mass flow with inlet-state density", "component boundary PT measurements are treated as exact point estimates for this audit", "unmodeled connecting-line energy appears in the closed-loop residual"],
+  "metrics": {
+    "closed_loop_energy_residual_percent": {"minimum": 0.1078203362, "maximum": 1.552481898, "mean": 0.7626184263, "mean_absolute": 0.7626184263, "maximum_absolute": 1.552481898},
+    "evaporator_fluid_minus_hot_water_percent": {"minimum": -5.728781976, "maximum": -1.191346059, "mean": -3.579981892, "mean_absolute": 3.579981892, "maximum_absolute": 5.728781976},
+    "condenser_fluid_minus_cooling_water_percent": {"minimum": -1.743739646, "maximum": 5.142465742, "mean": 3.045975193, "mean_absolute": 3.24567938, "maximum_absolute": 5.142465742},
+    "expander_shaft_efficiency_percent": {"minimum": 28.41650836, "maximum": 81.43929794, "mean": 67.39443423, "mean_absolute": 67.39443423, "maximum_absolute": 81.43929794},
+    "gross_thermal_efficiency_percent": {"minimum": 1.478815512, "maximum": 6.985949253, "mean": 5.296876535, "mean_absolute": 5.296876535, "maximum_absolute": 6.985949253},
+    "evaporator_duty_w": {"minimum": 3264.122066, "maximum": 11961.0095, "mean": 6932.930498, "mean_absolute": 6932.930498, "maximum_absolute": 11961.0095},
+    "expander_shaft_power_w": {"minimum": 60.84461929, "maximum": 835.5900538, "mean": 393.4378512, "mean_absolute": 393.4378512, "maximum_absolute": 835.5900538}
+  },
+  "diagnostics": {"nonpositive_measured_pump_fluid_power_cases": [73]},
+  "acceptance": {"mean_absolute_loop_residual_limit_percent": 1.0, "maximum_absolute_loop_residual_limit_percent": 2.0, "passed": true},
+  "claim_limit": "This audit validates property reconstruction and measured-state conservation only; it does not predict internal states from external boundaries."
+}

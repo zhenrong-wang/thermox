@@ -1218,13 +1218,14 @@ void test_catalog_discovery() {
     require(
         water_heos != response.property_backends.end() &&
             water_heos->implementation_name ==
-                "coolprop-heos-water" &&
+                "coolprop-heos" &&
+            water_heos->supported_substances.empty() &&
             std::find(
                 water_heos->capabilities.begin(),
                 water_heos->capabilities.end(),
                 "state_ph_derivatives") !=
                 water_heos->capabilities.end(),
-        "catalog must expose regime-spanning HEOS water metadata");
+        "catalog must expose open-substance HEOS metadata");
     require(
         response.connector_domains.size() == 8 &&
             std::any_of(

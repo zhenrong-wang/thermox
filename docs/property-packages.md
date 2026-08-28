@@ -130,12 +130,16 @@ fixed-fluid and thermochemistry backend catalogs through `thermox.catalog/v13`, 
 clients to reject unsupported backend/component combinations before simulation submission.
 
 CoolProp 8.0.0 is pinned under `modules/properties/coolprop` and is the primary
-external real-fluid implementation. CO2 is evaluated with the high-accuracy HEOS
-backend using its Span-Wagner formulation. Water and steam can use either
-`coolprop_if97`/`water_steam_if97` for the industrial IF97 formulation or
-`coolprop_heos` for a smooth Helmholtz-energy formulation suitable for
-regime-spanning inventory transients. The backend choice is explicit and is
-preserved in run provenance.
+external real-fluid implementation. `coolprop_heos` accepts any pure-fluid
+identifier supported by the pinned provider and validates it when the model's
+medium package is created. Its catalog intentionally publishes an empty
+`supported_substances` list to mean provider-open, so declaration clients accept
+a provider substance identifier rather than presenting a false closed list.
+CO2 can also use the named `co2_span_wagner` registration. Water and steam can
+use either `coolprop_if97`/`water_steam_if97` for the industrial IF97 formulation
+or generic `coolprop_heos` for a smooth Helmholtz-energy formulation suitable for
+regime-spanning inventory transients. The backend, substance, and package version
+are explicit and preserved in run provenance.
 
 `coolprop_incompressible` exposes provider-backed single-phase heat-transfer
 liquids through the same PT/PH/PS and transport contract. Its first registered
@@ -189,7 +193,7 @@ one-sided behavior at a property-domain boundary, and reports
 and derives all sixteen partials from them. Neighboring points are selected from the same phase where
 possible so a finite-difference stencil does not accidentally average two constitutive regimes.
 
-HEOS water advertises analytic PH derivatives in single-phase states. CoolProp does not define
+HEOS pure fluids advertise analytic PH derivatives in single-phase states. CoolProp does not define
 those analytic partials inside the saturation dome, so the shared wrapper uses the same bounded
 finite-difference contract there and records finite-difference provenance. This fallback is
 limited specifically to an analytic `saturation_boundary` result; other analytic backend failures
@@ -222,7 +226,7 @@ includes high-pressure water saturation and near-critical CO2 saturation. The PT
 call rejects an exactly saturated state as ambiguous, while PH and PS can
 represent a two-phase mixture with vapor quality.
 
-Each worker thread owns its CoolProp state objects, avoiding shared mutable
-backend state while amortizing factory cost. Broader independent reference
+Each worker thread owns one cached CoolProp state object per backend/substance pair,
+avoiding shared mutable backend state while amortizing factory cost. Broader independent reference
 vectors, an analytic IF97 derivative implementation, and performance profiling
 remain useful promotion work for production-scale simulations.

@@ -17,6 +17,11 @@ The selected cases are intentionally complementary rather than numerous:
   non-proprietary maps and reproducible steady/transient reference behavior. This is the strongest
   public test of map interpolation, bleeds/cooling, multi-shaft closure, nozzles, controls, and fuel
   steps, but it remains cross-code evidence rather than independent hardware evidence.
+- **Korea University 1 kW R245fa ORC** provides 77 complete steady hardware points with a clean
+  distinction between ten external inputs and internal system responses. It is the primary next
+  whole-system held-out physical gate. The source is CC BY 4.0; the associated papers describe
+  charge-sensitive pressure formation and passive receiver behavior that must be modeled rather
+  than replaced with measured internal pressures.
 - **Sandia sCO2 loop** provides near-critical real-fluid hardware and transient behavior. The
   publications cite the `GenIV_101201_1041.csv` source file but do not publish it for download;
   plotted series can support an uncertainty-qualified digitized study, not metrology-grade raw-data

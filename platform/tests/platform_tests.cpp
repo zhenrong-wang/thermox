@@ -7561,6 +7561,7 @@ void test_transient_fluid_volume_closes_with_real_fluid_backends() {
     const std::vector<BackendCase> cases = {
         {"water_steam_if97", "Water", 1.0e5, 300.0},
         {"coolprop_heos", "Water", 1.0e5, 300.0},
+        {"coolprop_heos", "R245fa", 4.0e5, 336.0},
         {"co2_span_wagner", "CO2", 8.0e6, 350.0}};
     const auto properties =
         thermox::physics::make_default_property_package_registry();

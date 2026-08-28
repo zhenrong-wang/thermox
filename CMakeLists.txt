@@ -38,6 +38,20 @@ target_compile_options(thermox_examples PRIVATE
 
 add_executable(thermox_cli core/apps/thermox_cli.cpp)
 target_link_libraries(thermox_cli PRIVATE thermox_service)
+add_executable(
+    thermox_orc_1kw_measured_state_audit
+    benchmarks/orc_1kw/measured_state_audit.cpp)
+target_link_libraries(
+    thermox_orc_1kw_measured_state_audit PRIVATE thermox_physics)
+target_compile_features(
+    thermox_orc_1kw_measured_state_audit PRIVATE cxx_std_20)
+target_compile_options(
+    thermox_orc_1kw_measured_state_audit PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+add_test(
+    NAME benchmark_orc_1kw_measured_state_audit
+    COMMAND thermox_orc_1kw_measured_state_audit
+        ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/orc_1kw/measurements.csv)
 add_test(
     NAME platform_iso2314_performance_test_cli
     COMMAND thermox_cli performance-test

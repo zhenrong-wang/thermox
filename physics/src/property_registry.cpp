@@ -1,11 +1,11 @@
 #include "thermox/physics/property_registry.hpp"
 
 #include "thermox/physics/co2_package.hpp"
+#include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
 #include "thermox/physics/incompressible_package.hpp"
 #include "thermox/physics/tabulated_incompressible_package.hpp"
-#include "thermox/physics/water_heos_package.hpp"
 
 #include <algorithm>
 #include <array>
@@ -121,12 +121,10 @@ PropertyPackageRegistry make_default_property_package_registry() {
             throw std::invalid_argument("IF97 backend requires substance Water or Steam");
         return std::make_shared<If97PropertyPackage>();
     };
-    const auto water_heos = [](std::string_view substance)
+    const auto coolprop_heos = [](std::string_view substance)
         -> std::shared_ptr<const PropertyPackage> {
-        if (substance != "Water" && substance != "Steam")
-            throw std::invalid_argument(
-                "HEOS water backend requires substance Water or Steam");
-        return std::make_shared<WaterHeosPropertyPackage>();
+        return std::make_shared<CoolPropHeosPropertyPackage>(
+            std::string{substance});
     };
     const auto incompressible = [](std::string_view substance)
         -> std::shared_ptr<const PropertyPackage> {
@@ -167,7 +165,7 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const auto ideal_identity = ideal_gas("Air");
     const auto co2_identity = co2("CO2");
     const auto if97_identity = if97("Water");
-    const auto water_heos_identity = water_heos("Water");
+    const auto coolprop_heos_identity = coolprop_heos("Water");
     const auto incompressible_identity = incompressible("SolarSalt");
     const auto solar_salt_table_identity =
         solar_salt_table("SolarSalt");
@@ -177,8 +175,10 @@ PropertyPackageRegistry make_default_property_package_registry() {
     const std::string co2_version{co2_identity->version()};
     const std::string if97_name{if97_identity->name()};
     const std::string if97_version{if97_identity->version()};
-    const std::string water_heos_name{water_heos_identity->name()};
-    const std::string water_heos_version{water_heos_identity->version()};
+    const std::string coolprop_heos_name{
+        coolprop_heos_identity->name()};
+    const std::string coolprop_heos_version{
+        coolprop_heos_identity->version()};
     const std::string incompressible_name{
         incompressible_identity->name()};
     const std::string incompressible_version{
@@ -216,9 +216,9 @@ PropertyPackageRegistry make_default_property_package_registry() {
          {"Water", "Steam"}, if97_capabilities},
         if97);
     registry.register_backend(
-        {"coolprop_heos", water_heos_name, water_heos_version,
-         {"Water", "Steam"}, all_flashes},
-        water_heos);
+        {"coolprop_heos", coolprop_heos_name,
+         coolprop_heos_version, {}, all_flashes},
+        coolprop_heos);
     registry.register_backend(
         {"coolprop_incompressible", incompressible_name,
          incompressible_version, {"SolarSalt", "NaK"},

@@ -1,0 +1,69 @@
+{
+  "schema_version": "thermox.benchmark_source_manifest/v1",
+  "benchmark_id": "orc_1kw_r245fa",
+  "source": {
+    "organization": "Korea University",
+    "authors": ["Jinwoo Oh"],
+    "title": "Experimental data of 1 kW lab-scale ORC testbed",
+    "publication_date": "2021-09-10",
+    "doi": "10.17632/8ncck9946w.1",
+    "official_url": "https://data.mendeley.com/datasets/8ncck9946w/1",
+    "retrieved_on": "2026-08-28",
+    "file_name": "Experimental data - 1 kW lab-scale ORC.xlsx",
+    "file_id": "1073834e-e994-4048-9d2f-901fac22af36",
+    "file_size_bytes": 39413,
+    "sha256": "4ead0884c6a72f9a3223e107e373aedd7efcda56ce56a1ab75a86c433114d9b6",
+    "license": "CC BY 4.0",
+    "repository_policy": "The original workbook remains in ignored tmp storage. The mechanically normalized measurements.csv is redistributed under CC BY 4.0 with attribution; the repository also tracks the exact source checksum, measurement contract, and reproducible derived results."
+  },
+  "normalized_artifact": {
+    "path": "benchmarks/orc_1kw/measurements.csv",
+    "sha256": "6afad053f4ab3f8a0f859be24a3cb93322d5f9411baba9840cc77e2100b48f48",
+    "transformation": "The two workbook sheets were inner-joined by Case, headers were expanded to descriptive snake_case names with units, and numeric values were serialized without rounding. No measurement was filtered, imputed, or altered."
+  },
+  "associated_publications": [
+    {
+      "title": "Experimental and numerical analysis on low-temperature off-design organic Rankine cycle in perspective of mass conservation",
+      "journal": "Energy",
+      "volume": "234",
+      "article": "121262",
+      "doi": "10.1016/j.energy.2021.121262",
+      "use": "Source experiment, pressure formation, charge distribution, and passive receiver design."
+    },
+    {
+      "title": "Development of a fully deterministic simulation model for organic Rankine cycle operating under off-design conditions",
+      "journal": "Applied Energy",
+      "volume": "307",
+      "article": "118149",
+      "doi": "10.1016/j.apenergy.2021.118149",
+      "use": "Published full-system modeling method and comparison envelope; reports simulation energy-balance error below 0.3% and experimental comparisons within 8%."
+    }
+  ],
+  "workbook_inventory": {
+    "case_count": 77,
+    "join_key": "Case",
+    "join_key_complete_and_unique": true,
+    "formula_cell_count": 0,
+    "missing_measurement_count": 0,
+    "sheets": [
+      {
+        "name": "External parameters",
+        "range": "B3:P81",
+        "role": "Known or controlled system boundaries plus measured source/sink outlet states",
+        "columns": ["Case", "Thw,in", "Phw,in", "Thw,out", "Phw,out", "VFRhw", "Tcw,in", "Pcw,in", "Tcw,out", "Pcw,out", "VFRcw", "Npp", "Nex", "Mch", "Tamb"]
+      },
+      {
+        "name": "Internal parameters",
+        "range": "B3:T81",
+        "role": "Measured working-fluid component boundary states, mass flow, and expander torque",
+        "columns": ["Case", "Tpp,in", "Ppp,in", "Tpp,out", "Ppp,out", "Tev,in", "Pev,in", "Tev,out", "Pev,out", "Tex,in", "Pex,in", "Tex,out", "Pex,out", "Tcd,in", "Pcd,in", "Tcd,out", "Pcd,out", "MFRwf", "Trqex"]
+      }
+    ]
+  },
+  "interpretation_limits": [
+    "The workbook contains steady averaged operating points, not raw instrument time series.",
+    "Instrument uncertainty and component geometry are not encoded in the workbook itself; they must be sourced from the papers before uncertainty-qualified acceptance.",
+    "Measured internal states may be used as independent targets or for a boundary-constrained accounting audit, but never as inputs to a result classified as external-boundary prediction.",
+    "The published 8% comparison envelope is context for the authors' complete model, not an automatic Thermox acceptance waiver."
+  ]
+}

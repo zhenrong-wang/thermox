@@ -34,33 +34,33 @@ bool Co2PropertyPackage::supports(
 PropertyResult Co2PropertyPackage::state_pt(
     double pressure, double temperature) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::co2, detail::CoolPropFlash::pt,
+        {"HEOS", "CO2"}, detail::CoolPropFlash::pt,
         pressure, temperature);
 }
 
 PropertyResult Co2PropertyPackage::state_ph(
     double pressure, double enthalpy) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::co2, detail::CoolPropFlash::ph,
+        {"HEOS", "CO2"}, detail::CoolPropFlash::ph,
         pressure, enthalpy);
 }
 
 PhDerivativesResult Co2PropertyPackage::state_ph_derivatives(
     double pressure, double enthalpy) const {
     return detail::coolprop_state_ph_derivatives(
-        detail::CoolPropFluid::co2, pressure, enthalpy);
+        {"HEOS", "CO2"}, pressure, enthalpy);
 }
 
 PropertyResult Co2PropertyPackage::state_ps(
     double pressure, double entropy) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::co2, detail::CoolPropFlash::ps,
+        {"HEOS", "CO2"}, detail::CoolPropFlash::ps,
         pressure, entropy);
 }
 
 SaturationResult Co2PropertyPackage::saturation_p(double pressure) const {
     return detail::coolprop_saturation_p(
-        detail::CoolPropFluid::co2, pressure);
+        {"HEOS", "CO2"}, pressure);
 }
 
 }  // namespace thermox::physics

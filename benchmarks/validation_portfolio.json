@@ -126,6 +126,46 @@
       }
     },
     {
+      "id": "orc_1kw_r245fa",
+      "status": "measured_state_accounting_complete",
+      "role": "independent_multi_point_whole_system_hardware",
+      "evidence_basis": [
+        "independent_reference",
+        "boundary_constrained"
+      ],
+      "strengths": [
+        "77 complete steady operating points from physical hardware",
+        "external boundaries are explicitly separated from internal responses",
+        "component boundary pressures and temperatures, working-fluid flow, torque, source/sink flows, charge, and controls are measured",
+        "CC BY 4.0 source with an exact published checksum"
+      ],
+      "limits": [
+        "measurement uncertainty and component geometry still require extraction from associated papers",
+        "the workbook contains averaged steady points rather than raw time series",
+        "external-boundary prediction requires charge-sensitive receiver and distributed heat-exchanger closure"
+      ],
+      "required_gates": [
+        "r245fa_property_path",
+        "measured_state_energy_accounting",
+        "component_blocked_cross_validation",
+        "frozen_cases_69_77_external_boundary_prediction"
+      ],
+      "completed_gates": [
+        "source_provenance_and_integrity",
+        "r245fa_property_path",
+        "measured_state_energy_accounting"
+      ],
+      "latest_result": {
+        "case_count": 77,
+        "closed_loop_energy_residual_mean_absolute_percent": 0.7626184263,
+        "closed_loop_energy_residual_maximum_absolute_percent": 1.552481898,
+        "evaporator_side_difference_mean_percent": -3.579981892,
+        "condenser_side_difference_mean_percent": 3.045975193,
+        "classification": "boundary_constrained_measured_state_accounting",
+        "reserved": ["component_blocked_validation", "external_boundary_system_prediction"]
+      }
+    },
+    {
       "id": "sandia_sco2_loop",
       "status": "selected_data_limited",
       "role": "real_fluid_hardware_transient",

@@ -1,6 +1,7 @@
 #include "thermox/equation_system.hpp"
 #include "thermox/transient_solver.hpp"
 #include "thermox/physics/co2_package.hpp"
+#include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 #include "thermox/physics/if97_package.hpp"
 #include "thermox/physics/incompressible_package.hpp"
@@ -8,7 +9,6 @@
 #include "thermox/physics/humid_air.hpp"
 #include "thermox/physics/iso2314_equivalent_cooling.hpp"
 #include "thermox/physics/thermochemistry.hpp"
-#include "thermox/physics/water_heos_package.hpp"
 #ifdef THERMOX_TEST_HAS_CANTERA
 #include "thermox/physics/cantera_thermochemistry.hpp"
 #endif
@@ -975,11 +975,13 @@ int main() {
     const thermox::physics::IdealGasPropertyPackage ideal_gas;
     const thermox::physics::Co2PropertyPackage co2;
     const thermox::physics::If97PropertyPackage if97;
-    const thermox::physics::WaterHeosPropertyPackage water_heos;
+    const thermox::physics::CoolPropHeosPropertyPackage water_heos{"Water"};
+    const thermox::physics::CoolPropHeosPropertyPackage r245fa{"R245fa"};
     verify_round_trip(ideal_gas, 2e5, 600.0, 1e-10);
     verify_round_trip(co2, 1e5, 320.0, 0.1);
     verify_round_trip(if97, 25e6, 873.0, 0.2);
     verify_round_trip(water_heos, 25e6, 873.0, 0.2);
+    verify_round_trip(r245fa, 400e3, 336.0, 0.1);
     verify_ph_derivatives(
         ideal_gas, 2e5, 600.0, 1.0e-8,
         thermox::physics::PropertyDerivativeSource::analytic);
@@ -993,9 +995,13 @@ int main() {
     verify_ph_derivatives(
         water_heos, 6e6, 700.0, 2.0e-4,
         thermox::physics::PropertyDerivativeSource::analytic);
+    verify_ph_derivatives(
+        r245fa, 400e3, 336.0, 2.0e-4,
+        thermox::physics::PropertyDerivativeSource::analytic);
     verify_ph_transport_derivatives(co2, 20e6, 700.0);
     verify_ph_transport_derivatives(if97, 6e6, 700.0);
     verify_ph_transport_derivatives(water_heos, 6e6, 700.0);
+    verify_ph_transport_derivatives(r245fa, 400e3, 336.0);
     require(
         thermox::physics::
             state_ph_transport_derivatives_with_fallback(
@@ -1023,6 +1029,7 @@ int main() {
     verify_saturation_pairs(if97, 1e5);
     verify_saturation_pairs(if97, 20e6);
     verify_saturation_pairs(water_heos, 1e6);
+    verify_saturation_pairs(r245fa, 150e3);
     verify_surface_tension_contracts(co2, if97, water_heos);
     verify_if97_derivatives_near_vapor_boundary(if97);
     verify_heos_two_phase_derivative_fallback(water_heos);

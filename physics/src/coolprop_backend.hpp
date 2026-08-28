@@ -6,15 +6,26 @@
 
 namespace thermox::physics::detail {
 
-enum class CoolPropFluid { co2, water_if97, water_heos };
+struct CoolPropBackendRef {
+    std::string_view backend;
+    std::string_view substance;
+};
+
 enum class CoolPropFlash { pt, ph, ps };
 
 [[nodiscard]] PropertyResult coolprop_state(
-    CoolPropFluid fluid, CoolPropFlash flash, double first, double second);
+    CoolPropBackendRef selection,
+    CoolPropFlash flash,
+    double first,
+    double second);
 [[nodiscard]] PhDerivativesResult coolprop_state_ph_derivatives(
-    CoolPropFluid fluid, double pressure_pa, double enthalpy_j_kg);
+    CoolPropBackendRef selection,
+    double pressure_pa,
+    double enthalpy_j_kg);
 [[nodiscard]] SaturationResult coolprop_saturation_p(
-    CoolPropFluid fluid, double pressure_pa);
+    CoolPropBackendRef selection, double pressure_pa);
+[[nodiscard]] PropertyLimits coolprop_limits(
+    CoolPropBackendRef selection);
 [[nodiscard]] PropertyResult coolprop_incompressible_state(
     std::string_view substance,
     CoolPropFlash flash,

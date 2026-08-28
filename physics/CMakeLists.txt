@@ -1,6 +1,7 @@
 add_library(thermox_physics
     src/co2_package.cpp
     src/coolprop_backend.cpp
+    src/coolprop_heos_package.cpp
     src/humid_air.cpp
     src/ideal_gas_package.cpp
     src/if97_package.cpp
@@ -10,7 +11,6 @@ add_library(thermox_physics
     src/property_registry.cpp
     src/tabulated_incompressible_package.cpp
     src/thermochemistry.cpp
-    src/water_heos_package.cpp
 )
 add_library(thermox::physics ALIAS thermox_physics)
 set_target_properties(

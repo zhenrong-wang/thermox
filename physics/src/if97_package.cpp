@@ -35,27 +35,27 @@ bool If97PropertyPackage::supports(
 PropertyResult If97PropertyPackage::state_pt(
     double pressure, double temperature) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::water_if97, detail::CoolPropFlash::pt,
+        {"IF97", "Water"}, detail::CoolPropFlash::pt,
         pressure, temperature);
 }
 
 PropertyResult If97PropertyPackage::state_ph(
     double pressure, double enthalpy) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::water_if97, detail::CoolPropFlash::ph,
+        {"IF97", "Water"}, detail::CoolPropFlash::ph,
         pressure, enthalpy);
 }
 
 PropertyResult If97PropertyPackage::state_ps(
     double pressure, double entropy) const {
     return detail::coolprop_state(
-        detail::CoolPropFluid::water_if97, detail::CoolPropFlash::ps,
+        {"IF97", "Water"}, detail::CoolPropFlash::ps,
         pressure, entropy);
 }
 
 SaturationResult If97PropertyPackage::saturation_p(double pressure) const {
     return detail::coolprop_saturation_p(
-        detail::CoolPropFluid::water_if97, pressure);
+        {"IF97", "Water"}, pressure);
 }
 
 }  // namespace thermox::physics

@@ -115,17 +115,26 @@ export function MediumForm({
           </label>
           <label>
             <span>Substance</span>
-            <select
-              value={substance}
-              required
-              onChange={(event) => selectSubstance(event.target.value)}
-            >
-              {(backend?.supported_substances ?? []).map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            {backend?.supported_substances.length ? (
+              <select
+                value={substance}
+                required
+                onChange={(event) => selectSubstance(event.target.value)}
+              >
+                {backend.supported_substances.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={substance}
+                required
+                placeholder="Provider substance identifier, e.g. R245fa"
+                onChange={(event) => selectSubstance(event.target.value)}
+              />
+            )}
           </label>
           <label>
             <span>Medium ID</span>

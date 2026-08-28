@@ -53,7 +53,8 @@ options:
 Recommended backend IDs:
 
 - `coolprop_if97`: water/steam IF97 style calculations.
-- `coolprop_heos`: Helmholtz-energy water/steam, including smooth phase-boundary traversal.
+- `coolprop_heos`: provider-open pure-fluid Helmholtz-energy models, including water/steam,
+  CO2, refrigerants, and smooth phase-boundary traversal where the selected fluid supports it.
 - `ideal_gas_mixture`: lightweight gas model for early Brayton/HRSG work.
 - `cantera_solution`: combustion/reacting gas mixtures.
 - `refprop`: optional high-accuracy licensed backend adapter.
