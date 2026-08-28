@@ -67,6 +67,8 @@ with the graph's net boundary energy flow.
 This model is valid only while `0 <= x <= 1`. It assumes homogeneous equilibrium, no phase slip,
 no axial gradients, and no explicit nucleate-boiling, dryout, or condensation heat-transfer
 correlation. It does not model a drum level or natural-circulation loop. Crossing into subcooled or
-superheated regimes requires either event-driven switching to a single-phase cell or a future
-regime-spanning finite-volume model. Multi-cell evaporator and drum/circulation topology can be
-assembled without changing the numerical kernel.
+superheated regimes can use `heat_exchanger.fluid.finite_volume_cell` when both sides are
+property-package fluids and homogeneous-equilibrium `p-h` behavior is sufficient. The dedicated
+equilibrium cell remains useful for a composition-aware material stream and for exposing saturated
+quality directly. Multi-cell evaporator and drum/circulation topology can be assembled without
+changing the numerical kernel.

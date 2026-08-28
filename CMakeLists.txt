@@ -269,6 +269,17 @@ add_test(NAME platform_dynamic_heat_exchanger_cli
         --case heat_up
         --end-time 0.5
 )
+add_test(NAME platform_regime_spanning_heat_exchanger_cli
+    COMMAND thermox_cli simulate
+        --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/regime_spanning_finite_volume_heat_exchanger.json
+        --case boil_to_vapor
+        --end-time 10
+        --format json
+)
+set_tests_properties(platform_regime_spanning_heat_exchanger_cli PROPERTIES
+    PASS_REGULAR_EXPRESSION
+        "\"port_name\": \"cold_out\", \"domain\": \"fluid\", \"medium_id\": \"water\", \"phase\": \"vapor\""
+)
 add_test(NAME platform_regime_spanning_rigid_volume_cli
     COMMAND thermox_cli simulate
         --model ${CMAKE_CURRENT_SOURCE_DIR}/core/examples/dynamic_regime_spanning_rigid_volume.json

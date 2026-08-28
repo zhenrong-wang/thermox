@@ -43,6 +43,10 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   internal energy, and wall energy during filling or draining. Inventory links are medium-aware,
   preventing utility-fluid mass from entering a refrigerant charge balance. Rigid volumes provide
   the corresponding generic receiver/accumulator closure.
+- The same generic exchanger DAE is regression-tested across a two-phase-to-vapor saturation
+  boundary with no model switch or rejected integration step. This validates homogeneous-
+  equilibrium regime traversal; it does not substitute for equipment-specific boiling,
+  condensation, void-fraction, or dryout correlations.
 - External-boundary prediction remains open. It still requires generic speed-dependent pump and
   expander behavior and traceable or training-only calibrated geometry/component artifacts. The
   dataset's measured charge alone cannot identify the individual exchanger and receiver volumes.

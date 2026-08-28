@@ -1,0 +1,68 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "regime_spanning_finite_volume_heat_exchanger",
+    "media": [{
+      "id": "air",
+      "backend": "ideal_gas_mixture",
+      "substance": "Air"
+    }, {
+      "id": "water",
+      "backend": "coolprop_heos",
+      "substance": "Water"
+    }],
+    "components": [{
+      "id": "cell",
+      "kind": "heat_exchanger.fluid.finite_volume_cell",
+      "parameters": {
+        "hot_fluid_volume": {"value": 1.0, "unit": "m3"},
+        "cold_fluid_volume": {"value": 1.0, "unit": "L"},
+        "wall_thermal_capacity": {"value": 10.0, "unit": "J/K"},
+        "hot_side_UA": {"value": 0.1, "unit": "W/K"},
+        "cold_side_UA": {"value": 0.1, "unit": "W/K"},
+        "hot_flow_diameter": {"value": 0.1, "unit": "m"},
+        "cold_flow_diameter": {"value": 0.1, "unit": "m"},
+        "hot_loss_coefficient": 1.0,
+        "cold_loss_coefficient": 1.0
+      },
+      "media": {
+        "hot_in": "air",
+        "hot_out": "air",
+        "cold_in": "water",
+        "cold_out": "water"
+      }
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "boil_to_vapor",
+    "mode": "dynamic_transient",
+    "fixed_values": {
+      "cell.hot_in.m_dot": 0.0,
+      "cell.hot_in.h": 502250.0,
+      "cell.hot_out.m_dot": 0.0,
+      "cell.cold_in.m_dot": 0.0,
+      "cell.cold_in.h": 2777000.0,
+      "cell.cold_out.m_dot": 0.0
+    },
+    "initial_guesses": {
+      "cell.hot_in.p": 1000000.0,
+      "cell.hot_out.p": 1000000.0,
+      "cell.hot_out.h": 502250.0,
+      "cell.hot_inventory.mass": 6.968641114982578,
+      "cell.hot_mass": 6.968641114982578,
+      "cell.hot_total_energy": 2500000.0,
+      "cell.hot_pressure": 1000000.0,
+      "cell.hot_enthalpy": 502250.0,
+      "cell.cold_in.p": 1000000.0,
+      "cell.cold_out.p": 1000000.0,
+      "cell.cold_out.h": 2777000.0,
+      "cell.cold_inventory.mass": 0.0051453165484018717,
+      "cell.cold_mass": 0.0051453165484018717,
+      "cell.cold_total_energy": 13288.544054912041,
+      "cell.cold_pressure": 1000000.0,
+      "cell.cold_enthalpy": 2777000.0,
+      "cell.wall_temperature": 490.0
+    }
+  }]
+}

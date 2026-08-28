@@ -6436,6 +6436,68 @@ void test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_form
             "dynamic cell retains finite stored fluid energies");
 }
 
+void test_finite_volume_heat_exchanger_crosses_phase_boundary() {
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto water = properties.create("coolprop_heos", "Water");
+    constexpr double water_pressure = 1.0e6;
+    constexpr double water_enthalpy = 2777000.0;
+    const auto initial_water = water->state_ph(
+        water_pressure, water_enthalpy);
+    require(initial_water.ok() &&
+                initial_water.state.phase ==
+                    thermox::physics::Phase::two_phase,
+            "finite-volume exchanger starts with two-phase water");
+
+    const auto document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/regime_spanning_finite_volume_heat_exchanger.json");
+    const auto graph = thermox::platform::compile_transient_model_graph(
+        document, components, properties, "boil_to_vapor");
+    thermox::TimeIntegrationOptions options;
+    options.end_time = 10.0;
+    options.initial_step = 0.01;
+    options.max_step = 0.1;
+    const auto result = thermox::integrate_dae(graph.problem, options);
+    require(result.diagnostics.success,
+            "regime-spanning exchanger integration: " +
+                result.diagnostics.message);
+    require(result.diagnostics.rejected_steps == 0,
+            "regime-spanning exchanger crosses without rejected steps");
+    const auto index = [&](const std::string& name) {
+        return require_variable_index(graph.problem.variable_names, name);
+    };
+    const auto& initial = result.trajectory.front().state;
+    const auto& final = result.trajectory.back().state;
+    const auto final_water = water->state_ph(
+        final.at(index("cell.cold_pressure")),
+        final.at(index("cell.cold_enthalpy")));
+    require(final_water.ok() &&
+                final_water.state.phase == thermox::physics::Phase::vapor,
+            "finite-volume exchanger crosses from two-phase to vapor");
+    require_near(
+        final.at(index("cell.cold_mass")),
+        initial.at(index("cell.cold_mass")), 1.0e-12,
+        "closed finite-volume cold side conserves mass");
+    const double total_initial_energy =
+        initial.at(index("cell.hot_total_energy")) +
+        initial.at(index("cell.cold_total_energy")) +
+        10.0 * initial.at(index("cell.wall_temperature"));
+    const double total_final_energy =
+        final.at(index("cell.hot_total_energy")) +
+        final.at(index("cell.cold_total_energy")) +
+        10.0 * final.at(index("cell.wall_temperature"));
+    require_near(
+        total_final_energy, total_initial_energy, 1.0e-6,
+        "closed finite-volume exchanger conserves total energy across phase boundary");
+    require_near(
+        final.at(index("cell.cold_mass")),
+        0.001 * final_water.state.density_kg_m3, 1.0e-10,
+        "two-phase transition retains cold-side geometry closure");
+}
+
 void test_dynamic_material_fluid_cell_conserves_species_and_energy() {
     const auto properties =
         thermox::physics::make_default_property_package_registry();
@@ -8931,6 +8993,7 @@ int main() {
         test_material_fluid_heat_exchangers();
         test_generic_model_solves_counterflow_ua_heat_exchanger();
         test_dynamic_heat_exchanger_cell_has_conservative_steady_and_transient_forms();
+        test_finite_volume_heat_exchanger_crosses_phase_boundary();
         test_dynamic_material_fluid_cell_conserves_species_and_energy();
         test_two_cell_counterflow_exchanger_composes_and_conserves();
         test_if97_fixed_quality_evaporator_and_condenser();

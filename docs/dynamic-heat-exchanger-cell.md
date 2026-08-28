@@ -113,6 +113,20 @@ The regression checks consistent initialization, adaptive integration, cross-pro
 operation, nonzero mass accumulation, geometry closure, positive hot-to-cold transfer, and exact
 total stored-energy-rate closure against the boundary enthalpy flows.
 
+The regime-spanning reference starts its closed water side inside the two-phase region and transfers
+energy from a closed ideal-gas side through the wall until the water becomes vapor:
+
+```sh
+./build/thermox_cli simulate \
+  --model core/examples/regime_spanning_finite_volume_heat_exchanger.json \
+  --case boil_to_vapor \
+  --end-time 10 \
+  --format json
+```
+
+It crosses the saturation boundary without a model switch or rejected integration step while
+conserving each side's mass, total fluid-plus-wall energy, and both geometric volume closures.
+
 ## Scope and limits
 
 The older `heat_exchanger.fluid.dynamic_cell` keeps constant masses as equipment parameters and is
@@ -120,5 +134,7 @@ useful when pressure inventory dynamics are intentionally outside the model boun
 finite-volume model is the appropriate cell when charge must determine pressure dynamically. Both
 approximations neglect compressible pressure-wave propagation, axial conduction, heat loss to
 ambient, radiation, fouling evolution, flow reversal, and finite transport delay. A future
-phase-change cell may add void-fraction and moving-boundary correlations as a separate calculation
-model under the same physical template.
+specialized cell may add slip-dependent void fraction, moving boundaries, boiling/condensation heat
+transfer, dryout, and critical-flow correlations under the same physical template. Those closures
+must be selected explicitly; they are not implied by successful homogeneous-equilibrium traversal
+of a saturation boundary.
