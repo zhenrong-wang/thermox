@@ -29,6 +29,7 @@ add_library(thermox_platform
     src/two_phase_flow_groups.cpp
     src/unit_registry.cpp
     src/valve_models.cpp
+    src/volumetric_expander_models.cpp
 )
 add_library(thermox::platform ALIAS thermox_platform)
 set_target_properties(

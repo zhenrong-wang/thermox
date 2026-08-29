@@ -608,7 +608,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 99,
+        response.components.size() == 100,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -1186,6 +1186,28 @@ void test_catalog_discovery() {
                             std::optional<double>{1.0};
                 }),
         "catalog must expose mapped pump steady/transient contract");
+    const auto volumetric_expander = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "expander.fluid.volumetric_correlations";
+        });
+    require(
+        volumetric_expander != response.components.end() &&
+            volumetric_expander->template_kind == "expander" &&
+            volumetric_expander->supports_steady &&
+            volumetric_expander->supports_transient &&
+            volumetric_expander->artifacts.size() == 3 &&
+            std::any_of(
+                volumetric_expander->ports.begin(),
+                volumetric_expander->ports.end(),
+                [](const auto& port) {
+                    return port.name == "rejected_heat" &&
+                        port.domain == "heat" &&
+                        port.direction == "out";
+                }),
+        "catalog must expose the conservative correlated volumetric "
+        "expander contract");
     const auto composition_source = std::find_if(
         response.components.begin(),
         response.components.end(),

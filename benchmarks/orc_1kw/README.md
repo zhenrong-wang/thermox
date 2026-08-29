@@ -58,10 +58,16 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   the platform contract and explicitly rejects gas-path corrected maps. The 77 measurements do not
   themselves define a defensible non-rectangular pump map, so no hardware-validation claim is made
   until the paper, OEM data, or a preregistered training-only model supplies its form.
-- External-boundary prediction remains open. It still requires generic scroll-expander
-  filling/leakage/heat-loss behavior, traceable heat-exchanger and receiver geometry, and a sourced
-  or training-only pump artifact. The dataset's measured charge alone cannot identify the individual
-  exchanger and receiver volumes.
+- `expander.fluid.volumetric_correlations` now supplies the generic component-blocked scroll-
+  expander path. It predicts mass capacity, outlet enthalpy, shaft power, and an explicit rejected-
+  heat stream from three versioned correlations. Synthetic R245fa regression covers steady and
+  quasi-steady transient compilation and exact component energy closure. Hardware fitting and the
+  frozen 69--77 evaluation remain a distinct evidence stage; successful component mechanics alone
+  are not a validation result.
+- External-boundary prediction remains open. It still requires validated scroll-expander closure
+  artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
+  artifact. The dataset's measured charge alone cannot identify the individual exchanger and
+  receiver volumes.
 
 ## Evidence discipline
 

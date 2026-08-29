@@ -2,6 +2,7 @@
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/calibration.hpp"
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/results.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 
@@ -979,6 +980,10 @@ void test_component_registry_exposes_default_models() {
             "default registry should contain property-aware pump");
     require(registry.contains("pump.fluid.performance_map"),
             "default registry should contain map-driven pump");
+    require(registry.contains(
+                "expander.fluid.volumetric_correlations"),
+            "default registry should contain correlated volumetric "
+            "expander");
     require(registry.contains("junction.fluid.mixer.two_inlet"),
             "default registry should contain two-inlet mixer");
     require(registry.contains("junction.fluid.splitter.two_outlet"),
@@ -1082,6 +1087,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
         "pump.fluid.performance_map",
+        "expander.fluid.volumetric_correlations",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
         "turbine.fluid.variable_geometry_map",
@@ -2489,6 +2495,148 @@ void test_map_driven_pump_solves_real_fluid_operating_point() {
                 properties, invalid_maps, "operating_point");
         },
         "pump primary axis must be 'mass_flow'");
+}
+
+void test_correlated_volumetric_expander_closes_mass_and_energy() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "correlated_r245fa_expander",
+    "media": [{
+      "id": "working_fluid",
+      "backend": "coolprop_heos",
+      "substance": "R245fa"
+    }],
+    "components": [{
+      "id": "expander",
+      "kind": "expander.fluid.volumetric_correlations",
+      "artifacts": {
+        "filling_factor_correlation": "expander-filling",
+        "fluid_efficiency_correlation": "expander-fluid-efficiency",
+        "shaft_efficiency_correlation": "expander-shaft-efficiency"
+      },
+      "parameters": {
+        "displacement_per_revolution": 0.000025,
+        "rejected_heat_temperature": {"value": 310.0, "unit": "K"}
+      },
+      "media": {"inlet": "working_fluid", "outlet": "working_fluid"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "expander.inlet.p": {"value": 800.0, "unit": "kPa"},
+      "expander.inlet.T": {"value": 360.0, "unit": "K"},
+      "expander.outlet.p": {"value": 200.0, "unit": "kPa"},
+      "expander.shaft.omega": 200.0
+    },
+    "initial_guesses": {
+      "expander.inlet.m_dot": {"value": 0.025, "unit": "kg/s"},
+      "expander.outlet.m_dot": {"value": 0.025, "unit": "kg/s"},
+      "expander.outlet.h": {"value": 430.0, "unit": "kJ/kg"},
+      "expander.shaft.W_dot": {"value": 0.5, "unit": "kW"},
+      "expander.rejected_heat.Q_dot": {"value": 0.2, "unit": "kW"},
+      "expander.rejected_heat.T": {"value": 310.0, "unit": "K"}
+    }
+  }]
+})json");
+
+    const auto make_correlation = [](
+        std::string id, std::string output,
+        std::string expression, double base, char checksum) {
+        return thermox::platform::CorrelationArtifact{
+            std::move(id),
+            thermox::platform::correlation_artifact_schema_v2,
+            "test-1", std::string(64, checksum),
+            {{"pressure_ratio", "dimensionless"},
+             {"inlet_pressure", "pressure"},
+             {"inlet_temperature", "temperature"},
+             {"inlet_density", "density"},
+             {"angular_speed", "angular_speed"}},
+            {std::move(output), "dimensionless"},
+            {{"default", "general", 0,
+              {{"base", base}}, std::move(expression), {}}}};
+    };
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(make_correlation(
+        "expander-filling", "filling_factor",
+        "base + 0.01 * (pressure_ratio - 3) + "
+        "0 * inlet_pressure + 0 * inlet_temperature + "
+        "0 * inlet_density + 0 * angular_speed",
+        0.89, '1'));
+    artifacts.register_artifact(make_correlation(
+        "expander-fluid-efficiency",
+        "fluid_isentropic_efficiency",
+        "base + 0 * pressure_ratio + 0 * inlet_pressure + "
+        "0 * inlet_temperature + 0 * inlet_density + "
+        "0 * angular_speed",
+        0.80, '2'));
+    artifacts.register_artifact(make_correlation(
+        "expander-shaft-efficiency",
+        "shaft_isentropic_efficiency",
+        "base + 0 * pressure_ratio + 0 * inlet_pressure + "
+        "0 * inlet_temperature + 0 * inlet_density + "
+        "0 * angular_speed",
+        0.50, '3'));
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, components, properties, artifacts,
+        "operating_point");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto fluid = properties.create("coolprop_heos", "R245fa");
+    const auto inlet = fluid->state_ph(
+        value("expander.inlet.p"), value("expander.inlet.h"));
+    require(inlet.ok(), "correlated expander inlet state");
+    const auto isentropic = fluid->state_ps(
+        value("expander.outlet.p"), inlet.state.entropy_j_kg_k);
+    require(isentropic.ok(), "correlated expander isentropic state");
+    const double ideal_drop =
+        value("expander.inlet.h") -
+        isentropic.state.enthalpy_j_kg;
+    const double expected_flow = 0.90 *
+        inlet.state.density_kg_m3 * 0.000025 * 200.0 /
+        (2.0 * std::numbers::pi);
+    const double expected_outlet_enthalpy =
+        value("expander.inlet.h") - 0.80 * ideal_drop;
+    const double expected_shaft =
+        expected_flow * 0.50 * ideal_drop;
+    require_near(
+        value("expander.inlet.m_dot"), expected_flow, 1.0e-9,
+        "correlated expander filling-factor mass flow");
+    require_near(
+        value("expander.outlet.h"), expected_outlet_enthalpy,
+        1.0e-5, "correlated expander fluid efficiency");
+    require_near(
+        value("expander.shaft.W_dot"), expected_shaft,
+        1.0e-6, "correlated expander shaft efficiency");
+    require_near(
+        value("expander.rejected_heat.Q_dot"),
+        expected_flow *
+                (value("expander.inlet.h") -
+                 expected_outlet_enthalpy) -
+            expected_shaft,
+        1.0e-6, "correlated expander explicit loss energy");
+    require_near(
+        value("expander.rejected_heat.T"), 310.0, 1.0e-10,
+        "correlated expander rejected-heat temperature");
+
+    auto transient_document = document;
+    transient_document.cases.front().mode = "dynamic_transient";
+    (void)thermox::platform::compile_transient_model_graph(
+        transient_document, components, properties, artifacts,
+        "operating_point");
 }
 
 void test_map_driven_turbine_solves_bound_operating_point() {
@@ -9108,6 +9256,7 @@ int main() {
         test_map_driven_compressor_solves_bound_operating_point();
         test_map_continuation_recovers_out_of_domain_flow_guess();
         test_map_driven_pump_solves_real_fluid_operating_point();
+        test_correlated_volumetric_expander_closes_mass_and_energy();
         test_map_driven_turbine_solves_bound_operating_point();
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();

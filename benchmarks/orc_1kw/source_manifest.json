@@ -37,6 +37,14 @@
       "article": "118149",
       "doi": "10.1016/j.apenergy.2021.118149",
       "use": "Published full-system modeling method and comparison envelope; reports simulation energy-balance error below 0.3% and experimental comparisons within 8%."
+    },
+    {
+      "title": "Numerical and experimental investigation on thermal-hydraulic characteristics of a scroll expander for organic Rankine cycle",
+      "journal": "Applied Energy",
+      "volume": "278",
+      "article": "115672",
+      "doi": "10.1016/j.apenergy.2020.115672",
+      "use": "Related test-rig scroll-expander geometry, leakage, heat-transfer, and component-validation methodology."
     }
   ],
   "workbook_inventory": {
