@@ -61,9 +61,15 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
 - `expander.fluid.volumetric_correlations` now supplies the generic component-blocked scroll-
   expander path. It predicts mass capacity, outlet enthalpy, shaft power, and an explicit rejected-
   heat stream from three versioned correlations. Synthetic R245fa regression covers steady and
-  quasi-steady transient compilation and exact component energy closure. Hardware fitting and the
-  frozen 69--77 evaluation remain a distinct evidence stage; successful component mechanics alone
-  are not a validation result.
+  quasi-steady transient compilation and exact component energy closure.
+- The first frozen component-blocked hardware evaluation is now executable and recorded in
+  `expander_holdout_results.json`. A full quadratic response surface in pressure ratio, inlet
+  pressure, and shaft speed was fitted on cases 1--68 only, then evaluated once on cases 69--77
+  through the generic Thermox component. All 77 solves converged with a maximum normalized
+  residual of 6.45e-10. Held-out outlet-temperature MAE is 1.90 K, but mass flow has 7.75% MAPE
+  and 16.68% worst error, while shaft power has 24.41% MAPE and 48.37% worst error. The frozen
+  model therefore **fails** the provisional 8% MAPE / 15% maximum-error primary-output gate. This
+  is retained as negative evidence; it must not be post-hoc tuned against the exposed holdout.
 - External-boundary prediction remains open. It still requires validated scroll-expander closure
   artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
   artifact. The dataset's measured charge alone cannot identify the individual exchanger and
@@ -74,4 +80,14 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
 The measured-state accounting stage can validate property reconstruction and conservation, but it
 cannot establish predictive accuracy. Component calibration must use only cases 1--68. The
 parameters are owned by the component or system domains declared in the contract. Cases 69--77
-remain untouched until the model family and acceptance criteria are frozen.
+were first inspected by Thermox only after the quadratic expander model family and acceptance
+criteria were frozen. They are now a consumed holdout for that model revision. Any revised model
+family needs a new benchmark revision and genuinely untouched validation data; it may use cases
+69--77 for diagnosis, but not claim them again as an independent holdout.
+
+Run the component-blocked evidence generator with:
+
+```sh
+./build/thermox_orc_1kw_expander_holdout_validation \
+  benchmarks/orc_1kw/measurements.csv
+```

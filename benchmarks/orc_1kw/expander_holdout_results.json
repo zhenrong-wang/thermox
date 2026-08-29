@@ -1,0 +1,44 @@
+{
+  "schema_version": "thermox.component_blocked_validation/v1",
+  "benchmark_id": "orc_1kw_r245fa",
+  "component_kind": "expander.fluid.volumetric_correlations",
+  "classification": "calibrated_component_blocked_extrapolative_holdout",
+  "split": {"calibration_cases": "1-68", "holdout_cases": "69-77", "holdout_inspected_once": true},
+  "model": {"family": "full_quadratic_response_surface", "inputs": ["pressure_ratio", "inlet_pressure_MPa", "speed_krpm"], "feature_order": ["1", "pr", "pin", "speed", "pr2", "pin2", "speed2", "pr_pin", "pr_speed", "pin_speed"], "displacement_normalization_m3_per_revolution": 1.45e-05},
+  "coefficients": {
+    "effective_capacity_cm3_per_revolution": [33.43170753, 8.320011083, -29.91882237, -12.15583111, -0.3601914102, 6.199248552, 2.211250733, 1.3821057, -1.969599097, 5.838205474],
+    "fluid_isentropic_efficiency": [1.238784431, -0.3290981702, 1.518270175, -0.1218888588, -0.02278681901, -0.5970489101, -0.01820596727, 0.09995913684, 0.1308338437, -0.40350089],
+    "shaft_isentropic_efficiency": [0.645054819, -0.3584488033, 3.86846011, -0.565052083, -0.08041893801, -1.130033255, 0.03985855069, 0.1994157839, 0.2968544224, -1.059029704]
+  },
+  "metrics": {
+    "calibration": {
+      "mass_flow": {"mean_absolute_percent": 1.003941276, "maximum_absolute_percent": 4.540878344, "mean_signed_percent": 0.0193682182},
+      "fluid_isentropic_efficiency": {"mean_absolute_percent": 1.626187639, "maximum_absolute_percent": 8.418537822, "mean_signed_percent": 0.04290141553},
+      "shaft_isentropic_efficiency": {"mean_absolute_percent": 4.840758887, "maximum_absolute_percent": 45.82134571, "mean_signed_percent": 0.691958273},
+      "shaft_power": {"mean_absolute_percent": 4.818418197, "maximum_absolute_percent": 42.98781058, "mean_signed_percent": 0.7078924838},
+      "outlet_temperature_error_k": {"mean_absolute": 0.3080239585, "maximum_absolute": 1.049361076, "mean_signed": 0.001305103223}
+    },
+    "holdout": {
+      "mass_flow": {"mean_absolute_percent": 7.747951611, "maximum_absolute_percent": 16.68372056, "mean_signed_percent": -6.879133347},
+      "fluid_isentropic_efficiency": {"mean_absolute_percent": 9.975914049, "maximum_absolute_percent": 16.59455566, "mean_signed_percent": 7.257665145},
+      "shaft_isentropic_efficiency": {"mean_absolute_percent": 34.82630712, "maximum_absolute_percent": 67.23126562, "mean_signed_percent": 23.64471152},
+      "shaft_power": {"mean_absolute_percent": 24.40773142, "maximum_absolute_percent": 48.37473989, "mean_signed_percent": 13.65778922},
+      "outlet_temperature_error_k": {"mean_absolute": 1.897085495, "maximum_absolute": 2.878501434, "mean_signed": -1.334976702}
+    }
+  },
+  "holdout_cases": [
+    {"case": 69, "mass_flow_error_percent": -9.7476483, "outlet_temperature_error_k": -1.642577611, "shaft_power_error_percent": 9.558335742},
+    {"case": 70, "mass_flow_error_percent": -4.834506796, "outlet_temperature_error_k": -1.256169681, "shaft_power_error_percent": 20.21065542},
+    {"case": 71, "mass_flow_error_percent": -0.9287622039, "outlet_temperature_error_k": -1.070569207, "shaft_power_error_percent": 20.36081712},
+    {"case": 72, "mass_flow_error_percent": 3.909682188, "outlet_temperature_error_k": 2.529489567, "shaft_power_error_percent": -48.37473989},
+    {"case": 73, "mass_flow_error_percent": -16.68372056, "outlet_temperature_error_k": -2.878501434, "shaft_power_error_percent": 39.33086857},
+    {"case": 74, "mass_flow_error_percent": -6.957670131, "outlet_temperature_error_k": -1.767331313, "shaft_power_error_percent": 16.751697},
+    {"case": 75, "mass_flow_error_percent": -7.688040053, "outlet_temperature_error_k": -0.8014910799, "shaft_power_error_percent": 13.61103029},
+    {"case": 76, "mass_flow_error_percent": -7.744123338, "outlet_temperature_error_k": -2.276423765, "shaft_power_error_percent": 21.25529219},
+    {"case": 77, "mass_flow_error_percent": -11.23741093, "outlet_temperature_error_k": -2.851215798, "shaft_power_error_percent": 30.21614653}
+  ],
+  "numerical": {"converged_cases": 77, "maximum_absolute_normalized_residual": 6.44758785e-10},
+  "acceptance": {"primary_outputs": ["mass_flow", "shaft_power"], "mape_limit_percent": 8.0, "maximum_absolute_relative_error_limit_percent": 15.0, "passed": false},
+  "assumptions": ["the 14.5 cm3/rev displacement is a normalization assumption and is not independently identified by this dataset; mass-flow predictions are invariant because effective capacity is fitted", "measured expander inlet PT and outlet pressure are fixed component boundaries", "correlations are fitted only on cases 1-68"],
+  "claim_limit": "This is a component-blocked holdout test, not external-boundary whole-ORC prediction. The frozen quadratic model fails the provisional primary-output gate and must remain negative evidence."
+}

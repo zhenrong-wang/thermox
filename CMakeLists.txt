@@ -52,6 +52,20 @@ add_test(
     NAME benchmark_orc_1kw_measured_state_audit
     COMMAND thermox_orc_1kw_measured_state_audit
         ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/orc_1kw/measurements.csv)
+add_executable(
+    thermox_orc_1kw_expander_holdout_validation
+    benchmarks/orc_1kw/expander_holdout_validation.cpp)
+target_link_libraries(
+    thermox_orc_1kw_expander_holdout_validation PRIVATE thermox_platform)
+target_compile_features(
+    thermox_orc_1kw_expander_holdout_validation PRIVATE cxx_std_20)
+target_compile_options(
+    thermox_orc_1kw_expander_holdout_validation PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+add_test(
+    NAME benchmark_orc_1kw_expander_holdout_validation
+    COMMAND thermox_orc_1kw_expander_holdout_validation
+        ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/orc_1kw/measurements.csv)
 add_test(
     NAME platform_iso2314_performance_test_cli
     COMMAND thermox_cli performance-test
