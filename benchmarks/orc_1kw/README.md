@@ -73,9 +73,17 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
 - `expander.fluid.semi_physical_volumetric` is the generic physics response to that failure. It
   separates trapped displacement flow, choked leakage, built-in pressure-ratio mismatch,
   speed-dependent and proportional mechanical losses, and ambient heat rejection. Its real-fluid
-  steady/transient regression closes mass and energy, but it has not been fitted to this rig. Cases
-  69--77 are already consumed and cannot independently validate the new model; geometry-backed
-  calibration plus fresh hardware data are required.
+  steady/transient regression closes mass and energy. A new canonical direct-evaluation API is
+  shared by graph execution and optimization, avoiding a benchmark-side duplicate model.
+- The semi-physical model has now been fitted and evaluated only inside cases 1--68 using three
+  blocked experiment-family folds: charge sweeps, sink-temperature sweeps, and speed sweeps.
+  Average validation errors are encouraging: mass-flow MAPE is 3.20--6.67%, outlet-temperature
+  MAE is 0.33--1.16 K, and shaft-power MAPE is 3.82--7.97%. It nevertheless fails the provisional
+  primary-output gate: speed-sweep mass flow reaches 16.84% error, and shaft-power relative maxima
+  reach 28.64--47.77% at low-power points (28--58 W maximum absolute error). Every fit has local
+  sensitivity rank 5 for 6 parameters, with proportional mechanical loss driven to zero. The data
+  therefore do not independently identify the full loss decomposition. These are internal cross-
+  validation results, not a fresh independent holdout; cases 69--77 remain consumed and excluded.
 - External-boundary prediction remains open. It still requires validated scroll-expander closure
   artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
   artifact. The dataset's measured charge alone cannot identify the individual exchanger and
@@ -97,3 +105,15 @@ Run the component-blocked evidence generator with:
 ./build/thermox_orc_1kw_expander_holdout_validation \
   benchmarks/orc_1kw/measurements.csv
 ```
+
+Run the semi-physical full training fit and blocked internal cross-validation with:
+
+```sh
+./build/thermox_orc_1kw_semi_physical_expander_study \
+  benchmarks/orc_1kw/measurements.csv full-fit
+./build/thermox_orc_1kw_semi_physical_expander_study \
+  benchmarks/orc_1kw/measurements.csv cross-validation
+```
+
+The declared residual scales are engineering model-discrimination scales, not instrument standard
+uncertainties. Consequently, the study does not report uncertainty-qualified parameter covariance.

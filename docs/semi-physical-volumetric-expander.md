@@ -66,6 +66,11 @@ The result contract also exposes `built_in_pressure`, `internal_mass_flow`, `lea
 These diagnostics make calibration residuals and loss attribution auditable without changing the
 physical port topology.
 
+The public `evaluate_semi_physical_volumetric_expander` API is the canonical direct-evaluation
+path for optimizers and advanced constructed calls. The registered graph component delegates to
+the same implementation, so calibration tools can avoid repeated nonlinear graph assembly without
+creating an independent sidecar physics formula.
+
 ## Scope and claim limit
 
 The component supports steady and quasi-steady transient graphs. It is not a chamber-resolved
@@ -79,6 +84,8 @@ The formulation follows the physical decomposition reported by Oudkerk, Dickes, 
 "Testing and modeling a scroll expander integrated into an Organic Rankine Cycle," Applied
 Thermal Engineering 29 (2009), DOI 10.1016/j.applthermaleng.2009.04.013.
 
-Synthetic regression proves equation assembly, real-fluid state evaluation, domain handling, and
-mass/energy conservation. It is not hardware validation. Calibrated parameters require machine
-geometry and training data, and predictive claims require an independent operating envelope.
+Synthetic regression proves equation assembly, direct/graph evaluator equivalence, real-fluid
+state evaluation, domain handling, and mass/energy conservation. The public ORC benchmark adds
+structured internal cross-validation but finds the six-parameter loss decomposition locally rank
+deficient. Predictive claims still require independently known geometry or an independent fresh
+operating envelope.

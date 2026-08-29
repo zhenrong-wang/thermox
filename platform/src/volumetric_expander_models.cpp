@@ -1,5 +1,6 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
+#include "thermox/platform/semi_physical_volumetric_expander.hpp"
 
 #include <cmath>
 #include <limits>
@@ -27,18 +28,8 @@ struct ExpanderClosures {
     double shaft_isentropic_efficiency{0.0};
 };
 
-struct SemiPhysicalExpanderResult {
-    double mass_flow{0.0};
-    double outlet_enthalpy{0.0};
-    double shaft_power{0.0};
-    double rejected_heat{0.0};
-    double built_in_pressure{0.0};
-    double internal_mass_flow{0.0};
-    double leakage_mass_flow{0.0};
-    double indicated_power{0.0};
-    double mechanical_loss_power{0.0};
-    double ambient_heat_loss{0.0};
-};
+using SemiPhysicalExpanderResult =
+    SemiPhysicalVolumetricExpanderEvaluation;
 
 EvaluationStatus find_isentropic_density_state(
     const physics::PropertyPackage& properties,
@@ -703,24 +694,20 @@ public:
             context, "ambient_heat_loss");
         const auto evaluate =
             [properties, inlet_p, inlet_h, outlet_p, shaft_omega,
-             maximum_chamber_volume, built_in_volume_ratio,
-             leakage_area, leakage_discharge_coefficient,
-             mechanical_loss_at_reference_speed,
-             mechanical_loss_reference_angular_speed,
-             proportional_mechanical_loss,
-             ambient_heat_transfer_conductance, ambient_temperature](
+             parameters = SemiPhysicalVolumetricExpanderParameters{
+                 maximum_chamber_volume, built_in_volume_ratio,
+                 leakage_area, leakage_discharge_coefficient,
+                 mechanical_loss_at_reference_speed,
+                 mechanical_loss_reference_angular_speed,
+                 proportional_mechanical_loss,
+                 ambient_heat_transfer_conductance,
+                 ambient_temperature}](
                 const std::vector<double>& x,
                 SemiPhysicalExpanderResult& result) {
-                return evaluate_semi_physical_expander(
+                return evaluate_semi_physical_volumetric_expander(
                     *properties, x.at(inlet_p), x.at(inlet_h),
                     x.at(outlet_p), x.at(shaft_omega),
-                    maximum_chamber_volume, built_in_volume_ratio,
-                    leakage_area, leakage_discharge_coefficient,
-                    mechanical_loss_at_reference_speed,
-                    mechanical_loss_reference_angular_speed,
-                    proportional_mechanical_loss,
-                    ambient_heat_transfer_conductance,
-                    ambient_temperature, result);
+                    parameters, result);
             };
         const std::string prefix =
             "component." + context.component.id + ".";
@@ -819,6 +806,29 @@ private:
 };
 
 }  // namespace
+
+EvaluationStatus evaluate_semi_physical_volumetric_expander(
+    const physics::PropertyPackage& properties,
+    double inlet_pressure,
+    double inlet_enthalpy,
+    double outlet_pressure,
+    double angular_speed,
+    const SemiPhysicalVolumetricExpanderParameters& parameters,
+    SemiPhysicalVolumetricExpanderEvaluation& result) {
+    return evaluate_semi_physical_expander(
+        properties, inlet_pressure, inlet_enthalpy, outlet_pressure,
+        angular_speed,
+        parameters.maximum_chamber_volume_per_revolution,
+        parameters.built_in_volume_ratio,
+        parameters.leakage_area,
+        parameters.leakage_discharge_coefficient,
+        parameters.mechanical_loss_at_reference_speed,
+        parameters.mechanical_loss_reference_angular_speed,
+        parameters.proportional_mechanical_loss,
+        parameters.ambient_heat_transfer_conductance,
+        parameters.ambient_temperature,
+        result);
+}
 
 void register_volumetric_expander_component_models(
     ComponentRegistry& registry) {

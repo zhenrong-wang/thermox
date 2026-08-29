@@ -1,0 +1,79 @@
+{
+  "schema_version": "thermox.orc_semi_physical_study/v1",
+  "model_kind": "expander.fluid.semi_physical_volumetric",
+  "execution_path": "canonical_platform_component_evaluator",
+  "case_scope": "1-68",
+  "consumed_primary_holdout_cases": "69-77_excluded",
+  "objective_scales": {
+    "semantics": "engineering_model_discrimination_not_measurement_uncertainty",
+    "mass_flow_kg_s": 0.001,
+    "outlet_temperature_k": 1.0,
+    "shaft_power_w": 20.0
+  },
+  "full_training_fit": {
+    "converged": true,
+    "iterations": 12,
+    "residual_evaluations": 144,
+    "initial_objective": 5568.91,
+    "final_objective": 230.911,
+    "sensitivity_rank": 5,
+    "parameter_count": 6,
+    "locally_data_identifiable": false,
+    "parameters": {
+      "maximum_chamber_volume_m3_per_revolution": 4.18316e-05,
+      "built_in_volume_ratio": 3.20335,
+      "leakage_area_m2": 4.65925e-06,
+      "reference_mechanical_loss_w": 64.8236,
+      "proportional_mechanical_loss": 0.0,
+      "ambient_conductance_w_k": 2.69724
+    }
+  },
+  "blocked_internal_cross_validation": [
+    {
+      "id": "charge_sweeps",
+      "training_case_count": 39,
+      "validation_case_count": 29,
+      "fit_converged": true,
+      "sensitivity_rank": 5,
+      "metrics": {
+        "mass_flow": {"mae_kg_s": 0.00144523, "max_absolute_error_kg_s": 0.00274189, "mape_percent": 5.58263, "max_are_percent": 11.1828, "bias_percent": 5.26173},
+        "outlet_temperature": {"mae_k": 0.327986, "max_absolute_error_k": 1.05506, "mape_percent": 0.100618, "bias_percent": -0.0790698},
+        "shaft_power": {"mae_w": 10.3179, "max_absolute_error_w": 38.2817, "mape_percent": 5.36505, "max_are_percent": 47.7672, "bias_percent": 5.21861}
+      }
+    },
+    {
+      "id": "sink_temperature_sweeps",
+      "training_case_count": 48,
+      "validation_case_count": 20,
+      "fit_converged": true,
+      "sensitivity_rank": 5,
+      "metrics": {
+        "mass_flow": {"mae_kg_s": 0.00091843, "max_absolute_error_kg_s": 0.00156855, "mape_percent": 3.20131, "max_are_percent": 7.16236, "bias_percent": 1.77708},
+        "outlet_temperature": {"mae_k": 0.966634, "max_absolute_error_k": 2.13816, "mape_percent": 0.297519, "bias_percent": -0.297519},
+        "shaft_power": {"mae_w": 7.28737, "max_absolute_error_w": 28.1266, "mape_percent": 3.81518, "max_are_percent": 46.227, "bias_percent": 3.11357}
+      }
+    },
+    {
+      "id": "speed_sweeps",
+      "training_case_count": 49,
+      "validation_case_count": 19,
+      "fit_converged": true,
+      "sensitivity_rank": 5,
+      "metrics": {
+        "mass_flow": {"mae_kg_s": 0.00174949, "max_absolute_error_kg_s": 0.00602718, "mape_percent": 6.66874, "max_are_percent": 16.8351, "bias_percent": -2.85483},
+        "outlet_temperature": {"mae_k": 1.15927, "max_absolute_error_k": 2.57473, "mape_percent": 0.360916, "bias_percent": 0.360916},
+        "shaft_power": {"mae_w": 22.5351, "max_absolute_error_w": 57.9531, "mape_percent": 7.96531, "max_are_percent": 28.6444, "bias_percent": -4.45721}
+      }
+    }
+  ],
+  "verdict": {
+    "average_internal_generalization": "promising_within_cases_1_68",
+    "provisional_primary_output_gate": "failed",
+    "reasons": [
+      "speed-sweep mass-flow maximum relative error is 16.8351%, above the preregistered 15% limit",
+      "shaft-power maximum relative errors are 28.6444% to 47.7672%, despite modest absolute errors at low-power points",
+      "all fits have sensitivity rank 5 for 6 adjustable parameters; proportional mechanical loss is driven to its lower bound"
+    ],
+    "claim_limit": "structured internal cross-validation of a component-blocked model; not independent holdout validation and not whole-system external-boundary prediction"
+  }
+}

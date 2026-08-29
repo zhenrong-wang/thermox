@@ -66,6 +66,18 @@ add_test(
     NAME benchmark_orc_1kw_expander_holdout_validation
     COMMAND thermox_orc_1kw_expander_holdout_validation
         ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/orc_1kw/measurements.csv)
+add_executable(
+    thermox_orc_1kw_semi_physical_expander_study
+    benchmarks/orc_1kw/semi_physical_expander_study.cpp)
+target_link_libraries(
+    thermox_orc_1kw_semi_physical_expander_study PRIVATE thermox_platform)
+target_compile_features(
+    thermox_orc_1kw_semi_physical_expander_study PRIVATE cxx_std_20)
+target_compile_options(
+    thermox_orc_1kw_semi_physical_expander_study PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+# Deliberately not registered as a normal CTest: these physical calibrations
+# are reproducible evidence jobs, not low-cost unit tests.
 add_test(
     NAME platform_iso2314_performance_test_cli
     COMMAND thermox_cli performance-test

@@ -4,6 +4,8 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/results.hpp"
+#include "thermox/platform/semi_physical_volumetric_expander.hpp"
+#include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 
 #include <algorithm>
@@ -2752,6 +2754,35 @@ void test_semi_physical_volumetric_expander_closes_losses_and_energy() {
     require_near(
         value("expander.rejected_heat.T"), 300.0, 1.0e-10,
         "semi-physical expander ambient sink temperature");
+
+    const thermox::physics::CoolPropHeosPropertyPackage fluid{"R245fa"};
+    thermox::platform::SemiPhysicalVolumetricExpanderEvaluation direct;
+    const auto direct_status =
+        thermox::platform::evaluate_semi_physical_volumetric_expander(
+            fluid,
+            value("expander.inlet.p"),
+            value("expander.inlet.h"),
+            value("expander.outlet.p"),
+            value("expander.shaft.omega"),
+            {
+                0.00005, 3.0, 0.0000001, 0.8,
+                50.0, 200.0, 0.05, 2.0, 300.0,
+            },
+            direct);
+    require(direct_status.ok(),
+            "canonical semi-physical evaluator must succeed");
+    require_near(
+        direct.mass_flow, value("expander.inlet.m_dot"), 1.0e-10,
+        "direct evaluator and graph mass flow");
+    require_near(
+        direct.outlet_enthalpy, value("expander.outlet.h"), 1.0e-6,
+        "direct evaluator and graph outlet enthalpy");
+    require_near(
+        direct.shaft_power, value("expander.shaft.W_dot"), 1.0e-7,
+        "direct evaluator and graph shaft power");
+    require_near(
+        direct.rejected_heat, value("expander.rejected_heat.Q_dot"),
+        1.0e-7, "direct evaluator and graph rejected heat");
 
     auto transient_document = document;
     transient_document.cases.front().mode = "dynamic_transient";
