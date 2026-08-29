@@ -80,10 +80,23 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   Average validation errors are encouraging: mass-flow MAPE is 3.20--6.67%, outlet-temperature
   MAE is 0.33--1.16 K, and shaft-power MAPE is 3.82--7.97%. It nevertheless fails the provisional
   primary-output gate: speed-sweep mass flow reaches 16.84% error, and shaft-power relative maxima
-  reach 28.64--47.77% at low-power points (28--58 W maximum absolute error). Every fit has local
-  sensitivity rank 5 for 6 parameters, with proportional mechanical loss driven to zero. The data
-  therefore do not independently identify the full loss decomposition. These are internal cross-
-  validation results, not a fresh independent holdout; cases 69--77 remain consumed and excluded.
+  reach 28.64--47.77% at low-power points (28--58 W maximum absolute error). The original six-
+  parameter formulation returned rank 5/6 in the full fit and every blocked fold, independently
+  driving proportional mechanical loss to zero. Fixing that unsupported term at zero produces a
+  clean five-parameter formulation; all fits are now full rank 5/5 and the objectives and
+  predictions are unchanged to numerical precision. This removes redundancy without a prior or
+  held-out-data tuning. Because the six-parameter fold results had already been inspected, the
+  reduced blocked-fold rerun is confirmatory evidence of the rank correction, not a new untouched
+  model-selection validation.
+- The fitted leakage area is an effective conditional value: discharge coefficient is fixed at
+  0.8, so these data identify the coefficient-area product rather than physical clearance area
+  independently. The 300 rad/s mechanical-loss reference speed is only a parameterization
+  normalization. Both assumptions are explicit in the result artifact and are not hardware facts.
+- A frozen five-parameter fit on cases 1--68 was also evaluated diagnostically on consumed cases
+  69--77. This is explicitly not independent validation. It gives mass-flow MAPE 10.44% with
+  -10.44% bias, outlet-temperature MAE 1.01 K, and shaft-power MAPE 16.47% with -16.47% bias. The
+  coherent underprediction shows that the model does not extrapolate without systematic bias to
+  the changed source/sink-flow regime. Fresh hardware data are still required for a new holdout.
 - External-boundary prediction remains open. It still requires validated scroll-expander closure
   artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
   artifact. The dataset's measured charge alone cannot identify the individual exchanger and
@@ -113,6 +126,8 @@ Run the semi-physical full training fit and blocked internal cross-validation wi
   benchmarks/orc_1kw/measurements.csv full-fit
 ./build/thermox_orc_1kw_semi_physical_expander_study \
   benchmarks/orc_1kw/measurements.csv cross-validation
+./build/thermox_orc_1kw_semi_physical_expander_study \
+  benchmarks/orc_1kw/measurements.csv consumed-holdout-diagnostic
 ```
 
 The declared residual scales are engineering model-discrimination scales, not instrument standard

@@ -85,7 +85,10 @@ The formulation follows the physical decomposition reported by Oudkerk, Dickes, 
 Thermal Engineering 29 (2009), DOI 10.1016/j.applthermaleng.2009.04.013.
 
 Synthetic regression proves equation assembly, direct/graph evaluator equivalence, real-fluid
-state evaluation, domain handling, and mass/energy conservation. The public ORC benchmark adds
-structured internal cross-validation but finds the six-parameter loss decomposition locally rank
-deficient. Predictive claims still require independently known geometry or an independent fresh
-operating envelope.
+state evaluation, domain handling, and mass/energy conservation. The public ORC benchmark found
+the optional proportional mechanical-loss term unsupported: it was driven to zero in the full fit
+and every blocked fold, leaving rank 5/6. Fixing that term at zero gives a full-rank 5/5 reduced
+configuration without changing its objective or predictions. That result applies to this rig and
+dataset; the generic component retains the optional term for equipment where data or independent
+loss evidence support it. Predictive claims still require independently known geometry or an
+independent fresh operating envelope.

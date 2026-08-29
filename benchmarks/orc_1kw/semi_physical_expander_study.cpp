@@ -128,8 +128,8 @@ std::vector<OperatingPoint> make_operating_points(
     const std::vector<Row>& rows,
     const thermox::physics::PropertyPackage& fluid) {
     std::vector<OperatingPoint> points;
-    points.reserve(calibration_case_count);
-    for (std::size_t index = 0; index < calibration_case_count; ++index) {
+    points.reserve(rows.size());
+    for (std::size_t index = 0; index < rows.size(); ++index) {
         const auto& row = rows.at(index);
         const double inlet_pressure =
             value(row, "expander_inlet_pressure_kpa") * 1000.0;
@@ -160,7 +160,7 @@ thermox::platform::SemiPhysicalVolumetricExpanderParameters parameters_from(
     const std::vector<double>& candidate, double ambient_temperature) {
     return {
         candidate.at(0), candidate.at(1), candidate.at(2), 0.8,
-        candidate.at(3), 300.0, candidate.at(4), candidate.at(5),
+        candidate.at(3), 300.0, 0.0, candidate.at(4),
         ambient_temperature,
     };
 }
@@ -238,9 +238,9 @@ thermox::BoundedLeastSquaresResult fit_direct(
     settings.objective_relative_tolerance = 1.0e-7;
     return thermox::solve_bounded_nonlinear_least_squares(
         residual,
-        {5.0e-5, 3.0, 5.0e-7, 50.0, 0.1, 2.0},
-        {2.0e-5, 1.2, 0.0, 0.0, 0.0, 0.0},
-        {1.5e-4, 6.0, 1.0e-5, 1000.0, 0.8, 50.0},
+        {5.0e-5, 3.0, 5.0e-7, 50.0, 2.0},
+        {2.0e-5, 1.2, 0.0, 0.0, 0.0},
+        {1.5e-4, 6.0, 1.0e-5, 1000.0, 50.0},
         settings);
 }
 
@@ -248,7 +248,7 @@ const std::vector<std::string>& parameter_names() {
     static const std::vector<std::string> names{
         "maximum_chamber_volume", "built_in_volume_ratio",
         "leakage_area", "reference_mechanical_loss",
-        "proportional_mechanical_loss", "ambient_conductance",
+        "ambient_conductance",
     };
     return names;
 }
@@ -283,8 +283,9 @@ void run_direct_full_fit(
     const auto fit = fit_direct(points, training, fluid);
     if (!fit.success)
         throw std::runtime_error("direct full calibration failed: " + fit.message);
-    std::cout << "{\"schema_version\":\"thermox.orc_semi_physical_study/v1\","
+    std::cout << "{\"schema_version\":\"thermox.orc_semi_physical_study/v2\","
         << "\"mode\":\"full_training_fit\",\"case_scope\":\"1-68\","
+        << "\"model_configuration\":\"reduced_five_parameter_zero_proportional_loss\","
         << "\"execution_path\":\"canonical_platform_component_evaluator\","
         << "\"objective_scale_semantics\":\"engineering_model_discrimination_not_measurement_uncertainty\",";
     print_direct_fit(std::cout, fit);
@@ -299,8 +300,9 @@ void run_direct_cross_validation(
         contiguous_fold("sink_temperature_sweeps", 29, 48),
         contiguous_fold("speed_sweeps", 49, 67),
     };
-    std::cout << "{\"schema_version\":\"thermox.orc_semi_physical_study/v1\","
+    std::cout << "{\"schema_version\":\"thermox.orc_semi_physical_study/v2\","
         << "\"mode\":\"blocked_internal_cross_validation\","
+        << "\"model_configuration\":\"reduced_five_parameter_zero_proportional_loss\","
         << "\"execution_path\":\"canonical_platform_component_evaluator\","
         << "\"case_scope\":\"1-68\",\"consumed_primary_holdout_cases\":\"69-77_excluded\","
         << "\"objective_scale_semantics\":\"engineering_model_discrimination_not_measurement_uncertainty\",\"folds\":[";
@@ -344,6 +346,53 @@ void run_direct_cross_validation(
     std::cout << "]}\n";
 }
 
+void run_consumed_holdout_diagnostic(
+    const std::vector<OperatingPoint>& points,
+    const thermox::physics::PropertyPackage& fluid) {
+    std::set<std::size_t> training;
+    for (std::size_t index = 0; index < calibration_case_count; ++index)
+        training.insert(index);
+    const auto fit = fit_direct(points, training, fluid);
+    if (!fit.success)
+        throw std::runtime_error(
+            "consumed-holdout diagnostic fit failed: " + fit.message);
+    Metrics mass;
+    Metrics temperature;
+    Metrics power;
+    for (std::size_t index = calibration_case_count;
+         index < points.size(); ++index) {
+        PointPrediction prediction;
+        std::string message;
+        if (!predict(fluid, points.at(index), fit.x,
+                     prediction, message)) {
+            throw std::runtime_error(
+                "consumed-holdout prediction failed for " +
+                case_id(index) + ": " + message);
+        }
+        const auto& point = points.at(index);
+        accumulate(mass, prediction.mass_flow, point.measured_mass_flow);
+        accumulate(temperature, prediction.outlet_temperature,
+                   point.measured_outlet_temperature);
+        accumulate(power, prediction.shaft_power,
+                   point.measured_shaft_power);
+    }
+    std::cout << "{\"schema_version\":\"thermox.orc_semi_physical_study/v2\","
+        << "\"mode\":\"consumed_holdout_diagnostic\","
+        << "\"model_configuration\":\"reduced_five_parameter_zero_proportional_loss\","
+        << "\"calibration_cases\":\"1-68\",\"diagnostic_cases\":\"69-77\","
+        << "\"independent_validation\":false,"
+        << "\"claim_limit\":\"diagnostic_only_holdout_previously_consumed\","
+        << "\"execution_path\":\"canonical_platform_component_evaluator\",";
+    print_direct_fit(std::cout, fit);
+    std::cout << ",\"diagnostic_metrics\":{\"mass_flow\":";
+    print_metrics(std::cout, mass);
+    std::cout << ",\"outlet_temperature\":";
+    print_metrics(std::cout, temperature);
+    std::cout << ",\"shaft_power\":";
+    print_metrics(std::cout, power);
+    std::cout << "}}\n";
+}
+
 std::set<std::size_t> complement(const std::set<std::size_t>& held_out) {
     std::set<std::size_t> result;
     for (std::size_t index = 0; index < calibration_case_count; ++index)
@@ -365,7 +414,8 @@ int main(int argc, char** argv) {
         if (argc != 3)
             throw std::invalid_argument(
                 "usage: thermox_orc_1kw_semi_physical_expander_study "
-                "<measurements.csv> <full-fit|cross-validation>");
+                "<measurements.csv> "
+                "<full-fit|cross-validation|consumed-holdout-diagnostic>");
         const auto rows = read_csv(argv[1]);
         const thermox::physics::CoolPropHeosPropertyPackage fluid{"R245fa"};
         const auto points = make_operating_points(rows, fluid);
@@ -373,6 +423,8 @@ int main(int argc, char** argv) {
         if (mode == "full-fit") run_direct_full_fit(points, fluid);
         else if (mode == "cross-validation")
             run_direct_cross_validation(points, fluid);
+        else if (mode == "consumed-holdout-diagnostic")
+            run_consumed_holdout_diagnostic(points, fluid);
         else throw std::invalid_argument("unknown study mode: " + std::string{mode});
         return 0;
     } catch (const std::exception& ex) {
