@@ -608,7 +608,7 @@ void test_catalog_discovery() {
         !response.fingerprint.empty(),
         "catalog must have a deterministic fingerprint");
     require(
-        response.components.size() == 100,
+        response.components.size() == 101,
         "service must expose the complete component registry");
     require(
         std::any_of(
@@ -1208,6 +1208,29 @@ void test_catalog_discovery() {
                 }),
         "catalog must expose the conservative correlated volumetric "
         "expander contract");
+    const auto semi_physical_expander = std::find_if(
+        response.components.begin(), response.components.end(),
+        [](const auto& component) {
+            return component.kind ==
+                "expander.fluid.semi_physical_volumetric";
+        });
+    require(
+        semi_physical_expander != response.components.end() &&
+            semi_physical_expander->template_kind == "expander" &&
+            semi_physical_expander->supports_steady &&
+            semi_physical_expander->supports_transient &&
+            semi_physical_expander->artifacts.empty() &&
+            semi_physical_expander->parameters.size() == 9 &&
+            semi_physical_expander->internal_variables.size() == 6 &&
+            std::any_of(
+                semi_physical_expander->parameters.begin(),
+                semi_physical_expander->parameters.end(),
+                [](const auto& parameter) {
+                    return parameter.name == "built_in_volume_ratio" &&
+                        parameter.required;
+                }),
+        "catalog must expose the parameter-driven semi-physical "
+        "volumetric expander contract");
     const auto composition_source = std::find_if(
         response.components.begin(),
         response.components.end(),

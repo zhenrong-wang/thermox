@@ -984,6 +984,10 @@ void test_component_registry_exposes_default_models() {
                 "expander.fluid.volumetric_correlations"),
             "default registry should contain correlated volumetric "
             "expander");
+    require(registry.contains(
+                "expander.fluid.semi_physical_volumetric"),
+            "default registry should contain semi-physical volumetric "
+            "expander");
     require(registry.contains("junction.fluid.mixer.two_inlet"),
             "default registry should contain two-inlet mixer");
     require(registry.contains("junction.fluid.splitter.two_outlet"),
@@ -1088,6 +1092,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "pump.fluid.isentropic_efficiency",
         "pump.fluid.performance_map",
         "expander.fluid.volumetric_correlations",
+        "expander.fluid.semi_physical_volumetric",
         "turbine.fluid.isentropic_efficiency",
         "turbine.fluid.performance_map",
         "turbine.fluid.variable_geometry_map",
@@ -2636,6 +2641,122 @@ void test_correlated_volumetric_expander_closes_mass_and_energy() {
     transient_document.cases.front().mode = "dynamic_transient";
     (void)thermox::platform::compile_transient_model_graph(
         transient_document, components, properties, artifacts,
+        "operating_point");
+}
+
+void test_semi_physical_volumetric_expander_closes_losses_and_energy() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "semi_physical_r245fa_expander",
+    "media": [{
+      "id": "working_fluid",
+      "backend": "coolprop_heos",
+      "substance": "R245fa"
+    }],
+    "components": [{
+      "id": "expander",
+      "kind": "expander.fluid.semi_physical_volumetric",
+      "parameters": {
+        "maximum_chamber_volume_per_revolution": 0.00005,
+        "built_in_volume_ratio": 3.0,
+        "leakage_area": 0.0000001,
+        "leakage_discharge_coefficient": 0.8,
+        "mechanical_loss_at_reference_speed": {
+          "value": 50.0, "unit": "W"
+        },
+        "mechanical_loss_reference_angular_speed": 200.0,
+        "proportional_mechanical_loss": 0.05,
+        "ambient_heat_transfer_conductance": {
+          "value": 2.0, "unit": "W/K"
+        },
+        "ambient_temperature": {"value": 300.0, "unit": "K"}
+      },
+      "media": {"inlet": "working_fluid", "outlet": "working_fluid"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "expander.inlet.p": {"value": 800.0, "unit": "kPa"},
+      "expander.inlet.T": {"value": 360.0, "unit": "K"},
+      "expander.outlet.p": {"value": 200.0, "unit": "kPa"},
+      "expander.shaft.omega": 200.0
+    },
+    "initial_guesses": {
+      "expander.inlet.m_dot": {"value": 0.02, "unit": "kg/s"},
+      "expander.outlet.m_dot": {"value": 0.02, "unit": "kg/s"},
+      "expander.outlet.h": {"value": 430.0, "unit": "kJ/kg"},
+      "expander.shaft.W_dot": {"value": 0.5, "unit": "kW"},
+      "expander.rejected_heat.Q_dot": {"value": 0.1, "unit": "kW"},
+      "expander.rejected_heat.T": {"value": 300.0, "unit": "K"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, components, properties, "operating_point");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require(value("expander.inlet.m_dot") > 0.0,
+            "semi-physical expander positive mass capacity");
+    require(value("expander.shaft.W_dot") > 0.0,
+            "semi-physical expander positive shaft power");
+    require(value("expander.rejected_heat.Q_dot") > 50.0,
+            "semi-physical expander exposes mechanical and ambient loss");
+    require(value("expander.built_in_pressure") > 0.0,
+            "semi-physical expander exposes built-in discharge pressure");
+    require(value("expander.leakage_mass_flow") > 0.0,
+            "semi-physical expander exposes positive configured leakage");
+    require_near(
+        value("expander.inlet.m_dot"),
+        value("expander.internal_mass_flow") +
+            value("expander.leakage_mass_flow"),
+        1.0e-10,
+        "semi-physical expander internal plus leakage mass capacity");
+    require_near(
+        value("expander.indicated_power"),
+        value("expander.shaft.W_dot") +
+            value("expander.mechanical_loss_power"),
+        1.0e-7,
+        "semi-physical expander indicated power attribution");
+    require_near(
+        value("expander.rejected_heat.Q_dot"),
+        value("expander.mechanical_loss_power") +
+            value("expander.ambient_heat_loss"),
+        1.0e-7,
+        "semi-physical expander rejected heat attribution");
+    require_near(
+        value("expander.outlet.m_dot"),
+        value("expander.inlet.m_dot"), 1.0e-10,
+        "semi-physical expander mass continuity");
+    require_near(
+        value("expander.inlet.m_dot") *
+            (value("expander.inlet.h") -
+             value("expander.outlet.h")),
+        value("expander.shaft.W_dot") +
+            value("expander.rejected_heat.Q_dot"),
+        1.0e-6,
+        "semi-physical expander exact external energy closure");
+    require_near(
+        value("expander.rejected_heat.T"), 300.0, 1.0e-10,
+        "semi-physical expander ambient sink temperature");
+
+    auto transient_document = document;
+    transient_document.cases.front().mode = "dynamic_transient";
+    (void)thermox::platform::compile_transient_model_graph(
+        transient_document, components, properties,
         "operating_point");
 }
 
@@ -9257,6 +9378,7 @@ int main() {
         test_map_continuation_recovers_out_of_domain_flow_guess();
         test_map_driven_pump_solves_real_fluid_operating_point();
         test_correlated_volumetric_expander_closes_mass_and_energy();
+        test_semi_physical_volumetric_expander_closes_losses_and_energy();
         test_map_driven_turbine_solves_bound_operating_point();
         test_generic_model_solves_ideal_gas_turbine_residuals();
         test_generic_model_solves_two_inlet_mixer();

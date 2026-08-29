@@ -70,6 +70,12 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   and 16.68% worst error, while shaft power has 24.41% MAPE and 48.37% worst error. The frozen
   model therefore **fails** the provisional 8% MAPE / 15% maximum-error primary-output gate. This
   is retained as negative evidence; it must not be post-hoc tuned against the exposed holdout.
+- `expander.fluid.semi_physical_volumetric` is the generic physics response to that failure. It
+  separates trapped displacement flow, choked leakage, built-in pressure-ratio mismatch,
+  speed-dependent and proportional mechanical losses, and ambient heat rejection. Its real-fluid
+  steady/transient regression closes mass and energy, but it has not been fitted to this rig. Cases
+  69--77 are already consumed and cannot independently validate the new model; geometry-backed
+  calibration plus fresh hardware data are required.
 - External-boundary prediction remains open. It still requires validated scroll-expander closure
   artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
   artifact. The dataset's measured charge alone cannot identify the individual exchanger and
