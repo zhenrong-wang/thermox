@@ -1,0 +1,406 @@
+{
+  "schema_version": "thermox.orc_pressure_formation_study/v1",
+  "contract": "pressure_formation_study_contract.json",
+  "classification": "training_only_model_discrimination_not_validation",
+  "candidates": [
+    {
+      "id": "hot_source_linear",
+      "ridge_lambda": 0,
+      "coefficient_count": 2,
+      "full_training_fit": {
+        "physical_rank": 2,
+        "reciprocal_pivot_ratio": 1,
+        "normalization_mean": [
+          79.9880514706
+        ],
+        "normalization_scale": [
+          10.9332611404
+        ],
+        "coefficients_kpa": [
+          605.7311375,
+          170.521813227
+        ],
+        "metrics": {
+          "count": 68,
+          "mape_percent": 4.29083647839,
+          "maximum_absolute_relative_error_percent": 20.2654988699,
+          "mean_bias_percent": 0.154264809556,
+          "rmse_kpa": 35.1378126953,
+          "all_predictions_positive_finite": true
+        }
+      },
+      "blocked_folds": [
+        {
+          "id": "charge_sweeps",
+          "physical_rank": 2,
+          "coefficient_count": 2,
+          "metrics": {
+            "count": 29,
+            "mape_percent": 5.73463675392,
+            "maximum_absolute_relative_error_percent": 10.1501610794,
+            "mean_bias_percent": -5.73463675392,
+            "rmse_kpa": 38.170804518,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": true,
+            "maximum_error_at_most_15_percent": true,
+            "positive_finite_predictions": true
+          },
+          "passed": true
+        },
+        {
+          "id": "sink_temperature_sweeps",
+          "physical_rank": 2,
+          "coefficient_count": 2,
+          "metrics": {
+            "count": 20,
+            "mape_percent": 2.02394712277,
+            "maximum_absolute_relative_error_percent": 3.78491406302,
+            "mean_bias_percent": -0.209122097038,
+            "rmse_kpa": 16.4375591526,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": true,
+            "maximum_error_at_most_15_percent": true,
+            "positive_finite_predictions": true
+          },
+          "passed": true
+        },
+        {
+          "id": "speed_sweeps",
+          "physical_rank": 2,
+          "coefficient_count": 2,
+          "metrics": {
+            "count": 19,
+            "mape_percent": 9.22457234464,
+            "maximum_absolute_relative_error_percent": 22.6083236081,
+            "mean_bias_percent": 7.97411017069,
+            "rmse_kpa": 66.0230095034,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        }
+      ],
+      "passed_all_folds": false
+    },
+    {
+      "id": "hot_source_quadratic",
+      "ridge_lambda": 0,
+      "coefficient_count": 3,
+      "full_training_fit": {
+        "physical_rank": 3,
+        "reciprocal_pivot_ratio": 0.492303496673,
+        "normalization_mean": [
+          79.9880514706
+        ],
+        "normalization_scale": [
+          10.9332611404
+        ],
+        "coefficients_kpa": [
+          588.705692536,
+          170.546676008,
+          17.0254449641
+        ],
+        "metrics": {
+          "count": 68,
+          "mape_percent": 3.90141567602,
+          "maximum_absolute_relative_error_percent": 17.2496589233,
+          "mean_bias_percent": 0.265968570878,
+          "rmse_kpa": 32.1099746535,
+          "all_predictions_positive_finite": true
+        }
+      },
+      "blocked_folds": [
+        {
+          "id": "charge_sweeps",
+          "physical_rank": 3,
+          "coefficient_count": 3,
+          "metrics": {
+            "count": 29,
+            "mape_percent": 5.76985575941,
+            "maximum_absolute_relative_error_percent": 6.43770172384,
+            "mean_bias_percent": -5.76985575941,
+            "rmse_kpa": 36.3717287328,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": true,
+            "maximum_error_at_most_15_percent": true,
+            "positive_finite_predictions": true
+          },
+          "passed": true
+        },
+        {
+          "id": "sink_temperature_sweeps",
+          "physical_rank": 3,
+          "coefficient_count": 3,
+          "metrics": {
+            "count": 20,
+            "mape_percent": 1.66422669182,
+            "maximum_absolute_relative_error_percent": 3.61457932017,
+            "mean_bias_percent": 0.165198813091,
+            "rmse_kpa": 10.3623140768,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": true,
+            "maximum_error_at_most_15_percent": true,
+            "positive_finite_predictions": true
+          },
+          "passed": true
+        },
+        {
+          "id": "speed_sweeps",
+          "physical_rank": 3,
+          "coefficient_count": 3,
+          "metrics": {
+            "count": 19,
+            "mape_percent": 9.01690577362,
+            "maximum_absolute_relative_error_percent": 20.0239449885,
+            "mean_bias_percent": 8.02115528335,
+            "rmse_kpa": 64.3704720607,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        }
+      ],
+      "passed_all_folds": false
+    },
+    {
+      "id": "reduced_external_ridge_1",
+      "ridge_lambda": 1,
+      "coefficient_count": 6,
+      "full_training_fit": {
+        "physical_rank": 6,
+        "reciprocal_pivot_ratio": 0.253509770597,
+        "normalization_mean": [
+          79.9880514706,
+          19.2711323529,
+          303.475842892,
+          2795.06151471,
+          5.45588235294
+        ],
+        "normalization_scale": [
+          10.9332611404,
+          3.74258590105,
+          99.7054423621,
+          416.985551728,
+          0.751152517007
+        ],
+        "coefficients_kpa": [
+          605.7311375,
+          60.297938061,
+          -0.492824198596,
+          116.189792655,
+          -25.0704950572,
+          2.12514436516
+        ],
+        "metrics": {
+          "count": 68,
+          "mape_percent": 1.49427088283,
+          "maximum_absolute_relative_error_percent": 5.55162059715,
+          "mean_bias_percent": 0.119968564113,
+          "rmse_kpa": 11.5755203244,
+          "all_predictions_positive_finite": true
+        }
+      },
+      "blocked_folds": [
+        {
+          "id": "charge_sweeps",
+          "physical_rank": 5,
+          "coefficient_count": 6,
+          "metrics": {
+            "count": 29,
+            "mape_percent": 2.56132114823,
+            "maximum_absolute_relative_error_percent": 6.02611817202,
+            "mean_bias_percent": -2.56132114823,
+            "rmse_kpa": 15.4845012363,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": false,
+            "mape_at_most_8_percent": true,
+            "maximum_error_at_most_15_percent": true,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        },
+        {
+          "id": "sink_temperature_sweeps",
+          "physical_rank": 6,
+          "coefficient_count": 6,
+          "metrics": {
+            "count": 20,
+            "mape_percent": 74.2363035161,
+            "maximum_absolute_relative_error_percent": 227.267779023,
+            "mean_bias_percent": -57.27985309,
+            "rmse_kpa": 506.671087076,
+            "all_predictions_positive_finite": false
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": false
+          },
+          "passed": false
+        },
+        {
+          "id": "speed_sweeps",
+          "physical_rank": 6,
+          "coefficient_count": 6,
+          "metrics": {
+            "count": 19,
+            "mape_percent": 177.48906444,
+            "maximum_absolute_relative_error_percent": 452.807107876,
+            "mean_bias_percent": 177.48906444,
+            "rmse_kpa": 1145.65720491,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        }
+      ],
+      "passed_all_folds": false
+    },
+    {
+      "id": "all_external_ridge_10",
+      "ridge_lambda": 10,
+      "coefficient_count": 9,
+      "full_training_fit": {
+        "physical_rank": 9,
+        "reciprocal_pivot_ratio": 0.20734095743,
+        "normalization_mean": [
+          79.9880514706,
+          15.0327220588,
+          19.2711323529,
+          17.340630777,
+          303.475842892,
+          2795.06151471,
+          5.45588235294,
+          22.3856053922
+        ],
+        "normalization_scale": [
+          10.9332611404,
+          0.00284869027521,
+          3.74258590105,
+          0.15096486815,
+          99.7054423621,
+          416.985551728,
+          0.751152517007,
+          1.61254972029
+        ],
+        "coefficients_kpa": [
+          605.7311375,
+          71.2329400206,
+          16.1534424343,
+          4.27726178535,
+          -4.78809629882,
+          84.1881045481,
+          -15.7676368133,
+          3.98434849594,
+          -6.63314796496
+        ],
+        "metrics": {
+          "count": 68,
+          "mape_percent": 2.87848863762,
+          "maximum_absolute_relative_error_percent": 9.39240601014,
+          "mean_bias_percent": 0.640190991153,
+          "rmse_kpa": 20.7965901014,
+          "all_predictions_positive_finite": true
+        }
+      },
+      "blocked_folds": [
+        {
+          "id": "charge_sweeps",
+          "physical_rank": 8,
+          "coefficient_count": 9,
+          "metrics": {
+            "count": 29,
+            "mape_percent": 8.34060460835,
+            "maximum_absolute_relative_error_percent": 15.2278192214,
+            "mean_bias_percent": -8.34060460835,
+            "rmse_kpa": 58.2273743062,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": false,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        },
+        {
+          "id": "sink_temperature_sweeps",
+          "physical_rank": 9,
+          "coefficient_count": 9,
+          "metrics": {
+            "count": 20,
+            "mape_percent": 231.842908854,
+            "maximum_absolute_relative_error_percent": 709.036554995,
+            "mean_bias_percent": -179.588750352,
+            "rmse_kpa": 1580.31758565,
+            "all_predictions_positive_finite": false
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": false
+          },
+          "passed": false
+        },
+        {
+          "id": "speed_sweeps",
+          "physical_rank": 9,
+          "coefficient_count": 9,
+          "metrics": {
+            "count": 19,
+            "mape_percent": 425.12702216,
+            "maximum_absolute_relative_error_percent": 1091.76084935,
+            "mean_bias_percent": 425.12702216,
+            "rmse_kpa": 2753.18997933,
+            "all_predictions_positive_finite": true
+          },
+          "acceptance_checks": {
+            "full_rank": true,
+            "mape_at_most_8_percent": false,
+            "maximum_error_at_most_15_percent": false,
+            "positive_finite_predictions": true
+          },
+          "passed": false
+        }
+      ],
+      "passed_all_folds": false
+    }
+  ],
+  "selection": {
+    "accepted": false,
+    "reason": "no preregistered candidate passed every blocked fold"
+  },
+  "consumed_holdout_diagnostic": null
+}

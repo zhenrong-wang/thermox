@@ -108,6 +108,16 @@ target_compile_features(
 target_compile_options(
     thermox_orc_1kw_inventory_identifiability_study PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+add_executable(
+    thermox_orc_1kw_pressure_formation_study
+    benchmarks/orc_1kw/pressure_formation_study.cpp)
+target_link_libraries(
+    thermox_orc_1kw_pressure_formation_study PRIVATE thermox_core)
+target_compile_features(
+    thermox_orc_1kw_pressure_formation_study PRIVATE cxx_std_20)
+target_compile_options(
+    thermox_orc_1kw_pressure_formation_study PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
 # Whole-cycle real-fluid sweeps are explicit evidence jobs, not routine CTest.
 add_test(
     NAME platform_iso2314_performance_test_cli

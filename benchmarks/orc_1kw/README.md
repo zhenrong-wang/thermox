@@ -194,6 +194,17 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   therefore remains unchanged until the paper's pressure equation/coefficient provenance or a
   preregistered training-only replacement is available. Fixing measured internal pressure would
   close the graph but would forfeit the external-boundary prediction classification.
+- The replacement pressure-formation study was preregistered in a separate pushed commit before
+  fitting. `thermox_orc_1kw_pressure_formation_study` evaluates four fixed candidate families with
+  column-pivoted QR, training-fold-only normalization, three experiment-family folds, explicit
+  rank checks, and no access to cases 69--77 for selection. None passes the frozen 8% MAPE / 15%
+  maximum-error gate on every fold. The two compact hot-source-temperature models fail the speed
+  fold at 9.02--9.22% MAPE and 20.02--22.61% maximum error. The richer regularized external-
+  boundary models are rank-deficient in the charge fold and extrapolate severely in the sink and
+  speed folds. The result in `pressure_formation_study_results.json` therefore rejects every
+  candidate and deliberately produces no deployable closure or consumed-holdout score. This
+  dataset cannot currently replace the unavailable published pressure equation with a credible
+  generic correlation.
 
 ## Evidence discipline
 
@@ -257,6 +268,13 @@ Run the low-cost training-only inventory identifiability screen with:
 
 ```sh
 ./build/thermox_orc_1kw_inventory_identifiability_study \
+  benchmarks/orc_1kw/measurements.csv
+```
+
+Run the preregistered pressure-formation discrimination study with:
+
+```sh
+./build/thermox_orc_1kw_pressure_formation_study \
   benchmarks/orc_1kw/measurements.csv
 ```
 
