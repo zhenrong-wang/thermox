@@ -1,0 +1,74 @@
+{
+  "schema_version": "thermox.orc_pressure_formation_study_contract/v1",
+  "benchmark_id": "orc_1kw_r245fa",
+  "purpose": "Identify whether a compact external-boundary correlation can supply the one pressure-formation closure required by the passive-receiver whole-cycle graph.",
+  "claim_limit": "Training-only model discrimination and blocked internal cross-validation; not independent hardware validation and not recovery of the publication's Eq. 53.",
+  "target": {
+    "name": "expander_inlet_pressure_kpa",
+    "role": "Measured internal target used only during correlation fitting and evaluation"
+  },
+  "eligible_inputs": [
+    "hot_water_inlet_temperature_c",
+    "hot_water_volume_flow_lpm",
+    "cooling_water_inlet_temperature_c",
+    "cooling_water_volume_flow_lpm",
+    "pump_speed_rpm",
+    "expander_speed_rpm",
+    "charge_kg",
+    "ambient_temperature_c"
+  ],
+  "excluded_inputs": "All measured working-fluid states, measured working-fluid flow, utility outlet states, expander torque, and case index.",
+  "data_policy": {
+    "fit_and_internal_cross_validation_cases": "1-68",
+    "blocked_folds": [
+      {"id": "charge_sweeps", "validation_cases": "1-29"},
+      {"id": "sink_temperature_sweeps", "validation_cases": "30-49"},
+      {"id": "speed_sweeps", "validation_cases": "50-68"}
+    ],
+    "consumed_diagnostic_cases": "69-77",
+    "anti_leakage_rule": "Cases 69-77 must not select features, polynomial order, regularization, thresholds, or scales. Any result on them is diagnostic only."
+  },
+  "normalization": "For every fit, each nonconstant feature is centered and scaled using that fit's training rows only. The frozen full-fit normalization is part of the resulting artifact.",
+  "solver": "Column-pivoted Householder QR. Ridge candidates are represented by augmented rows; normal equations are forbidden.",
+  "candidate_families": [
+    {
+      "id": "hot_source_linear",
+      "features": ["hot_water_inlet_temperature_c"],
+      "basis": "intercept plus normalized linear terms",
+      "ridge_lambda": 0.0
+    },
+    {
+      "id": "hot_source_quadratic",
+      "features": ["hot_water_inlet_temperature_c"],
+      "basis": "intercept, normalized linear terms, and squared normalized terms",
+      "ridge_lambda": 0.0
+    },
+    {
+      "id": "reduced_external_ridge_1",
+      "features": ["hot_water_inlet_temperature_c", "cooling_water_inlet_temperature_c", "pump_speed_rpm", "expander_speed_rpm", "charge_kg"],
+      "basis": "intercept plus normalized linear terms",
+      "ridge_lambda": 1.0
+    },
+    {
+      "id": "all_external_ridge_10",
+      "features": ["hot_water_inlet_temperature_c", "hot_water_volume_flow_lpm", "cooling_water_inlet_temperature_c", "cooling_water_volume_flow_lpm", "pump_speed_rpm", "expander_speed_rpm", "charge_kg", "ambient_temperature_c"],
+      "basis": "intercept plus normalized linear terms",
+      "ridge_lambda": 10.0
+    }
+  ],
+  "acceptance": {
+    "every_blocked_fold": [
+      "mean_absolute_relative_error_percent <= 8",
+      "maximum_absolute_relative_error_percent <= 15",
+      "finite positive pressure for every validation row",
+      "unregularized physical design matrix has full numerical column rank"
+    ],
+    "selection": "Select the passing family with the fewest coefficients; break a tie by lower worst-fold MAPE. If no family passes, reject the empirical closure.",
+    "whole_cycle_gate": "A selected closure may enter a bounded cycle diagnostic, but cannot restore an independent validation claim without genuinely untouched hardware cases."
+  },
+  "publication_provenance": {
+    "doi": "10.1016/j.apenergy.2021.118149",
+    "known_fact": "The authors' model directly predicts expander inlet pressure with their Eq. 53 and pairs that pressure-formation model with a passive receiver.",
+    "unavailable_fact": "The equation body, fitted coefficients, uncertainty, and calibration split are not present in the open dataset or accessible metadata; this study must not claim to reproduce Eq. 53."
+  }
+}
