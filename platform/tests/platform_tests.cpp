@@ -5,6 +5,7 @@
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/results.hpp"
 #include "thermox/platform/semi_physical_volumetric_expander.hpp"
+#include "thermox/platform/semi_physical_positive_displacement_pump.hpp"
 #include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/ideal_gas_package.hpp"
 
@@ -1093,6 +1094,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "compressor.material.variable_geometry_map",
         "pump.fluid.isentropic_efficiency",
         "pump.fluid.performance_map",
+        "pump.fluid.semi_physical_positive_displacement",
         "expander.fluid.volumetric_correlations",
         "expander.fluid.semi_physical_volumetric",
         "turbine.fluid.isentropic_efficiency",
@@ -2502,6 +2504,103 @@ void test_map_driven_pump_solves_real_fluid_operating_point() {
                 properties, invalid_maps, "operating_point");
         },
         "pump primary axis must be 'mass_flow'");
+}
+
+void test_semi_physical_positive_displacement_pump_closes_capacity_and_energy() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "semi_physical_r245fa_pump",
+    "media": [{
+      "id": "working_fluid",
+      "backend": "coolprop_heos",
+      "substance": "R245fa"
+    }],
+    "components": [{
+      "id": "pump",
+      "kind": "pump.fluid.semi_physical_positive_displacement",
+      "parameters": {
+        "displacement_volume_per_revolution": 0.000005,
+        "leakage_area": 0.00000001,
+        "leakage_discharge_coefficient": 0.8,
+        "eta_is": 0.65
+      },
+      "media": {"inlet": "working_fluid", "outlet": "working_fluid"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "operating_point",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "pump.inlet.p": {"value": 300.0, "unit": "kPa"},
+      "pump.inlet.T": {"value": 300.0, "unit": "K"},
+      "pump.outlet.p": {"value": 800.0, "unit": "kPa"},
+      "pump.shaft.omega": 30.0
+    },
+    "initial_guesses": {
+      "pump.inlet.m_dot": {"value": 0.03, "unit": "kg/s"},
+      "pump.outlet.m_dot": {"value": 0.03, "unit": "kg/s"},
+      "pump.outlet.h": {"value": 240.0, "unit": "kJ/kg"},
+      "pump.shaft.W_dot": {"value": 0.03, "unit": "kW"}
+    }
+  }]
+})json");
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        properties, "operating_point");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged,
+            result.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    const auto working_fluid = properties.create(
+        "coolprop_heos", "R245fa");
+    thermox::platform::SemiPhysicalPositiveDisplacementPumpEvaluation
+        direct;
+    const auto status = thermox::platform::
+        evaluate_semi_physical_positive_displacement_pump(
+            *working_fluid, value("pump.inlet.p"),
+            value("pump.inlet.h"), value("pump.outlet.p"),
+            value("pump.shaft.omega"),
+            {0.000005, 0.00000001, 0.8, 0.65}, direct);
+    require(status.ok(), status.message);
+    require(direct.mass_flow > 0.0,
+            "positive-displacement pump produces positive capacity");
+    require(direct.leakage_mass_flow > 0.0,
+            "positive-displacement pump exposes pressure-driven leakage");
+    require_near(
+        value("pump.inlet.m_dot"), direct.mass_flow, 1.0e-10,
+        "pump graph and direct evaluator share mass capacity");
+    require_near(
+        value("pump.outlet.h"), direct.outlet_enthalpy, 1.0e-5,
+        "pump graph and direct evaluator share outlet energy");
+    require_near(
+        value("pump.shaft.W_dot"), direct.shaft_power, 1.0e-6,
+        "pump graph and direct evaluator share shaft power");
+    require_near(
+        value("pump.ideal_displacement_mass_flow") -
+            value("pump.leakage_mass_flow"),
+        value("pump.inlet.m_dot"), 1.0e-10,
+        "pump displacement minus leakage closes delivered mass flow");
+    require_near(
+        direct.shaft_power,
+        direct.mass_flow *
+            (direct.outlet_enthalpy - value("pump.inlet.h")),
+        1.0e-8, "pump shaft power closes fluid energy");
+
+    auto transient_document = document;
+    transient_document.cases.front().mode = "dynamic_transient";
+    (void)thermox::platform::compile_transient_model_graph(
+        transient_document,
+        thermox::platform::make_default_component_registry(),
+        properties, "operating_point");
 }
 
 void test_correlated_volumetric_expander_closes_mass_and_energy() {
@@ -9408,6 +9507,7 @@ int main() {
         test_map_driven_compressor_solves_bound_operating_point();
         test_map_continuation_recovers_out_of_domain_flow_guess();
         test_map_driven_pump_solves_real_fluid_operating_point();
+        test_semi_physical_positive_displacement_pump_closes_capacity_and_energy();
         test_correlated_volumetric_expander_closes_mass_and_energy();
         test_semi_physical_volumetric_expander_closes_losses_and_energy();
         test_map_driven_turbine_solves_bound_operating_point();

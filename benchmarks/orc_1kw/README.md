@@ -58,6 +58,16 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   the platform contract and explicitly rejects gas-path corrected maps. The 77 measurements do not
   themselves define a defensible non-rectangular pump map, so no hardware-validation claim is made
   until the paper, OEM data, or a preregistered training-only model supplies its form.
+- `pump.fluid.semi_physical_positive_displacement` now provides the more appropriate generic
+  diaphragm/positive-displacement closure for this rig: ideal displacement capacity minus
+  pressure-driven leakage, with property-backed isentropic heating and shaft input. Three blocked
+  experiment-family folds inside cases 1--68 give mass-flow MAPE of 0.34--0.80% and maximum errors
+  of 0.57--1.99%; pump outlet-temperature MAE is 0.15--0.27 K. A full cases 1--68 fit gives an
+  effective displacement of 4.283 mL/rev, conditional leakage area of 1.141e-8 m2 at fixed
+  `Cd=0.8`, and aggregate PT-derived isentropic efficiency of 0.362. Cases 69--77 are diagnostic
+  only and give 1.07% mass-flow MAPE and 0.30 K outlet-temperature MAE. This is strong
+  component-blocked evidence, not external-boundary whole-cycle validation: measured pump pressure
+  rise is still an input, and only `Cd*A` is identifiable.
 - `expander.fluid.volumetric_correlations` now supplies the generic component-blocked scroll-
   expander path. It predicts mass capacity, outlet enthalpy, shaft power, and an explicit rejected-
   heat stream from three versioned correlations. Synthetic R245fa regression covers steady and
@@ -128,6 +138,13 @@ Run the semi-physical full training fit and blocked internal cross-validation wi
   benchmarks/orc_1kw/measurements.csv cross-validation
 ./build/thermox_orc_1kw_semi_physical_expander_study \
   benchmarks/orc_1kw/measurements.csv consumed-holdout-diagnostic
+```
+
+Run the positive-displacement pump study with:
+
+```sh
+./build/thermox_orc_1kw_semi_physical_pump_study \
+  benchmarks/orc_1kw/measurements.csv
 ```
 
 The declared residual scales are engineering model-discrimination scales, not instrument standard

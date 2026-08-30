@@ -1,0 +1,43 @@
+{
+  "schema_version": "thermox.orc_semi_physical_pump_study/v1",
+  "execution_path": "canonical_platform_component_evaluator",
+  "capacity_model": "displacement_minus_incompressible_orifice_leakage",
+  "calibration_scope": "cases_1_68",
+  "consumed_primary_holdout_cases": "69_77_diagnostic_only",
+  "assumptions": {
+    "leakage_discharge_coefficient": 0.8,
+    "leakage_identifiability": "only_cd_times_area_is_identified",
+    "efficiency_interpretation": "aggregate_from_measured_inlet_and_outlet_PT_not_an_OEM_map"
+  },
+  "blocked_internal_cross_validation": [
+    {
+      "id": "charge_sweeps",
+      "fit": {"displacement_volume_per_revolution": 4.3196e-06, "effective_leakage_area_at_fixed_cd_0_8": 1.70276e-08, "aggregate_isentropic_efficiency": 0.341846, "capacity_design_matrix_condition_number": 32.0637},
+      "mass_flow": {"count": 29, "mean_absolute_error_si": 0.000228824, "maximum_absolute_error_si": 0.000623984, "mape_percent": 0.800819, "maximum_absolute_relative_error_percent": 1.99255, "mean_bias_percent": 0.796974},
+      "outlet_temperature": {"count": 29, "mean_absolute_error_si": 0.18921, "maximum_absolute_error_si": 0.539731, "mape_percent": 0.0641222, "maximum_absolute_relative_error_percent": 0.18313, "mean_bias_percent": 0.0219306}
+    },
+    {
+      "id": "sink_temperature_sweeps",
+      "fit": {"displacement_volume_per_revolution": 4.27245e-06, "effective_leakage_area_at_fixed_cd_0_8": 1.07401e-08, "aggregate_isentropic_efficiency": 0.374629, "capacity_design_matrix_condition_number": 30.9118},
+      "mass_flow": {"count": 20, "mean_absolute_error_si": 0.000169702, "maximum_absolute_error_si": 0.000295036, "mape_percent": 0.551981, "maximum_absolute_relative_error_percent": 0.814159, "mean_bias_percent": -0.551704},
+      "outlet_temperature": {"count": 20, "mean_absolute_error_si": 0.273403, "maximum_absolute_error_si": 0.785645, "mape_percent": 0.094952, "maximum_absolute_relative_error_percent": 0.277858, "mean_bias_percent": -0.0461129}
+    },
+    {
+      "id": "speed_sweeps",
+      "fit": {"displacement_volume_per_revolution": 4.28733e-06, "effective_leakage_area_at_fixed_cd_0_8": 1.32209e-08, "aggregate_isentropic_efficiency": 0.36652, "capacity_design_matrix_condition_number": 36.1043},
+      "mass_flow": {"count": 19, "mean_absolute_error_si": 8.69328e-05, "maximum_absolute_error_si": 0.000202245, "mape_percent": 0.339132, "maximum_absolute_relative_error_percent": 0.570132, "mean_bias_percent": -0.181022},
+      "outlet_temperature": {"count": 19, "mean_absolute_error_si": 0.152809, "maximum_absolute_error_si": 0.393603, "mape_percent": 0.0518815, "maximum_absolute_relative_error_percent": 0.13363, "mean_bias_percent": -0.035068}
+    }
+  ],
+  "full_training_fit": {
+    "displacement_volume_per_revolution": 4.28271e-06,
+    "effective_leakage_area_at_fixed_cd_0_8": 1.14142e-08,
+    "aggregate_isentropic_efficiency": 0.361842,
+    "capacity_design_matrix_condition_number": 32.0142
+  },
+  "consumed_holdout_diagnostic": {
+    "independent_validation": false,
+    "mass_flow": {"count": 9, "mean_absolute_error_si": 0.000271246, "maximum_absolute_error_si": 0.00035849, "mape_percent": 1.06749, "maximum_absolute_relative_error_percent": 1.73519, "mean_bias_percent": 1.06749},
+    "outlet_temperature": {"count": 9, "mean_absolute_error_si": 0.297114, "maximum_absolute_error_si": 0.930017, "mape_percent": 0.100705, "maximum_absolute_relative_error_percent": 0.307558, "mean_bias_percent": 0.00555071}
+  }
+}

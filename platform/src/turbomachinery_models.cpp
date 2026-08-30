@@ -1,6 +1,7 @@
 #include "component_modules.hpp"
 #include "component_model_support.hpp"
 #include "performance_map_continuation.hpp"
+#include "thermox/platform/semi_physical_positive_displacement_pump.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -119,6 +120,36 @@ ComponentModelDescriptor make_pump_map_descriptor() {
         performance_map_artifact_type,
         true,
     }};
+    return out;
+}
+
+ComponentModelDescriptor make_positive_displacement_pump_descriptor() {
+    auto out = make_descriptor(
+        "pump.fluid.semi_physical_positive_displacement", "in");
+    out.version = "1.0.0";
+    out.supports_transient = true;
+    out.uses_quasi_steady_transient_equations = true;
+    out.model_name =
+        "Displacement capacity with pressure-driven leakage";
+    out.parameters = {
+        {"displacement_volume_per_revolution", "volume", true,
+         std::nullopt, 0.0, std::numeric_limits<double>::infinity(),
+         false, true},
+        {"leakage_area", "area", false, 0.0, 0.0,
+         std::numeric_limits<double>::infinity(), true, true},
+        {"leakage_discharge_coefficient", "dimensionless", false,
+         1.0, 0.0, 1.0, true, true},
+        {"eta_is", "dimensionless", true, std::nullopt, 0.0, 1.0,
+         false, true},
+    };
+    out.internal_variables = {
+        {"ideal_displacement_mass_flow", DaeVariableKind::algebraic,
+         0.02, 0.1, 0.0, 1.0, 0.0,
+         std::numeric_limits<double>::infinity(), "mass_flow"},
+        {"leakage_mass_flow", DaeVariableKind::algebraic,
+         0.001, 0.1, 0.0, 1.0, 0.0,
+         std::numeric_limits<double>::infinity(), "mass_flow"},
+    };
     return out;
 }
 
@@ -1243,7 +1274,191 @@ private:
     ComponentModelDescriptor descriptor_;
 };
 
+class SemiPhysicalPositiveDisplacementPumpModel final
+    : public ComponentModel {
+public:
+    SemiPhysicalPositiveDisplacementPumpModel()
+        : descriptor_(make_positive_displacement_pump_descriptor()) {}
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto properties =
+            require_property_package(context, "inlet");
+        if (properties != require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const SemiPhysicalPositiveDisplacementPumpParameters parameters{
+            required_parameter(
+                context.component,
+                "displacement_volume_per_revolution"),
+            required_parameter(context.component, "leakage_area"),
+            required_parameter(
+                context.component, "leakage_discharge_coefficient"),
+            required_parameter(context.component, "eta_is")};
+        const auto inlet_m = require_port_variable(
+            context, "inlet.m_dot");
+        const auto inlet_p = require_port_variable(context, "inlet.p");
+        const auto inlet_h = require_port_variable(context, "inlet.h");
+        const auto outlet_m = require_port_variable(
+            context, "outlet.m_dot");
+        const auto outlet_p = require_port_variable(context, "outlet.p");
+        const auto outlet_h = require_port_variable(context, "outlet.h");
+        const auto shaft_w = require_port_variable(
+            context, "shaft.W_dot");
+        const auto shaft_omega = require_port_variable(
+            context, "shaft.omega");
+        const auto ideal_mass = component_model_support::
+            require_internal_variable(
+                context, "ideal_displacement_mass_flow");
+        const auto leakage_mass = component_model_support::
+            require_internal_variable(context, "leakage_mass_flow");
+        const auto evaluate =
+            [properties, inlet_p, inlet_h, outlet_p, shaft_omega,
+             parameters](
+                const std::vector<double>& x,
+                SemiPhysicalPositiveDisplacementPumpEvaluation& result) {
+                return evaluate_semi_physical_positive_displacement_pump(
+                    *properties, x.at(inlet_p), x.at(inlet_h),
+                    x.at(outlet_p), x.at(shaft_omega), parameters,
+                    result);
+            };
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_continuity",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 0.1);
+        const auto add_result_equation =
+            [&system, &prefix, evaluate](
+                const std::string& name, std::size_t variable,
+                double SemiPhysicalPositiveDisplacementPumpEvaluation::
+                    *member,
+                double scale) {
+                system.add_checked_equation(
+                    prefix + name,
+                    [evaluate, variable, member](
+                        const std::vector<double>& x,
+                        double& residual) {
+                        SemiPhysicalPositiveDisplacementPumpEvaluation
+                            result;
+                        const auto status = evaluate(x, result);
+                        if (!status.ok()) return status;
+                        residual = x.at(variable) - result.*member;
+                        return EvaluationStatus::success();
+                    },
+                    scale);
+            };
+        add_result_equation(
+            "displacement_capacity", inlet_m,
+            &SemiPhysicalPositiveDisplacementPumpEvaluation::mass_flow,
+            0.1);
+        add_result_equation(
+            "outlet_energy", outlet_h,
+            &SemiPhysicalPositiveDisplacementPumpEvaluation::
+                outlet_enthalpy,
+            1.0e5);
+        add_result_equation(
+            "shaft_power", shaft_w,
+            &SemiPhysicalPositiveDisplacementPumpEvaluation::shaft_power,
+            1.0e3);
+        add_result_equation(
+            "ideal_displacement_mass_flow_diagnostic", ideal_mass,
+            &SemiPhysicalPositiveDisplacementPumpEvaluation::
+                ideal_displacement_mass_flow,
+            0.1);
+        add_result_equation(
+            "leakage_mass_flow_diagnostic", leakage_mass,
+            &SemiPhysicalPositiveDisplacementPumpEvaluation::
+                leakage_mass_flow,
+            0.1);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 }  // namespace
+
+EvaluationStatus evaluate_semi_physical_positive_displacement_pump(
+    const physics::PropertyPackage& properties,
+    double inlet_pressure,
+    double inlet_enthalpy,
+    double outlet_pressure,
+    double angular_speed,
+    const SemiPhysicalPositiveDisplacementPumpParameters& parameters,
+    SemiPhysicalPositiveDisplacementPumpEvaluation& result) {
+    result = {};
+    if (!std::isfinite(inlet_pressure) || inlet_pressure <= 0.0 ||
+        !std::isfinite(inlet_enthalpy) ||
+        !std::isfinite(outlet_pressure) ||
+        outlet_pressure < inlet_pressure ||
+        !std::isfinite(angular_speed) || angular_speed <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "positive-displacement pump requires finite positive inlet "
+            "state and speed with outlet pressure not below inlet pressure");
+    }
+    if (!std::isfinite(
+            parameters.displacement_volume_per_revolution) ||
+        parameters.displacement_volume_per_revolution <= 0.0 ||
+        !std::isfinite(parameters.leakage_area) ||
+        parameters.leakage_area < 0.0 ||
+        !std::isfinite(parameters.leakage_discharge_coefficient) ||
+        parameters.leakage_discharge_coefficient < 0.0 ||
+        parameters.leakage_discharge_coefficient > 1.0 ||
+        !std::isfinite(parameters.isentropic_efficiency) ||
+        parameters.isentropic_efficiency <= 0.0 ||
+        parameters.isentropic_efficiency > 1.0) {
+        return EvaluationStatus::fatal(
+            "positive-displacement pump parameters are outside their "
+            "physical domains");
+    }
+    const auto inlet = properties.state_ph(
+        inlet_pressure, inlet_enthalpy);
+    if (!inlet.ok()) return property_failure(inlet);
+    const double density = inlet.state.density_kg_m3;
+    if (!std::isfinite(density) || density <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "positive-displacement pump inlet density must be positive");
+    }
+    const double pressure_rise = outlet_pressure - inlet_pressure;
+    result.ideal_displacement_mass_flow =
+        density * parameters.displacement_volume_per_revolution *
+        angular_speed / (2.0 * std::numbers::pi);
+    result.leakage_mass_flow =
+        parameters.leakage_discharge_coefficient *
+        parameters.leakage_area *
+        std::sqrt(2.0 * density * pressure_rise);
+    result.mass_flow = result.ideal_displacement_mass_flow -
+        result.leakage_mass_flow;
+    if (!std::isfinite(result.mass_flow) || result.mass_flow <= 0.0) {
+        return EvaluationStatus::recoverable(
+            "positive-displacement pump leakage equals or exceeds its "
+            "ideal displacement capacity");
+    }
+    const auto isentropic = properties.state_ps(
+        outlet_pressure, inlet.state.entropy_j_kg_k);
+    if (!isentropic.ok()) return property_failure(isentropic);
+    result.outlet_enthalpy = inlet_enthalpy +
+        (isentropic.state.enthalpy_j_kg - inlet_enthalpy) /
+            parameters.isentropic_efficiency;
+    result.shaft_power = result.mass_flow *
+        (result.outlet_enthalpy - inlet_enthalpy);
+    if (!std::isfinite(result.outlet_enthalpy) ||
+        !std::isfinite(result.shaft_power) ||
+        result.shaft_power < 0.0) {
+        return EvaluationStatus::recoverable(
+            "positive-displacement pump produced a nonphysical energy "
+            "state");
+    }
+    return EvaluationStatus::success();
+}
 
 void register_turbomachinery_component_models(
     ComponentRegistry& registry) {
@@ -1254,6 +1469,8 @@ void register_turbomachinery_component_models(
         std::make_shared<TurbomachineryModel>(
             "pump.fluid.isentropic_efficiency", true));
     registry.register_model(std::make_shared<PumpMapModel>());
+    registry.register_model(std::make_shared<
+        SemiPhysicalPositiveDisplacementPumpModel>());
     registry.register_model(
         std::make_shared<TurbomachineryModel>(
             "turbine.fluid.isentropic_efficiency", false));
