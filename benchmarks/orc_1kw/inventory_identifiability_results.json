@@ -1,0 +1,33 @@
+{
+  "schema_version": "thermox.orc_inventory_identifiability/v1",
+  "classification": "training_only_structural_screen_not_calibration",
+  "training_cases": 68,
+  "proxy_model": {
+    "equation": "charge=sum(lumped_volume*mean_measured_boundary_density)",
+    "evaporator_density": "arithmetic mean of measured inlet/outlet density",
+    "condenser_density": "arithmetic mean of measured inlet/outlet density",
+    "receiver_density": "measured pump-inlet density"
+  },
+  "fit": {
+    "rank": 3,
+    "parameter_count": 3,
+    "evaporator_volume_l": 7.1612,
+    "condenser_volume_l": 700.357,
+    "receiver_volume_l": -351.941,
+    "all_volumes_nonnegative": false,
+    "charge_rmse_kg": 0.661602,
+    "charge_maximum_absolute_error_kg": 1.89314,
+    "charge_mean_bias_kg": 0.00216008,
+    "qr_reciprocal_pivot_ratio": 0.000331914,
+    "qr_quality_method": "reference-householder-cpqr-r-diagonal-ratio"
+  },
+  "best_nonnegative_fit": {
+    "evaporator_volume_l": 7.87759,
+    "condenser_volume_l": 0,
+    "receiver_volume_l": 0,
+    "charge_rmse_kg": 0.742358,
+    "charge_maximum_absolute_error_kg": 1.98876,
+    "charge_mean_bias_kg": 0.000968217
+  },
+  "interpretation": "A full numerical rank does not establish physical identifiability; negative volume or large charge residual rejects this boundary-density proxy and requires internal holdup or void-fraction information."
+}

@@ -98,6 +98,16 @@ target_compile_features(
 target_compile_options(
     thermox_orc_1kw_external_boundary_sweep PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+add_executable(
+    thermox_orc_1kw_inventory_identifiability_study
+    benchmarks/orc_1kw/inventory_identifiability_study.cpp)
+target_link_libraries(
+    thermox_orc_1kw_inventory_identifiability_study PRIVATE thermox_platform)
+target_compile_features(
+    thermox_orc_1kw_inventory_identifiability_study PRIVATE cxx_std_20)
+target_compile_options(
+    thermox_orc_1kw_inventory_identifiability_study PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
 # Whole-cycle real-fluid sweeps are explicit evidence jobs, not routine CTest.
 add_test(
     NAME platform_iso2314_performance_test_cli

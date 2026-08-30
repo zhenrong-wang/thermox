@@ -138,6 +138,19 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   **not** falsify the nonlinear kernel and is not an accuracy validation. A 68-case run is withheld
   until training-only volume, conductance, loss, and receiver parameters are identifiable; blindly
   spending CPU on the known-inadequate parameterization would add no evidence.
+- A training-only inventory screen now tests whether the 68 measured boundary states and total
+  charge values can identify three nonnegative lumped refrigerant volumes. The full linear system
+  has numerical rank 3/3, but its QR reciprocal pivot ratio is only 3.32e-4 and the unconstrained
+  optimum requires +700 L condenser volume and -352 L receiver volume. Exact active-set
+  nonnegative least squares collapses to a single 7.88 L evaporator volume, yet still leaves
+  0.742 kg charge RMSE and 1.989 kg maximum error. These are impossible for the documented 1 kW
+  apparatus and decisively reject boundary-density-only charge allocation. The result is frozen in
+  `inventory_identifiability_results.json`; numerical rank must not be misreported as physical
+  identifiability.
+- Whole-cycle inventory calibration therefore needs at least apparatus internal-volume data and a
+  two-phase holdup/void-fraction model (or measured inventory/void fraction at selected operating
+  points). Connecting-line, plate-channel, receiver, and expander trapped volumes cannot be inferred
+  credibly from this dataset's total charge and boundary temperatures/pressures alone.
 
 ## Evidence discipline
 
@@ -193,6 +206,13 @@ Run a bounded external-boundary case range with:
 This evidence executable is intentionally not registered as routine CTest because real-fluid
 whole-cycle solves are comparatively expensive. Keep ranges small until their parameterization is
 shown feasible.
+
+Run the low-cost training-only inventory identifiability screen with:
+
+```sh
+./build/thermox_orc_1kw_inventory_identifiability_study \
+  benchmarks/orc_1kw/measurements.csv
+```
 
 The declared residual scales are engineering model-discrimination scales, not instrument standard
 uncertainties. Consequently, the study does not report uncertainty-qualified parameter covariance.
