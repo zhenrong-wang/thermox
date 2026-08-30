@@ -1,5 +1,6 @@
 #include "thermox/nonlinear_solver.hpp"
 #include "thermox/platform/component_registry.hpp"
+#include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
 #include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/property_registry.hpp"
@@ -62,6 +63,22 @@ double value(const Row& row, std::string_view key) {
 thermox::platform::ScalarValue scalar(
     double value_si, std::string unit, std::string dimension) {
     return {value_si, std::move(unit), std::move(dimension)};
+}
+
+void bind_orc_exchanger_holdup_artifact(
+    thermox::platform::ModelDocument& document) {
+    for (auto& assembly : document.assemblies) {
+        const std::string role = assembly.id == "evaporator"
+            ? "cold_side_void_fraction_correlation"
+            : (assembly.id == "condenser"
+                   ? "hot_side_void_fraction_correlation"
+                   : "");
+        if (role.empty()) continue;
+        for (auto& component : assembly.components) {
+            component.artifact_bindings[role] =
+                "orc-r245fa-void-fraction";
+        }
+    }
 }
 
 void configure_case(
@@ -246,12 +263,27 @@ void run(
     const std::string& model_path,
     const std::vector<Row>& rows,
     std::size_t first,
-    std::size_t last) {
-    const auto base = thermox::platform::load_model_document(model_path);
+    std::size_t last,
+    double slip_ratio) {
+    auto base = thermox::platform::load_model_document(model_path);
+    bind_orc_exchanger_holdup_artifact(base);
     const auto components =
         thermox::platform::make_default_component_registry();
     const auto properties =
         thermox::physics::make_default_property_package_registry();
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(thermox::platform::CorrelationArtifact{
+        "orc-r245fa-void-fraction",
+        thermox::platform::correlation_artifact_schema_v2,
+        "declared-slip-sensitivity", std::string(64, 'a'),
+        {{"vapor_quality", "dimensionless"},
+         {"liquid_density", "density"},
+         {"vapor_density", "density"}},
+        {"void_fraction", "dimensionless"},
+        {{"default", "two_phase", 0, {{"slip_ratio", slip_ratio}},
+          "1 / (1 + ((1 - vapor_quality) / vapor_quality) * "
+          "(vapor_density / liquid_density) * slip_ratio)", {}, {},
+          false}}});
     const thermox::physics::CoolPropHeosPropertyPackage water{"Water"};
     const thermox::physics::CoolPropHeosPropertyPackage r245fa{"R245fa"};
     std::vector<double> previous_solution;
@@ -263,6 +295,7 @@ void run(
     const auto started = std::chrono::steady_clock::now();
     std::cout << "{\"schema_version\":\"thermox.orc_external_boundary_sweep/v1\","
               << "\"classification\":\"preliminary_parameter_diagnostic_not_validation\","
+              << "\"declared_slip_ratio\":" << slip_ratio << ','
               << "\"case_range\":\"" << first << '-' << last
               << "\",\"cases\":[";
     for (std::size_t case_number = first;
@@ -271,7 +304,7 @@ void run(
         const auto& row = rows.at(case_number - 1U);
         configure_case(document, row, water, r245fa, case_number);
         auto graph = thermox::platform::compile_model_graph(
-            document, components, properties,
+            document, components, properties, artifacts,
             document.cases.front().id);
         const auto measured_endpoint_guess = graph.problem.initial_guess;
         bool used_warm_start = false;
@@ -368,16 +401,20 @@ void run(
 
 int main(int argc, char** argv) {
     try {
-        if (argc != 5)
+        if (argc != 6)
             throw std::invalid_argument(
                 "usage: thermox_orc_1kw_external_boundary_sweep "
-                "<model.json> <measurements.csv> <first-case> <last-case>");
+                "<model.json> <measurements.csv> <first-case> <last-case> "
+                "<slip-ratio>");
         const auto rows = read_csv(argv[2]);
         const auto first = static_cast<std::size_t>(std::stoul(argv[3]));
         const auto last = static_cast<std::size_t>(std::stoul(argv[4]));
         if (first == 0U || last < first || last > rows.size())
             throw std::invalid_argument("case range is outside source data");
-        run(argv[1], rows, first, last);
+        const double slip_ratio = std::stod(argv[5]);
+        if (!std::isfinite(slip_ratio) || slip_ratio <= 0.0)
+            throw std::invalid_argument("slip ratio must be positive and finite");
+        run(argv[1], rows, first, last, slip_ratio);
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "ORC external-boundary sweep failed: "

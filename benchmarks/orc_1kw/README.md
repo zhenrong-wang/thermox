@@ -158,6 +158,20 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   is represented compositionally by this volume plus a selected `pipe.fluid.*` hydraulic model,
   rather than by an ORC-specific line component. This closes the platform capability gap, but it
   does not manufacture the missing apparatus volumes or correlation applicability data.
+- Finite-volume exchanger sides can now bind optional `hot_side_void_fraction_correlation` and
+  `cold_side_void_fraction_correlation` artifacts. The closure invokes the artifact only in a
+  two-phase PH state and falls back to the property-package density in liquid, vapor, supercritical,
+  or other single-phase regimes. The same contract is verified in steady and transient execution,
+  including a two-phase-to-vapor path.
+- An explicit constant-slip sensitivity was run on real cases 1--10 with slip ratio 2; this ratio is
+  a declared diagnostic assumption, not an identified hardware parameter. Both repeated 3.5 kg and
+  4.0 kg charge blocks converge, while both 4.5 kg cases stop at 0.55--0.58% condenser-inventory
+  residual and 5.0--6.5 kg cases fail primarily on total charge. The repeatability supports a
+  missing-volume/holdup-capacity diagnosis. Across the four converged cases mass-flow MAPE is 1.31%
+  (1.64% maximum), but expander-power MAPE is 44.56% (62.15% maximum). Thus Thermox is credibly
+  executing a real external-boundary graph and predicting flow in its feasible subset, but this
+  parameterization decisively fails a system power-accuracy claim. The frozen evidence is
+  `external_boundary_slip_sensitivity_1_10_results.json`.
 
 ## Evidence discipline
 
@@ -207,8 +221,11 @@ Run a bounded external-boundary case range with:
 ```sh
 ./build/thermox_orc_1kw_external_boundary_sweep \
   benchmarks/orc_1kw/external_boundary_case1_feasibility.json \
-  benchmarks/orc_1kw/measurements.csv 1 3
+  benchmarks/orc_1kw/measurements.csv 1 10 2.0
 ```
+
+The last argument is the declared vapor/liquid velocity slip ratio. It is mandatory so a benchmark
+cannot silently choose or tune a holdup law.
 
 This evidence executable is intentionally not registered as routine CTest because real-fluid
 whole-cycle solves are comparatively expensive. Keep ranges small until their parameterization is

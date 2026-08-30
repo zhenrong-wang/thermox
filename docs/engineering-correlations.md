@@ -146,6 +146,13 @@ pressure loss remain separately replaceable model responsibilities. The candidat
 contract enforces declared scalar operating ranges and deterministic selection among the laws in
 the bound artifact.
 
+Finite-volume heat-exchanger cells accept the same artifact type independently on each side through
+optional `hot_side_void_fraction_correlation` and `cold_side_void_fraction_correlation` roles. A
+bound correlation is evaluated only when the side's PH state is two phase; single-phase states use
+the registered property density directly. The resulting void fraction mixes saturated phase
+densities into the geometric holdup density. Heat-transfer conductance artifacts remain separate,
+so users can change boiling/condensation heat transfer and inventory slip laws independently.
+
 ## Correlation families and regime selection
 
 The same `thermox.correlation/v2` contract represents both a one-law correlation and a regime

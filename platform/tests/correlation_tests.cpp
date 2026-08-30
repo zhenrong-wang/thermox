@@ -1325,6 +1325,205 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
                   "fixed charge closes slip-aware inventory mass");
 }
 
+void test_exchanger_void_fraction_holdup_is_regime_aware() {
+    constexpr double pressure = 1.0e6;
+    constexpr double volume = 0.01;
+    constexpr double cold_quality = 0.2;
+    constexpr double mass_flow = 0.1;
+    const auto properties =
+        thermox::physics::make_default_property_package_registry();
+    const auto water = properties.create("water_steam_if97", "Water");
+    const auto saturation = water->saturation_p(pressure);
+    const auto hot_state = water->state_pt(pressure, 500.0);
+    require(saturation.ok() && hot_state.ok(),
+            "mixed-regime exchanger properties must evaluate");
+    const double cold_enthalpy =
+        (1.0 - cold_quality) * saturation.liquid.enthalpy_j_kg +
+        cold_quality * saturation.vapor.enthalpy_j_kg;
+    const double homogeneous_specific_volume =
+        (1.0 - cold_quality) /
+            saturation.liquid.density_kg_m3 +
+        cold_quality / saturation.vapor.density_kg_m3;
+    const double alpha = 1.0 /
+        (1.0 + ((1.0 - cold_quality) / cold_quality) *
+             (saturation.vapor.density_kg_m3 /
+              saturation.liquid.density_kg_m3) * 2.0);
+    const double slip_density =
+        alpha * saturation.vapor.density_kg_m3 +
+        (1.0 - alpha) * saturation.liquid.density_kg_m3;
+
+    std::ostringstream json;
+    json << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "mixed_regime_holdup",
+    "media": [{"id": "water", "backend": "water_steam_if97", "substance": "Water"}],
+    "components": [{
+      "id": "cell",
+      "kind": "heat_exchanger.fluid.finite_volume_cell",
+      "parameters": {
+        "hot_fluid_volume": 0.01,
+        "cold_fluid_volume": 0.01,
+        "wall_thermal_capacity": 1000.0,
+        "hot_side_UA": 10.0,
+        "cold_side_UA": 10.0,
+        "hot_flow_diameter": 0.05,
+        "cold_flow_diameter": 0.05,
+        "hot_loss_coefficient": 1.0e-12,
+        "cold_loss_coefficient": 1.0e-12
+      },
+      "artifacts": {
+        "cold_side_void_fraction_correlation": "void-fraction-correlation"
+      },
+      "media": {"hot_in": "water", "hot_out": "water",
+                "cold_in": "water", "cold_out": "water"}
+    }],
+    "connections": []
+  },
+  "cases": [{
+    "id": "steady",
+    "mode": "steady_state",
+    "fixed_values": {
+      "cell.hot_in.m_dot": )json" << mass_flow << R"json(,
+      "cell.hot_in.p": )json" << pressure << R"json(,
+      "cell.hot_in.h": )json" << hot_state.state.enthalpy_j_kg << R"json(,
+      "cell.cold_in.m_dot": )json" << mass_flow << R"json(,
+      "cell.cold_in.p": )json" << pressure << R"json(,
+      "cell.cold_in.h": )json" << cold_enthalpy << R"json(
+    },
+    "initial_guesses": {
+      "cell.hot_out.m_dot": )json" << mass_flow << R"json(,
+      "cell.hot_out.p": )json" << pressure << R"json(,
+      "cell.hot_out.h": )json" << hot_state.state.enthalpy_j_kg << R"json(,
+      "cell.cold_out.m_dot": )json" << mass_flow << R"json(,
+      "cell.cold_out.p": )json" << pressure << R"json(,
+      "cell.cold_out.h": )json" << cold_enthalpy << R"json(
+    }
+  }]
+})json";
+    const auto document =
+        thermox::platform::parse_model_document_text(json.str());
+    thermox::platform::EngineeringArtifactRegistry artifacts;
+    artifacts.register_artifact(void_fraction_correlation());
+    const auto components =
+        thermox::platform::make_default_component_registry();
+    const auto graph = thermox::platform::compile_model_graph(
+        document, components, properties, artifacts, "steady");
+    const auto solved = thermox::solve_newton(graph.problem);
+    require(solved.diagnostics.converged, solved.diagnostics.message);
+    const auto value = [&](const std::string& name) {
+        const auto found = std::find(
+            graph.problem.variable_names.begin(),
+            graph.problem.variable_names.end(), name);
+        require(found != graph.problem.variable_names.end(),
+                "mixed-regime variable must exist: " + name);
+        return solved.x.at(static_cast<std::size_t>(
+            found - graph.problem.variable_names.begin()));
+    };
+    const auto solved_cold = water->state_ph(
+        value("cell.cold_in.p"), value("cell.cold_out.h"));
+    require(solved_cold.ok() &&
+                solved_cold.state.phase ==
+                    thermox::physics::Phase::two_phase,
+            "cold exchanger side must remain two phase");
+    const double solved_quality = solved_cold.state.vapor_quality;
+    const double solved_alpha = 1.0 /
+        (1.0 + ((1.0 - solved_quality) / solved_quality) *
+             (saturation.vapor.density_kg_m3 /
+              saturation.liquid.density_kg_m3) * 2.0);
+    const double solved_slip_density =
+        solved_alpha * saturation.vapor.density_kg_m3 +
+        (1.0 - solved_alpha) * saturation.liquid.density_kg_m3;
+    require_close(value("cell.cold_inventory.mass"),
+                  volume * solved_slip_density, 1.0e-8,
+                  "two-phase exchanger side uses slip-aware holdup");
+    require(std::abs(value("cell.cold_inventory.mass") -
+                     volume / homogeneous_specific_volume) > 0.1,
+            "slip-aware holdup must differ materially from homogeneous density");
+    const auto solved_hot = water->state_ph(
+        value("cell.hot_in.p"), value("cell.hot_out.h"));
+    require(solved_hot.ok() &&
+                solved_hot.state.phase !=
+                    thermox::physics::Phase::two_phase,
+            "hot exchanger side must remain single phase");
+    require_close(value("cell.hot_inventory.mass"),
+                  volume * solved_hot.state.density_kg_m3, 1.0e-8,
+                  "single-phase exchanger side bypasses void correlation");
+    require(alpha > 0.0 && slip_density > 0.0,
+            "reference slip calculation must remain physical");
+
+    auto transient_document = thermox::platform::load_model_document(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/regime_spanning_finite_volume_heat_exchanger.json");
+    transient_document.components.front().artifact_bindings[
+        "cold_side_void_fraction_correlation"] =
+        "void-fraction-correlation";
+    constexpr double transient_pressure = 1.0e6;
+    constexpr double transient_enthalpy = 2777000.0;
+    const auto transient_water = properties.create(
+        "coolprop_heos", "Water");
+    const auto transient_state = transient_water->state_ph(
+        transient_pressure, transient_enthalpy);
+    const auto transient_saturation = transient_water->saturation_p(
+        transient_pressure);
+    require(transient_state.ok() && transient_saturation.ok() &&
+                transient_state.state.phase ==
+                    thermox::physics::Phase::two_phase,
+            "transient exchanger reference must begin two phase");
+    const double transient_quality =
+        transient_state.state.vapor_quality;
+    const double transient_alpha = 1.0 /
+        (1.0 + ((1.0 - transient_quality) / transient_quality) *
+             (transient_saturation.vapor.density_kg_m3 /
+              transient_saturation.liquid.density_kg_m3) * 2.0);
+    const double transient_density =
+        transient_alpha *
+            transient_saturation.vapor.density_kg_m3 +
+        (1.0 - transient_alpha) *
+            transient_saturation.liquid.density_kg_m3;
+    const double transient_mass = 1.0e-3 * transient_density;
+    auto& transient_guesses =
+        transient_document.cases.front().initial_guesses;
+    transient_guesses["cell.cold_mass"] = {
+        transient_mass, "kg", "mass"};
+    transient_guesses["cell.cold_inventory.mass"] = {
+        transient_mass, "kg", "mass"};
+    transient_guesses["cell.cold_total_energy"] = {
+        transient_mass * transient_state.state.internal_energy_j_kg,
+        "J", "energy"};
+    const auto transient_graph =
+        thermox::platform::compile_transient_model_graph(
+            transient_document, components, properties, artifacts,
+            "boil_to_vapor");
+    const auto initialized = thermox::make_consistent_initial_conditions(
+        transient_graph.problem, 0.0);
+    require(initialized.diagnostics.converged,
+            initialized.diagnostics.message);
+    const auto transient_value = [&](const std::string& name) {
+        const auto found = std::find(
+            transient_graph.problem.variable_names.begin(),
+            transient_graph.problem.variable_names.end(), name);
+        require(found != transient_graph.problem.variable_names.end(),
+                "transient holdup variable must exist: " + name);
+        return initialized.state.at(static_cast<std::size_t>(
+            found - transient_graph.problem.variable_names.begin()));
+    };
+    require_close(transient_value("cell.cold_mass"), transient_mass,
+                  1.0e-8,
+                  "transient two-phase side initializes slip-aware mass");
+    require_close(transient_value("cell.cold_inventory.mass"),
+                  transient_value("cell.cold_mass"), 1.0e-10,
+                  "transient inventory port exposes correlated holdup");
+    thermox::TimeIntegrationOptions integration_options;
+    integration_options.end_time = 1.0e-3;
+    integration_options.initial_step = 1.0e-4;
+    integration_options.max_step = 5.0e-4;
+    const auto integrated = thermox::integrate_dae(
+        transient_graph.problem, integration_options);
+    require(integrated.diagnostics.success,
+            integrated.diagnostics.message);
+}
+
 void test_finite_volume_exchanger_uses_conductance_correlations() {
     auto document = thermox::platform::load_model_document(
         std::string(THERMOX_SOURCE_DIR) +
@@ -1531,6 +1730,7 @@ int main() {
         test_return_bend_uses_bound_correlation();
         test_two_phase_pipe_uses_bound_void_fraction_correlation();
         test_two_phase_inventory_uses_correlation_for_outlet_quality();
+        test_exchanger_void_fraction_holdup_is_regime_aware();
         test_finite_volume_exchanger_uses_conductance_correlations();
     } catch (const std::exception& error) {
         std::cerr << "correlation tests failed: "

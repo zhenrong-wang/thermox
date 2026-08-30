@@ -143,6 +143,12 @@ public:
                  std::numeric_limits<double>::infinity(), false, true});
         }
         if (finite_volume_) {
+            descriptor_.artifacts.push_back(
+                {"hot_side_void_fraction_correlation",
+                 correlation_artifact_type, false});
+            descriptor_.artifacts.push_back(
+                {"cold_side_void_fraction_correlation",
+                 correlation_artifact_type, false});
             descriptor_.parameters.insert(
                 descriptor_.parameters.begin(), {
                     {"hot_fluid_volume", "volume", true,
@@ -284,14 +290,24 @@ public:
             prefix + "cold_mass_continuity",
             {{cold_out_m, 1.0}, {cold_in_m, -1.0}}, 0.0, 100.0);
         if (finite_volume_) {
+            const auto hot_holdup_correlation =
+                optional_void_fraction_correlation(
+                    context, "hot_side_void_fraction_correlation",
+                    *hot_properties, "hot-side");
+            const auto cold_holdup_correlation =
+                optional_void_fraction_correlation(
+                    context, "cold_side_void_fraction_correlation",
+                    *cold_properties, "cold-side");
             add_steady_inventory_closure(
                 system, prefix + "hot_inventory", hot_properties,
                 hot_holdup_parameter, hot_inventory,
-                hot_in_p, hot_out_h);
+                hot_in_p, hot_out_h, hot_in_m,
+                hot_diameter, hot_holdup_correlation);
             add_steady_inventory_closure(
                 system, prefix + "cold_inventory", cold_properties,
                 cold_holdup_parameter, cold_inventory,
-                cold_in_p, cold_out_h);
+                cold_in_p, cold_out_h, cold_in_m,
+                cold_diameter, cold_holdup_correlation);
         } else {
             system.add_linear_equation(
                 prefix + "hot_inventory",
@@ -487,6 +503,116 @@ public:
     }
 
 private:
+    struct HoldupClosure {
+        std::shared_ptr<const CorrelationArtifact> correlation;
+        std::shared_ptr<const physics::PropertyPackage> properties;
+        std::size_t mass_flow{};
+        std::size_t pressure{};
+        std::size_t enthalpy{};
+        double diameter{};
+        double area{};
+    };
+
+    static const std::map<std::string, std::string>&
+    void_fraction_input_contract() {
+        static const std::map<std::string, std::string> contract{
+            {"vapor_quality", "dimensionless"},
+            {"liquid_density", "density"},
+            {"vapor_density", "density"},
+            {"mass_flow", "mass_flow"},
+            {"mass_flux", "mass_flux"},
+            {"area", "area"},
+            {"diameter", "length"},
+            {"pressure", "pressure"}};
+        return contract;
+    }
+
+    static std::shared_ptr<const CorrelationArtifact>
+    optional_void_fraction_correlation(
+        const ComponentCompileContext& context,
+        const std::string& role,
+        const physics::PropertyPackage& properties,
+        const std::string& side) {
+        if (!context.artifacts.contains(role)) return {};
+        const auto correlation = require_correlation(context, role);
+        if (correlation->output().name != "void_fraction" ||
+            correlation->output().dimension != "dimensionless") {
+            throw std::invalid_argument(
+                side + " holdup correlation output must be named "
+                "'void_fraction' with dimensionless dimension");
+        }
+        for (const auto& input : correlation->inputs()) {
+            const auto supported = void_fraction_input_contract().find(
+                input.name);
+            if (supported == void_fraction_input_contract().end() ||
+                input.dimension != supported->second) {
+                throw std::invalid_argument(
+                    side + " holdup correlation input '" + input.name +
+                    "' has unsupported name or dimension");
+            }
+        }
+        if (!properties.supports(
+                physics::PropertyCapability::saturation_p)) {
+            throw std::invalid_argument(
+                side + " holdup correlation requires saturation "
+                "properties unsupported by its medium");
+        }
+        return correlation;
+    }
+
+    static EvaluationStatus evaluate_holdup_density(
+        const HoldupClosure& closure,
+        const std::vector<double>& x,
+        double& density) {
+        const auto state = closure.properties->state_ph(
+            x.at(closure.pressure), x.at(closure.enthalpy));
+        if (!state.ok()) return property_failure(state);
+        if (!closure.correlation ||
+            state.state.phase != physics::Phase::two_phase) {
+            density = state.state.density_kg_m3;
+            return EvaluationStatus::success();
+        }
+        const auto saturation = closure.properties->saturation_p(
+            x.at(closure.pressure));
+        if (!saturation.ok()) return property_failure(saturation);
+        std::map<std::string, double> inputs;
+        for (const auto& input : closure.correlation->inputs()) {
+            if (input.name == "vapor_quality") {
+                inputs.emplace(input.name, state.state.vapor_quality);
+            } else if (input.name == "liquid_density") {
+                inputs.emplace(
+                    input.name, saturation.liquid.density_kg_m3);
+            } else if (input.name == "vapor_density") {
+                inputs.emplace(
+                    input.name, saturation.vapor.density_kg_m3);
+            } else if (input.name == "mass_flow") {
+                inputs.emplace(input.name, x.at(closure.mass_flow));
+            } else if (input.name == "mass_flux") {
+                inputs.emplace(
+                    input.name,
+                    std::abs(x.at(closure.mass_flow)) / closure.area);
+            } else if (input.name == "area") {
+                inputs.emplace(input.name, closure.area);
+            } else if (input.name == "diameter") {
+                inputs.emplace(input.name, closure.diameter);
+            } else if (input.name == "pressure") {
+                inputs.emplace(input.name, x.at(closure.pressure));
+            }
+        }
+        const auto evaluated = closure.correlation->evaluate(inputs);
+        if (!evaluated.error.empty())
+            return EvaluationStatus::recoverable(evaluated.error);
+        const double alpha = evaluated.value;
+        if (!std::isfinite(alpha) || alpha <= 0.0 || alpha >= 1.0) {
+            return EvaluationStatus::recoverable(
+                "two-phase exchanger holdup correlation must produce "
+                "0 < void_fraction < 1");
+        }
+        density = alpha * saturation.vapor.density_kg_m3 +
+            (1.0 - alpha) * saturation.liquid.density_kg_m3;
+        return EvaluationStatus::success();
+    }
+
     struct ConductanceClosure {
         std::shared_ptr<const CorrelationArtifact> correlation;
         std::shared_ptr<const physics::PropertyPackage> properties;
@@ -1013,12 +1139,22 @@ private:
             system, prefix + "cold_pressure_loss", cold_properties,
             cold_out_m, cold_pressure, cold_enthalpy, cold_out_p,
             cold_loss_scale);
+        const auto hot_holdup_correlation =
+            optional_void_fraction_correlation(
+                context, "hot_side_void_fraction_correlation",
+                *hot_properties, "hot-side");
+        const auto cold_holdup_correlation =
+            optional_void_fraction_correlation(
+                context, "cold_side_void_fraction_correlation",
+                *cold_properties, "cold-side");
         add_transient_volume_closure(
             system, prefix + "hot_volume_closure", hot_properties,
-            hot_volume, hot_mass, hot_pressure, hot_enthalpy);
+            hot_volume, hot_mass, hot_pressure, hot_enthalpy,
+            hot_out_m, hot_diameter, hot_holdup_correlation);
         add_transient_volume_closure(
             system, prefix + "cold_volume_closure", cold_properties,
-            cold_volume, cold_mass, cold_pressure, cold_enthalpy);
+            cold_volume, cold_mass, cold_pressure, cold_enthalpy,
+            cold_out_m, cold_diameter, cold_holdup_correlation);
         add_variable_mass_energy_closure(
             system, prefix + "hot_energy_closure", hot_properties,
             hot_energy, hot_mass, hot_pressure, hot_enthalpy);
@@ -1047,7 +1183,31 @@ private:
         double volume,
         std::size_t mass,
         std::size_t pressure,
-        std::size_t enthalpy) {
+        std::size_t enthalpy,
+        std::size_t mass_flow,
+        double diameter,
+        std::shared_ptr<const CorrelationArtifact> correlation) {
+        if (correlation) {
+            const double area = std::numbers::pi * diameter * diameter / 4.0;
+            const HoldupClosure closure{
+                std::move(correlation), std::move(properties), mass_flow,
+                pressure, enthalpy, diameter, area};
+            add_numeric_sparse_dae_equation(
+                system, name,
+                {mass, pressure, enthalpy, mass_flow}, {},
+                [closure, volume, mass](
+                    const std::vector<double>& x,
+                    const std::vector<double>&, double& residual) {
+                    double density = 0.0;
+                    const auto status = evaluate_holdup_density(
+                        closure, x, density);
+                    if (!status.ok()) return status;
+                    residual = x.at(mass) - volume * density;
+                    return EvaluationStatus::success();
+                },
+                10.0);
+            return;
+        }
         system.add_sparse_equation(
             name, {mass, pressure, enthalpy},
             [properties = std::move(properties), volume, mass,
@@ -1123,7 +1283,29 @@ private:
         double volume,
         std::size_t inventory_mass,
         std::size_t pressure,
-        std::size_t enthalpy) {
+        std::size_t enthalpy,
+        std::size_t mass_flow,
+        double diameter,
+        std::shared_ptr<const CorrelationArtifact> correlation) {
+        if (correlation) {
+            const double area = std::numbers::pi * diameter * diameter / 4.0;
+            const HoldupClosure closure{
+                std::move(correlation), std::move(properties), mass_flow,
+                pressure, enthalpy, diameter, area};
+            component_model_support::add_numeric_checked_sparse_equation(
+                system, name,
+                [closure, volume, inventory_mass](
+                    const std::vector<double>& x, double& residual) {
+                    double density = 0.0;
+                    const auto status = evaluate_holdup_density(
+                        closure, x, density);
+                    if (!status.ok()) return status;
+                    residual = x.at(inventory_mass) - volume * density;
+                    return EvaluationStatus::success();
+                },
+                {inventory_mass, pressure, enthalpy, mass_flow}, 10.0);
+            return;
+        }
         system.add_checked_sparse_equation(
             name,
             [properties, volume, inventory_mass, pressure, enthalpy](
