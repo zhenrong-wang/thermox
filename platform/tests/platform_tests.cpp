@@ -1177,6 +1177,19 @@ void test_component_catalog_exposes_parameter_contracts() {
             "default component modules should preserve the complete catalog");
     require(registry.descriptors().size() == registry.kinds().size(),
             "component catalog should expose every registered descriptor");
+    const auto& correlated_inventory = registry.require_model(
+        "volume.fluid.equilibrium_two_phase_correlated_outlet")
+                                           .descriptor();
+    require(correlated_inventory.supports_steady &&
+                correlated_inventory.supports_transient,
+            "correlated two-phase inventory must advertise both solve modes");
+    require(std::count_if(
+                correlated_inventory.internal_variables.begin(),
+                correlated_inventory.internal_variables.end(),
+                [](const auto& variable) {
+                    return variable.used_in_steady;
+                }) == 4,
+            "correlated inventory must expose four steady algebraic work variables");
     const auto& descriptor = registry.require_model(
         "heat_exchanger.fluid.counterflow_ua").descriptor();
     const auto find_parameter = [&](const std::string& name)

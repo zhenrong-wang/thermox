@@ -99,6 +99,10 @@ struct InternalVariableDescriptor {
     double lower_bound{-std::numeric_limits<double>::infinity()};
     double upper_bound{std::numeric_limits<double>::infinity()};
     std::string dimension{"unspecified"};
+    // Dual-mode dynamic components normally own internal variables only in
+    // their DAE formulation. Algebraic work variables may opt into the
+    // steady formulation when add_equations closes them explicitly.
+    bool used_in_steady{false};
 };
 
 struct EventModelDescriptor {

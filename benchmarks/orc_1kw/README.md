@@ -151,6 +151,13 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   two-phase holdup/void-fraction model (or measured inventory/void fraction at selected operating
   points). Connecting-line, plate-channel, receiver, and expander trapped volumes cannot be inferred
   credibly from this dataset's total charge and boundary temperatures/pressures alone.
+- The generic core can now use `volume.fluid.equilibrium_two_phase_correlated_outlet` in both steady
+  and transient graphs. Its steady equations retain distinct thermodynamic holdup quality,
+  correlation-derived void fraction, and transported outlet quality; a fixed-total-charge balance
+  is regression-tested to solve the corresponding saturation pressure. Connecting-line inventory
+  is represented compositionally by this volume plus a selected `pipe.fluid.*` hydraulic model,
+  rather than by an ORC-specific line component. This closes the platform capability gap, but it
+  does not manufacture the missing apparatus volumes or correlation applicability data.
 
 ## Evidence discipline
 

@@ -1141,6 +1141,26 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
       "volume.void_fraction": )json" << void_fraction << R"json(,
       "volume.outlet_quality": )json" << outlet_quality << R"json(
     }
+  }, {
+    "id": "steady_hold",
+    "mode": "steady_state",
+    "fixed_values": {
+      "volume.inlet.m_dot": 0.1,
+      "volume.inlet.p": )json" << pressure << R"json(,
+      "volume.inlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.heat.Q_dot": 0.0
+    },
+    "initial_guesses": {
+      "volume.outlet.m_dot": 0.1,
+      "volume.outlet.p": )json" << pressure << R"json(,
+      "volume.outlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.heat.T": )json" << saturation.liquid.temperature_k << R"json(,
+      "volume.inventory.mass": )json" << mass << R"json(,
+      "volume.pressure": )json" << pressure << R"json(,
+      "volume.holdup_quality": )json" << holdup_quality << R"json(,
+      "volume.void_fraction": )json" << void_fraction << R"json(,
+      "volume.outlet_quality": )json" << outlet_quality << R"json(
+    }
   }]
 })json";
     const auto document =
@@ -1205,6 +1225,104 @@ void test_two_phase_inventory_uses_correlation_for_outlet_quality() {
     require_close(
         integrated.trajectory.back().state.at(energy_index), energy,
         1.0e-6, "balanced enthalpy flow preserves inventory energy");
+
+    const auto steady_graph = thermox::platform::compile_model_graph(
+        document, components, properties, artifacts, "steady_hold");
+    const auto steady = thermox::solve_newton(steady_graph.problem);
+    require(steady.diagnostics.converged, steady.diagnostics.message);
+    const auto steady_value = [&](const std::string& name) {
+        const auto found = std::find(
+            steady_graph.problem.variable_names.begin(),
+            steady_graph.problem.variable_names.end(), name);
+        require(found != steady_graph.problem.variable_names.end(),
+                "steady inventory variable must exist: " + name);
+        return steady.x.at(static_cast<std::size_t>(
+            found - steady_graph.problem.variable_names.begin()));
+    };
+    require_close(steady_value("volume.inventory.mass"), mass,
+                  1.0e-9,
+                  "steady correlated volume exposes slip-aware holdup");
+    require_close(steady_value("volume.holdup_quality"),
+                  holdup_quality, 1.0e-8,
+                  "steady inventory retains holdup quality");
+    require_close(steady_value("volume.outlet_quality"),
+                  outlet_quality, 1.0e-8,
+                  "steady outlet quality follows slip correlation");
+    require_close(steady_value("volume.outlet.h"),
+                  outlet_enthalpy, 1.0e-5,
+                  "steady outlet enthalpy follows flow quality");
+
+    std::ostringstream charge_json;
+    charge_json << std::setprecision(17) << R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "slip_aware_fixed_charge",
+    "media": [{"id": "water", "backend": "water_steam_if97", "substance": "Water"}],
+    "components": [{
+      "id": "volume",
+      "kind": "volume.fluid.equilibrium_two_phase_correlated_outlet",
+      "parameters": {"volume": 0.01, "flow_diameter": 0.1},
+      "artifacts": {"void_fraction_correlation": "void-fraction-correlation"},
+      "media": {"inlet": "water", "outlet": "water"}
+    }, {
+      "id": "charge",
+      "kind": "balance.fluid.fixed_total_charge",
+      "port_counts": {"inventory": 1},
+      "parameters": {"total_charge": )json" << mass << R"json(},
+      "media": {"inventory_1": "water"}
+    }],
+    "connections": [{
+      "id": "inventory",
+      "kind": "inventory_link",
+      "from": "volume.inventory",
+      "to": "charge.inventory_1"
+    }]
+  },
+  "cases": [{
+    "id": "steady_charge",
+    "mode": "steady_state",
+    "fixed_values": {
+      "volume.inlet.m_dot": 0.1,
+      "volume.inlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.heat.Q_dot": 0.0
+    },
+    "initial_guesses": {
+      "volume.inlet.p": )json" << pressure << R"json(,
+      "volume.outlet.m_dot": 0.1,
+      "volume.outlet.p": )json" << pressure << R"json(,
+      "volume.outlet.h": )json" << outlet_enthalpy << R"json(,
+      "volume.heat.T": )json" << saturation.liquid.temperature_k << R"json(,
+      "volume.inventory.mass": )json" << mass << R"json(,
+      "volume.pressure": )json" << pressure << R"json(,
+      "volume.holdup_quality": )json" << holdup_quality << R"json(,
+      "volume.void_fraction": )json" << void_fraction << R"json(,
+      "volume.outlet_quality": )json" << outlet_quality << R"json(
+    }
+  }]
+})json";
+    const auto charge_document =
+        thermox::platform::parse_model_document_text(charge_json.str());
+    const auto charge_graph = thermox::platform::compile_model_graph(
+        charge_document, components, properties, artifacts,
+        "steady_charge");
+    const auto charge_solution =
+        thermox::solve_newton(charge_graph.problem);
+    require(charge_solution.diagnostics.converged,
+            charge_solution.diagnostics.message);
+    const auto charge_value = [&](const std::string& name) {
+        const auto found = std::find(
+            charge_graph.problem.variable_names.begin(),
+            charge_graph.problem.variable_names.end(), name);
+        require(found != charge_graph.problem.variable_names.end(),
+                "fixed-charge variable must exist: " + name);
+        return charge_solution.x.at(static_cast<std::size_t>(
+            found - charge_graph.problem.variable_names.begin()));
+    };
+    require_close(charge_value("volume.pressure"), pressure, 1.0e-2,
+                  "fixed charge recovers two-phase pressure");
+    require_close(charge_value("charge.inventory_1.mass"), mass,
+                  1.0e-9,
+                  "fixed charge closes slip-aware inventory mass");
 }
 
 void test_finite_volume_exchanger_uses_conductance_correlations() {

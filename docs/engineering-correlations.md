@@ -126,20 +126,25 @@ dimensions, unsafe expressions, evaluation failures, and nonphysical outputs are
 explicitly. The same contract compiles in steady and transient graphs.
 
 `volume.fluid.equilibrium_two_phase_correlated_outlet` applies the same artifact contract to a
-transient rigid inventory. Conserved total mass and internal energy determine pressure and
-thermodynamic holdup quality. Those states determine the observable holdup void fraction, while
-the bound correlation solves the transported outlet quality that reproduces that void fraction.
-This distinction lets a slip or drift-flux law affect phase transport without replacing or
-overconstraining the thermodynamic inventory closure. Outlet enthalpy is the saturated-mixture
-enthalpy at the correlated transported quality. The component therefore exposes separate
-`holdup_quality`, `void_fraction`, and `outlet_quality` results.
+rigid inventory in steady and transient graphs. Transient conserved total mass and internal energy
+determine pressure and thermodynamic holdup quality. The steady formulation instead closes
+mass/energy flow, rigid volume, saturation pressure, and inventory mass algebraically, allowing a
+fixed-total-charge constraint to solve pressure or quality. In both modes those states determine
+the observable holdup void fraction, while the bound correlation solves the transported outlet
+quality that reproduces that void fraction. This distinction lets a slip or drift-flux law affect
+phase transport without replacing or overconstraining the thermodynamic inventory closure. Outlet
+enthalpy is the saturated-mixture enthalpy at the correlated transported quality. The component
+therefore exposes separate `holdup_quality`, `void_fraction`, and `outlet_quality` results.
 
 For this inventory consumer, `vapor_quality` means transported outlet quality, densities and
 pressure are evaluated at the live inventory pressure, `mass_flow` is outlet flow, and geometry
-comes from `flow_diameter`. It is transient-only, requires `saturation_p`, and rejects
-nonphysical correlation outputs explicitly. Correlation validity envelopes and flow-regime
-selection remain engineering-data responsibilities. The candidate applicability contract enforces
-declared scalar operating ranges and deterministic selection among the laws in the bound artifact.
+comes from `flow_diameter`. It supports steady and transient compilation, requires `saturation_p`,
+and rejects nonphysical correlation outputs explicitly. Correlation validity envelopes and flow-regime
+selection remain engineering-data responsibilities. In a connecting-line assembly, pair this
+inventory with the appropriate `pipe.fluid.*` hydraulic component; volume/void fraction and
+pressure loss remain separately replaceable model responsibilities. The candidate applicability
+contract enforces declared scalar operating ranges and deterministic selection among the laws in
+the bound artifact.
 
 ## Correlation families and regime selection
 

@@ -555,7 +555,7 @@ public:
              correlation_artifact_type, true}};
         descriptor_.required_property_capabilities = {
             physics::PropertyCapability::saturation_p};
-        descriptor_.supports_steady = false;
+        descriptor_.supports_steady = true;
         descriptor_.supports_transient = true;
         descriptor_.internal_variables = {
             {"mass", DaeVariableKind::differential,
@@ -567,16 +567,16 @@ public:
              std::numeric_limits<double>::infinity(), "energy"},
             {"pressure", DaeVariableKind::algebraic,
              1.0e6, 1.0e5, 0.0, 1.0e5, 1.0,
-             std::numeric_limits<double>::infinity(), "pressure"},
+             std::numeric_limits<double>::infinity(), "pressure", true},
             {"holdup_quality", DaeVariableKind::algebraic,
              0.5, 1.0, 0.0, 1.0, 1.0e-9, 1.0 - 1.0e-9,
-             "dimensionless"},
+             "dimensionless", true},
             {"void_fraction", DaeVariableKind::algebraic,
              0.5, 1.0, 0.0, 1.0, 1.0e-9, 1.0 - 1.0e-9,
-             "dimensionless"},
+             "dimensionless", true},
             {"outlet_quality", DaeVariableKind::algebraic,
              0.5, 1.0, 0.0, 1.0, 1.0e-9, 1.0 - 1.0e-9,
-             "dimensionless"}};
+             "dimensionless", true}};
     }
 
     const ComponentModelDescriptor& descriptor() const override {
@@ -584,16 +584,118 @@ public:
     }
 
     void add_equations(
-        const ComponentCompileContext&,
-        EquationSystemBuilder&) const override {
-        throw std::logic_error(
-            "correlated two-phase fluid volume is transient-only");
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        const auto data = compile_data(context, false);
+        const std::string prefix =
+            "component." + context.component.id + ".";
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{data.outlet_m, 1.0}, {data.inlet_m, -1.0}},
+            0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_continuity",
+            {{data.outlet_p, 1.0}, {data.inlet_p, -1.0}},
+            0.0, 100000.0);
+        system.add_sparse_equation(
+            prefix + "steady_energy_balance",
+            {data.inlet_m, data.inlet_h, data.outlet_h,
+             data.heat_flow},
+            [data](const std::vector<double>& x,
+                   std::vector<EquationPartial>& jacobian) {
+                const double delta_h =
+                    x.at(data.outlet_h) - x.at(data.inlet_h);
+                jacobian.push_back({data.inlet_m, delta_h});
+                jacobian.push_back(
+                    {data.inlet_h, -x.at(data.inlet_m)});
+                jacobian.push_back(
+                    {data.outlet_h, x.at(data.inlet_m)});
+                jacobian.push_back({data.heat_flow, -1.0});
+                return x.at(data.inlet_m) * delta_h -
+                    x.at(data.heat_flow);
+            },
+            1.0e6);
+        system.add_linear_equation(
+            prefix + "bulk_pressure",
+            {{data.pressure, 1.0}, {data.outlet_p, -1.0}},
+            0.0, 100000.0);
+        component_model_support::add_numeric_checked_sparse_equation(
+            system, prefix + "outlet_flow_enthalpy",
+            [data](const std::vector<double>& x, double& residual) {
+                const auto saturation = data.properties->saturation_p(
+                    x.at(data.pressure));
+                if (!saturation.ok()) return property_failure(saturation);
+                const double quality = x.at(data.outlet_quality);
+                residual = x.at(data.outlet_h) -
+                    ((1.0 - quality) *
+                         saturation.liquid.enthalpy_j_kg +
+                     quality * saturation.vapor.enthalpy_j_kg);
+                return EvaluationStatus::success();
+            },
+            {data.pressure, data.outlet_quality, data.outlet_h},
+            1.0e5);
+        component_model_support::add_numeric_checked_sparse_equation(
+            system, prefix + "heat_surface_temperature",
+            [data](const std::vector<double>& x, double& residual) {
+                const auto saturation = data.properties->saturation_p(
+                    x.at(data.pressure));
+                if (!saturation.ok()) return property_failure(saturation);
+                residual = x.at(data.heat_temperature) -
+                    saturation.liquid.temperature_k;
+                return EvaluationStatus::success();
+            },
+            {data.pressure, data.heat_temperature},
+            1000.0);
+        component_model_support::add_numeric_checked_sparse_equation(
+            system, prefix + "rigid_volume_closure",
+            [data](const std::vector<double>& x, double& residual) {
+                const auto saturation = data.properties->saturation_p(
+                    x.at(data.pressure));
+                if (!saturation.ok()) return property_failure(saturation);
+                const double quality = x.at(data.holdup_quality);
+                const double specific_volume =
+                    (1.0 - quality) /
+                        saturation.liquid.density_kg_m3 +
+                    quality / saturation.vapor.density_kg_m3;
+                residual = x.at(data.inventory_mass) * specific_volume -
+                    data.volume;
+                return EvaluationStatus::success();
+            },
+            {data.inventory_mass, data.pressure,
+             data.holdup_quality},
+            1.0);
+        component_model_support::add_numeric_checked_sparse_equation(
+            system, prefix + "holdup_void_fraction",
+            [data](const std::vector<double>& x, double& residual) {
+                const auto saturation = data.properties->saturation_p(
+                    x.at(data.pressure));
+                if (!saturation.ok()) return property_failure(saturation);
+                const double rho_l = saturation.liquid.density_kg_m3;
+                const double rho_v = saturation.vapor.density_kg_m3;
+                const double quality = x.at(data.holdup_quality);
+                const double specific_volume =
+                    (1.0 - quality) / rho_l + quality / rho_v;
+                residual = x.at(data.void_fraction) -
+                    (quality / rho_v) / specific_volume;
+                return EvaluationStatus::success();
+            },
+            {data.pressure, data.holdup_quality,
+             data.void_fraction},
+            1.0);
+        component_model_support::add_numeric_checked_sparse_equation(
+            system, prefix + "correlated_outlet_slip",
+            [data](const std::vector<double>& x, double& residual) {
+                return evaluate_outlet_slip(data, x, residual);
+            },
+            {data.pressure, data.void_fraction,
+             data.outlet_quality, data.outlet_m},
+            1.0);
     }
 
     void add_transient_equations(
         const ComponentCompileContext& context,
         DaeEquationSystemBuilder& system) const override {
-        const auto data = compile_data(context);
+        const auto data = compile_data(context, true);
         const std::string prefix =
             "component." + context.component.id + ".";
         system.add_linear_equation(
@@ -724,50 +826,7 @@ public:
             {data.pressure, data.void_fraction,
              data.outlet_quality, data.outlet_m},
             [data](const std::vector<double>& x, double& residual) {
-                const auto saturation = data.properties->saturation_p(
-                    x.at(data.pressure));
-                if (!saturation.ok()) return property_failure(saturation);
-                const double rho_l =
-                    saturation.liquid.density_kg_m3;
-                const double rho_v =
-                    saturation.vapor.density_kg_m3;
-                std::map<std::string, double> inputs;
-                for (const auto& input : data.correlation->inputs()) {
-                    if (input.name == "vapor_quality") {
-                        inputs.emplace(
-                            input.name, x.at(data.outlet_quality));
-                    } else if (input.name == "liquid_density") {
-                        inputs.emplace(input.name, rho_l);
-                    } else if (input.name == "vapor_density") {
-                        inputs.emplace(input.name, rho_v);
-                    } else if (input.name == "mass_flow") {
-                        inputs.emplace(input.name, x.at(data.outlet_m));
-                    } else if (input.name == "mass_flux") {
-                        inputs.emplace(
-                            input.name,
-                            std::abs(x.at(data.outlet_m)) / data.area);
-                    } else if (input.name == "area") {
-                        inputs.emplace(input.name, data.area);
-                    } else if (input.name == "diameter") {
-                        inputs.emplace(input.name, data.diameter);
-                    } else if (input.name == "pressure") {
-                        inputs.emplace(input.name, x.at(data.pressure));
-                    }
-                }
-                const auto evaluated = data.correlation->evaluate(inputs);
-                if (!evaluated.error.empty()) {
-                    return EvaluationStatus::recoverable(
-                        evaluated.error);
-                }
-                if (!std::isfinite(evaluated.value) ||
-                    evaluated.value <= 0.0 ||
-                    evaluated.value >= 1.0) {
-                    return EvaluationStatus::recoverable(
-                        "two-phase inventory void-fraction correlation "
-                        "must produce 0 < alpha < 1");
-                }
-                residual = x.at(data.void_fraction) - evaluated.value;
-                return EvaluationStatus::success();
+                return evaluate_outlet_slip(data, x, residual);
             },
             1.0);
     }
@@ -776,7 +835,7 @@ private:
     struct Data {
         std::shared_ptr<const physics::PropertyPackage> properties;
         std::shared_ptr<const CorrelationArtifact> correlation;
-        std::size_t inlet_m{}, inlet_h{};
+        std::size_t inlet_m{}, inlet_p{}, inlet_h{};
         std::size_t outlet_m{}, outlet_p{}, outlet_h{};
         std::size_t heat_flow{}, heat_temperature{};
         std::size_t inventory_mass{};
@@ -785,8 +844,53 @@ private:
         double volume{}, diameter{}, area{};
     };
 
+    static EvaluationStatus evaluate_outlet_slip(
+        const Data& data,
+        const std::vector<double>& x,
+        double& residual) {
+        const auto saturation = data.properties->saturation_p(
+            x.at(data.pressure));
+        if (!saturation.ok()) return property_failure(saturation);
+        const double rho_l = saturation.liquid.density_kg_m3;
+        const double rho_v = saturation.vapor.density_kg_m3;
+        std::map<std::string, double> inputs;
+        for (const auto& input : data.correlation->inputs()) {
+            if (input.name == "vapor_quality") {
+                inputs.emplace(input.name, x.at(data.outlet_quality));
+            } else if (input.name == "liquid_density") {
+                inputs.emplace(input.name, rho_l);
+            } else if (input.name == "vapor_density") {
+                inputs.emplace(input.name, rho_v);
+            } else if (input.name == "mass_flow") {
+                inputs.emplace(input.name, x.at(data.outlet_m));
+            } else if (input.name == "mass_flux") {
+                inputs.emplace(
+                    input.name,
+                    std::abs(x.at(data.outlet_m)) / data.area);
+            } else if (input.name == "area") {
+                inputs.emplace(input.name, data.area);
+            } else if (input.name == "diameter") {
+                inputs.emplace(input.name, data.diameter);
+            } else if (input.name == "pressure") {
+                inputs.emplace(input.name, x.at(data.pressure));
+            }
+        }
+        const auto evaluated = data.correlation->evaluate(inputs);
+        if (!evaluated.error.empty())
+            return EvaluationStatus::recoverable(evaluated.error);
+        if (!std::isfinite(evaluated.value) ||
+            evaluated.value <= 0.0 || evaluated.value >= 1.0) {
+            return EvaluationStatus::recoverable(
+                "two-phase inventory void-fraction correlation must "
+                "produce 0 < alpha < 1");
+        }
+        residual = x.at(data.void_fraction) - evaluated.value;
+        return EvaluationStatus::success();
+    }
+
     static Data compile_data(
-        const ComponentCompileContext& context) {
+        const ComponentCompileContext& context,
+        bool transient) {
         Data data;
         data.properties = require_property_package(context, "inlet");
         if (data.properties !=
@@ -822,6 +926,7 @@ private:
             }
         }
         data.inlet_m = require_port_variable(context, "inlet.m_dot");
+        data.inlet_p = require_port_variable(context, "inlet.p");
         data.inlet_h = require_port_variable(context, "inlet.h");
         data.outlet_m = require_port_variable(context, "outlet.m_dot");
         data.outlet_p = require_port_variable(context, "outlet.p");
@@ -830,8 +935,11 @@ private:
         data.heat_temperature = require_port_variable(context, "heat.T");
         data.inventory_mass = require_port_variable(
             context, "inventory.mass");
-        data.mass = require_internal_variable(context, "mass");
-        data.energy = require_internal_variable(context, "total_energy");
+        if (transient) {
+            data.mass = require_internal_variable(context, "mass");
+            data.energy = require_internal_variable(
+                context, "total_energy");
+        }
         data.pressure = require_internal_variable(context, "pressure");
         data.holdup_quality = require_internal_variable(
             context, "holdup_quality");

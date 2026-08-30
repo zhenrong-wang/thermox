@@ -474,12 +474,17 @@ includes `Q_dot` in the energy accumulation equation. Their `volume` parameter a
 boundary and current applicability limits.
 
 `volume.fluid.equilibrium_two_phase_correlated_outlet` is the correlation-aware specialization
-for separated phase transport. It retains differential `mass` and `total_energy`; pressure and
-holdup quality follow from rigid-volume saturation closures. A bound `void_fraction_correlation`
-then maps live saturation properties, outlet flow, geometry, and transported quality to the
-inventory void fraction, closing a distinct outlet quality and enthalpy. Keeping inventory and
-transport qualities separate preserves the conservative finite-volume contract under phase slip.
-See [Engineering correlations](engineering-correlations.md#two-phase-pressure-drop).
+for separated phase transport. In transient graphs it retains differential `mass` and
+`total_energy`; pressure and holdup quality follow from rigid-volume saturation closures. In steady
+graphs the same saturation, void-fraction, and transported-quality equations expose slip-aware
+inventory mass directly, so `balance.fluid.fixed_total_charge` can determine an otherwise relaxed
+pressure or quality. A bound `void_fraction_correlation` maps live saturation properties, outlet
+flow, geometry, and transported quality to the inventory void fraction, closing a distinct outlet
+quality and enthalpy. Keeping inventory and transport qualities separate preserves the conservative
+finite-volume contract under phase slip. Compose this inventory component in series with a pipe
+pressure-drop component when a connecting line needs both holdup and hydraulics; neither model
+silently owns the other's physics. See
+[Engineering correlations](engineering-correlations.md#two-phase-pressure-drop).
 
 Correlation artifact inputs may carry qualified SI operating ranges. These constraints travel with
 the immutable artifact through project publication, execution snapshots, and durable job payloads;

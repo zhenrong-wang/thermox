@@ -1426,6 +1426,14 @@ void ComponentRegistry::register_model(std::shared_ptr<const ComponentModel> mod
                 "invalid internal component variable descriptor: " +
                 kind + "." + variable.name);
         }
+        if (variable.used_in_steady &&
+            (!model->descriptor().supports_steady ||
+             variable.kind != DaeVariableKind::algebraic)) {
+            throw std::invalid_argument(
+                "steady internal component variable must be algebraic "
+                "on a steady-capable model: " + kind + "." +
+                variable.name);
+        }
     }
     if (!models_.emplace(kind, std::move(model)).second) {
         throw std::invalid_argument("duplicate component model kind registration: " + kind);
@@ -1728,12 +1736,13 @@ CompiledModelGraph compile_flat_model_graph(
             }
         }
         for (const auto& variable : descriptor.internal_variables) {
-            // Dual-mode dynamic components own their internal variables in
-            // the DAE formulation. A steady-only model may instead expose
-            // algebraic work variables required by its steady equations.
-            if ((descriptor.supports_transient &&
-                 !descriptor.uses_quasi_steady_transient_equations) ||
-                variable.kind != DaeVariableKind::algebraic) {
+            // Dynamic internals are DAE-owned by default. Steady-only models
+            // expose algebraic work variables automatically; dual-mode
+            // models must opt each steady algebraic variable in explicitly.
+            if (variable.kind != DaeVariableKind::algebraic ||
+                (descriptor.supports_transient &&
+                 !descriptor.uses_quasi_steady_transient_equations &&
+                 !variable.used_in_steady)) {
                 continue;
             }
             const std::string full_name =
