@@ -457,6 +457,77 @@ private:
     bool heat_transfer_{false};
 };
 
+// A steady receiver whose stored mass is determined by the enclosing system
+// charge balance instead of by assuming a homogeneous thermodynamic state
+// throughout the vessel. This is the appropriate abstraction for a passive
+// liquid receiver when its level is an output. Vessel capacity remains an
+// external applicability check unless geometry is modeled explicitly.
+class PassiveResidualChargeReceiverModel final : public ComponentModel {
+public:
+    PassiveResidualChargeReceiverModel() {
+        descriptor_.kind = "receiver.fluid.passive_residual_charge";
+        descriptor_.version = "1.0.0";
+        descriptor_.template_kind = "receiver.fluid";
+        descriptor_.display_name = "Passive residual-charge receiver";
+        descriptor_.category = "Fluid inventory";
+        descriptor_.model_name =
+            "Steady adiabatic receiver with charge-determined inventory";
+        descriptor_.ports = {
+            {"inlet", "fluid", "in"},
+            {"outlet", "fluid", "out"},
+            {"inventory", "inventory", "out", 1U, "outlet"}};
+        descriptor_.supports_steady = true;
+        descriptor_.supports_transient = false;
+        descriptor_.internal_variables = {{
+            "stored_mass", DaeVariableKind::algebraic,
+            1.0, 10.0, 0.0, 1.0, 0.0,
+            std::numeric_limits<double>::infinity(), "mass", true}};
+    }
+
+    const ComponentModelDescriptor& descriptor() const override {
+        return descriptor_;
+    }
+
+    void add_equations(
+        const ComponentCompileContext& context,
+        EquationSystemBuilder& system) const override {
+        if (require_property_package(context, "inlet") !=
+            require_property_package(context, "outlet")) {
+            throw std::invalid_argument(
+                "component '" + context.component.id +
+                "' inlet and outlet must use the same medium");
+        }
+        const auto inlet_m = require_port_variable(context, "inlet.m_dot");
+        const auto inlet_p = require_port_variable(context, "inlet.p");
+        const auto inlet_h = require_port_variable(context, "inlet.h");
+        const auto outlet_m = require_port_variable(context, "outlet.m_dot");
+        const auto outlet_p = require_port_variable(context, "outlet.p");
+        const auto outlet_h = require_port_variable(context, "outlet.h");
+        const auto inventory_mass =
+            require_port_variable(context, "inventory.mass");
+        const auto stored_mass =
+            require_internal_variable(context, "stored_mass");
+        const std::string prefix =
+            "component." + context.component.id + ".";
+
+        system.add_linear_equation(
+            prefix + "mass_balance",
+            {{outlet_m, 1.0}, {inlet_m, -1.0}}, 0.0, 100.0);
+        system.add_linear_equation(
+            prefix + "pressure_continuity",
+            {{outlet_p, 1.0}, {inlet_p, -1.0}}, 0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "adiabatic_enthalpy_continuity",
+            {{outlet_h, 1.0}, {inlet_h, -1.0}}, 0.0, 100000.0);
+        system.add_linear_equation(
+            prefix + "inventory_port",
+            {{inventory_mass, 1.0}, {stored_mass, -1.0}}, 0.0, 10.0);
+    }
+
+private:
+    ComponentModelDescriptor descriptor_;
+};
+
 class FixedTotalFluidChargeModel final : public ComponentModel {
 public:
     FixedTotalFluidChargeModel() {
@@ -966,6 +1037,8 @@ void register_fluid_inventory_component_models(
         std::make_shared<RigidFluidVolumeModel>(false));
     registry.register_model(
         std::make_shared<RigidFluidVolumeModel>(true));
+    registry.register_model(
+        std::make_shared<PassiveResidualChargeReceiverModel>());
     registry.register_model(
         std::make_shared<CorrelatedTwoPhaseFluidVolumeModel>());
     registry.register_model(

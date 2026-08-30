@@ -1156,6 +1156,7 @@ void test_component_catalog_exposes_parameter_contracts() {
         "volume.fluid.rigid_adiabatic",
         "volume.fluid.rigid_heat_transfer",
         "volume.fluid.equilibrium_two_phase_correlated_outlet",
+        "receiver.fluid.passive_residual_charge",
         "balance.fluid.fixed_total_charge",
         "storage.thermal.lumped",
         "storage.thermal.wall_two_sided",
@@ -8369,6 +8370,68 @@ void test_steady_total_charge_solves_inventory_pressure() {
         "links incompatible inventory media");
 }
 
+void test_passive_receiver_inventory_is_resolved_by_system_charge() {
+    const auto document =
+        thermox::platform::parse_model_document_text(R"json({
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "passive_receiver_charge",
+    "media": [{
+      "id": "air", "backend": "ideal_gas_mixture", "substance": "Air"
+    }],
+    "components": [
+      {
+        "id": "receiver",
+        "kind": "receiver.fluid.passive_residual_charge",
+        "media": {"inlet": "air", "outlet": "air"}
+      },
+      {
+        "id": "charge",
+        "kind": "balance.fluid.fixed_total_charge",
+        "port_counts": {"inventory": 1},
+        "media": {"inventory_1": "air"},
+        "parameters": {"total_charge": {"value": 6.5, "unit": "kg"}}
+      }
+    ],
+    "connections": [{
+      "id": "receiver_inventory",
+      "from": "receiver.inventory",
+      "to": "charge.inventory_1",
+      "kind": "inventory_link"
+    }]
+  },
+  "cases": [{
+    "id": "steady", "mode": "steady_state_off_design",
+    "fixed_values": {
+      "receiver.inlet.m_dot": {"value": 0.02, "unit": "kg/s"},
+      "receiver.inlet.p": {"value": 180.0, "unit": "kPa"},
+      "receiver.inlet.h": {"value": 300.0, "unit": "kJ/kg"}
+    }
+  }]
+})json");
+    const auto graph = thermox::platform::compile_model_graph(
+        document,
+        thermox::platform::make_default_component_registry(),
+        thermox::physics::make_default_property_package_registry(),
+        "steady");
+    const auto result = thermox::solve_newton(graph.problem);
+    require(result.diagnostics.converged, result.diagnostics.message);
+    const auto variable = [&](const std::string& name) {
+        return result.x.at(require_variable_index(
+            graph.problem.variable_names, name));
+    };
+    require_near(variable("receiver.stored_mass"), 6.5, 1.0e-10,
+                 "passive receiver stores the residual system charge");
+    require_near(variable("receiver.inventory.mass"), 6.5, 1.0e-10,
+                 "passive receiver exposes resolved mass on inventory port");
+    require_near(variable("receiver.outlet.m_dot"), 0.02, 1.0e-12,
+                 "passive receiver conserves steady mass flow");
+    require_near(variable("receiver.outlet.p"), 180000.0, 1.0e-8,
+                 "passive receiver preserves pressure");
+    require_near(variable("receiver.outlet.h"), 300000.0, 1.0e-8,
+                 "passive receiver is adiabatic at steady state");
+}
+
 void test_transient_model_integrates_rigid_fluid_volume() {
     const auto document =
         thermox::platform::parse_model_document_text(R"json({
@@ -9599,6 +9662,7 @@ int main() {
         test_compiler_reports_square_structural_singularity();
         test_component_property_capabilities_are_validated();
         test_steady_total_charge_solves_inventory_pressure();
+        test_passive_receiver_inventory_is_resolved_by_system_charge();
         test_transient_model_compiles_and_integrates_lumped_storage();
         test_transient_model_integrates_rigid_fluid_volume();
         test_transient_fluid_volume_closes_with_real_fluid_backends();

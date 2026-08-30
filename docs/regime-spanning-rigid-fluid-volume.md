@@ -32,6 +32,16 @@ One `balance.fluid.fixed_total_charge` component can collect any number of those
 state remain component-level. This cleanly supports charge-sensitive ORC, refrigeration, heat-pump,
 and closed-Brayton calculations without embedding a cycle-specific pressure assumption.
 
+`receiver.fluid.passive_residual_charge` is a distinct steady receiver abstraction for systems
+where receiver level or inventory is an output of the total-charge balance. It preserves mass
+flow, pressure, and adiabatic enthalpy across the receiver, exposes a nonnegative `stored_mass`,
+and lets the enclosing charge balance determine that mass. Unlike a rigid homogeneous volume, it
+does not claim that one outlet `(p,h)` state determines the density of the entire vessel. This is
+useful for partially filled or stratified passive receivers, but it deliberately supplies no
+pressure-formation equation and no capacity claim. A model using it must obtain its missing system
+closure from independently justified equipment physics or a versioned empirical correlation;
+vessel geometry or level is still required to audit flooding or emptying.
+
 This formulation does not encode a liquid-only or vapor-only component. Phase
 identity is a result of the registered property package, so the same declared
 topology can evolve through a property regime boundary. Adaptive local-error

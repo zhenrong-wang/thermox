@@ -172,6 +172,28 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   executing a real external-boundary graph and predicting flow in its feasible subset, but this
   parameterization decisively fails a system power-accuracy claim. The frozen evidence is
   `external_boundary_slip_sensitivity_1_10_results.json`.
+- The negative power and charge evidence is now decomposed in
+  `external_boundary_negative_evidence_1_10_results.json`. At the measured expander inlet/outlet
+  states, the frozen semi-physical expander predicts shaft power with 0.92% MAPE and 1.58% maximum
+  error across the four converged cases. In the external-boundary cycle, the same evaluator has
+  44.56% power MAPE because the cycle predicts expander inlet pressure 9.59% low, inlet enthalpy
+  3.38% low, and outlet pressure 13.58% high on average. The dominant power failure is therefore
+  upstream pressure/state formation, not a missing expander output multiplier.
+- Failed high-charge final iterates now expose per-component inventory. The assumed 2 L homogeneous
+  receiver saturates near 2.70 kg and the complete preliminary graph reaches only 4.50--4.75 kg,
+  leaving 0.50--1.87 kg of the declared 5.0--6.5 kg charge unrepresented. This quantifies the
+  earlier missing-volume diagnosis and shows that the evaporator's assumed refrigerant volume
+  contributes only grams in these iterates.
+- The associated Energy and Applied Energy papers explicitly pair two reality-based closures: a
+  passive receiver whose inventory is the residual after other component inventories, and an
+  empirical evaporation/expander-inlet pressure-formation model. Thermox now provides the generic
+  steady component `receiver.fluid.passive_residual_charge`; its nonnegative stored mass is solved
+  by the enclosing fixed-charge balance without imposing a homogeneous vessel state. Replacing the
+  preliminary rigid receiver with it makes this benchmark under-specified by exactly one equation,
+  independently confirming the missing pressure-formation closure. The original feasibility model
+  therefore remains unchanged until the paper's pressure equation/coefficient provenance or a
+  preregistered training-only replacement is available. Fixing measured internal pressure would
+  close the graph but would forfeit the external-boundary prediction classification.
 
 ## Evidence discipline
 

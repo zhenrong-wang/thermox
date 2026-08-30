@@ -2,6 +2,7 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/correlation.hpp"
 #include "thermox/platform/model_document.hpp"
+#include "thermox/platform/semi_physical_volumetric_expander.hpp"
 #include "thermox/physics/coolprop_heos_package.hpp"
 #include "thermox/physics/property_registry.hpp"
 
@@ -215,6 +216,89 @@ std::size_t variable_index(
     return static_cast<std::size_t>(std::distance(names.begin(), found));
 }
 
+std::string json_string(std::string_view value);
+
+std::optional<std::size_t> optional_variable_index(
+    const std::vector<std::string>& names, const std::string& name) {
+    const auto found = std::find(names.begin(), names.end(), name);
+    if (found == names.end()) return std::nullopt;
+    return static_cast<std::size_t>(std::distance(names.begin(), found));
+}
+
+double component_parameter(
+    const thermox::platform::ModelDocument& document,
+    std::string_view component_id, std::string_view parameter) {
+    const auto component = std::find_if(
+        document.components.begin(), document.components.end(),
+        [&](const auto& candidate) { return candidate.id == component_id; });
+    if (component == document.components.end())
+        throw std::runtime_error(
+            "missing component: " + std::string{component_id});
+    const auto value = component->parameters.find(std::string{parameter});
+    if (value == component->parameters.end())
+        throw std::runtime_error(
+            "missing component parameter: " + std::string{component_id} +
+            "." + std::string{parameter});
+    return value->second.value_si;
+}
+
+thermox::platform::SemiPhysicalVolumetricExpanderParameters
+expander_parameters(
+    const thermox::platform::ModelDocument& document,
+    double ambient_temperature) {
+    const auto parameter = [&](std::string_view name) {
+        return component_parameter(document, "expander", name);
+    };
+    return {
+        parameter("maximum_chamber_volume_per_revolution"),
+        parameter("built_in_volume_ratio"),
+        parameter("leakage_area"),
+        parameter("leakage_discharge_coefficient"),
+        parameter("mechanical_loss_at_reference_speed"),
+        parameter("mechanical_loss_reference_angular_speed"),
+        parameter("proportional_mechanical_loss"),
+        parameter("ambient_heat_transfer_conductance"),
+        ambient_temperature,
+    };
+}
+
+const std::vector<std::string>& inventory_variables() {
+    static const std::vector<std::string> names{
+        "evaporator/cell_1.cold_inventory.mass",
+        "evaporator/cell_2.cold_inventory.mass",
+        "condenser/cell_1.hot_inventory.mass",
+        "condenser/cell_2.hot_inventory.mass",
+        "receiver.inventory.mass",
+    };
+    return names;
+}
+
+void print_inventory_diagnostic(
+    std::ostream& output, const std::vector<std::string>& variable_names,
+    const std::vector<double>& x, double declared_charge) {
+    output << ",\"inventory_diagnostic\":{\"declared_charge\":"
+           << declared_charge << ",\"components\":{";
+    double total = 0.0;
+    bool first = true;
+    std::size_t count = 0;
+    for (const auto& name : inventory_variables()) {
+        const auto index = optional_variable_index(variable_names, name);
+        if (!index || *index >= x.size() || !std::isfinite(x.at(*index)))
+            continue;
+        if (!first) output << ',';
+        first = false;
+        output << json_string(name) << ':' << x.at(*index);
+        total += x.at(*index);
+        ++count;
+    }
+    output << "},\"resolved_component_count\":" << count;
+    if (count == inventory_variables().size()) {
+        output << ",\"modeled_charge\":" << total
+               << ",\"charge_deficit\":" << declared_charge - total;
+    }
+    output << '}';
+}
+
 struct Metric {
     std::size_t count{};
     double absolute_relative_sum{};
@@ -290,10 +374,14 @@ void run(
     std::vector<std::string> previous_names;
     Metric mass_flow;
     Metric expander_power;
+    Metric measured_boundary_expander_power;
+    Metric expander_inlet_pressure;
+    Metric expander_inlet_enthalpy;
+    Metric expander_outlet_pressure;
     std::size_t converged = 0;
     std::size_t total_solver_iterations = 0;
     const auto started = std::chrono::steady_clock::now();
-    std::cout << "{\"schema_version\":\"thermox.orc_external_boundary_sweep/v1\","
+    std::cout << "{\"schema_version\":\"thermox.orc_external_boundary_sweep/v2\","
               << "\"classification\":\"preliminary_parameter_diagnostic_not_validation\","
               << "\"declared_slip_ratio\":" << slip_ratio << ','
               << "\"case_range\":\"" << first << '-' << last
@@ -349,6 +437,9 @@ void run(
                   << solved.diagnostics
                          .final_maximum_absolute_normalized_residual;
         if (!solved.diagnostics.converged) {
+            print_inventory_diagnostic(
+                std::cout, graph.problem.variable_names, solved.x,
+                value(row, "charge_kg"));
             std::cout << ",\"message\":"
                       << json_string(solved.diagnostics.message) << '}';
             continue;
@@ -369,17 +460,71 @@ void run(
             2.0 * std::numbers::pi / 60.0;
         const double measured_power =
             value(row, "expander_torque_n_m") * angular_speed;
+        const double measured_expander_inlet_pressure =
+            value(row, "expander_inlet_pressure_kpa") * 1000.0;
+        const double measured_expander_outlet_pressure =
+            value(row, "expander_outlet_pressure_kpa") * 1000.0;
+        const auto measured_expander_inlet = r245fa.state_pt(
+            measured_expander_inlet_pressure,
+            value(row, "expander_inlet_temperature_c") + 273.15);
+        if (!measured_expander_inlet.ok())
+            throw std::runtime_error(measured_expander_inlet.message);
+        thermox::platform::SemiPhysicalVolumetricExpanderEvaluation
+            oracle_expander;
+        const auto oracle_status =
+            thermox::platform::evaluate_semi_physical_volumetric_expander(
+                r245fa, measured_expander_inlet_pressure,
+                measured_expander_inlet.state.enthalpy_j_kg,
+                measured_expander_outlet_pressure, angular_speed,
+                expander_parameters(
+                    base, value(row, "ambient_temperature_c") + 273.15),
+                oracle_expander);
+        if (!oracle_status.ok())
+            throw std::runtime_error(
+                "measured-boundary expander evaluation failed: " +
+                oracle_status.message);
         accumulate(mass_flow, predicted_mass, measured_mass);
         accumulate(expander_power, predicted_power, measured_power);
+        accumulate(measured_boundary_expander_power,
+                   oracle_expander.shaft_power, measured_power);
+        accumulate(expander_inlet_pressure,
+                   solved_value("expander.inlet.p"),
+                   measured_expander_inlet_pressure);
+        accumulate(expander_inlet_enthalpy,
+                   solved_value("expander.inlet.h"),
+                   measured_expander_inlet.state.enthalpy_j_kg);
+        accumulate(expander_outlet_pressure,
+                   solved_value("expander.outlet.p"),
+                   measured_expander_outlet_pressure);
         const auto expander_outlet = r245fa.state_ph(
             solved_value("expander.outlet.p"),
             solved_value("expander.outlet.h"));
         if (!expander_outlet.ok())
             throw std::runtime_error(expander_outlet.message);
         std::cout << ",\"predicted_mass_flow\":" << predicted_mass
+                  << ",\"measured_mass_flow\":" << measured_mass
                   << ",\"predicted_expander_power\":" << predicted_power
+                  << ",\"measured_expander_power\":" << measured_power
+                  << ",\"measured_boundary_expander_power\":"
+                  << oracle_expander.shaft_power
+                  << ",\"predicted_expander_inlet_pressure\":"
+                  << solved_value("expander.inlet.p")
+                  << ",\"measured_expander_inlet_pressure\":"
+                  << measured_expander_inlet_pressure
+                  << ",\"predicted_expander_inlet_enthalpy\":"
+                  << solved_value("expander.inlet.h")
+                  << ",\"measured_expander_inlet_enthalpy\":"
+                  << measured_expander_inlet.state.enthalpy_j_kg
+                  << ",\"predicted_expander_outlet_pressure\":"
+                  << solved_value("expander.outlet.p")
+                  << ",\"measured_expander_outlet_pressure\":"
+                  << measured_expander_outlet_pressure
                   << ",\"predicted_expander_outlet_temperature\":"
-                  << expander_outlet.state.temperature_k << '}';
+                  << expander_outlet.state.temperature_k;
+        print_inventory_diagnostic(
+            std::cout, graph.problem.variable_names, solved.x,
+            value(row, "charge_kg"));
+        std::cout << '}';
     }
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();
@@ -393,6 +538,22 @@ void run(
     std::cout << ",\"expander_power\":";
     if (expander_power.count > 0U)
         print_metric(std::cout, expander_power);
+    else std::cout << "null";
+    std::cout << ",\"measured_boundary_expander_power\":";
+    if (measured_boundary_expander_power.count > 0U)
+        print_metric(std::cout, measured_boundary_expander_power);
+    else std::cout << "null";
+    std::cout << ",\"expander_inlet_pressure\":";
+    if (expander_inlet_pressure.count > 0U)
+        print_metric(std::cout, expander_inlet_pressure);
+    else std::cout << "null";
+    std::cout << ",\"expander_inlet_enthalpy\":";
+    if (expander_inlet_enthalpy.count > 0U)
+        print_metric(std::cout, expander_inlet_enthalpy);
+    else std::cout << "null";
+    std::cout << ",\"expander_outlet_pressure\":";
+    if (expander_outlet_pressure.count > 0U)
+        print_metric(std::cout, expander_outlet_pressure);
     else std::cout << "null";
     std::cout << "}}\n";
 }
