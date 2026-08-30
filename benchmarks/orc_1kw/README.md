@@ -124,6 +124,20 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   holdup, receiver behavior, and connecting lines. The dataset's charge alone cannot independently
   identify every individual volume; the calibration must expose rank and profile diagnostics and
   then be frozen before any new holdout is evaluated.
+- `thermox_orc_1kw_external_boundary_sweep` provides a bounded, single-process multi-case
+  diagnostic path. It reconstructs utility mass flows with real-fluid inlet density, applies each
+  case's external boundaries, charge, speed, and ambient temperature, and uses measured component
+  endpoints only as nonlinear initial guesses—not as equations. Neighboring cases first use the
+  previous converged root and retry once from their own measured-endpoint seed if needed.
+- The first deliberately small charge-sweep diagnostic is frozen in
+  `external_boundary_sweep_1_3_results.json`. Case 1 converges, while cases 2 and 3 fail from both
+  initialization paths. Their best limiting scaled residuals are 4.21% in condenser hot-side
+  inventory and 1.69% in the expander ambient heat-loss diagnostic. These adjacent cases change
+  charge from 3.5 to 4.0 and 4.5 kg. This falsifies the assumption that the preliminary case-1
+  inventory/exchanger parameterization can be reused unchanged across the charge sweep. It does
+  **not** falsify the nonlinear kernel and is not an accuracy validation. A 68-case run is withheld
+  until training-only volume, conductance, loss, and receiver parameters are identifiable; blindly
+  spending CPU on the known-inadequate parameterization would add no evidence.
 
 ## Evidence discipline
 
@@ -167,6 +181,18 @@ Run the case-1 external-boundary closure feasibility model with:
   --model benchmarks/orc_1kw/external_boundary_case1_feasibility.json \
   --case case_1 --format json
 ```
+
+Run a bounded external-boundary case range with:
+
+```sh
+./build/thermox_orc_1kw_external_boundary_sweep \
+  benchmarks/orc_1kw/external_boundary_case1_feasibility.json \
+  benchmarks/orc_1kw/measurements.csv 1 3
+```
+
+This evidence executable is intentionally not registered as routine CTest because real-fluid
+whole-cycle solves are comparatively expensive. Keep ranges small until their parameterization is
+shown feasible.
 
 The declared residual scales are engineering model-discrimination scales, not instrument standard
 uncertainties. Consequently, the study does not report uncertainty-qualified parameter covariance.

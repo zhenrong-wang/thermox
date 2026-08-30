@@ -1,0 +1,54 @@
+{
+  "schema_version": "thermox.orc_external_boundary_sweep/v1",
+  "classification": "preliminary_parameter_diagnostic_not_validation",
+  "case_range": "1-3",
+  "cases": [
+    {
+      "case": 1,
+      "converged": true,
+      "iterations": 10,
+      "solve_attempts": 1,
+      "selected_initialization": "measured_component_endpoints",
+      "maximum_scaled_residual": 5.67307e-11,
+      "predicted_mass_flow": 0.0194282,
+      "predicted_expander_power": 116.879,
+      "predicted_expander_outlet_temperature": 309.931
+    },
+    {
+      "case": 2,
+      "converged": false,
+      "iterations": 11,
+      "solve_attempts": 2,
+      "selected_initialization": "previous_converged_solution",
+      "maximum_scaled_residual": 0.0421146,
+      "message": "line search failed to reduce residual; dominant scaled residual 'component.condenser/cell_1.hot_inventory'=4.211460e-02"
+    },
+    {
+      "case": 3,
+      "converged": false,
+      "iterations": 12,
+      "solve_attempts": 2,
+      "selected_initialization": "previous_converged_solution",
+      "maximum_scaled_residual": 0.0168965,
+      "message": "line search failed to reduce residual; dominant scaled residual 'component.expander.ambient_heat_loss_diagnostic'=1.689647e-02"
+    }
+  ],
+  "summary": {
+    "requested_cases": 3,
+    "converged_cases": 1,
+    "total_solver_iterations": 52,
+    "elapsed_seconds": 26.7319,
+    "mass_flow": {
+      "count": 1,
+      "mape_percent": 0.69377,
+      "maximum_absolute_relative_error_percent": 0.69377,
+      "mean_bias_percent": -0.69377
+    },
+    "expander_power": {
+      "count": 1,
+      "mape_percent": 32.0047,
+      "maximum_absolute_relative_error_percent": 32.0047,
+      "mean_bias_percent": -32.0047
+    }
+  }
+}

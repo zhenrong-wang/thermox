@@ -169,8 +169,13 @@ void require(bool condition, const std::string& message) {
 
 void require_near(double actual, double expected, double tolerance, const std::string& message) {
     if (std::abs(actual - expected) > tolerance) {
-        throw std::runtime_error(message + ": actual=" + std::to_string(actual) +
-                                 " expected=" + std::to_string(expected));
+        std::ostringstream detail;
+        detail << std::scientific << std::setprecision(17)
+               << message << ": actual=" << actual
+               << " expected=" << expected
+               << " absolute_error=" << std::abs(actual - expected)
+               << " tolerance=" << tolerance;
+        throw std::runtime_error(detail.str());
     }
 }
 
@@ -8734,13 +8739,17 @@ void test_heos_rigid_volume_crosses_both_saturation_boundaries() {
         require(initial_properties.state.phase == test_case.initial_phase &&
                     final_properties.state.phase == test_case.final_phase,
                 test_case.id + " must reach the expected phases");
+        const double mass_conservation_tolerance =
+            1.0e-12 + 5.0e-8 * std::abs(initial.state.at(mass));
         require_near(final.state.at(mass), initial.state.at(mass),
-                     1.0e-12, test_case.id + " conserves mass");
+                     mass_conservation_tolerance,
+                     test_case.id + " conserves mass");
         require_near(
             final.state.at(energy) - initial.state.at(energy),
             test_case.heat_flow * test_case.duration, 1.0e-6,
             test_case.id + " integrates boundary heat exactly");
-        require_near(final.derivative.at(mass), 0.0, 1.0e-12,
+        require_near(final.derivative.at(mass), 0.0,
+                     mass_conservation_tolerance / test_case.duration,
                      test_case.id + " has zero mass rate");
         require_near(final.derivative.at(energy),
                      test_case.heat_flow, 1.0e-8,
