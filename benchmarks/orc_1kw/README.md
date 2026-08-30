@@ -107,10 +107,23 @@ form the primary extrapolative holdout. Randomly mixing those rows would exagger
   -10.44% bias, outlet-temperature MAE 1.01 K, and shaft-power MAPE 16.47% with -16.47% bias. The
   coherent underprediction shows that the model does not extrapolate without systematic bias to
   the changed source/sink-flow regime. Fresh hardware data are still required for a new holdout.
-- External-boundary prediction remains open. It still requires validated scroll-expander closure
-  artifacts, traceable heat-exchanger and receiver geometry, and a sourced or training-only pump
-  artifact. The dataset's measured charge alone cannot identify the individual exchanger and
-  receiver volumes.
+- The first complete external-boundary graph is now executable for case 1. It composes the generic
+  semi-physical pump and expander with two-cell counterflow finite-volume evaporator/condenser
+  assemblies, a rigid receiver, and the fixed-charge balance. From only utility inlet boundaries,
+  pump/expander speeds, charge, and ambient temperature, it converges in 10 Newton iterations with
+  maximum scaled residual 5.33e-12. Flow is -0.69% from measurement and utility outlet
+  temperatures differ by +0.57/-0.08 K. This is topology and solver feasibility, **not validation**:
+  expander inlet temperature differs by -7.74 K, condenser outlet by +6.12 K, pump discharge
+  pressure by -14.59%, and expander power by -32.01%. The exchanger conductances and volumes are
+  preliminary, receiver volume was adjusted for case-1 charge closure, hydraulic losses are near
+  zero because effective flow areas are unknown, and case 1 participated in pump/expander fitting.
+  The frozen result is retained in `external_boundary_case1_feasibility_results.json` so those
+  limitations cannot be hidden by later calibration.
+- External-boundary predictive validation therefore remains open. It requires training-only
+  identification or traceable geometry for exchanger conductance, hydraulic loss, refrigerant
+  holdup, receiver behavior, and connecting lines. The dataset's charge alone cannot independently
+  identify every individual volume; the calibration must expose rank and profile diagnostics and
+  then be frozen before any new holdout is evaluated.
 
 ## Evidence discipline
 
@@ -145,6 +158,14 @@ Run the positive-displacement pump study with:
 ```sh
 ./build/thermox_orc_1kw_semi_physical_pump_study \
   benchmarks/orc_1kw/measurements.csv
+```
+
+Run the case-1 external-boundary closure feasibility model with:
+
+```sh
+./build/thermox_cli solve \
+  --model benchmarks/orc_1kw/external_boundary_case1_feasibility.json \
+  --case case_1 --format json
 ```
 
 The declared residual scales are engineering model-discrimination scales, not instrument standard

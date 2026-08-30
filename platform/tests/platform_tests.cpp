@@ -2553,6 +2553,17 @@ void test_semi_physical_positive_displacement_pump_closes_capacity_and_energy() 
         document,
         thermox::platform::make_default_component_registry(),
         properties, "operating_point");
+    const auto capacity_row = std::find(
+        graph.problem.residual_names.begin(),
+        graph.problem.residual_names.end(),
+        "component.pump.displacement_capacity");
+    require(capacity_row != graph.problem.residual_names.end(),
+            "positive-displacement pump exposes capacity residual");
+    require(
+        graph.problem.analytic_jacobian_rows.at(
+            static_cast<std::size_t>(std::distance(
+                graph.problem.residual_names.begin(), capacity_row))),
+        "positive-displacement pump declares a sparse Jacobian row");
     const auto result = thermox::solve_newton(graph.problem);
     require(result.diagnostics.converged,
             result.diagnostics.message);
@@ -2803,6 +2814,17 @@ void test_semi_physical_volumetric_expander_closes_losses_and_energy() {
         thermox::platform::make_default_component_registry();
     const auto graph = thermox::platform::compile_model_graph(
         document, components, properties, "operating_point");
+    const auto capacity_row = std::find(
+        graph.problem.residual_names.begin(),
+        graph.problem.residual_names.end(),
+        "component.expander.semi_physical_mass_capacity");
+    require(capacity_row != graph.problem.residual_names.end(),
+            "semi-physical expander exposes capacity residual");
+    require(
+        graph.problem.analytic_jacobian_rows.at(
+            static_cast<std::size_t>(std::distance(
+                graph.problem.residual_names.begin(), capacity_row))),
+        "semi-physical expander declares a sparse Jacobian row");
     const auto result = thermox::solve_newton(graph.problem);
     require(result.diagnostics.converged,
             result.diagnostics.message);

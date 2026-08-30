@@ -1319,7 +1319,7 @@ public:
                 context, "ideal_displacement_mass_flow");
         const auto leakage_mass = component_model_support::
             require_internal_variable(context, "leakage_mass_flow");
-        const auto evaluate =
+        const auto raw_evaluate =
             [properties, inlet_p, inlet_h, outlet_p, shaft_omega,
              parameters](
                 const std::vector<double>& x,
@@ -1329,6 +1329,12 @@ public:
                     x.at(outlet_p), x.at(shaft_omega), parameters,
                     result);
             };
+        const std::vector<std::size_t> evaluator_dependencies{
+            inlet_p, inlet_h, outlet_p, shaft_omega};
+        const auto evaluate = component_model_support::
+            memoize_component_evaluation<
+                SemiPhysicalPositiveDisplacementPumpEvaluation>(
+                raw_evaluate, evaluator_dependencies);
         const std::string prefix =
             "component." + context.component.id + ".";
 
@@ -1340,8 +1346,12 @@ public:
                 const std::string& name, std::size_t variable,
                 double SemiPhysicalPositiveDisplacementPumpEvaluation::
                     *member,
+                std::vector<std::size_t> dependencies,
                 double scale) {
-                system.add_checked_equation(
+                dependencies.push_back(variable);
+                component_model_support::
+                    add_numeric_checked_sparse_equation(
+                    system,
                     prefix + name,
                     [evaluate, variable, member](
                         const std::vector<double>& x,
@@ -1353,30 +1363,36 @@ public:
                         residual = x.at(variable) - result.*member;
                         return EvaluationStatus::success();
                     },
+                    std::move(dependencies),
                     scale);
             };
         add_result_equation(
             "displacement_capacity", inlet_m,
             &SemiPhysicalPositiveDisplacementPumpEvaluation::mass_flow,
+            evaluator_dependencies,
             0.1);
         add_result_equation(
             "outlet_energy", outlet_h,
             &SemiPhysicalPositiveDisplacementPumpEvaluation::
                 outlet_enthalpy,
+            evaluator_dependencies,
             1.0e5);
         add_result_equation(
             "shaft_power", shaft_w,
             &SemiPhysicalPositiveDisplacementPumpEvaluation::shaft_power,
+            evaluator_dependencies,
             1.0e3);
         add_result_equation(
             "ideal_displacement_mass_flow_diagnostic", ideal_mass,
             &SemiPhysicalPositiveDisplacementPumpEvaluation::
                 ideal_displacement_mass_flow,
+            evaluator_dependencies,
             0.1);
         add_result_equation(
             "leakage_mass_flow_diagnostic", leakage_mass,
             &SemiPhysicalPositiveDisplacementPumpEvaluation::
                 leakage_mass_flow,
+            evaluator_dependencies,
             0.1);
     }
 

@@ -4,10 +4,111 @@
 #include "thermox/platform/component_registry.hpp"
 #include "thermox/platform/regime_map.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 
 namespace thermox::platform::component_model_support {
+
+template <typename Result, typename Evaluate>
+std::function<EvaluationStatus(const std::vector<double>&, Result&)>
+memoize_component_evaluation(
+    Evaluate evaluate,
+    std::vector<std::size_t> dependencies,
+    std::size_t capacity = 16U) {
+    // Multi-output physical closures are lowered to several scalar graph
+    // equations. A small exact-key cache prevents each row and each sparse
+    // finite-difference column from repeating the same property calculation.
+    struct Entry {
+        std::vector<double> key;
+        EvaluationStatus status;
+        Result result;
+    };
+    struct Cache {
+        std::mutex mutex;
+        std::vector<Entry> entries;
+    };
+    auto cache = std::make_shared<Cache>();
+    return [evaluate = std::move(evaluate),
+            dependencies = std::move(dependencies), cache,
+            capacity](const std::vector<double>& x, Result& result) {
+        std::vector<double> key;
+        key.reserve(dependencies.size());
+        for (const auto dependency : dependencies)
+            key.push_back(x.at(dependency));
+        {
+            const std::lock_guard lock{cache->mutex};
+            const auto found = std::find_if(
+                cache->entries.begin(), cache->entries.end(),
+                [&](const Entry& entry) { return entry.key == key; });
+            if (found != cache->entries.end()) {
+                result = found->result;
+                return found->status;
+            }
+        }
+        Result evaluated_result;
+        const auto status = evaluate(x, evaluated_result);
+        {
+            const std::lock_guard lock{cache->mutex};
+            if (capacity > 0U) {
+                if (cache->entries.size() >= capacity)
+                    cache->entries.erase(cache->entries.begin());
+                cache->entries.push_back(
+                    {std::move(key), status, evaluated_result});
+            }
+        }
+        result = std::move(evaluated_result);
+        return status;
+    };
+}
+
+inline std::size_t add_numeric_checked_sparse_equation(
+    EquationSystemBuilder& system,
+    std::string name,
+    CheckedEquationCallback evaluate,
+    std::vector<std::size_t> variables,
+    double scale) {
+    // Preserve recoverable domain failures while declaring the real graph
+    // incidence instead of forcing the global solver to assume a dense row.
+    std::sort(variables.begin(), variables.end());
+    variables.erase(
+        std::unique(variables.begin(), variables.end()), variables.end());
+    const auto assemble =
+        [evaluate, variables](
+            const std::vector<double>& x,
+            std::vector<EquationPartial>& jacobian) {
+            double base = 0.0;
+            const auto base_status = evaluate(x, base);
+            if (!base_status.ok())
+                throw std::runtime_error(base_status.message);
+            for (const auto variable : variables) {
+                const double step = 1.0e-6 *
+                    std::max(std::abs(x.at(variable)), 1.0);
+                auto perturbed = x;
+                perturbed.at(variable) += step;
+                double shifted = 0.0;
+                auto status = evaluate(perturbed, shifted);
+                double derivative = 0.0;
+                if (status.ok()) {
+                    derivative = (shifted - base) / step;
+                } else {
+                    perturbed.at(variable) = x.at(variable) - step;
+                    status = evaluate(perturbed, shifted);
+                    if (!status.ok())
+                        throw std::runtime_error(status.message);
+                    derivative = (base - shifted) / step;
+                }
+                jacobian.push_back({variable, derivative});
+            }
+            return base;
+        };
+    return system.add_checked_sparse_equation(
+        std::move(name), std::move(evaluate), std::move(variables),
+        assemble, scale);
+}
 
 inline double required_parameter(
     const ComponentDefinition& component,

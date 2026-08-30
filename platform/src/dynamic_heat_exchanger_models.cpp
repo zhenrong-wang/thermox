@@ -710,7 +710,8 @@ private:
         std::size_t hot_out_h,
         std::size_t cold_in_p,
         std::size_t cold_out_h) {
-        system.add_checked_equation(
+        component_model_support::add_numeric_checked_sparse_equation(
+            system,
             name,
             [hot_properties = std::move(hot_properties),
              cold_properties = std::move(cold_properties), effective_ua,
@@ -735,6 +736,8 @@ private:
                     effective_ua * difference;
                 return EvaluationStatus::success();
             },
+            {hot_in_m, hot_in_p, hot_in_h, hot_out_h,
+             cold_in_p, cold_out_h},
             1.0e6);
     }
 

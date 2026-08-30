@@ -692,7 +692,7 @@ public:
             context, "mechanical_loss_power");
         const auto ambient_heat_loss = require_internal_variable(
             context, "ambient_heat_loss");
-        const auto evaluate =
+        const auto raw_evaluate =
             [properties, inlet_p, inlet_h, outlet_p, shaft_omega,
              parameters = SemiPhysicalVolumetricExpanderParameters{
                  maximum_chamber_volume, built_in_volume_ratio,
@@ -709,6 +709,11 @@ public:
                     x.at(outlet_p), x.at(shaft_omega),
                     parameters, result);
             };
+        const std::vector<std::size_t> evaluator_dependencies{
+            inlet_p, inlet_h, outlet_p, shaft_omega};
+        const auto evaluate = component_model_support::
+            memoize_component_evaluation<SemiPhysicalExpanderResult>(
+                raw_evaluate, evaluator_dependencies);
         const std::string prefix =
             "component." + context.component.id + ".";
 
@@ -716,7 +721,8 @@ public:
             prefix + "mass_continuity",
             {{outlet_m, 1.0}, {inlet_m, -1.0}},
             0.0, 0.1);
-        system.add_checked_equation(
+        component_model_support::add_numeric_checked_sparse_equation(
+            system,
             prefix + "semi_physical_mass_capacity",
             [evaluate, inlet_m](
                 const std::vector<double>& x, double& residual) {
@@ -725,9 +731,10 @@ public:
                 if (!status.ok()) return status;
                 residual = x.at(inlet_m) - result.mass_flow;
                 return EvaluationStatus::success();
-            },
+            }, {inlet_m, inlet_p, inlet_h, outlet_p, shaft_omega},
             0.1);
-        system.add_checked_equation(
+        component_model_support::add_numeric_checked_sparse_equation(
+            system,
             prefix + "semi_physical_outlet_energy",
             [evaluate, outlet_h](
                 const std::vector<double>& x, double& residual) {
@@ -736,9 +743,10 @@ public:
                 if (!status.ok()) return status;
                 residual = x.at(outlet_h) - result.outlet_enthalpy;
                 return EvaluationStatus::success();
-            },
+            }, {outlet_h, inlet_p, inlet_h, outlet_p, shaft_omega},
             1.0e5);
-        system.add_checked_equation(
+        component_model_support::add_numeric_checked_sparse_equation(
+            system,
             prefix + "semi_physical_shaft_power",
             [evaluate, shaft_w](
                 const std::vector<double>& x, double& residual) {
@@ -747,9 +755,10 @@ public:
                 if (!status.ok()) return status;
                 residual = x.at(shaft_w) - result.shaft_power;
                 return EvaluationStatus::success();
-            },
+            }, {shaft_w, inlet_p, inlet_h, outlet_p, shaft_omega},
             1.0e3);
-        system.add_checked_equation(
+        component_model_support::add_numeric_checked_sparse_equation(
+            system,
             prefix + "semi_physical_rejected_heat",
             [evaluate, rejected_heat](
                 const std::vector<double>& x, double& residual) {
@@ -758,14 +767,18 @@ public:
                 if (!status.ok()) return status;
                 residual = x.at(rejected_heat) - result.rejected_heat;
                 return EvaluationStatus::success();
-            },
+            }, {rejected_heat, inlet_p, inlet_h, outlet_p, shaft_omega},
             1.0e3);
-        const auto add_diagnostic_equation = [&system, &prefix, evaluate](
+        const auto add_diagnostic_equation = [
+            &system, &prefix, evaluate, evaluator_dependencies](
             const std::string& name,
             std::size_t variable,
             double SemiPhysicalExpanderResult::*member,
             double scale) {
-            system.add_checked_equation(
+            auto dependencies = evaluator_dependencies;
+            dependencies.push_back(variable);
+            component_model_support::add_numeric_checked_sparse_equation(
+                system,
                 prefix + name,
                 [evaluate, variable, member](
                     const std::vector<double>& x, double& residual) {
@@ -774,7 +787,7 @@ public:
                     if (!status.ok()) return status;
                     residual = x.at(variable) - result.*member;
                     return EvaluationStatus::success();
-                },
+                }, std::move(dependencies),
                 scale);
         };
         add_diagnostic_equation(

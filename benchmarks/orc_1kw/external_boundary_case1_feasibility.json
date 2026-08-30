@@ -1,0 +1,194 @@
+{
+  "schema_version": "thermox.model/v2",
+  "model": {
+    "id": "orc_1kw_external_boundary_feasibility",
+    "media": [
+      {"id": "r245fa", "backend": "coolprop_heos", "substance": "R245fa"},
+      {"id": "water", "backend": "coolprop_heos", "substance": "Water"}
+    ],
+    "components": [
+      {"id": "hot_source", "kind": "source.fluid.boundary", "media": {"outlet": "water"}},
+      {"id": "hot_sink", "kind": "sink.fluid.boundary", "media": {"inlet": "water"}},
+      {"id": "cold_source", "kind": "source.fluid.boundary", "media": {"outlet": "water"}},
+      {"id": "cold_sink", "kind": "sink.fluid.boundary", "media": {"inlet": "water"}},
+      {
+        "id": "pump",
+        "kind": "pump.fluid.semi_physical_positive_displacement",
+        "parameters": {
+          "displacement_volume_per_revolution": 4.28271e-6,
+          "leakage_area": 1.14142e-8,
+          "leakage_discharge_coefficient": 0.8,
+          "eta_is": 0.361842
+        },
+        "media": {"inlet": "r245fa", "outlet": "r245fa"}
+      },
+      {
+        "id": "expander",
+        "kind": "expander.fluid.semi_physical_volumetric",
+        "parameters": {
+          "maximum_chamber_volume_per_revolution": 4.18326e-5,
+          "built_in_volume_ratio": 3.2035,
+          "leakage_area": 4.65945e-6,
+          "leakage_discharge_coefficient": 0.8,
+          "mechanical_loss_at_reference_speed": 64.8154,
+          "mechanical_loss_reference_angular_speed": 300.0,
+          "proportional_mechanical_loss": 0.0,
+          "ambient_heat_transfer_conductance": 2.69751,
+          "ambient_temperature": 293.135
+        },
+        "media": {"inlet": "r245fa", "outlet": "r245fa"}
+      },
+      {
+        "id": "receiver",
+        "kind": "volume.fluid.rigid_adiabatic",
+        "parameters": {"volume": 0.0020},
+        "media": {"inlet": "r245fa", "outlet": "r245fa"}
+      },
+      {
+        "id": "charge",
+        "kind": "balance.fluid.fixed_total_charge",
+        "port_counts": {"inventory": 5},
+        "parameters": {"total_charge": 3.5},
+        "media": {"inventory_1": "r245fa", "inventory_2": "r245fa", "inventory_3": "r245fa", "inventory_4": "r245fa", "inventory_5": "r245fa"}
+      }
+    ],
+    "assemblies": [
+      {
+        "id": "evaporator",
+        "ports": [
+          {"name": "hot_in", "endpoint": "cell_1.hot_in"},
+          {"name": "hot_out", "endpoint": "cell_2.hot_out"},
+          {"name": "cold_in", "endpoint": "cell_2.cold_in"},
+          {"name": "cold_out", "endpoint": "cell_1.cold_out"},
+          {"name": "inventory_1", "endpoint": "cell_1.cold_inventory"},
+          {"name": "inventory_2", "endpoint": "cell_2.cold_inventory"}
+        ],
+        "components": [
+          {"id": "cell_1", "kind": "heat_exchanger.fluid.finite_volume_cell", "parameters": {"hot_fluid_volume": 0.0005, "cold_fluid_volume": 0.00005, "wall_thermal_capacity": 500.0, "hot_side_UA": 500.0, "cold_side_UA": 500.0, "hot_flow_diameter": 0.02, "cold_flow_diameter": 0.01, "hot_loss_coefficient": 1e-6, "cold_loss_coefficient": 1e-6}, "media": {"hot_in": "water", "hot_out": "water", "cold_in": "r245fa", "cold_out": "r245fa"}},
+          {"id": "cell_2", "kind": "heat_exchanger.fluid.finite_volume_cell", "parameters": {"hot_fluid_volume": 0.0005, "cold_fluid_volume": 0.00005, "wall_thermal_capacity": 500.0, "hot_side_UA": 500.0, "cold_side_UA": 500.0, "hot_flow_diameter": 0.02, "cold_flow_diameter": 0.01, "hot_loss_coefficient": 1e-6, "cold_loss_coefficient": 1e-6}, "media": {"hot_in": "water", "hot_out": "water", "cold_in": "r245fa", "cold_out": "r245fa"}}
+        ],
+        "connections": [
+          {"id": "hot_12", "from": "cell_1.hot_out", "to": "cell_2.hot_in", "kind": "fluid_link"},
+          {"id": "cold_21", "from": "cell_2.cold_out", "to": "cell_1.cold_in", "kind": "fluid_link"}
+        ]
+      },
+      {
+        "id": "condenser",
+        "ports": [
+          {"name": "hot_in", "endpoint": "cell_1.hot_in"},
+          {"name": "hot_out", "endpoint": "cell_2.hot_out"},
+          {"name": "cold_in", "endpoint": "cell_2.cold_in"},
+          {"name": "cold_out", "endpoint": "cell_1.cold_out"},
+          {"name": "inventory_1", "endpoint": "cell_1.hot_inventory"},
+          {"name": "inventory_2", "endpoint": "cell_2.hot_inventory"}
+        ],
+        "components": [
+          {"id": "cell_1", "kind": "heat_exchanger.fluid.finite_volume_cell", "parameters": {"hot_fluid_volume": 0.00065, "cold_fluid_volume": 0.0005, "wall_thermal_capacity": 500.0, "hot_side_UA": 1000.0, "cold_side_UA": 1000.0, "hot_flow_diameter": 0.01, "cold_flow_diameter": 0.02, "hot_loss_coefficient": 1e-6, "cold_loss_coefficient": 1e-6}, "media": {"hot_in": "r245fa", "hot_out": "r245fa", "cold_in": "water", "cold_out": "water"}},
+          {"id": "cell_2", "kind": "heat_exchanger.fluid.finite_volume_cell", "parameters": {"hot_fluid_volume": 0.00065, "cold_fluid_volume": 0.0005, "wall_thermal_capacity": 500.0, "hot_side_UA": 1000.0, "cold_side_UA": 1000.0, "hot_flow_diameter": 0.01, "cold_flow_diameter": 0.02, "hot_loss_coefficient": 1e-6, "cold_loss_coefficient": 1e-6}, "media": {"hot_in": "r245fa", "hot_out": "r245fa", "cold_in": "water", "cold_out": "water"}}
+        ],
+        "connections": [
+          {"id": "hot_12", "from": "cell_1.hot_out", "to": "cell_2.hot_in", "kind": "fluid_link"},
+          {"id": "cold_21", "from": "cell_2.cold_out", "to": "cell_1.cold_in", "kind": "fluid_link"}
+        ]
+      }
+    ],
+    "connections": [
+      {"id": "hot_supply", "from": "hot_source.outlet", "to": "evaporator.hot_in", "kind": "fluid_link"},
+      {"id": "hot_return", "from": "evaporator.hot_out", "to": "hot_sink.inlet", "kind": "fluid_link"},
+      {"id": "cold_supply", "from": "cold_source.outlet", "to": "condenser.cold_in", "kind": "fluid_link"},
+      {"id": "cold_return", "from": "condenser.cold_out", "to": "cold_sink.inlet", "kind": "fluid_link"},
+      {"id": "pump_to_evaporator", "from": "pump.outlet", "to": "evaporator.cold_in", "kind": "fluid_link"},
+      {"id": "evaporator_to_expander", "from": "evaporator.cold_out", "to": "expander.inlet", "kind": "fluid_link"},
+      {"id": "expander_to_condenser", "from": "expander.outlet", "to": "condenser.hot_in", "kind": "fluid_link"},
+      {"id": "condenser_to_receiver", "from": "condenser.hot_out", "to": "receiver.inlet", "kind": "fluid_link"},
+      {"id": "receiver_to_pump", "from": "receiver.outlet", "to": "pump.inlet", "kind": "fluid_link"},
+      {"id": "evaporator_charge_1", "from": "evaporator.inventory_1", "to": "charge.inventory_1", "kind": "inventory_link"},
+      {"id": "evaporator_charge_2", "from": "evaporator.inventory_2", "to": "charge.inventory_2", "kind": "inventory_link"},
+      {"id": "condenser_charge_1", "from": "condenser.inventory_1", "to": "charge.inventory_3", "kind": "inventory_link"},
+      {"id": "condenser_charge_2", "from": "condenser.inventory_2", "to": "charge.inventory_4", "kind": "inventory_link"},
+      {"id": "receiver_charge", "from": "receiver.inventory", "to": "charge.inventory_5", "kind": "inventory_link"}
+    ]
+  },
+  "cases": [{
+    "id": "case_1",
+    "mode": "steady_state_off_design",
+    "fixed_values": {
+      "hot_source.outlet.m_dot": 0.2456073850192484,
+      "hot_source.outlet.p": 185039.483,
+      "hot_source.outlet.T": 338.124833,
+      "cold_source.outlet.m_dot": 0.28804876779090766,
+      "cold_source.outlet.p": 175559.8,
+      "cold_source.outlet.T": 293.627,
+      "pump.shaft.omega": 21.901031,
+      "expander.shaft.omega": 314.044477
+    },
+    "initial_guesses": {
+      "pump.inlet.m_dot": 0.0195,
+      "pump.outlet.m_dot": 0.0195,
+      "expander.inlet.m_dot": 0.0195,
+      "expander.outlet.m_dot": 0.0195,
+      "receiver.inlet.m_dot": 0.0195,
+      "receiver.outlet.m_dot": 0.0195,
+      "pump.inlet.p": 149095.967,
+      "pump.inlet.h": 230000.0,
+      "pump.outlet.p": 434317.683,
+      "pump.outlet.h": 231000.0,
+      "expander.inlet.p": 412038.267,
+      "expander.inlet.h": 450000.0,
+      "expander.outlet.p": 152787.65,
+      "expander.outlet.h": 430000.0,
+      "hot_sink.inlet.h": 251000.0,
+      "cold_sink.inlet.h": 99500.0,
+
+      "evaporator/cell_1.hot_in.h": 272000.0,
+      "evaporator/cell_1.hot_in.m_dot": 0.2456073850192484,
+      "evaporator/cell_1.hot_out.m_dot": 0.2456073850192484,
+      "evaporator/cell_2.hot_in.m_dot": 0.2456073850192484,
+      "evaporator/cell_2.hot_out.m_dot": 0.2456073850192484,
+      "evaporator/cell_1.cold_in.m_dot": 0.0195,
+      "evaporator/cell_1.cold_out.m_dot": 0.0195,
+      "evaporator/cell_2.cold_in.m_dot": 0.0195,
+      "evaporator/cell_2.cold_out.m_dot": 0.0195,
+      "evaporator/cell_1.hot_out.h": 269000.0,
+      "evaporator/cell_2.hot_in.h": 269000.0,
+      "evaporator/cell_2.hot_out.h": 253000.0,
+      "evaporator/cell_2.cold_in.h": 231000.0,
+      "evaporator/cell_2.cold_out.h": 400000.0,
+      "evaporator/cell_1.cold_in.h": 400000.0,
+      "evaporator/cell_1.cold_out.h": 450000.0,
+      "evaporator/cell_1.hot_in.p": 185000.0,
+      "evaporator/cell_1.hot_out.p": 183000.0,
+      "evaporator/cell_2.hot_in.p": 183000.0,
+      "evaporator/cell_2.hot_out.p": 177000.0,
+      "evaporator/cell_2.cold_in.p": 434000.0,
+      "evaporator/cell_2.cold_out.p": 418000.0,
+      "evaporator/cell_1.cold_in.p": 418000.0,
+      "evaporator/cell_1.cold_out.p": 412000.0,
+
+      "condenser/cell_1.hot_in.h": 430000.0,
+      "condenser/cell_1.hot_in.m_dot": 0.0195,
+      "condenser/cell_1.hot_out.m_dot": 0.0195,
+      "condenser/cell_2.hot_in.m_dot": 0.0195,
+      "condenser/cell_2.hot_out.m_dot": 0.0195,
+      "condenser/cell_1.cold_in.m_dot": 0.28804876779090766,
+      "condenser/cell_1.cold_out.m_dot": 0.28804876779090766,
+      "condenser/cell_2.cold_in.m_dot": 0.28804876779090766,
+      "condenser/cell_2.cold_out.m_dot": 0.28804876779090766,
+      "condenser/cell_1.hot_out.h": 390000.0,
+      "condenser/cell_2.hot_in.h": 390000.0,
+      "condenser/cell_2.hot_out.h": 230000.0,
+      "condenser/cell_2.cold_in.h": 85800.0,
+      "condenser/cell_2.cold_out.h": 86500.0,
+      "condenser/cell_1.cold_in.h": 86500.0,
+      "condenser/cell_1.cold_out.h": 99500.0,
+      "condenser/cell_1.hot_in.p": 153000.0,
+      "condenser/cell_1.hot_out.p": 151500.0,
+      "condenser/cell_2.hot_in.p": 151500.0,
+      "condenser/cell_2.hot_out.p": 147000.0,
+      "condenser/cell_2.cold_in.p": 175500.0,
+      "condenser/cell_2.cold_out.p": 160500.0,
+      "condenser/cell_1.cold_in.p": 160500.0,
+      "condenser/cell_1.cold_out.p": 145500.0
+    }
+  }]
+}

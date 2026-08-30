@@ -1,0 +1,53 @@
+{
+  "schema_version": "thermox.orc_external_boundary_feasibility/v1",
+  "case": 1,
+  "classification": "topology_and_solver_feasibility_not_validation",
+  "execution": {
+    "model": "external_boundary_case1_feasibility.json",
+    "command": "thermox_cli solve --model external_boundary_case1_feasibility.json --case case_1 --format json",
+    "status": "succeeded",
+    "iterations": 10,
+    "maximum_absolute_normalized_residual": 5.329868490999701e-12,
+    "representative_wall_time_seconds": 5.62,
+    "host_load": "single_process_single_busy_core"
+  },
+  "external_inputs": [
+    "hot_water_inlet_temperature_pressure_and_volume_flow",
+    "cooling_water_inlet_temperature_pressure_and_volume_flow",
+    "pump_speed",
+    "expander_speed",
+    "working_fluid_charge",
+    "ambient_temperature"
+  ],
+  "assumptions_and_claim_limits": [
+    "pump and expander parameters were fitted on cases 1-68, which includes case 1",
+    "two finite-volume counterflow cells are used per plate heat exchanger",
+    "heat-exchanger conductances are preliminary engineering values and were not independently calibrated",
+    "heat-exchanger and receiver volumes are assumed; receiver volume was adjusted to permit the case-1 charge closure",
+    "hydraulic loss coefficients are set to a near-zero numerical value because effective flow areas are unavailable",
+    "connecting-line heat loss pressure loss and inventory are omitted",
+    "utility mass flows are reconstructed from measured volume flow and CoolProp inlet density",
+    "the result demonstrates graph closure only and must not be cited as independent predictive validation"
+  ],
+  "comparisons": {
+    "working_fluid_mass_flow": {"predicted_si": 0.01942807109599174, "measured_si": 0.01956392592592592, "error_si": -0.00013585482993417816, "relative_error_percent": -0.6944149678779181},
+    "pump_inlet_pressure": {"predicted_si": 159261.74126569342, "measured_si": 149095.9666666665, "error_si": 10165.774599026918, "relative_error_percent": 6.818276058234704},
+    "pump_inlet_temperature": {"predicted_si": 300.043369350885, "measured_si": 293.7656666666669, "error_si": 6.27770268421807},
+    "pump_outlet_pressure": {"predicted_si": 370932.2804940651, "measured_si": 434317.6833333332, "error_si": -63385.40283926809, "relative_error_percent": -14.594248696666725},
+    "pump_outlet_temperature": {"predicted_si": 300.34255657580144, "measured_si": 294.09066666666655, "error_si": 6.2518899091348885},
+    "expander_inlet_pressure": {"predicted_si": 370932.2783226036, "measured_si": 400126.43333333294, "error_si": -29194.15501072933, "relative_error_percent": -7.2962325351818444},
+    "expander_inlet_temperature": {"predicted_si": 328.30812562687413, "measured_si": 336.04966666666735, "error_si": -7.741541039793219},
+    "expander_outlet_pressure": {"predicted_si": 159261.74336551514, "measured_si": 152787.65, "error_si": 6474.093365515146, "relative_error_percent": 4.237314577137057},
+    "expander_outlet_temperature": {"predicted_si": 309.931275467398, "measured_si": 314.1503333333331, "error_si": -4.219057865935099},
+    "condenser_outlet_temperature": {"predicted_si": 300.043369350885, "measured_si": 293.9216666666666, "error_si": 6.121702684218349},
+    "hot_water_outlet_temperature": {"predicted_si": 334.13366214572477, "measured_si": 333.5685000000004, "error_si": 0.5651621457243436},
+    "cooling_water_outlet_temperature": {"predicted_si": 296.83885445602067, "measured_si": 296.92349999999993, "error_si": -0.0846455439792635},
+    "expander_shaft_power": {"predicted_si": 116.87640670732591, "measured_si": 171.89225297390803, "error_si": -55.015846266582116, "relative_error_percent": -32.00600685298663}
+  },
+  "diagnosis": [
+    "mass capacity and external utility energy balances are already close at this operating point",
+    "the internal temperature and pressure levels are not yet credible predictions",
+    "the receiver outlet is almost saturated instead of reproducing the measured liquid subcooling",
+    "heat-exchanger conductance hydraulic geometry receiver behavior and connecting-line closures must be calibrated or sourced before multi-case prediction"
+  ]
+}
