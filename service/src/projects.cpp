@@ -849,6 +849,105 @@ ModelRevisionRecord ProjectService::create_model_revision(
         document.schema_version,
         document.model_id,
         document.revision,
+        "",
+        "",
+        canonical,
+        checksum(canonical));
+}
+
+TopologyDraftPromotionReview ProjectService::review_topology_draft(
+    const IdentityContext& identity,
+    const std::string& project_id,
+    const std::string& artifact_revision_id) const {
+    require_identity(identity);
+    if (project_id.empty() || artifact_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and topology draft revision IDs must not be empty");
+    }
+    const auto content = get_artifact_revision_content(
+        identity, project_id, artifact_revision_id);
+    if (!content) {
+        throw ProjectStateError("topology draft revision was not found");
+    }
+    if (content->revision.artifact_type != topology_draft_artifact_type ||
+        content->revision.artifact_schema_version !=
+            topology_draft_schema_v1) {
+        throw ProjectRequestError(
+            "artifact revision is not a topology draft");
+    }
+
+    TopologyDraftPromotionReview review;
+    review.project_id = project_id;
+    review.artifact_revision_id = artifact_revision_id;
+    review.artifact_checksum = content->revision.content.checksum;
+    try {
+        const auto wrapper =
+            nlohmann::json::parse(content->canonical_artifact_json);
+        const auto model_json = wrapper.at("document").dump();
+        const auto document = platform::parse_topology_document_text(
+            model_json, units_);
+        (void)platform::flatten_model_document(document);
+        review.promotable = true;
+        review.model_id = document.model_id;
+        review.medium_count = document.media.size();
+        review.material_count = document.materials.size();
+        review.component_count = document.components.size();
+        review.assembly_count = document.assemblies.size();
+        review.connection_count = document.connections.size();
+    } catch (const std::exception& error) {
+        review.issues.push_back({
+            "topology_contract_invalid",
+            error.what(),
+        });
+    }
+    return review;
+}
+
+ModelRevisionRecord ProjectService::promote_topology_draft(
+    const PromoteTopologyDraftRequest& request) const {
+    const auto review = review_topology_draft(
+        request.identity,
+        request.project_id,
+        request.artifact_revision_id);
+    if (!review.promotable) {
+        throw ProjectRequestError(
+            "topology draft is not promotable: " +
+            (review.issues.empty()
+                 ? std::string("unknown topology contract error")
+                 : review.issues.front().message));
+    }
+    const auto content = get_artifact_revision_content(
+        request.identity,
+        request.project_id,
+        request.artifact_revision_id);
+    if (!content) {
+        throw ProjectStateError("topology draft revision was not found");
+    }
+    platform::ModelDocument document;
+    std::string canonical;
+    try {
+        const auto wrapper =
+            nlohmann::json::parse(content->canonical_artifact_json);
+        document = platform::parse_topology_document_text(
+            wrapper.at("document").dump(), units_);
+        (void)platform::flatten_model_document(document);
+        canonical =
+            detail::serialize_topology_document_json(document);
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("topology draft promotion failed: ") +
+            error.what());
+    }
+    return repository_->create_model_revision(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.parent_model_revision_id,
+        document.schema_version,
+        document.model_id,
+        document.revision,
+        request.artifact_revision_id,
+        content->revision.content.checksum,
         canonical,
         checksum(canonical));
 }
@@ -1176,6 +1275,8 @@ ModelRevisionRecord ProjectService::apply_graph_edits(
             document.schema_version,
             document.model_id,
             document.revision,
+            "",
+            "",
             canonical,
             checksum(canonical));
     } catch (const ProjectRequestError&) {

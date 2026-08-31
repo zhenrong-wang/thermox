@@ -108,6 +108,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "020_reconciliation_jobs.sql",
              "021_study_trajectory_validation.sql",
              "022_topology_presentations.sql",
+             "023_model_revision_draft_provenance.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -1036,6 +1037,38 @@ void test_projects_and_immutable_model_revisions(
                 artifact.artifact_revision_id).empty(),
         "PostgreSQL quality reviews must preserve the exact artifact "
         "and assessed snapshot under Team isolation");
+
+    const auto topology_draft = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "postgres-topology-draft",
+        {},
+        thermox::service::topology_draft_artifact_type,
+        thermox::service::topology_draft_schema_v1,
+        std::string(
+            R"({"schema_version":"thermox.topology_draft/v1","id":"postgres-topology-draft","document":)") +
+            model.str() + "}",
+    });
+    const auto draft_review = projects.review_topology_draft(
+        team_a,
+        project.project_id,
+        topology_draft.artifact_revision_id);
+    const auto promoted = projects.promote_topology_draft({
+        team_a,
+        project.project_id,
+        topology_draft.artifact_revision_id,
+        second.model_revision_id,
+    });
+    const auto loaded_promoted = projects.get_model_revision(
+        team_a, project.project_id, promoted.model_revision_id);
+    require(
+        draft_review.promotable && loaded_promoted &&
+            loaded_promoted->source_draft_artifact_revision_id ==
+                topology_draft.artifact_revision_id &&
+            loaded_promoted->source_draft_checksum ==
+                topology_draft.content.checksum,
+        "PostgreSQL model revisions must preserve exact topology-draft "
+        "promotion provenance");
 
     thermox::service::CreateStudyRevisionRequest study_request;
     study_request.identity = team_a;

@@ -270,6 +270,8 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}` | Read Team-scoped project metadata |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions` | List/publish immutable model revisions |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}` | Read canonical revision content |
+| `GET` | `/api/v1/projects/{project_id}/topology-drafts/{artifact_revision_id}/review` | Authoritatively review an exact immutable draft for promotion |
+| `POST` | `/api/v1/projects/{project_id}/topology-drafts/{artifact_revision_id}/promote` | Promote a reviewed draft and retain source revision/checksum provenance |
 | `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/edits` | Apply a typed atomic edit batch and publish a child revision |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions` | List/publish immutable cases |
 | `GET` | `/api/v1/projects/{project_id}/model-revisions/{revision_id}/case-revisions/{case_revision_id}` | Read canonical case content |

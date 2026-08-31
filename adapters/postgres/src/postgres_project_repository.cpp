@@ -733,10 +733,13 @@ service::ModelRevisionRecord decode_model_revision(
     record.model_schema_version = field(result, row, 5);
     record.model_id = field(result, row, 6);
     record.model_revision_label = field(result, row, 7);
-    record.canonical_model_json = field(result, row, 8);
-    record.checksum = field(result, row, 9);
-    record.created_by_user_id = field(result, row, 10);
-    record.created_at = decode_time(field(result, row, 11));
+    record.source_draft_artifact_revision_id =
+        optional_field(result, row, 8);
+    record.source_draft_checksum = optional_field(result, row, 9);
+    record.canonical_model_json = field(result, row, 10);
+    record.checksum = field(result, row, 11);
+    record.created_by_user_id = field(result, row, 12);
+    record.created_at = decode_time(field(result, row, 13));
     return record;
 }
 
@@ -950,6 +953,7 @@ constexpr const char model_revision_columns[] =
     "model_revision_id, project_id, team_id, "
     "revision_number, parent_model_revision_id, "
     "model_schema_version, model_id, model_revision_label, "
+    "source_draft_artifact_revision_id, source_draft_checksum, "
     "canonical_model_payload, checksum, "
     "created_by_user_id, "
     "floor(extract(epoch FROM created_at) * 1000)"
@@ -1136,6 +1140,8 @@ public:
         const std::string& model_schema_version,
         const std::string& model_id,
         const std::string& model_revision_label,
+        const std::string& source_draft_artifact_revision_id,
+        const std::string& source_draft_checksum,
         const std::string& canonical_model_json,
         const std::string& checksum) override {
         auto connection = connect(connection_string_);
@@ -1174,22 +1180,31 @@ public:
         const char* parent = parent_model_revision_id.empty()
             ? nullptr
             : parent_model_revision_id.c_str();
+        const char* source_draft =
+            source_draft_artifact_revision_id.empty()
+                ? nullptr
+                : source_draft_artifact_revision_id.c_str();
+        const char* source_checksum = source_draft_checksum.empty()
+            ? nullptr
+            : source_draft_checksum.c_str();
         const auto result = execute(
             connection.get(),
             "INSERT INTO thermox_model_revisions ("
             "project_id, team_id, revision_number, "
             "parent_model_revision_id, model_schema_version, "
             "model_id, model_revision_label, "
+            "source_draft_artifact_revision_id, source_draft_checksum, "
             "canonical_model_payload, checksum, "
             "created_by_user_id"
             ") VALUES ("
             "$1, $2, $3::bigint, $4, $5, $6, $7, "
-            "$8, $9, $10"
+            "$8, $9, $10, $11, $12"
             ") RETURNING "
             "model_revision_id, project_id, team_id, "
             "revision_number, parent_model_revision_id, "
             "model_schema_version, model_id, "
             "model_revision_label, "
+            "source_draft_artifact_revision_id, source_draft_checksum, "
             "canonical_model_payload, checksum, "
             "created_by_user_id, "
             "floor(extract(epoch FROM created_at) * 1000)"
@@ -1202,6 +1217,8 @@ public:
                 model_schema_version.c_str(),
                 model_id.c_str(),
                 model_revision_label.c_str(),
+                source_draft,
+                source_checksum,
                 canonical_model_json.c_str(),
                 checksum.c_str(),
                 created_by_user_id.c_str(),

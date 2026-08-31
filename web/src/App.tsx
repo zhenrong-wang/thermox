@@ -1209,6 +1209,46 @@ function App() {
     return revision
   }
 
+  async function reviewTopologyDraft(revision: ArtifactRevision) {
+    if (!selectedProjectId) throw new Error('Select a project first.')
+    return api.reviewTopologyDraft(
+      selectedProjectId,
+      revision.artifact_revision_id,
+    )
+  }
+
+  async function promoteTopologyDraft(revision: ArtifactRevision) {
+    if (!selectedProjectId) throw new Error('Select a project first.')
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const model = await api.promoteTopologyDraft(
+        selectedProjectId,
+        revision.artifact_revision_id,
+        selectedRevisionId,
+      )
+      setRevisions((current) => [
+        model,
+        ...current.filter((item) => item.model_revision_id !== model.model_revision_id),
+      ])
+      setSelection(undefined)
+      setShowSystemReadiness(false)
+      setTopologyPresentation(undefined)
+      setLayoutSaveState('idle')
+      setSelectedRevisionId(model.model_revision_id)
+      setOperationStatus(
+        `Promoted draft ${revision.artifact_id} r${revision.revision_number} as topology r${model.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   async function addComponent(component: ComponentDefinition) {
     const child = await publishEdits(
       [
@@ -3101,6 +3141,8 @@ function App() {
           onPublish={publishTopologyDocument}
           onLoadDraft={loadTopologyDraft}
           onSaveDraft={saveTopologyDraft}
+          onReviewDraft={reviewTopologyDraft}
+          onPromoteDraft={promoteTopologyDraft}
         />
       )}
       {workspaceView === 'topology' && addingAssembly && topology && (

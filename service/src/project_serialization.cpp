@@ -99,6 +99,10 @@ void model_revision_json(
     json_string(out, revision.model_id);
     out << ", \"model_revision_label\": ";
     json_string(out, revision.model_revision_label);
+    out << ", \"source_draft_artifact_revision_id\": ";
+    json_string(out, revision.source_draft_artifact_revision_id);
+    out << ", \"source_draft_checksum\": ";
+    json_string(out, revision.source_draft_checksum);
     out << ", \"checksum\": ";
     json_string(out, revision.checksum);
     out << ", \"created_by_user_id\": ";
@@ -1174,6 +1178,39 @@ std::string serialize_artifact_revisions_json(
             out << ", ";
         }
         artifact_revision_json(out, revisions[index]);
+    }
+    out << "]}\n";
+    return out.str();
+}
+
+std::string serialize_topology_draft_promotion_review_json(
+    const TopologyDraftPromotionReview& review) {
+    std::ostringstream out;
+    out << "{\"schema_version\": ";
+    json_string(out, review.schema_version);
+    out << ", \"project_id\": ";
+    json_string(out, review.project_id);
+    out << ", \"artifact_revision_id\": ";
+    json_string(out, review.artifact_revision_id);
+    out << ", \"artifact_checksum\": ";
+    json_string(out, review.artifact_checksum);
+    out << ", \"promotable\": "
+        << (review.promotable ? "true" : "false");
+    out << ", \"model_id\": ";
+    json_string(out, review.model_id);
+    out << ", \"medium_count\": " << review.medium_count
+        << ", \"material_count\": " << review.material_count
+        << ", \"component_count\": " << review.component_count
+        << ", \"assembly_count\": " << review.assembly_count
+        << ", \"connection_count\": " << review.connection_count
+        << ", \"issues\": [";
+    for (std::size_t index = 0; index < review.issues.size(); ++index) {
+        if (index != 0U) out << ", ";
+        out << "{\"code\": ";
+        json_string(out, review.issues[index].code);
+        out << ", \"message\": ";
+        json_string(out, review.issues[index].message);
+        out << '}';
     }
     out << "]}\n";
     return out.str();

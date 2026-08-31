@@ -23,6 +23,8 @@ export interface ModelRevision {
   model_schema_version: string
   model_id: string
   model_revision_label: string
+  source_draft_artifact_revision_id: string
+  source_draft_checksum: string
   checksum: string
   created_by_user_id: string
   created_at_epoch_ms: number
@@ -1518,6 +1520,21 @@ export interface ArtifactRevisionContent<T = unknown> {
   schema_version: 'thermox.artifact_revision_content/v1'
   revision: ArtifactRevision
   artifact: T
+}
+
+export interface TopologyDraftPromotionReview {
+  schema_version: 'thermox.topology_draft_promotion_review/v1'
+  project_id: string
+  artifact_revision_id: string
+  artifact_checksum: string
+  promotable: boolean
+  model_id: string
+  medium_count: number
+  material_count: number
+  component_count: number
+  assembly_count: number
+  connection_count: number
+  issues: Array<{ code: string; message: string }>
 }
 
 export type EngineeringReviewDisposition =

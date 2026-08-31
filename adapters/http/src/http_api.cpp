@@ -2869,6 +2869,8 @@ Response Api::handle(const Request& request) const {
                 suffix.substr(separator);
             constexpr std::string_view artifacts_segment =
                 "/artifact-revisions";
+            constexpr std::string_view topology_drafts_segment =
+                "/topology-drafts/";
             constexpr std::string_view component_catalog_segment =
                 "/component-catalog";
             constexpr std::string_view topology_presentation_segment =
@@ -3456,6 +3458,68 @@ Response Api::handle(const Request& request) const {
                 }
                 return run_configuration_revision_response(
                     *revision, 200);
+            }
+            if (remainder.starts_with(topology_drafts_segment)) {
+                const auto draft_path = remainder.substr(
+                    topology_drafts_segment.size());
+                const auto nested_separator = draft_path.find('/');
+                const auto artifact_revision_id =
+                    draft_path.substr(0, nested_separator);
+                const auto action = nested_separator == std::string::npos
+                    ? std::string{}
+                    : draft_path.substr(nested_separator);
+                if (artifact_revision_id.empty() ||
+                    (action != "/review" && action != "/promote")) {
+                    return error_response(
+                        404,
+                        "route_not_found",
+                        "no route matches the request target");
+                }
+                if (!impl_->projects->get_artifact_revision(
+                        identity, project_id, artifact_revision_id)) {
+                    return error_response(
+                        404,
+                        "topology_draft_revision_not_found",
+                        "topology draft revision was not found");
+                }
+                if (action == "/review") {
+                    reject_unknown_query(target.query, {});
+                    if (method != "get") {
+                        auto response = error_response(
+                            405,
+                            "method_not_allowed",
+                            "topology draft review only supports GET");
+                        response.headers["Allow"] = "GET";
+                        return response;
+                    }
+                    return json_response(
+                        200,
+                        service::
+                            serialize_topology_draft_promotion_review_json(
+                                impl_->projects->review_topology_draft(
+                                    identity,
+                                    project_id,
+                                    artifact_revision_id)));
+                }
+                reject_unknown_query(
+                    target.query, {"parent_revision_id"});
+                if (method != "post") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "topology draft promotion only supports POST");
+                    response.headers["Allow"] = "POST";
+                    return response;
+                }
+                service::PromoteTopologyDraftRequest command;
+                command.identity = identity;
+                command.project_id = project_id;
+                command.artifact_revision_id = artifact_revision_id;
+                command.parent_model_revision_id = optional_query(
+                    target.query, "parent_revision_id");
+                return model_revision_response(
+                    impl_->projects->promote_topology_draft(command),
+                    201);
             }
             if (remainder == artifacts_segment) {
                 if (!impl_->projects

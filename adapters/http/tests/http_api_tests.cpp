@@ -2571,6 +2571,20 @@ void test_partial_topology_draft_workflow() {
                 std::string::npos &&
             detail.body.find("Early cycle sketch") != std::string::npos,
         "topology drafts must use the ordinary integrity-checked artifact read boundary");
+    const auto blocked_review = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project_id +
+            "/topology-drafts/" + first_id + "/review",
+        {},
+        {},
+    }));
+    require(
+        blocked_review.status == 200 &&
+            blocked_review.body.find("\"promotable\": false") !=
+                std::string::npos &&
+            blocked_review.body.find("topology_contract_invalid") !=
+                std::string::npos,
+        "the service must review an exact partial draft revision as blocked");
 
     const auto strict_rejection = api.handle(authenticated(json_post(
         "/api/v1/projects/" + project_id + "/model-revisions",
@@ -2598,6 +2612,40 @@ void test_partial_topology_draft_workflow() {
             child.body.find("\"revision_number\": 2") !=
                 std::string::npos,
         "draft edits must publish immutable child revisions");
+    const auto child_json = boost::json::parse(child.body).as_object();
+    const auto child_id = std::string(
+        child_json.at("artifact_revision_id").as_string());
+    const auto child_checksum = std::string(
+        child_json.at("content").as_object().at("checksum").as_string());
+    const auto accepted_review = api.handle(authenticated({
+        "GET",
+        "/api/v1/projects/" + project_id +
+            "/topology-drafts/" + child_id + "/review",
+        {},
+        {},
+    }));
+    require(
+        accepted_review.status == 200 &&
+            accepted_review.body.find("\"promotable\": true") !=
+                std::string::npos &&
+            accepted_review.body.find(child_checksum) != std::string::npos,
+        "the service must authoritatively approve a complete draft revision");
+    const auto promoted = api.handle(authenticated({
+        "POST",
+        "/api/v1/projects/" + project_id +
+            "/topology-drafts/" + child_id + "/promote",
+        {},
+        {},
+    }));
+    require(
+        promoted.status == 201 &&
+            promoted.body.find(
+                "\"source_draft_artifact_revision_id\": \"" +
+                child_id + "\"") != std::string::npos &&
+            promoted.body.find(
+                "\"source_draft_checksum\": \"" +
+                child_checksum + "\"") != std::string::npos,
+        "promotion must persist exact draft revision and checksum provenance");
 }
 
 }  // namespace

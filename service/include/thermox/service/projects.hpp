@@ -73,10 +73,33 @@ struct ModelRevisionRecord {
     std::string model_schema_version;
     std::string model_id;
     std::string model_revision_label;
+    std::string source_draft_artifact_revision_id;
+    std::string source_draft_checksum;
     std::string canonical_model_json;
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
+};
+
+struct TopologyDraftReviewIssue {
+    std::string code;
+    std::string message;
+};
+
+struct TopologyDraftPromotionReview {
+    std::string schema_version{
+        "thermox.topology_draft_promotion_review/v1"};
+    std::string project_id;
+    std::string artifact_revision_id;
+    std::string artifact_checksum;
+    bool promotable{false};
+    std::string model_id;
+    std::size_t medium_count{0};
+    std::size_t material_count{0};
+    std::size_t component_count{0};
+    std::size_t assembly_count{0};
+    std::size_t connection_count{0};
+    std::vector<TopologyDraftReviewIssue> issues;
 };
 
 // Mutable, per-user authoring presentation. This is deliberately outside the
@@ -306,6 +329,8 @@ public:
         const std::string& model_schema_version,
         const std::string& model_id,
         const std::string& model_revision_label,
+        const std::string& source_draft_artifact_revision_id,
+        const std::string& source_draft_checksum,
         const std::string& canonical_model_json,
         const std::string& checksum) = 0;
     virtual std::optional<ModelRevisionRecord>
@@ -503,6 +528,13 @@ struct CreateModelRevisionRequest {
     std::string project_id;
     std::string parent_model_revision_id;
     std::string model_json;
+};
+
+struct PromoteTopologyDraftRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string artifact_revision_id;
+    std::string parent_model_revision_id;
 };
 
 struct PutTopologyPresentationRequest {
@@ -766,6 +798,13 @@ public:
         const IdentityContext& identity) const;
     [[nodiscard]] ModelRevisionRecord create_model_revision(
         const CreateModelRevisionRequest& request) const;
+    [[nodiscard]] TopologyDraftPromotionReview
+    review_topology_draft(
+        const IdentityContext& identity,
+        const std::string& project_id,
+        const std::string& artifact_revision_id) const;
+    [[nodiscard]] ModelRevisionRecord promote_topology_draft(
+        const PromoteTopologyDraftRequest& request) const;
     [[nodiscard]] std::optional<ModelRevisionRecord>
     get_model_revision(
         const IdentityContext& identity,
@@ -967,6 +1006,8 @@ std::string serialize_artifact_revision_content_json(
     const ArtifactRevisionContent& content);
 std::string serialize_artifact_revisions_json(
     const std::vector<ArtifactRevisionRecord>& revisions);
+std::string serialize_topology_draft_promotion_review_json(
+    const TopologyDraftPromotionReview& review);
 std::string serialize_performance_map_quality_review_json(
     const PerformanceMapQualityReviewRecord& review);
 std::string serialize_performance_map_quality_reviews_json(

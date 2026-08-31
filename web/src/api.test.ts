@@ -139,6 +139,45 @@ describe('topology draft API', () => {
     expect(url.searchParams.get('parent_revision_id')).toBe('draft-r1')
     expect(request).toMatchObject({ method: 'POST', body: JSON.stringify(definition) })
   })
+
+  it('reviews and promotes one exact immutable draft revision', async () => {
+    const review = {
+      schema_version: 'thermox.topology_draft_promotion_review/v1',
+      artifact_revision_id: 'draft-r2',
+      artifact_checksum: 'sha256:abc',
+      promotable: true,
+    }
+    const promoted = {
+      schema_version: 'thermox.model_revision/v1',
+      model_revision_id: 'model-r3',
+      source_draft_artifact_revision_id: 'draft-r2',
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(review), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(promoted), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.reviewTopologyDraft('project/a', 'draft-r2')
+    await api.promoteTopologyDraft('project/a', 'draft-r2', 'model-r2')
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/v1/projects/project%2Fa/topology-drafts/draft-r2/review',
+    )
+    const [path, request] = fetchMock.mock.calls[1]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.pathname).toBe(
+      '/api/v1/projects/project%2Fa/topology-drafts/draft-r2/promote',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe('model-r2')
+    expect(request).toMatchObject({ method: 'POST' })
+  })
 })
 
 describe('Study package API', () => {

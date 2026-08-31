@@ -42,6 +42,7 @@ import type {
   StudyRevisionList,
   ExpressionComponentDefinition,
   TopologyDocument,
+  TopologyDraftPromotionReview,
   TopologyPresentation,
   TopologyPresentationRecord,
   ValidationCampaignArtifact,
@@ -416,6 +417,29 @@ export const api = {
     return postJson<ArtifactRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/artifact-revisions?${query.toString()}`,
       definition,
+      signal,
+    )
+  },
+  reviewTopologyDraft: (
+    projectId: string,
+    artifactRevisionId: string,
+    signal?: AbortSignal,
+  ) => getJson<TopologyDraftPromotionReview>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/topology-drafts/${encodeURIComponent(artifactRevisionId)}/review`,
+    signal,
+  ),
+  promoteTopologyDraft: (
+    projectId: string,
+    artifactRevisionId: string,
+    parentRevisionId = '',
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams()
+    if (parentRevisionId) query.set('parent_revision_id', parentRevisionId)
+    const suffix = query.size ? `?${query.toString()}` : ''
+    return postJson<ModelRevision>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/topology-drafts/${encodeURIComponent(artifactRevisionId)}/promote${suffix}`,
+      undefined,
       signal,
     )
   },

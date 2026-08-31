@@ -32,12 +32,19 @@ This boundary intentionally rejects malformed JSON, non-object documents, unknow
 ID mismatches, and unsupported draft schemas. It does not require topology fields, component
 registry membership, fluids, connections, cases, artifacts, or calculation intent.
 
-## Promotion boundary
+## Review and promotion boundary
 
-Draft promotion uses the normal model-revision API; there is no relaxed model type and no solver
-path for drafts. Before promotion, the workbench reports missing topology-contract fields. The
-service then remains authoritative for strict topology parsing, unit normalization,
-canonicalization, immutable model checksums, and parent lineage.
+Draft promotion is an explicit service operation; there is no relaxed model type and no solver
+path for drafts. `GET /api/v1/projects/{project_id}/topology-drafts/{revision_id}/review` checks the
+exact integrity-verified artifact revision with the strict topology parser and hierarchy flattener.
+It returns a checksum-bound, non-persisted review with `promotable`, structural counts, and issues.
+
+`POST /api/v1/projects/{project_id}/topology-drafts/{revision_id}/promote` repeats that authoritative
+check and creates an immutable model revision. The model ledger records both
+`source_draft_artifact_revision_id` and `source_draft_checksum`, so later audit can identify the
+exact declaration that crossed the physical-model boundary. PostgreSQL also constrains the source
+revision to an existing artifact row. Direct publication of a complete topology remains available
+for declaration-based clients that do not need a saved-draft stage.
 
 After promotion, the ordinary workflow still requires physical definitions, an operating case,
 artifact pins, Study intent, authoritative compilation/readiness, and a run configuration before
@@ -50,7 +57,9 @@ The Topology JSON workbench supports three distinct states:
 
 1. malformed JSON — neither draft persistence nor promotion is allowed;
 2. valid JSON object with topology blockers — immutable draft persistence is allowed;
-3. valid `thermox.topology/v1` — draft persistence and topology publication are both allowed.
+3. valid `thermox.topology/v1` — draft persistence and service-reviewed promotion are allowed.
 
-Saved draft revisions can be reopened and published as child drafts. Canvas layout remains outside
-both the draft declaration and physical topology, using the existing presentation document.
+Saved draft revisions can be reopened and published as child drafts. Editing a loaded draft makes
+the workbench treat it as unsaved; it must be saved as a new immutable revision before using the
+reviewed-promotion action. Canvas layout remains outside both the draft declaration and physical
+topology, using the existing presentation document.

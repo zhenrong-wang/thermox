@@ -71,6 +71,8 @@ public:
         const std::string& model_schema_version,
         const std::string& model_id,
         const std::string& model_revision_label,
+        const std::string& source_draft_artifact_revision_id,
+        const std::string& source_draft_checksum,
         const std::string& canonical_model_json,
         const std::string& checksum) override {
         std::lock_guard lock(mutex_);
@@ -102,6 +104,9 @@ public:
         record.model_schema_version = model_schema_version;
         record.model_id = model_id;
         record.model_revision_label = model_revision_label;
+        record.source_draft_artifact_revision_id =
+            source_draft_artifact_revision_id;
+        record.source_draft_checksum = source_draft_checksum;
         record.canonical_model_json = canonical_model_json;
         record.checksum = checksum;
         record.created_by_user_id = created_by_user_id;

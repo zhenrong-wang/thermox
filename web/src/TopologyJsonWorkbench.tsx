@@ -6,7 +6,12 @@ import {
   topologyDraftSourceText,
   type TopologyDraftDefinition,
 } from './topologyDraft'
-import type { ArtifactRevision, ModelRevision, TopologyDocument } from './types'
+import type {
+  ArtifactRevision,
+  ModelRevision,
+  TopologyDocument,
+  TopologyDraftPromotionReview,
+} from './types'
 
 interface TopologyJsonWorkbenchProps {
   topology?: TopologyDocument
@@ -20,6 +25,8 @@ interface TopologyJsonWorkbenchProps {
     definition: TopologyDraftDefinition,
     parentArtifactRevisionId: string,
   ) => Promise<ArtifactRevision>
+  onReviewDraft: (revision: ArtifactRevision) => Promise<TopologyDraftPromotionReview>
+  onPromoteDraft: (revision: ArtifactRevision) => Promise<void>
 }
 
 function emptyDocument(): TopologyDocument {
@@ -51,6 +58,8 @@ export function TopologyJsonWorkbench({
   onPublish,
   onLoadDraft,
   onSaveDraft,
+  onReviewDraft,
+  onPromoteDraft,
 }: TopologyJsonWorkbenchProps) {
   const selectedText = topologyJsonText(topology ?? emptyDocument())
   const [source, setSource] = useState(selectedText)
@@ -62,6 +71,10 @@ export function TopologyJsonWorkbench({
   const [draftLabel, setDraftLabel] = useState('')
   const [selectedDraftRevisionId, setSelectedDraftRevisionId] = useState('')
   const [activeDraft, setActiveDraft] = useState<ArtifactRevision>()
+  const [activeDraftSource, setActiveDraftSource] = useState('')
+  const [activeDraftLabel, setActiveDraftLabel] = useState('')
+  const [serverReview, setServerReview] =
+    useState<TopologyDraftPromotionReview>()
   const [savingDraft, setSavingDraft] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const review = useMemo(() => reviewTopologyJson(source), [source])
@@ -70,6 +83,10 @@ export function TopologyJsonWorkbench({
   const changesModelIdentity = Boolean(
     currentModelId && review.summary?.modelId &&
     currentModelId !== review.summary.modelId,
+  )
+  const exactActiveDraft = Boolean(
+    activeDraft && source === activeDraftSource &&
+    draftId === activeDraft.artifact_id && draftLabel === activeDraftLabel,
   )
 
   async function loadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -80,6 +97,7 @@ export function TopologyJsonWorkbench({
     try {
       setSource(await file.text())
       setActiveDraft(undefined)
+      setServerReview(undefined)
       setSelectedDraftRevisionId('')
       setStatus(`Loaded ${file.name}; review before publishing.`)
     } catch (reason) {
@@ -106,13 +124,21 @@ export function TopologyJsonWorkbench({
     if (!revision) return
     setError('')
     setStatus('')
+    setServerReview(undefined)
     try {
       const definition = await onLoadDraft(revision)
-      setSource(topologyDraftSourceText(definition))
+      const draftSource = topologyDraftSourceText(definition)
+      setSource(draftSource)
       setDraftId(definition.id)
       setDraftLabel(definition.label ?? '')
       setActiveDraft(revision)
-      setStatus(`Loaded ${definition.id} draft r${revision.revision_number}.`)
+      setActiveDraftSource(draftSource)
+      setActiveDraftLabel(definition.label ?? '')
+      const authoritative = await onReviewDraft(revision)
+      setServerReview(authoritative)
+      setStatus(
+        `Loaded ${definition.id} draft r${revision.revision_number}; service review ${authoritative.promotable ? 'passed' : 'found blockers'}.`,
+      )
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load the draft revision.')
     }
@@ -124,6 +150,7 @@ export function TopologyJsonWorkbench({
     setSavingDraft(true)
     setError('')
     setStatus('')
+    setServerReview(undefined)
     try {
       const revision = await onSaveDraft(
         topologyDraftDefinition(id, draftLabel, draftReview.document),
@@ -132,9 +159,13 @@ export function TopologyJsonWorkbench({
           : '',
       )
       setActiveDraft(revision)
+      setActiveDraftSource(source)
+      setActiveDraftLabel(draftLabel)
       setSelectedDraftRevisionId(revision.artifact_revision_id)
+      const authoritative = await onReviewDraft(revision)
+      setServerReview(authoritative)
       setStatus(
-        `Saved immutable draft ${revision.artifact_id} r${revision.revision_number}.`,
+        `Saved immutable draft ${revision.artifact_id} r${revision.revision_number}; service review ${authoritative.promotable ? 'passed' : 'found blockers'}.`,
       )
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Draft publication was rejected.')
@@ -156,11 +187,14 @@ export function TopologyJsonWorkbench({
 
   async function publish(event: FormEvent) {
     event.preventDefault()
-    if (!review.document) return
+    if (exactActiveDraft) {
+      if (!activeDraft || !serverReview?.promotable) return
+    } else if (!review.document) return
     setError('')
     setStatus('')
     try {
-      await onPublish(review.document)
+      if (exactActiveDraft && activeDraft) await onPromoteDraft(activeDraft)
+      else if (review.document) await onPublish(review.document)
       onCancel()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Topology publication was rejected.')
@@ -186,6 +220,7 @@ export function TopologyJsonWorkbench({
             onClick={() => {
               setSource(selectedText)
               setActiveDraft(undefined)
+              setServerReview(undefined)
               setSelectedDraftRevisionId('')
               setError('')
               setStatus('Restored the selected revision.')
@@ -259,6 +294,13 @@ export function TopologyJsonWorkbench({
             strict service parser, canonicalization, and checksum; calculation readiness is
             validated later against the registry, case, and pinned artifacts.
           </small>
+          {exactActiveDraft && serverReview && (
+            <p className={serverReview.promotable ? '' : 'is-invalid'}>
+              Service review: {serverReview.promotable
+                ? `promotable as ${serverReview.model_id}; checksum ${serverReview.artifact_checksum}`
+                : serverReview.issues.map((issue) => issue.message).join('; ')}
+            </p>
+          )}
         </div>
         {(error || status) && <div className={`form-error topology-json-message${error ? '' : ' is-status'}`}>
           {error || status}
@@ -271,8 +313,14 @@ export function TopologyJsonWorkbench({
             {savingDraft ? 'Saving draft…' : activeDraft ? 'Save child draft' : 'Save draft'}
           </button>
           <button type="submit" className="primary-button"
-            disabled={publishing || !review.document}>
-            {publishing ? 'Publishing…' : revision ? 'Publish child revision' : 'Publish first revision'}
+            disabled={publishing || (exactActiveDraft
+              ? !serverReview?.promotable
+              : !review.document)}>
+            {publishing
+              ? 'Publishing…'
+              : exactActiveDraft
+                ? 'Promote reviewed draft'
+                : revision ? 'Publish child revision' : 'Publish first revision'}
           </button>
         </footer>
       </form>
