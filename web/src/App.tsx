@@ -4,6 +4,7 @@ import { api, errorMessage, isAbortError } from './api'
 import { AssemblyForm } from './AssemblyForm'
 import { AssemblyTemplateForm } from './AssemblyTemplateForm'
 import { AssemblyTemplateInstanceForm } from './AssemblyTemplateInstanceForm'
+import { BalanceUncertaintyArtifactForm } from './BalanceUncertaintyArtifactForm'
 import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
 import { CalibrationPublishForm } from './CalibrationPublishForm'
@@ -77,6 +78,7 @@ import {
 } from './workflow'
 import type {
   ArtifactRevision,
+  BalanceUncertaintyModel,
   AssemblyTemplateCatalogEntry,
   AssemblyDefinition,
   CalibrationRevision,
@@ -207,6 +209,11 @@ function App() {
     definition: CorrelationArtifactDefinition
   }>()
   const [addingPerformanceMap, setAddingPerformanceMap] = useState(false)
+  const [addingBalanceUncertainty, setAddingBalanceUncertainty] = useState(false)
+  const [revisingBalanceUncertainty, setRevisingBalanceUncertainty] = useState<{
+    source: ArtifactRevision
+    definition: BalanceUncertaintyModel
+  }>()
   const [addingValidationSeries, setAddingValidationSeries] = useState(false)
   const [validationSeries, setValidationSeries] = useState<
     ValidationSeriesCatalogEntry[]
@@ -1317,6 +1324,68 @@ function App() {
     }
   }
 
+  async function publishBalanceUncertainty(
+    artifactId: string,
+    parentArtifactRevisionId: string,
+    definition: BalanceUncertaintyModel,
+  ) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing metrology data.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createBalanceUncertaintyRevision(
+        selectedProjectId,
+        artifactId,
+        parentArtifactRevisionId,
+        definition,
+      )
+      const artifacts = await api.artifactRevisions(selectedProjectId)
+      setArtifactRevisions(artifacts.artifact_revisions)
+      setAddingBalanceUncertainty(false)
+      setRevisingBalanceUncertainty(undefined)
+      setOperationStatus(
+        `Published boundary metrology ${artifactId} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function reviseBalanceUncertainty(source: ArtifactRevision) {
+    if (!selectedProjectId) return
+    setLoadingArtifactRevision(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const content = await api.artifactRevision<BalanceUncertaintyModel>(
+        selectedProjectId,
+        source.artifact_revision_id,
+      )
+      if (
+        content.revision.artifact_type !== 'thermox.balance_uncertainty' ||
+        content.artifact.schema_version !== 'thermox.balance_uncertainty/v1'
+      ) {
+        throw new Error('The selected revision is not supported boundary metrology.')
+      }
+      setAddingBalanceUncertainty(false)
+      setRevisingBalanceUncertainty({
+        source: content.revision,
+        definition: content.artifact,
+      })
+    } catch (reason) {
+      setOperationError(errorMessage(reason))
+    } finally {
+      setLoadingArtifactRevision(false)
+    }
+  }
+
   async function publishValidationSeries(
     artifactId: string,
     parentArtifactRevisionId: string,
@@ -1523,6 +1592,7 @@ function App() {
     resultProjections: ResultProjection[],
     acceptanceCriteria: EngineeringAcceptanceCriterion[],
     trajectoryValidationBindings: StudyTrajectoryValidationBinding[],
+    balanceUncertaintyArtifactRevisionId: string,
   ) {
     if (
       !selectedProjectId ||
@@ -1542,6 +1612,8 @@ function App() {
     const artifactRevisionIds = studyArtifactRevisionIds(
       selectedArtifactRevisionIds,
       trajectoryValidationBindings,
+      balanceUncertaintyArtifactRevisionId
+        ? [balanceUncertaintyArtifactRevisionId] : [],
     )
     const request: CreateStudyRevision = {
       schema_version: 'thermox.study_revision.create/v5',
@@ -2580,6 +2652,13 @@ function App() {
             onRevisePerformanceMap={(revision) => {
               void revisePerformanceMap(revision)
             }}
+            onAddBalanceUncertainty={() => {
+              setRevisingBalanceUncertainty(undefined)
+              setAddingBalanceUncertainty(true)
+            }}
+            onReviseBalanceUncertainty={(revision) => {
+              void reviseBalanceUncertainty(revision)
+            }}
             onBuild={() => setWorkspaceView('topology')}
           />
         ) : workspaceView === 'studies' ? (
@@ -2919,6 +2998,24 @@ function App() {
             onSubmit={publishPerformanceMap}
           />
         )}
+      {workspaceView === 'definition' &&
+        (addingBalanceUncertainty || revisingBalanceUncertainty) &&
+        topology && topologyCatalog && (
+          <BalanceUncertaintyArtifactForm
+            key={revisingBalanceUncertainty
+              ? `revise-uncertainty-${revisingBalanceUncertainty.source.artifact_revision_id}`
+              : 'new-balance-uncertainty'}
+            topology={topology}
+            catalog={topologyCatalog}
+            artifactRevisions={artifactRevisions}
+            base={revisingBalanceUncertainty}
+            onCancel={() => {
+              setAddingBalanceUncertainty(false)
+              setRevisingBalanceUncertainty(undefined)
+            }}
+            onSubmit={publishBalanceUncertainty}
+          />
+        )}
       {(workspaceView === 'definition' || workspaceView === 'studies') &&
         addingValidationSeries && (
           <ValidationSeriesArtifactForm
@@ -2977,6 +3074,7 @@ function App() {
             catalog={topologyCatalog}
             base={activePublishedStudy}
             validationSeries={validationSeries}
+            artifactRevisions={artifactRevisions}
             transient={
               selectedCaseRevision.mode.includes('dynamic') ||
               selectedCaseRevision.mode.includes('transient')

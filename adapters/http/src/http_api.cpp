@@ -4187,7 +4187,7 @@ Response Api::handle(const Request& request) const {
                 balance_report_export_requested) {
                 require_json_request(
                     request, impl_->options.maximum_body_bytes);
-                const auto report_request =
+                auto report_request =
                     parse_balance_report_request(request);
                 const auto record = impl_->jobs->get(identity, suffix);
                 if (!record) {
@@ -4208,6 +4208,32 @@ Response Api::handle(const Request& request) const {
                 }
                 const auto& provenance =
                     *record->request.source_revisions;
+                if (!report_request.uncertainty_model &&
+                    !provenance.study_revision_id.empty()) {
+                    const auto study =
+                        impl_->projects->get_study_revision(
+                            identity, provenance.project_id,
+                            provenance.study_revision_id);
+                    if (!study) {
+                        throw service::ProjectStateError(
+                            "balance report Study revision was not found");
+                    }
+                    const auto artifacts =
+                        impl_->projects->resolve_artifact_revisions(
+                            identity, provenance.project_id,
+                            study->artifact_revision_ids);
+                    if (!artifacts) {
+                        throw service::ProjectStateError(
+                            "balance report Study artifacts were not found");
+                    }
+                    if (artifacts->balance_uncertainty) {
+                        report_request.uncertainty_model =
+                            artifacts->balance_uncertainty->model;
+                        report_request.uncertainty_artifact_revision_id =
+                            artifacts->balance_uncertainty->source
+                                .artifact_revision_id;
+                    }
+                }
                 const auto model = impl_->projects->get_model_revision(
                     identity, provenance.project_id,
                     provenance.model_revision_id);

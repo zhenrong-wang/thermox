@@ -959,6 +959,7 @@ export interface BalanceReport {
     status: 'not_declared' | 'not_evaluated' | 'partial' | 'complete'
     source: {
       model_id: string
+      artifact_revision_id: string
       reference: string
       checksum_sha256: string
       note: string

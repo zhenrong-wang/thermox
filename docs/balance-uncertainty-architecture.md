@@ -102,9 +102,22 @@ reported state. It does not claim a transient conservation closure because stora
 its uncertainty are not yet integrated over a time window. That extension belongs in the generic
 balance-report service, not in individual component models.
 
+## Persistence and Study binding
+
+`thermox.balance_uncertainty` is a first-class immutable Project artifact whose payload schema is
+`thermox.balance_uncertainty/v1`. Artifact publication parses, validates, and canonicalizes the
+declaration before storing its checksummed content. A Study may bind at most one such artifact
+revision. The revision is retained as provenance-only execution evidence and is never passed to the
+equation compiler as component data.
+
+When a revision-backed job report request does not supply a direct uncertainty model, the service
+resolves the exact Study and its pinned metrology revision. The report source contains both the
+controlled metrology source and the Thermox artifact revision ID. A directly supplied model remains
+an explicit per-request override for declaration-based clients.
+
 ## Product integration
 
-JSON, Markdown, and CSV reports expose the same source identity, coverage, propagated results, and
-limitations. The web result view renders these values. The first contract is intentionally
-declaration/API-first; persisted uncertainty artifacts, revision binding, and a browser authoring
-workflow are the next product-layer extension.
+JSON, Markdown, and CSV reports expose the same source identity, artifact revision, coverage,
+propagated results, and limitations. The Definition workspace authors and revises boundary metrology
+independently from component physics. Study publication can pin one exact revision, and the web
+result view renders the resolved evidence and propagated values.

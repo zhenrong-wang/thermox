@@ -7,6 +7,8 @@
 
 namespace thermox::service {
 
+inline constexpr char balance_uncertainty_artifact_type[] =
+    "thermox.balance_uncertainty";
 inline constexpr char balance_uncertainty_schema_v1[] =
     "thermox.balance_uncertainty/v1";
 
@@ -41,5 +43,7 @@ struct BalanceUncertaintyModel {
 
 [[nodiscard]] BalanceUncertaintyModel parse_balance_uncertainty_model_json(
     std::string_view model_json);
+[[nodiscard]] std::string serialize_balance_uncertainty_model_json(
+    const BalanceUncertaintyModel& model);
 
 }  // namespace thermox::service

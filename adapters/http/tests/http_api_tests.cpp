@@ -748,6 +748,55 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos,
         "assembly-template revisions must be discoverable through "
         "the standard artifact registry");
+    auto uncertainty_upload = json_post(
+        "/api/v1/projects/" + project.project_id +
+            "/artifact-revisions"
+            "?artifact_id=http-boundary-metering"
+            "&artifact_type=thermox.balance_uncertainty"
+            "&artifact_schema_version="
+            "thermox.balance_uncertainty%2Fv1",
+        R"json({
+          "schema_version": "thermox.balance_uncertainty/v1",
+          "id": "http-boundary-metering",
+          "source": {
+            "reference": "calibration-certificate-http-42",
+            "checksum_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "note": "HTTP integration standard uncertainties",
+            "limitations": []
+          },
+          "streams": [
+            {
+              "component_id": "compressor",
+              "port_name": "inlet",
+              "mass_flow_standard_uncertainty_si": 0.02,
+              "specific_enthalpy_standard_uncertainty_si": null,
+              "energy_flow_standard_uncertainty_si": 1000.0,
+              "mass_enthalpy_correlation": 0.0
+            },
+            {
+              "component_id": "compressor",
+              "port_name": "outlet",
+              "mass_flow_standard_uncertainty_si": 0.02,
+              "specific_enthalpy_standard_uncertainty_si": null,
+              "energy_flow_standard_uncertainty_si": 1200.0,
+              "mass_enthalpy_correlation": 0.0
+            }
+          ],
+          "correlations": []
+        })json");
+    const auto uncertainty_uploaded = api.handle(
+        authenticated(std::move(uncertainty_upload)));
+    require(
+        uncertainty_uploaded.status == 201 &&
+            uncertainty_uploaded.headers.contains("Location"),
+        "HTTP artifact workflow must publish typed balance metrology");
+    const auto uncertainty_revision_id =
+        uncertainty_uploaded.headers.at("Location").substr(
+            uncertainty_uploaded.headers.at("Location").find_last_of('/') +
+            1U);
+    require(
+        !uncertainty_revision_id.empty(),
+        "published balance metrology must expose an immutable revision ID");
     auto study_upload = json_post(
         "/api/v1/projects/" + project.project_id +
             "/study-revisions",
@@ -1301,7 +1350,6 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos &&
             result.headers.contains("ETag"),
         "job result must publish stored revision provenance");
-
     const std::string balance_request =
         R"({"schema_version":"thermox.balance_report_request/v2",)"
         R"("accounting_basis":"energy","system_boundary":"whole_system",)"

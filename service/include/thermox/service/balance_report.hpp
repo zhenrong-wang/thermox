@@ -21,6 +21,9 @@ struct BalanceReportRequest {
     std::string diagram_profile{"iso-14084-1:2015"};
     std::string calculation_profile{"none"};
     std::optional<BalanceUncertaintyModel> uncertainty_model;
+    // Service-resolved provenance for a Study-bound immutable artifact.
+    // Direct request declarations leave this empty.
+    std::string uncertainty_artifact_revision_id;
 };
 
 // Produces an informative, standards-profiled report from an immutable result

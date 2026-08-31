@@ -166,7 +166,7 @@ void test_whole_system_energy_report() {
     while (std::getline(rows, row)) {
         require(
             static_cast<std::size_t>(std::count(row.begin(), row.end(), ',')) ==
-                22U,
+                23U,
             "each simple CSV test record must preserve the 23-column schema");
     }
     job.result_summary.reset();

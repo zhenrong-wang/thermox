@@ -1404,7 +1404,8 @@ ProjectService::create_artifact_revision(
         request.artifact_type !=
             assembly_template_artifact_type &&
         request.artifact_type != validation_series_artifact_type &&
-        request.artifact_type != validation_campaign_artifact_type) {
+        request.artifact_type != validation_campaign_artifact_type &&
+        request.artifact_type != balance_uncertainty_artifact_type) {
         throw ProjectRequestError(
             "unsupported engineering artifact type: " +
             request.artifact_type);
@@ -1488,6 +1489,22 @@ ProjectService::create_artifact_revision(
             }
             canonical =
                 serialize_validation_campaign_artifact_json(artifact);
+        } else if (request.artifact_type ==
+                   balance_uncertainty_artifact_type) {
+            if (request.artifact_schema_version !=
+                balance_uncertainty_schema_v1) {
+                throw std::invalid_argument(
+                    "unsupported balance-uncertainty schema version: " +
+                    request.artifact_schema_version);
+            }
+            const auto artifact = parse_balance_uncertainty_model_json(
+                request.artifact_json);
+            if (artifact.id != request.artifact_id) {
+                throw std::invalid_argument(
+                    "balance-uncertainty payload ID must match the "
+                    "project artifact ID");
+            }
+            canonical = serialize_balance_uncertainty_model_json(artifact);
         } else {
             canonical =
                 detail::canonicalize_assembly_template_payload(
@@ -1817,6 +1834,26 @@ ProjectService::resolve_artifact_revisions(
             result.validation_series.push_back({
                 *revision,
                 parse_validation_series_artifact_json(*payload),
+            });
+        } else if (
+            revision->artifact_type ==
+            balance_uncertainty_artifact_type) {
+            if (result.balance_uncertainty) {
+                throw ProjectRequestError(
+                    "a Study may bind at most one balance-uncertainty "
+                    "artifact revision");
+            }
+            result.balance_uncertainty =
+                ResolvedBalanceUncertaintyArtifact{
+                    *revision,
+                    parse_balance_uncertainty_model_json(*payload),
+                };
+            result.snapshot.references.push_back({
+                revision->artifact_id,
+                revision->artifact_type,
+                revision->artifact_schema_version,
+                revision->artifact_revision_id,
+                revision->content.checksum.substr(7),
             });
         } else {
             throw ProjectStateError(

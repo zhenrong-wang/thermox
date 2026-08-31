@@ -24,6 +24,8 @@ interface DefinitionWorkspaceProps {
   onReviseCorrelation: (revision: ArtifactRevision) => void
   onAddPerformanceMap: () => void
   onRevisePerformanceMap: (revision: ArtifactRevision) => void
+  onAddBalanceUncertainty: () => void
+  onReviseBalanceUncertainty: (revision: ArtifactRevision) => void
   onBuild: () => void
 }
 
@@ -45,6 +47,8 @@ export function DefinitionWorkspace({
   onReviseCorrelation,
   onAddPerformanceMap,
   onRevisePerformanceMap,
+  onAddBalanceUncertainty,
+  onReviseBalanceUncertainty,
   onBuild,
 }: DefinitionWorkspaceProps) {
   if (!topology || !catalog) {
@@ -89,6 +93,16 @@ export function DefinitionWorkspace({
     )
   const latestPerformanceMaps = [...artifactRevisions]
     .filter((revision) => revision.artifact_type === 'thermox.performance_map')
+    .sort((left, right) => right.revision_number - left.revision_number)
+    .filter(
+      (revision, index, revisions) =>
+        revisions.findIndex(
+          (candidate) => candidate.artifact_id === revision.artifact_id,
+        ) === index,
+    )
+  const latestBalanceUncertainties = [...artifactRevisions]
+    .filter((revision) =>
+      revision.artifact_type === 'thermox.balance_uncertainty')
     .sort((left, right) => right.revision_number - left.revision_number)
     .filter(
       (revision, index, revisions) =>
@@ -144,6 +158,14 @@ export function DefinitionWorkspace({
             onClick={onAddPerformanceMap}
           >
             + Performance map
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={onAddBalanceUncertainty}
+          >
+            + Boundary metrology
           </button>
         </div>
       </div>
@@ -299,6 +321,43 @@ export function DefinitionWorkspace({
                 <strong>No project correlations</strong>
                 <p>Publish a typed equation, then bind it from a compatible component model.</p>
                 <button type="button" onClick={onAddCorrelation}>Publish correlation</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="physical-component-section engineering-data-section">
+          <header>
+            <div>
+              <span className="section-kicker">Metrology registry</span>
+              <h2>Boundary uncertainty models</h2>
+            </div>
+            <p>
+              Source-traceable measurement declarations are Study evidence.
+              They qualify reported closure without changing component equations.
+            </p>
+          </header>
+          <div className="engineering-artifact-list">
+            {latestBalanceUncertainties.map((revision) => (
+              <article key={revision.artifact_revision_id}>
+                <div>
+                  <strong>{revision.artifact_id}</strong>
+                  <code>{revision.artifact_schema_version}</code>
+                </div>
+                <span>r{revision.revision_number}</span>
+                <small>{revision.content.checksum}</small>
+                <button type="button" className="secondary-button"
+                  disabled={busy}
+                  onClick={() => onReviseBalanceUncertainty(revision)}>
+                  Revise
+                </button>
+              </article>
+            ))}
+            {!latestBalanceUncertainties.length && (
+              <div className="definition-list-empty">
+                <strong>No project boundary metrology</strong>
+                <p>Publish calibrated standard uncertainties, then bind one revision to a Study.</p>
+                <button type="button" onClick={onAddBalanceUncertainty}>Publish metrology</button>
               </div>
             )}
           </div>

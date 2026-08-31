@@ -4,6 +4,7 @@ import {
   scopeRequiresPort,
 } from './runAuthoring'
 import type {
+  ArtifactRevision,
   Catalog,
   EngineeringAcceptanceCriterion,
   ResultAggregation,
@@ -21,11 +22,13 @@ interface StudyPublishFormProps {
   base?: StudyRevision
   transient: boolean
   validationSeries: ValidationSeriesCatalogEntry[]
+  artifactRevisions: ArtifactRevision[]
   onCancel: () => void
   onSubmit: (
     projections: ResultProjection[],
     acceptanceCriteria: EngineeringAcceptanceCriterion[],
     trajectoryBindings: StudyTrajectoryValidationBinding[],
+    balanceUncertaintyArtifactRevisionId: string,
   ) => Promise<void>
 }
 
@@ -44,6 +47,7 @@ export function StudyPublishForm({
   base,
   transient,
   validationSeries,
+  artifactRevisions,
   onCancel,
   onSubmit,
 }: StudyPublishFormProps) {
@@ -56,6 +60,15 @@ export function StudyPublishForm({
   const [trajectoryBindings, setTrajectoryBindings] = useState<
     StudyTrajectoryValidationBinding[]
   >(base?.trajectory_validation_bindings ?? [])
+  const balanceUncertaintyRevisions = artifactRevisions.filter(
+    (revision) => revision.artifact_type === 'thermox.balance_uncertainty',
+  )
+  const [balanceUncertaintyArtifactRevisionId,
+    setBalanceUncertaintyArtifactRevisionId] = useState(
+    base?.artifact_revision_ids.find((revisionId) =>
+      balanceUncertaintyRevisions.some((revision) =>
+        revision.artifact_revision_id === revisionId)) ?? '',
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -149,7 +162,12 @@ export function StudyPublishForm({
     setSubmitting(true)
     setError('')
     try {
-      await onSubmit(projections, acceptanceCriteria, trajectoryBindings)
+      await onSubmit(
+        projections,
+        acceptanceCriteria,
+        trajectoryBindings,
+        balanceUncertaintyArtifactRevisionId,
+      )
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Study was rejected.')
     } finally {
@@ -171,6 +189,27 @@ export function StudyPublishForm({
           The Study pins the validated physical inputs and declares the outputs
           the calculation should retain and analyze.
         </p>
+        <fieldset>
+          <legend>Balance metrology evidence</legend>
+          <p className="form-note acceptance-note">
+            Optionally pin one immutable boundary-uncertainty revision. Balance
+            reports resolve it automatically; it does not alter solver equations.
+          </p>
+          <label>
+            <span>Boundary uncertainty revision</span>
+            <select value={balanceUncertaintyArtifactRevisionId}
+              onChange={(event) =>
+                setBalanceUncertaintyArtifactRevisionId(event.target.value)}>
+              <option value="">None</option>
+              {balanceUncertaintyRevisions.map((revision) => (
+                <option key={revision.artifact_revision_id}
+                  value={revision.artifact_revision_id}>
+                  {revision.artifact_id} · r{revision.revision_number}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
         <fieldset>
           <legend>Result projections</legend>
           <div className="projection-editor">

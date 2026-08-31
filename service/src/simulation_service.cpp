@@ -1,4 +1,5 @@
 #include "thermox/service/simulation_service.hpp"
+#include "thermox/service/balance_uncertainty.hpp"
 #include "thermox/service/thermal_feasibility.hpp"
 
 #include "serialization_internal.hpp"
@@ -511,7 +512,9 @@ SimulationArtifactBundle resolve_artifacts(
                 "schema version, revision, and checksum");
         }
         if (reference.artifact_type ==
-            platform::expression_component_artifact_type) {
+                platform::expression_component_artifact_type ||
+            reference.artifact_type ==
+                balance_uncertainty_artifact_type) {
             resolved.references.push_back(reference);
             continue;
         }

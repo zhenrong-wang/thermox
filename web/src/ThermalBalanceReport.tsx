@@ -163,7 +163,11 @@ export function ThermalBalanceReport({
         <div>
           <span>Metrology source</span>
           <strong>{report.uncertainty.source?.model_id ?? 'Not attached'}</strong>
-          <small>{report.uncertainty.source?.reference ?? report.uncertainty.limitations[0]}</small>
+          <small>{report.uncertainty.source
+            ? `${report.uncertainty.source.reference}${
+              report.uncertainty.source.artifact_revision_id
+                ? ` · ${report.uncertainty.source.artifact_revision_id}` : ''}`
+            : report.uncertainty.limitations[0]}</small>
         </div>
       </div>
       <footer>

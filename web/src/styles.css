@@ -3731,6 +3731,42 @@ code {
   width: min(1120px, 100%);
 }
 
+.uncertainty-dialog {
+  width: min(1120px, 100%);
+}
+
+.uncertainty-dialog .form-span {
+  grid-column: 1 / -1;
+}
+
+.uncertainty-grid {
+  display: grid;
+  grid-template-columns: minmax(210px, 2fr) repeat(4, minmax(90px, 1fr)) 30px;
+  gap: 6px;
+  align-items: center;
+  margin: 7px 10px;
+}
+
+.uncertainty-grid-header {
+  margin-top: 10px;
+  color: #718692;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.uncertainty-correlation-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 1fr 100px 30px;
+  gap: 6px;
+  align-items: center;
+  margin: 7px 10px;
+}
+
+.uncertainty-dialog fieldset > .secondary-button {
+  margin: 5px 10px 0;
+}
+
 .validation-campaign-dialog > label,
 .validation-campaign-dialog > .form-note,
 .validation-campaign-dialog > .form-error {

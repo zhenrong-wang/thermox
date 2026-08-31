@@ -381,6 +381,7 @@ double combined_standard_uncertainty(
 
 Json boundary_uncertainty(
     const std::optional<BalanceUncertaintyModel>& declared_model,
+    const std::string& artifact_revision_id,
     const Json& streams,
     double mass_reference,
     double energy_reference,
@@ -541,6 +542,7 @@ Json boundary_uncertainty(
         {"status", status},
         {"source", {
             {"model_id", model.id},
+            {"artifact_revision_id", artifact_revision_id},
             {"reference", model.source_reference},
             {"checksum_sha256", model.source_checksum_sha256},
             {"note", model.note},
@@ -646,6 +648,59 @@ BalanceUncertaintyModel parse_balance_uncertainty_model_json(
     }
     validate_uncertainty_model(model);
     return model;
+}
+
+std::string serialize_balance_uncertainty_model_json(
+    const BalanceUncertaintyModel& model) {
+    validate_uncertainty_model(model);
+    Json streams = Json::array();
+    for (const auto& stream : model.streams) {
+        streams.push_back({
+            {"component_id", stream.component_id},
+            {"port_name", stream.port_name},
+            {"mass_flow_standard_uncertainty_si",
+             stream.mass_flow_standard_uncertainty_si
+                 ? Json(*stream.mass_flow_standard_uncertainty_si)
+                 : Json(nullptr)},
+            {"specific_enthalpy_standard_uncertainty_si",
+             stream.specific_enthalpy_standard_uncertainty_si
+                 ? Json(*stream.specific_enthalpy_standard_uncertainty_si)
+                 : Json(nullptr)},
+            {"energy_flow_standard_uncertainty_si",
+             stream.energy_flow_standard_uncertainty_si
+                 ? Json(*stream.energy_flow_standard_uncertainty_si)
+                 : Json(nullptr)},
+            {"mass_enthalpy_correlation",
+             stream.mass_enthalpy_correlation},
+        });
+    }
+    Json correlations = Json::array();
+    for (const auto& correlation : model.correlations) {
+        correlations.push_back({
+            {"quantity", correlation.quantity},
+            {"first", {
+                {"component_id", correlation.first_component_id},
+                {"port_name", correlation.first_port_name},
+            }},
+            {"second", {
+                {"component_id", correlation.second_component_id},
+                {"port_name", correlation.second_port_name},
+            }},
+            {"coefficient", correlation.coefficient},
+        });
+    }
+    return Json({
+        {"schema_version", model.schema_version},
+        {"id", model.id},
+        {"source", {
+            {"reference", model.source_reference},
+            {"checksum_sha256", model.source_checksum_sha256},
+            {"note", model.note},
+            {"limitations", model.limitations},
+        }},
+        {"streams", std::move(streams)},
+        {"correlations", std::move(correlations)},
+    }).dump();
 }
 
 std::string build_balance_report_json(
@@ -761,7 +816,9 @@ std::string build_balance_report_json(
         ? Json(std::abs(reported_mass_balance) / mass_reference)
         : Json(nullptr);
     Json uncertainty = boundary_uncertainty(
-        request.uncertainty_model, streams, mass_reference,
+        request.uncertainty_model,
+        request.uncertainty_artifact_revision_id,
+        streams, mass_reference,
         energy_reference, transient);
     Json evaluated_requirements = Json::array({
         "exact immutable result provenance",
@@ -938,7 +995,14 @@ std::string serialize_balance_report_markdown(
         out << "- Model: `"
             << markdown_field(
                    uncertainty.at("source").at("model_id").get<std::string>())
-            << "`\n- Source: "
+            << "`\n";
+        const auto artifact_revision_id = uncertainty.at("source")
+            .at("artifact_revision_id").get<std::string>();
+        if (!artifact_revision_id.empty()) {
+            out << "- Artifact revision: `"
+                << markdown_field(artifact_revision_id) << "`\n";
+        }
+        out << "- Source: "
             << markdown_field(
                    uncertainty.at("source").at("reference").get<std::string>())
             << "\n- Source checksum: `"
@@ -1012,6 +1076,7 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
            "net_mass_flow_kg_s,net_energy_flow_W,reference_mass_flow_kg_s,"
            "reference_energy_flow_W,relative_mass_closure,"
            "relative_energy_closure,acceptance_status,uncertainty_model_id,"
+           "uncertainty_artifact_revision_id,"
            "mass_standard_uncertainty_kg_s,energy_standard_uncertainty_W,"
            "energy_expanded_uncertainty_k2_W,uncertainty_status\n";
     const auto& boundary = report.at("boundary");
@@ -1027,6 +1092,12 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
         ? std::string{}
         : csv_field(
               uncertainty.at("source").at("model_id").get<std::string>());
+    const auto uncertainty_artifact_revision_id =
+        uncertainty.at("source").is_null()
+        ? std::string{}
+        : csv_field(
+              uncertainty.at("source")
+                  .at("artifact_revision_id").get<std::string>());
     const auto mass_uncertainty = uncertainty.at("mass").is_null()
         ? std::string{}
         : number(uncertainty.at("mass")
@@ -1048,7 +1119,8 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
         << number(boundary.at("energy_reference_si").get<double>()) << ','
         << relative_mass << ',' << relative_energy << ','
         << report.at("closure_acceptance").at("status").get<std::string>()
-        << ',' << uncertainty_model_id << ',' << mass_uncertainty << ','
+        << ',' << uncertainty_model_id << ','
+        << uncertainty_artifact_revision_id << ',' << mass_uncertainty << ','
         << energy_uncertainty << ',' << expanded_energy_uncertainty << ','
         << uncertainty.at("status").get<std::string>()
         << '\n';
@@ -1061,7 +1133,7 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
             << ',' << stream.at("domain").get<std::string>() << ','
             << number(stream.at("mass_flow_si").get<double>()) << ','
             << number(stream.at("energy_flow_si").get<double>())
-            << ",,,,,,,,,,,,\n";
+            << ",,,,,,,,,,,,,\n";
     }
     for (const auto& component : report.at("component_closures")) {
         out << "component_closure," << job_id << ',' << checksum << ','
@@ -1071,7 +1143,7 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
             << ",,,,,,"
             << number(component.at("net_mass_flow_si").get<double>()) << ','
             << number(component.at("net_energy_flow_si").get<double>())
-            << ",,,,,,,,,,\n";
+            << ",,,,,,,,,,,\n";
     }
     return out.str();
 }

@@ -47,6 +47,7 @@ describe('Study evidence authoring', () => {
     expect(studyArtifactRevisionIds(
       ['map-r2', 'evidence-r1'],
       [binding],
-    )).toEqual(['evidence-r1', 'map-r2'])
+      ['metrology-r3'],
+    )).toEqual(['evidence-r1', 'map-r2', 'metrology-r3'])
   })
 })

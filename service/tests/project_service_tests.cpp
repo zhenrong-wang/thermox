@@ -2890,6 +2890,79 @@ void test_revision_backed_validation_resolves_exact_inputs() {
         "and immutable provenance");
 }
 
+void test_balance_uncertainty_is_a_revisioned_study_artifact() {
+    thermox::service::ProjectService projects{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project = projects.create_project({
+        team_a, "Balance metrology", {},
+    });
+    const std::string payload = R"json({
+      "schema_version": "thermox.balance_uncertainty/v1",
+      "id": "boundary-metering",
+      "source": {
+        "reference": "calibration-certificate-42",
+        "checksum_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "note": "standard uncertainties",
+        "limitations": []
+      },
+      "streams": [{
+        "component_id": "compressor",
+        "port_name": "inlet",
+        "mass_flow_standard_uncertainty_si": 0.02,
+        "specific_enthalpy_standard_uncertainty_si": null,
+        "energy_flow_standard_uncertainty_si": 1000.0,
+        "mass_enthalpy_correlation": 0.0
+      }],
+      "correlations": []
+    })json";
+    const auto revision = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "boundary-metering",
+        {},
+        thermox::service::balance_uncertainty_artifact_type,
+        thermox::service::balance_uncertainty_schema_v1,
+        payload,
+    });
+    const auto resolved = projects.resolve_artifact_revisions(
+        team_a, project.project_id, {revision.artifact_revision_id});
+    require(
+        resolved && resolved->balance_uncertainty &&
+            resolved->balance_uncertainty->source.artifact_revision_id ==
+                revision.artifact_revision_id &&
+            resolved->balance_uncertainty->model.id ==
+                "boundary-metering" &&
+            resolved->snapshot.references.size() == 1U,
+        "balance uncertainty must resolve as a typed immutable Study "
+        "artifact with execution provenance");
+
+    const auto second = projects.create_artifact_revision({
+        team_a,
+        project.project_id,
+        "second-metering",
+        {},
+        thermox::service::balance_uncertainty_artifact_type,
+        thermox::service::balance_uncertainty_schema_v1,
+        std::string(payload).replace(
+            payload.find("boundary-metering"),
+            std::string("boundary-metering").size(),
+            "second-metering"),
+    });
+    bool multiple_rejected = false;
+    try {
+        (void)projects.resolve_artifact_revisions(
+            team_a, project.project_id,
+            {revision.artifact_revision_id,
+             second.artifact_revision_id});
+    } catch (const thermox::service::ProjectRequestError&) {
+        multiple_rejected = true;
+    }
+    require(
+        multiple_rejected,
+        "a Study input set must not resolve ambiguous balance-uncertainty "
+        "artifacts");
+}
+
 }  // namespace
 
 int main() {
@@ -2916,6 +2989,7 @@ int main() {
         test_graph_edits_publish_valid_child_revisions();
         test_case_edits_publish_atomic_child_revisions();
         test_revision_backed_validation_resolves_exact_inputs();
+        test_balance_uncertainty_is_a_revisioned_study_artifact();
         std::cout << "project service tests passed\n";
         return 0;
     } catch (const std::exception& error) {

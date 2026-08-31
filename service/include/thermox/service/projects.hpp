@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thermox/service/identity.hpp"
+#include "thermox/service/balance_uncertainty.hpp"
 #include "thermox/service/result_projection.hpp"
 #include "thermox/service/simulation_service.hpp"
 #include "thermox/service/validation_campaign.hpp"
@@ -655,10 +656,16 @@ struct ResolvedValidationSeriesArtifact {
     ValidationSeriesArtifact artifact;
 };
 
+struct ResolvedBalanceUncertaintyArtifact {
+    ArtifactRevisionRecord source;
+    BalanceUncertaintyModel model;
+};
+
 struct ResolvedEngineeringArtifacts {
     SimulationArtifactBundle snapshot;
     SimulationComponentBundle components;
     std::vector<ResolvedValidationSeriesArtifact> validation_series;
+    std::optional<ResolvedBalanceUncertaintyArtifact> balance_uncertainty;
     std::vector<ArtifactRevisionRecord> revisions;
 };
 

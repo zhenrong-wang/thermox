@@ -23,9 +23,11 @@ export function parseValidationSeriesArtifact(
 export function studyArtifactRevisionIds(
   physicalArtifactRevisionIds: string[],
   trajectoryBindings: StudyTrajectoryValidationBinding[],
+  evidenceArtifactRevisionIds: string[] = [],
 ): string[] {
   return [...new Set([
     ...physicalArtifactRevisionIds,
     ...trajectoryBindings.map((binding) => binding.artifact_revision_id),
+    ...evidenceArtifactRevisionIds,
   ])].sort()
 }
