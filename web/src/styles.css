@@ -4364,6 +4364,110 @@ code {
   margin-bottom: 12px;
 }
 
+.result-assurance-card {
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid #d7e1e6;
+  border-radius: 5px;
+  background: #fbfcfc;
+}
+
+.result-assurance-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e0e7eb;
+  background: #f7f9fa;
+}
+
+.result-assurance-card h2,
+.result-assurance-card p {
+  margin: 0;
+}
+
+.result-assurance-card h2 {
+  color: #334d5f;
+  font-size: 11px;
+}
+
+.result-assurance-card p {
+  max-width: 480px;
+  color: #788a95;
+  font-size: 8px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.result-assurance-layers {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: #e1e8eb;
+}
+
+.result-assurance-layers > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 7px;
+  padding: 11px;
+  border-top: 3px solid #aab7be;
+  background: #fff;
+}
+
+.result-assurance-layers > div.supported {
+  border-top-color: #45936f;
+  background: #f6fbf8;
+}
+
+.result-assurance-layers > div.failed {
+  border-top-color: #bd6259;
+  background: #fff7f6;
+}
+
+.result-assurance-layers > div.review {
+  border-top-color: #c58b3f;
+  background: #fffaf2;
+}
+
+.result-assurance-layers > div > span {
+  grid-row: 1 / 3;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7eef1;
+  color: #537080;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.result-assurance-layers strong {
+  overflow: hidden;
+  color: #405b6b;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-assurance-layers em {
+  color: #82929b;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.result-assurance-layers small {
+  grid-column: 1 / -1;
+  color: #788a95;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
 .result-summary-strip > div,
 .result-summary-strip > p {
   display: grid;
@@ -5270,6 +5374,10 @@ code {
   .result-explorer-controls {
     grid-template-columns: minmax(180px, 1fr) 145px auto auto;
   }
+
+  .result-assurance-layers {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
@@ -5281,6 +5389,18 @@ code {
   .study-publication-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .result-assurance-card > header {
+    flex-direction: column;
+  }
+
+  .result-assurance-card p {
+    text-align: left;
+  }
+
+  .result-assurance-layers {
+    grid-template-columns: 1fr;
   }
 
   .form-grid {

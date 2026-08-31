@@ -16,6 +16,7 @@ import {
   type TransientSeriesPoint,
 } from './resultExploration'
 import { TopologyCanvas } from './TopologyCanvas'
+import { ResultAssuranceStrip } from './ResultAssuranceStrip'
 import type { ReportDownload } from './api'
 import type { GraphSelection } from './InspectorPanel'
 import {
@@ -30,6 +31,7 @@ import {
   resultSampleCount,
   resultSampleTime,
 } from './resultPresentation'
+import { buildResultAssuranceLayers } from './resultAssurance'
 import type {
   CatalogComponent,
   JobValidationReport,
@@ -398,6 +400,9 @@ export function ResultsWorkspace({
     topologyRevisionId,
     Boolean(topology),
   )
+  const assuranceLayers = result
+    ? buildResultAssuranceLayers(job, result, exactProvenance)
+    : []
   async function exportValidationReport(format: 'markdown' | 'csv') {
     if (!validationReport) return
     setExportingFormat(format)
@@ -594,6 +599,7 @@ export function ResultsWorkspace({
 
       {!loading && result && graph && (
         <div className="results-content">
+          <ResultAssuranceStrip layers={assuranceLayers} />
           <div className="result-summary-strip">
             {(job.result_summary?.values ?? []).map((value) => {
               const displayed = displayValue(
