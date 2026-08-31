@@ -295,11 +295,25 @@ export function TopologyJsonWorkbench({
             validated later against the registry, case, and pinned artifacts.
           </small>
           {exactActiveDraft && serverReview && (
-            <p className={serverReview.promotable ? '' : 'is-invalid'}>
-              Service review: {serverReview.promotable
-                ? `promotable as ${serverReview.model_id}; checksum ${serverReview.artifact_checksum}`
-                : serverReview.issues.map((issue) => issue.message).join('; ')}
-            </p>
+            serverReview.promotable ? (
+              <p>
+                Service review: promotable as {serverReview.model_id}; checksum{' '}
+                <code>{serverReview.artifact_checksum}</code>
+              </p>
+            ) : (
+              <div className="topology-draft-service-issues">
+                <strong>Authoritative service review</strong>
+                <ul>
+                  {serverReview.issues.slice(0, 12).map((issue, index) => (
+                    <li key={`${issue.code}-${issue.json_path}-${index}`}>
+                      {issue.json_path && <code>{issue.json_path}</code>}{' '}
+                      {issue.message}
+                      {issue.suggestions[0] && <small>{issue.suggestions[0]}</small>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
           )}
         </div>
         {(error || status) && <div className={`form-error topology-json-message${error ? '' : ' is-status'}`}>

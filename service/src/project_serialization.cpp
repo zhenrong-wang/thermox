@@ -1208,8 +1208,23 @@ std::string serialize_topology_draft_promotion_review_json(
         if (index != 0U) out << ", ";
         out << "{\"code\": ";
         json_string(out, review.issues[index].code);
+        out << ", \"severity\": ";
+        json_string(out, to_string(review.issues[index].severity));
+        out << ", \"stage\": ";
+        json_string(out, review.issues[index].stage);
+        out << ", \"json_path\": ";
+        json_string(out, review.issues[index].json_path);
         out << ", \"message\": ";
         json_string(out, review.issues[index].message);
+        out << ", \"suggestions\": [";
+        for (std::size_t suggestion = 0;
+             suggestion < review.issues[index].suggestions.size();
+             ++suggestion) {
+            if (suggestion != 0U) out << ", ";
+            json_string(
+                out, review.issues[index].suggestions[suggestion]);
+        }
+        out << ']';
         out << '}';
     }
     out << "]}\n";

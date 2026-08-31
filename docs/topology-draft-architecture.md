@@ -38,6 +38,9 @@ Draft promotion is an explicit service operation; there is no relaxed model type
 path for drafts. `GET /api/v1/projects/{project_id}/topology-drafts/{revision_id}/review` checks the
 exact integrity-verified artifact revision with the strict topology parser and hierarchy flattener.
 It returns a checksum-bound, non-persisted review with `promotable`, structural counts, and issues.
+Issues use stable codes, RFC 6901-style JSON paths, severity/stage metadata, and repair suggestions.
+The review accumulates declaration-shape problems before invoking the strict parser, allowing an
+engineer to correct several incomplete fields in one authoring pass.
 
 `POST /api/v1/projects/{project_id}/topology-drafts/{revision_id}/promote` repeats that authoritative
 check and creates an immutable model revision. The model ledger records both
@@ -61,5 +64,6 @@ The Topology JSON workbench supports three distinct states:
 
 Saved draft revisions can be reopened and published as child drafts. Editing a loaded draft makes
 the workbench treat it as unsaved; it must be saved as a new immutable revision before using the
-reviewed-promotion action. Canvas layout remains outside both the draft declaration and physical
-topology, using the existing presentation document.
+reviewed-promotion action. After promotion, the UI advances to physical definition, where fluids,
+component parameters, and pinned engineering artifacts are supplied. Canvas layout remains outside
+both the draft declaration and physical topology, using the existing presentation document.

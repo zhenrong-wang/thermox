@@ -3882,6 +3882,21 @@ code {
   color: #71838e;
 }
 
+.topology-json-review > .topology-draft-service-issues {
+  display: grid;
+  justify-content: stretch;
+  gap: 6px;
+}
+
+.topology-draft-service-issues li + li {
+  margin-top: 5px;
+}
+
+.topology-draft-service-issues li small {
+  display: block;
+  margin-top: 2px;
+}
+
 .topology-json-message {
   margin: 12px 20px 0;
 }

@@ -304,6 +304,221 @@ std::string canonical_topology_draft(
     return value.dump();
 }
 
+void append_topology_draft_issue(
+    TopologyDraftPromotionReview& review,
+    std::string code,
+    std::string json_path,
+    std::string message,
+    std::vector<std::string> suggestions) {
+    review.issues.push_back({
+        std::move(code),
+        DiagnosticSeverity::error,
+        "draft",
+        std::move(json_path),
+        {}, {}, {},
+        std::move(message),
+        std::move(suggestions),
+    });
+}
+
+bool non_empty_json_string(const nlohmann::json& value) {
+    return value.is_string() &&
+        !trim(value.get<std::string>()).empty();
+}
+
+const nlohmann::json* topology_array_field(
+    const nlohmann::json& model,
+    const std::string& field,
+    bool required,
+    TopologyDraftPromotionReview& review) {
+    if (!model.contains(field)) {
+        if (required) {
+            append_topology_draft_issue(
+                review,
+                "topology_required_array_missing",
+                "/model/" + field,
+                "model." + field + " must be an array",
+                {"Add an empty array while drafting, then populate it "
+                 "before calculation when required."});
+        }
+        return nullptr;
+    }
+    if (!model[field].is_array()) {
+        append_topology_draft_issue(
+            review,
+            "topology_array_type_invalid",
+            "/model/" + field,
+            "model." + field + " must be an array",
+            {"Replace this value with a JSON array."});
+        return nullptr;
+    }
+    return &model[field];
+}
+
+std::set<std::string> topology_entity_ids(
+    const nlohmann::json* entities,
+    const std::string& field,
+    TopologyDraftPromotionReview& review) {
+    std::set<std::string> ids;
+    if (entities == nullptr) return ids;
+    for (std::size_t index = 0; index < entities->size(); ++index) {
+        const auto& entity = (*entities)[index];
+        const auto path = "/model/" + field + "/" +
+            std::to_string(index) + "/id";
+        if (!entity.is_object() || !entity.contains("id") ||
+            !non_empty_json_string(entity["id"])) {
+            append_topology_draft_issue(
+                review,
+                "topology_entity_id_missing",
+                path,
+                "model." + field + "[" + std::to_string(index) +
+                    "].id must be a non-empty string",
+                {"Assign a stable ID unique within the topology."});
+            continue;
+        }
+        const auto id = entity["id"].get<std::string>();
+        if (!ids.insert(id).second) {
+            append_topology_draft_issue(
+                review,
+                "topology_entity_id_duplicate",
+                path,
+                "model." + field + " repeats ID '" + id + "'",
+                {"Rename one entity and update references to it."});
+        }
+    }
+    return ids;
+}
+
+void preflight_topology_draft_document(
+    const nlohmann::json& document,
+    TopologyDraftPromotionReview& review) {
+    if (!document.contains("schema_version") ||
+        document["schema_version"] != "thermox.topology/v1") {
+        append_topology_draft_issue(
+            review,
+            "topology_schema_invalid",
+            "/schema_version",
+            "schema_version must be thermox.topology/v1",
+            {"Set schema_version to 'thermox.topology/v1'."});
+    }
+    if (!document.contains("model") ||
+        !document["model"].is_object()) {
+        append_topology_draft_issue(
+            review,
+            "topology_model_missing",
+            "/model",
+            "model must be a JSON object",
+            {"Add the physical-system declaration under model."});
+        return;
+    }
+    const auto& model = document["model"];
+    for (const std::string field : {"id", "name", "revision"}) {
+        if (!model.contains(field) ||
+            !non_empty_json_string(model[field])) {
+            append_topology_draft_issue(
+                review,
+                "topology_model_field_missing",
+                "/model/" + field,
+                "model." + field + " must be a non-empty string",
+                {"Provide a stable model " + field + "."});
+        }
+    }
+    if (model.contains("id") && non_empty_json_string(model["id"])) {
+        review.model_id = model["id"].get<std::string>();
+    }
+
+    const auto* media = topology_array_field(
+        model, "media", true, review);
+    const auto* materials = topology_array_field(
+        model, "materials", false, review);
+    const auto* components = topology_array_field(
+        model, "components", true, review);
+    const auto* assemblies = topology_array_field(
+        model, "assemblies", false, review);
+    const auto* connections = topology_array_field(
+        model, "connections", true, review);
+    review.medium_count = media == nullptr ? 0U : media->size();
+    review.material_count =
+        materials == nullptr ? 0U : materials->size();
+    review.component_count =
+        components == nullptr ? 0U : components->size();
+    review.assembly_count =
+        assemblies == nullptr ? 0U : assemblies->size();
+    review.connection_count =
+        connections == nullptr ? 0U : connections->size();
+
+    (void)topology_entity_ids(media, "media", review);
+    (void)topology_entity_ids(materials, "materials", review);
+    auto component_ids =
+        topology_entity_ids(components, "components", review);
+    const auto assembly_ids =
+        topology_entity_ids(assemblies, "assemblies", review);
+    (void)topology_entity_ids(connections, "connections", review);
+    for (const auto& id : assembly_ids) {
+        if (component_ids.contains(id)) {
+            append_topology_draft_issue(
+                review,
+                "topology_entity_namespace_ambiguous",
+                "/model/assemblies",
+                "component and assembly share top-level ID '" + id + "'",
+                {"Use distinct top-level component and assembly IDs."});
+        }
+        component_ids.insert(id);
+    }
+    if (components != nullptr) {
+        for (std::size_t index = 0; index < components->size(); ++index) {
+            const auto& component = (*components)[index];
+            if (!component.is_object() || !component.contains("kind") ||
+                !non_empty_json_string(component["kind"])) {
+                append_topology_draft_issue(
+                    review,
+                    "topology_component_kind_missing",
+                    "/model/components/" + std::to_string(index) +
+                        "/kind",
+                    "component kind must be a non-empty string",
+                    {"Select a registered component kind."});
+            }
+        }
+    }
+    if (connections == nullptr) return;
+    for (std::size_t index = 0; index < connections->size(); ++index) {
+        const auto& connection = (*connections)[index];
+        if (!connection.is_object()) continue;
+        for (const std::string field : {"from", "to", "kind"}) {
+            if (!connection.contains(field) ||
+                !non_empty_json_string(connection[field])) {
+                append_topology_draft_issue(
+                    review,
+                    "topology_connection_field_missing",
+                    "/model/connections/" + std::to_string(index) +
+                        "/" + field,
+                    "connection " + field +
+                        " must be a non-empty string",
+                    {"Connect registered ports using entity.port syntax."});
+            }
+        }
+        for (const std::string field : {"from", "to"}) {
+            if (!connection.contains(field) ||
+                !non_empty_json_string(connection[field])) continue;
+            const auto endpoint = connection[field].get<std::string>();
+            const auto separator = endpoint.find('.');
+            const auto entity = separator == std::string::npos
+                ? std::string{}
+                : endpoint.substr(0, separator);
+            if (entity.empty() || !component_ids.contains(entity)) {
+                append_topology_draft_issue(
+                    review,
+                    "topology_connection_endpoint_unknown",
+                    "/model/connections/" + std::to_string(index) +
+                        "/" + field,
+                    "connection endpoint '" + endpoint +
+                        "' does not reference a top-level entity",
+                    {"Use an existing component or assembly export ID."});
+            }
+        }
+    }
+}
+
 std::string run_mode(const std::string& case_mode) {
     if (case_mode.find("transient") != std::string::npos ||
         case_mode.find("dynamic") != std::string::npos) {
@@ -883,7 +1098,10 @@ TopologyDraftPromotionReview ProjectService::review_topology_draft(
     try {
         const auto wrapper =
             nlohmann::json::parse(content->canonical_artifact_json);
-        const auto model_json = wrapper.at("document").dump();
+        const auto& draft_document = wrapper.at("document");
+        preflight_topology_draft_document(draft_document, review);
+        if (!review.issues.empty()) return review;
+        const auto model_json = draft_document.dump();
         const auto document = platform::parse_topology_document_text(
             model_json, units_);
         (void)platform::flatten_model_document(document);
@@ -895,10 +1113,13 @@ TopologyDraftPromotionReview ProjectService::review_topology_draft(
         review.assembly_count = document.assemblies.size();
         review.connection_count = document.connections.size();
     } catch (const std::exception& error) {
-        review.issues.push_back({
+        append_topology_draft_issue(
+            review,
             "topology_contract_invalid",
+            {},
             error.what(),
-        });
+            {"Correct the declaration at the reported model field and "
+             "save a new immutable draft revision."});
     }
     return review;
 }

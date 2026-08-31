@@ -1237,8 +1237,9 @@ function App() {
       setTopologyPresentation(undefined)
       setLayoutSaveState('idle')
       setSelectedRevisionId(model.model_revision_id)
+      setWorkspaceView('definition')
       setOperationStatus(
-        `Promoted draft ${revision.artifact_id} r${revision.revision_number} as topology r${model.revision_number}.`,
+        `Promoted draft ${revision.artifact_id} r${revision.revision_number} as topology r${model.revision_number}. Continue by defining fluids, component parameters, and engineering artifacts.`,
       )
     } catch (reason) {
       const message = errorMessage(reason)

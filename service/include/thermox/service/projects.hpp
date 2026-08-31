@@ -81,14 +81,9 @@ struct ModelRevisionRecord {
     std::chrono::system_clock::time_point created_at;
 };
 
-struct TopologyDraftReviewIssue {
-    std::string code;
-    std::string message;
-};
-
 struct TopologyDraftPromotionReview {
     std::string schema_version{
-        "thermox.topology_draft_promotion_review/v1"};
+        "thermox.topology_draft_promotion_review/v2"};
     std::string project_id;
     std::string artifact_revision_id;
     std::string artifact_checksum;
@@ -99,7 +94,7 @@ struct TopologyDraftPromotionReview {
     std::size_t component_count{0};
     std::size_t assembly_count{0};
     std::size_t connection_count{0};
-    std::vector<TopologyDraftReviewIssue> issues;
+    std::vector<Diagnostic> issues;
 };
 
 // Mutable, per-user authoring presentation. This is deliberately outside the

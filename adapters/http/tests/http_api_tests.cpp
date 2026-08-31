@@ -2580,11 +2580,19 @@ void test_partial_topology_draft_workflow() {
     }));
     require(
         blocked_review.status == 200 &&
+            blocked_review.body.find(
+                "thermox.topology_draft_promotion_review/v2") !=
+                std::string::npos &&
             blocked_review.body.find("\"promotable\": false") !=
                 std::string::npos &&
-            blocked_review.body.find("topology_contract_invalid") !=
+            blocked_review.body.find("topology_schema_invalid") !=
+                std::string::npos &&
+            blocked_review.body.find("/model/name") !=
+                std::string::npos &&
+            blocked_review.body.find("suggestions") !=
                 std::string::npos,
-        "the service must review an exact partial draft revision as blocked");
+        "the service must return actionable, path-addressed blockers for "
+        "an exact partial draft revision");
 
     const auto strict_rejection = api.handle(authenticated(json_post(
         "/api/v1/projects/" + project_id + "/model-revisions",

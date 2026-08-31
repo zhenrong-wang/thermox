@@ -142,7 +142,7 @@ describe('topology draft API', () => {
 
   it('reviews and promotes one exact immutable draft revision', async () => {
     const review = {
-      schema_version: 'thermox.topology_draft_promotion_review/v1',
+      schema_version: 'thermox.topology_draft_promotion_review/v2',
       artifact_revision_id: 'draft-r2',
       artifact_checksum: 'sha256:abc',
       promotable: true,

@@ -1523,7 +1523,7 @@ export interface ArtifactRevisionContent<T = unknown> {
 }
 
 export interface TopologyDraftPromotionReview {
-  schema_version: 'thermox.topology_draft_promotion_review/v1'
+  schema_version: 'thermox.topology_draft_promotion_review/v2'
   project_id: string
   artifact_revision_id: string
   artifact_checksum: string
@@ -1534,7 +1534,14 @@ export interface TopologyDraftPromotionReview {
   component_count: number
   assembly_count: number
   connection_count: number
-  issues: Array<{ code: string; message: string }>
+  issues: Array<{
+    code: string
+    severity: 'information' | 'warning' | 'error'
+    stage: string
+    json_path: string
+    message: string
+    suggestions: string[]
+  }>
 }
 
 export type EngineeringReviewDisposition =
