@@ -19,6 +19,7 @@ interface DefinitionWorkspaceProps {
   onEditComponent: (component: ComponentDefinition) => void
   onAddFluid: () => void
   onAddMaterial: () => void
+  onDefineComponent: () => void
   onAddCorrelation: () => void
   onReviseCorrelation: (revision: ArtifactRevision) => void
   onAddPerformanceMap: () => void
@@ -39,6 +40,7 @@ export function DefinitionWorkspace({
   onEditComponent,
   onAddFluid,
   onAddMaterial,
+  onDefineComponent,
   onAddCorrelation,
   onReviseCorrelation,
   onAddPerformanceMap,
@@ -106,6 +108,14 @@ export function DefinitionWorkspace({
             onClick={onAddMaterial}
           >
             + Reacting mixture
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={onDefineComponent}
+          >
+            + Component model
           </button>
           <button
             type="button"

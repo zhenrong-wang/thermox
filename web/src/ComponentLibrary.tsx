@@ -1,7 +1,8 @@
 import { useMemo, useState, type DragEvent } from 'react'
 import {
   COMPONENT_DRAG_TYPE,
-  componentMatchesFilter,
+  componentCategories,
+  componentMatchesLibraryFilters,
 } from './componentLibrary'
 import type {
   AssemblyTemplateCatalogEntry,
@@ -11,47 +12,38 @@ import type {
 interface ComponentLibraryProps {
   components: CatalogComponent[]
   disabled: boolean
-  fluidCount: number
-  materialCount: number
-  artifactRevisionCount: number
   catalogFingerprint: string
   onChoose: (component: CatalogComponent) => void
-  onAddFluid: () => void
-  onAddMaterial: () => void
-  onAddCorrelation: () => void
   onGroupComponents: () => void
   assemblyTemplates: AssemblyTemplateCatalogEntry[]
   onInstantiateAssembly: (template: AssemblyTemplateCatalogEntry) => void
   onCreateTopology?: () => void
-  onDefine: () => void
   onRevise: (component: CatalogComponent) => void
 }
 
 export function ComponentLibrary({
   components,
   disabled,
-  fluidCount,
-  materialCount,
-  artifactRevisionCount,
   catalogFingerprint,
   onChoose,
-  onAddFluid,
-  onAddMaterial,
-  onAddCorrelation,
   onGroupComponents,
   assemblyTemplates,
   onInstantiateAssembly,
   onCreateTopology,
-  onDefine,
   onRevise,
 }: ComponentLibraryProps) {
   const [filter, setFilter] = useState('')
+  const [category, setCategory] = useState('all')
+  const categories = useMemo(
+    () => componentCategories(components),
+    [components],
+  )
   const visibleComponents = useMemo(
     () =>
       components.filter((component) =>
-        componentMatchesFilter(component, filter),
+        componentMatchesLibraryFilters(component, filter, category),
       ),
-    [components, filter],
+    [category, components, filter],
   )
   const templates = useMemo(() => {
     const grouped = new Map<string, CatalogComponent[]>()
@@ -112,28 +104,6 @@ export function ComponentLibrary({
             Create topology
           </button>
         )}
-        <div className="definition-resources">
-          <span className="eyebrow">Definition resources</span>
-          <div className="resource-summary">
-            <span>{fluidCount} fluids</span>
-            <span>{materialCount} reacting mixtures</span>
-            <span>{artifactRevisionCount} models &amp; data</span>
-          </div>
-          <div className="resource-actions">
-            <button type="button" className="resource-button" disabled={disabled} onClick={onAddFluid}>
-              + Fluid
-            </button>
-            <button type="button" className="resource-button" disabled={disabled} onClick={onAddMaterial}>
-              + Reacting mixture
-            </button>
-            <button type="button" className="resource-button" disabled={disabled} onClick={onDefine}>
-              + Custom component
-            </button>
-            <button type="button" className="resource-button" disabled={disabled} onClick={onAddCorrelation}>
-              + Correlation
-            </button>
-          </div>
-        </div>
         <button
           type="button"
           className="library-start-button"
@@ -151,6 +121,19 @@ export function ComponentLibrary({
           placeholder="Filter equipment, model, port, or domain"
           aria-label="Filter component library"
         />
+      </label>
+      <label className="library-category-filter">
+        <span>Equipment category</span>
+        <select
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          aria-label="Filter component category"
+        >
+          <option value="all">All categories</option>
+          {categories.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
       </label>
       {assemblyTemplates.length > 0 && (
         <div className="assembly-template-list">

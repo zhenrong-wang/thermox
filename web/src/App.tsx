@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
 import { AssemblyForm } from './AssemblyForm'
@@ -6,7 +6,6 @@ import { AssemblyTemplateForm } from './AssemblyTemplateForm'
 import { AssemblyTemplateInstanceForm } from './AssemblyTemplateInstanceForm'
 import { CaseCreateForm } from './CaseCreateForm'
 import { CaseRevisionPanel } from './CaseRevisionPanel'
-import { CaseWorkspace } from './CaseWorkspace'
 import { CalibrationPublishForm } from './CalibrationPublishForm'
 import { ReconciliationPublishForm } from './ReconciliationPublishForm'
 import { ReconciliationResultPanel } from './ReconciliationResultPanel'
@@ -39,9 +38,7 @@ import { MaterialForm } from './MaterialForm'
 import { PerformanceMapArtifactForm } from './PerformanceMapArtifactForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
-import { RunConfigurationWorkspace } from './RunConfigurationWorkspace'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
-import { ResultsWorkspace } from './ResultsWorkspace'
 import { StudyPublishForm } from './StudyPublishForm'
 import { studyArtifactRevisionIds } from './studyAuthoring'
 import { ValidationSeriesArtifactForm } from './ValidationSeriesArtifactForm'
@@ -52,7 +49,6 @@ import {
   requiredProjectComponentSources,
   resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
-import { TopologyCanvas } from './TopologyCanvas'
 import { initialTopologyDocument } from './topologyAuthoring'
 import { WorkflowNavigator } from './WorkflowNavigator'
 import {
@@ -104,6 +100,27 @@ import type {
   ValidationSeriesCatalogEntry,
 } from './types'
 
+const CaseWorkspace = lazy(() =>
+  import('./CaseWorkspace').then((module) => ({
+    default: module.CaseWorkspace,
+  })),
+)
+const ResultsWorkspace = lazy(() =>
+  import('./ResultsWorkspace').then((module) => ({
+    default: module.ResultsWorkspace,
+  })),
+)
+const RunConfigurationWorkspace = lazy(() =>
+  import('./RunConfigurationWorkspace').then((module) => ({
+    default: module.RunConfigurationWorkspace,
+  })),
+)
+const TopologyCanvas = lazy(() =>
+  import('./TopologyCanvas').then((module) => ({
+    default: module.TopologyCanvas,
+  })),
+)
+
 function App() {
   const {
     profile: displayUnitProfile,
@@ -128,8 +145,6 @@ function App() {
     useState<CaseRevision>()
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
-  const [topologySidebar, setTopologySidebar] =
-    useState<'library' | 'inspector'>('library')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [publishing, setPublishing] = useState(false)
@@ -1946,7 +1961,6 @@ function App() {
         `Ungrouped ${assembly.id} for direct editing.`,
       )
       setSelection(undefined)
-      setTopologySidebar('library')
     } catch (reason) {
       setOperationError(errorMessage(reason))
     }
@@ -2065,7 +2079,6 @@ function App() {
       )
     ) {
       setSelection({ type: 'connection', id: diagnostic.connection_id })
-      setTopologySidebar('inspector')
       setWorkspaceView('topology')
     }
   }
@@ -2173,6 +2186,13 @@ function App() {
           </div>
         </aside>
 
+        <Suspense
+          fallback={(
+            <section className="workspace-loading" aria-live="polite">
+              Loading workspace…
+            </section>
+          )}
+        >
         {workspaceView === 'topology' ? (
           <section className="canvas-panel">
           <div className="canvas-toolbar">
@@ -2180,9 +2200,32 @@ function App() {
               <span className="eyebrow">Immutable topology</span>
               <h1>{topology?.model.name ?? 'Thermal system graph'}</h1>
             </div>
-            <div className="revision-chip">
-              <span>SHA-256</span>
-              <code>{selectedRevision?.checksum.slice(7, 19) ?? '—'}</code>
+            <div className="canvas-toolbar-actions">
+              <span
+                className={`model-authoring-status${
+                  exactRevisionCompiled ? ' is-ready' : ''
+                }`}
+              >
+                {exactRevisionCompiled ? 'Calculatable' : 'Definition incomplete'}
+              </span>
+              <button type="button" onClick={() => setWorkspaceView('definition')}>
+                Define
+              </button>
+              <button type="button" onClick={() => setWorkspaceView('studies')}>
+                Check
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={!exactRevisionCompiled}
+                onClick={() => setWorkspaceView('runs')}
+              >
+                Calculate
+              </button>
+              <div className="revision-chip">
+                <span>SHA-256</span>
+                <code>{selectedRevision?.checksum.slice(7, 19) ?? '—'}</code>
+              </div>
             </div>
           </div>
           {(operationError || operationStatus || publishing) && (
@@ -2211,32 +2254,68 @@ function App() {
               <span>expects the API at http://127.0.0.1:8080</span>
             </div>
           ) : (
-            <TopologyCanvas
-              topology={topology}
-              catalog={topologyCatalog?.components ?? []}
-              revisionId={selectedRevisionId}
-              publishing={publishing}
-              componentReadiness={physicalReadiness}
-              onCreateTopology={
-                selectedProjectId && !selectedRevisionId
-                  ? () => {
-                      void createInitialTopology()
-                    }
-                  : undefined
-              }
-              onConnect={connectPorts}
-              onSelect={(nextSelection) => {
-                setSelection(nextSelection)
-                setTopologySidebar(
-                  nextSelection ? 'inspector' : 'library',
-                )
-              }}
-              onAddComponent={(component) => {
-                setSelection(undefined)
-                setTopologySidebar('library')
-                setNewComponentType(component)
-              }}
-            />
+            <div className="topology-stage">
+              <div className="topology-canvas-surface">
+                <TopologyCanvas
+                  topology={topology}
+                  catalog={topologyCatalog?.components ?? []}
+                  revisionId={selectedRevisionId}
+                  publishing={publishing}
+                  componentReadiness={physicalReadiness}
+                  onCreateTopology={
+                    selectedProjectId && !selectedRevisionId
+                      ? () => {
+                          void createInitialTopology()
+                        }
+                      : undefined
+                  }
+                  onConnect={connectPorts}
+                  onSelect={setSelection}
+                  onAddComponent={(component) => {
+                    setSelection(undefined)
+                    setNewComponentType(component)
+                  }}
+                />
+              </div>
+              <aside
+                className={`topology-inspector-dock ${
+                  selection ? 'has-selection' : 'is-empty'
+                }`}
+              >
+                {selection && topology && topologyCatalog ? (
+                  <InspectorPanel
+                    selection={selection}
+                    topology={topology}
+                    catalog={topologyCatalog}
+                    publishing={publishing}
+                    onEditComponent={setEditingComponent}
+                    onEditConnection={setEditingConnection}
+                    onRemoveComponent={(component) => {
+                      void removeComponent(component)
+                    }}
+                    onRemoveAssembly={(assembly) => {
+                      void removeAssembly(assembly)
+                    }}
+                    onUngroupAssembly={(assembly) => {
+                      void ungroupAssembly(assembly)
+                    }}
+                    onPublishAssemblyTemplate={setPublishingAssemblyTemplate}
+                    onRemoveConnection={(connection) => {
+                      void removeConnection(connection)
+                    }}
+                    onClose={() => setSelection(undefined)}
+                  />
+                ) : (
+                  <div className="inspector-empty-state">
+                    <span className="eyebrow">Instance inspector</span>
+                    <strong>Select an item on the canvas</strong>
+                    <p>
+                      Inspect and edit the selected component, assembly, or connection without hiding the equipment library.
+                    </p>
+                  </div>
+                )}
+              </aside>
+            </div>
           )}
           </section>
         ) : workspaceView === 'definition' ? (
@@ -2256,6 +2335,7 @@ function App() {
             onEditComponent={setEditingComponent}
             onAddFluid={() => setAddingMedium(true)}
             onAddMaterial={() => setAddingMaterial(true)}
+            onDefineComponent={() => setDefiningComponent(true)}
             onAddCorrelation={() => {
               setAddingPerformanceMap(false)
               setRevisingPerformanceMap(undefined)
@@ -2375,6 +2455,7 @@ function App() {
             }}
           />
         )}
+        </Suspense>
 
         <aside
           className={`palette${
@@ -2382,98 +2463,31 @@ function App() {
           }`}
         >
           {workspaceView === 'topology' ? (
-            <>
-              <div className="topology-sidebar-tabs">
-                <button
-                  type="button"
-                  className={topologySidebar === 'library' ? 'active' : ''}
-                  onClick={() => setTopologySidebar('library')}
-                >
-                  Library
-                  <span>
-                    {effectiveCatalog?.components.length ?? 0}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={topologySidebar === 'inspector' ? 'active' : ''}
-                  disabled={!selection}
-                  onClick={() => setTopologySidebar('inspector')}
-                >
-                  Inspector
-                </button>
-              </div>
-              <div className="topology-sidebar-content">
-                {topologySidebar === 'inspector' &&
-                selection &&
-                topology &&
-                topologyCatalog ? (
-                  <InspectorPanel
-                    selection={selection}
-                    topology={topology}
-                    catalog={topologyCatalog}
-                    publishing={publishing}
-                    onEditComponent={setEditingComponent}
-                    onEditConnection={setEditingConnection}
-                    onRemoveComponent={(component) => {
-                      void removeComponent(component)
-                    }}
-                    onRemoveAssembly={(assembly) => {
-                      void removeAssembly(assembly)
-                    }}
-                    onUngroupAssembly={(assembly) => {
-                      void ungroupAssembly(assembly)
-                    }}
-                    onPublishAssemblyTemplate={setPublishingAssemblyTemplate}
-                    onRemoveConnection={(connection) => {
-                      void removeConnection(connection)
-                    }}
-                    onClose={() => {
-                      setSelection(undefined)
-                      setTopologySidebar('library')
-                    }}
-                  />
-                ) : (
-                  <ComponentLibrary
-                    components={
-                      effectiveCatalog?.components ?? []
+            <ComponentLibrary
+              components={effectiveCatalog?.components ?? []}
+              disabled={!topology || publishing}
+              catalogFingerprint={effectiveCatalog?.fingerprint ?? ''}
+              onChoose={setNewComponentType}
+              onGroupComponents={() => setAddingAssembly(true)}
+              assemblyTemplates={assemblyTemplates}
+              onInstantiateAssembly={setInstantiatingAssemblyTemplate}
+              onCreateTopology={
+                selectedProjectId && !selectedRevisionId
+                  ? () => {
+                      void createInitialTopology()
                     }
-                    disabled={!topology || publishing}
-                    fluidCount={topology?.model.media.length ?? 0}
-                    materialCount={topology?.model.materials?.length ?? 0}
-                    artifactRevisionCount={artifactRevisions.length}
-                    catalogFingerprint={
-                      effectiveCatalog?.fingerprint ?? ''
-                    }
-                    onChoose={setNewComponentType}
-                    onAddFluid={() => setAddingMedium(true)}
-                    onAddMaterial={() => setAddingMaterial(true)}
-                    onAddCorrelation={() => setAddingCorrelation(true)}
-                    onGroupComponents={() => setAddingAssembly(true)}
-                    assemblyTemplates={assemblyTemplates}
-                    onInstantiateAssembly={setInstantiatingAssemblyTemplate}
-                    onCreateTopology={
-                      selectedProjectId && !selectedRevisionId
-                        ? () => {
-                            void createInitialTopology()
-                          }
-                        : undefined
-                    }
-                    onDefine={() => setDefiningComponent(true)}
-                    onRevise={(component) => {
-                      const sourceRevisionId =
-                        component.source_artifact_revision_id
-                      const entry = projectComponents.find(
-                        (candidate) =>
-                          candidate.source.artifact_revision_id ===
-                          sourceRevisionId,
-                      )
-                      if (entry) setRevisingComponent(entry)
-                    }}
-                  />
-                )}
-              </div>
-            </>
+                  : undefined
+              }
+              onRevise={(component) => {
+                const sourceRevisionId =
+                  component.source_artifact_revision_id
+                const entry = projectComponents.find(
+                  (candidate) =>
+                    candidate.source.artifact_revision_id === sourceRevisionId,
+                )
+                if (entry) setRevisingComponent(entry)
+              }}
+            />
           ) : workspaceView === 'definition' ? (
             <DefinitionSidebar
               topology={topology}

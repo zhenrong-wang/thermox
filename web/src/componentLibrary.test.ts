@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { componentMatchesFilter } from './componentLibrary'
+import {
+  componentCategories,
+  componentMatchesFilter,
+  componentMatchesLibraryFilters,
+} from './componentLibrary'
 import type { CatalogComponent } from './types'
 
 const component: CatalogComponent = {
@@ -54,5 +58,26 @@ describe('component library presentation', () => {
       default_mode: 'tracking',
     }
     expect(componentMatchesFilter(hybrid, 'failsafe')).toBe(true)
+  })
+
+  it('keeps equipment categories orthogonal to text search', () => {
+    const pump = {
+      ...component,
+      kind: 'pump.fluid.isentropic_efficiency',
+      template_kind: 'pump',
+      display_name: 'Pump',
+      category: 'Fluid machinery',
+    }
+    expect(componentCategories([component, pump, component])).toEqual([
+      'Fluid machinery',
+      'Turbomachinery',
+    ])
+    expect(componentMatchesLibraryFilters(component, 'map', 'all')).toBe(true)
+    expect(
+      componentMatchesLibraryFilters(component, 'map', 'Turbomachinery'),
+    ).toBe(true)
+    expect(
+      componentMatchesLibraryFilters(component, 'map', 'Fluid machinery'),
+    ).toBe(false)
   })
 })

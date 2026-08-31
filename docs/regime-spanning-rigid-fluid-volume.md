@@ -52,7 +52,7 @@ incorrectly dictate the time step.
 ## Verified reference path
 
 [`dynamic_regime_spanning_rigid_volume.json`](../core/examples/dynamic_regime_spanning_rigid_volume.json)
-starts IF97 water immediately below the saturated-vapor boundary, adds heat,
+starts HEOS water immediately below the saturated-vapor boundary, adds heat,
 and discharges through a hydraulic inertance to a regulated-pressure sink. A
 ten-second run reaches the vapor region while retaining mass and energy
 inventory equations:
@@ -65,7 +65,7 @@ inventory equations:
 ```
 
 The regression is intentionally small and CPU-bounded. It verifies the generic
-graph compiler, IF97 PH closure, heat-port energy term, hydraulic momentum
+graph compiler, HEOS PH closure, heat-port energy term, hydraulic momentum
 state, consistent initialization, and adaptive DAE integration together.
 
 [`dynamic_bidirectional_regime_spanning_rigid_volume.json`](../core/examples/dynamic_bidirectional_regime_spanning_rigid_volume.json)
@@ -89,10 +89,12 @@ model stratification, a resolved interface, nucleation hysteresis, metastable
 states, critical heat flux, dryout, or flow-regime switching. Those effects
 belong in specialized registered components and correlations.
 
-The bidirectional claim applies to the HEOS water backend. CoolProp IF97 snaps
-a narrow liquid-side PH band to the saturated-liquid state, which can make the
-inventory closure Jacobian singular at the liquid boundary. IF97 remains
-verified for the two-phase-to-vapor reference path and remains appropriate for
-standards-oriented steam-cycle work that does not require that crossing.
-Thermox reports the unsupported IF97 trajectory as a solver failure rather than
-loosening conservation tolerances or silently selecting a phase branch.
+The regime-crossing claim applies to the HEOS water backend. CoolProp IF97 does
+not expose analytic PH derivatives and can snap narrow saturation-boundary PH
+bands to a saturated state. That can make the homogeneous inventory closure
+Jacobian singular during either saturation-boundary crossing. IF97 remains
+appropriate and verified for standards-oriented steady steam-cycle work and
+for transient paths that stay away from the boundary; it is not currently a
+supported backend for this regime-crossing claim. Thermox reports such an IF97
+trajectory as a solver failure rather than loosening conservation tolerances,
+silently changing the property backend, or selecting a phase branch.

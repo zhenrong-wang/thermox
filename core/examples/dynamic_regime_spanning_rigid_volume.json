@@ -4,7 +4,7 @@
     "id": "dynamic_regime_spanning_rigid_volume",
     "media": [{
       "id": "water",
-      "backend": "water_steam_if97",
+      "backend": "coolprop_heos",
       "substance": "Water"
     }],
     "components": [{

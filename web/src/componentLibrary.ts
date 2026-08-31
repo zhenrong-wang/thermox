@@ -28,3 +28,22 @@ export function componentMatchesFilter(
     )
   )
 }
+
+export function componentCategories(
+  components: CatalogComponent[],
+): string[] {
+  return [...new Set(components.map((component) => component.category))]
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+}
+
+export function componentMatchesLibraryFilters(
+  component: CatalogComponent,
+  rawQuery: string,
+  category: string,
+): boolean {
+  return (
+    (category === 'all' || component.category === category) &&
+    componentMatchesFilter(component, rawQuery)
+  )
+}

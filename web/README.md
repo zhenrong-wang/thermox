@@ -13,7 +13,10 @@ The workspace currently provides:
 - draft component placement without prematurely requiring physical parameters, media, or maps;
 - per-component draft/incomplete/defined authoring states on the graph and definition workspace;
 - a persistent, searchable component library generated from `thermox.catalog/v14`, with
-  click-to-configure and drag-to-canvas instance creation;
+  equipment-category filtering, click-to-configure, and drag-to-canvas instance creation;
+- simultaneous topology authoring, physical-component library, and selection-driven instance
+  inspection, without mixing fluid/material/artifact definition resources into the equipment
+  palette;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;
 - typed project-artifact selectors for performance maps and other declared component resources;
