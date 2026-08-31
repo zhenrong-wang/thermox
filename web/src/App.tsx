@@ -52,6 +52,10 @@ import {
 import { initialTopologyDocument } from './topologyAuthoring'
 import { WorkflowNavigator } from './WorkflowNavigator'
 import {
+  withPlacedEntity,
+  type CanvasComponentPlacement,
+} from './topologyPresentation'
+import {
   buildWorkflowStages,
   type WorkspaceView,
 } from './workflow'
@@ -158,6 +162,8 @@ function App() {
   const [operationStatus, setOperationStatus] = useState('')
   const [newComponentType, setNewComponentType] =
     useState<CatalogComponent>()
+  const [newComponentPlacement, setNewComponentPlacement] =
+    useState<CanvasComponentPlacement>()
   const [editingComponent, setEditingComponent] =
     useState<ComponentDefinition>()
   const [editingConnection, setEditingConnection] =
@@ -465,6 +471,8 @@ function App() {
     setAddingPerformanceMap(false)
     setRevisingPerformanceMap(undefined)
     setSelectedRevisionId('')
+    setNewComponentType(undefined)
+    setNewComponentPlacement(undefined)
     setTopology(undefined)
     setTopologyPresentation(undefined)
     setLayoutSaveState('idle')
@@ -1060,7 +1068,7 @@ function App() {
   }
 
   async function addComponent(component: ComponentDefinition) {
-    await publishEdits(
+    const child = await publishEdits(
       [
         {
           action: 'upsert',
@@ -1071,7 +1079,37 @@ function App() {
       ],
       `Added ${component.id}.`,
     )
+    if (newComponentPlacement && selectedProjectId) {
+      const nextPresentation = withPlacedEntity(
+        newComponentPlacement,
+        component.id,
+      )
+      setTopologyPresentation(nextPresentation)
+      setLayoutSaveState('saving')
+      try {
+        await api.putTopologyPresentation(
+          selectedProjectId,
+          child.model_revision_id,
+          nextPresentation,
+        )
+        setLayoutSaveState('saved')
+      } catch (reason) {
+        setLayoutSaveState('error')
+        setOperationError(
+          `The component was added, but its canvas position could not be saved: ${errorMessage(reason)}`,
+        )
+      }
+    }
     setNewComponentType(undefined)
+    setNewComponentPlacement(undefined)
+  }
+
+  function beginComponentDraft(
+    component: CatalogComponent,
+    placement?: CanvasComponentPlacement,
+  ) {
+    setNewComponentType(component)
+    setNewComponentPlacement(placement)
   }
 
   async function addMedium(medium: MediumDefinition) {
@@ -1921,6 +1959,7 @@ function App() {
         ],
         `Removed ${component.id}.`,
       )
+      setSelection(undefined)
     } catch {
       // publishEdits exposes the service diagnostic in the workspace.
     }
@@ -1944,6 +1983,7 @@ function App() {
         }],
         `Removed ${assembly.id}.`,
       )
+      setSelection(undefined)
     } catch {
       // publishEdits exposes the service diagnostic in the workspace.
     }
@@ -2042,6 +2082,7 @@ function App() {
         ],
         `Removed connection ${connection.id}.`,
       )
+      setSelection(undefined)
     } catch {
       // publishEdits exposes the service diagnostic in the workspace.
     }
@@ -2075,6 +2116,28 @@ function App() {
     } catch (reason) {
       setOperationError(errorMessage(reason))
     }
+  }
+
+  function deleteGraphSelection(candidate: GraphSelection) {
+    if (!topology) return
+    if (candidate.type === 'component') {
+      const component = topology.model.components.find(
+        (item) => item.id === candidate.id,
+      )
+      if (component) void removeComponent(component)
+      return
+    }
+    if (candidate.type === 'assembly') {
+      const assembly = (topology.model.assemblies ?? []).find(
+        (item) => item.id === candidate.id,
+      )
+      if (assembly) void removeAssembly(assembly)
+      return
+    }
+    const connection = topology.model.connections.find(
+      (item) => item.id === candidate.id,
+    )
+    if (connection) void removeConnection(connection)
   }
 
   function updateTopologyPresentation(next: TopologyPresentation) {
@@ -2321,6 +2384,7 @@ function App() {
                   revisionId={selectedRevisionId}
                   publishing={publishing}
                   componentReadiness={physicalReadiness}
+                  selection={selection}
                   presentation={topologyPresentation}
                   onPresentationChange={updateTopologyPresentation}
                   onCreateTopology={
@@ -2332,10 +2396,11 @@ function App() {
                   }
                   onConnect={connectPorts}
                   onSelect={setSelection}
-                  onAddComponent={(component) => {
+                  onAddComponent={(component, placement) => {
                     setSelection(undefined)
-                    setNewComponentType(component)
+                    beginComponentDraft(component, placement)
                   }}
+                  onDeleteSelection={deleteGraphSelection}
                 />
               </div>
               <aside
@@ -2533,7 +2598,7 @@ function App() {
               components={effectiveCatalog?.components ?? []}
               disabled={!topology || publishing}
               catalogFingerprint={effectiveCatalog?.fingerprint ?? ''}
-              onChoose={setNewComponentType}
+              onChoose={(component) => beginComponentDraft(component)}
               onGroupComponents={() => setAddingAssembly(true)}
               assemblyTemplates={assemblyTemplates}
               onInstantiateAssembly={setInstantiatingAssemblyTemplate}
@@ -2631,7 +2696,10 @@ function App() {
           intent="draft"
           topology={topology}
           artifactRevisions={artifactRevisions}
-          onCancel={() => setNewComponentType(undefined)}
+          onCancel={() => {
+            setNewComponentType(undefined)
+            setNewComponentPlacement(undefined)
+          }}
           onSubmit={addComponent}
         />
       )}

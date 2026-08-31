@@ -7,10 +7,13 @@ import {
   ReactFlow,
   type Connection,
   type Edge,
+  type FinalConnectionState,
   type Node,
+  type ReactFlowInstance,
   type Viewport,
   type XYPosition,
 } from '@xyflow/react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import '@xyflow/react/dist/style.css'
 import { COMPONENT_DRAG_TYPE } from './componentLibrary'
 import { assemblyPorts } from './assemblyAuthoring'
@@ -24,6 +27,10 @@ import type {
 } from './types'
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
 import { connectionIntentIssue } from './graphAuthoring'
+import {
+  presentationFromNodes,
+  type CanvasComponentPlacement,
+} from './topologyPresentation'
 
 interface TopologyCanvasProps {
   topology?: TopologyDocument
@@ -32,7 +39,11 @@ interface TopologyCanvasProps {
   publishing: boolean
   onConnect: (connection: Connection) => Promise<void>
   onSelect: (selection?: GraphSelection) => void
-  onAddComponent?: (component: CatalogComponent) => void
+  onAddComponent?: (
+    component: CatalogComponent,
+    placement?: CanvasComponentPlacement,
+  ) => void
+  onDeleteSelection?: (selection: GraphSelection) => void
   readOnly?: boolean
   resultValues?: Record<string, ResultNodeValue[]>
   selection?: GraphSelection
@@ -40,6 +51,43 @@ interface TopologyCanvasProps {
   componentReadiness?: Record<string, ComponentDefinitionReadiness>
   presentation?: TopologyPresentation
   onPresentationChange?: (presentation: TopologyPresentation) => void
+}
+
+const defaultViewport: Viewport = { x: 0, y: 0, zoom: 1 }
+
+export function centeredComponentPosition(position: XYPosition): XYPosition {
+  return { x: position.x - 125, y: position.y - 59 }
+}
+
+export function finalConnectionIntent(
+  state: FinalConnectionState,
+): Connection | undefined {
+  if (!state.fromHandle || !state.fromNode || !state.toHandle || !state.toNode) {
+    return undefined
+  }
+  if (state.fromHandle.type === 'source') {
+    return {
+      source: state.fromNode.id,
+      sourceHandle: state.fromHandle.id ?? null,
+      target: state.toNode.id,
+      targetHandle: state.toHandle.id ?? null,
+    }
+  }
+  return {
+    source: state.toNode.id,
+    sourceHandle: state.toHandle.id ?? null,
+    target: state.fromNode.id,
+    targetHandle: state.fromHandle.id ?? null,
+  }
+}
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  )
 }
 
 function endpoint(value: string): [string, string] {
@@ -129,6 +177,7 @@ export function TopologyCanvas({
   onConnect,
   onSelect,
   onAddComponent,
+  onDeleteSelection,
   readOnly = false,
   resultValues = {},
   selection,
@@ -137,6 +186,11 @@ export function TopologyCanvas({
   presentation,
   onPresentationChange,
 }: TopologyCanvasProps) {
+  const flow = useRef<ReactFlowInstance<Node<TopologyNodeData>, Edge> | null>(
+    null,
+  )
+  const [connectionFeedback, setConnectionFeedback] = useState('')
+
   if (!topology) {
     return (
       <div className="empty-canvas">
@@ -196,101 +250,167 @@ export function TopologyCanvas({
     positions: ReadonlyMap<string, XYPosition>,
     viewport: Viewport,
   ) => {
-    onPresentationChange?.({
-      schema_version: 'thermox.topology_presentation/v1',
-      nodes: nodes.map((node) => {
-        const position = positions.get(node.id) ?? node.position
-        return {
-          entity_id: node.id,
-          x: position.x,
-          y: position.y,
-        }
-      }),
-      viewport,
-    })
+    onPresentationChange?.(
+      presentationFromNodes(
+        nodes.map((node) => {
+          const position = positions.get(node.id) ?? node.position
+          return { ...node, position }
+        }),
+        viewport,
+      ),
+    )
+  }
+
+  const handleKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isTextEditingTarget(event.target)) return
+    if (event.key === 'Escape') {
+      onSelect(undefined)
+      setConnectionFeedback('')
+      return
+    }
+    if (
+      (event.key === 'Delete' || event.key === 'Backspace') &&
+      selection &&
+      onDeleteSelection &&
+      !readOnly &&
+      !publishing &&
+      !event.repeat
+    ) {
+      event.preventDefault()
+      onDeleteSelection(selection)
+    }
   }
 
   return (
-    <ReactFlow
-      key={`${revisionId}:${presentation ? 'persisted' : 'automatic'}`}
-      {...elementProps}
-      nodeTypes={nodeTypes}
-      fitView={!presentation}
-      fitViewOptions={{ padding: 0.22 }}
-      defaultViewport={presentation?.viewport}
-      nodesDraggable={!readOnly}
-      nodesConnectable={!readOnly && !publishing}
-      isValidConnection={validConnection}
-      onConnect={(connection) => {
-        if (!readOnly) void onConnect(connection)
-      }}
-      onNodeDragStop={(_, node) => {
-        if (!readOnly) {
-          const positions = new Map(presentedPositions)
-          positions.set(node.id, node.position)
-          publishPresentation(
-            positions,
-            presentation?.viewport ?? { x: 0, y: 0, zoom: 1 },
-          )
-        }
-      }}
-      onMoveEnd={(_, viewport) => {
-        if (!readOnly) publishPresentation(presentedPositions, viewport)
-      }}
-      onNodeClick={(_, node) =>
-        onSelect({
-          type: (node.data as TopologyNodeData).assembly
-            ? 'assembly'
-            : 'component',
-          id: node.id,
-        })
-      }
-      onEdgeClick={(_, edge) =>
-        onSelect({ type: 'connection', id: edge.id })
-      }
-      onPaneClick={() => onSelect(undefined)}
-      onDragOver={(event) => {
-        if (
-          onAddComponent &&
-          !readOnly &&
-          !publishing &&
-          event.dataTransfer.types.includes(COMPONENT_DRAG_TYPE)
-        ) {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'copy'
-        }
-      }}
-      onDrop={(event) => {
-        if (!onAddComponent || readOnly || publishing) return
-        const kind = event.dataTransfer.getData(COMPONENT_DRAG_TYPE)
-        const component = catalogByKind.get(kind)
-        if (!component) return
-        event.preventDefault()
-        onAddComponent(component)
-      }}
-      elementsSelectable
-      minZoom={0.2}
-      maxZoom={2}
-      proOptions={{ hideAttribution: true }}
+    <div
+      className="topology-flow-shell"
+      tabIndex={0}
+      aria-label="Thermal system topology canvas"
+      onKeyDown={handleKeyboard}
     >
-      {onAddComponent && !readOnly && (
-        <Panel position="top-left" className="canvas-authoring-hint">
-          Drag a registered component here to add it
-        </Panel>
-      )}
-      <Background
-        color="#cbd4dd"
-        gap={22}
-        size={1}
-        variant={BackgroundVariant.Dots}
-      />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor="#183d5d"
-        maskColor="rgba(239, 244, 247, 0.72)"
-      />
-      <Controls showInteractive={false} />
-    </ReactFlow>
+      <ReactFlow
+        key={`${revisionId}:${presentation ? 'persisted' : 'automatic'}`}
+        {...elementProps}
+        nodeTypes={nodeTypes}
+        fitView={!presentation}
+        fitViewOptions={{ padding: 0.22 }}
+        defaultViewport={presentation?.viewport}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly && !publishing}
+        deleteKeyCode={null}
+        isValidConnection={validConnection}
+        onInit={(instance) => {
+          flow.current = instance
+        }}
+        onConnectStart={() => setConnectionFeedback('')}
+        onConnect={(connection) => {
+          setConnectionFeedback('')
+          if (!readOnly) void onConnect(connection)
+        }}
+        onConnectEnd={(_, state) => {
+          if (readOnly || state.isValid) return
+          const intent = finalConnectionIntent(state)
+          setConnectionFeedback(
+            intent
+              ? connectionIntentIssue(intent, topology, catalog) ??
+                  'This connection is not permitted.'
+              : 'Drop the connection on a compatible registered port.',
+          )
+        }}
+        onNodeDragStop={(_, node) => {
+          if (!readOnly) {
+            const positions = new Map(presentedPositions)
+            positions.set(node.id, node.position)
+            publishPresentation(
+              positions,
+              flow.current?.getViewport() ??
+                presentation?.viewport ??
+                defaultViewport,
+            )
+          }
+        }}
+        onMoveEnd={(_, viewport) => {
+          if (!readOnly) publishPresentation(presentedPositions, viewport)
+        }}
+        onNodeClick={(_, node) =>
+          onSelect({
+            type: (node.data as TopologyNodeData).assembly
+              ? 'assembly'
+              : 'component',
+            id: node.id,
+          })
+        }
+        onEdgeClick={(_, edge) =>
+          onSelect({ type: 'connection', id: edge.id })
+        }
+        onPaneClick={() => {
+          onSelect(undefined)
+          setConnectionFeedback('')
+        }}
+        onDragOver={(event) => {
+          if (
+            onAddComponent &&
+            !readOnly &&
+            !publishing &&
+            event.dataTransfer.types.includes(COMPONENT_DRAG_TYPE)
+          ) {
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+          }
+        }}
+        onDrop={(event) => {
+          if (!onAddComponent || readOnly || publishing) return
+          const kind = event.dataTransfer.getData(COMPONENT_DRAG_TYPE)
+          const component = catalogByKind.get(kind)
+          if (!component) return
+          event.preventDefault()
+          const instance = flow.current
+          const position = centeredComponentPosition(
+            instance?.screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            }) ?? { x: event.clientX, y: event.clientY },
+          )
+          onAddComponent(component, {
+            position,
+            presentation: presentationFromNodes(
+              instance?.getNodes() ?? nodes,
+              instance?.getViewport() ??
+                presentation?.viewport ??
+                defaultViewport,
+            ),
+          })
+        }}
+        elementsSelectable
+        minZoom={0.2}
+        maxZoom={2}
+        proOptions={{ hideAttribution: true }}
+      >
+        {onAddComponent && !readOnly && (
+          <Panel position="top-left" className="canvas-authoring-hint">
+            Drag a component here · Delete removes the selection
+          </Panel>
+        )}
+        {connectionFeedback && (
+          <Panel position="top-center" className="canvas-connection-feedback">
+            <strong>Connection not created</strong>
+            <span>{connectionFeedback}</span>
+          </Panel>
+        )}
+        <Background
+          color="#cbd4dd"
+          gap={22}
+          size={1}
+          variant={BackgroundVariant.Dots}
+        />
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor="#183d5d"
+          maskColor="rgba(239, 244, 247, 0.72)"
+        />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
   )
 }

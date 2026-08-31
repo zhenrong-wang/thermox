@@ -45,6 +45,19 @@ The intended instance workflow is:
 5. connect compatible registered ports and ask the service to publish and validate the child
    revision.
 
+Dropping an equipment model records the pointer position in flow coordinates before its instance
+form opens. After the service publishes the new physical-model revision, the client stores that
+position against the returned revision through the presentation endpoint. Failed component
+publication therefore cannot leave a phantom canvas node, while a presentation-storage failure
+cannot roll back or disguise a successfully published physical revision.
+
+Connection gestures are checked against the catalog direction, domain, duplicate, and capacity
+rules while they are drawn. Rejected gestures show the concrete preflight reason on the canvas;
+accepted gestures still require authoritative service validation. Delete and Backspace are mapped
+to the same confirmed component, assembly, or connection removal commands as the inspector. React
+Flow's local element deletion is disabled, so keyboard interaction can never mutate only the
+browser copy or bypass immutable revision publication. Escape clears canvas selection.
+
 ## Physical templates and calculation models
 
 The catalog keeps the engineer-facing physical identity separate from the executable model kind.

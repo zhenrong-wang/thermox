@@ -18,7 +18,11 @@ The workspace currently provides:
   inspection, without mixing fluid/material/artifact definition resources into the equipment
   palette;
 - assembly-aware connection preflight for port direction, connector domain, duplicate links, and
-  registered connection capacity, with authored node positions retained across revision refreshes;
+  registered connection capacity, with rejected-gesture diagnostics shown on the canvas;
+- pointer-accurate drag placement persisted only after the component's immutable physical revision
+  is accepted, with authored node positions retained across revision refreshes;
+- revision-safe Delete/Backspace removal for selected components, assemblies, and connections,
+  using the same confirmation and service commands as the inspector;
 - service-persisted, per-user node layout and viewport metadata that remains outside immutable
   physical topology and numerical provenance;
 - selection-level definition diagnostics in the topology inspector, while final calculatability

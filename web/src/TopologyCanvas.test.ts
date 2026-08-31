@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { layoutNodes } from './TopologyCanvas'
+import type { FinalConnectionState } from '@xyflow/react'
+import {
+  centeredComponentPosition,
+  finalConnectionIntent,
+  layoutNodes,
+} from './TopologyCanvas'
+import { presentationFromNodes } from './topologyPresentation'
 import type { CatalogComponent, TopologyDocument } from './types'
 
 const componentType: CatalogComponent = {
@@ -46,5 +52,38 @@ describe('topology canvas layout', () => {
 
     expect(nodes).toHaveLength(1)
     expect(nodes[0].position).toEqual(position)
+  })
+
+  it('centers a dragged component on the pointer and snapshots its viewport', () => {
+    expect(centeredComponentPosition({ x: 500, y: 300 })).toEqual({
+      x: 375,
+      y: 241,
+    })
+    expect(
+      presentationFromNodes(
+        [{ id: 'pump', position: { x: 375, y: 241 } }],
+        { x: 12, y: 18, zoom: 0.8 },
+      ),
+    ).toEqual({
+      schema_version: 'thermox.topology_presentation/v1',
+      nodes: [{ entity_id: 'pump', x: 375, y: 241 }],
+      viewport: { x: 12, y: 18, zoom: 0.8 },
+    })
+  })
+
+  it('normalizes a connection drawn from either handle direction', () => {
+    const state = {
+      fromHandle: { type: 'target', id: 'inlet' },
+      fromNode: { id: 'sink' },
+      toHandle: { type: 'source', id: 'outlet' },
+      toNode: { id: 'source' },
+    } as unknown as FinalConnectionState
+
+    expect(finalConnectionIntent(state)).toEqual({
+      source: 'source',
+      sourceHandle: 'outlet',
+      target: 'sink',
+      targetHandle: 'inlet',
+    })
   })
 })
