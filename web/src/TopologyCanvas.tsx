@@ -28,6 +28,7 @@ import type {
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
 import { connectionIntentIssue } from './graphAuthoring'
 import { connectionLineStyle, topologyDomainColor } from './topologyVisuals'
+import { autoLayoutTopology } from './topologyAutoLayout'
 import {
   presentationFromNodes,
   type CanvasComponentPlacement,
@@ -346,6 +347,23 @@ export function TopologyCanvas({
     }
   }
 
+  const arrangeFlow = () => {
+    const instance = flow.current
+    if (!instance) return
+    const arranged = autoLayoutTopology(topology, catalogByKind)
+    const positions = new Map(
+      arranged.map((node) => [node.entity_id, { x: node.x, y: node.y }]),
+    )
+    instance.setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        position: positions.get(node.id) ?? node.position,
+      })),
+    )
+    publishPresentation(positions, instance.getViewport())
+    window.requestAnimationFrame(() => void instance.fitView({ padding: 0.22 }))
+  }
+
   return (
     <div
       className="topology-flow-shell"
@@ -453,7 +471,10 @@ export function TopologyCanvas({
       >
         {onAddComponent && !readOnly && (
           <Panel position="top-left" className="canvas-authoring-hint">
-            Drag a component here · Delete removes the selection
+            <span>Drag a component here · Delete removes the selection</span>
+            <button type="button" disabled={publishing} onClick={arrangeFlow}>
+              Arrange flow
+            </button>
           </Panel>
         )}
         {connectionFeedback && (

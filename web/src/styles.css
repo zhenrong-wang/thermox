@@ -1235,13 +1235,31 @@ code {
 }
 
 .canvas-authoring-hint {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
   padding: 7px 10px !important;
   border: 1px dashed #76aab9 !important;
   border-radius: 4px;
   background: rgba(247, 251, 252, 0.92) !important;
   color: #47758a !important;
   font-size: 9px;
-  pointer-events: none;
+}
+
+.canvas-authoring-hint button {
+  padding: 4px 7px;
+  border: 1px solid #94bac7;
+  border-radius: 3px;
+  background: #fff;
+  color: #386b80;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.canvas-authoring-hint button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .canvas-connection-feedback {
