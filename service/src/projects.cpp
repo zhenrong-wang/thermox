@@ -12,6 +12,7 @@
 #include "thermox/platform/regime_map.hpp"
 
 #include <openssl/evp.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -153,6 +154,104 @@ std::string checksum(std::string_view value) {
                 << static_cast<unsigned int>(digest[index]);
     }
     return encoded.str();
+}
+
+std::string canonical_topology_presentation(
+    const std::string& payload,
+    const platform::ModelDocument& model) {
+    if (payload.empty() || payload.size() > 2U * 1024U * 1024U) {
+        throw ProjectRequestError(
+            "topology presentation must contain 1 byte to 2 MiB");
+    }
+    nlohmann::json value;
+    try {
+        value = nlohmann::json::parse(payload);
+    } catch (const std::exception& error) {
+        throw ProjectRequestError(
+            std::string("invalid topology presentation JSON: ") +
+            error.what());
+    }
+    if (!value.is_object()) {
+        throw ProjectRequestError(
+            "topology presentation must be a JSON object");
+    }
+    const std::set<std::string> root_fields = {
+        "schema_version", "nodes", "viewport"};
+    for (const auto& [key, unused] : value.items()) {
+        (void)unused;
+        if (!root_fields.contains(key)) {
+            throw ProjectRequestError(
+                "unknown topology presentation field: " + key);
+        }
+    }
+    if (value.value("schema_version", std::string{}) !=
+        topology_presentation_schema_v1) {
+        throw ProjectRequestError(
+            "unsupported topology presentation schema_version");
+    }
+    if (!value.contains("nodes") || !value["nodes"].is_array() ||
+        value["nodes"].size() > 10000U) {
+        throw ProjectRequestError(
+            "topology presentation nodes must be an array of at most "
+            "10000 entries");
+    }
+    std::set<std::string> entity_ids;
+    for (const auto& component : model.components) {
+        entity_ids.insert(component.id);
+    }
+    for (const auto& assembly : model.assemblies) {
+        entity_ids.insert(assembly.id);
+    }
+    std::set<std::string> positioned;
+    for (const auto& node : value["nodes"]) {
+        if (!node.is_object() || node.size() != 3U ||
+            !node.contains("entity_id") || !node["entity_id"].is_string() ||
+            !node.contains("x") || !node["x"].is_number() ||
+            !node.contains("y") || !node["y"].is_number()) {
+            throw ProjectRequestError(
+                "each topology presentation node requires entity_id, x, "
+                "and y");
+        }
+        const auto entity_id = node["entity_id"].get<std::string>();
+        const double x = node["x"].get<double>();
+        const double y = node["y"].get<double>();
+        if (!entity_ids.contains(entity_id)) {
+            throw ProjectRequestError(
+                "topology presentation references unknown entity: " +
+                entity_id);
+        }
+        if (!positioned.insert(entity_id).second) {
+            throw ProjectRequestError(
+                "topology presentation repeats entity: " + entity_id);
+        }
+        if (!std::isfinite(x) || !std::isfinite(y) ||
+            std::abs(x) > 1.0e7 || std::abs(y) > 1.0e7) {
+            throw ProjectRequestError(
+                "topology presentation node coordinates are out of range");
+        }
+    }
+    if (!value.contains("viewport") || !value["viewport"].is_object()) {
+        throw ProjectRequestError(
+            "topology presentation requires a viewport object");
+    }
+    const auto& viewport = value["viewport"];
+    if (viewport.size() != 3U ||
+        !viewport.contains("x") || !viewport["x"].is_number() ||
+        !viewport.contains("y") || !viewport["y"].is_number() ||
+        !viewport.contains("zoom") || !viewport["zoom"].is_number()) {
+        throw ProjectRequestError(
+            "topology presentation viewport requires x, y, and zoom");
+    }
+    const double x = viewport["x"].get<double>();
+    const double y = viewport["y"].get<double>();
+    const double zoom = viewport["zoom"].get<double>();
+    if (!std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(zoom) || std::abs(x) > 1.0e7 ||
+        std::abs(y) > 1.0e7 || zoom < 0.05 || zoom > 10.0) {
+        throw ProjectRequestError(
+            "topology presentation viewport is out of range");
+    }
+    return value.dump();
 }
 
 std::string run_mode(const std::string& case_mode) {
@@ -731,6 +830,55 @@ ProjectService::list_model_revisions(
     }
     return repository_->list_model_revisions(
         identity.team_id, project_id);
+}
+
+TopologyPresentationRecord
+ProjectService::put_topology_presentation(
+    const PutTopologyPresentationRequest& request) const {
+    require_identity(request.identity);
+    if (request.project_id.empty() || request.model_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and model revision IDs must not be empty");
+    }
+    const auto revision = repository_->get_model_revision(
+        request.identity.team_id,
+        request.project_id,
+        request.model_revision_id);
+    if (!revision) {
+        throw ProjectStateError("model revision was not found");
+    }
+    platform::ModelDocument model;
+    try {
+        model = platform::parse_topology_document_text(
+            revision->canonical_model_json, units_);
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string("persisted model revision is invalid: ") +
+            error.what());
+    }
+    const auto canonical = canonical_topology_presentation(
+        request.presentation_json, model);
+    return repository_->upsert_topology_presentation(
+        request.identity.team_id,
+        request.identity.user_id,
+        request.project_id,
+        request.model_revision_id,
+        canonical);
+}
+
+std::optional<TopologyPresentationRecord>
+ProjectService::get_topology_presentation(
+    const IdentityContext& identity,
+    const std::string& project_id) const {
+    require_identity(identity);
+    if (project_id.empty()) {
+        throw ProjectRequestError("project ID must not be empty");
+    }
+    if (!repository_->get_project(identity.team_id, project_id)) {
+        return std::nullopt;
+    }
+    return repository_->get_topology_presentation(
+        identity.team_id, identity.user_id, project_id);
 }
 
 ModelRevisionRecord ProjectService::apply_graph_edits(

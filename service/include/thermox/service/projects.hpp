@@ -41,6 +41,8 @@ inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
 inline constexpr char project_component_catalog_schema_v2[] =
     "thermox.project_component_catalog/v2";
+inline constexpr char topology_presentation_schema_v1[] =
+    "thermox.topology_presentation/v1";
 inline constexpr char assembly_template_artifact_type[] =
     "thermox.assembly_template";
 inline constexpr char assembly_template_schema_v1[] =
@@ -70,6 +72,19 @@ struct ModelRevisionRecord {
     std::string checksum;
     std::string created_by_user_id;
     std::chrono::system_clock::time_point created_at;
+};
+
+// Mutable, per-user authoring presentation. This is deliberately outside the
+// immutable physical model and therefore never participates in model checksums
+// or numerical provenance.
+struct TopologyPresentationRecord {
+    std::string schema_version{topology_presentation_schema_v1};
+    std::string project_id;
+    std::string team_id;
+    std::string user_id;
+    std::string model_revision_id;
+    std::string canonical_presentation_json;
+    std::chrono::system_clock::time_point updated_at;
 };
 
 struct CaseRevisionRecord {
@@ -298,6 +313,19 @@ public:
         const std::string& team_id,
         const std::string& project_id) const = 0;
 
+    virtual TopologyPresentationRecord
+    upsert_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id,
+        const std::string& model_revision_id,
+        const std::string& canonical_presentation_json) = 0;
+    virtual std::optional<TopologyPresentationRecord>
+    get_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id) const = 0;
+
     virtual CaseRevisionRecord create_case_revision(
         const std::string& team_id,
         const std::string& created_by_user_id,
@@ -470,6 +498,13 @@ struct CreateModelRevisionRequest {
     std::string project_id;
     std::string parent_model_revision_id;
     std::string model_json;
+};
+
+struct PutTopologyPresentationRequest {
+    IdentityContext identity;
+    std::string project_id;
+    std::string model_revision_id;
+    std::string presentation_json;
 };
 
 enum class GraphEntityType {
@@ -729,6 +764,13 @@ public:
     list_model_revisions(
         const IdentityContext& identity,
         const std::string& project_id) const;
+    [[nodiscard]] TopologyPresentationRecord
+    put_topology_presentation(
+        const PutTopologyPresentationRequest& request) const;
+    [[nodiscard]] std::optional<TopologyPresentationRecord>
+    get_topology_presentation(
+        const IdentityContext& identity,
+        const std::string& project_id) const;
     [[nodiscard]] ModelRevisionRecord apply_graph_edits(
         const ApplyGraphEditsRequest& request) const;
     [[nodiscard]] CaseRevisionRecord create_case_revision(
@@ -901,6 +943,8 @@ std::string serialize_model_revision_json(
     bool include_model = true);
 std::string serialize_model_revisions_json(
     const std::vector<ModelRevisionRecord>& revisions);
+std::string serialize_topology_presentation_json(
+    const TopologyPresentationRecord& presentation);
 std::string serialize_case_revision_json(
     const CaseRevisionRecord& revision,
     bool include_case = true);

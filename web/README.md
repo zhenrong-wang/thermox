@@ -19,6 +19,8 @@ The workspace currently provides:
   palette;
 - assembly-aware connection preflight for port direction, connector domain, duplicate links, and
   registered connection capacity, with authored node positions retained across revision refreshes;
+- service-persisted, per-user node layout and viewport metadata that remains outside immutable
+  physical topology and numerical provenance;
 - selection-level definition diagnostics in the topology inspector, while final calculatability
   remains owned by the service compiler;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;

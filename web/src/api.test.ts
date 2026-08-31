@@ -6,10 +6,55 @@ import type {
   ExpressionComponentDefinition,
   PerformanceMapArtifactDefinition,
   TopologyDocument,
+  TopologyPresentation,
 } from './types'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('topology presentation API', () => {
+  it('loads an optional view and persists typed layout metadata with PUT', async () => {
+    const presentation: TopologyPresentation = {
+      schema_version: 'thermox.topology_presentation/v1',
+      nodes: [{ entity_id: 'compressor', x: 120, y: 80 }],
+      viewport: { x: 10, y: 20, zoom: 1.1 },
+    }
+    const record = {
+      schema_version: 'thermox.topology_presentation/v1',
+      project_id: 'project/a',
+      team_id: 'team-a',
+      user_id: 'user-a',
+      model_revision_id: 'model-r2',
+      updated_at_epoch_ms: 123,
+      presentation,
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(record), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.topologyPresentation('project/a')).resolves.toBeUndefined()
+    await expect(
+      api.putTopologyPresentation('project/a', 'model-r2', presentation),
+    ).resolves.toEqual(record)
+
+    expect(fetchMock.mock.calls[1]).toEqual([
+      '/api/v1/projects/project%2Fa/topology-presentation',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          schema_version: 'thermox.topology_presentation.put/v1',
+          model_revision_id: 'model-r2',
+          presentation,
+        }),
+      }),
+    ])
+  })
 })
 
 describe('assembly template authoring API', () => {

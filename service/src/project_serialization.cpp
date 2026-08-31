@@ -1096,6 +1096,26 @@ std::string serialize_model_revisions_json(
     return out.str();
 }
 
+std::string serialize_topology_presentation_json(
+    const TopologyPresentationRecord& presentation) {
+    std::ostringstream out;
+    out << "{\"schema_version\": ";
+    json_string(out, presentation.schema_version);
+    out << ", \"project_id\": ";
+    json_string(out, presentation.project_id);
+    out << ", \"team_id\": ";
+    json_string(out, presentation.team_id);
+    out << ", \"user_id\": ";
+    json_string(out, presentation.user_id);
+    out << ", \"model_revision_id\": ";
+    json_string(out, presentation.model_revision_id);
+    out << ", \"updated_at_epoch_ms\": "
+        << epoch_milliseconds(presentation.updated_at);
+    out << ", \"presentation\": "
+        << presentation.canonical_presentation_json << "}\n";
+    return out.str();
+}
+
 std::string serialize_case_revision_json(
     const CaseRevisionRecord& revision,
     bool include_case) {

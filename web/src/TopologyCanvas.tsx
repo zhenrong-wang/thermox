@@ -8,16 +8,20 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type Viewport,
   type XYPosition,
 } from '@xyflow/react'
-import { useRef } from 'react'
 import '@xyflow/react/dist/style.css'
 import { COMPONENT_DRAG_TYPE } from './componentLibrary'
 import { assemblyPorts } from './assemblyAuthoring'
 import { TopologyNode, type TopologyNodeData } from './TopologyNode'
 import type { GraphSelection } from './InspectorPanel'
 import type { ResultNodeValue } from './resultPresentation'
-import type { CatalogComponent, TopologyDocument } from './types'
+import type {
+  CatalogComponent,
+  TopologyDocument,
+  TopologyPresentation,
+} from './types'
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
 import { connectionIntentIssue } from './graphAuthoring'
 
@@ -34,6 +38,8 @@ interface TopologyCanvasProps {
   selection?: GraphSelection
   onCreateTopology?: () => void
   componentReadiness?: Record<string, ComponentDefinitionReadiness>
+  presentation?: TopologyPresentation
+  onPresentationChange?: (presentation: TopologyPresentation) => void
 }
 
 function endpoint(value: string): [string, string] {
@@ -128,8 +134,9 @@ export function TopologyCanvas({
   selection,
   onCreateTopology,
   componentReadiness = {},
+  presentation,
+  onPresentationChange,
 }: TopologyCanvasProps) {
-  const savedPositions = useRef(new Map<string, XYPosition>())
   if (!topology) {
     return (
       <div className="empty-canvas">
@@ -155,13 +162,19 @@ export function TopologyCanvas({
   }
 
   const catalogByKind = new Map(catalog.map((item) => [item.kind, item]))
+  const presentedPositions = new Map<string, XYPosition>(
+    (presentation?.nodes ?? []).map((node) => [
+      node.entity_id,
+      { x: node.x, y: node.y },
+    ]),
+  )
   const nodes = layoutNodes(
     topology,
     catalogByKind,
     resultValues,
     selection,
     componentReadiness,
-    savedPositions.current,
+    presentedPositions,
   )
   const edges = layoutEdges(topology, selection)
   const elementProps = readOnly
@@ -179,14 +192,32 @@ export function TopologyCanvas({
       catalog,
     )
   }
+  const publishPresentation = (
+    positions: ReadonlyMap<string, XYPosition>,
+    viewport: Viewport,
+  ) => {
+    onPresentationChange?.({
+      schema_version: 'thermox.topology_presentation/v1',
+      nodes: nodes.map((node) => {
+        const position = positions.get(node.id) ?? node.position
+        return {
+          entity_id: node.id,
+          x: position.x,
+          y: position.y,
+        }
+      }),
+      viewport,
+    })
+  }
 
   return (
     <ReactFlow
-      key={revisionId}
+      key={`${revisionId}:${presentation ? 'persisted' : 'automatic'}`}
       {...elementProps}
       nodeTypes={nodeTypes}
-      fitView
+      fitView={!presentation}
       fitViewOptions={{ padding: 0.22 }}
+      defaultViewport={presentation?.viewport}
       nodesDraggable={!readOnly}
       nodesConnectable={!readOnly && !publishing}
       isValidConnection={validConnection}
@@ -194,7 +225,17 @@ export function TopologyCanvas({
         if (!readOnly) void onConnect(connection)
       }}
       onNodeDragStop={(_, node) => {
-        if (!readOnly) savedPositions.current.set(node.id, node.position)
+        if (!readOnly) {
+          const positions = new Map(presentedPositions)
+          positions.set(node.id, node.position)
+          publishPresentation(
+            positions,
+            presentation?.viewport ?? { x: 0, y: 0, zoom: 1 },
+          )
+        }
+      }}
+      onMoveEnd={(_, viewport) => {
+        if (!readOnly) publishPresentation(presentedPositions, viewport)
       }}
       onNodeClick={(_, node) =>
         onSelect({

@@ -18,8 +18,12 @@ This gives clients an explicit optimistic-concurrency boundary:
 - concurrent editors can detect that they started from different revision IDs;
 - undo, branching, comparison, and audit history do not require mutable topology rows.
 
-Canvas layout and other presentation metadata do not belong in the physical topology and will use
-a separate document boundary.
+Canvas layout and viewport metadata do not belong in the physical topology. They use the separate
+`thermox.topology_presentation/v1` document boundary and never participate in model checksums,
+compiler input, or numerical provenance. The service stores one mutable presentation per
+`(team_id, project_id, user_id)`, referencing the model revision against which its entity IDs were
+validated. A topology revision remains immutable while each engineer can arrange the same system
+without overwriting another engineer's workspace.
 
 ## Canvas responsibility
 
@@ -27,8 +31,9 @@ The canvas is a typed topology editor, not a general-purpose drawing document. R
 selection, viewport, node, edge, and typed-handle interaction. Thermox does not embed draw.io or
 adopt its diagram schema because the authoritative entities are registered components, connector
 contracts, media/material definitions, engineering artifacts, and immutable revisions—not
-arbitrary shapes and lines. A future layout document may add groups, labels, and annotations
-without changing the physical model.
+arbitrary shapes and lines. The current presentation document contains node coordinates and a
+viewport; later versions may add groups, labels, and annotations without changing the physical
+model.
 
 The intended instance workflow is:
 

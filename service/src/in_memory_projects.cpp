@@ -153,6 +153,49 @@ public:
         return records;
     }
 
+    TopologyPresentationRecord upsert_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id,
+        const std::string& model_revision_id,
+        const std::string& canonical_presentation_json) override {
+        std::lock_guard lock(mutex_);
+        const auto project = projects_.find(project_id);
+        const auto revision = model_revisions_.find(model_revision_id);
+        if (project == projects_.end() ||
+            project->second.team_id != team_id ||
+            revision == model_revisions_.end() ||
+            revision->second.team_id != team_id ||
+            revision->second.project_id != project_id) {
+            throw ProjectStateError(
+                "project or model revision was not found");
+        }
+        TopologyPresentationRecord record;
+        record.project_id = project_id;
+        record.team_id = team_id;
+        record.user_id = user_id;
+        record.model_revision_id = model_revision_id;
+        record.canonical_presentation_json =
+            canonical_presentation_json;
+        record.updated_at = std::chrono::system_clock::now();
+        topology_presentations_[
+            team_id + "\n" + project_id + "\n" + user_id] = record;
+        return record;
+    }
+
+    std::optional<TopologyPresentationRecord>
+    get_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id) const override {
+        std::lock_guard lock(mutex_);
+        const auto found = topology_presentations_.find(
+            team_id + "\n" + project_id + "\n" + user_id);
+        return found == topology_presentations_.end()
+            ? std::nullopt
+            : std::optional<TopologyPresentationRecord>{found->second};
+    }
+
     CaseRevisionRecord create_case_revision(
         const std::string& team_id,
         const std::string& created_by_user_id,
@@ -893,6 +936,8 @@ private:
     std::unordered_map<std::string, ProjectRecord> projects_;
     std::unordered_map<std::string, ModelRevisionRecord>
         model_revisions_;
+    std::unordered_map<std::string, TopologyPresentationRecord>
+        topology_presentations_;
     std::unordered_map<std::string, CaseRevisionRecord>
         case_revisions_;
     std::unordered_map<std::string, ArtifactRevisionRecord>

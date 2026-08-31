@@ -1297,6 +1297,30 @@ export interface TopologyDocument {
   }
 }
 
+export interface TopologyPresentation {
+  schema_version: 'thermox.topology_presentation/v1'
+  nodes: Array<{
+    entity_id: string
+    x: number
+    y: number
+  }>
+  viewport: {
+    x: number
+    y: number
+    zoom: number
+  }
+}
+
+export interface TopologyPresentationRecord {
+  schema_version: 'thermox.topology_presentation/v1'
+  project_id: string
+  team_id: string
+  user_id: string
+  model_revision_id: string
+  updated_at_epoch_ms: number
+  presentation: TopologyPresentation
+}
+
 export interface AssemblyDefinition {
   id: string
   label?: string

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { Connection } from '@xyflow/react'
 import { api, errorMessage, isAbortError } from './api'
 import { AssemblyForm } from './AssemblyForm'
@@ -93,6 +93,7 @@ import type {
   StudyRevision,
   StudyTrajectoryValidationBinding,
   TopologyDocument,
+  TopologyPresentation,
   ValidationDiagnostic,
   ValidationCampaignArtifact,
   ValidationCampaignCatalogEntry,
@@ -145,6 +146,11 @@ function App() {
     useState<CaseRevision>()
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
+  const [topologyPresentation, setTopologyPresentation] =
+    useState<TopologyPresentation>()
+  const [layoutSaveState, setLayoutSaveState] =
+    useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const layoutSaveTimer = useRef<number | undefined>(undefined)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [publishing, setPublishing] = useState(false)
@@ -460,14 +466,21 @@ function App() {
     setRevisingPerformanceMap(undefined)
     setSelectedRevisionId('')
     setTopology(undefined)
+    setTopologyPresentation(undefined)
+    setLayoutSaveState('idle')
+    if (layoutSaveTimer.current !== undefined) {
+      window.clearTimeout(layoutSaveTimer.current)
+      layoutSaveTimer.current = undefined
+    }
     if (!selectedProjectId) return
     const controller = new AbortController()
     Promise.all([
       api.modelRevisions(selectedProjectId, controller.signal),
       api.artifactRevisions(selectedProjectId, controller.signal),
       api.projectComponentCatalog(selectedProjectId, controller.signal),
+      api.topologyPresentation(selectedProjectId, controller.signal),
     ])
-      .then(([response, artifacts, components]) => {
+      .then(([response, artifacts, components, presentation]) => {
         setError('')
         const ordered = [...response.model_revisions].sort(
           (left, right) => right.revision_number - left.revision_number,
@@ -475,6 +488,8 @@ function App() {
         setRevisions(ordered)
         setArtifactRevisions(artifacts.artifact_revisions)
         setProjectComponents(components.components)
+        setTopologyPresentation(presentation?.presentation)
+        setLayoutSaveState(presentation ? 'saved' : 'idle')
         setSelectedRevisionId(ordered[0]?.model_revision_id ?? '')
       })
       .catch((reason: unknown) => {
@@ -482,6 +497,15 @@ function App() {
       })
     return () => controller.abort()
   }, [selectedProjectId])
+
+  useEffect(
+    () => () => {
+      if (layoutSaveTimer.current !== undefined) {
+        window.clearTimeout(layoutSaveTimer.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     setTopology(undefined)
@@ -2053,6 +2077,29 @@ function App() {
     }
   }
 
+  function updateTopologyPresentation(next: TopologyPresentation) {
+    setTopologyPresentation(next)
+    if (!selectedProjectId || !selectedRevisionId) return
+    setLayoutSaveState('saving')
+    if (layoutSaveTimer.current !== undefined) {
+      window.clearTimeout(layoutSaveTimer.current)
+    }
+    const projectId = selectedProjectId
+    const revisionId = selectedRevisionId
+    layoutSaveTimer.current = window.setTimeout(() => {
+      layoutSaveTimer.current = undefined
+      void api
+        .putTopologyPresentation(projectId, revisionId, next)
+        .then(() => setLayoutSaveState('saved'))
+        .catch((reason: unknown) => {
+          setLayoutSaveState('error')
+          setOperationError(
+            `Canvas layout could not be saved: ${errorMessage(reason)}`,
+          )
+        })
+    }, 450)
+  }
+
   function inspectComponentDefinition(componentId: string) {
     const component = topology?.model.components.find(
       (item) => item.id === componentId,
@@ -2202,6 +2249,18 @@ function App() {
             </div>
             <div className="canvas-toolbar-actions">
               <span
+                className={`layout-save-state ${layoutSaveState}`}
+                aria-live="polite"
+              >
+                {layoutSaveState === 'saving'
+                  ? 'Saving layout…'
+                  : layoutSaveState === 'saved'
+                    ? 'Layout saved'
+                    : layoutSaveState === 'error'
+                      ? 'Layout save failed'
+                      : 'Layout not saved'}
+              </span>
+              <span
                 className={`model-authoring-status${
                   exactRevisionCompiled ? ' is-ready' : ''
                 }`}
@@ -2262,6 +2321,8 @@ function App() {
                   revisionId={selectedRevisionId}
                   publishing={publishing}
                   componentReadiness={physicalReadiness}
+                  presentation={topologyPresentation}
+                  onPresentationChange={updateTopologyPresentation}
                   onCreateTopology={
                     selectedProjectId && !selectedRevisionId
                       ? () => {

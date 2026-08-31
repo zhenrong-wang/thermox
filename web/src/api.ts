@@ -40,6 +40,8 @@ import type {
   StudyRevisionList,
   ExpressionComponentDefinition,
   TopologyDocument,
+  TopologyPresentation,
+  TopologyPresentationRecord,
   ValidationCampaignArtifact,
   ValidationSeriesArtifact,
 } from './types'
@@ -75,6 +77,25 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T
 }
 
+async function getOptionalJson<T>(
+  path: string,
+  signal?: AbortSignal,
+): Promise<T | undefined> {
+  const response = await fetch(path, {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (response.status === 404) return undefined
+  if (!response.ok) {
+    const body = await response.text()
+    throw new ApiError(
+      response.status,
+      body || `${response.status} ${response.statusText}`,
+    )
+  }
+  return (await response.json()) as T
+}
+
 async function postJson<T>(
   path: string,
   body: unknown,
@@ -82,6 +103,30 @@ async function postJson<T>(
 ): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!response.ok) {
+    const responseBody = await response.text()
+    throw new ApiError(
+      response.status,
+      responseBody || `${response.status} ${response.statusText}`,
+    )
+  }
+  return (await response.json()) as T
+}
+
+async function putJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(path, {
+    method: 'PUT',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -214,6 +259,29 @@ export const api = {
   ) =>
     getJson<ModelRevision>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(revisionId)}`,
+      signal,
+    ),
+  topologyPresentation: (
+    projectId: string,
+    signal?: AbortSignal,
+  ) =>
+    getOptionalJson<TopologyPresentationRecord>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/topology-presentation`,
+      signal,
+    ),
+  putTopologyPresentation: (
+    projectId: string,
+    modelRevisionId: string,
+    presentation: TopologyPresentation,
+    signal?: AbortSignal,
+  ) =>
+    putJson<TopologyPresentationRecord>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/topology-presentation`,
+      {
+        schema_version: 'thermox.topology_presentation.put/v1',
+        model_revision_id: modelRevisionId,
+        presentation,
+      },
       signal,
     ),
   createModelRevision: (

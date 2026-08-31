@@ -114,6 +114,12 @@ sequence, may reference a parent only inside the same `(team_id, project_id)` sc
 canonical JSON bytes, and publish a SHA-256 checksum. PostgreSQL composite foreign keys make a
 cross-Team or cross-Project parent relationship impossible.
 
+Migration `022_topology_presentations.sql` adds mutable, per-user canvas presentation state keyed
+by Team and Project. Each record references an exact model revision and stores only validated node
+coordinates and viewport state. It is deliberately separate from immutable topology payloads and
+therefore cannot change a model checksum, run provenance, or numerical result. User identity in the
+primary key prevents collaborative authors from overwriting one another's arrangement.
+
 Migration `004_case_revisions.sql` adds independent `thermox.case/v1` operating-case history. Every
 case revision binds to one exact topology revision. Its parent must have the same Team, Project,
 topology revision, and logical case ID; revision numbering is atomic within that scope. The service

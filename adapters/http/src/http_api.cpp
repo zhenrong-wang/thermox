@@ -683,6 +683,55 @@ service::CreateProjectRequest parse_create_project_request(
 
 const boost::json::value& require_json_field(
     const boost::json::object& object,
+    std::string_view name);
+std::string require_json_string(
+    const boost::json::object& object,
+    std::string_view name);
+
+service::PutTopologyPresentationRequest
+parse_put_topology_presentation_request(const Request& request) {
+    boost::json::value parsed;
+    try {
+        parsed = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid topology presentation JSON: ") +
+            error.what());
+    }
+    if (!parsed.is_object()) {
+        throw std::invalid_argument(
+            "topology presentation request must be a JSON object");
+    }
+    const auto& object = parsed.as_object();
+    const std::set<std::string_view> allowed = {
+        "schema_version", "model_revision_id", "presentation"};
+    for (const auto& item : object) {
+        if (!allowed.contains(item.key())) {
+            throw std::invalid_argument(
+                "unknown topology presentation request field: " +
+                std::string(item.key()));
+        }
+    }
+    const auto schema = require_json_string(object, "schema_version");
+    if (schema != "thermox.topology_presentation.put/v1") {
+        throw std::invalid_argument(
+            "unsupported topology presentation request schema_version");
+    }
+    const auto& presentation =
+        require_json_field(object, "presentation");
+    if (!presentation.is_object()) {
+        throw std::invalid_argument(
+            "topology presentation must be a JSON object");
+    }
+    service::PutTopologyPresentationRequest command;
+    command.model_revision_id =
+        require_json_string(object, "model_revision_id");
+    command.presentation_json = boost::json::serialize(presentation);
+    return command;
+}
+
+const boost::json::value& require_json_field(
+    const boost::json::object& object,
     std::string_view name) {
     const auto* value = object.if_contains(name);
     if (value == nullptr) {
@@ -2622,6 +2671,8 @@ Response Api::handle(const Request& request) const {
                 "/artifact-revisions";
             constexpr std::string_view component_catalog_segment =
                 "/component-catalog";
+            constexpr std::string_view topology_presentation_segment =
+                "/topology-presentation";
             constexpr std::string_view run_configurations_segment =
                 "/run-configuration-revisions";
             constexpr std::string_view studies_segment =
@@ -2729,6 +2780,43 @@ Response Api::handle(const Request& request) const {
                         serialize_project_component_catalog_json(
                             impl_->project_components.get(
                                 identity, project_id)));
+            }
+            if (remainder == topology_presentation_segment) {
+                reject_unknown_query(target.query, {});
+                if (method == "get") {
+                    const auto presentation =
+                        impl_->projects->get_topology_presentation(
+                            identity, project_id);
+                    if (!presentation) {
+                        return error_response(
+                            404,
+                            "topology_presentation_not_found",
+                            "topology presentation was not found");
+                    }
+                    return json_response(
+                        200,
+                        service::serialize_topology_presentation_json(
+                            *presentation));
+                }
+                if (method == "put") {
+                    require_json_request(
+                        request, impl_->options.maximum_body_bytes);
+                    auto command =
+                        parse_put_topology_presentation_request(request);
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    return json_response(
+                        200,
+                        service::serialize_topology_presentation_json(
+                            impl_->projects->put_topology_presentation(
+                                command)));
+                }
+                auto response = error_response(
+                    405,
+                    "method_not_allowed",
+                    "topology presentation only supports GET and PUT");
+                response.headers["Allow"] = "GET, PUT";
+                return response;
             }
             if (remainder == run_configurations_segment) {
                 if (!impl_->projects

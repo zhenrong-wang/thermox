@@ -518,6 +518,23 @@ button {
   opacity: 0.45;
 }
 
+.layout-save-state {
+  color: #7d8d98;
+  font-size: 8px;
+}
+
+.layout-save-state.saving {
+  color: #7a6b34;
+}
+
+.layout-save-state.saved {
+  color: #39745c;
+}
+
+.layout-save-state.error {
+  color: #9a423b;
+}
+
 .model-authoring-status {
   padding: 5px 7px;
   border: 1px solid #dec9a9;

@@ -132,6 +132,70 @@ void test_model_revisions_are_immutable_and_scoped() {
         "a parent revision must belong to the same project");
 }
 
+void test_topology_presentations_are_user_scoped_and_non_physical() {
+    thermox::service::ProjectService service{
+        thermox::service::make_in_memory_project_repository()};
+    const auto project = service.create_project({
+        team_a, "Presentation workspace", {},
+    });
+    const auto model = service.create_model_revision({
+        team_a,
+        project.project_id,
+        {},
+        read_source_file(
+            "core/examples/air_compressor.topology.json"),
+    });
+    const std::string presentation = R"({
+      "schema_version": "thermox.topology_presentation/v1",
+      "nodes": [{"entity_id": "compressor", "x": 120.5, "y": -44}],
+      "viewport": {"x": 10, "y": 20, "zoom": 1.25}
+    })";
+    const auto stored = service.put_topology_presentation({
+        team_a,
+        project.project_id,
+        model.model_revision_id,
+        presentation,
+    });
+    require(
+        stored.model_revision_id == model.model_revision_id &&
+            stored.user_id == team_a.user_id &&
+            stored.canonical_presentation_json.find(
+                "\"entity_id\":\"compressor\"") !=
+                std::string::npos &&
+            service.get_topology_presentation(
+                team_a, project.project_id)
+                .has_value(),
+        "topology presentation must round-trip independently of the "
+        "physical model revision");
+
+    const thermox::service::IdentityContext teammate{
+        "user-c", "team-a", "project-test"};
+    require(
+        !service.get_topology_presentation(
+             teammate, project.project_id)
+             .has_value() &&
+            !service.get_topology_presentation(
+                 team_b, project.project_id)
+                 .has_value(),
+        "topology presentations must be isolated by user and Team");
+
+    bool unknown_entity_rejected = false;
+    try {
+        (void)service.put_topology_presentation({
+            team_a,
+            project.project_id,
+            model.model_revision_id,
+            R"({"schema_version":"thermox.topology_presentation/v1","nodes":[{"entity_id":"invented","x":0,"y":0}],"viewport":{"x":0,"y":0,"zoom":1}})",
+        });
+    } catch (const thermox::service::ProjectRequestError&) {
+        unknown_entity_rejected = true;
+    }
+    require(
+        unknown_entity_rejected,
+        "presentation metadata must not reference entities outside its "
+        "immutable model revision");
+}
+
 void test_assembly_hierarchy_survives_model_revision_persistence() {
     thermox::service::ProjectService service{
         thermox::service::make_in_memory_project_repository()};
@@ -2832,6 +2896,7 @@ int main() {
     try {
         test_projects_are_team_scoped_logical_partitions();
         test_model_revisions_are_immutable_and_scoped();
+        test_topology_presentations_are_user_scoped_and_non_physical();
         test_assembly_hierarchy_survives_model_revision_persistence();
         test_invalid_input_is_rejected_before_persistence();
         test_public_json_omits_model_from_history();

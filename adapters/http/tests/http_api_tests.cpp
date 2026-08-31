@@ -39,6 +39,14 @@ thermox::http::Request json_post(
     };
 }
 
+thermox::http::Request json_put(
+    std::string target,
+    std::string body) {
+    auto request = json_post(std::move(target), std::move(body));
+    request.method = "PUT";
+    return request;
+}
+
 thermox::http::Request authenticated(
     thermox::http::Request request,
     std::string user_id = "user-a",
@@ -2046,6 +2054,46 @@ void test_team_scoped_projects_and_model_revisions() {
                 std::string::npos,
         "model revision creation must publish immutable "
         "canonical content and checksum metadata");
+
+    const auto model_revision_id =
+        revision.headers.at("Location").substr(
+            revision.headers.at("Location").find_last_of('/') + 1U);
+    const auto presentation_location =
+        project_location + "/topology-presentation";
+    const auto presentation = api.handle(authenticated(json_put(
+        presentation_location,
+        std::string{
+            R"({"schema_version":"thermox.topology_presentation.put/v1",)"
+            R"("model_revision_id":")"} +
+            model_revision_id +
+            R"(","presentation":{"schema_version":"thermox.topology_presentation/v1","nodes":[{"entity_id":"compressor","x":125,"y":80}],"viewport":{"x":10,"y":20,"zoom":1.1}}})")));
+    require(
+        presentation.status == 200 &&
+            presentation.body.find(
+                "\"schema_version\": "
+                "\"thermox.topology_presentation/v1\"") !=
+                std::string::npos &&
+            presentation.body.find(
+                "\"entity_id\":\"compressor\"") !=
+                std::string::npos,
+        "topology presentation PUT must persist user-scoped visual "
+        "metadata outside the model revision");
+    const auto loaded_presentation = api.handle(authenticated({
+        "GET", presentation_location, {}, {},
+    }));
+    require(
+        loaded_presentation.status == 200 &&
+            loaded_presentation.body.find(model_revision_id) !=
+                std::string::npos,
+        "topology presentation GET must return the user's latest view");
+    const auto teammate_presentation = api.handle(authenticated(
+        {"GET", presentation_location, {}, {}},
+        "user-c",
+        "team-a"));
+    require(
+        teammate_presentation.status == 404,
+        "one Team member's topology presentation must not leak to "
+        "another member");
 
     auto edit_request = authenticated(json_post(
         revision.headers.at("Location") + "/edits",

@@ -107,6 +107,7 @@ void prepare_test_schema(const std::string& connection_string) {
              "019_reconciliation_revisions.sql",
              "020_reconciliation_jobs.sql",
              "021_study_trajectory_validation.sql",
+             "022_topology_presentations.sql",
          }) {
         std::ifstream migration(
             std::string(THERMOX_SOURCE_DIR) +
@@ -892,6 +893,26 @@ void test_projects_and_immutable_model_revisions(
                  first.model_revision_id)
              .has_value(),
         "cross-Team revision lookup must not reveal existence");
+
+    const auto presentation = projects.put_topology_presentation({
+        team_a,
+        project.project_id,
+        second.model_revision_id,
+        R"({"schema_version":"thermox.topology_presentation/v1","nodes":[{"entity_id":"compressor","x":320,"y":140}],"viewport":{"x":12,"y":18,"zoom":0.9}})",
+    });
+    const auto loaded_presentation =
+        projects.get_topology_presentation(team_a, project.project_id);
+    require(
+        loaded_presentation &&
+            loaded_presentation->model_revision_id ==
+                second.model_revision_id &&
+            loaded_presentation->canonical_presentation_json ==
+                presentation.canonical_presentation_json &&
+            !projects.get_topology_presentation(
+                 team_b, project.project_id)
+                 .has_value(),
+        "PostgreSQL topology presentations must upsert per user and "
+        "remain Team scoped");
 
     std::ifstream case_file(
         std::string(THERMOX_SOURCE_DIR) +

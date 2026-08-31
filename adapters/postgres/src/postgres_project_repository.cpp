@@ -740,6 +740,19 @@ service::ModelRevisionRecord decode_model_revision(
     return record;
 }
 
+service::TopologyPresentationRecord decode_topology_presentation(
+    const PGresult* result,
+    int row = 0) {
+    service::TopologyPresentationRecord record;
+    record.project_id = field(result, row, 0);
+    record.team_id = field(result, row, 1);
+    record.user_id = field(result, row, 2);
+    record.model_revision_id = field(result, row, 3);
+    record.canonical_presentation_json = field(result, row, 4);
+    record.updated_at = decode_time(field(result, row, 5));
+    return record;
+}
+
 service::CaseRevisionRecord decode_case_revision(
     const PGresult* result,
     int row = 0) {
@@ -1026,7 +1039,8 @@ public:
             "to_regclass("
             "'thermox_run_configuration_revisions')::text, "
             "to_regclass("
-            "'thermox_reconciliation_revisions')::text");
+            "'thermox_reconciliation_revisions')::text, "
+            "to_regclass('thermox_topology_presentations')::text");
         if (PQgetisnull(schema.get(), 0, 0) ||
             PQgetisnull(schema.get(), 0, 1) ||
             PQgetisnull(schema.get(), 0, 2) ||
@@ -1035,7 +1049,8 @@ public:
             PQgetisnull(schema.get(), 0, 5) ||
             PQgetisnull(schema.get(), 0, 6) ||
             PQgetisnull(schema.get(), 0, 7) ||
-            PQgetisnull(schema.get(), 0, 8)) {
+            PQgetisnull(schema.get(), 0, 8) ||
+            PQgetisnull(schema.get(), 0, 9)) {
             throw std::runtime_error(
                 "PostgreSQL project schema is not installed; "
                 "apply all migrations");
@@ -1241,6 +1256,57 @@ public:
                 decode_model_revision(result.get(), row));
         }
         return records;
+    }
+
+    service::TopologyPresentationRecord
+    upsert_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id,
+        const std::string& model_revision_id,
+        const std::string& canonical_presentation_json) override {
+        auto connection = connect(connection_string_);
+        const auto result = execute(
+            connection.get(),
+            "INSERT INTO thermox_topology_presentations ("
+            "team_id, project_id, user_id, model_revision_id, "
+            "presentation_payload) VALUES ($1, $2, $3, $4, $5::jsonb) "
+            "ON CONFLICT (team_id, project_id, user_id) DO UPDATE SET "
+            "model_revision_id = EXCLUDED.model_revision_id, "
+            "presentation_payload = EXCLUDED.presentation_payload, "
+            "updated_at = clock_timestamp() RETURNING "
+            "project_id, team_id, user_id, model_revision_id, "
+            "presentation_payload::text, "
+            "floor(extract(epoch FROM updated_at) * 1000)"
+            "::bigint::text",
+            {
+                team_id.c_str(),
+                project_id.c_str(),
+                user_id.c_str(),
+                model_revision_id.c_str(),
+                canonical_presentation_json.c_str(),
+            });
+        return decode_topology_presentation(result.get());
+    }
+
+    std::optional<service::TopologyPresentationRecord>
+    get_topology_presentation(
+        const std::string& team_id,
+        const std::string& user_id,
+        const std::string& project_id) const override {
+        auto connection = connect(connection_string_);
+        const auto result = execute(
+            connection.get(),
+            "SELECT project_id, team_id, user_id, model_revision_id, "
+            "presentation_payload::text, "
+            "floor(extract(epoch FROM updated_at) * 1000)"
+            "::bigint::text FROM thermox_topology_presentations "
+            "WHERE team_id = $1 AND project_id = $2 AND user_id = $3",
+            {team_id.c_str(), project_id.c_str(), user_id.c_str()});
+        if (PQntuples(result.get()) == 0) {
+            return std::nullopt;
+        }
+        return decode_topology_presentation(result.get());
     }
 
     service::CaseRevisionRecord create_case_revision(
