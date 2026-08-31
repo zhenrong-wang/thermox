@@ -57,6 +57,51 @@ describe('topology presentation API', () => {
   })
 })
 
+describe('topology revision API', () => {
+  it('publishes the public declaration as a child of the selected revision', async () => {
+    const definition: TopologyDocument = {
+      schema_version: 'thermox.topology/v1',
+      model: {
+        id: 'declared-cycle',
+        name: 'Declared cycle',
+        revision: '2',
+        media: [],
+        components: [],
+        connections: [],
+      },
+    }
+    const revision = {
+      schema_version: 'thermox.model_revision/v1',
+      model_revision_id: 'model-r2',
+      revision_number: 2,
+    }
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) =>
+      new Response(JSON.stringify(revision), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      api.createModelRevision('project/a', definition, 'model-r1'),
+    ).resolves.toEqual(revision)
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.pathname).toBe(
+      '/api/v1/projects/project%2Fa/model-revisions',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe('model-r1')
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(definition),
+    })
+  })
+})
+
 describe('assembly template authoring API', () => {
   it('publishes a versioned topology artifact', async () => {
     const definition: TopologyDocument = {

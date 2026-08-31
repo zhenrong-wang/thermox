@@ -3767,6 +3767,84 @@ code {
   margin: 5px 10px 0;
 }
 
+.topology-json-dialog {
+  width: min(1120px, 100%);
+}
+
+.topology-json-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 14px 20px 0;
+}
+
+.topology-json-actions > span {
+  margin-left: auto;
+  color: #718692;
+  font-size: 9px;
+}
+
+.topology-json-editor {
+  display: block;
+  width: calc(100% - 40px) !important;
+  min-height: 390px !important;
+  margin: 12px 20px 0;
+  padding: 12px !important;
+  resize: vertical;
+  background: #172630 !important;
+  color: #d9e7ec !important;
+  font: 10px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
+  tab-size: 2;
+}
+
+.topology-json-review {
+  display: grid;
+  gap: 8px;
+  margin: 12px 20px 0;
+  padding: 11px 12px;
+  border: 1px solid #b9dacb;
+  border-radius: 5px;
+  background: #eff8f4;
+  color: #365f4e;
+  font-size: 9px;
+}
+
+.topology-json-review.is-invalid {
+  border-color: #e0c3bd;
+  background: #fff5f3;
+  color: #855149;
+}
+
+.topology-json-review > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.topology-json-review ul,
+.topology-json-review p {
+  margin: 0;
+}
+
+.topology-json-review ul {
+  padding-left: 18px;
+}
+
+.topology-json-review small {
+  color: #71838e;
+}
+
+.topology-json-message {
+  margin: 12px 20px 0;
+}
+
+.topology-json-message.is-status {
+  border-color: #bdd9cb;
+  background: #eff8f4;
+  color: #39705a;
+}
+
 .validation-campaign-dialog > label,
 .validation-campaign-dialog > .form-note,
 .validation-campaign-dialog > .form-error {

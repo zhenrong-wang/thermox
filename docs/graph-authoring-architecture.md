@@ -25,6 +25,20 @@ compiler input, or numerical provenance. The service stores one mutable presenta
 validated. A topology revision remains immutable while each engineer can arrange the same system
 without overwriting another engineer's workspace.
 
+## Declaration workbench
+
+The Build workspace also accepts the public `thermox.topology/v1` JSON document directly. Loading
+or pasting a declaration, reviewing it, and publishing it creates the same immutable model revision
+as every other client; it does not create a browser-only graph format. The browser performs only an
+early structural review. The service remains authoritative for parsing, registry validation,
+canonicalization, checksum generation, Team isolation, and parent-revision linkage.
+
+The selected model revision can be copied or downloaded from the same workbench and loaded again to
+reconstruct its physical graph. Presentation coordinates remain a separate user-scoped document,
+so exporting a topology does not accidentally turn viewport state into physical or numerical input.
+Cases, engineering artifacts, Studies, and run configurations retain their own revision contracts;
+they are not embedded implicitly in a topology declaration.
+
 ## Canvas responsibility
 
 The canvas is a typed topology editor, not a general-purpose drawing document. React Flow supplies

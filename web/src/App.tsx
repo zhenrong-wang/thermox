@@ -58,6 +58,7 @@ import {
   resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import { initialTopologyDocument } from './topologyAuthoring'
+import { TopologyJsonWorkbench } from './TopologyJsonWorkbench'
 import {
   buildSystemReadiness,
   type SystemReadinessIssue,
@@ -171,6 +172,7 @@ function App() {
     useState<CaseRevision>()
   const [selectedRevisionId, setSelectedRevisionId] = useState('')
   const [topology, setTopology] = useState<TopologyDocument>()
+  const [showingTopologyJson, setShowingTopologyJson] = useState(false)
   const [topologyPresentation, setTopologyPresentation] =
     useState<TopologyPresentation>()
   const [layoutSaveState, setLayoutSaveState] =
@@ -503,6 +505,7 @@ function App() {
     setNewComponentPlacement(undefined)
     setShowSystemReadiness(false)
     setTopology(undefined)
+    setShowingTopologyJson(false)
     setTopologyPresentation(undefined)
     setLayoutSaveState('idle')
     if (layoutSaveTimer.current !== undefined) {
@@ -1108,6 +1111,42 @@ function App() {
       )
     } catch (reason) {
       setOperationError(errorMessage(reason))
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function publishTopologyDocument(document: TopologyDocument) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before publishing topology JSON.')
+    }
+    setPublishing(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const revision = await api.createModelRevision(
+        selectedProjectId,
+        document,
+        selectedRevisionId,
+      )
+      setRevisions((current) => [
+        revision,
+        ...current.filter(
+          (item) => item.model_revision_id !== revision.model_revision_id,
+        ),
+      ])
+      setSelection(undefined)
+      setShowSystemReadiness(false)
+      setTopologyPresentation(undefined)
+      setLayoutSaveState('idle')
+      setSelectedRevisionId(revision.model_revision_id)
+      setOperationStatus(
+        `Published topology JSON as immutable revision r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+      throw new Error(message)
     } finally {
       setPublishing(false)
     }
@@ -2470,6 +2509,12 @@ function App() {
               </span>
               <button
                 type="button"
+                onClick={() => setShowingTopologyJson(true)}
+              >
+                JSON
+              </button>
+              <button
+                type="button"
                 className={`model-authoring-status${
                   exactRevisionCompiled ? ' is-ready' : ''
                 }`}
@@ -2881,6 +2926,16 @@ function App() {
             setNewComponentPlacement(undefined)
           }}
           onSubmit={addComponent}
+        />
+      )}
+      {workspaceView === 'topology' && showingTopologyJson && (
+        <TopologyJsonWorkbench
+          key={selectedRevisionId || 'new-topology-json'}
+          topology={topology}
+          revision={selectedRevision}
+          publishing={publishing}
+          onCancel={() => setShowingTopologyJson(false)}
+          onPublish={publishTopologyDocument}
         />
       )}
       {workspaceView === 'topology' && addingAssembly && topology && (
