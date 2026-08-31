@@ -4,6 +4,7 @@ import {
   componentCategories,
   componentMatchesLibraryFilters,
 } from './componentLibrary'
+import { ComponentSymbol } from './ComponentSymbol'
 import type {
   AssemblyTemplateCatalogEntry,
   CatalogComponent,
@@ -184,6 +185,9 @@ export function ComponentLibrary({
                     title={`Drag ${component.display_name} using ${component.model_name}`}
                   >
                     <div>
+                      <ComponentSymbol
+                        component={component}
+                      />
                       <span className="kind-family">{component.model_name}</span>
                       {component.supports_transient && <span className="transient-badge">transient</span>}
                       {component.supported_modes.length > 0 && <span className="transient-badge">modes: {component.supported_modes.join(' / ')}</span>}

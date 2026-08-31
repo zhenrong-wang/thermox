@@ -1,9 +1,11 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { ComponentSymbol } from './ComponentSymbol'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue, type ResultNodeValue } from './resultPresentation'
 import type {
   AssemblyDefinition,
+  CatalogComponent,
   CatalogPort,
   ComponentDefinition,
 } from './types'
@@ -12,6 +14,7 @@ import type { ComponentDefinitionReadiness } from './definitionReadiness'
 export interface TopologyNodeData extends Record<string, unknown> {
   component: ComponentDefinition
   assembly?: AssemblyDefinition
+  catalogComponent?: CatalogComponent
   ports: CatalogPort[]
   resultValues?: ResultNodeValue[]
   definition?: ComponentDefinitionReadiness
@@ -40,10 +43,18 @@ export function TopologyNode({ data, selected }: NodeProps) {
   const outputs = nodeData.ports.filter(
     (port) => port.direction === 'out' || port.direction === 'bidirectional',
   )
+  const visualComponent = nodeData.catalogComponent ?? {
+    kind: nodeData.assembly ? 'assembly.meta' : nodeData.component.kind,
+    template_kind: nodeData.assembly ? 'assembly' : nodeData.component.kind,
+    category: nodeData.assembly ? 'Assembly' : '',
+  }
 
   return (
     <article className={`topology-node${selected ? ' is-selected' : ''}`}>
       <header>
+        <ComponentSymbol
+          component={visualComponent}
+        />
         <span className="node-label">
           {nodeData.component.label || nodeData.component.id}
         </span>

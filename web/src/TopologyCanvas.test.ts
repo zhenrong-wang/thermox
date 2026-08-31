@@ -3,6 +3,7 @@ import type { FinalConnectionState } from '@xyflow/react'
 import {
   centeredComponentPosition,
   finalConnectionIntent,
+  layoutEdges,
   layoutNodes,
 } from './TopologyCanvas'
 import { presentationFromNodes } from './topologyPresentation'
@@ -21,7 +22,22 @@ const componentType: CatalogComponent = {
   supported_modes: [],
   events: [],
   default_mode: '',
-  ports: [],
+  ports: [
+    {
+      name: 'inlet',
+      domain: 'fluid',
+      direction: 'in',
+      maximum_connections: 1,
+      medium_source_port: '',
+    },
+    {
+      name: 'outlet',
+      domain: 'fluid',
+      direction: 'out',
+      maximum_connections: 1,
+      medium_source_port: '',
+    },
+  ],
   parameters: [],
   artifacts: [],
 }
@@ -84,6 +100,37 @@ describe('topology canvas layout', () => {
       sourceHandle: 'outlet',
       target: 'sink',
       targetHandle: 'inlet',
+    })
+  })
+
+  it('derives edge presentation from the registered connector domain', () => {
+    const graph = {
+      ...topology,
+      model: {
+        ...topology.model,
+        components: [
+          { id: 'pump', kind: componentType.kind },
+          { id: 'pump-2', kind: componentType.kind },
+        ],
+        connections: [
+          {
+            id: 'fluid-link',
+            kind: 'thermox.fluid_connection/v1',
+            from: 'pump.outlet',
+            to: 'pump-2.inlet',
+          },
+        ],
+      },
+    } as TopologyDocument
+    const edges = layoutEdges(
+      graph,
+      new Map([[componentType.kind, componentType]]),
+    )
+
+    expect(edges[0].label).toBe('fluid')
+    expect(edges[0].style).toMatchObject({
+      stroke: '#2f8bd8',
+      strokeWidth: 2,
     })
   })
 })

@@ -27,6 +27,7 @@ import type {
 } from './types'
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
 import { connectionIntentIssue } from './graphAuthoring'
+import { connectionLineStyle, topologyDomainColor } from './topologyVisuals'
 import {
   presentationFromNodes,
   type CanvasComponentPlacement,
@@ -138,31 +139,57 @@ export function layoutNodes(
       ports: assembly
         ? assemblyPorts(assembly, catalog)
         : catalog.get(component.kind)?.ports ?? [],
+      catalogComponent: catalog.get(component.kind),
       resultValues: resultValues[component.id] ?? [],
       definition: componentReadiness[component.id],
     },
   }))
 }
 
-function layoutEdges(
+export function layoutEdges(
   topology: TopologyDocument,
+  catalog: Map<string, CatalogComponent>,
   selection?: GraphSelection,
 ): Edge[] {
   return topology.model.connections.map((connection) => {
     const [source, sourceHandle] = endpoint(connection.from)
     const [target, targetHandle] = endpoint(connection.to)
+    const sourceComponent = topology.model.components.find(
+      (component) => component.id === source,
+    )
+    const sourceAssembly = (topology.model.assemblies ?? []).find(
+      (assembly) => assembly.id === source,
+    )
+    const sourcePort = sourceComponent
+      ? catalog
+          .get(sourceComponent.kind)
+          ?.ports.find((port) => port.name === sourceHandle)
+      : sourceAssembly
+        ? assemblyPorts(sourceAssembly, catalog).find(
+            (port) => port.name === sourceHandle,
+          )
+        : undefined
+    const domain = sourcePort?.domain ?? connection.kind
+    const selectedEdge =
+      selection?.type === 'connection' && selection.id === connection.id
     return {
       id: connection.id,
-      selected:
-        selection?.type === 'connection' && selection.id === connection.id,
+      selected: selectedEdge,
       source,
       sourceHandle,
       target,
       targetHandle,
       type: 'smoothstep',
-      label: connection.kind,
-      labelStyle: { fill: '#617083', fontSize: 10 },
-      style: { stroke: '#8795a6', strokeWidth: 1.5 },
+      label: domain,
+      labelStyle: {
+        fill: topologyDomainColor(domain),
+        fontSize: 9,
+        fontWeight: 700,
+      },
+      style: {
+        ...connectionLineStyle(domain),
+        strokeWidth: selectedEdge ? 3 : 2,
+      },
     }
   })
 }
@@ -230,7 +257,7 @@ export function TopologyCanvas({
     componentReadiness,
     presentedPositions,
   )
-  const edges = layoutEdges(topology, selection)
+  const edges = layoutEdges(topology, catalogByKind, selection)
   const elementProps = readOnly
     ? { nodes, edges }
     : { defaultNodes: nodes, defaultEdges: edges }
