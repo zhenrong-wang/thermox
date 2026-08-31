@@ -1841,6 +1841,41 @@ code {
   text-transform: uppercase;
 }
 
+.inspector-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inspector-section-heading h3 {
+  margin: 0;
+}
+
+.inspector-readiness ul {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector-readiness li {
+  padding: 6px 7px;
+  border-left: 2px solid #d99a4c;
+  background: #fff8ee;
+  color: #77542e;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.inspector-readiness p {
+  margin: 9px 0 0;
+  color: #657d70;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
 .detail-row {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);

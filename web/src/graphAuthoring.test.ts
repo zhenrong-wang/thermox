@@ -97,7 +97,11 @@ const catalog: Catalog = {
 }
 
 describe('buildConnectionOperation', () => {
-  it('uses the runtime connector contract and a collision-safe ID', () => {
+  it('uses the runtime connector contract and a deterministic ID', () => {
+    const disconnected = {
+      ...topology,
+      model: { ...topology.model, connections: [] },
+    }
     expect(
       buildConnectionOperation(
         {
@@ -106,15 +110,15 @@ describe('buildConnectionOperation', () => {
           target: 'sink',
           targetHandle: 'inlet',
         },
-        topology,
+        disconnected,
         catalog,
       ),
     ).toEqual({
       action: 'upsert',
       entity_type: 'connection',
-      entity_id: 'link_source_outlet_sink_inlet_2',
+      entity_id: 'link_source_outlet_sink_inlet',
       entity: {
-        id: 'link_source_outlet_sink_inlet_2',
+        id: 'link_source_outlet_sink_inlet',
         from: 'source.outlet',
         to: 'sink.inlet',
         kind: 'fluid_link',
@@ -177,9 +181,95 @@ describe('buildConnectionOperation', () => {
       },
       topology,
       catalog,
-      'existing-link',
+      'link_source_outlet_sink_inlet',
     )
-    expect(operation.entity_id).toBe('existing-link')
-    expect(operation.entity.id).toBe('existing-link')
+    expect(operation.entity_id).toBe('link_source_outlet_sink_inlet')
+    expect(operation.entity.id).toBe('link_source_outlet_sink_inlet')
+  })
+
+  it('rejects reversed, duplicate, and capacity-exhausted endpoints', () => {
+    expect(() =>
+      buildConnectionOperation(
+        {
+          source: 'sink',
+          sourceHandle: 'inlet',
+          target: 'source',
+          targetHandle: 'outlet',
+        },
+        topology,
+        catalog,
+      ),
+    ).toThrow('cannot be used as a source')
+
+    expect(() =>
+      buildConnectionOperation(
+        {
+          source: 'source',
+          sourceHandle: 'outlet',
+          target: 'sink',
+          targetHandle: 'inlet',
+        },
+        topology,
+        catalog,
+      ),
+    ).toThrow('already exists')
+
+    const secondSink: TopologyDocument = {
+      ...topology,
+      model: {
+        ...topology.model,
+        components: [
+          ...topology.model.components,
+          { id: 'sink_2', kind: 'sink.test' },
+        ],
+      },
+    }
+    expect(() =>
+      buildConnectionOperation(
+        {
+          source: 'source',
+          sourceHandle: 'outlet',
+          target: 'sink_2',
+          targetHandle: 'inlet',
+        },
+        secondSink,
+        catalog,
+      ),
+    ).toThrow('source.outlet has reached its connection limit')
+  })
+
+  it('connects through a collapsed assembly public port', () => {
+    const withAssembly: TopologyDocument = {
+      ...topology,
+      model: {
+        ...topology.model,
+        components: [{ id: 'sink', kind: 'sink.test' }],
+        connections: [],
+        assemblies: [
+          {
+            id: 'source_train',
+            components: [{ id: 'source', kind: 'source.test' }],
+            connections: [],
+            ports: [{ name: 'outlet', endpoint: 'source.outlet' }],
+          },
+        ],
+      },
+    }
+    expect(
+      buildConnectionOperation(
+        {
+          source: 'source_train',
+          sourceHandle: 'outlet',
+          target: 'sink',
+          targetHandle: 'inlet',
+        },
+        withAssembly,
+        catalog,
+      ).entity,
+    ).toMatchObject({
+      from: 'source_train.outlet',
+      to: 'sink.inlet',
+      kind: 'fluid_link',
+    })
   })
 })

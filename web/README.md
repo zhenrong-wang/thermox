@@ -17,6 +17,10 @@ The workspace currently provides:
 - simultaneous topology authoring, physical-component library, and selection-driven instance
   inspection, without mixing fluid/material/artifact definition resources into the equipment
   palette;
+- assembly-aware connection preflight for port direction, connector domain, duplicate links, and
+  registered connection capacity, with authored node positions retained across revision refreshes;
+- selection-level definition diagnostics in the topology inspector, while final calculatability
+  remains owned by the service compiler;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;
 - typed project-artifact selectors for performance maps and other declared component resources;

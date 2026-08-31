@@ -2288,6 +2288,11 @@ function App() {
                     topology={topology}
                     catalog={topologyCatalog}
                     publishing={publishing}
+                    definition={
+                      selection.type === 'component'
+                        ? physicalReadiness[selection.id]
+                        : undefined
+                    }
                     onEditComponent={setEditingComponent}
                     onEditConnection={setEditingConnection}
                     onRemoveComponent={(component) => {

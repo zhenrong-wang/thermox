@@ -8,7 +8,9 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type XYPosition,
 } from '@xyflow/react'
+import { useRef } from 'react'
 import '@xyflow/react/dist/style.css'
 import { COMPONENT_DRAG_TYPE } from './componentLibrary'
 import { assemblyPorts } from './assemblyAuthoring'
@@ -17,6 +19,7 @@ import type { GraphSelection } from './InspectorPanel'
 import type { ResultNodeValue } from './resultPresentation'
 import type { CatalogComponent, TopologyDocument } from './types'
 import type { ComponentDefinitionReadiness } from './definitionReadiness'
+import { connectionIntentIssue } from './graphAuthoring'
 
 interface TopologyCanvasProps {
   topology?: TopologyDocument
@@ -40,12 +43,13 @@ function endpoint(value: string): [string, string] {
     : [value.slice(0, separator), value.slice(separator + 1)]
 }
 
-function layoutNodes(
+export function layoutNodes(
   topology: TopologyDocument,
   catalog: Map<string, CatalogComponent>,
   resultValues: Record<string, ResultNodeValue[]>,
   selection?: GraphSelection,
   componentReadiness: Record<string, ComponentDefinitionReadiness> = {},
+  savedPositions: ReadonlyMap<string, XYPosition> = new Map(),
 ): Node<TopologyNodeData>[] {
   const entities = [
     ...topology.model.components.map((component) => ({
@@ -69,10 +73,11 @@ function layoutNodes(
       (selection?.type === 'component' || selection?.type === 'assembly') &&
       selection.id === component.id,
     type: 'topology',
-    position: {
-      x: (index % columns) * 330,
-      y: Math.floor(index / columns) * rowHeight,
-    },
+    position:
+      savedPositions.get(component.id) ?? {
+        x: (index % columns) * 330,
+        y: Math.floor(index / columns) * rowHeight,
+      },
     data: {
       component,
       assembly,
@@ -124,6 +129,7 @@ export function TopologyCanvas({
   onCreateTopology,
   componentReadiness = {},
 }: TopologyCanvasProps) {
+  const savedPositions = useRef(new Map<string, XYPosition>())
   if (!topology) {
     return (
       <div className="empty-canvas">
@@ -155,50 +161,22 @@ export function TopologyCanvas({
     resultValues,
     selection,
     componentReadiness,
+    savedPositions.current,
   )
   const edges = layoutEdges(topology, selection)
   const elementProps = readOnly
     ? { nodes, edges }
     : { defaultNodes: nodes, defaultEdges: edges }
-  const componentsById = new Map(
-    topology.model.components.map((component) => [component.id, component]),
-  )
-  const assemblyPortsById = new Map(
-    (topology.model.assemblies ?? []).map((assembly) => [
-      assembly.id,
-      assemblyPorts(assembly, catalogByKind),
-    ]),
-  )
-  const connectionDomain = (
-    componentId: string | null,
-    handleId: string | null,
-  ) => {
-    if (!componentId || !handleId) return undefined
-    const component = componentsById.get(componentId)
-    return component
-      ? catalogByKind
-          .get(component.kind)
-          ?.ports.find((port) => port.name === handleId)?.domain
-      : assemblyPortsById
-          .get(componentId)
-          ?.find((port) => port.name === handleId)?.domain
-  }
   const validConnection = (connection: Connection | Edge) => {
-    if (
-      connection.source === connection.target ||
-      !connection.sourceHandle ||
-      !connection.targetHandle
-    ) {
-      return false
-    }
-    const sourceDomain = connectionDomain(
-      connection.source,
-      connection.sourceHandle,
-    )
-    return (
-      sourceDomain !== undefined &&
-      sourceDomain ===
-        connectionDomain(connection.target, connection.targetHandle)
+    return !connectionIntentIssue(
+      {
+        source: connection.source,
+        sourceHandle: connection.sourceHandle ?? null,
+        target: connection.target,
+        targetHandle: connection.targetHandle ?? null,
+      },
+      topology,
+      catalog,
     )
   }
 
@@ -214,6 +192,9 @@ export function TopologyCanvas({
       isValidConnection={validConnection}
       onConnect={(connection) => {
         if (!readOnly) void onConnect(connection)
+      }}
+      onNodeDragStop={(_, node) => {
+        if (!readOnly) savedPositions.current.set(node.id, node.position)
       }}
       onNodeClick={(_, node) =>
         onSelect({

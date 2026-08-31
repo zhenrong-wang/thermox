@@ -1,6 +1,7 @@
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
+import type { ComponentDefinitionReadiness } from './definitionReadiness'
 import type {
   Catalog,
   AssemblyDefinition,
@@ -19,6 +20,7 @@ interface InspectorPanelProps {
   topology: TopologyDocument
   catalog: Catalog
   publishing: boolean
+  definition?: ComponentDefinitionReadiness
   onEditComponent: (component: ComponentDefinition) => void
   onEditConnection: (connection: ConnectionDefinition) => void
   onRemoveComponent: (component: ComponentDefinition) => void
@@ -49,6 +51,7 @@ export function InspectorPanel({
   topology,
   catalog,
   publishing,
+  definition,
   onEditComponent,
   onEditConnection,
   onRemoveComponent,
@@ -106,6 +109,28 @@ export function InspectorPanel({
               .join(', ')}
           />
         </section>
+        {definition && (
+          <section className="inspector-readiness">
+            <div className="inspector-section-heading">
+              <h3>Definition readiness</h3>
+              <span className={`physical-state ${definition.state}`}>
+                {definition.state}
+              </span>
+            </div>
+            {definition.issues.length > 0 ? (
+              <ul>
+                {definition.issues.map((issue) => (
+                  <li key={issue.id}>{issue.message}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>
+                Local component inputs are complete. System calculatability is
+                confirmed separately by the study compiler.
+              </p>
+            )}
+          </section>
+        )}
         <section>
           <h3>Bindings</h3>
           {Object.entries({
@@ -175,7 +200,9 @@ export function InspectorPanel({
             disabled={publishing || !descriptor}
             onClick={() => onEditComponent(component)}
           >
-            Edit instance
+            {definition?.state === 'defined'
+              ? 'Edit definition'
+              : 'Complete definition'}
           </button>
         </footer>
       </div>
