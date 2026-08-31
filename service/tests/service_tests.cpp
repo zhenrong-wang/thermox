@@ -9570,7 +9570,7 @@ void test_standards_profiled_balance_report() {
     const auto& root = report.as_object();
     require(
         root.at("schema_version").as_string() ==
-                "thermox.balance_report/v2" &&
+                "thermox.balance_report/v3" &&
             root.at("profile").as_object().at("conformance").as_string() ==
                 "informative" &&
             root.at("boundary").as_object().at("energy_input_si").as_double() ==

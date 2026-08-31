@@ -990,7 +990,8 @@ service::BalanceReportRequest parse_balance_report_request(
             field.key() != "accounting_basis" &&
             field.key() != "system_boundary" &&
             field.key() != "diagram_profile" &&
-            field.key() != "calculation_profile") {
+            field.key() != "calculation_profile" &&
+            field.key() != "uncertainty_model") {
             throw std::invalid_argument(
                 "unknown balance report field: " +
                 std::string(field.key()));
@@ -1006,6 +1007,12 @@ service::BalanceReportRequest parse_balance_report_request(
         require_json_string(root, "diagram_profile");
     parsed.calculation_profile =
         require_json_string(root, "calculation_profile");
+    if (const auto* uncertainty = root.if_contains("uncertainty_model");
+        uncertainty != nullptr && !uncertainty->is_null()) {
+        parsed.uncertainty_model =
+            service::parse_balance_uncertainty_model_json(
+                boost::json::serialize(*uncertainty));
+    }
     return parsed;
 }
 

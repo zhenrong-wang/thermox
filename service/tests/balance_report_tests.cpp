@@ -1,6 +1,9 @@
 #include "thermox/service/balance_report.hpp"
 
+#include <boost/json/src.hpp>
+
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -80,10 +83,30 @@ void test_whole_system_energy_report() {
       {"from":"source.outlet","to":"load.inlet"},
       {"from":"load.outlet","to":"sink.inlet"}
     ]}})";
+    BalanceReportRequest report_request;
+    report_request.uncertainty_model = parse_balance_uncertainty_model_json(
+        R"({"schema_version":"thermox.balance_uncertainty/v1",)"
+        R"("id":"metering-r1","source":{"reference":"calibration-certificates",)"
+        R"("checksum_sha256":"0000000000000000000000000000000000000000000000000000000000000000",)"
+        R"("note":"standard uncertainties","limitations":[]},"streams":[)"
+        R"({"component_id":"source","port_name":"outlet",)"
+        R"("mass_flow_standard_uncertainty_si":0.02,)"
+        R"("specific_enthalpy_standard_uncertainty_si":0.5,)"
+        R"("energy_flow_standard_uncertainty_si":null,)"
+        R"("mass_enthalpy_correlation":0.2},)"
+        R"({"component_id":"sink","port_name":"inlet",)"
+        R"("mass_flow_standard_uncertainty_si":0.02,)"
+        R"("specific_enthalpy_standard_uncertainty_si":null,)"
+        R"("energy_flow_standard_uncertainty_si":1.5,)"
+        R"("mass_enthalpy_correlation":0.0}],"correlations":[)"
+        R"({"quantity":"mass_flow","first":{"component_id":"source","port_name":"outlet"},)"
+        R"("second":{"component_id":"sink","port_name":"inlet"},"coefficient":0.5},)"
+        R"({"quantity":"energy_flow","first":{"component_id":"source","port_name":"outlet"},)"
+        R"("second":{"component_id":"sink","port_name":"inlet"},"coefficient":0.25}]})");
     const auto report = build_balance_report_json(
-        job, result, topology, BalanceReportRequest{});
+        job, result, topology, report_request);
     require(
-        report.find("\"schema_version\":\"thermox.balance_report/v2\"") !=
+        report.find("\"schema_version\":\"thermox.balance_report/v3\"") !=
                 std::string::npos &&
             report.find("\"conformance\":\"informative\"") !=
                 std::string::npos &&
@@ -96,15 +119,40 @@ void test_whole_system_energy_report() {
             report.find("\"relative_energy_closure\":0.0") !=
                 std::string::npos &&
             report.find("\"status\":\"passed\"") !=
+                std::string::npos &&
+            report.find("\"model_id\":\"metering-r1\"") !=
+                std::string::npos &&
+            report.find("\"correlation_count\":2") !=
+                std::string::npos &&
+            report.find("\"status\":\"complete\"") !=
                 std::string::npos,
         "balance report must preserve profile and boundary accounting");
+    const auto parsed_report = boost::json::parse(report).as_object();
+    const auto& uncertainty =
+        parsed_report.at("uncertainty").as_object();
+    const double expected_energy_uncertainty = std::sqrt(
+        2.4 + 2.25 - 2.0 * 0.25 * std::sqrt(2.4) * 1.5);
+    require(
+        std::abs(
+            uncertainty.at("mass").as_object()
+                    .at("standard_uncertainty_si").as_double() -
+            0.02) < 1.0e-12 &&
+            std::abs(
+                uncertainty.at("energy").as_object()
+                        .at("standard_uncertainty_si").as_double() -
+                expected_energy_uncertainty) < 1.0e-12,
+        "correlated mass and energy closure uncertainties must follow the "
+        "declared first-order covariance model");
     const auto markdown = serialize_balance_report_markdown(report);
     require(
         markdown.find("# Thermox thermal balance report") !=
                 std::string::npos &&
             markdown.find("model-r4") != std::string::npos &&
             markdown.find("Clause-level standards conformity is not") !=
-                std::string::npos,
+                std::string::npos &&
+            markdown.find("## Measurement uncertainty") !=
+                std::string::npos &&
+            markdown.find("metering-r1") != std::string::npos,
         "Markdown export must carry accounting, provenance, and limitations");
     const auto csv = serialize_balance_report_csv(report);
     require(
@@ -118,12 +166,12 @@ void test_whole_system_energy_report() {
     while (std::getline(rows, row)) {
         require(
             static_cast<std::size_t>(std::count(row.begin(), row.end(), ',')) ==
-                17U,
-            "each simple CSV test record must preserve the 18-column schema");
+                22U,
+            "each simple CSV test record must preserve the 23-column schema");
     }
     job.result_summary.reset();
     const auto undeclared = build_balance_report_json(
-        job, result, topology, BalanceReportRequest{});
+        job, result, topology, report_request);
     require(
         undeclared.find("\"status\":\"not_declared\"") !=
             std::string::npos,

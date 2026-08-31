@@ -30,6 +30,21 @@ export function ThermalBalanceReport({
     value === null ? 'Not defined' : `${formatResultValue(value * 100)}%`
   const acceptanceLabel = report.closure_acceptance.status
     .replaceAll('_', ' ')
+  const uncertaintyLabel = report.uncertainty.status.replaceAll('_', ' ')
+  const energyUncertainty = report.uncertainty.energy
+    ? power(report.uncertainty.energy.standard_uncertainty_si)
+    : null
+  const expandedEnergyUncertainty = report.uncertainty.energy
+    ? power(report.uncertainty.energy.expanded_uncertainty_si_k2)
+    : null
+  const massUncertainty = report.uncertainty.mass
+    ? displayValue(
+        report.uncertainty.mass.standard_uncertainty_si,
+        'mass_flow',
+        profile,
+        unitDimensions,
+      )
+    : null
   const maximum = Math.max(
     Math.abs(report.boundary.energy_input_si),
     Math.abs(report.boundary.energy_output_si),
@@ -119,6 +134,36 @@ export function ThermalBalanceReport({
           <span>Criteria coverage</span>
           <strong>{report.closure_acceptance.complete ? 'Mass + energy' : 'Incomplete'}</strong>
           <small>{report.closure_acceptance.criteria.length} matched criteria</small>
+        </div>
+      </div>
+      <div className={`balance-uncertainty-summary is-${report.uncertainty.status}`}>
+        <div>
+          <span>Measurement uncertainty</span>
+          <strong>{uncertaintyLabel}</strong>
+          <small>{report.uncertainty.interpretation}</small>
+        </div>
+        <div>
+          <span>Energy standard uncertainty</span>
+          <strong>{energyUncertainty
+            ? `${formatResultValue(energyUncertainty.value)} ${energyUncertainty.unit}`
+            : 'Not evaluated'}</strong>
+          <small>{expandedEnergyUncertainty
+            ? `Expanded k=2: ${formatResultValue(expandedEnergyUncertainty.value)} ${expandedEnergyUncertainty.unit}`
+            : 'Complete boundary coverage required'}</small>
+        </div>
+        <div>
+          <span>Mass standard uncertainty</span>
+          <strong>{massUncertainty
+            ? `${formatResultValue(massUncertainty.value)} ${massUncertainty.unit}`
+            : report.uncertainty.mass_applicable
+              ? 'Not evaluated'
+              : 'Not applicable'}</strong>
+          <small>{report.uncertainty.correlation_count} declared correlations</small>
+        </div>
+        <div>
+          <span>Metrology source</span>
+          <strong>{report.uncertainty.source?.model_id ?? 'Not attached'}</strong>
+          <small>{report.uncertainty.source?.reference ?? report.uncertainty.limitations[0]}</small>
         </div>
       </div>
       <footer>

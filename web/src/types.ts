@@ -895,7 +895,7 @@ export interface SimulationJobPage {
 }
 
 export interface BalanceReport {
-  schema_version: 'thermox.balance_report/v2'
+  schema_version: 'thermox.balance_report/v3'
   job_id: string
   result_checksum: string
   provenance: {
@@ -955,6 +955,39 @@ export interface BalanceReport {
       passed: boolean
     }>
   }
+  uncertainty: {
+    status: 'not_declared' | 'not_evaluated' | 'partial' | 'complete'
+    source: {
+      model_id: string
+      reference: string
+      checksum_sha256: string
+      note: string
+    } | null
+    mass_applicable: boolean
+    mass: {
+      standard_uncertainty_si: number
+      expanded_uncertainty_si_k2: number
+      reference_si: number
+      relative_standard_uncertainty: number | null
+    } | null
+    energy: {
+      standard_uncertainty_si: number
+      expanded_uncertainty_si_k2: number
+      reference_si: number
+      relative_standard_uncertainty: number | null
+    } | null
+    stream_contributions: Array<{
+      component_id: string
+      port_name: string
+      boundary_direction: 'input' | 'output'
+      mass_flow_standard_uncertainty_si: number | null
+      energy_flow_standard_uncertainty_si: number | null
+      energy_uncertainty_method: string
+    }>
+    correlation_count: number
+    interpretation: string
+    limitations: string[]
+  }
   boundary_streams: Array<{
     component_id: string
     port_name: string
@@ -962,12 +995,38 @@ export interface BalanceReport {
     boundary_direction: 'input' | 'output'
     mass_flow_si: number
     energy_flow_si: number
+    specific_enthalpy_si: number | null
   }>
   component_closures: Array<{
     component_id: string
     kind: string
     net_mass_flow_si: number
     net_energy_flow_si: number
+  }>
+}
+
+export interface BalanceUncertaintyModel {
+  schema_version: 'thermox.balance_uncertainty/v1'
+  id: string
+  source: {
+    reference: string
+    checksum_sha256: string
+    note?: string
+    limitations: string[]
+  }
+  streams: Array<{
+    component_id: string
+    port_name: string
+    mass_flow_standard_uncertainty_si: number | null
+    specific_enthalpy_standard_uncertainty_si: number | null
+    energy_flow_standard_uncertainty_si: number | null
+    mass_enthalpy_correlation: number
+  }>
+  correlations: Array<{
+    quantity: 'mass_flow' | 'energy_flow'
+    first: { component_id: string; port_name: string }
+    second: { component_id: string; port_name: string }
+    coefficient: number
   }>
 }
 

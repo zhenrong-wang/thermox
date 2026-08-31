@@ -4545,6 +4545,12 @@ code {
 .balance-closure-evaluation strong { font-size:9px; text-transform:capitalize; }
 .balance-closure-evaluation.is-passed strong,.balance-closure-evaluation.is-partial_pass strong { color:#287252; }
 .balance-closure-evaluation.is-failed strong,.balance-closure-evaluation.is-partial_fail strong { color:#a54d42; }
+.balance-uncertainty-summary { display:grid; grid-template-columns:1.4fr repeat(3,1fr); gap:1px; border-top:1px solid #e3eaed; background:#e3eaed; }
+.balance-uncertainty-summary > div { display:grid; gap:4px; padding:10px 13px; background:#f9fbfc; color:#526d7c; }
+.balance-uncertainty-summary span,.balance-uncertainty-summary small { font-size:7px; }
+.balance-uncertainty-summary strong { font-size:9px; text-transform:capitalize; }
+.balance-uncertainty-summary.is-complete strong { color:#287252; }
+.balance-uncertainty-summary.is-partial strong { color:#9a6a28; }
 .thermal-balance-report > footer { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; color:#7b8c96; font-size:7px; }
 
 .result-assurance-card > header {

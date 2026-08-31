@@ -1,23 +1,26 @@
 #pragma once
 
+#include "thermox/service/balance_uncertainty.hpp"
 #include "thermox/service/simulation_jobs.hpp"
 
+#include <optional>
 #include <string>
 #include <string_view>
 
 namespace thermox::service {
 
-inline constexpr char balance_report_request_schema_v1[] =
-    "thermox.balance_report_request/v1";
-inline constexpr char balance_report_schema_v2[] =
-    "thermox.balance_report/v2";
+inline constexpr char balance_report_request_schema_v2[] =
+    "thermox.balance_report_request/v2";
+inline constexpr char balance_report_schema_v3[] =
+    "thermox.balance_report/v3";
 
 struct BalanceReportRequest {
-    std::string schema_version{balance_report_request_schema_v1};
+    std::string schema_version{balance_report_request_schema_v2};
     std::string accounting_basis{"energy"};
     std::string system_boundary{"whole_system"};
     std::string diagram_profile{"iso-14084-1:2015"};
     std::string calculation_profile{"none"};
+    std::optional<BalanceUncertaintyModel> uncertainty_model;
 };
 
 // Produces an informative, standards-profiled report from an immutable result

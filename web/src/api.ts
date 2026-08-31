@@ -1,6 +1,7 @@
 import type {
   ArtifactRevision,
   BalanceReport,
+  BalanceUncertaintyModel,
   ArtifactRevisionContent,
   PerformanceMapQualityReview,
   PerformanceMapQualityReviewList,
@@ -705,15 +706,20 @@ export const api = {
       `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
       signal,
     ),
-  balanceReport: (jobId: string, signal?: AbortSignal) =>
+  balanceReport: (
+    jobId: string,
+    signal?: AbortSignal,
+    uncertaintyModel?: BalanceUncertaintyModel,
+  ) =>
     postJson<BalanceReport>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/balance-report`,
       {
-        schema_version: 'thermox.balance_report_request/v1',
+        schema_version: 'thermox.balance_report_request/v2',
         accounting_basis: 'energy',
         system_boundary: 'whole_system',
         diagram_profile: 'iso-14084-1:2015',
         calculation_profile: 'none',
+        uncertainty_model: uncertaintyModel ?? null,
       },
       signal,
     ),
@@ -721,15 +727,17 @@ export const api = {
     jobId: string,
     format: 'markdown' | 'csv',
     signal?: AbortSignal,
+    uncertaintyModel?: BalanceUncertaintyModel,
   ) =>
     postDownload(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/balance-report-export?format=${format}`,
       {
-        schema_version: 'thermox.balance_report_request/v1',
+        schema_version: 'thermox.balance_report_request/v2',
         accounting_basis: 'energy',
         system_boundary: 'whole_system',
         diagram_profile: 'iso-14084-1:2015',
         calculation_profile: 'none',
+        uncertainty_model: uncertaintyModel ?? null,
       },
       `thermox-balance-report.${format === 'markdown' ? 'md' : 'csv'}`,
       signal,

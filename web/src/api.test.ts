@@ -331,11 +331,12 @@ describe('thermal balance report API', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          schema_version: 'thermox.balance_report_request/v1',
+          schema_version: 'thermox.balance_report_request/v2',
           accounting_basis: 'energy',
           system_boundary: 'whole_system',
           diagram_profile: 'iso-14084-1:2015',
           calculation_profile: 'none',
+          uncertainty_model: null,
         }),
       }),
     )
