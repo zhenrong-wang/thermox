@@ -894,6 +894,44 @@ export interface SimulationJobPage {
   next_cursor: string | null
 }
 
+export interface BalanceReport {
+  schema_version: 'thermox.balance_report/v1'
+  job_id: string
+  result_checksum: string
+  mode: 'steady' | 'transient'
+  sample_time_si: number
+  accounting_basis: 'energy'
+  system_boundary: 'whole_system'
+  profile: {
+    diagram: string
+    calculation: string
+    conformance: 'informative'
+    evaluated_requirements: string[]
+    unevaluated_requirements: string[]
+  }
+  boundary: {
+    energy_input_si: number
+    energy_output_si: number
+    net_energy_flow_si: number
+    net_mass_flow_si: number
+    closure_interpretation: string
+  }
+  boundary_streams: Array<{
+    component_id: string
+    port_name: string
+    domain: string
+    boundary_direction: 'input' | 'output'
+    mass_flow_si: number
+    energy_flow_si: number
+  }>
+  component_closures: Array<{
+    component_id: string
+    kind: string
+    net_mass_flow_si: number
+    net_energy_flow_si: number
+  }>
+}
+
 export type ComparedValueStatus =
   | 'matched'
   | 'baseline_only'

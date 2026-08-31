@@ -1,6 +1,7 @@
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 add_library(thermox_service
+    src/balance_report.cpp
     src/artifact_declaration.cpp
     src/artifact_payload.cpp
     src/engineering_study.cpp

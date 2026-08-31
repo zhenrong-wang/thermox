@@ -1,6 +1,7 @@
 #include "thermox/platform/expression_component.hpp"
 #include "thermox/service/in_memory_artifacts.hpp"
 #include "thermox/service/artifact_declaration.hpp"
+#include "thermox/service/balance_report.hpp"
 #include "thermox/service/engineering_study.hpp"
 #include "thermox/service/native_runtime.hpp"
 #include "thermox/service/performance_test.hpp"
@@ -9519,6 +9520,66 @@ void test_iso2314_gas_turbine_performance_test_reduction() {
         "conformity");
 }
 
+void test_standards_profiled_balance_report() {
+    using namespace thermox::service;
+    SimulationJobRecord job;
+    job.job_id = "balance-job";
+    ResultArtifact result;
+    result.manifest.checksum = "sha256:result";
+    result.content = R"({
+      "schema_version":"thermox.result/v6",
+      "status":"succeeded",
+      "graph":{
+        "components":[
+          {"component_id":"source","kind":"source.fluid.boundary","ports":[
+            {"port_name":"outlet","domain":"fluid","primary_values":[
+              {"name":"m_dot","value_si":2.0},{"name":"h","value_si":50.0}
+            ],"derived_values":[]}
+          ],"metrics":[]},
+          {"component_id":"load","kind":"test.load","ports":[
+            {"port_name":"inlet","domain":"fluid","primary_values":[
+              {"name":"m_dot","value_si":2.0},{"name":"h","value_si":50.0}
+            ],"derived_values":[]},
+            {"port_name":"outlet","domain":"fluid","primary_values":[
+              {"name":"m_dot","value_si":2.0},{"name":"h","value_si":50.0}
+            ],"derived_values":[]}
+          ],"metrics":[]},
+          {"component_id":"sink","kind":"sink.fluid.boundary","ports":[
+            {"port_name":"inlet","domain":"fluid","primary_values":[
+              {"name":"m_dot","value_si":2.0},{"name":"h","value_si":50.0}
+            ],"derived_values":[]}
+          ],"metrics":[]}
+        ],
+        "system_balances":[
+          {"name":"net_boundary_mass_flow","value_si":0.0},
+          {"name":"net_boundary_energy_flow","value_si":0.0}
+        ],"kpis":[]
+      }
+    })";
+    const std::string topology = R"({
+      "schema_version":"thermox.topology/v1","model":{
+        "connections":[
+          {"from":"source.outlet","to":"load.inlet"},
+          {"from":"load.outlet","to":"sink.inlet"}
+        ]
+      }
+    })";
+    const auto report = boost::json::parse(
+        build_balance_report_json(
+            job, result, topology, BalanceReportRequest{}));
+    const auto& root = report.as_object();
+    require(
+        root.at("schema_version").as_string() ==
+                "thermox.balance_report/v1" &&
+            root.at("profile").as_object().at("conformance").as_string() ==
+                "informative" &&
+            root.at("boundary").as_object().at("energy_input_si").as_double() ==
+                100.0 &&
+            root.at("boundary").as_object().at("energy_output_si").as_double() ==
+                100.0,
+        "balance report must preserve standards scope and boundary accounting");
+}
+
 }  // namespace
 
 int main() {
@@ -9606,6 +9667,7 @@ int main() {
         test_validation_series_contract();
         test_validation_evidence_contract();
         test_iso2314_gas_turbine_performance_test_reduction();
+        test_standards_profiled_balance_report();
         std::cout << "thermox service tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

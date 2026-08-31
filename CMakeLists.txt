@@ -286,6 +286,15 @@ if(TARGET thermox_cantera_backend)
         ENVIRONMENT "CANTERA_DATA=${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
+add_executable(
+    thermox_balance_report_tests
+    service/tests/balance_report_tests.cpp)
+target_link_libraries(
+    thermox_balance_report_tests PRIVATE thermox_service)
+add_test(
+    NAME thermox_balance_report_tests
+    COMMAND thermox_balance_report_tests)
+
 add_executable(thermox_job_service_tests
     service/tests/job_service_tests.cpp
 )

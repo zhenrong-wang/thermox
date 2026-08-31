@@ -17,6 +17,8 @@ import {
 } from './resultExploration'
 import { TopologyCanvas } from './TopologyCanvas'
 import { ResultAssuranceStrip } from './ResultAssuranceStrip'
+import { ThermalBalanceReport } from './ThermalBalanceReport'
+import { api } from './api'
 import type { ReportDownload } from './api'
 import type { GraphSelection } from './InspectorPanel'
 import {
@@ -33,6 +35,7 @@ import {
 } from './resultPresentation'
 import { buildResultAssuranceLayers } from './resultAssurance'
 import type {
+  BalanceReport,
   CatalogComponent,
   JobValidationReport,
   SimulationJob,
@@ -276,6 +279,7 @@ export function ResultsWorkspace({
     'markdown' | 'csv' | ''
   >('')
   const [exportError, setExportError] = useState('')
+  const [balanceReport, setBalanceReport] = useState<BalanceReport>()
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -284,6 +288,16 @@ export function ResultsWorkspace({
     setScope('all')
     setSelection(undefined)
   }, [job?.job_id, sampleCount])
+
+  useEffect(() => {
+    setBalanceReport(undefined)
+    if (!job?.job_id || job.state !== 'succeeded') return
+    const controller = new AbortController()
+    void api.balanceReport(job.job_id, controller.signal)
+      .then(setBalanceReport)
+      .catch(() => setBalanceReport(undefined))
+    return () => controller.abort()
+  }, [job?.job_id, job?.state])
 
   const graph = result ? resultGraph(result, sampleIndex) : undefined
   const overlays = useMemo(
@@ -600,6 +614,7 @@ export function ResultsWorkspace({
       {!loading && result && graph && (
         <div className="results-content">
           <ResultAssuranceStrip layers={assuranceLayers} />
+          {balanceReport && <ThermalBalanceReport report={balanceReport} />}
           <div className="result-summary-strip">
             {(job.result_summary?.values ?? []).map((value) => {
               const displayed = displayValue(

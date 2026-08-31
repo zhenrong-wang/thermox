@@ -4525,6 +4525,22 @@ code {
   background: #fbfcfc;
 }
 
+.thermal-balance-report { margin-bottom:14px; overflow:hidden; border:1px solid #d7e1e6; border-radius:5px; background:#fff; }
+.thermal-balance-report > header { display:flex; justify-content:space-between; padding:12px 14px; background:#f7f9fa; border-bottom:1px solid #e0e7eb; }
+.thermal-balance-report h2 { margin:0; color:#334d5f; font-size:11px; }
+.thermal-balance-report > header > div:last-child { display:grid; justify-items:end; gap:3px; color:#537080; font-size:8px; text-transform:uppercase; }
+.balance-flow-diagram { display:grid; grid-template-columns:1fr 170px 1fr; gap:18px; align-items:center; padding:18px; background:linear-gradient(90deg,#f4faf7,#fff 48%,#fff8f2); }
+.balance-streams { display:grid; gap:6px; }
+.balance-streams span { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-radius:3px; background:#fff; box-shadow:0 1px 4px #2b4b5d14; color:#496878; font-size:8px; }
+.balance-streams.input span { border-right:4px solid #45936f; }
+.balance-streams.output span { border-left:4px solid #d1844e; }
+.balance-system-node { display:grid; gap:5px; padding:18px 12px; border:2px solid #4e8299; border-radius:6px; background:#eef7fa; color:#355d70; text-align:center; }
+.balance-system-node span,.balance-system-node small { font-size:7px; }
+.balance-accounting-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#e3eaed; }
+.balance-accounting-strip div { position:relative; display:grid; gap:5px; padding:10px 13px; background:#fff; color:#526d7c; font-size:8px; }
+.balance-accounting-strip i { height:3px; max-width:100%; background:#4f9b7d; }
+.thermal-balance-report > footer { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; color:#7b8c96; font-size:7px; }
+
 .result-assurance-card > header {
   display: flex;
   align-items: flex-start;

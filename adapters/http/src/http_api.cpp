@@ -1,5 +1,6 @@
 #include "thermox/http/http_api.hpp"
 
+#include "thermox/service/balance_report.hpp"
 #include "thermox/service/in_memory_jobs.hpp"
 #include "thermox/service/in_memory_projects.hpp"
 #include "thermox/service/serialization.hpp"
@@ -968,6 +969,44 @@ parse_job_comparison_request(const Request& request) {
         require_json_string(root, "baseline_job_id"),
         require_json_string(root, "candidate_job_id"),
     };
+}
+
+service::BalanceReportRequest parse_balance_report_request(
+    const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid balance report JSON: ") + error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument(
+            "balance report request must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    for (const auto& field : root) {
+        if (field.key() != "schema_version" &&
+            field.key() != "accounting_basis" &&
+            field.key() != "system_boundary" &&
+            field.key() != "diagram_profile" &&
+            field.key() != "calculation_profile") {
+            throw std::invalid_argument(
+                "unknown balance report field: " +
+                std::string(field.key()));
+        }
+    }
+    service::BalanceReportRequest parsed;
+    parsed.schema_version = require_json_string(root, "schema_version");
+    parsed.accounting_basis =
+        require_json_string(root, "accounting_basis");
+    parsed.system_boundary =
+        require_json_string(root, "system_boundary");
+    parsed.diagram_profile =
+        require_json_string(root, "diagram_profile");
+    parsed.calculation_profile =
+        require_json_string(root, "calculation_profile");
+    return parsed;
 }
 
 std::pair<std::string, std::vector<std::string>>
@@ -4049,8 +4088,15 @@ Response Api::handle(const Request& request) const {
             std::string suffix =
                 target.path.substr(job_prefix.size());
             bool result_requested = false;
+            bool balance_report_requested = false;
+            constexpr std::string_view balance_report_suffix =
+                "/balance-report";
             constexpr std::string_view result_suffix = "/result";
-            if (suffix.ends_with(result_suffix)) {
+            if (suffix.ends_with(balance_report_suffix)) {
+                balance_report_requested = true;
+                suffix.resize(
+                    suffix.size() - balance_report_suffix.size());
+            } else if (suffix.ends_with(result_suffix)) {
                 result_requested = true;
                 suffix.resize(
                     suffix.size() - result_suffix.size());
@@ -4061,6 +4107,13 @@ Response Api::handle(const Request& request) const {
                     404, "route_not_found",
                     "no route matches the request target");
             }
+            if (balance_report_requested && method != "post") {
+                auto response = error_response(
+                    405, "method_not_allowed",
+                    "balance reports only support POST");
+                response.headers["Allow"] = "POST";
+                return response;
+            }
             if (result_requested && method != "get") {
                 auto response = error_response(
                     405, "method_not_allowed",
@@ -4068,7 +4121,7 @@ Response Api::handle(const Request& request) const {
                 response.headers["Allow"] = "GET";
                 return response;
             }
-            if (!result_requested &&
+            if (!result_requested && !balance_report_requested &&
                 method != "get" && method != "delete") {
                 auto response = error_response(
                     405, "method_not_allowed",
@@ -4108,6 +4161,43 @@ Response Api::handle(const Request& request) const {
                         "revision_precondition_failed",
                         error.what());
                 }
+            }
+            if (balance_report_requested) {
+                require_json_request(
+                    request, impl_->options.maximum_body_bytes);
+                const auto report_request =
+                    parse_balance_report_request(request);
+                const auto record = impl_->jobs->get(identity, suffix);
+                if (!record) {
+                    return error_response(
+                        404, "simulation_not_found",
+                        "simulation job was not found");
+                }
+                if (!record->request.source_revisions) {
+                    throw service::JobStateError(
+                        "balance report requires revision-backed execution");
+                }
+                const auto result =
+                    impl_->jobs->get_result(identity, suffix);
+                if (!result) {
+                    return error_response(
+                        404, "simulation_not_found",
+                        "simulation job was not found");
+                }
+                const auto& provenance =
+                    *record->request.source_revisions;
+                const auto model = impl_->projects->get_model_revision(
+                    identity, provenance.project_id,
+                    provenance.model_revision_id);
+                if (!model) {
+                    throw service::ProjectStateError(
+                        "balance report model revision was not found");
+                }
+                return json_response(
+                    200,
+                    service::build_balance_report_json(
+                        *record, *result, model->canonical_model_json,
+                        report_request));
             }
             if (!result_requested) {
                 const auto record =

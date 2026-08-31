@@ -1,5 +1,6 @@
 import type {
   ArtifactRevision,
+  BalanceReport,
   ArtifactRevisionContent,
   PerformanceMapQualityReview,
   PerformanceMapQualityReviewList,
@@ -702,6 +703,18 @@ export const api = {
   simulationResult: (jobId: string, signal?: AbortSignal) =>
     getJson<SimulationResult>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,
+      signal,
+    ),
+  balanceReport: (jobId: string, signal?: AbortSignal) =>
+    postJson<BalanceReport>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/balance-report`,
+      {
+        schema_version: 'thermox.balance_report_request/v1',
+        accounting_basis: 'energy',
+        system_boundary: 'whole_system',
+        diagram_profile: 'iso-14084-1:2015',
+        calculation_profile: 'none',
+      },
       signal,
     ),
   reconciliationResult: (jobId: string, signal?: AbortSignal) =>
