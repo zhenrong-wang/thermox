@@ -129,11 +129,24 @@ system.
 
 ### 3. Study
 
-- Create operating cases and boundary conditions.
-- Select an explicit engineering intent.
-- Define observations, adjustable quantities, objectives, initial conditions, and outputs as
-  required by that intent.
-- Invoke authoritative validation for the exact revision set.
+- Select an explicit engineering intent and persisted steady/transient mode.
+- Complete physical definitions and publish case-specific boundary values, parameter overrides,
+  initial conditions, and numeric options as immutable case revisions.
+- Select exact immutable engineering-data revisions and invoke authoritative validation for that
+  topology/case/artifact selection.
+- Only after the exact selection is calculatable, define outputs, acceptance criteria, and evidence
+  bindings and publish an immutable Study revision.
+
+The web workspace presents these as four guided preparation stages: intent and mode, definitions
+and boundaries, engineering data and compilation, then outputs and Study publication. Stage states
+before compilation are navigation hints, not solver claims. Artifact selections are shared
+workspace state rather than private form state: changing a selected revision immediately makes the
+prior compiler result stale, hides it from the current preparation context, and blocks Study
+publication until the new exact set is compiled. This prevents the browser from displaying one
+artifact selection while publishing another. When locating an already published Study, the client
+requires every selected calculation artifact and the exact case revision; additional Study-owned
+validation-evidence artifacts remain valid and do not make that Study disappear from execution
+authoring.
 
 ### 4. Calculate
 

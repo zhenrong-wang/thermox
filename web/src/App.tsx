@@ -61,6 +61,11 @@ import {
   buildSystemReadiness,
   type SystemReadinessIssue,
 } from './systemReadiness'
+import {
+  resolveStudyArtifactSelections,
+  selectedStudyArtifactRevisionIds,
+  studyMatchesPreparationSelection,
+} from './studyPreparation'
 import { WorkflowNavigator } from './WorkflowNavigator'
 import {
   withPlacedEntity,
@@ -152,6 +157,9 @@ function App() {
   const [artifactRevisions, setArtifactRevisions] = useState<
     ArtifactRevision[]
   >([])
+  const [studyArtifactSelections, setStudyArtifactSelections] = useState<
+    Record<string, string>
+  >({})
   const [projectComponents, setProjectComponents] = useState<
     ProjectComponentCatalogEntry[]
   >([])
@@ -477,6 +485,7 @@ function App() {
   useEffect(() => {
     setRevisions([])
     setArtifactRevisions([])
+    setStudyArtifactSelections({})
     setProjectComponents([])
     setAddingCorrelation(false)
     setRevisingCorrelation(undefined)
@@ -671,6 +680,20 @@ function App() {
       ].sort(),
     [requiredComponentSources, topology],
   )
+  useEffect(() => {
+    setStudyArtifactSelections((current) =>
+      resolveStudyArtifactSelections(
+        requiredArtifactIds,
+        artifactRevisions,
+        preferredArtifactRevisionIds,
+        current,
+      ),
+    )
+  }, [
+    artifactRevisions,
+    preferredArtifactRevisionIds,
+    requiredArtifactIds,
+  ])
   const visibleRunConfigurations = useMemo(
     () => {
       const studyIds = new Set(
@@ -718,40 +741,20 @@ function App() {
     [selectedRunConfiguration, studyRevisions],
   )
   const selectedArtifactRevisionIds = useMemo(
-    () =>
-      requiredArtifactIds
-        .map((artifactId) => {
-          const validated = validationResult?.artifact_revisions.find(
-            (revision) => revision.artifact_id === artifactId,
-          )
-          if (validated) return validated.artifact_revision_id
-          const preferred =
-            preferredArtifactRevisionIds[artifactId]
-          if (preferred) return preferred
-          return artifactRevisions
-            .filter((revision) => revision.artifact_id === artifactId)
-            .sort(
-              (left, right) =>
-                right.revision_number - left.revision_number,
-            )[0]?.artifact_revision_id
-        })
-        .filter((id): id is string => Boolean(id)),
-    [
-      artifactRevisions,
-      preferredArtifactRevisionIds,
+    () => selectedStudyArtifactRevisionIds(
       requiredArtifactIds,
-      validationResult,
-    ],
+      studyArtifactSelections,
+    ),
+    [requiredArtifactIds, studyArtifactSelections],
   )
   const activePublishedStudy = useMemo(
     () =>
       visibleStudies.find(
         (study) =>
-          study.case_revision_id === selectedCaseRevisionId &&
-          study.artifact_revision_ids.length ===
-            selectedArtifactRevisionIds.length &&
-          study.artifact_revision_ids.every((id) =>
-            selectedArtifactRevisionIds.includes(id),
+          studyMatchesPreparationSelection(
+            study,
+            selectedCaseRevisionId,
+            selectedArtifactRevisionIds,
           ),
       ),
     [
@@ -2576,14 +2579,19 @@ function App() {
             operationStatus={caseOperationStatus}
             artifactRevisions={artifactRevisions}
             requiredArtifactIds={requiredArtifactIds}
-            preferredArtifactRevisionIds={
-              preferredArtifactRevisionIds
+            artifactSelections={studyArtifactSelections}
+            onArtifactSelectionChange={(artifactId, revisionId) =>
+              setStudyArtifactSelections((current) => ({
+                ...current,
+                [artifactId]: revisionId,
+              }))
             }
             topology={topology}
             catalog={topologyCatalog}
             unresolvedArtifactCount={unresolvedArtifactCount}
             exactRevisionCompiled={exactRevisionCompiled}
-            validationResult={validationResult}
+            hasPublishedStudy={Boolean(activePublishedStudy)}
+            validationResult={exactRevisionValidation}
             validating={validating}
             onDismissOperation={() => {
               setCaseOperationError('')
@@ -2593,6 +2601,7 @@ function App() {
             onValidate={validateCase}
             onInspectComponent={inspectComponentDefinition}
             onInspectDiagnostic={inspectDiagnosticOnCanvas}
+            onPublishStudy={() => setAddingStudy(true)}
             onCreate={() => setAddingCase(true)}
           />
         ) : workspaceView === 'runs' ? (

@@ -42,6 +42,10 @@ The workspace currently provides:
 - topology-scoped operating-case creation and exact case-revision browsing;
 - immutable case metadata and scalar-map edits with service-normalized engineering units;
 - exact artifact-revision selection and compile-aware validation with structured diagnostics;
+- a guided Study-preparation sequence covering intent, physical/case inputs, exact engineering
+  data, authoritative compilation, output projection, acceptance, and publication;
+- shared artifact-selection state that immediately invalidates stale compilation and publication
+  gates when an engineer changes any selected revision;
 - immutable run-configuration creation and revision history;
 - complete steady/transient solver policy and generic result-projection authoring;
 - idempotent durable job submission for an exact run-configuration revision;

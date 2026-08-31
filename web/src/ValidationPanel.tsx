@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type {
   ArtifactRevision,
   ProjectModelValidation,
@@ -8,7 +8,8 @@ import type {
 interface ValidationPanelProps {
   artifactRevisions: ArtifactRevision[]
   requiredArtifactIds: string[]
-  preferredArtifactRevisionIds: Record<string, string>
+  artifactSelections: Record<string, string>
+  onArtifactSelectionChange: (artifactId: string, revisionId: string) => void
   result?: ProjectModelValidation
   validating: boolean
   onValidate: (artifactRevisionIds: string[]) => Promise<void>
@@ -29,7 +30,8 @@ function diagnosticLocation(diagnostic: ValidationDiagnostic) {
 export function ValidationPanel({
   artifactRevisions,
   requiredArtifactIds,
-  preferredArtifactRevisionIds,
+  artifactSelections,
+  onArtifactSelectionChange,
   result,
   validating,
   onValidate,
@@ -49,36 +51,8 @@ export function ValidationPanel({
     }
     return grouped
   }, [artifactRevisions])
-  const [selections, setSelections] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      requiredArtifactIds.map((artifactId) => [
-        artifactId,
-        preferredArtifactRevisionIds[artifactId] ??
-          revisionsByArtifact.get(artifactId)?.[0]?.artifact_revision_id ??
-          '',
-      ]),
-    ),
-  )
-  useEffect(() => {
-    setSelections((current) =>
-      Object.fromEntries(
-        requiredArtifactIds.map((artifactId) => [
-          artifactId,
-          preferredArtifactRevisionIds[artifactId] ??
-            current[artifactId] ??
-            revisionsByArtifact.get(artifactId)?.[0]
-              ?.artifact_revision_id ??
-            '',
-        ]),
-      ),
-    )
-  }, [
-    preferredArtifactRevisionIds,
-    requiredArtifactIds,
-    revisionsByArtifact,
-  ])
   const missing = requiredArtifactIds.filter(
-    (artifactId) => !selections[artifactId],
+    (artifactId) => !artifactSelections[artifactId],
   )
   const compilation = result?.validation.compilation
   const readiness = result?.validation.readiness
@@ -115,7 +89,9 @@ export function ValidationPanel({
           disabled={validating || missing.length > 0}
           onClick={() =>
             void onValidate(
-              requiredArtifactIds.map((artifactId) => selections[artifactId]),
+              requiredArtifactIds.map(
+                (artifactId) => artifactSelections[artifactId],
+              ),
             ).catch(() => {
               // The workspace operation banner exposes transport diagnostics.
             })
@@ -135,12 +111,9 @@ export function ValidationPanel({
             <label key={artifactId}>
               <span>{artifactId}</span>
               <select
-                value={selections[artifactId] ?? ''}
+                value={artifactSelections[artifactId] ?? ''}
                 onChange={(event) =>
-                  setSelections((current) => ({
-                    ...current,
-                    [artifactId]: event.target.value,
-                  }))
+                  onArtifactSelectionChange(artifactId, event.target.value)
                 }
               >
                 <option value="">

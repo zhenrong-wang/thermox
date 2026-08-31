@@ -10,6 +10,9 @@ import {
 } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
 import { DefinitionOverview } from './DefinitionOverview'
+import { definitionIssues } from './definitionReadiness'
+import { StudyPreparationStrip } from './StudyPreparationStrip'
+import { buildStudyPreparationStages } from './studyPreparation'
 import { ValidationPanel } from './ValidationPanel'
 import type {
   ArtifactRevision,
@@ -32,11 +35,13 @@ interface CaseWorkspaceProps {
   operationStatus: string
   artifactRevisions: ArtifactRevision[]
   requiredArtifactIds: string[]
-  preferredArtifactRevisionIds: Record<string, string>
+  artifactSelections: Record<string, string>
+  onArtifactSelectionChange: (artifactId: string, revisionId: string) => void
   topology?: TopologyDocument
   catalog?: Catalog
   unresolvedArtifactCount: number
   exactRevisionCompiled: boolean
+  hasPublishedStudy: boolean
   validationResult?: ProjectModelValidation
   validating: boolean
   onDismissOperation: () => void
@@ -44,6 +49,7 @@ interface CaseWorkspaceProps {
   onValidate: (artifactRevisionIds: string[]) => Promise<void>
   onInspectComponent: (componentId: string) => void
   onInspectDiagnostic: (diagnostic: ValidationDiagnostic) => void
+  onPublishStudy: () => void
   onCreate: () => void
 }
 
@@ -106,11 +112,13 @@ export function CaseWorkspace({
   operationStatus,
   artifactRevisions,
   requiredArtifactIds,
-  preferredArtifactRevisionIds,
+  artifactSelections,
+  onArtifactSelectionChange,
   topology,
   catalog,
   unresolvedArtifactCount,
   exactRevisionCompiled,
+  hasPublishedStudy,
   validationResult,
   validating,
   onDismissOperation,
@@ -118,6 +126,7 @@ export function CaseWorkspace({
   onValidate,
   onInspectComponent,
   onInspectDiagnostic,
+  onPublishStudy,
   onCreate,
 }: CaseWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
@@ -173,6 +182,19 @@ export function CaseWorkspace({
   }
   const activeCase = simulationCase
   const intent = studyMode(activeCase.mode)
+  const boundaryValueCount =
+    Object.keys(activeCase.fixed_values ?? {}).length +
+    Object.keys(activeCase.parameter_overrides ?? {}).length
+  const localDefinitionIssueCount = definitionIssues(topology, catalog).length
+  const preparationStages = buildStudyPreparationStages({
+    recognizedIntent: Boolean(intent),
+    localDefinitionIssueCount,
+    boundaryValueCount,
+    requiredArtifactCount: requiredArtifactIds.length,
+    unresolvedArtifactCount,
+    exactRevisionCompiled,
+    hasPublishedStudy,
+  })
 
   async function updateMetadata(event: FormEvent) {
     event.preventDefault()
@@ -243,66 +265,86 @@ export function CaseWorkspace({
         </div>
       )}
       <div className="case-editor-scroll">
-        <section className="study-intent-card">
-          <div>
-            <span className="section-kicker">Engineering question</span>
-            <h2>{intent?.title ?? activeCase.mode}</h2>
-            <p>
-              {intent?.description ??
-                'This persisted operating mode is not recognized by the current client catalog.'}
-            </p>
+        <StudyPreparationStrip stages={preparationStages} />
+
+        <section id="study-intent" className="study-preparation-stage">
+          <header className="study-preparation-heading">
+            <span>1</span>
+            <div>
+              <h2>Intent and calculation mode</h2>
+              <p>
+                State the engineering question before entering numerical
+                constraints.
+              </p>
+            </div>
+          </header>
+          <div className="study-intent-card">
+            <div>
+              <span className="section-kicker">Engineering question</span>
+              <h2>{intent?.title ?? activeCase.mode}</h2>
+              <p>
+                {intent?.description ??
+                  'This persisted operating mode is not recognized by the current client catalog.'}
+              </p>
+            </div>
+            <span>{intent?.execution ?? 'unknown'} execution</span>
           </div>
-          <span>{intent?.execution ?? 'unknown'} execution</span>
+          <form className="case-metadata" onSubmit={updateMetadata}>
+            <div>
+              <span className="section-kicker">Case identity</span>
+              <strong>{activeCase.id}</strong>
+            </div>
+            <label>
+              <span>Label</span>
+              <input
+                value={label}
+                placeholder="Optional"
+                onChange={(event) => setLabel(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Mode</span>
+              <select
+                value={mode}
+                onChange={(event) => setMode(event.target.value)}
+              >
+                {studyModes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="secondary-button"
+              disabled={publishing}
+            >
+              Publish metadata
+            </button>
+          </form>
         </section>
-        <form className="case-metadata" onSubmit={updateMetadata}>
-          <div>
-            <span className="section-kicker">Case identity</span>
-            <strong>{activeCase.id}</strong>
-          </div>
-          <label>
-            <span>Label</span>
-            <input
-              value={label}
-              placeholder="Optional"
-              onChange={(event) => setLabel(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Mode</span>
-            <select value={mode} onChange={(event) => setMode(event.target.value)}>
-              {studyModes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="secondary-button" disabled={publishing}>
-            Publish metadata
-          </button>
-        </form>
 
-        <DefinitionOverview
-          topology={topology}
-          catalog={catalog}
-          caseRevision={revision}
-          requiredArtifactCount={requiredArtifactIds.length}
-          unresolvedArtifactCount={unresolvedArtifactCount}
-          compiled={exactRevisionCompiled}
-          onInspectComponent={onInspectComponent}
-        />
-
-        <ValidationPanel
-          artifactRevisions={artifactRevisions}
-          requiredArtifactIds={requiredArtifactIds}
-          preferredArtifactRevisionIds={
-            preferredArtifactRevisionIds
-          }
-          result={validationResult}
-          validating={validating}
-          onValidate={onValidate}
-          onInspectDiagnostic={onInspectDiagnostic}
-        />
+        <section id="study-inputs" className="study-preparation-stage">
+          <header className="study-preparation-heading">
+            <span>2</span>
+            <div>
+              <h2>Physical definitions and boundary conditions</h2>
+              <p>
+                Complete component inputs, then declare case-specific fixed
+                values, overrides, guesses, and numeric options.
+              </p>
+            </div>
+          </header>
+          <DefinitionOverview
+            topology={topology}
+            catalog={catalog}
+            caseRevision={revision}
+            requiredArtifactCount={requiredArtifactIds.length}
+            unresolvedArtifactCount={unresolvedArtifactCount}
+            compiled={exactRevisionCompiled}
+            onInspectComponent={onInspectComponent}
+          />
 
         {scalarSections.map((section) => {
           const entries = Object.entries(
@@ -348,7 +390,7 @@ export function CaseWorkspace({
           )
         })}
 
-        <form className="scalar-add-form" onSubmit={addScalar}>
+          <form className="scalar-add-form" onSubmit={addScalar}>
           <header>
             <div>
               <span className="section-kicker">Atomic case edit</span>
@@ -406,8 +448,77 @@ export function CaseWorkspace({
           <button type="submit" className="primary-button" disabled={publishing}>
             Publish scalar revision
           </button>
-        </form>
-        {formError && <div className="form-error case-form-error">{formError}</div>}
+          </form>
+          {formError && <div className="form-error case-form-error">{formError}</div>}
+        </section>
+
+        <section id="study-validation" className="study-preparation-stage">
+          <header className="study-preparation-heading">
+            <span>3</span>
+            <div>
+              <h2>Engineering data and authoritative compilation</h2>
+              <p>
+                Select exact immutable artifact revisions and ask the service
+                to compile this exact input set.
+              </p>
+            </div>
+          </header>
+          <ValidationPanel
+            artifactRevisions={artifactRevisions}
+            requiredArtifactIds={requiredArtifactIds}
+            artifactSelections={artifactSelections}
+            onArtifactSelectionChange={onArtifactSelectionChange}
+            result={validationResult}
+            validating={validating}
+            onValidate={onValidate}
+            onInspectDiagnostic={onInspectDiagnostic}
+          />
+        </section>
+
+        <section
+          id="study-publication"
+          className="study-preparation-stage study-publication-stage"
+        >
+          <header className="study-preparation-heading">
+            <span>4</span>
+            <div>
+              <h2>Outputs and immutable Study</h2>
+              <p>
+                Choose retained outputs and engineering acceptance criteria,
+                then pin the validated input revisions.
+              </p>
+            </div>
+          </header>
+          <div
+            className={`study-publication-card${
+              hasPublishedStudy ? ' complete' : ''
+            }`}
+          >
+            <div>
+              <strong>
+                {hasPublishedStudy
+                  ? 'Study published for this input selection'
+                  : exactRevisionCompiled
+                    ? 'Validated inputs are ready to publish'
+                    : 'Compilation must pass before publication'}
+              </strong>
+              <p>
+                The Study remains separate from solver settings: it declares intent,
+                exact inputs, outputs, and acceptance evidence.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!exactRevisionCompiled || publishing}
+              onClick={onPublishStudy}
+            >
+              {hasPublishedStudy
+                ? 'Revise Study outputs'
+                : 'Define outputs and publish'}
+            </button>
+          </div>
+        </section>
       </div>
     </section>
   )
