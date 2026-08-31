@@ -1798,7 +1798,19 @@ function App() {
   }
 
   async function submitSimulationJob() {
-    if (!selectedProjectId || !selectedRunConfigurationRevisionId) return
+    if (
+      !selectedProjectId ||
+      !selectedRunConfigurationRevisionId ||
+      !selectedRunConfiguration ||
+      !selectedRunStudy ||
+      selectedRunConfiguration.study_revision_id !==
+        selectedRunStudy.study_revision_id
+    ) {
+      setRunOperationError(
+        'Execution is blocked because the selected configuration does not resolve to its exact published Study revision.',
+      )
+      return
+    }
     const idempotencyKey =
       submissionIdempotencyKey ||
       `web-${selectedRunConfigurationRevisionId}-${crypto.randomUUID()}`

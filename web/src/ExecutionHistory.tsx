@@ -14,6 +14,7 @@ interface ExecutionHistoryProps {
   submitting: boolean
   stateFilter: '' | SimulationJobState
   nextCursor: string | null
+  submissionReady: boolean
   onSelect: (jobId: string) => void
   onStateFilter: (state: '' | SimulationJobState) => void
   onSubmit: () => void
@@ -41,6 +42,7 @@ export function ExecutionHistory({
   submitting,
   stateFilter,
   nextCursor,
+  submissionReady,
   onSelect,
   onStateFilter,
   onSubmit,
@@ -59,7 +61,7 @@ export function ExecutionHistory({
         : ''
 
   return (
-    <section className="execution-history">
+    <section className="execution-history" id="run-execution">
       <header>
         <div>
           <span className="section-kicker">Durable worker queue</span>
@@ -92,8 +94,13 @@ export function ExecutionHistory({
           <button
             type="button"
             className="primary-button"
-            disabled={submitting}
+            disabled={submitting || !submissionReady}
             onClick={onSubmit}
+            title={
+              submissionReady
+                ? 'Queue this exact run-configuration revision'
+                : 'Resolve the Study and configuration revision binding first'
+            }
           >
             {submitting ? 'Submitting…' : 'Queue execution'}
           </button>

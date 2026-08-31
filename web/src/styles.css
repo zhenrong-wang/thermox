@@ -3380,6 +3380,7 @@ code {
 .run-editor-scroll {
   overflow-y: auto;
   padding: 18px 20px 28px;
+  scroll-behavior: smooth;
 }
 
 .run-provenance-card,
@@ -3389,6 +3390,12 @@ code {
   border: 1px solid #d7e1e6;
   border-radius: 5px;
   background: #fbfcfc;
+}
+
+.run-provenance-card,
+.run-detail-card,
+.execution-history {
+  scroll-margin-top: 84px;
 }
 
 .run-provenance-card > header,
@@ -3483,6 +3490,42 @@ code {
   background: #f7f9fa;
   font-size: 8px;
   text-transform: uppercase;
+}
+
+.run-detail-card > .run-subheading {
+  border-top: 1px solid #e0e7eb;
+}
+
+.execution-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: #e6ecef;
+}
+
+.execution-review-grid > div {
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 10px 13px;
+  background: #fff;
+}
+
+.execution-review-grid span {
+  color: #84939d;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.execution-review-grid code,
+.execution-review-grid strong {
+  overflow: hidden;
+  color: #34566b;
+  font-size: 9px;
+  text-overflow: ellipsis;
 }
 
 .run-projection-list {

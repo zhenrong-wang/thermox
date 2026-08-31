@@ -1,4 +1,10 @@
 import { ExecutionHistory } from './ExecutionHistory'
+import { ExecutionPreparationStrip } from './ExecutionPreparationStrip'
+import {
+  buildExecutionPreparationStages,
+  executionSelectionReady,
+  studyExecutionMode,
+} from './executionPreparation'
 import type {
   RunConfigurationRevision,
   SimulationJob,
@@ -88,11 +94,13 @@ export function RunConfigurationWorkspace({
     )
   }
 
-  const mode =
-    study?.intent.includes('dynamic') ||
-    study?.intent.includes('transient')
-      ? 'transient'
-      : 'steady'
+  const mode = studyExecutionMode(study)
+  const submissionReady = executionSelectionReady(revision, study)
+  const preparationStages = buildExecutionPreparationStages(
+    revision,
+    study,
+    jobs,
+  )
 
   return (
     <section className="run-workspace">
@@ -129,7 +137,8 @@ export function RunConfigurationWorkspace({
         </div>
       )}
       <div className="run-editor-scroll">
-        <section className="run-provenance-card">
+        <ExecutionPreparationStrip stages={preparationStages} />
+        <section className="run-provenance-card" id="run-study">
           <header>
             <h2>Revision bindings</h2>
             <span>{mode}</span>
@@ -150,7 +159,7 @@ export function RunConfigurationWorkspace({
           </div>
         </section>
 
-        <section className="run-detail-card">
+        <section className="run-detail-card" id="run-policy">
           <header>
             <h2>
               {mode === 'steady'
@@ -180,8 +189,38 @@ export function RunConfigurationWorkspace({
           )}
         </section>
 
-        <section className="run-detail-card">
+        <section className="run-detail-card" id="run-review">
           <header>
+            <h2>Exact execution review</h2>
+            <span>{submissionReady ? 'ready' : 'blocked'}</span>
+          </header>
+          <div className="execution-review-grid">
+            <div>
+              <span>Model revision</span>
+              <code>{study?.model_revision_id ?? 'unavailable'}</code>
+            </div>
+            <div>
+              <span>Case revision</span>
+              <code>{study?.case_revision_id ?? 'unavailable'}</code>
+            </div>
+            <div>
+              <span>Study fingerprint</span>
+              <code>{study?.checksum ?? 'unavailable'}</code>
+            </div>
+            <div>
+              <span>Configuration fingerprint</span>
+              <code>{revision.checksum}</code>
+            </div>
+            <div>
+              <span>Engineering artifacts</span>
+              <strong>{study?.artifact_revision_ids.length ?? 0}</strong>
+            </div>
+            <div>
+              <span>Acceptance criteria</span>
+              <strong>{study?.acceptance_criteria.length ?? 0}</strong>
+            </div>
+          </div>
+          <header className="run-subheading">
             <h2>Result projections</h2>
             <span>{study?.result_projections.length ?? 0}</span>
           </header>
@@ -214,6 +253,7 @@ export function RunConfigurationWorkspace({
           submitting={jobSubmitting}
           stateFilter={jobStateFilter}
           nextCursor={jobsNextCursor}
+          submissionReady={submissionReady}
           onSelect={onSelectJob}
           onStateFilter={onJobStateFilter}
           onSubmit={onSubmitJob}
