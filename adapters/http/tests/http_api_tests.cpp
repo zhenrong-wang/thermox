@@ -2535,6 +2535,71 @@ void test_study_package_import() {
             " body=" + rejected.body);
 }
 
+void test_partial_topology_draft_workflow() {
+    thermox::http::Api api;
+    const auto created = api.handle(authenticated(json_post(
+        "/api/v1/projects",
+        R"json({"schema_version":"thermox.project.create/v1","name":"Draft project","description":""})json")));
+    require(created.status == 201, "topology-draft project must exist");
+    const auto project_id = std::string(
+        boost::json::parse(created.body).as_object()
+            .at("project_id").as_string());
+    const std::string draft_target =
+        "/api/v1/projects/" + project_id +
+        "/artifact-revisions?artifact_id=draft-cycle"
+        "&artifact_type=thermox.topology_draft"
+        "&artifact_schema_version=thermox.topology_draft%2Fv1";
+    const auto first = api.handle(authenticated(json_post(
+        draft_target,
+        R"json({
+          "schema_version":"thermox.topology_draft/v1",
+          "id":"draft-cycle",
+          "label":"Early cycle sketch",
+          "document":{"model":{"id":"cycle","components":[]}}
+        })json")));
+    require(
+        first.status == 201 && first.headers.contains("Location"),
+        "a valid partial JSON object must persist as a draft revision");
+    const auto first_id = first.headers.at("Location").substr(
+        first.headers.at("Location").find_last_of('/') + 1U);
+    const auto detail = api.handle(authenticated({
+        "GET", first.headers.at("Location"), {}, {},
+    }));
+    require(
+        detail.status == 200 &&
+            detail.body.find("thermox.topology_draft/v1") !=
+                std::string::npos &&
+            detail.body.find("Early cycle sketch") != std::string::npos,
+        "topology drafts must use the ordinary integrity-checked artifact read boundary");
+
+    const auto strict_rejection = api.handle(authenticated(json_post(
+        "/api/v1/projects/" + project_id + "/model-revisions",
+        R"json({"model":{"id":"cycle","components":[]}})json")));
+    require(
+        strict_rejection.status == 400,
+        "the same partial declaration must remain blocked from topology publication");
+
+    const auto child = api.handle(authenticated(json_post(
+        draft_target + "&parent_revision_id=" + first_id,
+        R"json({
+          "schema_version":"thermox.topology_draft/v1",
+          "id":"draft-cycle",
+          "label":"Completed structure",
+          "document":{
+            "schema_version":"thermox.topology/v1",
+            "model":{
+              "id":"cycle","name":"Cycle","revision":"1",
+              "media":[],"components":[],"connections":[]
+            }
+          }
+        })json")));
+    require(
+        child.status == 201 &&
+            child.body.find("\"revision_number\": 2") !=
+                std::string::npos,
+        "draft edits must publish immutable child revisions");
+}
+
 }  // namespace
 
 int main() {
@@ -2549,6 +2614,7 @@ int main() {
         test_tenant_scoped_asynchronous_jobs();
         test_authored_component_job_workflow();
         test_revision_backed_transient_validation_workflow();
+        test_partial_topology_draft_workflow();
         test_study_package_import();
         test_team_scoped_projects_and_model_revisions();
         std::cout << "http api tests passed\n";

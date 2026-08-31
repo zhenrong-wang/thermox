@@ -65,6 +65,7 @@ import {
 } from './projectComponentCatalog'
 import { initialTopologyDocument } from './topologyAuthoring'
 import { TopologyJsonWorkbench } from './TopologyJsonWorkbench'
+import type { TopologyDraftDefinition } from './topologyDraft'
 import {
   buildSystemReadiness,
   type SystemReadinessIssue,
@@ -685,6 +686,12 @@ function App() {
       ),
     [requiredComponentSources],
   )
+  const topologyDraftRevisions = useMemo(
+    () => artifactRevisions.filter(
+      (revision) => revision.artifact_type === 'thermox.topology_draft',
+    ),
+    [artifactRevisions],
+  )
   const requiredArtifactIds = useMemo(
     () =>
       [
@@ -1162,6 +1169,44 @@ function App() {
     } finally {
       setPublishing(false)
     }
+  }
+
+  async function loadTopologyDraft(
+    revision: ArtifactRevision,
+  ): Promise<TopologyDraftDefinition> {
+    if (!selectedProjectId) throw new Error('Select a project first.')
+    const content = await api.artifactRevision<TopologyDraftDefinition>(
+      selectedProjectId,
+      revision.artifact_revision_id,
+    )
+    if (
+      content.revision.artifact_type !== 'thermox.topology_draft' ||
+      content.revision.artifact_schema_version !== 'thermox.topology_draft/v1'
+    ) {
+      throw new Error('The selected artifact is not a topology draft.')
+    }
+    return content.artifact
+  }
+
+  async function saveTopologyDraft(
+    definition: TopologyDraftDefinition,
+    parentArtifactRevisionId: string,
+  ): Promise<ArtifactRevision> {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before saving a topology draft.')
+    }
+    const revision = await api.createTopologyDraftRevision(
+      selectedProjectId,
+      definition.id,
+      parentArtifactRevisionId,
+      definition,
+    )
+    setArtifactRevisions((current) => [
+      revision,
+      ...current.filter((item) =>
+        item.artifact_revision_id !== revision.artifact_revision_id),
+    ])
+    return revision
   }
 
   async function addComponent(component: ComponentDefinition) {
@@ -3050,9 +3095,12 @@ function App() {
           key={selectedRevisionId || 'new-topology-json'}
           topology={topology}
           revision={selectedRevision}
+          drafts={topologyDraftRevisions}
           publishing={publishing}
           onCancel={() => setShowingTopologyJson(false)}
           onPublish={publishTopologyDocument}
+          onLoadDraft={loadTopologyDraft}
+          onSaveDraft={saveTopologyDraft}
         />
       )}
       {workspaceView === 'topology' && addingAssembly && topology && (

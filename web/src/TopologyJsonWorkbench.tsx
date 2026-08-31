@@ -1,13 +1,25 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { reviewTopologyJson, topologyJsonText } from './topologyJson'
-import type { ModelRevision, TopologyDocument } from './types'
+import {
+  reviewTopologyDraftSource,
+  topologyDraftDefinition,
+  topologyDraftSourceText,
+  type TopologyDraftDefinition,
+} from './topologyDraft'
+import type { ArtifactRevision, ModelRevision, TopologyDocument } from './types'
 
 interface TopologyJsonWorkbenchProps {
   topology?: TopologyDocument
   revision?: ModelRevision
+  drafts: ArtifactRevision[]
   publishing: boolean
   onCancel: () => void
   onPublish: (document: TopologyDocument) => Promise<void>
+  onLoadDraft: (revision: ArtifactRevision) => Promise<TopologyDraftDefinition>
+  onSaveDraft: (
+    definition: TopologyDraftDefinition,
+    parentArtifactRevisionId: string,
+  ) => Promise<ArtifactRevision>
 }
 
 function emptyDocument(): TopologyDocument {
@@ -33,16 +45,27 @@ function safeFilename(value: string): string {
 export function TopologyJsonWorkbench({
   topology,
   revision,
+  drafts,
   publishing,
   onCancel,
   onPublish,
+  onLoadDraft,
+  onSaveDraft,
 }: TopologyJsonWorkbenchProps) {
   const selectedText = topologyJsonText(topology ?? emptyDocument())
   const [source, setSource] = useState(selectedText)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [draftId, setDraftId] = useState(
+    `draft-${topology?.model.id ?? 'thermal-system'}`,
+  )
+  const [draftLabel, setDraftLabel] = useState('')
+  const [selectedDraftRevisionId, setSelectedDraftRevisionId] = useState('')
+  const [activeDraft, setActiveDraft] = useState<ArtifactRevision>()
+  const [savingDraft, setSavingDraft] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const review = useMemo(() => reviewTopologyJson(source), [source])
+  const draftReview = useMemo(() => reviewTopologyDraftSource(source), [source])
   const currentModelId = topology?.model.id
   const changesModelIdentity = Boolean(
     currentModelId && review.summary?.modelId &&
@@ -56,6 +79,8 @@ export function TopologyJsonWorkbench({
     setStatus('')
     try {
       setSource(await file.text())
+      setActiveDraft(undefined)
+      setSelectedDraftRevisionId('')
       setStatus(`Loaded ${file.name}; review before publishing.`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not read the selected file.')
@@ -71,6 +96,50 @@ export function TopologyJsonWorkbench({
       setStatus('Copied the selected revision JSON.')
     } catch {
       setError('Clipboard access is unavailable. Select and copy the JSON text manually.')
+    }
+  }
+
+  async function loadDraft() {
+    const revision = drafts.find(
+      (candidate) => candidate.artifact_revision_id === selectedDraftRevisionId,
+    )
+    if (!revision) return
+    setError('')
+    setStatus('')
+    try {
+      const definition = await onLoadDraft(revision)
+      setSource(topologyDraftSourceText(definition))
+      setDraftId(definition.id)
+      setDraftLabel(definition.label ?? '')
+      setActiveDraft(revision)
+      setStatus(`Loaded ${definition.id} draft r${revision.revision_number}.`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load the draft revision.')
+    }
+  }
+
+  async function saveDraft() {
+    const id = draftId.trim()
+    if (!id || !draftReview.document) return
+    setSavingDraft(true)
+    setError('')
+    setStatus('')
+    try {
+      const revision = await onSaveDraft(
+        topologyDraftDefinition(id, draftLabel, draftReview.document),
+        activeDraft?.artifact_id === id
+          ? activeDraft.artifact_revision_id
+          : '',
+      )
+      setActiveDraft(revision)
+      setSelectedDraftRevisionId(revision.artifact_revision_id)
+      setStatus(
+        `Saved immutable draft ${revision.artifact_id} r${revision.revision_number}.`,
+      )
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Draft publication was rejected.')
+    } finally {
+      setSavingDraft(false)
     }
   }
 
@@ -114,7 +183,13 @@ export function TopologyJsonWorkbench({
           <input ref={fileInput} type="file" accept="application/json,.json"
             hidden onChange={(event) => void loadFile(event)} />
           <button type="button" className="secondary-button"
-            onClick={() => { setSource(selectedText); setError(''); setStatus('Restored the selected revision.') }}>
+            onClick={() => {
+              setSource(selectedText)
+              setActiveDraft(undefined)
+              setSelectedDraftRevisionId('')
+              setError('')
+              setStatus('Restored the selected revision.')
+            }}>
             Restore selected
           </button>
           <button type="button" className="secondary-button" disabled={!topology}
@@ -123,12 +198,47 @@ export function TopologyJsonWorkbench({
             onClick={downloadSelected}>Download selected JSON</button>
           <span>{revision ? `Selected r${revision.revision_number}` : 'No published revision'}</span>
         </div>
+        <div className="topology-draft-bar">
+          <label>
+            <span>Draft ID</span>
+            <input value={draftId} onChange={(event) => {
+              setDraftId(event.target.value)
+              if (event.target.value !== activeDraft?.artifact_id) setActiveDraft(undefined)
+            }} />
+          </label>
+          <label>
+            <span>Label</span>
+            <input value={draftLabel} placeholder="Optional"
+              onChange={(event) => setDraftLabel(event.target.value)} />
+          </label>
+          <label className="topology-draft-picker">
+            <span>Saved draft revision</span>
+            <select value={selectedDraftRevisionId}
+              onChange={(event) => setSelectedDraftRevisionId(event.target.value)}>
+              <option value="">Select…</option>
+              {drafts.map((candidate) => (
+                <option key={candidate.artifact_revision_id}
+                  value={candidate.artifact_revision_id}>
+                  {candidate.artifact_id} · r{candidate.revision_number}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="secondary-button"
+            disabled={!selectedDraftRevisionId} onClick={() => void loadDraft()}>
+            Load draft
+          </button>
+        </div>
         <textarea className="topology-json-editor" spellCheck={false}
           aria-label="Topology JSON document" value={source}
           onChange={(event) => { setSource(event.target.value); setError(''); setStatus('') }} />
         <div className={`topology-json-review${review.issues.length ? ' is-invalid' : ' is-valid'}`}>
           <div>
-            <strong>{review.issues.length ? 'Client review found issues' : 'Document shape is ready for publication'}</strong>
+            <strong>{draftReview.syntaxIssue
+              ? 'JSON must be corrected before it can be saved'
+              : review.issues.length
+                ? `Draft-saveable · ${review.issues.length} promotion blockers`
+                : 'Document shape is ready for topology publication'}</strong>
             {review.summary && (
               <span>
                 {review.summary.componentCount} components · {review.summary.assemblyCount} assemblies ·{' '}
@@ -140,12 +250,14 @@ export function TopologyJsonWorkbench({
           {changesModelIdentity && (
             <p>Model identity changes from <code>{currentModelId}</code> to <code>{review.summary?.modelId}</code>.</p>
           )}
-          {review.issues.length > 0 && (
+          {draftReview.syntaxIssue && <p>{draftReview.syntaxIssue}</p>}
+          {!draftReview.syntaxIssue && review.issues.length > 0 && (
             <ul>{review.issues.slice(0, 12).map((issue) => <li key={issue}>{issue}</li>)}</ul>
           )}
           <small>
-            This review checks the public document shape. Publication invokes the
-            authoritative service parser, registry validation, canonicalization, and checksum.
+            Any valid JSON object can be stored as an immutable draft. Promotion invokes the
+            strict service parser, canonicalization, and checksum; calculation readiness is
+            validated later against the registry, case, and pinned artifacts.
           </small>
         </div>
         {(error || status) && <div className={`form-error topology-json-message${error ? '' : ' is-status'}`}>
@@ -153,6 +265,11 @@ export function TopologyJsonWorkbench({
         </div>}
         <footer>
           <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>
+          <button type="button" className="secondary-button"
+            disabled={savingDraft || !draftId.trim() || !draftReview.document}
+            onClick={() => void saveDraft()}>
+            {savingDraft ? 'Saving draft…' : activeDraft ? 'Save child draft' : 'Save draft'}
+          </button>
           <button type="submit" className="primary-button"
             disabled={publishing || !review.document}>
             {publishing ? 'Publishing…' : revision ? 'Publish child revision' : 'Publish first revision'}

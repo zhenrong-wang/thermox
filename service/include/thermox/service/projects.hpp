@@ -48,6 +48,10 @@ inline constexpr char assembly_template_artifact_type[] =
     "thermox.assembly_template";
 inline constexpr char assembly_template_schema_v1[] =
     "thermox.topology/v1";
+inline constexpr char topology_draft_artifact_type[] =
+    "thermox.topology_draft";
+inline constexpr char topology_draft_schema_v1[] =
+    "thermox.topology_draft/v1";
 
 struct ProjectRecord {
     std::string schema_version{project_schema_v1};

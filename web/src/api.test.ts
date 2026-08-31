@@ -9,6 +9,7 @@ import type {
   TopologyPresentation,
 } from './types'
 import type { StudyPackageDocument } from './studyPackage'
+import type { TopologyDraftDefinition } from './topologyDraft'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -100,6 +101,43 @@ describe('topology revision API', () => {
       method: 'POST',
       body: JSON.stringify(definition),
     })
+  })
+})
+
+describe('topology draft API', () => {
+  it('publishes an immutable draft artifact without requiring a complete topology', async () => {
+    const definition: TopologyDraftDefinition = {
+      schema_version: 'thermox.topology_draft/v1',
+      id: 'draft-cycle',
+      document: { model: { id: 'cycle', components: [] } },
+    }
+    const revision = {
+      schema_version: 'thermox.artifact_revision/v1',
+      artifact_revision_id: 'draft-r2',
+      artifact_id: 'draft-cycle',
+      revision_number: 2,
+    }
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => new Response(JSON.stringify(revision), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.createTopologyDraftRevision(
+      'project/a', 'draft-cycle', 'draft-r1', definition,
+    )
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.searchParams.get('artifact_type')).toBe('thermox.topology_draft')
+    expect(url.searchParams.get('artifact_schema_version')).toBe(
+      'thermox.topology_draft/v1',
+    )
+    expect(url.searchParams.get('parent_revision_id')).toBe('draft-r1')
+    expect(request).toMatchObject({ method: 'POST', body: JSON.stringify(definition) })
   })
 })
 

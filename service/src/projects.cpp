@@ -254,6 +254,56 @@ std::string canonical_topology_presentation(
     return value.dump();
 }
 
+std::string canonical_topology_draft(
+    const std::string& schema_version,
+    const std::string& artifact_id,
+    const std::string& payload) {
+    if (schema_version != topology_draft_schema_v1) {
+        throw ProjectRequestError(
+            "unsupported topology-draft schema version: " +
+            schema_version);
+    }
+    if (payload.empty() || payload.size() > 2U * 1024U * 1024U) {
+        throw ProjectRequestError(
+            "topology draft must contain 1 byte to 2 MiB");
+    }
+    const auto value = nlohmann::json::parse(payload);
+    if (!value.is_object()) {
+        throw ProjectRequestError(
+            "topology draft must be a JSON object");
+    }
+    const std::set<std::string> fields = {
+        "schema_version", "id", "label", "document"};
+    for (const auto& [key, unused] : value.items()) {
+        (void)unused;
+        if (!fields.contains(key)) {
+            throw ProjectRequestError(
+                "unknown topology-draft field: " + key);
+        }
+    }
+    if (value.value("schema_version", std::string{}) !=
+        topology_draft_schema_v1) {
+        throw ProjectRequestError(
+            "unsupported topology-draft schema_version");
+    }
+    if (!value.contains("id") || !value["id"].is_string() ||
+        value["id"].get<std::string>().empty() ||
+        value["id"].get<std::string>() != artifact_id) {
+        throw ProjectRequestError(
+            "topology-draft ID must be non-empty and match the "
+            "project artifact ID");
+    }
+    if (value.contains("label") && !value["label"].is_string()) {
+        throw ProjectRequestError(
+            "topology-draft label must be a string");
+    }
+    if (!value.contains("document") || !value["document"].is_object()) {
+        throw ProjectRequestError(
+            "topology-draft document must be a JSON object");
+    }
+    return value.dump();
+}
+
 std::string run_mode(const std::string& case_mode) {
     if (case_mode.find("transient") != std::string::npos ||
         case_mode.find("dynamic") != std::string::npos) {
@@ -1403,6 +1453,7 @@ ProjectService::create_artifact_revision(
             platform::expression_component_artifact_type &&
         request.artifact_type !=
             assembly_template_artifact_type &&
+        request.artifact_type != topology_draft_artifact_type &&
         request.artifact_type != validation_series_artifact_type &&
         request.artifact_type != validation_campaign_artifact_type &&
         request.artifact_type != balance_uncertainty_artifact_type) {
@@ -1505,6 +1556,12 @@ ProjectService::create_artifact_revision(
                     "project artifact ID");
             }
             canonical = serialize_balance_uncertainty_model_json(artifact);
+        } else if (request.artifact_type ==
+                   topology_draft_artifact_type) {
+            canonical = canonical_topology_draft(
+                request.artifact_schema_version,
+                request.artifact_id,
+                request.artifact_json);
         } else {
             canonical =
                 detail::canonicalize_assembly_template_payload(

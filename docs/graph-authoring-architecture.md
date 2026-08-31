@@ -39,6 +39,10 @@ so exporting a topology does not accidentally turn viewport state into physical 
 Cases, engineering artifacts, Studies, and run configurations retain their own revision contracts;
 they are not embedded implicitly in a topology declaration.
 
+Partial declarations use the separate immutable `thermox.topology_draft/v1` artifact boundary.
+Any valid JSON object can be saved and revised there, while promotion continues through the strict
+model-revision service. Draft persistence never weakens physical-model or execution readiness.
+
 ## Canvas responsibility
 
 The canvas is a typed topology editor, not a general-purpose drawing document. React Flow supplies
