@@ -23,6 +23,41 @@ void test_whole_system_energy_report() {
     provenance.case_revision_id = "case-r2";
     provenance.run_configuration_revision_id = "run-r3";
     job.request.source_revisions = provenance;
+    ResultProjection energy_projection;
+    energy_projection.id = "energy-closure";
+    energy_projection.scope = ResultValueScope::system_balance;
+    energy_projection.value_name = "net_boundary_energy_flow";
+    energy_projection.dimension = "power";
+    ResultProjection mass_projection;
+    mass_projection.id = "mass-closure";
+    mass_projection.scope = ResultValueScope::system_balance;
+    mass_projection.value_name = "net_boundary_mass_flow";
+    mass_projection.dimension = "mass_flow";
+    job.request.result_projections = {energy_projection, mass_projection};
+    EngineeringAcceptanceResult energy_acceptance;
+    energy_acceptance.criterion_id = "energy-band";
+    energy_acceptance.projection_id = energy_projection.id;
+    energy_acceptance.dimension = "power";
+    energy_acceptance.actual_value_si = 0.0;
+    energy_acceptance.lower_bound_si = -1.0;
+    energy_acceptance.upper_bound_si = 1.0;
+    energy_acceptance.passed = true;
+    EngineeringAcceptanceResult mass_acceptance;
+    mass_acceptance.criterion_id = "mass-band";
+    mass_acceptance.projection_id = mass_projection.id;
+    mass_acceptance.dimension = "mass_flow";
+    mass_acceptance.actual_value_si = 0.0;
+    mass_acceptance.lower_bound_si = -0.01;
+    mass_acceptance.upper_bound_si = 0.01;
+    mass_acceptance.passed = true;
+    EngineeringAcceptanceSummary acceptance;
+    acceptance.passed = true;
+    acceptance.passed_count = 2U;
+    acceptance.criteria = {energy_acceptance, mass_acceptance};
+    ResultSummary summary;
+    summary.mode = "steady";
+    summary.engineering_acceptance = acceptance;
+    job.result_summary = summary;
     ResultArtifact result;
     result.manifest.checksum = "sha256:result";
     result.content = R"({"graph":{"components":[
@@ -48,7 +83,7 @@ void test_whole_system_energy_report() {
     const auto report = build_balance_report_json(
         job, result, topology, BalanceReportRequest{});
     require(
-        report.find("\"schema_version\":\"thermox.balance_report/v1\"") !=
+        report.find("\"schema_version\":\"thermox.balance_report/v2\"") !=
                 std::string::npos &&
             report.find("\"conformance\":\"informative\"") !=
                 std::string::npos &&
@@ -57,6 +92,10 @@ void test_whole_system_energy_report() {
             report.find("\"energy_output_si\":100.0") !=
                 std::string::npos &&
             report.find("\"model_revision_id\":\"model-r4\"") !=
+                std::string::npos &&
+            report.find("\"relative_energy_closure\":0.0") !=
+                std::string::npos &&
+            report.find("\"status\":\"passed\"") !=
                 std::string::npos,
         "balance report must preserve profile and boundary accounting");
     const auto markdown = serialize_balance_report_markdown(report);
@@ -79,9 +118,50 @@ void test_whole_system_energy_report() {
     while (std::getline(rows, row)) {
         require(
             static_cast<std::size_t>(std::count(row.begin(), row.end(), ',')) ==
-                12U,
-            "each simple CSV test record must preserve the 13-column schema");
+                17U,
+            "each simple CSV test record must preserve the 18-column schema");
     }
+    job.result_summary.reset();
+    const auto undeclared = build_balance_report_json(
+        job, result, topology, BalanceReportRequest{});
+    require(
+        undeclared.find("\"status\":\"not_declared\"") !=
+            std::string::npos,
+        "closure acceptance must remain undeclared without immutable run "
+        "criteria");
+}
+
+void test_transient_closure_is_not_accepted_without_accumulation() {
+    using namespace thermox::service;
+    SimulationJobRecord job;
+    job.job_id = "transient-balance-job";
+    ResultArtifact result;
+    result.manifest.checksum = "sha256:transient";
+    result.content = R"({"trajectory":[{"time":2.0,"graph":{
+      "components":[
+        {"component_id":"source","kind":"source.fluid.boundary","ports":[
+          {"port_name":"outlet","domain":"fluid","primary_values":[
+            {"name":"m_dot","value_si":1.0},{"name":"h","value_si":20.0}]}]},
+        {"component_id":"sink","kind":"sink.fluid.boundary","ports":[
+          {"port_name":"inlet","domain":"fluid","primary_values":[
+            {"name":"m_dot","value_si":1.0},{"name":"h","value_si":20.0}]}]}
+      ],"system_balances":[
+        {"name":"net_boundary_mass_flow","value_si":0.0},
+        {"name":"net_boundary_energy_flow","value_si":0.0}
+      ]}}]})";
+    const std::string topology = R"({"model":{"connections":[
+      {"from":"source.outlet","to":"sink.inlet"}
+    ]}})";
+    const auto report = build_balance_report_json(
+        job, result, topology, BalanceReportRequest{});
+    require(
+        report.find("\"mode\":\"transient\"") != std::string::npos &&
+            report.find("\"status\":\"not_evaluated\"") !=
+                std::string::npos &&
+            report.find("stored mass and energy accumulation") !=
+                std::string::npos,
+        "transient snapshots must not claim closure acceptance without "
+        "accumulation terms");
 }
 
 void test_unsupported_profile_is_rejected() {
@@ -103,6 +183,7 @@ void test_unsupported_profile_is_rejected() {
 int main() {
     try {
         test_whole_system_energy_report();
+        test_transient_closure_is_not_accepted_without_accumulation();
         test_unsupported_profile_is_rejected();
         std::cout << "thermox balance report tests passed\n";
         return 0;

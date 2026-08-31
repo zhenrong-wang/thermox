@@ -895,7 +895,7 @@ export interface SimulationJobPage {
 }
 
 export interface BalanceReport {
-  schema_version: 'thermox.balance_report/v1'
+  schema_version: 'thermox.balance_report/v2'
   job_id: string
   result_checksum: string
   provenance: {
@@ -919,11 +919,41 @@ export interface BalanceReport {
     unevaluated_requirements: string[]
   }
   boundary: {
+    mass_input_si: number
+    mass_output_si: number
     energy_input_si: number
     energy_output_si: number
     net_energy_flow_si: number
     net_mass_flow_si: number
+    energy_reference_si: number
+    mass_reference_si: number
+    relative_energy_closure: number | null
+    relative_mass_closure: number | null
     closure_interpretation: string
+  }
+  closure_acceptance: {
+    source: 'run_configuration_engineering_acceptance'
+    status:
+      | 'not_evaluated'
+      | 'not_declared'
+      | 'partial_pass'
+      | 'partial_fail'
+      | 'passed'
+      | 'failed'
+    complete: boolean
+    energy_declared: boolean
+    mass_declared: boolean
+    interpretation: string
+    criteria: Array<{
+      criterion_id: string
+      projection_id: string
+      balance: 'energy' | 'mass'
+      dimension: string
+      actual_value_si: number
+      lower_bound_si: number | null
+      upper_bound_si: number | null
+      passed: boolean
+    }>
   }
   boundary_streams: Array<{
     component_id: string

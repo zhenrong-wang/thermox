@@ -2,12 +2,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
 #include <map>
-#include <iomanip>
-#include <sstream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -112,6 +113,79 @@ std::string number(double value) {
     return out.str();
 }
 
+Json closure_acceptance(
+    const SimulationJobRecord& job,
+    bool transient) {
+    Json criteria = Json::array();
+    bool energy_declared = false;
+    bool mass_declared = false;
+    bool declared_passed = true;
+    if (!transient && job.result_summary &&
+        job.result_summary->engineering_acceptance) {
+        for (const auto& result :
+             job.result_summary->engineering_acceptance->criteria) {
+            const auto projection = std::find_if(
+                job.request.result_projections.begin(),
+                job.request.result_projections.end(),
+                [&](const ResultProjection& candidate) {
+                    return candidate.id == result.projection_id;
+                });
+            if (projection == job.request.result_projections.end() ||
+                projection->scope != ResultValueScope::system_balance ||
+                (projection->value_name != "net_boundary_energy_flow" &&
+                 projection->value_name != "net_boundary_mass_flow")) {
+                continue;
+            }
+            const bool energy =
+                projection->value_name == "net_boundary_energy_flow";
+            energy_declared = energy_declared || energy;
+            mass_declared = mass_declared || !energy;
+            declared_passed = declared_passed && result.passed;
+            criteria.push_back({
+                {"criterion_id", result.criterion_id},
+                {"projection_id", result.projection_id},
+                {"balance", energy ? "energy" : "mass"},
+                {"dimension", result.dimension},
+                {"actual_value_si", result.actual_value_si},
+                {"lower_bound_si", result.lower_bound_si
+                    ? Json(*result.lower_bound_si) : Json(nullptr)},
+                {"upper_bound_si", result.upper_bound_si
+                    ? Json(*result.upper_bound_si) : Json(nullptr)},
+                {"passed", result.passed},
+            });
+        }
+    }
+
+    std::string status;
+    std::string interpretation;
+    if (transient) {
+        status = "not_evaluated";
+        interpretation =
+            "transient closure requires stored mass and energy accumulation";
+    } else if (!energy_declared && !mass_declared) {
+        status = "not_declared";
+        interpretation =
+            "no run-configuration acceptance criteria target system closure";
+    } else if (!energy_declared || !mass_declared) {
+        status = declared_passed ? "partial_pass" : "partial_fail";
+        interpretation =
+            "only declared closure dimensions were evaluated";
+    } else {
+        status = declared_passed ? "passed" : "failed";
+        interpretation =
+            "mass and energy closure criteria were evaluated";
+    }
+    return {
+        {"source", "run_configuration_engineering_acceptance"},
+        {"status", status},
+        {"complete", energy_declared && mass_declared && !transient},
+        {"energy_declared", energy_declared},
+        {"mass_declared", mass_declared},
+        {"interpretation", interpretation},
+        {"criteria", std::move(criteria)},
+    };
+}
+
 }  // namespace
 
 std::string build_balance_report_json(
@@ -145,6 +219,8 @@ std::string build_balance_report_json(
 
     Json components = Json::array();
     Json streams = Json::array();
+    double boundary_mass_input = 0.0;
+    double boundary_mass_output = 0.0;
     double boundary_input = 0.0;
     double boundary_output = 0.0;
     for (const auto& component : graph.value("components", Json::array())) {
@@ -184,8 +260,15 @@ std::string build_balance_report_json(
                     direction == "out" ? "input" : "output";
                 const double magnitude =
                     std::abs(port.at("energy_flow_si").get<double>());
-                if (direction == "out") boundary_input += magnitude;
-                else boundary_output += magnitude;
+                const double mass_magnitude =
+                    std::abs(port.at("mass_flow_si").get<double>());
+                if (direction == "out") {
+                    boundary_input += magnitude;
+                    boundary_mass_input += mass_magnitude;
+                } else {
+                    boundary_output += magnitude;
+                    boundary_mass_output += mass_magnitude;
+                }
                 streams.push_back(std::move(port));
             }
         }
@@ -201,9 +284,19 @@ std::string build_balance_report_json(
             reported_mass_balance = value.value("value_si", 0.0);
         }
     }
+    const double energy_reference =
+        std::max(boundary_input, boundary_output);
+    const double mass_reference =
+        std::max(boundary_mass_input, boundary_mass_output);
+    const Json relative_energy_closure = energy_reference > 0.0
+        ? Json(std::abs(reported_energy_balance) / energy_reference)
+        : Json(nullptr);
+    const Json relative_mass_closure = mass_reference > 0.0
+        ? Json(std::abs(reported_mass_balance) / mass_reference)
+        : Json(nullptr);
 
     Json report = {
-        {"schema_version", balance_report_schema_v1},
+        {"schema_version", balance_report_schema_v2},
         {"job_id", job.job_id},
         {"result_checksum", result.manifest.checksum},
         {"provenance", {
@@ -235,7 +328,9 @@ std::string build_balance_report_json(
             {"evaluated_requirements", Json::array({
                 "exact immutable result provenance",
                 "whole-system mass and energy boundary accounting",
-                "component mass and energy closure"
+                "component mass and energy closure",
+                "normalized whole-system closure metrics",
+                "run-configuration closure acceptance linkage when declared"
             })},
             {"unevaluated_requirements", Json::array({
                 "clause-level standards conformity",
@@ -245,14 +340,21 @@ std::string build_balance_report_json(
             })}
         }},
         {"boundary", {
+            {"mass_input_si", boundary_mass_input},
+            {"mass_output_si", boundary_mass_output},
             {"energy_input_si", boundary_input},
             {"energy_output_si", boundary_output},
             {"net_energy_flow_si", reported_energy_balance},
             {"net_mass_flow_si", reported_mass_balance},
+            {"energy_reference_si", energy_reference},
+            {"mass_reference_si", mass_reference},
+            {"relative_energy_closure", relative_energy_closure},
+            {"relative_mass_closure", relative_mass_closure},
             {"closure_interpretation", transient
                 ? "net boundary rate; stored-energy accumulation not evaluated"
                 : "steady whole-system closure residual"}
         }},
+        {"closure_acceptance", closure_acceptance(job, transient)},
         {"boundary_streams", std::move(streams)},
         {"component_closures", std::move(components)},
     };
@@ -293,14 +395,61 @@ std::string serialize_balance_report_markdown(
         << number(boundary.at("energy_input_si").get<double>())
         << " | W |\n| Energy output | "
         << number(boundary.at("energy_output_si").get<double>())
-        << " | W |\n| Net energy flow / closure | "
+        << " | W |\n| Mass input | "
+        << number(boundary.at("mass_input_si").get<double>())
+        << " | kg/s |\n| Mass output | "
+        << number(boundary.at("mass_output_si").get<double>())
+        << " | kg/s |\n| Net energy flow / closure | "
         << number(boundary.at("net_energy_flow_si").get<double>())
         << " | W |\n| Net mass flow / closure | "
         << number(boundary.at("net_mass_flow_si").get<double>())
         << " | kg/s |\n\nInterpretation: "
         << markdown_field(
                boundary.at("closure_interpretation").get<std::string>())
-        << ".\n\n## Boundary streams\n\n"
+        << ".\n\nNormalized energy closure: ";
+    if (boundary.at("relative_energy_closure").is_null()) {
+        out << "not defined";
+    } else {
+        out << number(
+            boundary.at("relative_energy_closure").get<double>() * 100.0)
+            << "%";
+    }
+    out << ". Normalized mass closure: ";
+    if (boundary.at("relative_mass_closure").is_null()) {
+        out << "not defined";
+    } else {
+        out << number(
+            boundary.at("relative_mass_closure").get<double>() * 100.0)
+            << "%";
+    }
+    const auto& acceptance = report.at("closure_acceptance");
+    out << ".\n\n## Closure acceptance\n\n"
+        << "- Status: **"
+        << markdown_field(acceptance.at("status").get<std::string>())
+        << "**\n- Source: `"
+        << markdown_field(acceptance.at("source").get<std::string>())
+        << "`\n- Coverage: energy "
+        << (acceptance.at("energy_declared").get<bool>() ? "declared" : "missing")
+        << ", mass "
+        << (acceptance.at("mass_declared").get<bool>() ? "declared" : "missing")
+        << "\n- Interpretation: "
+        << markdown_field(acceptance.at("interpretation").get<std::string>())
+        << "\n\n| Criterion | Balance | Actual (SI) | Lower | Upper | Result |\n"
+           "|---|---|---:|---:|---:|---|\n";
+    for (const auto& criterion : acceptance.at("criteria")) {
+        out << "| "
+            << markdown_field(criterion.at("criterion_id").get<std::string>())
+            << " | " << criterion.at("balance").get<std::string>() << " | "
+            << number(criterion.at("actual_value_si").get<double>()) << " | ";
+        if (criterion.at("lower_bound_si").is_null()) out << "—";
+        else out << number(criterion.at("lower_bound_si").get<double>());
+        out << " | ";
+        if (criterion.at("upper_bound_si").is_null()) out << "—";
+        else out << number(criterion.at("upper_bound_si").get<double>());
+        out << " | " << (criterion.at("passed").get<bool>() ? "pass" : "fail")
+            << " |\n";
+    }
+    out << "\n## Boundary streams\n\n"
         << "| Component | Port | Direction | Domain | Mass flow (kg/s) | "
            "Energy flow (W) |\n|---|---|---|---|---:|---:|\n";
     for (const auto& stream : report.at("boundary_streams")) {
@@ -340,12 +489,26 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
     std::ostringstream out;
     out << "record_type,job_id,result_checksum,model_revision_id,component_id,"
            "kind,port_name,direction,domain,mass_flow_kg_s,energy_flow_W,"
-           "net_mass_flow_kg_s,net_energy_flow_W\n";
+           "net_mass_flow_kg_s,net_energy_flow_W,reference_mass_flow_kg_s,"
+           "reference_energy_flow_W,relative_mass_closure,"
+           "relative_energy_closure,acceptance_status\n";
     const auto& boundary = report.at("boundary");
+    const auto relative_mass = boundary.at("relative_mass_closure").is_null()
+        ? std::string{}
+        : number(boundary.at("relative_mass_closure").get<double>());
+    const auto relative_energy =
+        boundary.at("relative_energy_closure").is_null()
+        ? std::string{}
+        : number(boundary.at("relative_energy_closure").get<double>());
     out << "system_summary," << job_id << ',' << checksum << ','
         << model_revision << ",,,,,,,,"
         << number(boundary.at("net_mass_flow_si").get<double>()) << ','
-        << number(boundary.at("net_energy_flow_si").get<double>()) << '\n';
+        << number(boundary.at("net_energy_flow_si").get<double>()) << ','
+        << number(boundary.at("mass_reference_si").get<double>()) << ','
+        << number(boundary.at("energy_reference_si").get<double>()) << ','
+        << relative_mass << ',' << relative_energy << ','
+        << report.at("closure_acceptance").at("status").get<std::string>()
+        << '\n';
     for (const auto& stream : report.at("boundary_streams")) {
         out << "boundary_stream," << job_id << ',' << checksum << ','
             << model_revision << ','
@@ -354,7 +517,8 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
             << ',' << stream.at("boundary_direction").get<std::string>()
             << ',' << stream.at("domain").get<std::string>() << ','
             << number(stream.at("mass_flow_si").get<double>()) << ','
-            << number(stream.at("energy_flow_si").get<double>()) << ",,\n";
+            << number(stream.at("energy_flow_si").get<double>())
+            << ",,,,,,,\n";
     }
     for (const auto& component : report.at("component_closures")) {
         out << "component_closure," << job_id << ',' << checksum << ','
@@ -364,7 +528,7 @@ std::string serialize_balance_report_csv(std::string_view report_json) {
             << ",,,,,,"
             << number(component.at("net_mass_flow_si").get<double>()) << ','
             << number(component.at("net_energy_flow_si").get<double>())
-            << '\n';
+            << ",,,,,\n";
     }
     return out.str();
 }

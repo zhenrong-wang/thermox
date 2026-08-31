@@ -1312,7 +1312,7 @@ void test_tenant_scoped_asynchronous_jobs() {
         balance_request)));
     require(
         balance_report.status == 200 &&
-            balance_report.body.find("thermox.balance_report/v1") !=
+            balance_report.body.find("thermox.balance_report/v2") !=
                 std::string::npos &&
             balance_report.body.find(model.model_revision_id) !=
                 std::string::npos &&

@@ -4539,6 +4539,12 @@ code {
 .balance-accounting-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#e3eaed; }
 .balance-accounting-strip div { position:relative; display:grid; gap:5px; padding:10px 13px; background:#fff; color:#526d7c; font-size:8px; }
 .balance-accounting-strip i { height:3px; max-width:100%; background:#4f9b7d; }
+.balance-closure-evaluation { display:grid; grid-template-columns:1.4fr repeat(3,1fr); gap:1px; border-top:1px solid #e3eaed; background:#e3eaed; }
+.balance-closure-evaluation > div { display:grid; gap:4px; padding:10px 13px; background:#fff; color:#526d7c; }
+.balance-closure-evaluation span,.balance-closure-evaluation small { font-size:7px; }
+.balance-closure-evaluation strong { font-size:9px; text-transform:capitalize; }
+.balance-closure-evaluation.is-passed strong,.balance-closure-evaluation.is-partial_pass strong { color:#287252; }
+.balance-closure-evaluation.is-failed strong,.balance-closure-evaluation.is-partial_fail strong { color:#a54d42; }
 .thermal-balance-report > footer { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; color:#7b8c96; font-size:7px; }
 
 .result-assurance-card > header {

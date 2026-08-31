@@ -9,8 +9,8 @@ namespace thermox::service {
 
 inline constexpr char balance_report_request_schema_v1[] =
     "thermox.balance_report_request/v1";
-inline constexpr char balance_report_schema_v1[] =
-    "thermox.balance_report/v1";
+inline constexpr char balance_report_schema_v2[] =
+    "thermox.balance_report/v2";
 
 struct BalanceReportRequest {
     std::string schema_version{balance_report_request_schema_v1};

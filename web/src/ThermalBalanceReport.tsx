@@ -20,6 +20,16 @@ export function ThermalBalanceReport({
   const input = power(report.boundary.energy_input_si)
   const output = power(report.boundary.energy_output_si)
   const residual = power(report.boundary.net_energy_flow_si)
+  const massResidual = displayValue(
+    report.boundary.net_mass_flow_si,
+    'mass_flow',
+    profile,
+    unitDimensions,
+  )
+  const relativePercent = (value: number | null) =>
+    value === null ? 'Not defined' : `${formatResultValue(value * 100)}%`
+  const acceptanceLabel = report.closure_acceptance.status
+    .replaceAll('_', ' ')
   const maximum = Math.max(
     Math.abs(report.boundary.energy_input_si),
     Math.abs(report.boundary.energy_output_si),
@@ -88,6 +98,28 @@ export function ThermalBalanceReport({
         <div><span>Input</span><strong>{formatResultValue(input.value)} {input.unit}</strong><i style={{ width: `${Math.abs(report.boundary.energy_input_si) / maximum * 100}%` }} /></div>
         <div><span>Output</span><strong>{formatResultValue(output.value)} {output.unit}</strong><i style={{ width: `${Math.abs(report.boundary.energy_output_si) / maximum * 100}%` }} /></div>
         <div><span>Net / closure</span><strong>{formatResultValue(residual.value)} {residual.unit}</strong></div>
+      </div>
+      <div className={`balance-closure-evaluation is-${report.closure_acceptance.status}`}>
+        <div>
+          <span>Declared acceptance</span>
+          <strong>{acceptanceLabel}</strong>
+          <small>{report.closure_acceptance.interpretation}</small>
+        </div>
+        <div>
+          <span>Energy closure</span>
+          <strong>{relativePercent(report.boundary.relative_energy_closure)}</strong>
+          <small>{formatResultValue(residual.value)} {residual.unit}</small>
+        </div>
+        <div>
+          <span>Mass closure</span>
+          <strong>{relativePercent(report.boundary.relative_mass_closure)}</strong>
+          <small>{formatResultValue(massResidual.value)} {massResidual.unit}</small>
+        </div>
+        <div>
+          <span>Criteria coverage</span>
+          <strong>{report.closure_acceptance.complete ? 'Mass + energy' : 'Incomplete'}</strong>
+          <small>{report.closure_acceptance.criteria.length} matched criteria</small>
+        </div>
       </div>
       <footer>
         <span>Informative profile; clause-level conformity is not demonstrated. Model <code>{report.provenance.model_revision_id || 'unavailable'}</code></span>
