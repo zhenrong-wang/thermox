@@ -1,5 +1,9 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ComponentSymbol } from './ComponentSymbol'
+import {
+  componentDefinitionCounts,
+  componentParameterFacts,
+} from './componentDefinitionFacts'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { displayValue } from './displayUnits'
 import { formatResultValue, type ResultNodeValue } from './resultPresentation'
@@ -48,6 +52,11 @@ export function TopologyNode({ data, selected }: NodeProps) {
     template_kind: nodeData.assembly ? 'assembly' : nodeData.component.kind,
     category: nodeData.assembly ? 'Assembly' : '',
   }
+  const definitionCounts = componentDefinitionCounts(nodeData.component)
+  const parameterFacts = componentParameterFacts(
+    nodeData.component,
+    nodeData.catalogComponent,
+  )
 
   return (
     <article className={`topology-node${selected ? ' is-selected' : ''}`}>
@@ -68,6 +77,45 @@ export function TopologyNode({ data, selected }: NodeProps) {
           <span>{nodeData.definition.state}</span>
           {nodeData.definition.issues.length > 0 && (
             <small>{nodeData.definition.issues.length} missing</small>
+          )}
+        </div>
+      )}
+      {!nodeData.assembly && (
+        <div className="node-definition-facts">
+          {parameterFacts.map((fact) => {
+            const displayed = displayValue(
+              fact.valueSi,
+              fact.dimension,
+              profile,
+              unitDimensions,
+            )
+            return (
+              <span key={fact.name} title={fact.name}>
+                <i>{fact.name.replaceAll('_', ' ')}</i>
+                <strong>{formatResultValue(displayed.value)}</strong>
+                <small>{displayed.unit}</small>
+              </span>
+            )
+          })}
+          {definitionCounts.artifacts > 0 && (
+            <span className="definition-data-badge">
+              <strong>{definitionCounts.artifacts}</strong>
+              <small>data</small>
+            </span>
+          )}
+          {definitionCounts.parameters > parameterFacts.length && (
+            <span>
+              <strong>
+                +{definitionCounts.parameters - parameterFacts.length}
+              </strong>
+              <small>params</small>
+            </span>
+          )}
+          {definitionCounts.bindings > 0 && (
+            <span>
+              <strong>{definitionCounts.bindings}</strong>
+              <small>bindings</small>
+            </span>
           )}
         </div>
       )}

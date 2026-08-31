@@ -1266,6 +1266,40 @@ code {
   font-size: 9px;
 }
 
+.canvas-domain-legend {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px 9px;
+  max-width: 430px;
+  padding: 6px 8px !important;
+  border: 1px solid #d5dfe4 !important;
+  border-radius: 4px;
+  background: rgba(250, 252, 253, 0.94) !important;
+  box-shadow: 0 3px 10px rgba(39, 65, 83, 0.08);
+  pointer-events: none;
+}
+
+.canvas-domain-legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #617784;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.canvas-domain-legend i {
+  width: 15px;
+  height: 0;
+  border-top: 2px solid;
+}
+
+.canvas-domain-legend i.is-information {
+  border-top-style: dashed;
+}
+
 .topology-node {
   width: 250px;
   min-height: 118px;
@@ -1391,6 +1425,56 @@ code {
 .physical-state.defined {
   background: #e0f2e9;
   color: #287256;
+}
+
+.node-definition-facts {
+  display: flex;
+  min-height: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 12px 5px;
+}
+
+.node-definition-facts:empty {
+  display: none;
+}
+
+.node-definition-facts > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 3px 5px;
+  border: 1px solid #d9e4e8;
+  border-radius: 3px;
+  background: #f2f7f9;
+  color: #496878;
+}
+
+.node-definition-facts i {
+  max-width: 78px;
+  overflow: hidden;
+  color: #718894;
+  font-size: 6px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-definition-facts strong {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 7px;
+}
+
+.node-definition-facts small {
+  color: #8496a0;
+  font-size: 6px;
+}
+
+.node-definition-facts > .definition-data-badge {
+  border-color: #d8cdef;
+  background: #f4f0fb;
+  color: #684e9a;
 }
 
 .node-ports {

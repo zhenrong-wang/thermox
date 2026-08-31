@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FinalConnectionState } from '@xyflow/react'
 import {
+  activeTopologyDomains,
   centeredComponentPosition,
   finalConnectionIntent,
   layoutEdges,
@@ -132,5 +133,35 @@ describe('topology canvas layout', () => {
       stroke: '#2f8bd8',
       strokeWidth: 2,
     })
+  })
+
+  it('lists active physical domains in a stable engineering order', () => {
+    const multiDomain = {
+      ...componentType,
+      ports: [
+        ...componentType.ports,
+        {
+          name: 'shaft',
+          domain: 'shaft',
+          direction: 'in' as const,
+          maximum_connections: 1,
+          medium_source_port: '',
+        },
+        {
+          name: 'command',
+          domain: 'control',
+          direction: 'in' as const,
+          maximum_connections: 1,
+          medium_source_port: '',
+        },
+      ],
+    }
+
+    expect(
+      activeTopologyDomains(
+        topology,
+        new Map([[componentType.kind, multiDomain]]),
+      ),
+    ).toEqual(['fluid', 'shaft', 'control'])
   })
 })

@@ -196,6 +196,43 @@ export function layoutEdges(
 
 const nodeTypes = { topology: TopologyNode }
 
+const domainOrder = [
+  'material',
+  'fluid',
+  'heat',
+  'shaft',
+  'electrical',
+  'force',
+  'signal',
+  'control',
+]
+
+export function activeTopologyDomains(
+  topology: TopologyDocument,
+  catalog: Map<string, CatalogComponent>,
+): string[] {
+  const domains = new Set<string>()
+  for (const component of topology.model.components) {
+    for (const port of catalog.get(component.kind)?.ports ?? []) {
+      domains.add(port.domain)
+    }
+  }
+  for (const assembly of topology.model.assemblies ?? []) {
+    for (const port of assemblyPorts(assembly, catalog)) {
+      domains.add(port.domain)
+    }
+  }
+  return [...domains].sort((left, right) => {
+    const leftOrder = domainOrder.indexOf(left)
+    const rightOrder = domainOrder.indexOf(right)
+    return (
+      (leftOrder === -1 ? domainOrder.length : leftOrder) -
+        (rightOrder === -1 ? domainOrder.length : rightOrder) ||
+      left.localeCompare(right)
+    )
+  })
+}
+
 export function TopologyCanvas({
   topology,
   catalog,
@@ -258,6 +295,7 @@ export function TopologyCanvas({
     presentedPositions,
   )
   const edges = layoutEdges(topology, catalogByKind, selection)
+  const activeDomains = activeTopologyDomains(topology, catalogByKind)
   const elementProps = readOnly
     ? { nodes, edges }
     : { defaultNodes: nodes, defaultEdges: edges }
@@ -422,6 +460,23 @@ export function TopologyCanvas({
           <Panel position="top-center" className="canvas-connection-feedback">
             <strong>Connection not created</strong>
             <span>{connectionFeedback}</span>
+          </Panel>
+        )}
+        {activeDomains.length > 0 && (
+          <Panel position="top-right" className="canvas-domain-legend">
+            {activeDomains.map((domain) => (
+              <span key={domain}>
+                <i
+                  className={
+                    domain === 'signal' || domain === 'control'
+                      ? 'is-information'
+                      : ''
+                  }
+                  style={{ borderColor: topologyDomainColor(domain) }}
+                />
+                {domain}
+              </span>
+            ))}
           </Panel>
         )}
         <Background
