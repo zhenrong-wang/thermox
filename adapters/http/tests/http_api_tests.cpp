@@ -1301,6 +1301,54 @@ void test_tenant_scoped_asynchronous_jobs() {
                 std::string::npos &&
             result.headers.contains("ETag"),
         "job result must publish stored revision provenance");
+
+    const std::string balance_request =
+        R"({"schema_version":"thermox.balance_report_request/v1",)"
+        R"("accounting_basis":"energy","system_boundary":"whole_system",)"
+        R"("diagram_profile":"iso-14084-1:2015",)"
+        R"("calculation_profile":"none"})";
+    const auto balance_report = api.handle(authenticated(json_post(
+        "/api/v1/jobs/" + job_id + "/balance-report",
+        balance_request)));
+    require(
+        balance_report.status == 200 &&
+            balance_report.body.find("thermox.balance_report/v1") !=
+                std::string::npos &&
+            balance_report.body.find(model.model_revision_id) !=
+                std::string::npos &&
+            balance_report.body.find("\"conformance\":\"informative\"") !=
+                std::string::npos,
+        "balance report API must derive auditable accounting from the exact "
+        "result and model revision");
+    const auto balance_markdown = api.handle(authenticated(json_post(
+        "/api/v1/jobs/" + job_id +
+            "/balance-report-export?format=markdown",
+        balance_request)));
+    require(
+        balance_markdown.status == 200 &&
+            balance_markdown.headers.at("Content-Type") ==
+                "text/markdown; charset=utf-8" &&
+            balance_markdown.headers.at("Content-Disposition").find(
+                ".md\"") != std::string::npos &&
+            balance_markdown.body.find(model.model_revision_id) !=
+                std::string::npos &&
+            balance_markdown.body.find("Informative engineering report") !=
+                std::string::npos,
+        "balance report Markdown export must preserve provenance and bounded "
+        "claims");
+    const auto balance_csv = api.handle(authenticated(json_post(
+        "/api/v1/jobs/" + job_id +
+            "/balance-report-export?format=csv",
+        balance_request)));
+    require(
+        balance_csv.status == 200 &&
+            balance_csv.headers.at("Content-Type") ==
+                "text/csv; charset=utf-8" &&
+            balance_csv.body.find("record_type,job_id,result_checksum") ==
+                0U &&
+            balance_csv.body.find(model.model_revision_id) !=
+                std::string::npos,
+        "balance report CSV export must expose machine-readable accounting");
 }
 
 void test_authored_component_job_workflow() {

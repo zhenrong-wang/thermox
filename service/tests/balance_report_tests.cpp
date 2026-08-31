@@ -1,6 +1,8 @@
 #include "thermox/service/balance_report.hpp"
 
+#include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -14,6 +16,13 @@ void test_whole_system_energy_report() {
     using namespace thermox::service;
     SimulationJobRecord job;
     job.job_id = "balance-job";
+    RevisionProvenance provenance;
+    provenance.project_id = "project-a";
+    provenance.model_revision_id = "model-r4";
+    provenance.model_checksum = "sha256:model";
+    provenance.case_revision_id = "case-r2";
+    provenance.run_configuration_revision_id = "run-r3";
+    job.request.source_revisions = provenance;
     ResultArtifact result;
     result.manifest.checksum = "sha256:result";
     result.content = R"({"graph":{"components":[
@@ -46,8 +55,33 @@ void test_whole_system_energy_report() {
             report.find("\"energy_input_si\":100.0") !=
                 std::string::npos &&
             report.find("\"energy_output_si\":100.0") !=
+                std::string::npos &&
+            report.find("\"model_revision_id\":\"model-r4\"") !=
                 std::string::npos,
         "balance report must preserve profile and boundary accounting");
+    const auto markdown = serialize_balance_report_markdown(report);
+    require(
+        markdown.find("# Thermox thermal balance report") !=
+                std::string::npos &&
+            markdown.find("model-r4") != std::string::npos &&
+            markdown.find("Clause-level standards conformity is not") !=
+                std::string::npos,
+        "Markdown export must carry accounting, provenance, and limitations");
+    const auto csv = serialize_balance_report_csv(report);
+    require(
+        csv.find("record_type,job_id,result_checksum") == 0U &&
+            csv.find("boundary_stream,balance-job") != std::string::npos &&
+            csv.find("component_closure,balance-job") != std::string::npos &&
+            csv.find("model-r4") != std::string::npos,
+        "CSV export must carry machine-readable accounting and provenance");
+    std::istringstream rows(csv);
+    std::string row;
+    while (std::getline(rows, row)) {
+        require(
+            static_cast<std::size_t>(std::count(row.begin(), row.end(), ',')) ==
+                12U,
+            "each simple CSV test record must preserve the 13-column schema");
+    }
 }
 
 void test_unsupported_profile_is_rejected() {

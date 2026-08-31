@@ -4528,7 +4528,7 @@ code {
 .thermal-balance-report { margin-bottom:14px; overflow:hidden; border:1px solid #d7e1e6; border-radius:5px; background:#fff; }
 .thermal-balance-report > header { display:flex; justify-content:space-between; padding:12px 14px; background:#f7f9fa; border-bottom:1px solid #e0e7eb; }
 .thermal-balance-report h2 { margin:0; color:#334d5f; font-size:11px; }
-.thermal-balance-report > header > div:last-child { display:grid; justify-items:end; gap:3px; color:#537080; font-size:8px; text-transform:uppercase; }
+.balance-report-actions { display:flex; align-items:center; justify-content:flex-end; gap:6px; color:#537080; font-size:8px; text-transform:uppercase; }
 .balance-flow-diagram { display:grid; grid-template-columns:1fr 170px 1fr; gap:18px; align-items:center; padding:18px; background:linear-gradient(90deg,#f4faf7,#fff 48%,#fff8f2); }
 .balance-streams { display:grid; gap:6px; }
 .balance-streams span { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-radius:3px; background:#fff; box-shadow:0 1px 4px #2b4b5d14; color:#496878; font-size:8px; }

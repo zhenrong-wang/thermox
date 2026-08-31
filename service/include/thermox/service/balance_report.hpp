@@ -3,6 +3,7 @@
 #include "thermox/service/simulation_jobs.hpp"
 
 #include <string>
+#include <string_view>
 
 namespace thermox::service {
 
@@ -26,5 +27,12 @@ struct BalanceReportRequest {
     const ResultArtifact& result,
     const std::string& canonical_topology_json,
     const BalanceReportRequest& request);
+
+// Server-owned representations keep report semantics consistent across HTTP,
+// CLI, and future graphical clients.
+[[nodiscard]] std::string serialize_balance_report_markdown(
+    std::string_view report_json);
+[[nodiscard]] std::string serialize_balance_report_csv(
+    std::string_view report_json);
 
 }  // namespace thermox::service

@@ -280,6 +280,10 @@ export function ResultsWorkspace({
   >('')
   const [exportError, setExportError] = useState('')
   const [balanceReport, setBalanceReport] = useState<BalanceReport>()
+  const [balanceExportingFormat, setBalanceExportingFormat] = useState<
+    'markdown' | 'csv' | ''
+  >('')
+  const [balanceExportError, setBalanceExportError] = useState('')
   const sampleCount = result ? resultSampleCount(result) : 0
 
   useEffect(() => {
@@ -291,6 +295,7 @@ export function ResultsWorkspace({
 
   useEffect(() => {
     setBalanceReport(undefined)
+    setBalanceExportError('')
     if (!job?.job_id || job.state !== 'succeeded') return
     const controller = new AbortController()
     void api.balanceReport(job.job_id, controller.signal)
@@ -298,6 +303,24 @@ export function ResultsWorkspace({
       .catch(() => setBalanceReport(undefined))
     return () => controller.abort()
   }, [job?.job_id, job?.state])
+
+  async function exportBalanceReport(format: 'markdown' | 'csv') {
+    if (!job?.job_id) return
+    setBalanceExportingFormat(format)
+    setBalanceExportError('')
+    try {
+      const exported = await api.balanceReportExport(job.job_id, format)
+      downloadText(exported.content, exported.filename, exported.mediaType)
+    } catch (exportFailure) {
+      setBalanceExportError(
+        exportFailure instanceof Error
+          ? exportFailure.message
+          : 'Unable to export the thermal balance report.',
+      )
+    } finally {
+      setBalanceExportingFormat('')
+    }
+  }
 
   const graph = result ? resultGraph(result, sampleIndex) : undefined
   const overlays = useMemo(
@@ -614,7 +637,14 @@ export function ResultsWorkspace({
       {!loading && result && graph && (
         <div className="results-content">
           <ResultAssuranceStrip layers={assuranceLayers} />
-          {balanceReport && <ThermalBalanceReport report={balanceReport} />}
+          {balanceReport && (
+            <ThermalBalanceReport
+              report={balanceReport}
+              exportingFormat={balanceExportingFormat}
+              exportError={balanceExportError}
+              onExport={(format) => void exportBalanceReport(format)}
+            />
+          )}
           <div className="result-summary-strip">
             {(job.result_summary?.values ?? []).map((value) => {
               const displayed = displayValue(

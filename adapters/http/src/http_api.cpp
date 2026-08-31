@@ -4083,16 +4083,22 @@ Response Api::handle(const Request& request) const {
         constexpr std::string_view job_prefix =
             "/api/v1/jobs/";
         if (target.path.starts_with(job_prefix)) {
-            reject_unknown_query(target.query, {});
             const auto& identity = require_identity(request);
             std::string suffix =
                 target.path.substr(job_prefix.size());
             bool result_requested = false;
             bool balance_report_requested = false;
+            bool balance_report_export_requested = false;
+            constexpr std::string_view balance_report_export_suffix =
+                "/balance-report-export";
             constexpr std::string_view balance_report_suffix =
                 "/balance-report";
             constexpr std::string_view result_suffix = "/result";
-            if (suffix.ends_with(balance_report_suffix)) {
+            if (suffix.ends_with(balance_report_export_suffix)) {
+                balance_report_export_requested = true;
+                suffix.resize(
+                    suffix.size() - balance_report_export_suffix.size());
+            } else if (suffix.ends_with(balance_report_suffix)) {
                 balance_report_requested = true;
                 suffix.resize(
                     suffix.size() - balance_report_suffix.size());
@@ -4107,10 +4113,12 @@ Response Api::handle(const Request& request) const {
                     404, "route_not_found",
                     "no route matches the request target");
             }
-            if (balance_report_requested && method != "post") {
+            if ((balance_report_requested ||
+                 balance_report_export_requested) &&
+                method != "post") {
                 auto response = error_response(
                     405, "method_not_allowed",
-                    "balance reports only support POST");
+                    "balance reports and exports only support POST");
                 response.headers["Allow"] = "POST";
                 return response;
             }
@@ -4122,12 +4130,18 @@ Response Api::handle(const Request& request) const {
                 return response;
             }
             if (!result_requested && !balance_report_requested &&
+                !balance_report_export_requested &&
                 method != "get" && method != "delete") {
                 auto response = error_response(
                     405, "method_not_allowed",
                     "simulation jobs only support GET and DELETE");
                 response.headers["Allow"] = "GET, DELETE";
                 return response;
+            }
+            if (balance_report_export_requested) {
+                reject_unknown_query(target.query, {"format"});
+            } else {
+                reject_unknown_query(target.query, {});
             }
             if (method == "delete") {
                 if (!request.body.empty()) {
@@ -4162,7 +4176,8 @@ Response Api::handle(const Request& request) const {
                         error.what());
                 }
             }
-            if (balance_report_requested) {
+            if (balance_report_requested ||
+                balance_report_export_requested) {
                 require_json_request(
                     request, impl_->options.maximum_body_bytes);
                 const auto report_request =
@@ -4193,11 +4208,29 @@ Response Api::handle(const Request& request) const {
                     throw service::ProjectStateError(
                         "balance report model revision was not found");
                 }
-                return json_response(
-                    200,
-                    service::build_balance_report_json(
-                        *record, *result, model->canonical_model_json,
-                        report_request));
+                const auto report = service::build_balance_report_json(
+                    *record, *result, model->canonical_model_json,
+                    report_request);
+                if (!balance_report_export_requested) {
+                    return json_response(200, report);
+                }
+                const auto format = optional_query(target.query, "format");
+                const auto base_name =
+                    "thermox-balance-" + safe_download_name(suffix);
+                if (format == "markdown") {
+                    return download_response(
+                        service::serialize_balance_report_markdown(report),
+                        "text/markdown; charset=utf-8",
+                        base_name + ".md");
+                }
+                if (format == "csv") {
+                    return download_response(
+                        service::serialize_balance_report_csv(report),
+                        "text/csv; charset=utf-8",
+                        base_name + ".csv");
+                }
+                throw std::invalid_argument(
+                    "balance report export format must be markdown or csv");
             }
             if (!result_requested) {
                 const auto record =

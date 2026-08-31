@@ -898,6 +898,15 @@ export interface BalanceReport {
   schema_version: 'thermox.balance_report/v1'
   job_id: string
   result_checksum: string
+  provenance: {
+    project_id: string
+    model_revision_id: string
+    model_checksum: string
+    case_revision_id: string
+    case_checksum: string
+    run_configuration_revision_id: string
+    run_configuration_checksum: string
+  }
   mode: 'steady' | 'transient'
   sample_time_si: number
   accounting_basis: 'energy'

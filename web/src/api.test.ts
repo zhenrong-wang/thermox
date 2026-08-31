@@ -304,6 +304,44 @@ describe('validation report API', () => {
   })
 })
 
+describe('thermal balance report API', () => {
+  it('downloads the server-rendered balance report representation', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response('# Thermox thermal balance report', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition':
+            'attachment; filename="thermox-balance-job-a.md"',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.balanceReportExport(
+      'job/a',
+      'markdown',
+    )).resolves.toEqual({
+      content: '# Thermox thermal balance report',
+      filename: 'thermox-balance-job-a.md',
+      mediaType: 'text/markdown; charset=utf-8',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/jobs/job%2Fa/balance-report-export?format=markdown',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          schema_version: 'thermox.balance_report_request/v1',
+          accounting_basis: 'energy',
+          system_boundary: 'whole_system',
+          diagram_profile: 'iso-14084-1:2015',
+          calculation_profile: 'none',
+        }),
+      }),
+    )
+  })
+})
+
 describe('correlation artifact authoring API', () => {
   it('retrieves an exact immutable artifact payload for revision editing', async () => {
     const content = {

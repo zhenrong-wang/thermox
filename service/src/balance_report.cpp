@@ -5,6 +5,8 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <iomanip>
+#include <sstream>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -82,6 +84,32 @@ const Json& selected_graph(const Json& result, double& sample_time) {
     const auto& sample = trajectory.back();
     sample_time = sample.value("time", 0.0);
     return sample.at("graph");
+}
+
+std::string csv_field(const std::string& value) {
+    if (value.find_first_of(",\"\r\n") == std::string::npos) return value;
+    std::string escaped{"\""};
+    for (const char character : value) {
+        if (character == '"') escaped.push_back('"');
+        escaped.push_back(character);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+std::string markdown_field(std::string value) {
+    for (char& character : value) {
+        if (character == '|' || character == '\r' || character == '\n') {
+            character = ' ';
+        }
+    }
+    return value;
+}
+
+std::string number(double value) {
+    std::ostringstream out;
+    out << std::setprecision(15) << value;
+    return out.str();
 }
 
 }  // namespace
@@ -178,6 +206,24 @@ std::string build_balance_report_json(
         {"schema_version", balance_report_schema_v1},
         {"job_id", job.job_id},
         {"result_checksum", result.manifest.checksum},
+        {"provenance", {
+            {"project_id", job.request.source_revisions
+                ? job.request.source_revisions->project_id : ""},
+            {"model_revision_id", job.request.source_revisions
+                ? job.request.source_revisions->model_revision_id : ""},
+            {"model_checksum", job.request.source_revisions
+                ? job.request.source_revisions->model_checksum : ""},
+            {"case_revision_id", job.request.source_revisions
+                ? job.request.source_revisions->case_revision_id : ""},
+            {"case_checksum", job.request.source_revisions
+                ? job.request.source_revisions->case_checksum : ""},
+            {"run_configuration_revision_id", job.request.source_revisions
+                ? job.request.source_revisions->run_configuration_revision_id
+                : ""},
+            {"run_configuration_checksum", job.request.source_revisions
+                ? job.request.source_revisions->run_configuration_checksum
+                : ""},
+        }},
         {"mode", transient ? "transient" : "steady"},
         {"sample_time_si", sample_time},
         {"accounting_basis", request.accounting_basis},
@@ -211,6 +257,116 @@ std::string build_balance_report_json(
         {"component_closures", std::move(components)},
     };
     return report.dump();
+}
+
+std::string serialize_balance_report_markdown(
+    std::string_view report_json) {
+    const Json report = Json::parse(report_json);
+    const auto& profile = report.at("profile");
+    const auto& provenance = report.at("provenance");
+    const auto& boundary = report.at("boundary");
+    std::ostringstream out;
+    out << "# Thermox thermal balance report\n\n"
+        << "> Informative engineering report. Clause-level standards "
+           "conformity is not demonstrated.\n\n"
+        << "## Scope and provenance\n\n"
+        << "- Job: `" << markdown_field(report.at("job_id").get<std::string>())
+        << "`\n- Result checksum: `"
+        << markdown_field(report.at("result_checksum").get<std::string>())
+        << "`\n- Model revision: `"
+        << markdown_field(provenance.at("model_revision_id").get<std::string>())
+        << "`\n- Model checksum: `"
+        << markdown_field(provenance.at("model_checksum").get<std::string>())
+        << "`\n- Case revision: `"
+        << markdown_field(provenance.at("case_revision_id").get<std::string>())
+        << "`\n- Run configuration revision: `"
+        << markdown_field(
+               provenance.at("run_configuration_revision_id")
+                   .get<std::string>())
+        << "`\n- Diagram profile: `"
+        << markdown_field(profile.at("diagram").get<std::string>())
+        << "` (" << profile.at("conformance").get<std::string>() << ")\n"
+        << "- Calculation mode: `" << report.at("mode").get<std::string>()
+        << "`\n\n## Whole-system accounting\n\n"
+        << "| Quantity | SI value | Unit |\n|---|---:|---|\n"
+        << "| Energy input | "
+        << number(boundary.at("energy_input_si").get<double>())
+        << " | W |\n| Energy output | "
+        << number(boundary.at("energy_output_si").get<double>())
+        << " | W |\n| Net energy flow / closure | "
+        << number(boundary.at("net_energy_flow_si").get<double>())
+        << " | W |\n| Net mass flow / closure | "
+        << number(boundary.at("net_mass_flow_si").get<double>())
+        << " | kg/s |\n\nInterpretation: "
+        << markdown_field(
+               boundary.at("closure_interpretation").get<std::string>())
+        << ".\n\n## Boundary streams\n\n"
+        << "| Component | Port | Direction | Domain | Mass flow (kg/s) | "
+           "Energy flow (W) |\n|---|---|---|---|---:|---:|\n";
+    for (const auto& stream : report.at("boundary_streams")) {
+        out << "| " << markdown_field(stream.at("component_id").get<std::string>())
+            << " | " << markdown_field(stream.at("port_name").get<std::string>())
+            << " | " << stream.at("boundary_direction").get<std::string>()
+            << " | " << stream.at("domain").get<std::string>() << " | "
+            << number(stream.at("mass_flow_si").get<double>()) << " | "
+            << number(stream.at("energy_flow_si").get<double>()) << " |\n";
+    }
+    out << "\n## Component closures\n\n"
+        << "| Component | Kind | Net mass flow (kg/s) | Net energy flow (W) |\n"
+           "|---|---|---:|---:|\n";
+    for (const auto& component : report.at("component_closures")) {
+        out << "| "
+            << markdown_field(component.at("component_id").get<std::string>())
+            << " | " << markdown_field(component.at("kind").get<std::string>())
+            << " | " << number(component.at("net_mass_flow_si").get<double>())
+            << " | " << number(component.at("net_energy_flow_si").get<double>())
+            << " |\n";
+    }
+    out << "\n## Not evaluated\n\n";
+    for (const auto& limitation : profile.at("unevaluated_requirements")) {
+        out << "- " << markdown_field(limitation.get<std::string>()) << "\n";
+    }
+    return out.str();
+}
+
+std::string serialize_balance_report_csv(std::string_view report_json) {
+    const Json report = Json::parse(report_json);
+    const auto& provenance = report.at("provenance");
+    const auto job_id = csv_field(report.at("job_id").get<std::string>());
+    const auto checksum =
+        csv_field(report.at("result_checksum").get<std::string>());
+    const auto model_revision = csv_field(
+        provenance.at("model_revision_id").get<std::string>());
+    std::ostringstream out;
+    out << "record_type,job_id,result_checksum,model_revision_id,component_id,"
+           "kind,port_name,direction,domain,mass_flow_kg_s,energy_flow_W,"
+           "net_mass_flow_kg_s,net_energy_flow_W\n";
+    const auto& boundary = report.at("boundary");
+    out << "system_summary," << job_id << ',' << checksum << ','
+        << model_revision << ",,,,,,,,"
+        << number(boundary.at("net_mass_flow_si").get<double>()) << ','
+        << number(boundary.at("net_energy_flow_si").get<double>()) << '\n';
+    for (const auto& stream : report.at("boundary_streams")) {
+        out << "boundary_stream," << job_id << ',' << checksum << ','
+            << model_revision << ','
+            << csv_field(stream.at("component_id").get<std::string>())
+            << ",," << csv_field(stream.at("port_name").get<std::string>())
+            << ',' << stream.at("boundary_direction").get<std::string>()
+            << ',' << stream.at("domain").get<std::string>() << ','
+            << number(stream.at("mass_flow_si").get<double>()) << ','
+            << number(stream.at("energy_flow_si").get<double>()) << ",,\n";
+    }
+    for (const auto& component : report.at("component_closures")) {
+        out << "component_closure," << job_id << ',' << checksum << ','
+            << model_revision << ','
+            << csv_field(component.at("component_id").get<std::string>())
+            << ',' << csv_field(component.at("kind").get<std::string>())
+            << ",,,,,,"
+            << number(component.at("net_mass_flow_si").get<double>()) << ','
+            << number(component.at("net_energy_flow_si").get<double>())
+            << '\n';
+    }
+    return out.str();
 }
 
 }  // namespace thermox::service

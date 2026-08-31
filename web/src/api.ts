@@ -717,6 +717,23 @@ export const api = {
       },
       signal,
     ),
+  balanceReportExport: (
+    jobId: string,
+    format: 'markdown' | 'csv',
+    signal?: AbortSignal,
+  ) =>
+    postDownload(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/balance-report-export?format=${format}`,
+      {
+        schema_version: 'thermox.balance_report_request/v1',
+        accounting_basis: 'energy',
+        system_boundary: 'whole_system',
+        diagram_profile: 'iso-14084-1:2015',
+        calculation_profile: 'none',
+      },
+      `thermox-balance-report.${format === 'markdown' ? 'md' : 'csv'}`,
+      signal,
+    ),
   reconciliationResult: (jobId: string, signal?: AbortSignal) =>
     getJson<ReconciliationResult>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/result`,

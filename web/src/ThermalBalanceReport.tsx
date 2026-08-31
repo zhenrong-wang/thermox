@@ -3,7 +3,17 @@ import { displayValue } from './displayUnits'
 import { formatResultValue } from './resultPresentation'
 import type { BalanceReport } from './types'
 
-export function ThermalBalanceReport({ report }: { report: BalanceReport }) {
+export function ThermalBalanceReport({
+  report,
+  exportingFormat,
+  exportError,
+  onExport,
+}: {
+  report: BalanceReport
+  exportingFormat: 'markdown' | 'csv' | ''
+  exportError: string
+  onExport: (format: 'markdown' | 'csv') => void
+}) {
   const { profile, unitDimensions } = useDisplayUnits()
   const power = (value: number) =>
     displayValue(value, 'power', profile, unitDimensions)
@@ -27,11 +37,30 @@ export function ThermalBalanceReport({ report }: { report: BalanceReport }) {
           <span className="section-kicker">Standards-profiled accounting</span>
           <h2>Whole-system energy balance</h2>
         </div>
-        <div>
+        <div className="balance-report-actions">
           <strong>{report.profile.diagram}</strong>
           <span>{report.profile.conformance}</span>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={Boolean(exportingFormat)}
+            onClick={() => onExport('markdown')}
+          >
+            {exportingFormat === 'markdown' ? 'Exporting…' : 'Markdown'}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={Boolean(exportingFormat)}
+            onClick={() => onExport('csv')}
+          >
+            {exportingFormat === 'csv' ? 'Exporting…' : 'CSV'}
+          </button>
         </div>
       </header>
+      {exportError && (
+        <div className="operation-banner is-error">{exportError}</div>
+      )}
       <div className="balance-flow-diagram">
         <div className="balance-streams input">
           {streams('input').map((stream) => (
@@ -61,7 +90,7 @@ export function ThermalBalanceReport({ report }: { report: BalanceReport }) {
         <div><span>Net / closure</span><strong>{formatResultValue(residual.value)} {residual.unit}</strong></div>
       </div>
       <footer>
-        <span>Informative profile; clause-level conformity is not demonstrated.</span>
+        <span>Informative profile; clause-level conformity is not demonstrated. Model <code>{report.provenance.model_revision_id || 'unavailable'}</code></span>
         <code>{report.result_checksum}</code>
       </footer>
     </section>
