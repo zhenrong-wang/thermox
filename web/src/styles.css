@@ -2590,6 +2590,16 @@ code {
   font-size: 15px;
 }
 
+.case-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.case-empty .secondary-button {
+  margin-top: 8px;
+}
+
 .case-empty {
   grid-row: 1 / -1;
   display: grid;

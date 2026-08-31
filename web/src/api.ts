@@ -47,6 +47,10 @@ import type {
   ValidationCampaignArtifact,
   ValidationSeriesArtifact,
 } from './types'
+import type {
+  StudyPackageDocument,
+  StudyPackageImportResult,
+} from './studyPackage'
 
 class ApiError extends Error {
   readonly status: number
@@ -582,6 +586,23 @@ export const api = {
       request,
       signal,
     ),
+  importStudyPackage: (
+    projectId: string,
+    document: StudyPackageDocument,
+    parentModelRevisionId = '',
+    signal?: AbortSignal,
+  ) => {
+    const query = new URLSearchParams()
+    if (parentModelRevisionId) {
+      query.set('parent_model_revision_id', parentModelRevisionId)
+    }
+    const suffix = query.size ? `?${query.toString()}` : ''
+    return postJson<StudyPackageImportResult>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/study-packages${suffix}`,
+      document,
+      signal,
+    )
+  },
   calibrationRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<CalibrationRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/calibration-revisions`,

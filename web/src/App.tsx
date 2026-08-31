@@ -45,6 +45,12 @@ import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { SystemReadinessPanel } from './SystemReadinessPanel'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { StudyPublishForm } from './StudyPublishForm'
+import { StudyPackageWorkbench } from './StudyPackageWorkbench'
+import {
+  packageRunConfiguration,
+  packageStudyRevision,
+  type StudyPackageDocument,
+} from './studyPackage'
 import { studyArtifactRevisionIds } from './studyAuthoring'
 import { ValidationSeriesArtifactForm } from './ValidationSeriesArtifactForm'
 import { ValidationCampaignForm } from './ValidationCampaignForm'
@@ -242,6 +248,10 @@ function App() {
     useState<ProjectModelValidation>()
   const [studyRevisions, setStudyRevisions] = useState<StudyRevision[]>([])
   const [addingStudy, setAddingStudy] = useState(false)
+  const [showingStudyPackage, setShowingStudyPackage] = useState(false)
+  const [studyPackageInitial, setStudyPackageInitial] =
+    useState<StudyPackageDocument>()
+  const [studyPackagePublishing, setStudyPackagePublishing] = useState(false)
   const [calibrationRevisions, setCalibrationRevisions] = useState<
     CalibrationRevision[]
   >([])
@@ -506,6 +516,8 @@ function App() {
     setShowSystemReadiness(false)
     setTopology(undefined)
     setShowingTopologyJson(false)
+    setShowingStudyPackage(false)
+    setStudyPackageInitial(undefined)
     setTopologyPresentation(undefined)
     setLayoutSaveState('idle')
     if (layoutSaveTimer.current !== undefined) {
@@ -1694,6 +1706,110 @@ function App() {
     }
   }
 
+  function openStudyPackageWorkbench() {
+    setCaseOperationError('')
+    setCaseOperationStatus('')
+    const study = activePublishedStudy
+    const caseDocument = selectedCaseRevision?.case_document
+    if (!topology || !caseDocument || !study) {
+      setStudyPackageInitial(undefined)
+      setShowingStudyPackage(true)
+      return
+    }
+    const missingRevisionId = study.artifact_revision_ids.find(
+      (revisionId) => !artifactRevisions.some(
+        (candidate) => candidate.artifact_revision_id === revisionId,
+      ),
+    )
+    if (missingRevisionId) {
+      setCaseOperationError(
+        `Study artifact revision ${missingRevisionId} is not loaded in this project.`,
+      )
+      return
+    }
+    const dependencies = study.artifact_revision_ids.map((revisionId) => {
+      const revision = artifactRevisions.find(
+        (candidate) => candidate.artifact_revision_id === revisionId,
+      )!
+      return {
+        artifact_revision_id: revision.artifact_revision_id,
+        checksum: revision.content.checksum,
+        artifact_id: revision.artifact_id,
+        artifact_type: revision.artifact_type,
+        artifact_schema_version: revision.artifact_schema_version,
+      }
+    })
+    const runConfiguration = runConfigurationRevisions.find(
+      (revision) => revision.study_revision_id === study.study_revision_id,
+    )
+    setStudyPackageInitial({
+      schema_version: 'thermox.study_package/v1',
+      package_id: `${study.study_id}-r${study.revision_number}`,
+      topology,
+      case: caseDocument,
+      artifact_dependencies: dependencies,
+      study: packageStudyRevision(study),
+      ...(runConfiguration
+        ? { run_configuration: packageRunConfiguration(runConfiguration) }
+        : {}),
+    })
+    setShowingStudyPackage(true)
+  }
+
+  async function importStudyPackage(document: StudyPackageDocument) {
+    if (!selectedProjectId) {
+      throw new Error('Select a project before importing a Study package.')
+    }
+    setStudyPackagePublishing(true)
+    setCaseOperationError('')
+    setCaseOperationStatus('Verifying and importing Study package…')
+    try {
+      const imported = await api.importStudyPackage(
+        selectedProjectId,
+        document,
+        selectedRevisionId,
+      )
+      setRevisions((current) => [
+        imported.model_revision,
+        ...current.filter((item) =>
+          item.model_revision_id !== imported.model_revision.model_revision_id),
+      ])
+      setSelectedRevisionId(imported.model_revision.model_revision_id)
+      setCaseRevisions([imported.case_revision])
+      setSelectedCaseRevision(imported.case_revision)
+      setSelectedCaseRevisionId(imported.case_revision.case_revision_id)
+      setValidationResult(imported.validation)
+      setStudyRevisions((current) => [
+        imported.study_revision,
+        ...current.filter((item) =>
+          item.study_revision_id !== imported.study_revision.study_revision_id),
+      ])
+      if (imported.run_configuration_revision) {
+        const runRevision = imported.run_configuration_revision
+        setRunConfigurationRevisions((current) => [
+          runRevision,
+          ...current.filter((item) =>
+            item.run_configuration_revision_id !==
+            runRevision.run_configuration_revision_id),
+        ])
+        setSelectedRunConfiguration(runRevision)
+        setSelectedRunConfigurationRevisionId(
+          runRevision.run_configuration_revision_id,
+        )
+      }
+      setCaseOperationStatus(
+        `Imported Study package ${document.package_id} as immutable, validated revisions.`,
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setCaseOperationError(message)
+      setCaseOperationStatus('')
+      throw new Error(message)
+    } finally {
+      setStudyPackagePublishing(false)
+    }
+  }
+
   async function publishCalibration(request: CreateCalibrationRevision) {
     if (!selectedProjectId || !selectedRevisionId) {
       throw new Error('Select an exact topology revision first.')
@@ -2739,6 +2855,7 @@ function App() {
             onInspectDiagnostic={inspectDiagnosticOnCanvas}
             onPublishStudy={() => setAddingStudy(true)}
             onCreate={() => setAddingCase(true)}
+            onStudyPackage={openStudyPackageWorkbench}
           />
         ) : workspaceView === 'runs' ? (
           <RunConfigurationWorkspace
@@ -3138,6 +3255,15 @@ function App() {
             onSubmit={publishStudy}
           />
         )}
+      {showingStudyPackage && (
+        <StudyPackageWorkbench
+          key={studyPackageInitial?.package_id ?? 'study-package-import'}
+          initial={studyPackageInitial}
+          publishing={studyPackagePublishing}
+          onCancel={() => setShowingStudyPackage(false)}
+          onImport={importStudyPackage}
+        />
+      )}
       {addingCalibration && selectedRevisionId && (
         <CalibrationPublishForm
           modelRevisionId={selectedRevisionId}

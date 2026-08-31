@@ -2461,6 +2461,80 @@ void test_team_scoped_projects_and_model_revisions() {
         "case documents");
 }
 
+void test_study_package_import() {
+    thermox::http::Api api;
+    const auto created = api.handle(authenticated(json_post(
+        "/api/v1/projects",
+        R"json({"schema_version":"thermox.project.create/v1","name":"Study package project","description":""})json")));
+    require(created.status == 201, "Study package test project must exist");
+    const auto project = boost::json::parse(created.body).as_object();
+    const auto project_id = std::string(project.at("project_id").as_string());
+
+    boost::json::object package;
+    package["schema_version"] = "thermox.study_package/v1";
+    package["package_id"] = "air-compressor-design";
+    package["topology"] = boost::json::parse(read_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.topology.json"));
+    package["case"] = boost::json::parse(read_file(
+        std::string(THERMOX_SOURCE_DIR) +
+        "/core/examples/air_compressor.design.case.json"));
+    package["artifact_dependencies"] = boost::json::array{};
+    package["study"] = {
+        {"study_id", "air-compressor-design"},
+        {"intent", "steady_state_design"},
+        {"artifact_revision_ids", boost::json::array{}},
+        {"artifact_qualification_requirements", boost::json::array{}},
+        {"artifact_operating_envelopes", boost::json::array{}},
+        {"result_projections", boost::json::array{}},
+        {"acceptance_criteria", boost::json::array{}},
+        {"trajectory_validation_bindings", boost::json::array{}},
+    };
+    package["run_configuration"] = {
+        {"run_configuration_id", "air-compressor-default-run"},
+        {"steady_solver", boost::json::object{}},
+        {"transient_solver", boost::json::object{}},
+    };
+    const auto imported = api.handle(authenticated(json_post(
+        "/api/v1/projects/" + project_id + "/study-packages",
+        boost::json::serialize(package))));
+    require(
+        imported.status == 201 &&
+            imported.body.find("thermox.study_package_import/v1") !=
+                std::string::npos &&
+            imported.body.find("air-compressor-design") !=
+                std::string::npos &&
+            imported.body.find("air-compressor-default-run") !=
+                std::string::npos &&
+            imported.body.find("\"calculatable\":true") !=
+                std::string::npos,
+        "Study package import must publish and validate the complete "
+        "declaration through one API operation; status=" +
+            std::to_string(imported.status) + " body=" + imported.body);
+
+    auto missing_dependency = package;
+    missing_dependency["artifact_dependencies"] = boost::json::array{
+        boost::json::object{
+            {"artifact_revision_id", "missing-r1"},
+            {"checksum", "sha256:missing"},
+            {"artifact_id", "missing-map"},
+            {"artifact_type", "thermox.performance_map"},
+            {"artifact_schema_version", "thermox.performance_map/v1"},
+        },
+    };
+    missing_dependency.at("study").as_object()["artifact_revision_ids"] =
+        boost::json::array{"missing-r1"};
+    const auto rejected = api.handle(authenticated(json_post(
+        "/api/v1/projects/" + project_id + "/study-packages",
+        boost::json::serialize(missing_dependency))));
+    require(
+        rejected.status == 409 &&
+            rejected.body.find("missing-r1") != std::string::npos,
+        "Study package dependencies must be verified before publication; "
+        "status=" + std::to_string(rejected.status) +
+            " body=" + rejected.body);
+}
+
 }  // namespace
 
 int main() {
@@ -2475,6 +2549,7 @@ int main() {
         test_tenant_scoped_asynchronous_jobs();
         test_authored_component_job_workflow();
         test_revision_backed_transient_validation_workflow();
+        test_study_package_import();
         test_team_scoped_projects_and_model_revisions();
         std::cout << "http api tests passed\n";
         return 0;

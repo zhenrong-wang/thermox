@@ -2050,6 +2050,135 @@ service::CreateStudyRevisionRequest parse_create_study_request(
     return command;
 }
 
+struct StudyPackageDependency {
+    std::string artifact_revision_id;
+    std::string checksum;
+    std::string artifact_id;
+    std::string artifact_type;
+    std::string artifact_schema_version;
+};
+
+struct StudyPackageRequest {
+    std::string package_id;
+    std::string topology_json;
+    std::string case_json;
+    std::vector<StudyPackageDependency> dependencies;
+    boost::json::object study;
+    std::optional<boost::json::object> run_configuration;
+};
+
+StudyPackageRequest parse_study_package_request(const Request& request) {
+    boost::json::value value;
+    try {
+        value = boost::json::parse(request.body);
+    } catch (const std::exception& error) {
+        throw std::invalid_argument(
+            std::string("invalid Study package JSON: ") + error.what());
+    }
+    if (!value.is_object()) {
+        throw std::invalid_argument("Study package must be a JSON object");
+    }
+    const auto& root = value.as_object();
+    const std::set<std::string_view> allowed = {
+        "schema_version", "package_id", "topology", "case",
+        "artifact_dependencies", "study", "run_configuration"};
+    for (const auto& field : root) {
+        if (!allowed.contains(field.key())) {
+            throw std::invalid_argument(
+                "unknown Study package field: " +
+                std::string(field.key()));
+        }
+    }
+    if (require_json_string(root, "schema_version") !=
+        "thermox.study_package/v1") {
+        throw std::invalid_argument(
+            "unsupported Study package schema_version");
+    }
+    StudyPackageRequest parsed;
+    parsed.package_id = require_json_string(root, "package_id");
+    if (parsed.package_id.empty()) {
+        throw std::invalid_argument(
+            "Study package package_id must not be empty");
+    }
+    const auto& topology = require_json_field(root, "topology");
+    const auto& simulation_case = require_json_field(root, "case");
+    const auto& study = require_json_field(root, "study");
+    const auto& dependencies =
+        require_json_field(root, "artifact_dependencies");
+    if (!topology.is_object() || !simulation_case.is_object() ||
+        !study.is_object() || !dependencies.is_array()) {
+        throw std::invalid_argument(
+            "Study package topology, case, and study must be objects "
+            "and artifact_dependencies must be an array");
+    }
+    parsed.topology_json = boost::json::serialize(topology);
+    parsed.case_json = boost::json::serialize(simulation_case);
+    parsed.study = study.as_object();
+    std::set<std::string> dependency_ids;
+    for (const auto& dependency_value : dependencies.as_array()) {
+        if (!dependency_value.is_object()) {
+            throw std::invalid_argument(
+                "Study package artifact dependency must be an object");
+        }
+        const auto& dependency = dependency_value.as_object();
+        const std::set<std::string_view> dependency_fields = {
+            "artifact_revision_id", "checksum", "artifact_id",
+            "artifact_type", "artifact_schema_version"};
+        for (const auto& field : dependency) {
+            if (!dependency_fields.contains(field.key())) {
+                throw std::invalid_argument(
+                    "unknown Study package artifact dependency field: " +
+                    std::string(field.key()));
+            }
+        }
+        StudyPackageDependency item{
+            require_json_string(dependency, "artifact_revision_id"),
+            require_json_string(dependency, "checksum"),
+            require_json_string(dependency, "artifact_id"),
+            require_json_string(dependency, "artifact_type"),
+            require_json_string(dependency, "artifact_schema_version")};
+        if (item.artifact_revision_id.empty() || item.checksum.empty() ||
+            item.artifact_id.empty() || item.artifact_type.empty() ||
+            item.artifact_schema_version.empty()) {
+            throw std::invalid_argument(
+                "Study package artifact dependency fields must not be empty");
+        }
+        if (!dependency_ids.insert(item.artifact_revision_id).second) {
+            throw std::invalid_argument(
+                "Study package artifact dependency IDs must be unique");
+        }
+        parsed.dependencies.push_back(std::move(item));
+    }
+    const auto* selected_artifacts =
+        parsed.study.if_contains("artifact_revision_ids");
+    if (selected_artifacts == nullptr || !selected_artifacts->is_array()) {
+        throw std::invalid_argument(
+            "Study package study.artifact_revision_ids must be an array");
+    }
+    std::set<std::string> selected_artifact_ids;
+    for (const auto& revision_id : selected_artifacts->as_array()) {
+        if (!revision_id.is_string()) {
+            throw std::invalid_argument(
+                "Study package artifact revision IDs must be strings");
+        }
+        selected_artifact_ids.emplace(revision_id.as_string());
+    }
+    if (selected_artifact_ids != dependency_ids) {
+        throw std::invalid_argument(
+            "Study package artifact dependencies must exactly match the "
+            "Study artifact revision IDs");
+    }
+    if (const auto* run = root.if_contains("run_configuration");
+        run != nullptr) {
+        if (!run->is_object()) {
+            throw std::invalid_argument(
+                "Study package run_configuration must be an object");
+        }
+        parsed.run_configuration = run->as_object();
+    }
+    return parsed;
+}
+
 service::CreateCalibrationRevisionRequest
 parse_create_calibration_request(const Request& request) {
     boost::property_tree::ptree tree;
@@ -2464,6 +2593,31 @@ Response study_revision_response(
     return response;
 }
 
+Response study_package_import_response(
+    const std::string& package_id,
+    const service::ModelRevisionRecord& model,
+    const service::CaseRevisionRecord& simulation_case,
+    const service::ProjectModelValidationResponse& validation,
+    const service::StudyRevisionRecord& study,
+    const std::optional<service::RunConfigurationRevisionRecord>& run) {
+    boost::json::object body;
+    body["schema_version"] = "thermox.study_package_import/v1";
+    body["package_id"] = package_id;
+    body["model_revision"] = boost::json::parse(
+        service::serialize_model_revision_json(model));
+    body["case_revision"] = boost::json::parse(
+        service::serialize_case_revision_json(simulation_case));
+    body["validation"] = boost::json::parse(
+        service::serialize_project_model_validation_json(validation));
+    body["study_revision"] = boost::json::parse(
+        service::serialize_study_revision_json(study));
+    body["run_configuration_revision"] = run
+        ? boost::json::parse(
+              service::serialize_run_configuration_revision_json(*run))
+        : boost::json::value(nullptr);
+    return json_response(201, boost::json::serialize(body));
+}
+
 Response calibration_revision_response(
     const service::CalibrationRevisionRecord& revision,
     int status) {
@@ -2723,6 +2877,8 @@ Response Api::handle(const Request& request) const {
                 "/run-configuration-revisions";
             constexpr std::string_view studies_segment =
                 "/study-revisions";
+            constexpr std::string_view study_packages_segment =
+                "/study-packages";
             constexpr std::string_view calibrations_segment =
                 "/calibration-revisions";
             constexpr std::string_view reconciliations_segment =
@@ -2904,6 +3060,177 @@ Response Api::handle(const Request& request) const {
                     "GET and POST");
                 response.headers["Allow"] = "GET, POST";
                 return response;
+            }
+            if (remainder == study_packages_segment) {
+                if (!impl_->projects->get_project(identity, project_id)) {
+                    return error_response(
+                        404, "project_not_found", "project was not found");
+                }
+                reject_unknown_query(
+                    target.query, {"parent_model_revision_id"});
+                if (method != "post") {
+                    auto response = error_response(
+                        405,
+                        "method_not_allowed",
+                        "Study packages only support POST");
+                    response.headers["Allow"] = "POST";
+                    return response;
+                }
+                require_json_request(
+                    request, impl_->options.maximum_body_bytes);
+                const auto package = parse_study_package_request(request);
+                Request nested_request = request;
+                auto study_json = package.study;
+                study_json["schema_version"] =
+                    "thermox.study_revision.create/v5";
+                study_json["parent_study_revision_id"] = "";
+                study_json["model_revision_id"] = "pending-model";
+                study_json["case_revision_id"] = "pending-case";
+                nested_request.body = boost::json::serialize(study_json);
+                auto study_command =
+                    parse_create_study_request(nested_request);
+                std::optional<service::CreateRunConfigurationRevisionRequest>
+                    run_command;
+                if (package.run_configuration) {
+                    auto run_json = *package.run_configuration;
+                    run_json["schema_version"] =
+                        "thermox.run_configuration.create/v3";
+                    run_json["parent_run_configuration_revision_id"] = "";
+                    run_json["study_revision_id"] = "pending-study";
+                    nested_request.body =
+                        boost::json::serialize(run_json);
+                    run_command =
+                        parse_create_run_configuration_request(
+                            nested_request);
+                }
+
+                for (const auto& dependency : package.dependencies) {
+                    const auto content = impl_->projects
+                        ->get_artifact_revision_content(
+                            identity,
+                            project_id,
+                            dependency.artifact_revision_id);
+                    if (!content) {
+                        return error_response(
+                            409,
+                            "study_package_dependency_not_found",
+                            "Study package artifact revision was not found: " +
+                                dependency.artifact_revision_id);
+                    }
+                    if (content->revision.content.checksum !=
+                            dependency.checksum ||
+                        content->revision.artifact_id !=
+                            dependency.artifact_id ||
+                        content->revision.artifact_type !=
+                            dependency.artifact_type ||
+                        content->revision.artifact_schema_version !=
+                            dependency.artifact_schema_version) {
+                        return error_response(
+                            409,
+                            "study_package_dependency_mismatch",
+                            "Study package artifact dependency does not "
+                            "match its pinned identity: " +
+                                dependency.artifact_revision_id);
+                    }
+                }
+
+                service::CreateModelRevisionRequest model_command;
+                model_command.identity = identity;
+                model_command.project_id = project_id;
+                model_command.parent_model_revision_id = optional_query(
+                    target.query, "parent_model_revision_id");
+                model_command.model_json = package.topology_json;
+                const auto model = impl_->projects
+                    ->create_model_revision(model_command);
+
+                service::CreateCaseRevisionRequest case_command;
+                case_command.identity = identity;
+                case_command.project_id = project_id;
+                case_command.model_revision_id = model.model_revision_id;
+                case_command.case_json = package.case_json;
+                const auto simulation_case = impl_->projects
+                    ->create_case_revision(case_command);
+
+                service::ValidateProjectModelRequest validation_command;
+                validation_command.identity = identity;
+                validation_command.project_id = project_id;
+                validation_command.model_revision_id =
+                    model.model_revision_id;
+                validation_command.case_revision_id =
+                    simulation_case.case_revision_id;
+                for (const auto& dependency : package.dependencies) {
+                    validation_command.artifact_revision_ids.push_back(
+                        dependency.artifact_revision_id);
+                }
+                const auto validation =
+                    impl_->project_validation.validate(validation_command);
+                if (!validation.validation.readiness.calculatable) {
+                    return error_response(
+                        422,
+                        "study_package_validation_blocked",
+                        "Study package topology and case were published, "
+                        "but authoritative validation blocked Study "
+                        "publication");
+                }
+
+                std::string parent_study_revision_id;
+                std::size_t parent_study_revision_number = 0;
+                for (const auto& candidate :
+                     impl_->projects->list_study_revisions(
+                         identity, project_id)) {
+                    if (candidate.study_id == study_command.study_id &&
+                        candidate.revision_number >
+                            parent_study_revision_number) {
+                        parent_study_revision_number =
+                            candidate.revision_number;
+                        parent_study_revision_id =
+                            candidate.study_revision_id;
+                    }
+                }
+                study_command.parent_study_revision_id =
+                    parent_study_revision_id;
+                study_command.identity = identity;
+                study_command.project_id = project_id;
+                study_command.model_revision_id = model.model_revision_id;
+                study_command.case_revision_id =
+                    simulation_case.case_revision_id;
+                const auto study = impl_->projects
+                    ->create_study_revision(study_command);
+
+                std::optional<service::RunConfigurationRevisionRecord> run;
+                if (run_command) {
+                    std::string parent_run_revision_id;
+                    std::size_t parent_revision_number = 0;
+                    for (const auto& candidate :
+                         impl_->projects
+                             ->list_run_configuration_revisions(
+                                 identity, project_id)) {
+                        if (candidate.run_configuration_id ==
+                                run_command->run_configuration_id &&
+                            candidate.revision_number >
+                                parent_revision_number) {
+                            parent_revision_number =
+                                candidate.revision_number;
+                            parent_run_revision_id = candidate
+                                .run_configuration_revision_id;
+                        }
+                    }
+                    run_command->parent_run_configuration_revision_id =
+                        parent_run_revision_id;
+                    run_command->identity = identity;
+                    run_command->project_id = project_id;
+                    run_command->study_revision_id =
+                        study.study_revision_id;
+                    run = impl_->projects
+                        ->create_run_configuration_revision(*run_command);
+                }
+                return study_package_import_response(
+                    package.package_id,
+                    model,
+                    simulation_case,
+                    validation,
+                    study,
+                    run);
             }
             if (remainder == studies_segment) {
                 if (!impl_->projects

@@ -51,6 +51,7 @@ interface CaseWorkspaceProps {
   onInspectDiagnostic: (diagnostic: ValidationDiagnostic) => void
   onPublishStudy: () => void
   onCreate: () => void
+  onStudyPackage: () => void
 }
 
 const scalarSections: Array<{
@@ -128,6 +129,7 @@ export function CaseWorkspace({
   onInspectDiagnostic,
   onPublishStudy,
   onCreate,
+  onStudyPackage,
 }: CaseWorkspaceProps) {
   const { profile, unitDimensions } = useDisplayUnits()
   const caseUnits = useMemo(
@@ -175,6 +177,9 @@ export function CaseWorkspace({
           <p>Cases hold boundary conditions independently of topology.</p>
           <button type="button" className="primary-button" onClick={onCreate}>
             Create operating case
+          </button>
+          <button type="button" className="secondary-button" onClick={onStudyPackage}>
+            Load Study JSON
           </button>
         </div>
       </section>
@@ -247,9 +252,14 @@ export function CaseWorkspace({
           <span className="eyebrow">Immutable operating case</span>
           <h1>{activeCase.label || activeCase.id}</h1>
         </div>
-        <div className="revision-chip">
-          <span>CASE r{revision.revision_number}</span>
-          <code>{revision.checksum.slice(7, 19)}</code>
+        <div className="case-toolbar-actions">
+          <button type="button" className="secondary-button" onClick={onStudyPackage}>
+            Study JSON
+          </button>
+          <div className="revision-chip">
+            <span>CASE r{revision.revision_number}</span>
+            <code>{revision.checksum.slice(7, 19)}</code>
+          </div>
         </div>
       </div>
       {(operationError || operationStatus || publishing) && (

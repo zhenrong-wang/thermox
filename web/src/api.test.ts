@@ -8,6 +8,7 @@ import type {
   TopologyDocument,
   TopologyPresentation,
 } from './types'
+import type { StudyPackageDocument } from './studyPackage'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -99,6 +100,49 @@ describe('topology revision API', () => {
       method: 'POST',
       body: JSON.stringify(definition),
     })
+  })
+})
+
+describe('Study package API', () => {
+  it('submits one package operation with the selected topology parent', async () => {
+    const document = {
+      schema_version: 'thermox.study_package/v1',
+      package_id: 'package-a',
+      topology: {
+        schema_version: 'thermox.topology/v1',
+        model: {
+          id: 'model-a', name: 'Model A', revision: '1',
+          media: [], components: [], connections: [],
+        },
+      },
+      case: {
+        schema_version: 'thermox.case/v1',
+        case: { id: 'case-a', mode: 'steady_state_design' },
+      },
+      artifact_dependencies: [],
+      study: {
+        study_id: 'study-a', intent: 'steady_state_design',
+        artifact_revision_ids: [], artifact_qualification_requirements: [],
+        artifact_operating_envelopes: [], result_projections: [],
+        acceptance_criteria: [], trajectory_validation_bindings: [],
+      },
+    } satisfies StudyPackageDocument
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => new Response(JSON.stringify({
+      schema_version: 'thermox.study_package_import/v1',
+      package_id: 'package-a',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.importStudyPackage('project/a', document, 'model-r1')
+
+    const [path, request] = fetchMock.mock.calls[0]
+    const url = new URL(String(path), 'http://thermox.local')
+    expect(url.pathname).toBe('/api/v1/projects/project%2Fa/study-packages')
+    expect(url.searchParams.get('parent_model_revision_id')).toBe('model-r1')
+    expect(request).toMatchObject({ method: 'POST', body: JSON.stringify(document) })
   })
 })
 

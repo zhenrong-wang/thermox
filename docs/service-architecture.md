@@ -282,6 +282,7 @@ The initial routes are:
 | `GET` | `/api/v1/projects/{project_id}/run-configuration-revisions/{revision_id}` | Read an exact execution intent |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/study-revisions` | List/publish immutable engineering study intent |
 | `GET` | `/api/v1/projects/{project_id}/study-revisions/{revision_id}` | Read an exact study revision |
+| `POST` | `/api/v1/projects/{project_id}/study-packages` | Verify and import a complete topology/case/Study/run declaration |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/calibration-revisions` | List/publish immutable calibration campaigns bound to exact model and Study revisions |
 | `GET` | `/api/v1/projects/{project_id}/calibration-revisions/{revision_id}` | Read an exact calibration definition, dataset split, and solver policy |
 | `GET`, `POST` | `/api/v1/projects/{project_id}/reconciliation-revisions` | List/publish immutable reconciliation intent with disjoint constraint and held-out Studies |
