@@ -27,6 +27,10 @@ The workspace currently provides:
   physical topology and numerical provenance;
 - selection-level definition diagnostics in the topology inspector, while final calculatability
   remains owned by the service compiler;
+- an actionable graph-level readiness panel separating local definition, connector, and study
+  hints from exact-revision service compilation evidence;
+- direct readiness navigation to component definition, collapsed assembly, connection inspection,
+  study setup, or the authoritative compiler diagnostic;
 - catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;
 - typed project-artifact selectors for performance maps and other declared component resources;

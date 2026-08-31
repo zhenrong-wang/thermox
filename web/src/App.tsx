@@ -17,7 +17,10 @@ import {
   DefinitionSidebar,
   DefinitionWorkspace,
 } from './DefinitionWorkspace'
-import { componentDefinitionReadiness } from './definitionReadiness'
+import {
+  componentDefinitionReadiness,
+  definitionIssues,
+} from './definitionReadiness'
 import { useDisplayUnits } from './DisplayUnitsContext'
 import { ExpressionComponentForm } from './ExpressionComponentForm'
 import {
@@ -38,18 +41,26 @@ import { MaterialForm } from './MaterialForm'
 import { PerformanceMapArtifactForm } from './PerformanceMapArtifactForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
+import { SystemReadinessPanel } from './SystemReadinessPanel'
 import { ResultSelectionPanel } from './ResultSelectionPanel'
 import { StudyPublishForm } from './StudyPublishForm'
 import { studyArtifactRevisionIds } from './studyAuthoring'
 import { ValidationSeriesArtifactForm } from './ValidationSeriesArtifactForm'
 import { ValidationCampaignForm } from './ValidationCampaignForm'
-import { validationMatchesExecutionSelection } from './runAuthoring'
+import {
+  validationMatchesExecutionSelection,
+  validationTargetsExecutionSelection,
+} from './runAuthoring'
 import {
   mergeProjectComponentCatalog,
   requiredProjectComponentSources,
   resolveTopologyComponentCatalog,
 } from './projectComponentCatalog'
 import { initialTopologyDocument } from './topologyAuthoring'
+import {
+  buildSystemReadiness,
+  type SystemReadinessIssue,
+} from './systemReadiness'
 import { WorkflowNavigator } from './WorkflowNavigator'
 import {
   withPlacedEntity,
@@ -169,6 +180,7 @@ function App() {
   const [editingConnection, setEditingConnection] =
     useState<ConnectionDefinition>()
   const [selection, setSelection] = useState<GraphSelection>()
+  const [showSystemReadiness, setShowSystemReadiness] = useState(false)
   const [addingMedium, setAddingMedium] = useState(false)
   const [addingMaterial, setAddingMaterial] = useState(false)
   const [addingAssembly, setAddingAssembly] = useState(false)
@@ -473,6 +485,7 @@ function App() {
     setSelectedRevisionId('')
     setNewComponentType(undefined)
     setNewComponentPlacement(undefined)
+    setShowSystemReadiness(false)
     setTopology(undefined)
     setTopologyPresentation(undefined)
     setLayoutSaveState('idle')
@@ -620,12 +633,8 @@ function App() {
     [topology, topologyCatalog],
   )
   const physicalIssueCount = useMemo(
-    () =>
-      Object.values(physicalReadiness).reduce(
-        (total, item) => total + item.issues.length,
-        0,
-      ),
-    [physicalReadiness],
+    () => definitionIssues(topology, topologyCatalog).length,
+    [topology, topologyCatalog],
   )
   const requiredComponentSources = useMemo(
     () =>
@@ -829,10 +838,20 @@ function App() {
   const succeededJobCount = simulationJobs.filter(
     (job) => job.state === 'succeeded',
   ).length
+  const exactRevisionValidation =
+    selectedCaseRevision &&
+    validationTargetsExecutionSelection(
+      validationResult,
+      selectedRevisionId,
+      selectedCaseRevision.case_revision_id,
+      selectedArtifactRevisionIds,
+    )
+      ? validationResult
+      : undefined
   const exactRevisionCompiled = Boolean(
     selectedCaseRevision &&
       validationMatchesExecutionSelection(
-        validationResult,
+        exactRevisionValidation,
         selectedRevisionId,
         selectedCaseRevision.case_revision_id,
         selectedArtifactRevisionIds,
@@ -841,6 +860,23 @@ function App() {
   const unresolvedArtifactCount = Math.max(
     0,
     requiredArtifactIds.length - selectedArtifactRevisionIds.length,
+  )
+  const systemReadiness = useMemo(
+    () =>
+      buildSystemReadiness(
+        topology,
+        topologyCatalog,
+        Boolean(selectedCaseRevision),
+        unresolvedArtifactCount,
+        exactRevisionValidation,
+      ),
+    [
+      exactRevisionValidation,
+      selectedCaseRevision,
+      topology,
+      topologyCatalog,
+      unresolvedArtifactCount,
+    ],
   )
   const workflowStages = buildWorkflowStages({
     componentCount: topology?.model.components.length ?? 0,
@@ -2190,7 +2226,29 @@ function App() {
     ) {
       setSelection({ type: 'connection', id: diagnostic.connection_id })
       setWorkspaceView('topology')
+      return
     }
+    setWorkspaceView('studies')
+  }
+
+  function inspectSystemReadinessIssue(issue: SystemReadinessIssue) {
+    setShowSystemReadiness(false)
+    const { target } = issue
+    if (target.type === 'component') {
+      inspectComponentDefinition(target.id)
+      return
+    }
+    if (target.type === 'assembly' || target.type === 'connection') {
+      setSelection({ type: target.type, id: target.id })
+      setWorkspaceView('topology')
+      return
+    }
+    if (target.type === 'compiler') {
+      inspectDiagnosticOnCanvas(target.diagnostic)
+      return
+    }
+    setSelection(undefined)
+    setWorkspaceView(target.view)
   }
 
   return (
@@ -2323,13 +2381,20 @@ function App() {
                       ? 'Layout save failed'
                       : 'Layout not saved'}
               </span>
-              <span
+              <button
+                type="button"
                 className={`model-authoring-status${
                   exactRevisionCompiled ? ' is-ready' : ''
                 }`}
+                onClick={() => {
+                  setSelection(undefined)
+                  setShowSystemReadiness(true)
+                }}
               >
-                {exactRevisionCompiled ? 'Calculatable' : 'Definition incomplete'}
-              </span>
+                {exactRevisionCompiled
+                  ? 'Calculatable'
+                  : `${systemReadiness.issues.length} readiness issues`}
+              </button>
               <button type="button" onClick={() => setWorkspaceView('definition')}>
                 Define
               </button>
@@ -2395,7 +2460,10 @@ function App() {
                       : undefined
                   }
                   onConnect={connectPorts}
-                  onSelect={setSelection}
+                  onSelect={(nextSelection) => {
+                    setShowSystemReadiness(false)
+                    setSelection(nextSelection)
+                  }}
                   onAddComponent={(component, placement) => {
                     setSelection(undefined)
                     beginComponentDraft(component, placement)
@@ -2405,10 +2473,22 @@ function App() {
               </div>
               <aside
                 className={`topology-inspector-dock ${
-                  selection ? 'has-selection' : 'is-empty'
+                  selection || showSystemReadiness
+                    ? 'has-selection'
+                    : 'is-empty'
                 }`}
               >
-                {selection && topology && topologyCatalog ? (
+                {showSystemReadiness ? (
+                  <SystemReadinessPanel
+                    readiness={systemReadiness}
+                    onInspect={inspectSystemReadinessIssue}
+                    onValidate={() => {
+                      setShowSystemReadiness(false)
+                      setWorkspaceView('studies')
+                    }}
+                    onClose={() => setShowSystemReadiness(false)}
+                  />
+                ) : selection && topology && topologyCatalog ? (
                   <InspectorPanel
                     selection={selection}
                     topology={topology}

@@ -12,7 +12,26 @@ export function validationMatchesExecutionSelection(
   artifactRevisionIds: string[],
 ) {
   if (
-    !validation?.validation.readiness.calculatable ||
+    !validation?.validation.readiness.calculatable
+  ) {
+    return false
+  }
+  return validationTargetsExecutionSelection(
+    validation,
+    modelRevisionId,
+    caseRevisionId,
+    artifactRevisionIds,
+  )
+}
+
+export function validationTargetsExecutionSelection(
+  validation: ProjectModelValidation | undefined,
+  modelRevisionId: string,
+  caseRevisionId: string,
+  artifactRevisionIds: string[],
+) {
+  if (
+    !validation ||
     validation.model_revision_id !== modelRevisionId ||
     validation.case_revision_id !== caseRevisionId
   ) {

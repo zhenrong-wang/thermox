@@ -62,9 +62,21 @@ export function DefinitionWorkspace({
     )
   }
 
-  const states = Object.values(readiness)
-  const definedCount = states.filter((item) => item.state === 'defined').length
-  const issueCount = states.reduce((sum, item) => sum + item.issues.length, 0)
+  const topLevelIds = [
+    ...topology.model.components.map((component) => component.id),
+    ...(topology.model.assemblies ?? []).map((assembly) => assembly.id),
+  ]
+  const topLevelStates = topLevelIds
+    .map((id) => readiness[id])
+    .filter((item) => Boolean(item))
+  const definedCount = topLevelStates.filter(
+    (item) => item.state === 'defined',
+  ).length
+  const issueCount = new Set(
+    Object.values(readiness).flatMap((item) =>
+      item.issues.map((issue) => issue.id),
+    ),
+  ).size
   const busy = publishing || loadingArtifactRevision
   const latestCorrelations = [...artifactRevisions]
     .filter((revision) => revision.artifact_type === 'thermox.correlation')
@@ -152,8 +164,8 @@ export function DefinitionWorkspace({
       <div className="definition-workspace-scroll">
         <section className="physical-summary-grid">
           <div>
-            <span>Components</span>
-            <strong>{definedCount}/{topology.model.components.length}</strong>
+            <span>Equipment</span>
+            <strong>{definedCount}/{topLevelIds.length}</strong>
             <small>locally defined</small>
           </div>
           <div>

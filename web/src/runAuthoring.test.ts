@@ -5,6 +5,7 @@ import {
   scopeRequiresComponent,
   scopeRequiresPort,
   validationMatchesExecutionSelection,
+  validationTargetsExecutionSelection,
 } from './runAuthoring'
 import type { ProjectModelValidation } from './types'
 
@@ -64,6 +65,14 @@ describe('run authoring defaults', () => {
       ),
     ).toBe(false)
     validation.validation.readiness.calculatable = false
+    expect(
+      validationTargetsExecutionSelection(
+        validation,
+        'model-1',
+        'case-1',
+        ['artifact-1', 'artifact-2'],
+      ),
+    ).toBe(true)
     expect(
       validationMatchesExecutionSelection(
         validation,

@@ -221,6 +221,23 @@ Compilation failures intentionally use HTTP 422 while retaining the complete
 `thermox.project_model_validation/v1` response; clients treat that document as an engineering
 result rather than a transport exception.
 
+### Layered readiness presentation
+
+The graph workspace presents four explicit readiness layers: physical definition, known connector
+structure, study inputs, and service compilation. The first three are clearly labelled local
+authoring hints. They aggregate catalog-declared missing bindings, parameters, artifacts, malformed
+persisted connector intents, missing cases, and unresolved artifact-revision selections so an
+engineer can navigate directly to the responsible component, assembly, connection, or workspace.
+They do not assert that an equation system is closed or solvable.
+
+The compilation layer is populated only by a `thermox.project_model_validation/v1` result whose
+model, case, and artifact revision IDs exactly match the current selection. Both successful and
+blocked exact results remain visible. Diagnostics retain their service provenance and navigate to
+their graph entity when one is supplied; system-level diagnostics return to the study validation
+view. The UI uses the word `Calculatable` only when that exact service result reports calculatable
+readiness. A stale validation result is displayed as not evaluated rather than being inferred or
+silently reused.
+
 ## Security and persistence
 
 The identity context supplies the acting user and Team. The base revision must belong to the
